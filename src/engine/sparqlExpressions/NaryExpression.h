@@ -62,14 +62,22 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
     std::optional<SparqlExpression::Ptr> child3 = std::nullopt);
 
-template <SpatialJoinType Relation>
+template <SpatialJoinType::Enum Relation>
 SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                 SparqlExpression::Ptr child2);
+
+SparqlExpression::Ptr makeDe9imRelationExpression(SparqlExpression::Ptr child1,
+                                                  SparqlExpression::Ptr child2,
+                                                  SparqlExpression::Ptr child3);
 
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeEnvelopeLowerLeftExpression(
+    SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
+    SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
@@ -77,6 +85,8 @@ SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeSimplifyGeometryExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
 
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
@@ -92,6 +102,7 @@ SparqlExpression::Ptr makeHoursExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTimezoneExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeToEpochExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
 
@@ -165,6 +176,7 @@ std::optional<Variable> getVariableFromLangExpression(
 SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeIsIriExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeIsEncodedIriExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsLiteralExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsNumericExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsBlankExpression(SparqlExpression::Ptr child);

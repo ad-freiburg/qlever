@@ -4,6 +4,9 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include <optional>
+
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
@@ -17,7 +20,7 @@ struct IfImpl {
   CPP_template(typename I, typename E)(
       requires SingleExpressionResult<I>&& SingleExpressionResult<E>&&
           std::is_rvalue_reference_v<I&&>&& std::is_rvalue_reference_v<E&&>)
-      IdOrLiteralOrIri
+      IdOrLocalVocabEntry
       operator()(EffectiveBooleanValueGetter::Result condition, I&& i,
                  E&& e) const {
     if (condition == EffectiveBooleanValueGetter::Result::True) {
@@ -27,12 +30,69 @@ struct IfImpl {
     }
     AD_CORRECTNESS_CHECK(condition ==
                          EffectiveBooleanValueGetter::Result::Undef);
-    return IdOrLiteralOrIri{Id::makeUndefined()};
+    return IdOrLocalVocabEntry{Id::makeUndefined()};
   }
 };
-NARY_EXPRESSION(IfExpression, 3,
-                FV<IfImpl, EffectiveBooleanValueGetter, ActualValueGetter,
-                   ActualValueGetter>);
+
+// This class implements an expression that evaluates the `IF()` function, but
+// will be extended below by additional member functions. It always uses
+// `NaryExpressionStronglyTyped` explicitly because `ActualValueGetter` doesn't
+// have a uniform result type, and therefore cannot be type-erased.
+using IfExpressionImpl = NaryExpressionStronglyTyped<
+    detail::Operation<3, FV<IfImpl, EffectiveBooleanValueGetter,
+                            ActualValueGetter, ActualValueGetter>>>;
+
+// The actual `IfExpression` class that adds an override for
+// `isResultAlwaysDefined`.
+class IfExpression : public IfExpressionImpl {
+ public:
+  using IfExpressionImpl::IfExpressionImpl;
+
+  // _____________________________________________________________
+  bool isResultAlwaysDefined(
+      const VariableToColumnMap& varColMap) const override {
+    const auto& childrenSpan = children();
+    AD_CORRECTNESS_CHECK(childrenSpan.size() == 3);
+    const SparqlExpression* condition = childrenSpan[0].get();
+    const SparqlExpression* thenBranch = childrenSpan[1].get();
+    const SparqlExpression* elseBranch = childrenSpan[2].get();
+
+    // Special case: IF(BOUND(someExpr), someExpr, someOtherExpr)
+    // In this case, the result is always defined iff someOtherExpr is always
+    // defined.
+
+    // Check if condition is a `BOUND()` expression using RTTI.
+    // Create a dummy expression to get the typeid.
+    // The IIFE returns a reference to a `static` local, which is valid, but
+    // GCC's `-Wdangling-reference` cannot trace through it.
+    DISABLE_DANGLING_REFERENCE_WARNINGS
+    static const auto& dummyBoundExprRef = []() -> const SparqlExpression& {
+      static auto expr = makeBoundExpression(
+          std::make_unique<VariableExpression>(Variable{"?dummy"}));
+      return *expr;
+    }();
+    GCC_REENABLE_WARNINGS
+    if (typeid(*condition) == typeid(dummyBoundExprRef)) {
+      // condition is a BOUND expression, get its argument
+      const auto& boundChildren = condition->children();
+      AD_CORRECTNESS_CHECK(boundChildren.size() == 1);
+      auto boundVar = boundChildren[0]->getVariableOrNullopt();
+      auto thenVar = thenBranch->getVariableOrNullopt();
+      if (boundVar.has_value() && boundVar == thenVar) {
+        // Pattern matches: `IF(BOUND(?someVar), ?someVar, someOtherExpr)`
+        // Result is then always defined iff any of the if or else branch are
+        // always defined.
+        return elseBranch->isResultAlwaysDefined(varColMap) ||
+               thenBranch->isResultAlwaysDefined(varColMap);
+      }
+    }
+
+    // General case: result is always defined iff both branches are always
+    // defined
+    return thenBranch->isResultAlwaysDefined(varColMap) &&
+           elseBranch->isResultAlwaysDefined(varColMap);
+  }
+};
 
 // The implementation of the COALESCE expression. It (at least currently) has to
 // be done manually as we have no Generic implementation for variadic
@@ -42,9 +102,20 @@ class CoalesceExpression : public VariadicExpression {
   using VariadicExpression::VariadicExpression;
 
   // _____________________________________________________________
+  bool isResultAlwaysDefined(
+      const VariableToColumnMap& varColMap) const override {
+    // COALESCE is always defined if any of its children is always defined.
+    return ql::ranges::any_of(
+        childrenVec(), [&varColMap](const auto& childPtr) {
+          return childPtr->isResultAlwaysDefined(varColMap);
+        });
+  }
+
+  // _____________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
     // Arbitrarily chosen interval after which to check for cancellation.
     constexpr size_t CHUNK_SIZE = 1'000'000;
+
     // Set up one vector with the indices of the elements that are still unbound
     // so far and one for the indices that remain unbound after applying one of
     // the children.
@@ -58,28 +129,35 @@ class CoalesceExpression : public VariadicExpression {
         0, ctx->size(),
         [&unboundIndices](size_t i) { unboundIndices.push_back(i); },
         [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
-    VectorWithMemoryLimit<IdOrLiteralOrIri> result{ctx->_allocator};
+    VectorWithMemoryLimit<IdOrLocalVocabEntry> result{ctx->_allocator};
     std::fill_n(std::back_inserter(result), ctx->size(),
-                IdOrLiteralOrIri{Id::makeUndefined()});
+                IdOrLocalVocabEntry{Id::makeUndefined()});
     if (result.empty()) {
       return result;
     }
 
     ctx->cancellationHandle_->throwIfCancelled();
 
-    auto isUnbound = [](const IdOrLiteralOrIri& x) {
-      return (std::holds_alternative<Id>(x) &&
-              std::get<Id>(x) == Id::makeUndefined());
+    auto isUnbound = [](const IdOrLocalVocabEntry& x) {
+      return std::holds_alternative<Id>(x) && std::get<Id>(x).isUndefined();
     };
 
+    // The visitors below return an engaged optional iff the whole `COALESCE`
+    // can be short-circuited to a single constant value (see below).
     auto visitConstantExpressionResult =
-        CPP_template_lambda(&nextUnboundIndices, &unboundIndices, &isUnbound,
-                            &result, ctx)(typename T)(T && childResult)(
-            requires SingleExpressionResult<T> && isConstantResult<T>) {
-      IdOrLiteralOrIri constantResult{AD_FWD(childResult)};
+        [&nextUnboundIndices, &unboundIndices, &isUnbound, &result,
+         ctx](auto&& childResult) -> std::optional<IdOrLocalVocabEntry> {
+      using T = decltype(childResult);
+      static_assert(SingleExpressionResult<T> && isConstantResult<T>);
+      IdOrLocalVocabEntry constantResult{AD_FWD(childResult)};
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
-        return;
+        return std::nullopt;
+      }
+      // If we have a constant value and no other values are bound so far, we
+      // can directly return the constant value.
+      if (unboundIndices.size() == ctx->size()) {
+        return constantResult;
       }
       ad_utility::chunkedForLoop<CHUNK_SIZE>(
           0, unboundIndices.size(),
@@ -93,17 +171,19 @@ class CoalesceExpression : public VariadicExpression {
             result[unboundIndices[idx]] = constantResult;
           },
           [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
+      return std::nullopt;
     };
     GCC_REENABLE_WARNINGS
 
     // For a single child result, write the result at the indices where the
     // result so far is unbound, and the child result is bound. While doing so,
     // set up the `nextUnboundIndices` vector  for the next step.
-    auto visitVectorExpressionResult =
-        CPP_template_lambda(&result, &unboundIndices, &nextUnboundIndices, &ctx,
-                            &isUnbound)(typename T)(T && childResult)(
-            requires CPP_NOT(isConstantResult<T> && SingleExpressionResult<T> &&
-                             std::is_rvalue_reference_v<T&&>)) {
+    auto visitVectorExpressionResult = [&result, &unboundIndices,
+                                        &nextUnboundIndices, &ctx,
+                                        &isUnbound](auto&& childResult) {
+      using T = decltype(childResult);
+      static_assert(!(isConstantResult<T> && SingleExpressionResult<T> &&
+                      std::is_rvalue_reference_v<T>));
       auto gen = detail::makeGenerator(AD_FWD(childResult), ctx->size(), ctx);
       // Iterator to the next index where the result so far is unbound.
       auto unboundIdxIt = unboundIndices.begin();
@@ -117,7 +197,7 @@ class CoalesceExpression : public VariadicExpression {
             // Skip all the indices where the result is already bound from a
             // previous child.
             if (i == *unboundIdxIt) {
-              if (IdOrLiteralOrIri val{std::move(*generatorIterator)};
+              if (IdOrLocalVocabEntry val{std::move(*generatorIterator)};
                   isUnbound(val)) {
                 nextUnboundIndices.push_back(i);
               } else {
@@ -133,23 +213,29 @@ class CoalesceExpression : public VariadicExpression {
           },
           [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     };
-    auto visitExpressionResult = CPP_template_lambda(
-        &visitConstantExpressionResult,
-        &visitVectorExpressionResult)(typename T)(T && childResult)(
-        requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
+    auto visitExpressionResult =
+        [&visitConstantExpressionResult, &visitVectorExpressionResult](
+            auto&& childResult) -> std::optional<IdOrLocalVocabEntry> {
+      using T = decltype(childResult);
+      static_assert(SingleExpressionResult<T> && std::is_rvalue_reference_v<T>);
       // If the previous expression result is a constant, we can skip the
       // loop.
       if constexpr (isConstantResult<T>) {
-        visitConstantExpressionResult(AD_FWD(childResult));
+        return visitConstantExpressionResult(AD_FWD(childResult));
       } else {
         visitVectorExpressionResult(AD_FWD(childResult));
+        return std::nullopt;
       }
     };
 
     // Evaluate the children one by one, stopping as soon as all result are
     // bound.
     for (const auto& child : childrenVec()) {
-      std::visit(visitExpressionResult, child->evaluate(ctx));
+      std::optional<IdOrLocalVocabEntry> constantValue =
+          std::visit(visitExpressionResult, child->evaluate(ctx));
+      if (constantValue.has_value()) {
+        return constantValue.value();
+      }
       unboundIndices = std::move(nextUnboundIndices);
       nextUnboundIndices.clear();
       ctx->cancellationHandle_->throwIfCancelled();
@@ -158,8 +244,11 @@ class CoalesceExpression : public VariadicExpression {
         break;
       }
     }
-    // TODO<joka921> The result is wrong in the case when all children are
-    // constants (see the implementation of `CONCAT`).
+    // Prefer returning a single UNDEF over a vector of UNDEFs if all results
+    // are unbound.
+    if (unboundIndices.size() == ctx->size()) {
+      return Id::makeUndefined();
+    }
     return result;
   }
 };

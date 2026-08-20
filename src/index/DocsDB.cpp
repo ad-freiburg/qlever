@@ -13,7 +13,8 @@ void DocsDB::init(const std::string& fileName) {
   if (_dbFile.empty()) {
     _size = 0;
   } else {
-    off_t posLastOfft = _dbFile.getLastOffset(&_startOfOffsets);
+    auto [posLastOfft, startOfOffsets] = _dbFile.getLastOffset();
+    _startOfOffsets = startOfOffsets;
     _size = (posLastOfft - _startOfOffsets) / sizeof(off_t);
   }
 }

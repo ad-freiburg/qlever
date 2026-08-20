@@ -21,7 +21,7 @@
 using namespace pathSearch;
 
 // _____________________________________________________________________________
-BinSearchWrapper::BinSearchWrapper(const IdTable& table, size_t startCol,
+BinSearchWrapper::BinSearchWrapper(const IdTableView<0>& table, size_t startCol,
                                    size_t endCol, std::vector<size_t> edgeCols)
     : table_(table),
       startCol_(startCol),
@@ -135,7 +135,7 @@ std::vector<QueryExecutionTree*> PathSearch::getChildren() {
   }
 
   return res;
-};
+}
 
 // _____________________________________________________________________________
 std::string PathSearch::getCacheKeyImpl() const {
@@ -162,35 +162,35 @@ std::string PathSearch::getCacheKeyImpl() const {
   }
 
   return std::move(os).str();
-};
+}
 
 // _____________________________________________________________________________
 std::string PathSearch::getDescriptor() const {
   std::ostringstream os;
   os << "PathSearch";
   return std::move(os).str();
-};
+}
 
 // _____________________________________________________________________________
-size_t PathSearch::getResultWidth() const { return resultWidth_; };
+size_t PathSearch::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
 size_t PathSearch::getCostEstimate() {
   // TODO: Figure out a smart way to estimate cost
   return 1000;
-};
+}
 
 // _____________________________________________________________________________
 uint64_t PathSearch::getSizeEstimateBeforeLimit() {
   // TODO: Figure out a smart way to estimate size
   return 1000;
-};
+}
 
 // _____________________________________________________________________________
 float PathSearch::getMultiplicity(size_t col) {
   (void)col;
   return 1;
-};
+}
 
 // _____________________________________________________________________________
 bool PathSearch::knownEmptyResult() {
@@ -200,10 +200,10 @@ bool PathSearch::knownEmptyResult() {
     }
   }
   return false;
-};
+}
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
+std::vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 void PathSearch::bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,
@@ -234,7 +234,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{allocator()};
   idTable.setNumColumns(getResultWidth());
 
-  const IdTable& dynSub = subRes->idTable();
+  const IdTableView<0>& dynSub = subRes->idTableView();
   if (!dynSub.empty()) {
     auto timer = ad_utility::Timer(ad_utility::Timer::Started);
 
@@ -264,7 +264,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
       sources = allSources;
     }
     paths = allPaths(sources, targets, binSearch, config_.cartesian_,
-                     config_.numPathsPerTarget_);
+                     config_.numPathsPerTarget_, config_.maxDepth_);
 
     timer.stop();
     auto searchTime = timer.msecs();
@@ -287,12 +287,12 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
   }
 
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
-};
+}
 
 // _____________________________________________________________________________
 VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
   return variableColumns_;
-};
+}
 
 // _____________________________________________________________________________
 std::pair<ql::span<const Id>, ql::span<const Id>>
@@ -302,13 +302,13 @@ PathSearch::handleSearchSides() const {
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
-    sourceIds = resultTable->idTable().getColumn(sourceCol_.value());
-    targetIds = resultTable->idTable().getColumn(targetCol_.value());
+    sourceIds = resultTable->idTableView().getColumn(sourceCol_.value());
+    targetIds = resultTable->idTableView().getColumn(targetCol_.value());
     return {sourceIds, targetIds};
   }
 
   if (sourceTree_.has_value()) {
-    sourceIds = sourceTree_.value()->getResult()->idTable().getColumn(
+    sourceIds = sourceTree_.value()->getResult()->idTableView().getColumn(
         sourceCol_.value());
   } else if (config_.sourceIsVariable()) {
     sourceIds = {};
@@ -317,7 +317,7 @@ PathSearch::handleSearchSides() const {
   }
 
   if (targetTree_.has_value()) {
-    targetIds = targetTree_.value()->getResult()->idTable().getColumn(
+    targetIds = targetTree_.value()->getResult()->idTableView().getColumn(
         targetCol_.value());
   } else if (config_.targetIsVariable()) {
     targetIds = {};
@@ -329,10 +329,11 @@ PathSearch::handleSearchSides() const {
 }
 
 // _____________________________________________________________________________
-PathsLimited PathSearch::findPaths(
-    const Id& source, const std::unordered_set<uint64_t>& targets,
-    const BinSearchWrapper& binSearch,
-    std::optional<uint64_t> numPathsPerTarget) const {
+PathsLimited PathSearch::findPaths(const Id& source,
+                                   const std::unordered_set<uint64_t>& targets,
+                                   const BinSearchWrapper& binSearch,
+                                   std::optional<uint64_t> numPathsPerTarget,
+                                   std::optional<uint64_t> maxDepth) const {
   std::vector<Edge> edgeStack;
   Path currentPath{EdgesLimited(allocator())};
   std::unordered_map<
@@ -345,8 +346,13 @@ PathsLimited PathSearch::findPaths(
       visited{allocator()};
 
   visited.insert(source.getBits());
-  for (auto edge : binSearch.outgoingEdes(source)) {
-    edgeStack.push_back(std::move(edge));
+  // The source sits at depth 0, so its outgoing edges yield paths of depth
+  // 1. If `maxDepth` is 0, we therefore must not seed the stack at all.
+  // NOTE: `std::nullopt` (no depth limit) compares unequal to 0 here.
+  if (maxDepth != 0) {
+    for (auto edge : binSearch.outgoingEdes(source)) {
+      edgeStack.push_back(std::move(edge));
+    }
   }
 
   while (!edgeStack.empty()) {
@@ -373,12 +379,18 @@ PathsLimited PathSearch::findPaths(
     currentPath.push_back(edge);
 
     if (targets.empty() || ad_utility::contains(targets, edgeEnd)) {
-      result.push_back(currentPath);
+      // `currentPath` keeps being extended below, so store an independent copy.
+      result.push_back(currentPath.clone());
     }
 
-    for (const auto& outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
-      if (!ad_utility::contains(visited, outgoingEdge.end_.getBits())) {
-        edgeStack.push_back(outgoingEdge);
+    // Only expand the frontier if we are still allowed to grow the spine.
+    // `currentPath.size()` is the depth of the just-extended path; the
+    // pushed edges would extend it by one.
+    if (!maxDepth.has_value() || currentPath.size() < maxDepth.value()) {
+      for (const auto& outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
+        if (!ad_utility::contains(visited, outgoingEdge.end_.getBits())) {
+          edgeStack.push_back(outgoingEdge);
+        }
       }
     }
   }
@@ -387,10 +399,12 @@ PathsLimited PathSearch::findPaths(
 }
 
 // _____________________________________________________________________________
-PathsLimited PathSearch::allPaths(
-    ql::span<const Id> sources, ql::span<const Id> targets,
-    const BinSearchWrapper& binSearch, bool cartesian,
-    std::optional<uint64_t> numPathsPerTarget) const {
+PathsLimited PathSearch::allPaths(ql::span<const Id> sources,
+                                  ql::span<const Id> targets,
+                                  const BinSearchWrapper& binSearch,
+                                  bool cartesian,
+                                  std::optional<uint64_t> numPathsPerTarget,
+                                  std::optional<uint64_t> maxDepth) const {
   PathsLimited paths{allocator()};
   Path path{EdgesLimited(allocator())};
 
@@ -400,16 +414,16 @@ PathsLimited PathSearch::allPaths(
       targetSet.insert(target.getBits());
     }
     for (auto source : sources) {
-      for (const auto& path :
-           findPaths(source, targetSet, binSearch, numPathsPerTarget)) {
-        paths.push_back(path);
+      for (auto& path : findPaths(source, targetSet, binSearch,
+                                  numPathsPerTarget, maxDepth)) {
+        paths.push_back(std::move(path));
       }
     }
   } else {
     for (size_t i = 0; i < sources.size(); i++) {
-      for (const auto& path : findPaths(sources[i], {targets[i].getBits()},
-                                        binSearch, numPathsPerTarget)) {
-        paths.push_back(path);
+      for (auto& path : findPaths(sources[i], {targets[i].getBits()}, binSearch,
+                                  numPathsPerTarget, maxDepth)) {
+        paths.push_back(std::move(path));
       }
     }
   }
@@ -430,7 +444,7 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn, PathsLimited& paths,
 
   size_t rowIndex = 0;
   for (size_t pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
-    auto path = paths[pathIndex];
+    const auto& path = paths[pathIndex];
 
     std::optional<Id> sourceId = std::nullopt;
     if (config_.sourceIsVariable()) {

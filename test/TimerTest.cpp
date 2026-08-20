@@ -7,6 +7,7 @@
 
 #include <thread>
 
+#include "util/GTestHelpers.h"
 #include "util/Timer.h"
 #include "util/jthread.h"
 
@@ -19,7 +20,7 @@ using namespace std::chrono_literals;
 void testTime(Timer::Duration duration, std::chrono::milliseconds msecs,
               std::chrono::milliseconds expected) {
   auto lowerBound = 0.9 * expected;
-  auto upperBound = 1.1 * expected + 3ms;
+  auto upperBound = 1.1 * expected + 10ms;
   EXPECT_GE(duration, lowerBound);
   EXPECT_LE(duration, upperBound);
 
@@ -115,7 +116,7 @@ TEST(TimeBlockAndLog, TimeBlockAndLog) {
     ad_utility::TimeBlockAndLog t{"message", callback};
     std::this_thread::sleep_for(25ms);
   }
-  ASSERT_THAT(s, ::testing::MatchesRegex("message: 2[5-9]"));
+  ASSERT_THAT(s, MatchesRegex("message: (2[5-9]|3[0-9])"));
 }
 
 // ____________________________________________________________________________

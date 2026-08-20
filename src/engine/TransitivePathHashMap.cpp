@@ -68,7 +68,7 @@ void HashMapWrapper::setGraphId(Id graphId) {
 
 // _____________________________________________________________________________
 HashMapWrapper TransitivePathHashMap::setupEdgesMap(
-    const IdTable& sub, const TransitivePathSide& startSide,
+    const IdTableView<0>& sub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);

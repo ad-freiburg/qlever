@@ -9,17 +9,34 @@
 #include "../util/IndexTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheSerializer.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/SpatialJoinConfig.h"
 #include "global/ValueId.h"
 #include "rdfTypes/Variable.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
 
 using namespace SpatialJoinTestHelpers;
 
+void serializeAndDeserializeCache(NamedResultCache& cache,
+                                  QueryExecutionContext* qec) {
+  using namespace ad_utility::serialization;
+  ByteBufferWriteSerializer writer;
+  cache.writeToSerializer(writer);
+  cache.clear();
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
+                           qec->getLocalVocabContext());
+}
+
 // _____________________________________________________________________________
-TEST(SpatialJoinCachedIndex, Basic) {
+class SpatialJoinCachedIndexTest : public ::testing::TestWithParam<bool> {};
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinCachedIndexTest, Basic) {
+  bool shouldSerialize = GetParam();
   // Sample data and query
   std::string kb =
       "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
@@ -41,13 +58,21 @@ TEST(SpatialJoinCachedIndex, Basic) {
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinned, qec);
   [[maybe_unused]] auto pinResult = plan.getResult();
 
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
+
   // Retrieve and check the result table and geo index from the named cache
   auto cacheEntry = qec->namedResultCache().get("dummy");
 
   ASSERT_NE(cacheEntry.get(), nullptr);
-  ASSERT_NE(cacheEntry->result_.get(), nullptr);
-  EXPECT_EQ(cacheEntry->result_->numColumns(), 2);
-  EXPECT_EQ(cacheEntry->result_->numRows(), 5);
+  ASSERT_THAT(cacheEntry->result_,
+              ::testing::VariantWith<std::shared_ptr<const IdTable>>(
+                  ::testing::Ne(nullptr)));
+  auto resultView = ExplicitIdTableOperation::viewOf(cacheEntry->result_);
+  EXPECT_EQ(resultView.numColumns(), 2);
+  EXPECT_EQ(resultView.numRows(), 5);
 
   ASSERT_TRUE(cacheEntry->cachedGeoIndex_.has_value());
   EXPECT_EQ(cacheEntry->cachedGeoIndex_.value().getGeometryColumn().name(),
@@ -67,7 +92,8 @@ TEST(SpatialJoinCachedIndex, Basic) {
 }
 
 // _____________________________________________________________________________
-TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
+TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
+  bool shouldSerialize = GetParam();
   // We use real-world examples here for meaningful and better-to-understand
   // results: The examples <s1> to <s4> are rail segments in Freiburg Central
   // Railway Station (osmway:88297213, osmway:300061067, osmway:392142142,
@@ -107,10 +133,16 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   const auto pinResultCacheKey = plan.getCacheKey();
   [[maybe_unused]] auto pinResult = plan.getResult();
 
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
+
   // Check expected cache size
   const auto cacheEntry = qec->namedResultCache().get("dummy");
-  EXPECT_EQ(cacheEntry->result_->numColumns(), 2);
-  EXPECT_EQ(cacheEntry->result_->numRows(), 5);
+  auto resultView = ExplicitIdTableOperation::viewOf(cacheEntry->result_);
+  EXPECT_EQ(resultView.numColumns(), 2);
+  EXPECT_EQ(resultView.numRows(), 5);
   EXPECT_TRUE(cacheEntry->cachedGeoIndex_.has_value());
 
   // Prepare a spatial join using the s2 point polyline algorithm on this
@@ -132,16 +164,16 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   const auto res = spatialJoin->computeResult(false);
 
   EXPECT_TRUE(res.isFullyMaterialized());
-  EXPECT_EQ(res.idTable().numRows(), expectedResultIris.size());
-  EXPECT_EQ(res.idTable().numColumns(), 4);  // ?s1 ?s2 ?geo1 ?geo2
+  EXPECT_EQ(res.idTableView().numRows(), expectedResultIris.size());
+  EXPECT_EQ(res.idTableView().numColumns(), 4);  // ?s1 ?s2 ?geo1 ?geo2
 
   std::vector<std::string> resultIris;
 
   const auto subjectColIdx = spatialJoin->computeVariableToColumnMap()
                                  .at(Variable{"?s2"})
                                  .columnIndex_;
-  for (size_t i = 0; i < res.idTable().numRows(); i++) {
-    auto valueId = res.idTable().at(i, subjectColIdx);
+  for (size_t i = 0; i < res.idTableView().numRows(); i++) {
+    auto valueId = res.idTableView()(i, subjectColIdx);
     ASSERT_EQ(valueId.getDatatype(), Datatype::VocabIndex);
     auto entry = qec->getIndex().getVocab()[valueId.getVocabIndex()];
     resultIris.push_back(entry);
@@ -154,5 +186,76 @@ TEST(SpatialJoinCachedIndex, UseOfIndexByS2PointPolylineAlgorithm) {
   EXPECT_THAT(cacheKey, ::testing::HasSubstr("right cache name:dummy"));
   EXPECT_THAT(cacheKey, ::testing::HasSubstr(pinResultCacheKey));
 }
+
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(WithAndWithoutSerialization,
+                         SpatialJoinCachedIndexTest, ::testing::Bool());
+
+// _____________________________________________________________________________
+// Tests for `SpatialJoinCachedIndex` with and without simplification.
+class SpatialJoinCachedIndexSimplificationTest
+    : public ::testing::TestWithParam<bool> {};
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinCachedIndexSimplificationTest, WithoutSimplification) {
+  bool shouldSerialize = GetParam();
+  // A 3-vertex linestring: without simplification all 3 vertices (= 2 edges)
+  // must be stored in the S2 shape index.
+  const std::string kb =
+      "<s1> <p> \"LINESTRING(7.840000 47.999000, 7.840045 47.999050, 7.841000 "
+      "47.999900)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .";
+  const std::string query = "SELECT * { ?s <p> ?o }";
+
+  auto qec = ad_utility::testing::getQec(kb);
+  qec->pinResultWithName() = {"idx", Variable{"?o"}};
+  auto plan = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  [[maybe_unused]] auto pinResult = plan.getResult();
+
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
+
+  const auto entry = qec->namedResultCache().get("idx");
+  ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
+  auto s2idx = entry->cachedGeoIndex_.value().getIndex();
+  ASSERT_EQ(s2idx->num_shape_ids(), 1);
+  // 3 vertices → 2 edges, stored as a single shape.
+  EXPECT_EQ(s2idx->shape(0)->num_edges(), 2);
+}
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinCachedIndexSimplificationTest, WithSimplification) {
+  bool shouldSerialize = GetParam();
+  // Same 3-vertex linestring, but the middle vertex is only ~6 m off the
+  // direct path, so a 10 m simplification tolerance should remove it, leaving
+  // 2 vertices (= 1 edge) in the index.
+  const std::string kb =
+      "<s1> <p> \"LINESTRING(7.840000 47.999000, 7.840045 47.999050, 7.841000 "
+      "47.999900)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .";
+  const std::string query = "SELECT * { ?s <p> ?o }";
+
+  auto qec = ad_utility::testing::getQec(kb);
+  qec->pinResultWithName() = {"idx", Variable{"?o"}, 10.0};
+  auto plan = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  [[maybe_unused]] auto pinResult = plan.getResult();
+
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
+
+  const auto entry = qec->namedResultCache().get("idx");
+  ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
+  auto s2idx = entry->cachedGeoIndex_.value().getIndex();
+  ASSERT_EQ(s2idx->num_shape_ids(), 1);
+  // Middle vertex removed by simplification: 2 vertices → 1 edge.
+  EXPECT_EQ(s2idx->shape(0)->num_edges(), 1);
+}
+
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(WithAndWithoutSerialization,
+                         SpatialJoinCachedIndexSimplificationTest,
+                         ::testing::Bool());
 
 }  // namespace

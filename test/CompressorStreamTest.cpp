@@ -59,6 +59,22 @@ TEST_P(CompressorStreamTestFixture, TestGeneratorAppliesCompression) {
   ASSERT_EQ(iterator, generator.end());
 }
 
+// Create a long compression stream, iterate over some of it, and then destroy
+// the stream without the iteration having completed. This is a regression test
+// for a use-after-free bug for incomplete iteration (see the code of
+// `compressStream` for details. The old (buggy) code would have triggered the
+// address sanitizer for this test case.
+TEST_P(CompressorStreamTestFixture, IncompleteIteration) {
+  {
+    auto generator = compressStream(generateNChars(100'000'000), GetParam());
+    auto iterator = generator.begin();
+    ASSERT_NE(iterator, generator.end());
+    [[maybe_unused]] auto batch = *iterator;
+    ++iterator;
+    ASSERT_NE(iterator, generator.end());
+  }
+}
+
 using ad_utility::content_encoding::CompressionMethod;
 
 INSTANTIATE_TEST_SUITE_P(CompressionMethodParameters,

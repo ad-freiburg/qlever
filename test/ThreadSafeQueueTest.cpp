@@ -152,8 +152,8 @@ TEST(ThreadSafeQueue, Concurrency) {
     if (ad_utility::isInstantiation<Queue, ThreadSafeQueue>) {
       ql::ranges::sort(result);
     }
-    EXPECT_THAT(result, ::testing::ElementsAreArray(
-                            std::views::iota(0UL, numValues * numThreads)));
+    EXPECT_THAT(result, ::testing::ElementsAreArray(std::views::iota(
+                            size_t{0}, numValues * numThreads)));
   };
   runWithBothQueueTypes(runTest);
 }
@@ -403,7 +403,7 @@ struct RunQueueManagerTest {
         ql::ranges::sort(result);
       }
       EXPECT_THAT(result, ::testing::ElementsAreArray(
-                              std::views::iota(0UL, numValues)));
+                              std::views::iota(size_t{0}, numValues)));
     }
     // The probably most important test of all is that the destructors which are
     // run at the following closing brace never lead to a deadlock.

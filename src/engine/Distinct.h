@@ -17,9 +17,9 @@ class Distinct : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
   std::vector<ColumnIndex> keepIndices_;
 
+ public:
   static constexpr int64_t CHUNK_SIZE = 100'000;
 
- public:
   Distinct(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
            const std::vector<ColumnIndex>& keepIndices);
@@ -36,6 +36,16 @@ class Distinct : public Operation {
   const std::vector<ColumnIndex>& getDistinctColumns() const {
     return keepIndices_;
   }
+
+  // The result of a `Distinct` contains no two rows that agree on all columns
+  // in `keepIndices_`, hence it is also distinct wrt any superset of
+  // `keepIndices_`.
+  bool isDistinctByImpl(
+      const std::vector<ColumnIndex>& distinctIndices) const override;
+
+  // Non-template wrapper around `outOfPlaceDistinct` for use in unit tests.
+  // Dispatches to the right WIDTH via `callFixedSizeVi`.
+  IdTable outOfPlaceDistinctForTesting(const IdTable& input) const;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
@@ -61,6 +71,7 @@ class Distinct : public Operation {
   [[nodiscard]] std::string getCacheKeyImpl() const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
   Result computeResult(bool requestLaziness) override;
 
@@ -92,11 +103,7 @@ class Distinct : public Operation {
   // Out-of-place implementation of the unique algorithm. Does only copy values
   // if they're actually unique.
   template <size_t WIDTH>
-  IdTable outOfPlaceDistinct(const IdTable& dynInput) const;
-
-  FRIEND_TEST(Distinct, distinct);
-  FRIEND_TEST(Distinct, distinctWithEmptyInput);
-  FRIEND_TEST(Distinct, testChunkEdgeCases);
+  IdTable outOfPlaceDistinct(const IdTableView<0>& dynInput) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_DISTINCT_H

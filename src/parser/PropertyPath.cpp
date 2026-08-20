@@ -131,6 +131,18 @@ bool PropertyPath::isIri() const {
 }
 
 // _____________________________________________________________________________
+const std::vector<PropertyPath>& PropertyPath::getSequence() const {
+  AD_CONTRACT_CHECK(isSequence());
+  return std::get<ModifiedPath>(path_).children_;
+}
+
+// _____________________________________________________________________________
+bool PropertyPath::isSequence() const {
+  return std::holds_alternative<ModifiedPath>(path_) &&
+         std::get<ModifiedPath>(path_).modifier_ == Modifier::SEQUENCE;
+}
+
+// _____________________________________________________________________________
 std::optional<std::reference_wrapper<const PropertyPath>>
 PropertyPath::getChildOfInvertedPath() const {
   if (std::holds_alternative<ModifiedPath>(path_)) {

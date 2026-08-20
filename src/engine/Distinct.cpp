@@ -29,6 +29,17 @@ Distinct::Distinct(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
+bool Distinct::isDistinctByImpl(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  // The result is distinct wrt `distinctIndices` iff `keepIndices_` is a subset
+  // of `distinctIndices` (a superset of the deduplicated columns cannot
+  // reintroduce duplicates).
+  return ql::ranges::all_of(keepIndices_, [&distinctIndices](ColumnIndex col) {
+    return ad_utility::contains(distinctIndices, col);
+  });
+}
+
+// _____________________________________________________________________________
 string Distinct::getCacheKeyImpl() const {
   return absl::StrCat("DISTINCT (", subtree_->getCacheKey(), ") (",
                       absl::StrJoin(keepIndices_, ","), ")");
@@ -98,7 +109,7 @@ Result Distinct::computeResult(bool requestLaziness) {
   if (subRes->isFullyMaterialized()) {
     IdTable idTable =
         ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
-          return self->outOfPlaceDistinct<width>(subRes->idTable());
+          return self->outOfPlaceDistinct<width>(subRes->idTableView());
         });
     AD_LOG_DEBUG << "Distinct result computation done." << endl;
     return {std::move(idTable), resultSortedOn(),
@@ -178,7 +189,7 @@ IdTable Distinct::distinct(
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
+IdTable Distinct::outOfPlaceDistinct(const IdTableView<0>& dynInput) const {
   AD_CONTRACT_CHECK(keepIndices_.size() <= dynInput.numColumns());
   AD_LOG_DEBUG << "Distinct on " << dynInput.size() << " elements.\n";
   auto inputView = dynInput.asStaticView<WIDTH>();
@@ -221,4 +232,12 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
 std::unique_ptr<Operation> Distinct::cloneImpl() const {
   return std::make_unique<Distinct>(_executionContext, subtree_->clone(),
                                     keepIndices_);
+}
+
+// ____________________________________________________________________________
+IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
+  size_t width = input.numColumns();
+  return ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
+    return self->outOfPlaceDistinct<width>(input.asStaticView<0>());
+  });
 }

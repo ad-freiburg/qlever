@@ -13,14 +13,14 @@ FROM base AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y wget
 RUN wget https://apt.kitware.com/kitware-archive.sh && chmod +x kitware-archive.sh && ./kitware-archive.sh
-RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev libboost-container1.83-dev
+RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev mold liburing-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev libboost-container1.83-dev
 
 # Copy everything we need to build the binaries.
 #
 # NOTE: We are deliberately explicit here, for two reasons. First, so that we
 # don't copy more than necessary without having to rely on `.dockerignore`.
 # Second, so that we can copy `docker-entrypoint.sh` separately below (we don't
-# to rebuild the whole container when making a small change in there).
+# want to rebuild the whole container when making a small change in there).
 COPY src /qlever/src/
 COPY test /qlever/test/
 COPY e2e /qlever/e2e/
@@ -28,32 +28,36 @@ COPY benchmark /qlever/benchmark/
 COPY .git /qlever/.git/
 COPY CMakeLists.txt /qlever/
 COPY CompilationInfo.cmake /qlever/
+COPY GitVersion.cmake /qlever/
 
 # Build and compile. By default, also compile and run all tests. In order not
-# to, build the image with `--build-arg RUN_TESTS=false`. Explicitly set
-# `ARCH_FLAGS` depending on the architecture we are building for, for reasons
-# explained in https://github.com/ad-freiburg/qlever/issues/2595 .
+# to, build the image with `--build-arg RUN_TESTS=false`.
+# `-DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE` prevents fsst from compiling with
+# `-march=native`.
+# `-fuse-ld=mold` uses the `mold` linker, which is faster and much more
+# memory-efficient than the default linker. `CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST`
+# defers GoogleTest test discovery from build time to test time; by default,
+# each test binary is executed right after it is built to enumerate its test
+# cases, which costs memory while other tests are still being compiled and
+# linked. Both these changes aim to mitigate crashes in the CI for ARM64
+# docker builds, which we suspect to be caused by the OOM-killer.
+# `-Wno-psabi` silences very frequent notes in the ARM build that inform us that
+# QLever might not be ABI-compatible on ARM with software compiled on a compiler
+# older than GCC10.
 ARG RUN_TESTS=true
 WORKDIR /qlever/build/
-ARG TARGETARCH
-RUN case "${TARGETARCH}" in \
-        "arm64") ARCH_FLAGS="-march=armv8-a" ;; \
-        "amd64") ARCH_FLAGS="-march=x86-64" ;; \
-        *)       ARCH_FLAGS="" ;; \
-      esac && \
-    cmake -DCMAKE_CXX_FLAGS="${ARCH_FLAGS}" -DCMAKE_C_FLAGS="${ARCH_FLAGS}" \
-          -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja ..
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST -DCMAKE_CXX_FLAGS="-Wno-psabi" -GNinja ..
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
     else \
-      cmake --build . --target IndexBuilderMain ServerMain && echo "Skipping tests"; \
+      cmake --build . --target qlever-index qlever-server && echo "Skipping tests"; \
     fi
 
 # Install the packages needed for the final image.
 FROM base AS runtime
 WORKDIR /qlever
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu74 python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu74 python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc2 liburing2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
 
 # Set up user `qlever` with temporary sudo rights (which will be removed again
 # by the `docker-entrypoint.sh` script, see there).
@@ -82,10 +86,12 @@ ENV QLEVER_ARGCOMPLETE_ENABLED=1
 ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 
 # Copy the binaries and the entrypoint script.
+# qlever-server, qlever-index
+COPY --from=builder /qlever/build/qlever-* /qlever/
+# PrintIndexVersionMain, VocabularyMergerMain
 COPY --from=builder /qlever/build/*Main /qlever/
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
-COPY docker-entrypoint.sh /qlever/
-RUN sudo chmod +x /qlever/docker-entrypoint.sh
+COPY --chmod=755 docker-entrypoint.sh /qlever/
 
 # Our entrypoint script does some clever things; see the comments in there.
 ENTRYPOINT ["/qlever/docker-entrypoint.sh"]

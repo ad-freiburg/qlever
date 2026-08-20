@@ -66,6 +66,19 @@ TEST(SparqlParser, builtInCall) {
       matchNaryWithChildrenMatchers(
           &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
           matchLiteralExpression(ad_utility::triple_component::Iri{})));
+  // Repeat the tests with a BASE IRI.
+  expectBuiltInCall(
+      "IRI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(iri("<http://example.org/>"))),
+      "http://example.org/");
+  expectBuiltInCall(
+      "URI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(iri("<http://example.org/>"))),
+      "http://example.org/");
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
   expectBuiltInCall("tz(?x)", matchUnary(&makeTimezoneStrExpression));
@@ -324,6 +337,25 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCentroidExpression));
   expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
                      matchUnary(&makeIsGeoPointExpression));
+  expectFunctionCall(absl::StrCat(ql, "isEncodedIri>(?x)"),
+                     matchUnary(&makeIsEncodedIriExpression));
+  expectFunctionCall(absl::StrCat(ql, "toEpoch>(?x)"),
+                     matchUnary(&makeToEpochExpression));
+  expectFunctionCall(absl::StrCat(ql, "envelopeLowerLeft>(?x)"),
+                     matchUnary(&makeEnvelopeLowerLeftExpression));
+  expectFunctionCall(absl::StrCat(ql, "envelopeUpperRight>(?x)"),
+                     matchUnary(&makeEnvelopeUpperRightExpression));
+  expectFunctionCall(
+      absl::StrCat(ql,
+                   "prefix-match>(?x, \"Prefix\""
+                   ")"),
+      matchUnary([](auto&& expression) {
+        return makePrefixMatchExpression(
+            AD_FWD(expression),
+            std::make_unique<StringLiteralExpression>(
+                TripleComponent::Literal::fromStringRepresentation(
+                    "\"Prefix\"")));
+      }));
   expectFunctionCall(absl::StrCat(geof, "envelope>(?x)"),
                      matchUnary(&makeEnvelopeExpression));
   expectFunctionCall(absl::StrCat(geof, "geometryType>(?x)"),
@@ -395,35 +427,36 @@ TEST(SparqlParser, FunctionCall) {
       absl::StrCat(geof, "geometryN>(?a, ?b)"),
       matchNary(&makeGeometryNExpression, Variable{"?a"}, Variable{"?b"}));
 
+  // Simplify geometry (QLever-internal function)
+  expectFunctionCall(absl::StrCat(ql, "simplifyGeometry>(?a, ?b)"),
+                     matchNary(&makeSimplifyGeometryExpression, Variable{"?a"},
+                               Variable{"?b"}));
+
   // Geometric relation functions
+  using enum SpatialJoinType::Enum;
+  using GeoRelationFn =
+      SparqlExpression::Ptr (*)(SparqlExpression::Ptr, SparqlExpression::Ptr);
+  std::vector<std::pair<std::string_view, GeoRelationFn>> geoRelations{
+      {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
+      {"sfContains", &makeGeoRelationExpression<CONTAINS>},
+      {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
+      {"sfTouches", &makeGeoRelationExpression<TOUCHES>},
+      {"sfEquals", &makeGeoRelationExpression<EQUALS>},
+      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>},
+      {"sfWithin", &makeGeoRelationExpression<WITHIN>},
+  };
+  for (const auto& [sparqlName, makeExpr] : geoRelations) {
+    expectFunctionCall(absl::StrCat(geof, sparqlName, ">(?a, ?b)"),
+                       matchNary(makeExpr, Variable{"?a"}, Variable{"?b"}));
+  }
+
+  // DE-9IM relation function
   expectFunctionCall(
-      absl::StrCat(geof, "sfIntersects>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::INTERSECTS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfContains>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::CONTAINS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfCrosses>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::CROSSES>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfTouches>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::TOUCHES>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfEquals>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::EQUALS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfOverlaps>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::OVERLAPS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfWithin>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::WITHIN>,
-                Variable{"?a"}, Variable{"?b"}));
+      absl::StrCat(geof, "relate>(?a, ?b, \"T*T***T**\")"),
+      matchNaryWithChildrenMatchers(&makeDe9imRelationExpression,
+                                    variableExpressionMatcher(Variable{"?a"}),
+                                    variableExpressionMatcher(Variable{"?b"}),
+                                    matchLiteralExpression(lit("T*T***T**"))));
 
   // Math functions
   expectFunctionCall(absl::StrCat(math, "log>(?x)"),
@@ -472,6 +505,11 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "distance>()"));
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c, ?d)"));
+  expectFunctionCallFails(absl::StrCat(geof, "relate>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "relate>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "relate>(?a, ?b)"));
+  expectFunctionCallFails(
+      absl::StrCat(geof, "relate>(?a, ?b, \"T*T***T**\", ?c)"));
 
   const std::vector<std::string> unaryGeofFunctionNames = {
       "centroid", "envelope", "geometryType",  "minX",         "minY",
@@ -568,9 +606,10 @@ using namespace sparqlExpression;
 // points to an `AggregateExpr`, that the distinctness and the child variable of
 // the aggregate expression match, and that the `AggregateExpr`(via dynamic
 // cast) matches all the `additionalMatchers`.
-template <typename AggregateExpr>
+template <typename AggregateExpr, typename... AdditionalMatchers>
 ::testing::Matcher<const SparqlExpression::Ptr&> matchAggregate(
-    bool distinct, const Variable& child, const auto&... additionalMatchers) {
+    bool distinct, const Variable& child,
+    const AdditionalMatchers&... additionalMatchers) {
   using namespace ::testing;
   using namespace m::builtInCall;
   using Exp = SparqlExpression;

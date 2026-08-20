@@ -58,6 +58,12 @@ class SparqlExpressionPimpl {
   // SUM, AVG, COUNT, etc. in any form.
   bool containsAggregate() const;
 
+  // Returns true iff this expression or any of its subexpressions reads all
+  // the columns that are visible in the query body without explicitly
+  // mentioning the corresponding variables (currently only
+  // `COUNT(DISTINCT *)`). See `SparqlExpression::readsAllVisibleColumns`.
+  bool readsAllVisibleColumns() const;
+
   struct VariableAndDistinctness {
     ::Variable variable_;
     bool isDistinct_;
@@ -80,6 +86,17 @@ class SparqlExpressionPimpl {
   // declared.
   [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& variableToColumnMap) const;
+
+  // Return true iff this expression is guaranteed to produce the same result
+  // on every invocation. Delegates to `SparqlExpression::isDeterministic()`.
+  [[nodiscard]] bool isDeterministic() const;
+
+  // Return true if we statically (without evaluating the expression) can
+  // determine that its result will never contain undefined values / expression
+  // errors.
+  [[nodiscard]] bool isResultAlwaysDefined(
+      const VariableToColumnMap& variableToColumnMap) const;
+
   SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl,
                         std::string descriptor);
   ~SparqlExpressionPimpl();
@@ -88,7 +105,10 @@ class SparqlExpressionPimpl {
   SparqlExpressionPimpl(const SparqlExpressionPimpl&);
   SparqlExpressionPimpl& operator=(const SparqlExpressionPimpl&);
 
-  std::vector<const Variable*> containedVariables() const;
+  // If `excludeExists` is true, `EXISTS` is treated as a scope boundary: the
+  // variables that occur only inside the body of an `EXISTS` are not returned.
+  std::vector<const Variable*> containedVariables(
+      bool excludeExists = false) const;
 
   // Return true iff the `Variable` is used inside the expression.
   bool isVariableContained(const Variable&) const;
@@ -117,8 +137,8 @@ class SparqlExpressionPimpl {
 
   // For a concise description of this method and its functionality, refer to
   // the corresponding declaration in SparqlExpression.h.
-  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata()
-      const;
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      const LocalVocabContext& context) const;
 
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {

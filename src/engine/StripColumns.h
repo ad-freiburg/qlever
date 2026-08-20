@@ -48,6 +48,9 @@ class StripColumns : public Operation {
 
   size_t getCostEstimate() override;
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
@@ -56,6 +59,7 @@ class StripColumns : public Operation {
   bool knownEmptyResult() override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;

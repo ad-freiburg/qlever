@@ -46,13 +46,17 @@ class RelationalExpression : public SparqlExpression {
   // `CompressedBlockMetadata`. In addition we return the `Variable` that
   // corresponds to the sorted column.
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      bool isNegated) const override;
+      const LocalVocabContext& context, bool isNegated) const override;
 
   // These expressions are typically used inside `FILTER` clauses, so we need
   // proper estimates.
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSizeEstimate,
       const std::optional<Variable>& firstSortedVariable) const override;
+
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic();
+  }
 
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
@@ -81,6 +85,7 @@ class InExpression : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] const LocalVocabContext& context,
       [[maybe_unused]] bool isNegated) const override;
 
   // These expressions are typically used inside `FILTER` clauses, so we need
@@ -90,6 +95,10 @@ class InExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
   std::optional<LangFilterData> getLanguageFilterExpression() const override;
+
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic();
+  }
 
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override;

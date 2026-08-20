@@ -62,7 +62,10 @@ class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
         g_{std::move(g)} {}
   Graph g_;
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SparqlTripleSimpleWithGraph, g_)
+  // Two of these are equal if all members are equal (including the members of
+  // the base class).
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(
+      SparqlTripleSimpleWithGraph, SparqlTripleSimple, g_)
 };
 
 // A triple where the predicate is a `PropertyPath` or a `Variable`.
@@ -132,6 +135,22 @@ class SparqlTriple
   bool predicateIs(const Variable& variable) const {
     auto ptr = std::get_if<Variable>(&p_);
     return (ptr != nullptr && *ptr == variable);
+  }
+
+  // Call a function for every variable contained in the triple.
+  CPP_template(typename Function)(
+      requires std::is_invocable_v<
+          Function, const Variable&>) void forEachVariable(Function function)
+      const {
+    if (s_.isVariable()) {
+      std::invoke(function, s_.getVariable());
+    }
+    if (auto predicate = getPredicateVariable()) {
+      std::invoke(function, predicate.value());
+    }
+    if (o_.isVariable()) {
+      std::invoke(function, o_.getVariable());
+    }
   }
 };
 

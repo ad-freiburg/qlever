@@ -33,6 +33,7 @@
 #include "util/GeoConverters.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 #include "util/geo/DE9IMatrix.h"
 
 // This file contains functions used for parsing and processing WKT geometries
@@ -48,7 +49,7 @@ using ParsedWkt =
                  MultiPoint<CoordType>, MultiLine<CoordType>,
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
-using DAnyGeometry = util::geo::AnyGeometry<CoordType>;
+using DAnyGeometry = AnyGeometry<CoordType>;
 
 template <typename T>
 CPP_concept WktSingleGeometryType =
@@ -247,19 +248,16 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
 
 // Reverse projection applied by `sj::WKTParser`: convert coordinates from web
 // mercator int32 to normal lat-long double coordinates.
-inline util::geo::DPoint projectInt32WebMercToDoubleLatLng(
-    const util::geo::I32Point& p) {
-  return util::geo::webMercToLatLng<double>(
-      static_cast<double>(p.getX()) / PREC,
-      static_cast<double>(p.getY()) / PREC);
-};
+inline DPoint projectInt32WebMercToDoubleLatLng(const I32Point& p) {
+  return webMercToLatLng<double>(static_cast<double>(p.getX()) / PREC,
+                                 static_cast<double>(p.getY()) / PREC);
+}
 
 // Same as above, but for a bounding box.
-inline util::geo::DBox projectInt32WebMercToDoubleLatLng(
-    const util::geo::I32Box& box) {
+inline DBox projectInt32WebMercToDoubleLatLng(const I32Box& box) {
   return {projectInt32WebMercToDoubleLatLng(box.getLowerLeft()),
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
-};
+}
 
 // Counts the number of geometries in a geometry collection.
 inline uint32_t countChildGeometries(const ParsedWkt& geom) {
@@ -436,7 +434,7 @@ struct MetricAreaVisitor {
 
   double operator()(const ParsedWkt& geom) const {
     return std::visit(MetricAreaVisitor{}, geom);
-  };
+  }
 };
 
 static constexpr MetricAreaVisitor computeMetricArea;
@@ -617,9 +615,35 @@ inline DE9IMatrix getDE9IM(const ParsedWkt& left, const ParsedWkt& right) {
   return m;
 };
 
-template <SpatialJoinType Relation>
-inline bool DE9IMatrixSatisfies(DE9IMatrix m, bool lineLine = false) {
-  using enum SpatialJoinType;
+// The OGC/DE-9IM dimension of a geometry: 0 for (multi)points, 1 for
+// (multi)linestrings, 2 for (multi)polygons. `std::nullopt` for a geometry
+// collection, whose members may have mixed dimensions, and for `NONE`.
+inline std::optional<uint8_t> wktTypeDimension(WKTType type) {
+  using enum WKTType;
+  switch (type) {
+    case POINT:
+    case MULTIPOINT:
+      return 0;
+    case LINESTRING:
+    case MULTILINESTRING:
+      return 1;
+    case POLYGON:
+    case MULTIPOLYGON:
+      return 2;
+    case COLLECTION:
+    case NONE:
+    default:
+      return std::nullopt;
+  }
+}
+
+// Checks whether the given `DE9IMatrix` (describing the relation of two
+// geometries of dimension `dimLeft`/`dimRight`, see `wktTypeDimension` above)
+// satisfies the given `Relation`.
+template <SpatialJoinType::Enum Relation>
+inline bool DE9IMatrixSatisfies(DE9IMatrix m, std::optional<uint8_t> dimLeft,
+                                std::optional<uint8_t> dimRight) {
+  using enum SpatialJoinType::Enum;
   if constexpr (Relation == INTERSECTS) {
     return m.intersects();
   } else if constexpr (Relation == CONTAINS) {
@@ -627,27 +651,39 @@ inline bool DE9IMatrixSatisfies(DE9IMatrix m, bool lineLine = false) {
   } else if constexpr (Relation == COVERS) {
     return m.covers();
   } else if constexpr (Relation == CROSSES) {
-    return lineLine ? m.overlaps02() : m.II() == D0;
+    // `crosses` is only defined for two geometries of equal dimension if
+    // both are lines (a point can never cross another point, nor can a
+    // polygon cross another polygon). For differing dimensions, the
+    // lower-dimensional geometry's interior has to meet the higher one's
+    // interior, and lie outside its interior otherwise. If the dimension of
+    // either geometry is unknown (a mixed geometry collection), we cannot
+    // apply this dimension-dependent check and conservatively treat only the
+    // line-line case as a potential match.
+    if (!dimLeft.has_value() || !dimRight.has_value() ||
+        dimLeft == dimRight) {
+      return dimLeft == 1 && dimRight == 1 && m.II() == D0;
+    }
+    return dimLeft < dimRight ? (m.II() && m.IE()) : (m.II() && m.EI());
   } else if constexpr (Relation == TOUCHES) {
     return m.touches();
   } else if constexpr (Relation == EQUALS) {
     return m.equals();
   } else if constexpr (Relation == OVERLAPS) {
-    return lineLine ? m.overlaps1() : m.overlaps02();
+    // `overlaps` is only defined for two geometries of the same dimension;
+    // the exact DE-9IM check differs for lines and polygons/points.
+    return dimLeft == 1 && dimRight == 1
+               ? m.overlaps1()
+               : (dimLeft.has_value() && dimLeft == dimRight && m.overlaps02());
   } else if constexpr (Relation == WITHIN) {
     return m.within();
-  } else if constexpr (Relation == WITHIN_DIST) {
-    // Within dist may not be used as input
-    //   static_assert(false);
-    AD_FAIL();
   } else {
-    // There are no further geometric relations
-    // static_assert(false);
+    // `WITHIN_DIST` and `DE9IM` take an additional parameter (the distance
+    // resp. the filter pattern) and are therefore never checked here.
     AD_FAIL();
   }
 }
 
-template <SpatialJoinType Relation>
+template <SpatialJoinType::Enum Relation>
 inline std::optional<bool> georel(const GeoPointOrWkt& left,
                                   const GeoPointOrWkt& right) {
   auto [lType, lParsed] = parseGeoPointOrWkt(left);
@@ -656,9 +692,145 @@ inline std::optional<bool> georel(const GeoPointOrWkt& left,
     return std::nullopt;
   }
   auto de9im = getDE9IM(lParsed.value(), rParsed.value());
-  bool lineLine = false;  // TODO
-  return DE9IMatrixSatisfies<Relation>(de9im, lineLine);
+  return DE9IMatrixSatisfies<Relation>(de9im, wktTypeDimension(lType),
+                                       wktTypeDimension(rType));
 }
+
+// Simplify a parsed geometry using the Douglas-Peucker algorithm provided by
+// `pb_util`. The `tolerance` is interpreted in the coordinate units of the
+// geometry (that is, degrees for WGS84 `geo:wktLiteral`s). Points and
+// multipoints are returned unchanged, while lines and polygons (including their
+// multi-variants and geometry collections) are simplified. Returns
+// `std::nullopt` if the given geometry could not be parsed.
+inline std::optional<ParsedWkt> simplifyGeometry(
+    const std::optional<ParsedWkt>& geometry, double tolerance) {
+  if (!geometry.has_value()) {
+    return std::nullopt;
+  }
+  return std::visit(
+      [tolerance](const auto& geom) -> ParsedWkt {
+        return ParsedWkt{::util::geo::simplify(geom, tolerance)};
+      },
+      geometry.value());
+}
+
+// Implements the web mercator projection for points. Use together via
+// `ProjectionVisitor<WebMercatorProjection>` for other geometry types.
+struct WebMercatorProjection {
+  DPoint operator()(const DPoint& p) const { return latLngToWebMerc(p); }
+};
+
+// Concept to generically model a projection function (that is, point to point
+// mapping). Used for the `UtilGeomProjectionVisitor` below.
+template <typename T>
+CPP_concept IsProjectionFunction =
+    InvocableWithExactReturnType<T, DPoint, const DPoint&>;
+static_assert(IsProjectionFunction<WebMercatorProjection>);
+
+// Helper for `UtilGeomProjectionVisitor`.
+template <typename T>
+CPP_concept VectorBasedGeometry = isVector<T> || SimilarTo<T, DLine>;
+
+// Helper to translate the coordinates of a given geometry to another projection
+// (the projection is applied to each coordinate pair).
+CPP_template(typename Projection)(
+    requires IsProjectionFunction<Projection>) struct UtilGeomProjectionVisitor
+    : Projection {
+  // Inherit the transformation of points.
+  using Projection::operator();
+
+  // Transform collections (might be called recursively, for example for points
+  // in a `MultiLine`).
+  CPP_template_2(typename T)(requires VectorBasedGeometry<T>) T operator()(
+      T multi) const {
+    ql::ranges::transform(multi, multi.begin(), *this);
+    return multi;
+  }
+
+  // Polygons require special treatment for inner (~ a line) and outer
+  // boundaries (~ a multi line).
+  DPolygon operator()(DPolygon poly) const {
+    return {(*this)(std::move(poly.getOuter())),
+            (*this)(std::move(poly.getInners()))};
+  }
+
+  // Unwrap dynamic `AnyGeometry` container type.
+  DAnyGeometry operator()(DAnyGeometry anyGeom) const {
+    return visitAnyGeometry(
+        [this](auto&& contained) {
+          // TODO<ullingerc> `AnyGeometry` should allow moving out its contained
+          // value. Then this can be:
+          // `static_assert(std::is_rvalue_reference_v<decltype(contained)>);`
+          return DAnyGeometry{(*this)(AD_FWD(contained))};
+        },
+        std::move(anyGeom));
+  }
+
+  // Handle `ParsedWkt` variant.
+  ParsedWkt operator()(ParsedWkt geom) const {
+    return std::visit(
+        [this](auto&& contained) {
+          static_assert(std::is_rvalue_reference_v<decltype(contained)>);
+          return ParsedWkt{(*this)(AD_FWD(contained))};
+        },
+        std::move(geom));
+  }
+
+  // Handle values contained in `std::optional`.
+  CPP_template_2(typename T)(
+      requires(!SimilarTo<T, GeoPointOrWkt>)) std::optional<T>
+  operator()(std::optional<T> opt) const {
+    if (!opt.has_value()) {
+      return std::nullopt;
+    }
+    return (*this)(std::move(opt.value()));
+  }
+
+  // Handle `GeoPointOrWkt` (raw unparsed geometry).
+  ParseResult operator()(std::optional<GeoPointOrWkt> geoPointOrWkt) const {
+    auto [type, parsed] = ParseGeoPointOrWktVisitor{}(geoPointOrWkt);
+    return {type, (*this)(std::move(parsed))};
+  }
+};
+
+// Instantiation for projection to web mercator of the various supported
+// geometry types.
+static constexpr UtilGeomProjectionVisitor<WebMercatorProjection>
+    projectWebMerc;
+
+// Helper for `MetricDistanceVisitor`.
+template <typename T, typename U>
+CPP_concept IsPairOfUtilGeoms =
+    SimilarToAnyTypeIn<T, ParsedWkt> && SimilarToAnyTypeIn<U, ParsedWkt>;
+
+// Visitor to compute the distance in meters given a geometry that has been
+// converted to web mercator projection.
+struct MetricDistanceVisitor {
+  // Handle `ParsedWkt` variant.
+  double operator()(const ParsedWkt& a, const ParsedWkt& b) const {
+    return std::visit(MetricDistanceVisitor{}, a, b);
+  }
+
+  // Delegate the actual distance computation to `pb_util`.
+  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>) double
+  operator()(const T& a, const U& b) const {
+    return webMercMeterDist<T, U>(a, b);
+  }
+
+  // Handle optional geometries that may be contained in a `ParseResult`.
+  std::optional<double> operator()(const ParseResult& a,
+                                   const ParseResult& b) const {
+    if (!a.second.has_value() || !b.second.has_value()) {
+      return std::nullopt;
+    }
+    return MetricDistanceVisitor{}(a.second.value(), b.second.value());
+  }
+};
+
+// Compute the metric distance between any combination of supported geometry
+// types. Note that the coordinate pairs of the geometry must first be projected
+// to web mercator, e.g. using `projectWebMerc` above.
+constexpr MetricDistanceVisitor computeMetricDistance;
 
 }  // namespace ad_utility::detail
 

@@ -16,6 +16,7 @@
 #include "parser/TripleComponent.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/VariantRangeFilter.h"
 
 namespace parsedQuery {
 
@@ -81,4 +82,13 @@ void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
   auto inner = _expression.getDescriptor();
   return "BIND (" + inner + " AS " + _target.name() + ")";
 }
+
+// ____________________________________________________________________________
+void BasicGraphPattern::collectAllContainedVariables(
+    ad_utility::HashSet<Variable>& vars) const {
+  for (const SparqlTriple& t : _triples) {
+    t.forEachVariable([&vars](const auto& var) { vars.insert(var); });
+  }
+}
+
 }  // namespace parsedQuery

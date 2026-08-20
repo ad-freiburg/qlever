@@ -1,6 +1,11 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_TEST_ENGINE_SPATIALJOINPREFILTERTESTHELPERS_H
 #define QLEVER_TEST_ENGINE_SPATIALJOINPREFILTERTESTHELPERS_H
@@ -22,11 +27,11 @@
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
 #include "global/RuntimeParameters.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "rdfTypes/Literal.h"
 #include "rdfTypes/Variable.h"
-#include "util/GeoSparqlHelpers.h"
 #include "util/SourceLocation.h"
 
 // _____________________________________________________________________________
@@ -72,8 +77,7 @@ struct SweeperTestResult {
   // ___________________________________________________________________________
   void printResults(const ValIdToGeomName& vMap) const {
     for (const auto& [sjType, valIdLeft, valIdRight, dist] : results_) {
-      std::cout << "RESULTS: type="
-                << SpatialJoinTypeString.at(static_cast<int>(sjType))
+      std::cout << "RESULTS: type=" << sjType.toString()
                 << " left=" << vMap.at(valIdLeft)
                 << " right=" << vMap.at(valIdRight) << " dist=" << dist
                 << std::endl;
@@ -185,7 +189,7 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      SweeperResult& results,
                                      SweeperDistResult& resultDists,
                                      double withinDist) {
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
   sj::SweeperCfg cfg =
       SpatialJoinAlgorithms::libspatialjoinSweeperConfig(1, 1_GB);
   cfg.withinDist = withinDist;
@@ -197,8 +201,8 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
       results[t].push_back({WITHIN_DIST, std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
     } else {
-      results[t].push_back(
-          {static_cast<SpatialJoinType>(pred[0]), std::atoi(a), std::atoi(b)});
+      results[t].push_back({static_cast<SpatialJoinType::Enum>(pred[0]),
+                            std::atoi(a), std::atoi(b)});
     }
   };
   return cfg;
@@ -250,13 +254,13 @@ inline void runParsingAndSweeper(
     auto varToCol = spatialJoin->computeVariableToColumnMap();
     auto leftCol = varToCol.at(varLeft).columnIndex_;
     auto rightCol = varToCol.at(varRight).columnIndex_;
-    auto resultNumRows = result.idTable().numRows();
+    auto resultNumRows = result.idTableView().numRows();
     testResult = SweeperTestResult{};
     testResult.results_.reserve(resultNumRows);
-    for (size_t i = 0; i < result.idTable().numRows(); i++) {
+    for (size_t i = 0; i < result.idTableView().numRows(); i++) {
       testResult.results_.emplace_back(sjTask.joinType_,
-                                       result.idTable().at(i, leftCol),
-                                       result.idTable().at(i, rightCol), 0);
+                                       result.idTableView().at(i, leftCol),
+                                       result.idTableView().at(i, rightCol), 0);
     }
     if (spatialJoin->runtimeInfo().details_.contains(
             "num-geoms-dropped-by-prefilter")) {
@@ -280,9 +284,9 @@ inline void runParsingAndSweeper(
   // Run first parsing step (left side)
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
         numThreadsLeft] =
-      sjAlgo.libspatialjoinParse(false,
-                                 {prepared.idTableLeft_, prepared.leftJoinCol_},
-                                 sweeper, 1, std::nullopt);
+      sjAlgo.libspatialjoinParse(
+          false, {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
+          sweeper, 1, std::nullopt);
   // Due to problems in `Sweeper` when a side is empty, we don't use
   // `sweeper.setFilterBox(box);` here.
 
@@ -294,8 +298,8 @@ inline void runParsingAndSweeper(
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
         numThreadsRight] =
       sjAlgo.libspatialjoinParse(
-          true, {prepared.idTableRight_, prepared.rightJoinCol_}, sweeper, 1,
-          prefilterBox);
+          true, {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt},
+          sweeper, 1, prefilterBox);
 
   sweeper.flush();
 
@@ -409,7 +413,7 @@ inline void checkSweeperTestResult(
     GeoRelationWithIds key{sjType, valIdLeft, valIdRight};
     ASSERT_TRUE(expectedResultsAndDist.contains(key))
         << "Unexpected result found " << vMap.at(valIdLeft) << " "
-        << vMap.at(valIdRight) << " of type " << static_cast<size_t>(sjType);
+        << vMap.at(valIdRight) << " of type " << sjType;
     ASSERT_NEAR(expectedResultsAndDist[key], dist, 0.01);
     ++numActualResults;
   }

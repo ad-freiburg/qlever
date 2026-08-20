@@ -5,6 +5,10 @@
 #ifndef QLEVER_RUNTIMEPARAMETERS_H
 #define QLEVER_RUNTIMEPARAMETERS_H
 
+#include <algorithm>
+#include <optional>
+
+#include "util/Log.h"
 #include "util/Parameters.h"
 
 // A set of parameters that can be accessed with a runtime and a compile time
@@ -19,6 +23,14 @@ struct RuntimeParameters {
   using MemorySizeParameter =
       ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using SizeT = ad_utility::detail::parameterShortNames::SizeT;
+  using SpaceSeparatedStrings =
+      ad_utility::detail::parameterShortNames::SpaceSeparatedStrings;
+  using DeduplicationMode = ad_utility::DeduplicationMode;
+  using DeduplicationModeParameter =
+      ad_utility::detail::parameterShortNames::DeduplicationModeParameter;
+
+  using LogLevelParameter =
+      ad_utility::Parameter<LogLevel, LogLevel::FromString, LogLevel::ToString>;
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS BELOW, ALSO REGISTER THEM IN THE
@@ -44,7 +56,44 @@ struct RuntimeParameters {
   MemorySizeParameter cacheMaxSizeSingleEntry_{
       ad_utility::MemorySize::gigabytes(5), "cache-max-size-single-entry"};
   SizeT lazyIndexScanQueueSize_{20, "lazy-index-scan-queue-size"};
-  SizeT lazyIndexScanNumThreads_{10, "lazy-index-scan-num-threads"};
+  // The number of threads that read and decompress the blocks of a lazy index
+  // scan. Each lazy scan of a query has its own pool of this many threads.
+  // The value must be at least `1` (enforced by a parameter constraint).
+  // The default of `2` is enough for typical queries, where the operation
+  // that consumes the blocks processes them on a single thread and can barely
+  // keep up with the decompression even for `1` thread.
+  SizeT lazyIndexScanNumThreads_{2, "lazy-index-scan-num-threads"};
+  // The number of threads used to read and decompress blocks when scanning
+  // permutations during a runtime index rebuild (see `IndexRebuilder`), both
+  // for the main scan of the old permutations and for the statistics
+  // recomputation. Lowering it reduces the rebuild's CPU usage without
+  // affecting query scans. The default of 1 keeps a rebuild on a live server
+  // from starving concurrent queries of CPU, at nearly no cost in wall time:
+  // the bottleneck of each permutation pipeline is its single sequential
+  // remap thread, so additional scan threads mostly add contention (measured
+  // on Wikidata on an otherwise idle 16-core server, where the wall time was
+  // the same for 1, 2, and 4 threads). A value of 0 falls back to
+  // `lazy-index-scan-num-threads`, the same value as for query scans.
+  SizeT rebuildIndexScanNumThreads_{1, "rebuild-index-scan-num-threads"};
+  // The number of threads per permutation that compress and write blocks
+  // during a runtime index rebuild. Like the scan parameter above, this
+  // exists so that a rebuild on a live server leaves as much CPU as possible
+  // to concurrent queries: the default of 1 reduces the CPU work of the
+  // permutation phase by ~20% at nearly no cost in wall time (same
+  // measurement setup as above). A value of 0 falls back to
+  // `permutation-writer-num-threads`, which is also used when building an
+  // index from scratch and when writing materialized views, and which this
+  // parameter deliberately leaves untouched.
+  SizeT rebuildPermutationWriterNumThreads_{
+      1, "rebuild-permutation-writer-num-threads"};
+  // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
+  // the internal PSO+POS) that a runtime index rebuild processes in
+  // parallel. Each pair costs several CPU cores, several GB/s of memory
+  // bandwidth, and L3 cache, so lowering this value is THE knob for trading
+  // rebuild duration against interference with concurrent queries and
+  // updates. A value of 0 means "no limit" (all pairs in parallel).
+  SizeT rebuildMaxConcurrentPermutationPairs_{
+      0, "rebuild-max-concurrent-permutation-pairs"};
   Duration<std::chrono::seconds> defaultQueryTimeout_{std::chrono::seconds(30),
                                                       "default-query-timeout"};
   SizeT lazyIndexScanMaxSizeMaterialization_{
@@ -54,6 +103,7 @@ struct RuntimeParameters {
   Bool groupByDisableIndexScanOptimizations_{
       false, "group-by-disable-index-scan-optimizations"};
   SizeT serviceMaxValueRows_{10'000, "service-max-value-rows"};
+  SizeT serviceMaxRedirects_{1, "service-max-redirects"};
   SizeT queryPlanningBudget_{1500, "query-planning-budget"};
   Bool throwOnUnboundVariables_{false, "throw-on-unbound-variables"};
 
@@ -109,6 +159,18 @@ struct RuntimeParameters {
   Bool enablePrefilterOnIndexScans_{true, "enable-prefilter-on-index-scans"};
   // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
+  // The maximum number of threads for the parallel counting loops of the
+  // pattern trick (see `CountAvailablePredicates`). The value `0` means the
+  // number of logical cores of the machine. The default of `3` captures most
+  // of the speedup, with quickly diminishing returns for more threads.
+  SizeT patternTrickNumThreads_{3, "pattern-trick-num-threads"};
+  // The number of threads for the parallel sort of intermediate results
+  // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
+  // as `1`. Only effective when QLever was built with the CMake option
+  // `USE_PARALLEL`, which sets the macro `_PARALLEL_SORT`. The
+  // default of `3` captures most of the speedup, with quickly diminishing
+  // returns for more threads.
+  SizeT parallelSortNumThreads_{3, "parallel-sort-num-threads"};
   // The maximum size of the `prefilterBox` for
   // `SpatialJoinAlgorithms::libspatialjoinParse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};
@@ -130,6 +192,53 @@ struct RuntimeParameters {
   MemorySizeParameter materializedViewWriterMemory_{
       ad_utility::MemorySize::gigabytes(4), "materialized-view-writer-memory"};
 
+  // Memory threshold for switching from in-memory to external sort.
+  // If the input size exceeds this threshold, external sort is used.
+  MemorySizeParameter sortInMemoryThreshold_{
+      ad_utility::MemorySize::gigabytes(5), "sort-in-memory-threshold"};
+
+  Bool prefilteredOptionalJoin_{true, "prefiltered-optional-join"};
+
+  // If set, the query planner checks if suitable materialized views are loaded
+  // to substitute more expensive query plans.
+  Bool enableMaterializedViewQueryRewrite_{
+      true, "enable-materialized-view-query-rewrite"};
+
+  // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
+  // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
+  // IRIs that do not start with any of the given prefixes are rejected.
+  SpaceSeparatedStrings serviceAllowedIriPrefixes_{
+      {}, "service-allowed-iri-prefixes"};
+
+  // If set to true, then all queries and operations created afterward will
+  // neither read from nor write to QLever's subtree cache. This can be used to
+  // debug caching issues, and to get rid of the overhead of caching (in
+  // particular the computation of cache keys) when caching is not required.
+  Bool disableCaching_{false, "disable-caching"};
+
+  // Configure the amount of threads to compress and write blocks per
+  // permutation. A value of 0 indicates that the number of threads should be
+  // determined automatically based on the number of available hardware threads.
+  // Even though this influences the logic of regular index building,
+  // `qlever-index`doesn't expose a CLI flag to set this parameter.
+  SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
+
+  // Only blocks of this size or larger will be considered for vacuuming.
+  SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
+
+  // The runtime log level. Messages with a higher level are suppressed. The
+  // compile-time level (CMake LOGLEVEL) still applies as an upper bound.
+  LogLevelParameter logLevel_{LogLevel{ad_utility::detail::defaultLogLevel},
+                              "log-level"};
+
+  // Controls deduplication of triples in CONSTRUCT query results.
+  // "false" (default): no deduplication, every triple is emitted.
+  // "global": a triple is emitted at most once across the entire result.
+  // N (positive integer): deduplicate against the N most recently seen unique
+  // triples (per template triple); bounded memory, partial deduplication.
+  DeduplicationModeParameter constructDeduplication_{
+      DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
@@ -149,6 +258,12 @@ struct RuntimeParameters {
   // Throws if the parameter does not exist or if the value is invalid.
   void setFromString(const std::string& parameterName,
                      const std::string& value);
+
+  // Set a parameter from a single string of the form `<name>=<value>` (split
+  // at the first `=`). Throws if the string contains no `=`, if the parameter
+  // does not exist, or if the value is invalid. Used for the
+  // `--set-runtime-parameter` option of `qlever-server`.
+  void setFromAssignment(const std::string& assignment);
 
   // Get all parameter names.
   std::vector<std::string> getKeys() const;
@@ -183,6 +298,16 @@ auto getRuntimeParameter() {
   // destroyed. This is achieved by directly returning a copy of the parameter
   // value (the function returns `auto`, see above).
   return std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
+}
+
+// Get the current value of the numeric runtime parameter specified by the
+// `ParameterPtr`, translated to an optional override: the value 0, which for
+// such parameters means "fall back to the corresponding general parameter",
+// becomes `std::nullopt`.
+template <auto ParameterPtr>
+std::optional<size_t> getRuntimeParameterAsOptional() {
+  size_t value = getRuntimeParameter<ParameterPtr>();
+  return value == 0 ? std::nullopt : std::optional<size_t>{value};
 }
 
 #endif  // QLEVER_RUNTIMEPARAMETERS_H

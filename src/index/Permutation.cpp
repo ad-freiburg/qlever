@@ -1,19 +1,30 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/Permutation.h"
 
 #include <absl/strings/str_cat.h>
 
+#include "engine/VariableToColumnMap.h"
+#include "global/FileSuffixConstants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
-Permutation::Permutation(Enum permutation, Allocator allocator)
-    : readableName_(toString(permutation)),
-      fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
+Permutation::Permutation(Enum permutation, Allocator allocator,
+                         std::optional<std::string> readableName)
+    : readableName_{std::move(readableName)
+                        .value_or(std::string{toString(permutation)})},
+      fileSuffix_(
+          absl::StrCat(".", ad_utility::utf8ToLower(toString(permutation)))),
       keyOrder_(toKeyOrder(permutation)),
       allocator_{std::move(allocator)},
       permutation_{permutation} {}
@@ -27,21 +38,22 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 }
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(const std::string& onDiskBase,
-                               bool loadInternalPermutation) {
+void Permutation::loadFromDisk(
+    const std::string& onDiskBase, bool loadInternalPermutation,
+    Type permutationType,
+    ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns) {
   onDiskBase_ = onDiskBase;
+  permutationType_ = permutationType;
   if (loadInternalPermutation) {
+    AD_CONTRACT_CHECK(permutationType == Type::NORMAL);
     internalPermutation_ =
         std::make_unique<Permutation>(permutation_, allocator_);
     internalPermutation_->loadFromDisk(
         absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false);
-    internalPermutation_->isInternalPermutation_ = true;
+    internalPermutation_->permutationType_ = Type::INTERNAL;
   }
-  if constexpr (MetaData::isMmapBased_) {
-    meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
-                ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-  }
-  auto filename = std::string(onDiskBase + ".index" + fileSuffix_);
+  possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
+  auto filename = absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, fileSuffix_);
   ad_utility::File file;
   try {
     file.open(filename, "r");
@@ -52,8 +64,12 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
              "message was: " +
              e.what());
   }
-  meta_.readFromFile(&file);
-  reader_.emplace(allocator_, std::move(file));
+  ad_utility::File metaFile{filename + META_FILE_SUFFIX, "r"};
+  meta_.readFromFile(file, metaFile);
+  // Materialized views never use graph post-processing, while normal and
+  // internal permutations always use it.
+  bool useGraphPostProcessing = permutationType != Type::MATERIALIZED_VIEW;
+  reader_.emplace(allocator_, std::move(file), useGraphPostProcessing);
   AD_LOG_INFO << "Registered " << readableName_
               << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;
@@ -63,7 +79,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
 void Permutation::setOriginalMetadataForDeltaTriples(
     DeltaTriples& deltaTriples) const {
   deltaTriples.setOriginalMetadata(permutation(), metaData().blockDataShared(),
-                                   isInternalPermutation_);
+                                   permutationType_ == Type::INTERNAL);
   if (internalPermutation_ != nullptr) {
     internalPermutation().setOriginalMetadataForDeltaTriples(deltaTriples);
   }
@@ -105,7 +121,8 @@ IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
     const LimitOffsetClause& limitOffset) const {
-  return reader().getDistinctCol1IdsAndCounts(
+  return reader().getDistinctColIdsAndCounts(
+      1,
       getScanSpecAndBlocks(
           ScanSpecification{col0Id, std::nullopt, std::nullopt},
           locatedTriplesState),
@@ -119,9 +136,10 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
     const LocatedTriplesState& locatedTriplesState,
     const LimitOffsetClause& limitOffset) const {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
-  return reader().getDistinctCol0IdsAndCounts(
-      getScanSpecAndBlocks(scanSpec, locatedTriplesState), cancellationHandle,
-      getLocatedTriplesForPermutation(locatedTriplesState), limitOffset);
+  return reader().getDistinctColIdsAndCounts(
+      0, getScanSpecAndBlocks(scanSpec, locatedTriplesState),
+      cancellationHandle, getLocatedTriplesForPermutation(locatedTriplesState),
+      limitOffset);
 }
 
 // _____________________________________________________________________
@@ -142,6 +160,15 @@ auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
       return {2, 0, 1, 3};
   }
   AD_FAIL();
+}
+
+// _____________________________________________________________________
+std::vector<ql::filesystem::path> Permutation::fileNames(
+    Enum permutation, std::string_view onDiskBase) {
+  ql::filesystem::path filename =
+      absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, ".",
+                   ad_utility::utf8ToLower(toString(permutation)));
+  return {filename, absl::StrCat(filename.string(), META_FILE_SUFFIX)};
 }
 
 // _____________________________________________________________________
@@ -167,8 +194,9 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 // _____________________________________________________________________
 std::optional<CompressedRelationMetadata> Permutation::getMetadata(
     Id col0Id, const LocatedTriplesState& locatedTriplesState) const {
-  if (meta_.col0IdExists(col0Id)) {
-    return meta_.getMetaData(col0Id);
+  auto optionalMetadata = meta_.getMetaDataIfPresent(col0Id);
+  if (optionalMetadata.has_value()) {
+    return optionalMetadata.value();
   }
   return reader().getMetadataForSmallRelation(
       getScanSpecAndBlocks(
@@ -198,21 +226,54 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
     const LimitOffsetClause& limitOffset) const {
+  return lazyScanImpl(reader(), scanSpecAndBlocks, std::move(optBlocks),
+                      additionalColumns, cancellationHandle,
+                      locatedTriplesState, limitOffset);
+}
+
+// _____________________________________________________________________________
+CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScanImpl(
+    const CompressedRelationReader& reader,
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
+    std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
+    ColumnIndicesRef additionalColumns,
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesState& locatedTriplesState,
+    const LimitOffsetClause& limitOffset) const {
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
   if (!optBlocks.has_value()) {
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  return reader().lazyScan(
+  return reader.lazyScan(
       scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
       std::move(columns), cancellationHandle,
       getLocatedTriplesForPermutation(locatedTriplesState), limitOffset);
 }
 
+// _____________________________________________________________________________
+Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
+    ColumnIndicesRef additionalColumns,
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesState& locatedTriplesState,
+    std::optional<size_t> numThreadsOverride) const {
+  auto independentReader = std::make_unique<CompressedRelationReader>(
+      reader().makeReaderWithReboundAllocator(
+          ad_utility::makeUnlimitedAllocator<Id>()));
+  // Applies only to this dedicated reader; query scans use the shared reader
+  // and are unaffected.
+  independentReader->lazyScanNumThreadsOverride_ = numThreadsOverride;
+  auto blocks = lazyScanImpl(*independentReader, scanSpecAndBlocks,
+                             std::nullopt, additionalColumns,
+                             cancellationHandle, locatedTriplesState, {});
+  return {std::move(independentReader), std::move(blocks)};
+}
+
 // ______________________________________________________________________
 const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
     const LocatedTriplesState& locatedTriplesState) const {
-  return isInternalPermutation_
+  return permutationType_ == Type::INTERNAL
              ? locatedTriplesState.getLocatedTriplesForPermutation<true>(
                    permutation_)
              : locatedTriplesState.getLocatedTriplesForPermutation<false>(
@@ -231,4 +292,24 @@ BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
 const Permutation& Permutation::internalPermutation() const {
   AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
   return *internalPermutation_;
+}
+
+// ______________________________________________________________________
+void Permutation::setMaterializedView(
+    std::weak_ptr<const MaterializedView> view) {
+  AD_CONTRACT_CHECK(permutationType_ == Type::MATERIALIZED_VIEW);
+  materializedView_ = std::move(view);
+}
+
+// ______________________________________________________________________
+std::shared_ptr<const MaterializedView> Permutation::materializedView() const {
+  return materializedView_.lock();
+}
+
+// ______________________________________________________________________
+ColumnIndexAndTypeInfo::UndefStatus Permutation::getColumnUndefStatus(
+    ColumnIndex col) const {
+  return possiblyUndefinedColumns_.contains(col)
+             ? ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined
+             : ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
 }

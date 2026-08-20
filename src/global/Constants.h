@@ -34,6 +34,19 @@ constexpr inline size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
 
 constexpr inline size_t GALLOP_THRESHOLD = 1000;
 
+// Batching parameters for `VocabularyOnDisk::scanAll`, which reads the whole
+// vocabulary sequentially in two nested batches (one large read each), instead
+// of two small `pread`s per word.
+// The maximum number of words whose offsets are read into memory at once (they
+// are small: 8 bytes per word). Chosen to comfortably fit within
+// `VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH` for regular datasets.
+constexpr inline size_t VOCABULARY_SCAN_MAX_WORDS_PER_BATCH = 10'000;
+// The maximum number of bytes of word data read into memory at once. If a
+// single word is larger than this, that word alone is read and the limit is
+// necessarily exceeded (a word must not be split).
+constexpr inline ad_utility::MemorySize
+    VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH = 10_MB;
+
 constexpr inline char QLEVER_INTERNAL_PREFIX_NAME[] = "ql";
 constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_URL =
     "http://qlever.cs.uni-freiburg.de/builtin-functions/";
@@ -109,6 +122,15 @@ constexpr inline std::string_view QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX =
                                 QLEVER_INTERNAL_PREFIX_URL,
                                 string_constants::detail::blank_node_prefix>();
 
+// The prefix of the new graph IRIs that are generated when a Graph Store
+// Protocol PUT is made without specifying a graph.
+namespace string_constants::detail {
+constexpr inline std::string_view new_graph_prefix = "graph/";
+}  // namespace string_constants::detail
+constexpr inline std::string_view QLEVER_NEW_GRAPH_PREFIX =
+    ad_utility::constexprStrCat<QLEVER_INTERNAL_PREFIX_URL,
+                                string_constants::detail::new_graph_prefix>();
+
 // The prefix of the SERVICE IRI used for a cached result with a name. Use as
 // in `SERVICE <ql:cached-result-with-name-$query-name$> {}`.
 namespace string_constants::detail {
@@ -145,9 +167,12 @@ constexpr inline std::string_view MATCHINGWORD_VARIABLE_PREFIX =
 
 namespace constants::details::strings {
 constexpr inline std::string_view langtag{"langtag"};
-}
+constexpr inline std::string_view hasWord{"has-word"};
+}  // namespace constants::details::strings
 constexpr inline std::string_view LANGUAGE_PREDICATE =
     makeQleverInternalIriConst<constants::details::strings::langtag>();
+constexpr inline std::string_view HAS_WORD_PREDICATE =
+    makeQleverInternalIriConst<constants::details::strings::hasWord>();
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
@@ -211,9 +236,16 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
 
 constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 
-constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
-constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
-constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
+// The key under which the datetime when the index build started is stored in
+// the index configuration.
+constexpr inline std::string_view DATE_OF_INDEX_BUILD_KEY =
+    "date-of-index-build";
+
+// The datetime format used for the `date-of-index-build` entry in the index
+// configuration (the time when the build started), e.g.
+// `2026-07-12T14:03:52Z` (UTC).
+constexpr inline std::string_view DATE_OF_INDEX_BUILD_FORMAT =
+    "%Y-%m-%dT%H:%M:%SZ";
 
 constexpr inline std::string_view ERROR_IGNORE_CASE_UNSUPPORTED =
     "Key \"ignore-case\" is no longer supported. Please remove this key from "
@@ -265,7 +297,13 @@ constexpr inline size_t MAKE_ROOM_SLACK_FACTOR = 2;
 // more columns, but also increases compile times because more templates
 // have to be instantiated. It might also be necessary to increase some internal
 // compiler limits for the evaluation of constexpr functions and templates.
+// Under QLEVER_CHEAPER_COMPILATION the value is lowered to reduce the number
+// of template instantiations and thereby speed up debug builds.
+#ifdef QLEVER_CHEAPER_COMPILATION
+constexpr inline int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 1;
+#else
 constexpr inline int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
+#endif
 
 // Interval in which an enabled watchdog would check if
 // `CancellationHandle::throwIfCancelled` is called regularly.
@@ -307,7 +345,6 @@ auto parallel_sort([[maybe_unused]] Args&&... args) {
 using parallel_tag = int;
 }  // namespace ad_utility
 #endif
-constexpr inline size_t NUM_SORT_THREADS = 4;
 /// ANSI escape sequence for bold text in the console
 constexpr inline std::string_view EMPH_ON = "\033[1m";
 /// ANSI escape sequence to print "normal" text again in the console.
@@ -324,5 +361,10 @@ constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
 
 constexpr inline std::string_view GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX =
     "http-graph-store";
+
+// The number of `BatchIoManager`s pooled by `VocabularyOnDisk` for batched
+// vocabulary lookups (`lookupBatch`). Each manager owns an io_uring ring; the
+// pool size bounds how many batch lookups can be served concurrently.
+constexpr inline size_t NUM_VOCAB_BATCH_IO_MANAGERS = 8;
 
 #endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H

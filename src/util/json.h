@@ -14,19 +14,12 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #define EOF std::char_traits<char>::eof()
 #endif
 
-// Disallow implicit conversions from nlohmann::json to other types,
-// most notably to std::string.
-#include <stdexcept>
-
-#include "util/File.h"
-#include "util/TypeTraits.h"
-#define JSON_USE_IMPLICIT_CONVERSIONS 0
-
 #include <absl/strings/str_cat.h>
 
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <stdexcept>
 #include <utility>
 #include <variant>
 
@@ -34,7 +27,9 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include "backports/type_traits.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
+#include "util/File.h"
 #include "util/SourceLocation.h"
+#include "util/TypeTraits.h"
 
 // For higher flexibility of the custom json helper functions.
 template <typename T>

@@ -34,10 +34,10 @@ namespace ad_benchmark {
 */
 CPP_template(typename Function)(requires(
     ql::concepts::invocable<
-        Function>)) static float measureTimeOfFunction(const Function&
-                                                           functionToMeasure,
-                                                       std::string_view
-                                                           measurementSubjectIdentifier) {
+        Function>)) float measureTimeOfFunction(const Function&
+                                                    functionToMeasure,
+                                                std::string_view
+                                                    measurementSubjectIdentifier) {
   AD_LOG_INFO << "Running measurement \"" << measurementSubjectIdentifier
               << "\" ..." << std::endl;
 

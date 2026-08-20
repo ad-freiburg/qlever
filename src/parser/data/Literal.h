@@ -11,7 +11,6 @@
 
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
-#include "parser/data/ConstructQueryExportContext.h"
 #include "util/Concepts.h"
 
 class Literal {
@@ -45,22 +44,10 @@ class Literal {
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] const std::string& literal() const {
-    return _stringRepresentation;
-  }
+  const std::string& literal() const { return _stringRepresentation; }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> evaluate(
-      [[maybe_unused]] const ConstructQueryExportContext& context,
-      PositionInTriple role) const {
-    if (role == PositionInTriple::OBJECT) {
-      return _stringRepresentation;
-    }
-    return std::nullopt;
-  }
-
-  // ___________________________________________________________________________
-  [[nodiscard]] std::string toSparql() const { return _stringRepresentation; }
+  std::string toSparql() const { return _stringRepresentation; }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Literal, _stringRepresentation)
 };

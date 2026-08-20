@@ -15,9 +15,11 @@
 #include "global/Pattern.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
-#include "util/BufferedVector.h"
+#include "util/CompactStringVector.h"
 #include "util/ExceptionHandling.h"
+#include "util/ExternalOverflowStorage.h"
 #include "util/HashMap.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 
@@ -103,15 +105,10 @@ class PatternCreator {
   // because more triples with the same subject might be pushed.
   Pattern currentPattern_;
 
-  ad_utility::serialization::FileWriteSerializer patternSerializer_;
-
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
-  struct TripleAndIsInternal {
-    std::array<Id, NumColumnsIndexBuilding> triple_;
-    bool isInternal_;
-  };
-  ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
+  ad_utility::ExternalOverflowStorage<std::array<Id, NumColumnsIndexBuilding>>
+      tripleBuffer_;
   TripleSorter tripleSorter_;
 
   // The predicates which have already occurred in one of the patterns. Needed
@@ -130,17 +127,16 @@ class PatternCreator {
 
  public:
   // The patterns will be written to files starting with `basename`.
-  explicit PatternCreator(const std::string& basename, Id idOfHasPattern,
+  explicit PatternCreator(std::string basename, Id idOfHasPattern,
                           ad_utility::MemorySize memoryLimit)
-      : filename_{basename},
-        patternSerializer_{{basename}},
-        tripleBuffer_(100'000, basename + ".tripleBufferForPatterns.dat"),
+      : filename_{std::move(basename)},
+        tripleBuffer_(100'000, filename_ + ".tripleBufferForPatterns.dat"),
         tripleSorter_{
             std::make_unique<PSOSorter>(
-                basename + ".additionalTriples.pso.dat", memoryLimit / 2,
+                filename_ + ".additionalTriples.pso.dat", memoryLimit / 2,
                 ad_utility::makeUnlimitedAllocator<Id>()),
             std::make_unique<OSPSorter4Cols>(
-                basename + ".second-sorter.dat", memoryLimit / 2,
+                filename_ + ".second-sorter.dat", memoryLimit / 2,
                 ad_utility::makeUnlimitedAllocator<Id>())},
         idOfHasPattern_{idOfHasPattern} {
     AD_LOG_DEBUG << "Computing predicate patterns ..." << std::endl;
@@ -149,8 +145,7 @@ class PatternCreator {
   // This function has to be called for all the triples in the SPO permutation
   // The `triple` must be >= all previously pushed triples wrt the SPO
   // permutation.
-  void processTriple(std::array<Id, NumColumnsIndexBuilding> triple,
-                     bool ignoreTripleForPatterns);
+  void processTriple(const std::array<Id, NumColumnsIndexBuilding>& triple);
 
   // Write the patterns to disk after all triples have been pushed. Calls to
   // `processTriple` after calling `finish` lead to undefined behavior. Note
@@ -174,6 +169,13 @@ class PatternCreator {
                                    double& avgNumPredicatesPerSubject,
                                    uint64_t& numDistinctSubjectPredicatePairs,
                                    CompactVectorOfStrings<Id>& patterns);
+
+  // Write the given patterns and their statistics to files with the given
+  // `filename`.
+  static void writePatternsToFile(
+      const std::string& filename,
+      const CompactVectorOfStrings<Pattern::value_type>& patterns,
+      const PatternStatistics& patternStatistics);
 
   // Move out the sorted triples after finishing creating the patterns.
   TripleSorter&& getTripleSorter() && {

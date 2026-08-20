@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "backports/three_way_comparison.h"
-#include "engine/LocalVocab.h"
+#include "index/LocalVocab.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
 #include "parser/UpdateTriples.h"

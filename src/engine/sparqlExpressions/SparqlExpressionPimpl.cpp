@@ -16,14 +16,15 @@ SparqlExpressionPimpl::SparqlExpressionPimpl(
     std::shared_ptr<SparqlExpression>&& pimpl, std::string descriptor)
     : _pimpl{std::move(pimpl)} {
   _pimpl->descriptor() = std::move(descriptor);
-};
+}
 
 // ___________________________________________________________________________
 SparqlExpressionPimpl::~SparqlExpressionPimpl() = default;
 
 // ___________________________________________________________________________
-std::vector<const Variable*> SparqlExpressionPimpl::containedVariables() const {
-  return _pimpl->containedVariables();
+std::vector<const Variable*> SparqlExpressionPimpl::containedVariables(
+    bool excludeExists) const {
+  return _pimpl->containedVariables(excludeExists);
 }
 
 // ____________________________________________________________________________
@@ -62,6 +63,17 @@ std::string SparqlExpressionPimpl::getCacheKey(
   return _pimpl->getCacheKey(variableToColumnMap);
 }
 
+// ___________________________________________________________________________
+bool SparqlExpressionPimpl::isResultAlwaysDefined(
+    const VariableToColumnMap& variableToColumnMap) const {
+  return _pimpl->isResultAlwaysDefined(variableToColumnMap);
+}
+
+// ___________________________________________________________________________
+bool SparqlExpressionPimpl::isDeterministic() const {
+  return _pimpl->isDeterministic();
+}
+
 // ____________________________________________________________________________
 const std::string& SparqlExpressionPimpl::getDescriptor() const {
   return _pimpl->descriptor();
@@ -96,13 +108,19 @@ auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
 
 //_____________________________________________________________________________
 std::vector<PrefilterExprVariablePair>
-SparqlExpressionPimpl::getPrefilterExpressionForMetadata() const {
-  return _pimpl->getPrefilterExpressionForMetadata();
+SparqlExpressionPimpl::getPrefilterExpressionForMetadata(
+    const LocalVocabContext& context) const {
+  return _pimpl->getPrefilterExpressionForMetadata(context);
 }
 
 // _____________________________________________________________________________
 bool SparqlExpressionPimpl::containsAggregate() const {
   return _pimpl->containsAggregate();
+}
+
+// _____________________________________________________________________________
+bool SparqlExpressionPimpl::readsAllVisibleColumns() const {
+  return _pimpl->readsAllVisibleColumns();
 }
 
 // ______________________________________________________________________________

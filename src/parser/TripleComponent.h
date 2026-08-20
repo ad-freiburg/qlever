@@ -13,11 +13,9 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
-#include "engine/LocalVocab.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/SpecialIds.h"
-#include "index/EncodedIriManager.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "rdfTypes/Variable.h"
@@ -36,11 +34,11 @@ CPP_concept MoveAssignableWith =
 
 }  // namespace ad_utility::detail
 
-/// A wrapper around a `std::variant` that can hold the different types that the
-/// subject, predicate, or object of a triple can have in the Turtle Parser.
-/// Those currently are `double` (xsd:double and xsd:decimal), `int64_t`
-/// (xsd:int and xsd:integer) and `std::string` (variables, IRIs, and literals
-/// of any other type).
+// A wrapper around a `std::variant` that can hold the different types that the
+// subject, predicate, or object of a triple can have in the Turtle Parser.
+// Those currently are `double` (xsd:double and xsd:decimal), `int64_t`
+// (xsd:int and xsd:integer) and `std::string` (variables, IRIs, and literals
+// of any other type).
 class TripleComponent {
  public:
   using Literal = ad_utility::triple_component::Literal;
@@ -48,7 +46,7 @@ class TripleComponent {
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
-    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(UNDEF)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(UNDEF, )
     // Hash to arbitrary (fixed) value. For example, needed in
     // `Values::computeMultiplicities`.
     template <typename H>
@@ -128,6 +126,15 @@ class TripleComponent {
   /// Equality comparison between two `TripleComponent`s.
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(TripleComponent, _variant)
 
+  // Apply `visitor` to the value that is currently stored. Used by code that
+  // has to handle all the alternatives exhaustively, but cannot be a member
+  // function, for example the conversions in
+  // `index/TripleComponentConversions.h`.
+  template <typename Visitor>
+  decltype(auto) visit(Visitor&& visitor) const {
+    return std::visit(AD_FWD(visitor), _variant);
+  }
+
   /// Hash value for `TripleComponent` object.
   /// Note: It is important to use `ql::concepts::same_as` because otherwise
   /// this overload would also be eligible for the contained types that are
@@ -199,88 +206,11 @@ class TripleComponent {
   // Access the underlying variant (mostly used for testing)
   const auto& getVariant() const { return _variant; }
 
-  /// Convert to an RDF literal. `std::strings` will be emitted directly,
-  /// `int64_t` is converted to a `xsd:integer` literal, and a `double` is
-  /// converted to a `xsd:double`.
-  // TODO<joka921> This function is used in only few places and  ignores the
-  // strong typing of `Literal`s etc. It should be removed and its calls be
-  // replaced by calls that work on the strongly typed `TripleComponent`
-  // directly.
-  [[nodiscard]] std::string toRdfLiteral() const;
-
-  /// Convert the `TripleComponent` to an ID if it is not a string. In case of a
-  /// string return `std::nullopt`. This is used in `toValueId` below and during
-  /// the index building when we haven't built the vocabulary yet.
-  [[nodiscard]] std::optional<Id> toValueIdIfNotString(
-      const EncodedIriManager* encodedIriManager) const;
-
-  // Convert the `TripleComponent` to an `Id`. If the `TripleComponent` is a
-  // literal or IRI, resolve using the `vocabulary`. If they are not found in
-  // the vocabulary, return the positions of the two neighboring entries.
-  template <typename Vocabulary>
-  [[nodiscard]] std::variant<Id, std::pair<VocabIndex, VocabIndex>>
-  toValueIdOrBounds(const Vocabulary& vocabulary,
-                    const EncodedIriManager& evManager) const {
-    AD_CONTRACT_CHECK(!isString());
-    std::optional<Id> vid = toValueIdIfNotString(&evManager);
-    if (vid != std::nullopt) return vid.value();
-    AD_CORRECTNESS_CHECK(isLiteral() || isIri());
-    const std::string& content = isLiteral()
-                                     ? getLiteral().toStringRepresentation()
-                                     : getIri().toStringRepresentation();
-    auto [lower, upper] = vocabulary.getPositionOfWord(content);
-    if (lower != upper) {
-      return Id::makeFromVocabIndex(lower);
-    }
-    return std::pair(lower, upper);
-  }
-
-  // Like `toValueIdOrBounds`, but returns `std::nullopt` if not found.
-  template <typename Vocabulary>
-  [[nodiscard]] std::optional<Id> toValueId(
-      const Vocabulary& vocabulary, const EncodedIriManager& evManager) const {
-    auto idOrBounds = toValueIdOrBounds(vocabulary, evManager);
-    if (auto* id = std::get_if<Id>(&idOrBounds)) {
-      return *id;
-    }
-    return std::nullopt;
-  }
-
-  // Like `toValueIdOrBounds`, but also take the given `LocalVocab` into
-  // account. If this `TripleComponent` is neither found in `vocabulary` nor in
-  // `localVocab`, it will be added to `localVocab`. That way, we always get a
-  // valid `Id`.
-  //
-  // NOTE: The modifier is `&&` because in our uses of this method, the
-  // `TripleComponent` object is created solely to call this method and we want
-  // to avoid copying the literal or IRI when passing it to the local
-  // vocabulary.
-  template <typename Vocabulary>
-  [[nodiscard]] Id toValueId(const Vocabulary& vocabulary,
-                             LocalVocab& localVocab,
-                             const EncodedIriManager& encodedIriManager) && {
-    auto idOrBounds = toValueIdOrBounds(vocabulary, encodedIriManager);
-    if (auto* id = std::get_if<Id>(&idOrBounds)) {
-      return *id;
-    }
-    using Bounds = std::pair<VocabIndex, VocabIndex>;
-    AD_CORRECTNESS_CHECK(std::holds_alternative<Bounds>(idOrBounds));
-    auto [lower, upper] = std::get<Bounds>(idOrBounds);
-    // If `toValueId` could not convert to `Id`, we have a Literal or Iri,
-    // which we look up in (and potentially add to) our local vocabulary.
-    AD_CORRECTNESS_CHECK(isLiteral() || isIri());
-    using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-    auto moveWord = [&]() -> LiteralOrIri {
-      if (isLiteral()) {
-        return LiteralOrIri{std::move(getLiteral())};
-      } else {
-        return LiteralOrIri{std::move(getIri())};
-      }
-    };
-    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry(moveWord(), Id::makeFromVocabIndex(lower),
-                        Id::makeFromVocabIndex(upper))));
-  }
+  // NOTE: The conversions that require an index (`toValueIdIfNotString`,
+  // `toValueIdOrBounds`, `toValueId`, and `toRdfLiteral`) used to be member
+  // functions here. They are free functions in
+  // `index/TripleComponentConversions.h` now, so that this purely syntactic
+  // parser type does not depend on the `index` library.
 
   // Human-readable output. Is used for debugging, testing, and for the creation
   // of descriptors and cache keys.

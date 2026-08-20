@@ -383,6 +383,21 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
   }
 }
 
+// _____________________________________________________________________________
+void ParsedQuery::updateExportLimit(std::optional<uint64_t> sendLimit) {
+  if (sendLimit.has_value()) {
+    _limitOffset.exportLimit_ = sendLimit;
+  }
+}
+
+// ____________________________________________________________________________
+bool ParsedQuery::isAggregatingQuery() const {
+  return !_groupByVariables.empty() ||
+         ql::ranges::any_of(getAliases(), [](const Alias& alias) {
+           return alias._expression.containsAggregate();
+         });
+}
+
 // ____________________________________________________________________________
 void ParsedQuery::checkVariableIsVisible(
     const Variable& variable, const std::string& locationDescription,
@@ -403,7 +418,10 @@ void ParsedQuery::checkUsedVariablesAreVisible(
     const std::string& locationDescription,
     const ad_utility::HashSet<Variable>& additionalVisibleVariables,
     std::string_view otherPossibleLocationDescription) {
-  for (const auto* var : expression.containedVariables()) {
+  // Note: We pass `excludeExists = true`, because the variables that occur only
+  // inside the body of an `EXISTS` live in their own scope and thus are not
+  // visible in the surrounding query.
+  for (const auto* var : expression.containedVariables(true)) {
     checkVariableIsVisible(*var,
                            locationDescription + " in expression \"" +
                                expression.getDescriptor() + "\"",

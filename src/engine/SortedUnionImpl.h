@@ -8,16 +8,16 @@
 #include <optional>
 
 #include "backports/span.h"
-#include "engine/LocalVocab.h"
 #include "engine/Result.h"
 #include "engine/Union.h"
 #include "engine/idTable/IdTable.h"
+#include "index/LocalVocab.h"
 
 namespace sortedUnion {
-// Helper struct that has the same layout as Result::IdTableVocabPair but
+// Helper struct that has the same layout as `Result::IdTableVocabPair` but
 // doesn't own the data.
 struct Wrapper {
-  const IdTable& idTable_;
+  const IdTableView<0>& idTable_;
   const LocalVocab& localVocab_;
 };
 
@@ -90,8 +90,8 @@ struct IterationData {
 };
 
 template <typename Range>
-IterationData(std::shared_ptr<const Result>, Range, std::vector<ColumnIndex>)
-    -> IterationData<Range>;
+IterationData(std::shared_ptr<const Result>, Range,
+              std::vector<ColumnIndex>) -> IterationData<Range>;
 
 // Range that performs a zipper merge of two sorted ranges.
 template <size_t SPAN_SIZE, typename Range1, typename Range2, typename Func>
@@ -137,7 +137,7 @@ struct SortedUnionImpl
     }
   }
 
-  // Always inline makes makes a huge difference on large datasets.
+  // Always inline makes a huge difference on large datasets.
   template <typename T1, typename T2>
   AD_ALWAYS_INLINE bool isSmaller(const T1& row1, const T2& row2) const {
     using StaticRange = ql::span<const std::array<size_t, 2>, SPAN_SIZE>;
@@ -244,8 +244,8 @@ template <size_t SPAN_SIZE, typename Range1, typename Range2, typename Func>
 SortedUnionImpl(IterationData<Range1>, IterationData<Range2>, bool,
                 const std::vector<std::array<size_t, 2>>&,
                 const ad_utility::AllocatorWithLimit<Id>&,
-                ql::span<const ColumnIndex, SPAN_SIZE>, Func)
-    -> SortedUnionImpl<SPAN_SIZE, Range1, Range2, Func>;
+                ql::span<const ColumnIndex, SPAN_SIZE>,
+                Func) -> SortedUnionImpl<SPAN_SIZE, Range1, Range2, Func>;
 }  // namespace sortedUnion
 
 #endif  // QLEVER_SRC_ENGINE_SORTEDUNIONIMPL_H

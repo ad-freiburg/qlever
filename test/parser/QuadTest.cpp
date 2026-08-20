@@ -8,10 +8,7 @@
 #include "./SparqlAntlrParserTestHelpers.h"
 #include "parser/Quads.h"
 
-namespace tc {
-auto Iri = ad_utility::triple_component::Iri::fromIriref;
-}
-
+using namespace ad_utility::testing;
 // _____________________________________________________________________________
 TEST(QuadTest, getQuads) {
   auto expectGetQuads =
@@ -37,21 +34,18 @@ TEST(QuadTest, getQuads) {
     return SparqlTripleSimpleWithGraph(c, c, c, g);
   };
   expectGetQuads({}, {}, {});
-  expectGetQuads({TripleOf(Iri("<a>"))}, {},
-                 {QuadOf(tc::Iri("<a>"), std::monostate{})});
-  expectGetQuads({TripleOf(Iri("<a>"))},
-                 {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}}},
-                 {QuadOf(tc::Iri("<a>"), std::monostate{}),
-                  QuadOf(tc::Iri("<a>"), tc::Iri("<b>"))});
+  expectGetQuads({TripleOf(iri("<a>"))}, {},
+                 {QuadOf(iri("<a>"), std::monostate{})});
   expectGetQuads(
-      {TripleOf(Iri("<a>")), TripleOf(Iri("<d>"))},
-      {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}},
-       {tc::Iri("<b>"), {TripleOf(Iri("<b>")), TripleOf(Iri("<c>"))}}},
-      {QuadOf(tc::Iri("<a>"), std::monostate{}),
-       QuadOf(tc::Iri("<d>"), std::monostate{}),
-       QuadOf(tc::Iri("<a>"), tc::Iri("<b>")),
-       QuadOf(tc::Iri("<b>"), tc::Iri("<b>")),
-       QuadOf(tc::Iri("<c>"), tc::Iri("<b>"))});
+      {TripleOf(iri("<a>"))}, {{iri("<b>"), {TripleOf(iri("<a>"))}}},
+      {QuadOf(iri("<a>"), std::monostate{}), QuadOf(iri("<a>"), iri("<b>"))});
+  expectGetQuads(
+      {TripleOf(iri("<a>")), TripleOf(iri("<d>"))},
+      {{iri("<b>"), {TripleOf(iri("<a>"))}},
+       {iri("<b>"), {TripleOf(iri("<b>")), TripleOf(iri("<c>"))}}},
+      {QuadOf(iri("<a>"), std::monostate{}),
+       QuadOf(iri("<d>"), std::monostate{}), QuadOf(iri("<a>"), iri("<b>")),
+       QuadOf(iri("<b>"), iri("<b>")), QuadOf(iri("<c>"), iri("<b>"))});
 }
 
 // _____________________________________________________________________________
@@ -106,24 +100,22 @@ TEST(QuadTest, getOperations) {
                                                     matchers::Triples(triples));
       };
   expectGetQuads({}, {}, ElementsAre(matchers::Triples({})));
+  expectGetQuads({TripleOf(iri("<a>"))}, {},
+                 ElementsAre(matchers::Triples({SparqlTriple(iri("<a>"))})));
   expectGetQuads(
-      {TripleOf(Iri("<a>"))}, {},
-      ElementsAre(matchers::Triples({SparqlTriple(tc::Iri("<a>"))})));
+      {TripleOf(iri("<a>"))}, {{iri("<b>"), {TripleOf(iri("<a>"))}}},
+      ElementsAre(matchers::Triples({SparqlTriple(iri("<a>"))}),
+                  GraphTriples({SparqlTriple(iri("<a>"))}, iri("<b>"))));
   expectGetQuads(
-      {TripleOf(Iri("<a>"))}, {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}}},
+      {TripleOf(iri("<a>")), TripleOf(iri("<d>"))},
+      {{iri("<b>"), {TripleOf(iri("<a>"))}},
+       {iri("<b>"), {TripleOf(iri("<b>")), TripleOf(iri("<c>"))}}},
       ElementsAre(
-          matchers::Triples({SparqlTriple(tc::Iri("<a>"))}),
-          GraphTriples({SparqlTriple(tc::Iri("<a>"))}, tc::Iri("<b>"))));
-  expectGetQuads(
-      {TripleOf(Iri("<a>")), TripleOf(Iri("<d>"))},
-      {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}},
-       {tc::Iri("<b>"), {TripleOf(Iri("<b>")), TripleOf(Iri("<c>"))}}},
-      ElementsAre(matchers::Triples({SparqlTriple(tc::Iri("<a>")),
-                                     SparqlTriple(tc::Iri("<d>"))}),
-                  GraphTriples({SparqlTriple(tc::Iri("<a>"))}, tc::Iri("<b>")),
-                  GraphTriples({SparqlTriple(tc::Iri("<b>")),
-                                SparqlTriple(tc::Iri("<c>"))},
-                               tc::Iri("<b>"))));
+          matchers::Triples(
+              {SparqlTriple(iri("<a>")), SparqlTriple(iri("<d>"))}),
+          GraphTriples({SparqlTriple(iri("<a>"))}, iri("<b>")),
+          GraphTriples({SparqlTriple(iri("<b>")), SparqlTriple(iri("<c>"))},
+                       iri("<b>"))));
 }
 
 TEST(QuadTest, forAllVariables) {
@@ -141,8 +133,8 @@ TEST(QuadTest, forAllVariables) {
   using Var = Variable;
 
   using Triple = std::array<GraphTerm, 3>;
-  Triple noVars{GraphTerm(Iri("<a>")), GraphTerm(Iri("<b>")),
-                GraphTerm(Iri("<c>"))};
+  Triple noVars{GraphTerm(iri("<a>")), GraphTerm(iri("<b>")),
+                GraphTerm(iri("<c>"))};
   Triple differentVars{GraphTerm(Var("?a")), GraphTerm(Var("?b")),
                        GraphTerm(Var("?c"))};
   Triple sameVar{GraphTerm(Var("?a")), GraphTerm(Var("?a")),
@@ -162,4 +154,33 @@ TEST(QuadTest, forAllVariables) {
   expectForAllVariables(
       {{noVars, differentVars, sameVar}, {{{Var("?d"), {differentVars}}}}},
       {Var("?a"), Var("?b"), Var("?c"), Var("?d")});
+}
+
+// _____________________________________________________________________________
+// Two `SparqlTripleSimpleWithGraph` are only equal if all their members are
+// equal, including those of the base class `SparqlTripleSimple`.
+TEST(QuadTest, equalityOfSparqlTripleSimpleWithGraph) {
+  using Graph = SparqlTripleSimpleWithGraph::Graph;
+  using Triple = SparqlTripleSimpleWithGraph;
+  auto makeTriple =
+      [](std::string_view s, std::string_view p, std::string_view o,
+         const Graph& g,
+         Triple::AdditionalScanColumns additionalScanColumns = {}) {
+        return Triple{iri(s), iri(p), iri(o), g,
+                      std::move(additionalScanColumns)};
+      };
+  const Graph graph{iri("<d>")};
+  const Triple triple = makeTriple("<a>", "<b>", "<c>", graph);
+
+  EXPECT_EQ(triple, makeTriple("<a>", "<b>", "<c>", graph));
+  // Differences in the subject, predicate, object, and additional scan columns
+  // (which are all stored in the base class) must not be ignored.
+  EXPECT_NE(triple, makeTriple("<x>", "<b>", "<c>", graph));
+  EXPECT_NE(triple, makeTriple("<a>", "<x>", "<c>", graph));
+  EXPECT_NE(triple, makeTriple("<a>", "<b>", "<x>", graph));
+  EXPECT_NE(triple,
+            makeTriple("<a>", "<b>", "<c>", graph, {{0, Variable{"?x"}}}));
+  // A difference in the graph of course also makes them unequal.
+  EXPECT_NE(triple, makeTriple("<a>", "<b>", "<c>", Graph{std::monostate{}}));
+  EXPECT_NE(triple, makeTriple("<a>", "<b>", "<c>", Graph{iri("<x>")}));
 }

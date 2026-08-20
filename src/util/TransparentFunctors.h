@@ -98,6 +98,30 @@ struct DereferenceImpl {
   }
 };
 
+// Implementation of `addressOf` (see below).
+struct AddressOfImpl {
+  template <typename X>
+  constexpr decltype(auto) operator()(X&& x) const {
+    return &AD_FWD(x);
+  }
+};
+
+// Implementation of `hasValue` (see below).
+struct HasValueImpl {
+  template <typename X>
+  constexpr decltype(auto) operator()(X&& x) const {
+    return x.has_value();
+  }
+};
+
+// Implementation of `value` (see below).
+struct ValueImpl {
+  template <typename X>
+  constexpr decltype(auto) operator()(X&& x) const {
+    return AD_FWD(x).value();
+  }
+};
+
 }  // namespace detail
 
 // Return the first element via perfect forwarding of any type for which
@@ -136,6 +160,15 @@ static constexpr detail::StaticCastImpl<T> staticCast{};
 // Transparent functor that dereferences a pointer or smart pointer.
 static constexpr detail::DereferenceImpl dereference;
 
+// Transparent functor that gets the address of an object via `operator&`.
+static constexpr detail::AddressOfImpl addressOf;
+
+// Transparent functor for `std::optional::has_value`.
+static constexpr detail::HasValueImpl hasValue;
+
+// Transparent functor for `std::optional::value`.
+static constexpr detail::ValueImpl value;
+
 // Transparent functor that takes an arbitrary number of arguments by reference
 // and does nothing. We also use the type `Noop`, hence it is defined here and
 // not in the `detail` namespace above.
@@ -147,6 +180,15 @@ struct Noop {
   }
 };
 [[maybe_unused]] static constexpr Noop noop{};
+
+// A default-constructible projection functor for a data field member.
+template <auto MemberPtr>
+struct MemberProjection {
+  template <typename T>
+  constexpr decltype(auto) operator()(T&& obj) const noexcept {
+    return AD_FWD(obj).*MemberPtr;
+  }
+};
 
 }  // namespace ad_utility
 

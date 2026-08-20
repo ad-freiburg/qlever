@@ -18,6 +18,11 @@
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
 
+// The interface that this class needs from the index it belongs to. Only
+// forward-declared here, because its definition requires `global/Id.h`, which
+// in turn requires this header (see the note on `IdProxy` below).
+class LocalVocabContext;
+
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
 // the entry would be in the global vocabulary of the Index. This position is
@@ -37,6 +42,8 @@ class alignas(16) LocalVocabEntry
   FRIEND_TEST(TripleComponent, toValueId);
 
  private:
+  // Pointer to keep this object assignable.
+  const LocalVocabContext* context_;
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
@@ -49,17 +56,23 @@ class alignas(16) LocalVocabEntry
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
 
  public:
-  // Inherit the constructors from `LiteralOrIri`
-  using Base::Base;
+  LocalVocabEntry(LiteralT literal, const LocalVocabContext& context)
+      : Base{std::move(literal)}, context_{&context} {}
+  LocalVocabEntry(IriT iri, const LocalVocabContext& context) noexcept
+      : Base{std::move(iri)}, context_{&context} {}
 
   // Deliberately allow implicit conversion from `LiteralOrIri`.
-  QL_EXPLICIT(false) LocalVocabEntry(const Base& base) : Base{base} {}
-  QL_EXPLICIT(false)
-  LocalVocabEntry(Base&& base) noexcept : Base{std::move(base)} {}
+  LocalVocabEntry(const Base& base, const LocalVocabContext& context)
+      : Base{base}, context_{&context} {}
+  LocalVocabEntry(Base&& base, const LocalVocabContext& context) noexcept
+      : Base{std::move(base)}, context_{&context} {}
+
   // Constructor for when the position in the vocab is already known.
-  QL_EXPLICIT(true)
-  LocalVocabEntry(Base&& base, auto lower, auto upper)
+  template <typename Lower, typename Upper>
+  LocalVocabEntry(Base&& base, Lower lower, Upper upper,
+                  const LocalVocabContext& context)
       : Base{std::move(base)},
+        context_{&context},
         lowerBoundInVocab_(IdProxy::make(lower.getBits())),
         upperBoundInVocab_(IdProxy::make(upper.getBits())),
         positionInVocabKnown_(true) {
@@ -70,6 +83,25 @@ class alignas(16) LocalVocabEntry
                         PositionInVocab{IdProxy::make(lower.getBits()),
                                         IdProxy::make(upper.getBits())}));
   }
+
+  LocalVocabEntry(const LocalVocabEntry&) = default;
+  LocalVocabEntry(LocalVocabEntry&&) noexcept = default;
+  LocalVocabEntry& operator=(const LocalVocabEntry&) = default;
+  LocalVocabEntry& operator=(LocalVocabEntry&&) noexcept = default;
+
+  // Convenience functions that delegate to the corresponding static functions
+  // of `IriT` and `LiteralT`.
+  static LocalVocabEntry fromStringRepresentation(std::string s,
+                                                  const LocalVocabContext& ctx);
+
+  static LocalVocabEntry fromIriref(std::string_view view,
+                                    const LocalVocabContext& ctx);
+
+  static LocalVocabEntry literalWithoutQuotes(std::string_view view,
+                                              const LocalVocabContext& ctx);
+
+  static LocalVocabEntry literalWithNormalizedContent(
+      NormalizedStringView view, const LocalVocabContext& ctx);
 
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
@@ -87,7 +119,7 @@ class alignas(16) LocalVocabEntry
     IdProxy upperBound_;
 
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PositionInVocab, lowerBound_,
-                                                upperBound_);
+                                                upperBound_)
   };
   PositionInVocab positionInVocab() const {
     // Immediately return if we have previously computed and cached the
@@ -111,11 +143,24 @@ class alignas(16) LocalVocabEntry
   // cached `position` if it has previously been computed for both of the
   // entries, but it is currently questionable whether this gains much
   // performance.
-  auto compareThreeWay(const LocalVocabEntry& rhs) const {
-    return ql::compareThreeWay(static_cast<const Base&>(*this),
-                               static_cast<const Base&>(rhs));
-  }
+  ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
+
+  // Two entries are equal if and only if their string representations are, so
+  // forward to the base class instead of going through `compareThreeWay`, which
+  // would use the much more expensive collation of the vocabulary. This is what
+  // happens implicitly anyway (the operators defined by the macro above do not
+  // include `operator==`), but state it explicitly so that it doesn't silently
+  // change when `compareThreeWay` does.
+  bool operator==(const LocalVocabEntry& rhs) const {
+    return static_cast<const Base&>(*this) == static_cast<const Base&>(rhs);
+  }
+  // Declaring `operator==` above hides the ones inherited from `Base`, which
+  // would otherwise make comparisons against a plain `LiteralOrIri` ill-formed.
+  using Base::operator==;
+
+  // Expose `context_` for testing.
+  const LocalVocabContext& getContextForTesting() const { return *context_; }
 
  private:
   // The expensive case of looking up the position in vocab.

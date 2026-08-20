@@ -22,12 +22,12 @@ using HashMap = absl::flat_hash_map<Ts...>;
 // A HashMap with a memory limit. Note: We cannot use `absl::flat_hash_map`
 // here, because it is inherently not exception safe, and the
 // `AllocatorWithLimit` uses exceptions.
-template <class K, class V,
-          class HashFct = absl::container_internal::hash_default_hash<K>,
-          class EqualElem = absl::container_internal::hash_default_eq<K>,
+template <class K, class V, class HashFct = absl::DefaultHashContainerHash<K>,
+          class EqualElem = absl::DefaultHashContainerEq<K>,
           class Alloc = ad_utility::AllocatorWithLimit<std::pair<const K, V>>>
 using HashMapWithMemoryLimit =
     std::unordered_map<K, V, HashFct, EqualElem, Alloc>;
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_HASHMAP_H

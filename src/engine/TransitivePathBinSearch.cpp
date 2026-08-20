@@ -90,9 +90,8 @@ IdWithGraphs BinSearchMap::getEquivalentIdAndMatchingGraphs(Id node) const {
         // of all distinct Ids in the current graph.
         auto transformedRange =
             ql::ranges::subrange{startIdsLower, startIdsUpper} |
-            ql::views::transform([graphId](Id id) {
-              return std::pair{id, graphId};
-            });
+            ql::views::transform(
+                [graphId](Id id) { return std::pair{id, graphId}; });
         ql::ranges::unique_copy(transformedRange, std::back_inserter(result),
                                 {}, ad_utility::first);
       } else {
@@ -155,7 +154,7 @@ TransitivePathBinSearch::TransitivePathBinSearch(
 
 // _____________________________________________________________________________
 BinSearchMap TransitivePathBinSearch::setupEdgesMap(
-    const IdTable& dynSub, const TransitivePathSide& startSide,
+    const IdTableView<0>& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   return BinSearchMap{
       dynSub.getColumn(startSide.subCol_), dynSub.getColumn(targetSide.subCol_),

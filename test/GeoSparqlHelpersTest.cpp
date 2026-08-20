@@ -11,14 +11,14 @@
 #include "engine/SpatialJoinConfig.h"
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Iri.h"
 #include "util/GTestHelpers.h"
-#include "util/GeoSparqlHelpers.h"
 
 namespace {
 
 using ad_utility::source_location;
-using ad_utility::WktDistGeoPoints;
+using ad_utility::WktDist;
 using ad_utility::WktGeometricRelation;
 using ad_utility::WktLatitude;
 using ad_utility::WktLongitude;
@@ -79,34 +79,50 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
 
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktDist) {
-  // Equal longitude, latitudes with diff 3.0 and mean zero.
-  ASSERT_NEAR(WktDistGeoPoints()(GeoPoint(1.5, 2.0), GeoPoint(-1.5, 2.0)),
-              333.58, 0.01);
-
-  // Equal latitude zero, longitudes with diff 4.0.
-  ASSERT_NEAR(WktDistGeoPoints()(GeoPoint(0.0, 3.0), GeoPoint(-0.0, 7.0)),
-              444.7804, 0.01);
-
-  // Distance between the Eiffel tower and the Freibuger Münster (421km
-  // according to the distance measurement of Google Maps).
-  GeoPoint eiffeltower = GeoPoint(48.8585, 2.2945);
-  GeoPoint frCathedral = GeoPoint(47.9957, 7.8529);
   using enum UnitOfMeasurement;
-  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral), 421.098, 0.01);
-  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral, KILOMETERS), 421.098,
-              0.01);
-  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral, METERS), 421098, 1);
-  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral, MILES), 261.658,
-              0.01);
-  ASSERT_NEAR(ad_utility::WktMetricDistGeoPoints()(eiffeltower, frCathedral),
-              421098, 1);
+  GeoPoint eiffeltower{48.8585, 2.2945};
+  GeoPoint frCathedral{47.9957, 7.8529};
 
-  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, eiffeltower, METERS), 0, 0.01);
-  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, eiffeltower, MILES), 0, 0.01);
+  // Equal coordinates: distance 0.
+  EXPECT_NEAR(WktDist()(frCathedral, frCathedral, KILOMETERS), 0, 0.01);
+  EXPECT_NEAR(WktDist()(eiffeltower, eiffeltower, METERS), 0, 0.01);
+  EXPECT_NEAR(WktDist()(eiffeltower, eiffeltower, MILES), 0, 0.01);
+
+  // Distance between points: the Eiffel tower and the Freiburg Cathedral (421km
+  // according to the distance measurement of Google Maps).
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral), 421.57, 0.02);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, KILOMETERS), 421.57, 0.02);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, METERS), 421569, 15);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, MILES), 261.95, 0.02);
+  EXPECT_NEAR(ad_utility::WktMetricDist()(eiffeltower, frCathedral), 421569,
+              15);
+
+  // Distance between WKT non-point literals.
+  EXPECT_NEAR(
+      WktDist()(
+          // Line between Freiburg Central Station and Freiburg University
+          // Library.
+          "\"LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946000)\""
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+          // University building 101.
+          "\"POLYGON((7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
+          "48.0124216,7.8349855 48.0124448,7.8353244 48.0126418,7.8354091 "
+          "48.0126911,7.8352246 48.0129047,7.8351623 48.012879,7.8350687 "
+          "48.0128404,7.8347244 48.0126985,7.8346338 48.0126612))\""
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+          KILOMETERS),
+      1.7, 0.01);
+
+  // Invalid WKT literal.
+  EXPECT_TRUE(std::isnan(
+      WktDist()(eiffeltower,
+                // University building 101.
+                "\"POLYGON(bla bli blu)\""
+                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")));
 }
 
 // _____________________________________________________________________________
-template <SpatialJoinType SJType>
+template <SpatialJoinType::Enum SJType>
 void checkGeoRelationDummyImpl(
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -120,7 +136,7 @@ void checkGeoRelationDummyImpl(
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktGeometricRelation) {
   // Currently the geometric relation functions are only a dummy implementation
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
   checkGeoRelationDummyImpl<INTERSECTS>();
   checkGeoRelationDummyImpl<CONTAINS>();
   checkGeoRelationDummyImpl<COVERS>();
@@ -129,6 +145,16 @@ TEST(GeoSparqlHelpers, WktGeometricRelation) {
   checkGeoRelationDummyImpl<EQUALS>();
   checkGeoRelationDummyImpl<OVERLAPS>();
   checkGeoRelationDummyImpl<WITHIN>();
+}
+
+// _____________________________________________________________________________
+TEST(GeoSparqlHelpers, WktDe9imRelation) {
+  // The `geof:relate` function is currently only a dummy implementation.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::WktDe9imRelation()(GeoPoint{1, 1}, GeoPoint{2, 2},
+                                     std::string{"T*T***T**"}),
+      ::testing::HasSubstr(
+          "currently only implemented for a subset of all possible queries"));
 }
 
 }  // namespace

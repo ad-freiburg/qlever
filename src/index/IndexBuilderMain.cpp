@@ -9,6 +9,7 @@
 #include <absl/functional/bind_front.h>
 
 #include <boost/program_options.hpp>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
@@ -16,10 +17,13 @@
 
 #include "CompilationInfo.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
+#include "util/ResourceMonitor.h"
+#include "util/json.h"
 
 using std::string;
 
@@ -116,7 +120,7 @@ auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
   auto check = absl::bind_front(checkNumParameterValues, inputFile.size());
   check(filetype, "--file-format, -F");
   check(defaultGraphs, "--default-graph, -g");
-  check(parseParallel, "--parse-parallel, p");
+  check(parseParallel, "--parallel-parsing, p");
 
   std::vector<qlever::InputFileSpecification> fileSpecs;
   for (size_t i = 0; i < inputFile.size(); ++i) {
@@ -142,6 +146,36 @@ auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
   return fileSpecs;
 };
 
+// Helper to convert the JSON given for writing materialized views to a proper
+// `WriteMaterializedViews` vector.
+qlever::IndexBuilderConfig::WriteMaterializedViews parseMaterializedViewsJson(
+    std::string_view materializedViewsJson) {
+  qlever::IndexBuilderConfig::WriteMaterializedViews views;
+  if (!materializedViewsJson.empty()) {
+    AD_LOG_DEBUG << "Parsing materialized views configuration ..." << std::endl;
+    try {
+      auto viewsJson = nlohmann::json::parse(materializedViewsJson);
+      if (!viewsJson.is_object()) {
+        throw std::runtime_error(
+            "The --materialized-views option must be a JSON object "
+            "mapping view names to SPARQL queries.");
+      }
+      for (auto& [viewName, query] : viewsJson.items()) {
+        if (!query.is_string()) {
+          throw std::runtime_error(absl::StrCat(
+              "Query for materialized view '", viewName,
+              "' must be a string, but got type: ", jsonToTypeString(query)));
+        }
+        views.push_back({std::move(viewName), query.get<std::string>()});
+      }
+    } catch (const nlohmann::json::exception& e) {
+      throw std::runtime_error(
+          absl::StrCat("Failed to parse materialized views JSON: ", e.what()));
+    }
+  }
+  return views;
+}
+
 // Main function.
 int main(int argc, char** argv) {
   // Copy the git hash and datetime of compilation (which require relinking)
@@ -159,13 +193,20 @@ int main(int argc, char** argv) {
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
+  std::string materializedViewsJson;
+  bool noResourceUsageLog = false;
+  uint32_t resourceUsageIntervalS = 1;
+
+  ad_utility::ParameterToProgramOptionFactory optionFactory{
+      &globalRuntimeParameters};
 
   boost::program_options::options_description boostOptions(
-      "Options for IndexBuilderMain");
+      "Options for qlever-index");
   auto add = [&boostOptions](auto&&... args) {
     boostOptions.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
+  add("version,v", "Print version information.");
   add("index-basename,i", po::value(&config.baseName_)->required(),
       "The basename of the output files (required).");
   add("kg-input-file,f", po::value(&inputFile),
@@ -180,7 +221,7 @@ int main(int argc, char** argv) {
       "The graph IRI without angle brackets. Write `-` for the default graph. "
       "Can be omitted (then all files use the default graph), specified once "
       "(then all files use that graph), or once per file.");
-  add("parse-parallel,p", po::value(&parseParallel),
+  add("parallel-parsing,p", po::value(&parseParallel),
       "Enable or disable the parallel parser for all files (if specified once) "
       "or once per input file. Parallel parsing works for all input files "
       "using the N-Triples or N-Quads format, as well as for well-behaved "
@@ -227,6 +268,9 @@ int main(int argc, char** argv) {
       po::bool_switch(&config.onlyPsoAndPos_),
       "Only build the PSO and POS permutations. This is faster, but then "
       "queries with predicate variables are not supported");
+  add("add-has-word-triples", po::bool_switch(&config.addHasWordTriples_),
+      "Add `ql:has-word` triples for each word in each literal. This enables "
+      "keyword search in literals via `?literal ql:has-word \"word\"`.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfSupportedValues());
@@ -241,6 +285,22 @@ int main(int argc, char** argv) {
       "among non-encoded IRIs is correct, but the order between encoded "
       "and non-encoded IRIs is not");
 
+  add("iri-as-blank-node-regexes",
+      po::value(&config.blankNodeIriRegexes_)->composing()->multitoken(),
+      "Space-separated list of regexes. An IRI that is fully matched by one of "
+      "these regexes (via RE2 full match) is not stored in the vocabulary, but "
+      "converted to a blank node. This saves memory for IRIs that only act as "
+      "internal connector nodes (e.g. statement nodes). The regex is matched "
+      "against the full IRI text including the angle brackets and has to cover "
+      "the entire IRI, so each regex must start with `<`; to allow an "
+      "arbitrary "
+      "suffix, end it with `.*`, e.g. the regex "
+      "`<https://example\\.org/statement/.*>` matches "
+      "`<https://example.org/statement/42>`. Only IRIs are affected. NOTE: "
+      "This is an experimental feature. The affected IRIs behave as ordinary "
+      "blank nodes, so they are no longer recognized as those IRIs if used, "
+      "e.g., in a query or an update.");
+
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&config.memoryLimit_),
       "The amount of memory in to use for sorting during the index build. "
@@ -250,6 +310,26 @@ int main(int argc, char** argv) {
       "large enough to hold a single input triple. Default: 10 MB.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
+  add("materialized-views", po::value(&materializedViewsJson),
+      "create materialized views after index building. Takes a JSON object "
+      "mapping view names to SELECT queries for writing the view, for example: "
+      R"({"view1": "SELECT ...", "view2": "SELECT ..."})");
+  add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
+      "Disable the resource-usage log. By default a TSV log of the RSS and "
+      "CPU usage of the index build is written next to the index files "
+      "(`<index-basename>.index.resource-usage-log.tsv`).");
+  add("resource-usage-interval-s",
+      po::value(&resourceUsageIntervalS)->default_value(1),
+      "The sampling interval of the resource-usage log in seconds.");
+  auto logLevelDescription = absl::StrCat(
+      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
+      "Default is INFO. The compile-time level (",
+      LogLevel{LOGLEVEL}.toString(),
+      ") applies as an upper bound — messages above it are never emitted "
+      "regardless of this setting.");
+  add("log-level",
+      optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
+      logLevelDescription.c_str());
 
   // Process command line arguments.
   po::variables_map optionsMap;
@@ -257,26 +337,44 @@ int main(int argc, char** argv) {
   try {
     po::store(po::parse_command_line(argc, argv, boostOptions), optionsMap);
     if (optionsMap.count("help")) {
-      std::cout << boostOptions << '\n';
+      std::cout << boostOptions << std::endl;
+      return EXIT_SUCCESS;
+    }
+    if (optionsMap.count("version")) {
+      std::cout << argv[0] << " " << qlever::version::ProjectVersion
+                << std::endl;
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
   } catch (const std::exception& e) {
-    std::cerr << "Error in command-line argument: " << e.what() << '\n';
-    std::cerr << boostOptions << '\n';
+    std::cerr << "Error in command-line argument: " << e.what() << std::endl;
+    std::cerr << boostOptions << std::endl;
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever IndexBuilder, compiled on "
+  AD_LOG_INFO << EMPH_ON << "QLever index builder "
+              << qlever::version::ProjectVersion << ", compiled on "
               << qlever::version::DatetimeOfCompilation << " using git hash "
               << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
+    // Samples RSS and CPU usage for the duration of the build.
+    ad_utility::ResourceMonitor resourceMonitor;
+    if (!noResourceUsageLog) {
+      resourceMonitor.start(config.baseName_ + ".index.resource-usage-log.tsv",
+                            ad_utility::ResourceMonitor::Mode::Truncate,
+                            std::chrono::seconds{resourceUsageIntervalS});
+    }
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);
+    config.writeMaterializedViews_ =
+        parseMaterializedViewsJson(materializedViewsJson);
     config.validate();
+    // For index building, use more threads for writing permutations than the
+    // default (which is optimized for `rebuild-index`, where six permutations
+    // are written simultaneously).
+    setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(5);
     qlever::Qlever::buildIndex(config);
-
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "
                     "exception: "

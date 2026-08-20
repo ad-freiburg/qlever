@@ -5,27 +5,43 @@
 #include "index/LocalVocabEntry.h"
 
 #include "global/VocabIndex.h"
-#include "index/IndexImpl.h"
+#include "index/LocalVocabContext.h"
+
+// ___________________________________________________________________________
+ql::strong_ordering LocalVocabEntry::compareThreeWay(
+    const LocalVocabEntry& rhs) const {
+  AD_EXPENSIVE_CHECK(
+      context_ == rhs.context_,
+      "Contexts of LocalVocabEntries have to be identical. If this is not the "
+      "case this means that stale entries associated with an old index are "
+      "falsely carried over somewhere.");
+  int i = context_->compareWords(toStringRepresentation(),
+                                 rhs.toStringRepresentation());
+  if (i < 0) {
+    return ql::strong_ordering::less;
+  } else if (i > 0) {
+    return ql::strong_ordering::greater;
+  } else {
+    return ql::strong_ordering::equal;
+  }
+}
 
 // ___________________________________________________________________________
 auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   // Lookup the lower and upper bound from the vocabulary of the index,
   // cache and return them. This represents the place in the vocabulary where
   // this word would be stored if it were present.
-  const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();
   PositionInVocab positionInVocab;
-
-  const auto& vocab = index.getVocab();
 
   // NOTE: For encoded IRIs, the only purpose of the returned `std::pair` is to
   // give us a consistent ordering, which is important for determining equality
   // and for operations like `Join`, `Distinct`, `GroupBy`, etc.
   auto [lower, upper] = [&]() {
-    if (auto opt = index.encodedIriManager().encode(toStringRepresentation());
+    if (auto opt = context_->encodeAsId(toStringRepresentation());
         opt.has_value()) {
       return std::pair{opt.value(), Id::fromBits(opt.value().getBits() + 1)};
     }
-    auto [l, u] = vocab.getPositionOfWord(toStringRepresentation());
+    auto [l, u] = context_->getPositionOfWord(toStringRepresentation());
     AD_CORRECTNESS_CHECK(u.get() - l.get() <= 1);
     return std::pair{Id::makeFromVocabIndex(l), Id::makeFromVocabIndex(u)};
   }();
@@ -38,4 +54,28 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
                            std::memory_order_relaxed);
   positionInVocabKnown_.store(true, std::memory_order_release);
   return positionInVocab;
+}
+
+// _____________________________________________________________________________
+LocalVocabEntry LocalVocabEntry::fromStringRepresentation(
+    std::string s, const LocalVocabContext& ctx) {
+  return LocalVocabEntry{Base::fromStringRepresentation(std::move(s)), ctx};
+}
+
+// _____________________________________________________________________________
+LocalVocabEntry LocalVocabEntry::fromIriref(std::string_view view,
+                                            const LocalVocabContext& ctx) {
+  return LocalVocabEntry{IriT::fromIriref(view), ctx};
+}
+
+// _____________________________________________________________________________
+LocalVocabEntry LocalVocabEntry::literalWithoutQuotes(
+    std::string_view view, const LocalVocabContext& ctx) {
+  return LocalVocabEntry{LiteralT::literalWithoutQuotes(view), ctx};
+}
+
+// _____________________________________________________________________________
+LocalVocabEntry LocalVocabEntry::literalWithNormalizedContent(
+    NormalizedStringView view, const LocalVocabContext& ctx) {
+  return LocalVocabEntry{LiteralT::literalWithNormalizedContent(view), ctx};
 }

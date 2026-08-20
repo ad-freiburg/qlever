@@ -44,7 +44,7 @@ TEST(Describe, recursiveBlankNodes) {
                     ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
                     parsedDescribe};
   auto res = describe.computeResultOnlyForTesting();
-  const auto& table = res.idTable();
+  const auto& table = res.idTableView();
   // The expected result is as follows:
   //
   //   <s> <p>   <o>
@@ -88,7 +88,7 @@ TEST(Describe, describeWithVariable) {
                         qec, Permutation::Enum::POS, triple),
                     parsedDescribe};
   auto res = describe.computeResultOnlyForTesting();
-  const auto& table = res.idTable();
+  const auto& table = res.idTableView();
   // The expected result is as follows (the resources are `<s4>`, which is
   // explicitly requested, and `<s>` and `<s2>`, which match `?x` in the WHERE
   // clause):
@@ -119,8 +119,8 @@ TEST(Describe, describeWithVariableButNoWhereClause) {
   auto noWhere = ad_utility::makeExecutionTree<NeutralElementOperation>(qec);
   Describe describe{qec, noWhere, parsedDescribe};
   auto result = describe.computeResultOnlyForTesting();
-  EXPECT_EQ(result.idTable().size(), 0);
-  EXPECT_EQ(result.idTable().numColumns(), 3);
+  EXPECT_EQ(result.idTableView().size(), 0);
+  EXPECT_EQ(result.idTableView().numColumns(), 3);
 }
 
 // TODO<joka921> Add tests with inputs from a different graph, but those are

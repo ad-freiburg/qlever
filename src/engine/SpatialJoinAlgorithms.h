@@ -1,8 +1,13 @@
-// Copyright 2024 - 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Jonathan Zeller github@Jonathan24680
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
-//          Patrick Brosi <brosi@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 - 2025 Jonathan Zeller github@Jonathan24680, UFR
+// 2024 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025        Patrick Brosi <brosi@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
 #define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
@@ -19,7 +24,8 @@
 
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
-#include "util/GeoSparqlHelpers.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
+#include "util/VectorWithMemoryLimit.h"
 
 namespace BoostGeometryNamespace {
 namespace bg = boost::geometry;
@@ -149,13 +155,12 @@ class SpatialJoinAlgorithms {
       const Box& box, std::optional<Point> midpoint = std::nullopt) const;
 
   // this function gets the string which represents the area from the idtable.
-  std::optional<size_t> getAnyGeometry(const IdTable* idtable, size_t row,
-                                       size_t col);
+  std::optional<size_t> getAnyGeometry(const IdTableView<0>* idtable,
+                                       size_t row, size_t col);
 
   // wrapper to access non const private function for testing
-  std::optional<RtreeEntry> onlyForTestingGetRtreeEntry(const IdTable* idTable,
-                                                        const size_t row,
-                                                        const ColumnIndex col) {
+  std::optional<RtreeEntry> onlyForTestingGetRtreeEntry(
+      const IdTableView<0>* idTable, const size_t row, const ColumnIndex col) {
     return getRtreeEntry(idTable, row, col);
   }
 
@@ -176,7 +181,11 @@ class SpatialJoinAlgorithms {
   // added geometries, which may be used as a prefilter at next call and the
   // number of geometries added. This function is only `public` for testing
   // purposes and should otherwise not be used outside of this class.
-  using IdTableAndJoinColumn = std::pair<const IdTable*, const ColumnIndex>;
+  struct LibSpatialJoinParseInput {
+    const IdTableView<0>* idTable_;
+    ColumnIndex geomsCol_;
+    SpatialJoinBoundingBoxColumns boundingBoxCols_;
+  };
   struct LibSpatialJoinParseMetadata {
     // Aggregated bounding box of all parsed geometries
     util::geo::I32Box aggBoundingBox_;
@@ -189,18 +198,27 @@ class SpatialJoinAlgorithms {
     size_t numThreadsUsed_;
   };
   LibSpatialJoinParseMetadata libspatialjoinParse(
-      bool leftOrRightSide, IdTableAndJoinColumn idTableAndCol,
+      bool leftOrRightSide, LibSpatialJoinParseInput input,
       sj::Sweeper& sweeper, size_t numThreads,
       std::optional<util::geo::I32Box> prefilterBox) const;
 
   // Helper for `libspatialjoinParse` to check the bounding box (only if
   // available from a `GeoVocabulary`) of a given vocabulary entry against the
   // `prefilterLatLngBox`. Returns `true` if the geometry can be discarded just
-  // by the bounding box. Should only be applied if the index is known to be
-  // built on a `GeoVocabulary`.
+  // by the bounding box. If the bounding box is already loaded (for example
+  // from a materialized view), it can prefilter in memory. Otherwise on-disk
+  // `GeometryInfo` will be used. Then this should only be applied if the index
+  // is known to be built on a `GeoVocabulary`.
   static bool prefilterGeoByBoundingBox(
       const std::optional<util::geo::DBox>& prefilterLatLngBox,
-      const Index& index, VocabIndex vocabIndex);
+      const Index& index, VocabIndex vocabIndex,
+      const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox);
+
+  // Helper for `libspatialjoinParse` to get the bounding box from an
+  // `IdTable` if available.
+  static std::optional<ad_utility::BoundingBox> getBoundingBoxFromIdTable(
+      const IdTableView<0>* idTable,
+      const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row);
 
   // Retrieve the number of threads to be used for `libspatialjoinParse` and
   // `LibspatialjoinAlgorithm`.
@@ -208,12 +226,12 @@ class SpatialJoinAlgorithms {
 
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
-  static std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
-                                          ColumnIndex col);
+  static std::optional<GeoPoint> getPoint(const IdTableView<0>* restable,
+                                          size_t row, ColumnIndex col);
 
   // Helper function to retrieve and parse a line string from the given cell of
   // an `IdTable` and convert it to an `S2Polyline`.
-  static std::optional<S2Polyline> getPolyline(const IdTable& restable,
+  static std::optional<S2Polyline> getPolyline(const IdTableView<0>& restable,
                                                size_t row, ColumnIndex col,
                                                const Index& index);
 
@@ -222,12 +240,13 @@ class SpatialJoinAlgorithms {
   // contain two quotes, the string is returned as a whole
   std::string_view betweenQuotes(std::string_view extractFrom) const;
 
-  // Helper function, which adds a row, which belongs to the result to the
-  // result table. As inputs it uses a row of the left and a row of the right
-  // child result table.
-  void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
-                           const IdTable* resultRight, size_t rowLeft,
-                           size_t rowRight, Id distance) const;
+  // Helper to add a row to the result table. Combines the selected columns
+  // (given in `params_`) from the given row in each input table respectively.
+  // Input tables are swapped if requested (required for the `WITHIN` join).
+  void addResultTableEntry(IdTable* result, const IdTableView<0>* resultLeft,
+                           const IdTableView<0>* resultRight, size_t rowLeft,
+                           size_t rowRight, Id distance,
+                           bool swapLeftAndRight = false) const;
 
   // This helper function calculates the bounding boxes based on a box, where
   // definitely no match can occur. This means every element in the anti
@@ -254,7 +273,7 @@ class SpatialJoinAlgorithms {
   // this helper function takes an idtable, a row and a column. It then tries
   // to parse a geometry or a geoPoint of that cell in the idtable. If it
   // succeeds, it returns an rtree entry of that geometry/geopoint
-  std::optional<RtreeEntry> getRtreeEntry(const IdTable* idTable,
+  std::optional<RtreeEntry> getRtreeEntry(const IdTableView<0>* idTable,
                                           const size_t row,
                                           const ColumnIndex col);
 
@@ -309,8 +328,7 @@ class SpatialJoinAlgorithms {
   size_t numFailedParsedGeometries_ = 0;
 
   // this vector stores the geometries, which have already been parsed
-  std::vector<AnyGeometry, ad_utility::AllocatorWithLimit<AnyGeometry>>
-      geometries_;
+  ad_utility::VectorWithMemoryLimit<AnyGeometry> geometries_;
 
   // After adding the given amount of rows to the WKT parser, it will be checked
   // if the user has cancelled their query.

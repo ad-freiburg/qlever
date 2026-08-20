@@ -47,6 +47,8 @@ class StallForeverOperation : public Operation {
     return remainingTime();
   }
 
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   // _____________________________________________________________________________
   std::unique_ptr<Operation> cloneImpl() const override {
     AD_THROW("Clone not implemented");
@@ -59,7 +61,8 @@ class ShallowParentOperation : public Operation {
   std::shared_ptr<QueryExecutionTree> child_;
 
   explicit ShallowParentOperation(std::shared_ptr<QueryExecutionTree> child)
-      : child_{std::move(child)} {}
+      : Operation{child->getRootOperation()->getExecutionContext()},
+        child_{std::move(child)} {}
   std::string getCacheKeyImpl() const override { return "ParentOperation"; }
   std::string getDescriptor() const override {
     return "ParentOperationDescriptor";
@@ -85,7 +88,7 @@ class ShallowParentOperation : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override {
     auto childResult = child_->getResult();
-    return {childResult->idTable().clone(), resultSortedOn(),
+    return {childResult->cloneIdTable(), resultSortedOn(),
             childResult->getSharedLocalVocab()};
   }
 
@@ -93,6 +96,8 @@ class ShallowParentOperation : public Operation {
   std::chrono::milliseconds publicRemainingTime() const {
     return remainingTime();
   }
+
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
   // _____________________________________________________________________________
   std::unique_ptr<Operation> cloneImpl() const override {
@@ -143,6 +148,8 @@ class AlwaysFailOperation : public Operation {
             resultSortedOn()};
   }
 
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   // _____________________________________________________________________________
   std::unique_ptr<Operation> cloneImpl() const override {
     AD_THROW("Clone not implemented");
@@ -174,6 +181,8 @@ class CustomGeneratorOperation : public Operation {
     AD_CONTRACT_CHECK(requestLaziness);
     return {std::move(generator_), resultSortedOn()};
   }
+
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
   // _____________________________________________________________________________
   std::unique_ptr<Operation> cloneImpl() const override {

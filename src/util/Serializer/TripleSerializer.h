@@ -7,14 +7,15 @@
 #include <absl/container/flat_hash_map.h>
 
 #include <array>
-#include <filesystem>
 #include <fstream>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/filesystem.h"
 #include "backports/type_traits.h"
-#include "engine/LocalVocab.h"
 #include "global/Id.h"
+#include "index/IndexImpl.h"
+#include "index/LocalVocab.h"
 #include "util/Exception.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
@@ -96,13 +97,13 @@ CPP_template(typename Serializer)(
 CPP_template(typename Serializer)(
     requires serialization::ReadSerializer<Serializer>) std::
     tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
-        Serializer& serializer, BlankNodeManager* blankNodeManager) {
+        Serializer& serializer, const LocalVocabContext& context) {
   LocalVocab vocab;
   vocab.reserveBlankNodeBlocksFromExplicitIndices(
       readValue<std::vector<
           BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>(
           serializer),
-      blankNodeManager);
+      context.getBlankNodeManager());
   auto size = readValue<uint64_t>(serializer);
   // Note:: It might happen that the `size` is zero because the local vocab was
   // empty.
@@ -112,7 +113,7 @@ CPP_template(typename Serializer)(
     auto id = readValue<Id::T>(serializer);
     auto s = readValue<std::string>(serializer);
     auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(std::move(s)));
+        LocalVocabEntry::fromStringRepresentation(std::move(s), context));
     mapping.emplace(id, Id::makeFromLocalVocabIndex(localVocabIndex));
   }
   return {std::move(vocab), std::move(mapping)};
@@ -123,7 +124,7 @@ CPP_template(typename Serializer)(
 CPP_template(typename Range, typename Serializer)(
     requires ql::ranges::range<Range>) void serializeIds(Serializer& serializer,
                                                          Range&& range) {
-  if constexpr (std::ranges::contiguous_range<std::decay_t<Range>>) {
+  if constexpr (ql::ranges::contiguous_range<std::decay_t<Range>>) {
     serializer << ql::span{range};
   } else {
     ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
@@ -169,9 +170,9 @@ std::vector<Id> deserializeIds(Serializer& serializer,
 // Serialize the local vocabulary and the given ranges of Ids to the given path.
 CPP_template(typename Range)(
     requires ql::ranges::range<
-        Range>) void serializeIds(const std::filesystem::path& path,
+        Range>) void serializeIds(const ql::filesystem::path& path,
                                   const LocalVocab& vocab, Range&& idRanges) {
-  serialization::FileWriteSerializer serializer{path.c_str()};
+  serialization::FileWriteSerializer serializer{path.string()};
   detail::writeHeader(serializer);
   detail::serializeLocalVocab(serializer, vocab);
   serializer << uint64_t{ql::ranges::size(idRanges)};
@@ -181,15 +182,15 @@ CPP_template(typename Range)(
 }
 
 inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
-    const std::filesystem::path& path, BlankNodeManager* blankNodeManager) {
+    const ql::filesystem::path& path, const LocalVocabContext& context) {
   // This is a minor TOCTOU issue, the file might be gone after this check and
   // before the call to `fopen`, done by `FileReadSerializer`, so ideally we'd
   // handle this as a special exception type of our own `File` class, which
   // doesn't exist yet.
-  if (!std::filesystem::exists(path)) {
+  if (!ql::filesystem::exists(path)) {
     return {};
   }
-  auto serializer = [p = path.c_str()]() {
+  auto serializer = [p = path.string()]() {
     try {
       return serialization::FileReadSerializer{p};
     } catch (const std::runtime_error& err) {
@@ -203,8 +204,7 @@ inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
   AD_LOG_INFO << "Reading and processing persisted updates from " << path
               << " ..." << std::endl;
   detail::readHeader(serializer);
-  auto [vocab, mapping] =
-      detail::deserializeLocalVocab(serializer, blankNodeManager);
+  auto [vocab, mapping] = detail::deserializeLocalVocab(serializer, context);
   std::vector<std::vector<Id>> idVectors;
   auto numRanges = detail::readValue<uint64_t>(serializer);
   for ([[maybe_unused]] auto i : ad_utility::integerRange(numRanges)) {

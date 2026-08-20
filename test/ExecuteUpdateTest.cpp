@@ -15,18 +15,15 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 
 namespace {
 using namespace deltaTriplesTestHelpers;
+using ad_utility::testing::encodedIriManager;
 
 auto V = [](const uint64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 };
-
-const EncodedIriManager* encodedIriManager() {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-}
 
 // `ExecuteUpdate::IdOrVariableIndex` extended by `LiteralOrIri` which denotes
 // an entry from the local vocab.
@@ -75,18 +72,19 @@ TEST(ExecuteUpdate, executeUpdate) {
           const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
           source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
-        Index index = ad_utility::testing::makeTestIndex(
-            "ExecuteUpdate_executeUpdate", indexConfig);
+        auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+            "ExecuteUpdate_executeUpdate", indexConfig));
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
-        MaterializedViewsManager materializedViewsManager;
+        auto materializedViewsManager =
+            std::make_shared<MaterializedViewsManager>();
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
-                                  &materializedViewsManager);
-        expectExecuteUpdateHelper(update, qec, index);
-        index.deltaTriplesManager().modify<void>(
+                                  materializedViewsManager);
+        expectExecuteUpdateHelper(update, qec, *index);
+        index->deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
               EXPECT_THAT(deltaTriples, deltaTriplesMatcher);
             });
@@ -94,20 +92,21 @@ TEST(ExecuteUpdate, executeUpdate) {
   // Execute the given `update` and check that it fails with the given message.
   auto expectExecuteUpdateFails_ =
       [&expectExecuteUpdateHelper](
-          Index& index, const std::string& update,
+          std::shared_ptr<Index> index, const std::string& update,
           const testing::Matcher<const std::string&>& messageMatcher,
           source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
-        MaterializedViewsManager materializedViewsManager;
+        auto materializedViewsManager =
+            std::make_shared<MaterializedViewsManager>();
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
-                                  &materializedViewsManager);
+                                  materializedViewsManager);
         AD_EXPECT_THROW_WITH_MESSAGE(
-            expectExecuteUpdateHelper(update, qec, index), messageMatcher);
+            expectExecuteUpdateHelper(update, qec, *index), messageMatcher);
       };
   {
     auto expectExecuteUpdateFails =
@@ -115,9 +114,10 @@ TEST(ExecuteUpdate, executeUpdate) {
             const std::string& update,
             const testing::Matcher<const std::string&>& messageMatcher,
             source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-          Index index = ad_utility::testing::makeTestIndex(
-              "ExecuteUpdate_executeUpdate",
-              ad_utility::testing::TestIndexConfig());
+          auto index =
+              std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+                  "ExecuteUpdate_executeUpdate",
+                  ad_utility::testing::TestIndexConfig()));
           expectExecuteUpdateFails_(index, update, messageMatcher,
                                     sourceLocation);
         };
@@ -162,14 +162,14 @@ TEST(ExecuteUpdate, executeUpdate) {
     expectExecuteUpdate("DROP SILENT ALL", NumTriples(0, 8, 8, 0, 1));
     expectExecuteUpdate("ADD <x> TO <x>", NumTriples(0, 0, 0));
     expectExecuteUpdate("ADD SILENT <x> TO DEFAULT", NumTriples(0, 0, 0));
-    expectExecuteUpdate("ADD DEFAULT TO <x>", NumTriples(8, 0, 8, 1, 0));
+    expectExecuteUpdate("ADD DEFAULT TO <x>", NumTriples(8, 0, 8, 2, 0));
     expectExecuteUpdate("ADD SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
     expectExecuteUpdate("MOVE SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
     expectExecuteUpdate("MOVE GRAPH <x> TO <x>", NumTriples(0, 0, 0));
     expectExecuteUpdate("MOVE <x> TO DEFAULT", NumTriples(0, 8, 8, 0, 1));
     expectExecuteUpdate("MOVE DEFAULT TO GRAPH <x>",
-                        NumTriples(8, 8, 16, 1, 1));
-    expectExecuteUpdate("COPY DEFAULT TO <x>", NumTriples(8, 0, 8, 1, 0));
+                        NumTriples(8, 8, 16, 2, 1));
+    expectExecuteUpdate("COPY DEFAULT TO <x>", NumTriples(8, 0, 8, 2, 0));
     expectExecuteUpdate("COPY DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
     expectExecuteUpdate("COPY <x> TO DEFAULT", NumTriples(0, 8, 8, 0, 1));
     expectExecuteUpdate("CREATE SILENT GRAPH <x>", NumTriples(0, 0, 0));
@@ -198,17 +198,17 @@ TEST(ExecuteUpdate, executeUpdate) {
     expectExecuteUpdate("DROP SILENT ALL", NumTriples(0, 7, 7, 0, 3));
     expectExecuteUpdate("ADD <q> TO <q>", NumTriples(0, 0, 0));
     expectExecuteUpdate("ADD <a> TO <q>", NumTriples(0, 0, 0));
-    expectExecuteUpdate("ADD SILENT <q> TO DEFAULT", NumTriples(3, 0, 3, 2, 0));
+    expectExecuteUpdate("ADD SILENT <q> TO DEFAULT", NumTriples(3, 0, 3, 4, 0));
     expectExecuteUpdate("ADD DEFAULT TO <q>", NumTriples(1, 0, 1));
     expectExecuteUpdate("ADD SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
     expectExecuteUpdate("MOVE SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
-    expectExecuteUpdate("MOVE GRAPH <q> TO <t>", NumTriples(3, 3, 6, 2, 2));
-    expectExecuteUpdate("MOVE <q> TO DEFAULT", NumTriples(3, 4, 7, 2, 2));
+    expectExecuteUpdate("MOVE GRAPH <q> TO <t>", NumTriples(3, 3, 6, 4, 2));
+    expectExecuteUpdate("MOVE <q> TO DEFAULT", NumTriples(3, 4, 7, 4, 2));
     expectExecuteUpdate("MOVE DEFAULT TO GRAPH <t>", NumTriples(1, 1, 2));
     expectExecuteUpdate("MOVE DEFAULT TO GRAPH <q>", NumTriples(1, 4, 5, 0, 2));
     expectExecuteUpdate("COPY DEFAULT TO <q>", NumTriples(1, 3, 4, 0, 2));
     expectExecuteUpdate("COPY DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
-    expectExecuteUpdate("COPY <q> TO DEFAULT", NumTriples(3, 1, 4, 2, 0));
+    expectExecuteUpdate("COPY <q> TO DEFAULT", NumTriples(3, 1, 4, 4, 0));
     expectExecuteUpdate("CREATE SILENT GRAPH <x>", NumTriples(0, 0, 0));
     expectExecuteUpdate("CREATE GRAPH <y>", NumTriples(0, 0, 0));
   }
@@ -299,10 +299,10 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
     LocalVocab localVocab;
-    auto LVI = [&localVocab](const std::string& iri) {
+    auto LVI = [&localVocab, qec](std::string_view iri) {
       return Id::makeFromLocalVocabIndex(
-          localVocab.getIndexAndAddIfNotContained(LocalVocabEntry(
-              ad_utility::triple_component::Iri::fromIriref(iri))));
+          localVocab.getIndexAndAddIfNotContained(
+              LocalVocabEntry::fromIriref(iri, qec->getLocalVocabContext())));
     };
 
     expectComputeGraphUpdateQuads(
@@ -410,17 +410,14 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
 
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, transformTriplesTemplate) {
-  // Create an index for testing.
-  EncodedIriManager encodedIriManager({"http://example.org/"});
   // <http://example.org/123> is an encoded IRI
   ad_utility::testing::TestIndexConfig indexConfig{
       "<bar> <bar> \"foo\" . <http://example.org/123> <http://qlever.dev/1> "
       "\"baz\" ."};
-  indexConfig.encodedIriManager = encodedIriManager;
+  indexConfig.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
   Index index = ad_utility::testing::makeTestIndex(
       "_ExecuteUppdateTest_transformTriplesTemplate", indexConfig);
-  // We need a non-const vocab for the test.
-  auto& vocab = const_cast<Index::Vocab&>(index.getVocab());
+  auto& encodedIriManager = index.encodedIriManager();
 
   // Helpers
   using namespace ::testing;
@@ -437,8 +434,9 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   };
   // Matchers
   using MatcherType = Matcher<const ExecuteUpdate::IdOrVariableIndex&>;
-  auto TripleComponentMatcher = [](const ::LocalVocab& localVocab,
-                                   TripleComponentT component) -> MatcherType {
+  auto TripleComponentMatcher = [&index](
+                                    const ::LocalVocab& localVocab,
+                                    TripleComponentT component) -> MatcherType {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [](const ::Id& id) -> MatcherType {
@@ -447,10 +445,11 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
             [](const ColumnIndex& index) -> MatcherType {
               return VariantWith<ColumnIndex>(Eq(index));
             },
-            [&localVocab](
+            [&localVocab, &index](
                 const ad_utility::triple_component::LiteralOrIri& literalOrIri)
                 -> MatcherType {
-              const auto lviOpt = localVocab.getIndexOrNullopt(literalOrIri);
+              const auto lviOpt = localVocab.getIndexOrNullopt(
+                  LocalVocabEntry{literalOrIri, index.getLocalVocabContext()});
               if (!lviOpt) {
                 return AlwaysFalse(
                     absl::StrCat(literalOrIri.toStringRepresentation(),
@@ -463,7 +462,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
         component);
   };
   auto expectTransformTriplesTemplate =
-      [&vocab, &TripleComponentMatcher, &encodedIriManager](
+      [&index, &TripleComponentMatcher](
           const VariableToColumnMap& variableColumns,
           std::vector<SparqlTripleSimpleWithGraph>&& triples,
           const std::vector<std::array<TripleComponentT, 4>>&
@@ -472,8 +471,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
               AD_CURRENT_SOURCE_LOC()) {
         auto loc = generateLocationTrace(sourceLocation);
         auto [transformedTriples, localVocab] =
-            ExecuteUpdate::transformTriplesTemplate(encodedIriManager, vocab,
-                                                    variableColumns, triples);
+            ExecuteUpdate::transformTriplesTemplate(index, variableColumns,
+                                                    triples);
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
             [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
@@ -487,16 +486,15 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                     ElementsAreArray(transformedTriplesMatchers));
       };
   auto expectTransformTriplesTemplateFails =
-      [&vocab, &encodedIriManager](
-          const VariableToColumnMap& variableColumns,
-          std::vector<SparqlTripleSimpleWithGraph>&& triples,
-          const Matcher<const std::string&>& messageMatcher,
-          ad_utility::source_location sourceLocation =
-              AD_CURRENT_SOURCE_LOC()) {
+      [&index](const VariableToColumnMap& variableColumns,
+               std::vector<SparqlTripleSimpleWithGraph>&& triples,
+               const Matcher<const std::string&>& messageMatcher,
+               ad_utility::source_location sourceLocation =
+                   AD_CURRENT_SOURCE_LOC()) {
         auto loc = generateLocationTrace(sourceLocation);
         AD_EXPECT_THROW_WITH_MESSAGE(
-            ExecuteUpdate::transformTriplesTemplate(
-                encodedIriManager, vocab, variableColumns, std::move(triples)),
+            ExecuteUpdate::transformTriplesTemplate(index, variableColumns,
+                                                    std::move(triples)),
             messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s
@@ -533,12 +531,12 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Variable("?f"), Graph{}}},
-      {{Id("\"foo\""), Id("<bar>"), 0UL, defaultGraphId}});
+      {{Id("\"foo\""), Id("<bar>"), uint64_t{0}, defaultGraphId}});
   expectTransformTriplesTemplate(
       {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Variable("?f")}}},
-      {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), 0UL}});
+      {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), uint64_t{0}}});
   expectTransformTriplesTemplate(
       {},
       {SparqlTripleSimpleWithGraph{Iri("<http://example.org/123>"),
@@ -555,12 +553,12 @@ TEST(ExecuteUpdate, resolveVariable) {
       makeIdTableFromVector({{V(0), V(1), V(2)},
                              {V(3), V(4), V(5)},
                              {V(6), Id::makeUndefined(), V(8)}});
-  auto resolveVariable =
-      std::bind_front(&ExecuteUpdate::resolveVariable, std::cref(idTable));
+  auto resolveVariable = std::bind_front(&ExecuteUpdate::resolveVariable,
+                                         idTable.asStaticView<0>());
   EXPECT_THAT(resolveVariable(0, V(10)), Eq(V(10)));
-  EXPECT_THAT(resolveVariable(0, 1UL), Eq(V(1)));
-  EXPECT_THAT(resolveVariable(1, 1UL), Eq(V(4)));
-  EXPECT_THAT(resolveVariable(2, 1UL), Eq(std::nullopt));
+  EXPECT_THAT(resolveVariable(0, uint64_t{1}), Eq(V(1)));
+  EXPECT_THAT(resolveVariable(1, uint64_t{1}), Eq(V(4)));
+  EXPECT_THAT(resolveVariable(2, uint64_t{1}), Eq(std::nullopt));
   EXPECT_THAT(resolveVariable(2, Id::makeUndefined()), Eq(std::nullopt));
 }
 
@@ -576,8 +574,8 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
          const IdTable& idTable, uint64_t rowIdx,
          const Matcher<const std::vector<IdTriple<>>&>& expectedQuads) {
         std::vector<IdTriple<>> result;
-        ExecuteUpdate::computeAndAddQuadsForResultRow(templates, result,
-                                                      idTable, rowIdx);
+        ExecuteUpdate::computeAndAddQuadsForResultRow(
+            templates, result, idTable.asStaticView<0>(), rowIdx);
         EXPECT_THAT(result, expectedQuads);
       };
   // Compute the quads for an empty template set yields no quads.
@@ -590,12 +588,13 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
                      ElementsAreArray({IdTriple{{V(0), V(1), V(2), V(3)}}}));
   // The variables in templates are resolved to the value of the variable in the
   // specified row of the result.
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 0,
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)}}, idTable, 0,
                      ElementsAreArray({IdTriple{{V(0), V(1), V(1), V(3)}}}));
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 1,
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)}}, idTable, 1,
                      ElementsAreArray({IdTriple{{V(3), V(1), V(4), V(3)}}}));
   // Quads with undefined IDs cannot be stored and are not returned.
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 2, IsEmpty());
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)}}, idTable, 2,
+                     IsEmpty());
   expectComputeQuads({{V(0), V(1), Id::makeUndefined(), V(3)}}, idTable, 0,
                      IsEmpty());
   // Some extra cases to cover all branches.
@@ -606,8 +605,9 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
   expectComputeQuads({{V(0), V(1), V(2), Id::makeUndefined()}}, idTable, 0,
                      IsEmpty());
   // All the templates are evaluated for the specified row of the result.
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}, {V(0), 1UL, 2UL, V(3)}}, idTable,
-                     0,
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)},
+                      {V(0), uint64_t{1}, uint64_t{2}, V(3)}},
+                     idTable, 0,
                      ElementsAreArray({IdTriple{{V(0), V(1), V(1), V(3)}},
                                        IdTriple{{V(0), V(1), V(2), V(3)}}}));
 }

@@ -1,22 +1,37 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 
+#include <absl/strings/str_cat.h>
+#include <gtest/gtest_prod.h>
+
+#include <array>
+#include <stdexcept>
+
+#include "backports/filesystem.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/Constants.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/Permutation.h"
 #include "libqlever/QleverTypes.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
 #include "util/HashMap.h"
+#include "util/StringUtils.h"
+#include "util/Synchronized.h"
 
 // Forward declarations
 class QueryExecutionContext;
@@ -28,6 +43,17 @@ class IndexScan;
 // cleanly without breaking the entire index format.
 static constexpr size_t MATERIALIZED_VIEWS_VERSION = 1;
 
+// Filename suffixes for the on-disk representation of a materialized view.
+constexpr inline std::string_view VIEW_INFO_SUFFIX = ".viewinfo.json";
+constexpr inline std::string_view VIEW_SPO_SUFFIX = ".index.spo";
+constexpr inline std::string_view VIEW_SPO_META_SUFFIX =
+    ad_utility::constexprStrCat<VIEW_SPO_SUFFIX, META_FILE_SUFFIX>();
+
+// All suffixes of the files that make up a materialized view's on-disk
+// representation. Used to delete a view's files.
+constexpr inline std::array VIEW_ALL_SUFFIXES = {
+    VIEW_INFO_SUFFIX, VIEW_SPO_SUFFIX, VIEW_SPO_META_SUFFIX};
+
 // The `MaterializedViewWriter` can be used to write a new materialized view to
 // disk, given an already planned query. The query will be executed lazily and
 // the results will be written to the view.
@@ -38,8 +64,8 @@ class MaterializedViewWriter {
   std::string name_;
 
   // Query plan to retrieve the view's rows.
-  std::shared_ptr<QueryExecutionTree> qet_;
-  std::shared_ptr<QueryExecutionContext> qec_;
+  std::shared_ptr<const QueryExecutionTree> qet_;
+  std::shared_ptr<const QueryExecutionContext> qec_;
   ParsedQuery parsedQuery_;
 
   // Memory limit and allocator for `CompressedExternalIdTableSorter`, which is
@@ -55,6 +81,10 @@ class MaterializedViewWriter {
   // with the same column ordering as the `SELECT` statement.
   std::vector<ColumnIndex> columnPermutation_;
 
+  // The number of empty columns to add to the query result such that the
+  // resulting table has at least four columns.
+  uint8_t numAddEmptyColumns_;
+
   using RangeOfIdTables = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
   // SPO comparator
   using Comparator = SortTriple<0, 1, 2>;
@@ -62,15 +92,13 @@ class MaterializedViewWriter {
   // argument `NumStaticCols == 0`)
   using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
 
- public:
-  using QueryPlan = qlever::QueryPlan;
+  using PlannedQuery = qlever::PlannedQuery;
 
- private:
-  // Initialize a writer given the base filename of the view and a query plan.
-  // The view will be written to files prefixed with the index basename followed
-  // by the view name.
+  // Initialize a writer given the base filename of the view and a planned
+  // query. The view will be written to files prefixed with the index basename
+  // followed by the view name.
   MaterializedViewWriter(std::string onDiskBase, std::string name,
-                         const QueryPlan& queryPlan,
+                         const PlannedQuery& plannedQuery,
                          ad_utility::MemorySize memoryLimit,
                          ad_utility::AllocatorWithLimit<Id> allocator);
 
@@ -83,11 +111,16 @@ class MaterializedViewWriter {
   // columns and column ordering. This is called in the constructor to populate
   // `columnNamesAndPermutation_`.
   using ColumnNameAndIndex = std::pair<Variable, ColumnIndex>;
-  using ColumnNamesAndPermutation = std::vector<ColumnNameAndIndex>;
+  struct ColumnNamesAndPermutation {
+    std::vector<ColumnNameAndIndex> columnNamesAndIndices_;
+    uint8_t numAddEmptyColumns_;
+  };
   ColumnNamesAndPermutation getIdTableColumnNamesAndPermutation() const;
 
   // The number of columns of the view.
-  size_t numCols() const { return columnPermutation_.size(); }
+  size_t numCols() const {
+    return columnPermutation_.size() + numAddEmptyColumns_;
+  }
 
   // Helper to permute an `IdTable` according to `columnPermutation_` and verify
   // that there are no `LocalVocabEntry` values in any of the selected columns.
@@ -114,7 +147,7 @@ class MaterializedViewWriter {
   // Helper for `computeResultAndWritePermutation`: given sorted and permuted
   // blocks from `getSortedBlocks`, write the `Permutation` to disk using
   // `CompressedRelationWriter`. Returns the permutation metadata.
-  IndexMetaDataMmap writePermutation(RangeOfIdTables sortedBlocksSPO) const;
+  IndexMetaData writePermutation(RangeOfIdTables sortedBlocksSPO) const;
 
   // Helper for `computeResultAndWritePermutation`: Writes the metadata JSON
   // files with column names and ordering to disk.
@@ -124,31 +157,26 @@ class MaterializedViewWriter {
   // and writes the view (SPO permutation and metadata) to disk.
   void computeResultAndWritePermutation() const;
 
- public:
-  // Write a `MaterializedView` given the index' `onDiskBase`, a valid `name`
-  // (consisting only of alphanumerics and hyphens) and a `queryPlan` to be
-  // executed. The query's result is written to the view.
-  //
-  // The `memoryLimit` and `allocator` are used only for sorting the
-  // permutation if the query result is not correctly sorted already. The
-  // `queryPlan` is executed with the normal query memory limit.
-  static void writeViewToDisk(
-      std::string onDiskBase, std::string name, const QueryPlan& queryPlan,
-      ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
-      ad_utility::AllocatorWithLimit<Id> allocator =
-          ad_utility::makeUnlimitedAllocator<Id>());
+  friend MaterializedViewsManager;
 };
 
 // This class represents a single loaded `MaterializedView`. It can be used for
 // `IndexScan`s.
-class MaterializedView {
+class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
  private:
   std::string onDiskBase_;
   std::string name_;
   std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
-      Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>())};
+      Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>(), name_)};
   VariableToColumnMap varToColMap_;
   std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
+  std::optional<std::string> originalQuery_;
+  std::optional<ParsedQuery> parsedQuery_;
+
+  // Lookup table for `BIND` statements from the view's query. Maps the cache
+  // keys of the `BIND` expressions (based on the column indices in the view) to
+  // the target column index.
+  materializedViewsQueryAnalysis::BindExpressionAndTargetCol coveredBinds_;
 
   using AdditionalScanColumns = SparqlTripleSimple::AdditionalScanColumns;
 
@@ -156,11 +184,17 @@ class MaterializedView {
   // materialized views do not support updates yet.
   std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState() const;
 
+  FRIEND_TEST(MaterializedViewsTest, ManualConfigurations);
+
  public:
   // Load a materialized view from disk given the filename components. The
   // constructor will throw an exception if the name is invalid or the view does
   // not exist.
   MaterializedView(std::string onDiskBase, std::string name);
+
+  // Connect the permutation's back-reference to this view. Must be called
+  // after the `MaterializedView` is managed by a `shared_ptr`.
+  void connectPermutationBackReference();
 
   // Get the name of the view.
   const std::string& name() const { return name_; }
@@ -169,6 +203,14 @@ class MaterializedView {
   const VariableToColumnMap& variableToColumnMap() const {
     return varToColMap_;
   }
+
+  // Get the original query string used for writing the view.
+  const std::optional<std::string>& originalQuery() const {
+    return originalQuery_;
+  }
+
+  // Get a parsed version of the original query, used for query analysis.
+  const std::optional<ParsedQuery>& parsedQuery() const { return parsedQuery_; }
 
   // Return the combined filename from the index' `onDiskBase` and the name of
   // the view. Note that this function does not check for validity or existence.
@@ -220,7 +262,46 @@ class MaterializedView {
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
+
+  using ColumnMapping = ad_utility::HashMap<size_t, size_t>;
+  std::shared_ptr<IndexScan> makeIndexScan(QueryExecutionContext* qec,
+                                           const VariableToColumnMap& varToCol,
+                                           const ColumnMapping& colMap) const;
+
+  // Compute the cache key corresponding to the query of this materialized view.
+  // Requires a `QueryExecutionContext` to access the index, and the
+  // materialized view must know its original query. If `qec` is `nullptr` or
+  // the view does not know its original query, both members of the returned
+  // struct are `nullopt` (currently used by tests).
+  struct CacheKeyAndColumnMapping {
+    std::string cacheKey_;
+    ColumnMapping columnMapping_;
+  };
+  struct CacheKeyWithAndWithoutInvariantPatterns {
+    std::optional<CacheKeyAndColumnMapping> full_;
+    std::optional<CacheKeyAndColumnMapping> withoutInvariants_;
+  };
+  CacheKeyWithAndWithoutInvariantPatterns computeCacheKey(
+      QueryExecutionContext* qec) const;
+
+  // If the materialized view contains a top-level `BIND` statement where the
+  // expression matches the given cache key, return the column index of the
+  // `BIND`'s target variable.
+  //
+  // IMPORTANT: This works only if the caller can guarantee that the variables
+  // in the `BIND` expression have been mapped to exactly the same column
+  // indices as in the view while generating the cache key.
+  std::optional<size_t> lookupBindTargetColumn(
+      const std::string& bindCacheKey) const;
+
+  // Dummy variables for internal use.
+  static const Variable& dummySubject();
+  static const Variable& dummyPredicate();
+  static const Variable& dummyObject();
 };
+
+// Shorthand for query rewriting helper class.
+using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
 
 // The `MaterializedViewsManager` is part of the `QueryExecutionContext` and is
 // used to manage the currently loaded `MaterializedViews` in a `Server` or
@@ -228,35 +309,165 @@ class MaterializedView {
 class MaterializedViewsManager {
  private:
   std::string onDiskBase_;
-  mutable ad_utility::Synchronized<
-      ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>>>
-      loadedViews_;
+
+  // Set by `retireOnDiskFiles` (see there) once the files of the index this
+  // manager belongs to have been moved away by an index rebuild, after which
+  // this manager must not create or delete any file under `onDiskBase_`
+  // anymore. Accessed only through `lockIfNotRetired` below, whose shared lock
+  // makes the "not retired" answer stay valid for as long as it is held.
+  //
+  // NOTE: Whenever this and `loadedViews_` are held at the same time, this one
+  // has to be locked first, otherwise `retireOnDiskFiles` can deadlock against
+  // a concurrent write or deletion of a view. Since `lockIfNotRetired` is
+  // private and used only by `writeViewToDisk` and `deleteView`, which both
+  // take it before touching `loadedViews_`, no code holding `loadedViews_` can
+  // ask for this lock, so the two can not be acquired in the opposite order.
+  //
+  // NOTE: This deliberately is a separate `Synchronized` and not a member of
+  // `LoadedViews` below, although that would make the above ordering rule
+  // unnecessary. The two locks have very different hold times: this one is held
+  // in shared mode for the whole duration of writing a view (query execution,
+  // external sorting and writing the permutation), whereas `loadedViews_` is
+  // held only for the short lookups and updates of the loaded views. Merging
+  // them would mean that `getView`, which needs the exclusive lock to load a
+  // view lazily, has to wait for a concurrent view write to finish.
+  ad_utility::Synchronized<bool> onDiskFilesRetired_{false};
+
+  // Return a lock that blocks `retireOnDiskFiles` for as long as it is held, or
+  // throw if the on-disk files have already been retired. Every operation that
+  // creates or deletes a file under `onDiskBase_` has to hold such a lock for
+  // its whole duration: only then is it guaranteed that the files it touches
+  // still belong to this manager's index, and not to a rebuilt index that has
+  // taken over `onDiskBase_` in the meantime. `description` is a verb phrase
+  // naming the operation and is only used for the error message.
+  [[nodiscard]] auto lockIfNotRetired(std::string_view description) const {
+    auto lock = onDiskFilesRetired_.rlock();
+    if (*lock) {
+      throw std::runtime_error{absl::StrCat(
+          "Cannot ", description,
+          " because the files of the index it belongs to have been moved away "
+          "by an index rebuild. Please retry the operation, it will then be "
+          "applied to the rebuilt index.")};
+    }
+    return lock;
+  }
+
+  // Helper struct to unify the locking of loaded views and `QueryPatternCache`.
+  struct LoadedViews {
+    ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>> views_;
+    materializedViewsQueryAnalysis::QueryPatternCache queryPatternCache_;
+  };
+
+  mutable ad_utility::Synchronized<LoadedViews> loadedViews_;
+
+  // Load the given view into `state` if it isn't loaded yet and return it.
+  // Requires `state` to be the locked contents of `loadedViews_` (this is a
+  // helper for `loadView` and `getView`, so that the latter can look up the
+  // view atomically with loading it, without releasing the lock in between).
+  std::shared_ptr<MaterializedView> loadViewIntoLockedState(
+      const std::string& name, LoadedViews& state,
+      QueryExecutionContext* qec) const;
 
  public:
   MaterializedViewsManager() = default;
   explicit MaterializedViewsManager(std::string onDiskBase)
-      : onDiskBase_{std::move(onDiskBase)} {};
+      : onDiskBase_{std::move(onDiskBase)} {}
 
   // For use with the default constructor: set the index basename after creation
   // of the `MaterializedViewsManager`. This should only be called once and
   // before any calls to `loadView` and `getView`.
   void setOnDiskBase(const std::string& onDiskBase);
 
+  // Permanently prevent this manager from creating or deleting any further view
+  // file under `onDiskBase_`. This has to be called before the files of the
+  // index this manager belongs to are moved away by an index rebuild (see
+  // `Server::rebuildIndex`, which is the only caller, and
+  // `Qlever::moveRebuiltIndexIntoPlace`, which performs the move). Otherwise a
+  // view that is written concurrently with that move can end up under the base
+  // name that the rebuilt index has just taken over, even though its `Id`s
+  // refer to the vocabulary of the old index.
+  //
+  // Taking the exclusive lock is what makes this airtight: it blocks until a
+  // concurrent `writeViewToDisk` or `deleteView` has finished, so that the
+  // files of such an operation are complete before the move enumerates them and
+  // are therefore moved along with the rest of the old index (where they
+  // belong). Every later attempt throws. Everything else, in particular
+  // scanning views that are already loaded, keeps working, so that queries
+  // which still hold a snapshot of the old index can finish.
+  void retireOnDiskFiles() { *onDiskFilesRetired_.wlock() = true; }
+
+  // Check if a materialized view is currently loaded.
+  bool isViewLoaded(const std::string& name) const;
+
+  // Check if any materialized view is currently loaded.
+  bool hasLoadedViews() const;
+
+  // Return the names of all view files (of all views, loaded or not) that exist
+  // on disk for the given index base name. Views are loaded lazily by name, so
+  // the only way to enumerate them is to scan the directory for files with the
+  // `<base>.view.` prefix (see `MaterializedView::getFilenameBase`). This is
+  // used to move the views together with their index after a rebuild.
+  static std::vector<ql::filesystem::path> viewFilesOnDisk(
+      const ql::filesystem::path& onDiskBase);
+
   // Since we don't want to break the const-ness in a lot of places just for the
   // loading of views, `loadedViews_` is mutable. Note that this is okay,
   // because the views themselves aren't changed (only loaded on-demand).
-  void loadView(const std::string& name) const;
+  // `qec` is forwarded to `MaterializedView::computeCacheKey` for cache-key
+  // based query rewriting; passing `nullptr` skips that analysis (currently
+  // used by tests that do not care about it).
+  void loadView(const std::string& name, QueryExecutionContext* qec) const;
+
+  // Unload a materialized view if it is loaded. This function is a no-op
+  // otherwise. It is `const` for the same reason described above.
+  void unloadViewIfLoaded(const std::string& name) const;
+
+  // Delete a materialized view: unload it if loaded and delete all of its files
+  // from disk. Throws if the view does not exist.
+  void deleteView(const std::string& name) const;
 
   // Load the given view if it is not already loaded and return it. This pointer
-  // is never `nullptr`. If the view does not exist, the function throws.
+  // is never `nullptr`. If the view does not exist, the function throws. See
+  // `loadView` above for details on the use of the `QueryExecutionContext`.
   std::shared_ptr<const MaterializedView> getView(
-      const std::string& name) const;
+      const std::string& name, QueryExecutionContext* qec) const;
 
   // The same as `MaterializedView::makeIndexScan` above, but load and use the
   // right view automatically as requested in the `MaterializedViewQuery`.
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
+
+  // Given a set of triples, check if some join operations that would be
+  // required when evaluating them can be replaced by scans on materialized
+  // views that are currently loaded. This is implemented using the
+  // `queryPatternCache_`.
+  std::vector<MaterializedViewJoinReplacement> makeJoinReplacementIndexScans(
+      QueryExecutionContext* qec,
+      const parsedQuery::BasicGraphPattern& triples) const;
+
+  //  Check if there is a materialized view that can be used to replace a query
+  //  with the given cache key. The `VariableToColumnMap` needs to be provided
+  //  to apply the view's column permutation.
+  std::shared_ptr<IndexScan> makeIndexScan(
+      QueryExecutionContext* qec, const std::string& cacheKey,
+      const VariableToColumnMap& varToCol) const;
+
+  // Write a `MaterializedView` given a valid `name` (consisting only of
+  // alphanumerics and hyphens) and a `plannedQuery` to be executed. The query's
+  // result is written to the view.
+  //
+  // If a view with the same name is already loaded, it is unloaded before
+  // writing.
+  //
+  // The `memoryLimit` and `allocator` are used only for sorting the
+  // permutation if the query result is not correctly sorted already. The
+  // `plannedQuery` is executed with the normal query memory limit.
+  void writeViewToDisk(
+      std::string name, const qlever::PlannedQuery& plannedQuery,
+      ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
+      ad_utility::AllocatorWithLimit<Id> allocator =
+          ad_utility::makeUnlimitedAllocator<Id>()) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_

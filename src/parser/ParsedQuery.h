@@ -8,6 +8,7 @@
 
 #include <absl/functional/function_ref.h>
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <variant>
@@ -27,6 +28,9 @@
 #include "parser/data/OrderKey.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include "util/http/ResponseMiddleware.h"
+#endif
 
 // Data container for prefixes
 class SparqlPrefix {
@@ -89,6 +93,13 @@ class ParsedQuery {
 
   // The IRIs from the FROM and FROM NAMED clauses.
   DatasetClauses datasetClauses_;
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // A function to modify the HTTP response for this operation before it is
+  // sent. It can be used to set up responses (status code, body, ...) that
+  // depend on the operation result.
+  std::optional<ResponseMiddleware> responseMiddleware_;
+#endif
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);
@@ -243,6 +254,16 @@ class ParsedQuery {
   // If this is a SELECT query, return all the selected aliases. Return an empty
   // vector for construct clauses.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
+
+  // Update the export limit based on the `send` parameter (historical name).
+  // The limit controls the maximum number of bindings exported by
+  // `ExportQueryExecutionTrees`. Do nothing if `sendLimit` is `std::nullopt`.
+  void updateExportLimit(std::optional<uint64_t> sendLimit);
+
+  // Return true if this query performs a GROUP BY, either explicitly (a
+  // `GROUP BY` clause is present) or implicitly (no `GROUP BY` clause, but an
+  // aggregating expression is used in the `SELECT` clause).
+  [[nodiscard]] bool isAggregatingQuery() const;
 };
 
 #endif  // QLEVER_SRC_PARSER_PARSEDQUERY_H

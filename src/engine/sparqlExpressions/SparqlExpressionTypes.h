@@ -8,6 +8,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
 
+#include <boost/mp11.hpp>
 #include <vector>
 
 #include "backports/keywords.h"
@@ -18,87 +19,26 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/HashSet.h"
 #include "util/TypeTraits.h"
+#include "util/VectorWithMemoryLimit.h"
 #include "util/VisitMixin.h"
 
 namespace sparqlExpression {
 
-// A std::vector<T, AllocatorWithLimit> with deleted copy constructor
-// and copy assignment. Used in the SparqlExpression module, where we want
-// no accidental copies of large intermediate results.
-template <typename T>
-class VectorWithMemoryLimit
-    : public std::vector<T, ad_utility::AllocatorWithLimit<T>> {
- public:
-  using Allocator = ad_utility::AllocatorWithLimit<T>;
-  using Base = std::vector<T, ad_utility::AllocatorWithLimit<T>>;
+// `VectorWithMemoryLimit` used to live here, but has been moved to
+// `ad_utility`. Make it available under the (historic) `sparqlExpression`
+// namespace, where it is still used a lot.
+using ad_utility::VectorWithMemoryLimit;
 
- private:
-  struct CloneTag {};
-
- public:
-  // The `AllocatorWithMemoryLimit` is not default-constructible (on purpose).
-  // Unfortunately, the support for such allocators is not really great in the
-  // standard library. In particular, the type trait
-  // `std::default_initializable<std::vector<T, Alloc>>` will be true, even if
-  // the `Alloc` is not default-initializable, which leads to hard compile
-  // errors with the ranges library. For this reason we cannot simply inherit
-  // all the constructors from `Base`, but explicitly have to forward all but
-  // the default constructor. In particular, we only forward constructors that
-  // have
-  // * at least one argument
-  // * the first argument must not be similar to `std::vector` or
-  // `VectorWithMemoryLimit` to not hide copy or move constructors
-  // * the last argument must be `AllocatorWithMemoryLimit` (all constructors to
-  // `vector` take the allocator as a last parameter)
-  // * there must be a constructor of `Base` for the given arguments.
-  CPP_template(typename... Args)(
-      requires(sizeof...(Args) > 0) CPP_and CPP_NOT(
-          concepts::derived_from<ql::remove_cvref_t<ad_utility::First<Args...>>,
-                                 Base>)
-          CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
-              CPP_and concepts::constructible_from<Base, Args&&...>)
-      QL_EXPLICIT(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
-      : Base{AD_FWD(args)...} {}
-
-  // We have to explicitly forward the `initializer_list` constructor because it
-  // for some reason is not covered by the above generic mechanism.
-  VectorWithMemoryLimit(std::initializer_list<T> init, const Allocator& alloc)
-      : Base(init, alloc) {}
-
-  // Disable copy constructor and copy assignment operator (copying is too
-  // expensive in the setting where we want to use this class and not
-  // necessary).
- public:
-  VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
-  VectorWithMemoryLimit(const VectorWithMemoryLimit&) = delete;
-  // Moving is fine.
-  VectorWithMemoryLimit(VectorWithMemoryLimit&&) noexcept = default;
-  VectorWithMemoryLimit& operator=(VectorWithMemoryLimit&&) noexcept = default;
-
-  // Allow copying via an explicit clone() function.
-  [[nodiscard]] VectorWithMemoryLimit clone() const {
-    // Call the private copy constructor.
-    return VectorWithMemoryLimit(CloneTag{}, *this);
-  }
-
- private:
-  // Constructor for copying, used to implement the `clone` function.
-  // We use the explicit tag, s.t. this constructor doesn't match the signature
-  // of a copy constructor, because otherwise type traits like `copyable` or
-  // `constructible_form` would be misled (they might return true for certain
-  // compilers in C++17 if the copy constructor is present but private.
-  VectorWithMemoryLimit(CloneTag, const VectorWithMemoryLimit& other)
-      : Base{static_cast<const Base&>(other)} {}
-};
-static_assert(!ql::concepts::default_initializable<VectorWithMemoryLimit<int>>);
-static_assert(!ql::concepts::copyable<VectorWithMemoryLimit<int>>);
-
-// A class to store the results of expressions that can yield strings or IDs as
-// their result (for example IF and COALESCE). It is also used for expressions
-// that can only yield strings.
-using IdOrLiteralOrIri = std::variant<ValueId, LocalVocabEntry>;
+// The result of an expression that can yield an ID or a string (for example
+// IF and COALESCE). `IdOrLocalVocabEntry` is the fully resolved type used in
+// `ExpressionResult`. `IdOrLiteralOrIri` is the lighter type that expression
+// helpers can return without needing vocab position bounds; it gets promoted
+// to `IdOrLocalVocabEntry` via `promoteToLocalVocabEntry` at the boundary.
+using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+using IdOrLiteralOrIri =
+    std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
 // Printing for GTest.
-void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os);
+void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os);
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
@@ -107,7 +47,7 @@ void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os);
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<IdOrLiteralOrIri, ValueId>;
+using ConstantTypes = std::tuple<IdOrLocalVocabEntry, ValueId>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
@@ -166,7 +106,7 @@ struct EvaluationContext {
   const VariableToColumnMap& _variableToColumnMap;
 
   /// The input of the expression.
-  const IdTable& _inputTable;
+  IdTableView<0> _inputTable;
 
   /// The indices of the actual range of rows in the _inputTable on which the
   /// expression is evaluated. For BIND expressions this is always [0,
@@ -217,11 +157,23 @@ struct EvaluationContext {
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,
-                    const IdTable& inputTable,
+                    IdTableView<0> inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle,
                     TimePoint deadline);
+
+  /// Overload that accepts a materialized `IdTable` and converts it to a view.
+  EvaluationContext(const QueryExecutionContext& qec,
+                    const VariableToColumnMap& variableToColumnMap,
+                    const IdTable& inputTable,
+                    const ad_utility::AllocatorWithLimit<Id>& allocator,
+                    LocalVocab& localVocab,
+                    ad_utility::SharedCancellationHandle cancellationHandle,
+                    TimePoint deadline)
+      : EvaluationContext(qec, variableToColumnMap,
+                          inputTable.asStaticView<0>(), allocator, localVocab,
+                          std::move(cancellationHandle), deadline) {}
 
   bool isResultSortedBy(const Variable& variable);
   // The size (in number of elements) that this evaluation context refers to.
@@ -234,6 +186,11 @@ struct EvaluationContext {
   // _____________________________________________________________________________
   std::optional<ExpressionResult> getResultFromPreviousAggregate(
       const Variable& var) const;
+
+  // Currently a helper function that returns the index from `qec_`. Might
+  // change in the future so we hide the implementation details behind this
+  // function.
+  const LocalVocabContext& getLocalVocabContext() const;
 };
 
 namespace detail {
@@ -244,7 +201,7 @@ CPP_template(typename T, typename LocalVocabT)(
     constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
-  } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
+  } else if constexpr (ad_utility::isSimilar<T, IdOrLocalVocabEntry>) {
     return std::visit(
         [&localVocab](auto&& el) mutable {
           using R = decltype(el);
@@ -335,6 +292,34 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
   return result;
 }
 
+// Implementation of the `ValueGetterPack` (see below).
+namespace valueGetterPack::detail {
+template <size_t N, typename>
+struct ValueGetterPackImpl;
+
+template <size_t N, typename... ValueGetters>
+struct ValueGetterPackImpl<N, std::tuple<ValueGetters...>> {
+  static_assert(sizeof...(ValueGetters) == 1 || N == sizeof...(ValueGetters));
+  using type = std::conditional_t<
+      sizeof...(ValueGetters) != 1, std::tuple<ValueGetters...>,
+      // `mp_repeat_c` repeats the first argument (a tuple of a single
+      // `ValueGetter` in our case) N times, and then concatenates it (into a
+      // tuple of N-times the same `ValueGetter`.
+      boost::mp11::mp_repeat_c<std::tuple<ValueGetters...>, N>>;
+};
+}  // namespace valueGetterPack::detail
+
+// In the SPARQL expression module, an N-ary operation can either specify `N`
+// different value getters (one for each argument), or a single value getter
+// (the same for each arguments). The following helper function takes the `N` as
+// well as a `std::tuple<ValueGetters...>` where either there have to be `N`
+// value getters in the tuple, or only a single value getter. The result is then
+// always a tuple of `N` value getters, (created by repeating the single value
+// getter n-times if necessary).
+template <size_t N, typename T>
+using ValueGetterPack =
+    typename valueGetterPack::detail::ValueGetterPackImpl<N, T>::type;
+
 // Class for an operation used in a `SparqlExpression`, consisting of the
 // function for computing the operation and the value getters for the operands.
 // The number of operands is fixed.
@@ -365,9 +350,7 @@ struct Operation {
  public:
   constexpr static size_t N = NumOperands;
   using Function = typename FunctionAndValueGettersT::Function;
-  using ValueGetters = std::conditional_t<
-      NV == 1, std::array<std::tuple_element_t<0, OriginalValueGetters>, N>,
-      OriginalValueGetters>;
+  using ValueGetters = ValueGetterPack<N, OriginalValueGetters>;
   Function _function;
   ValueGetters _valueGetters{};
   std::tuple<SpecializedFunctions...> _specializedFunctions{};
@@ -387,6 +370,38 @@ constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
     size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
   return (... && isConstantResult<Inputs>) ? 1ul : context.size();
+}
+
+// Helper to check if an `ExpressionResult` variant holds a constant.
+// Used by the type erased expression.
+// Implementation lives in SparqlExpressionTypes.cpp to avoid instantiating
+// the std::visit vtable (6 alternatives × N TUs) in every including TU.
+bool isConstantExpressionResult(const ExpressionResult& res);
+
+// Helper type to convert the type from `IdOrLiteralOrIri` to
+// `IdOrLocalVocabEntry`. For other types, the type is unchanged.
+template <typename T>
+using PromoteToLocalVocabEntry =
+    std::conditional_t<std::is_same_v<T, IdOrLiteralOrIri>, IdOrLocalVocabEntry,
+                       T>;
+
+// Helper function to upgrade the variant type from `IdOrLiteralOrIri` to
+// `IdOrLocalVocabEntry` by wrapping the `LiteralOrIri` in a `LocalVocabEntry`.
+// For other types, the functor just returns the input as is.
+template <typename T>
+decltype(auto) promoteToLocalVocabEntry(T&& value,
+                                        const LocalVocabContext& context) {
+  if constexpr (std::is_same_v<std::decay_t<T>, IdOrLiteralOrIri>) {
+    return std::visit(
+        ad_utility::OverloadCallOperator{
+            [](Id id) -> IdOrLocalVocabEntry { return id; },
+            [&context](auto&& literalOrIri) -> IdOrLocalVocabEntry {
+              return {LocalVocabEntry{AD_FWD(literalOrIri), context}};
+            }},
+        AD_FWD(value));
+  } else {
+    return AD_FWD(value);
+  }
 }
 
 }  // namespace detail

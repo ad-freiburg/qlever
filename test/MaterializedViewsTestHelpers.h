@@ -12,18 +12,39 @@
 
 #include <fstream>
 
+#include "./QueryPlannerTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
+#include "engine/QueryExecutionContext.h"
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 
 namespace materializedViewsTestHelpers {
+
+namespace h = queryPlannerTestHelpers;
 
 static constexpr std::string_view dummyTurtle = R"(
   <s1> <p1> "abc" .
   <s1> <p2> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
   <s2> <p1> "xyz" .
   <s2> <p3> <http://example.com/> .
+)";
+
+static constexpr std::string_view cacheKeyRewriteDummyTurtle = R"(
+  @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+  <s1> <p1> "abc" .
+  <s1> <p3> "abc1" .
+  <s1> <p3> "abc2" .
+  <s1> <p3> "abc3" .
+  <s2> <p1> "xyz" .
+  <s1> <p2> "1"^^xsd:integer .
+  <s2> <p3> <s3> .
+  <s3> <p2> "7"^^xsd:integer .
+  <s2> <p3> <s4> .
+  <s3> <p2> "5"^^xsd:integer .
+  <s3> <p4> <http://example.com/> .
 )";
 
 // _____________________________________________________________________________
@@ -46,13 +67,10 @@ inline void makeTestIndex(const std::string& basename, const std::string& kg) {
 inline void removeTestIndex(const std::string& basename) {
   std::regex pattern(absl::StrCat(basename, "\\..*"));
   std::cout << "Removing test files " << basename << ".*" << std::endl;
-  for (const auto& entry :
-       std::filesystem::directory_iterator(std::filesystem::current_path())) {
-    if (entry.is_regular_file() &&
-        std::regex_match(entry.path().filename().string(), pattern)) {
-      std::filesystem::remove(entry.path());
-    }
-  }
+  qlever::util::deleteFilesInDirectory(
+      ql::filesystem::current_path(), [&pattern](const auto& path) {
+        return std::regex_match(path.filename().string(), pattern);
+      });
 }
 
 // _____________________________________________________________________________
@@ -61,9 +79,11 @@ class MaterializedViewsTest : public ::testing::Test {
   std::shared_ptr<qlever::Qlever> qlv_;
 
  protected:
-  const std::string testIndexBase_ = "_materializedViewsTestIndex";
+  const std::string testIndexBase_ = gtestCurrentTestName();
   const std::string simpleWriteQuery_ = "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }";
   std::stringstream log_;
+  std::optional<decltype(setGlobalLoggingStreamForTesting(nullptr))>
+      logStreamCleanup_;
 
   // ___________________________________________________________________________
   virtual std::string getDummyTurtle() const {
@@ -72,7 +92,7 @@ class MaterializedViewsTest : public ::testing::Test {
 
   // ___________________________________________________________________________
   void SetUp() override {
-    ad_utility::setGlobalLoggingStream(&log_);
+    logStreamCleanup_.emplace(setGlobalLoggingStreamForTesting(&log_));
     makeTestIndex(testIndexBase_, getDummyTurtle());
     qlever::EngineConfig config;
     config.baseName_ = testIndexBase_;
@@ -83,7 +103,8 @@ class MaterializedViewsTest : public ::testing::Test {
   void TearDown() override {
     qlv_ = nullptr;
     removeTestIndex(testIndexBase_);
-    ad_utility::setGlobalLoggingStream(&std::cout);
+    // Calls the cleanup, restoring the log stream to the previous value.
+    logStreamCleanup_.reset();
   }
 
   // ___________________________________________________________________________
@@ -93,13 +114,20 @@ class MaterializedViewsTest : public ::testing::Test {
   }
 
   // ___________________________________________________________________________
+  std::shared_ptr<QueryExecutionContext> getQec() {
+    return qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot());
+  }
+
+  // ___________________________________________________________________________
   void clearLog() { log_.str(""); }
 
   // Helper that evaluates a query on the test index and returns its result as
   // an `IdTable` with the same column ordering as the columns in the `SELECT`
   // statement.
   IdTable getQueryResultAsIdTable(std::string query) {
-    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(std::move(query));
+    auto plannedQuery = qlv().parseAndPlanQuery(std::move(query));
+    auto qet = plannedQuery.sharedQueryExecutionTree();
+    auto& parsed = plannedQuery.parsedQuery();
 
     // Get the visible variables' column indices in the correct order.
     if (!parsed.hasSelectClause()) {
@@ -118,7 +146,7 @@ class MaterializedViewsTest : public ::testing::Test {
 
     // Compute the result and permute the `IdTable` as expected.
     auto res = qet->getResult(false);
-    auto idTable = res->idTable().clone();
+    auto idTable = res->cloneIdTable();
     idTable.setColumnSubset(columns);
     return idTable;
   }
@@ -141,6 +169,118 @@ class MaterializedViewsTestLarge : public MaterializedViewsTest {
     }
     return dummy;
   }
+};
+
+// _____________________________________________________________________________
+class MaterializedViewsCacheKeyRewriteTest : public MaterializedViewsTest {
+ protected:
+  std::string getDummyTurtle() const override {
+    return std::string{cacheKeyRewriteDummyTurtle};
+  }
+};
+
+// _____________________________________________________________________________
+struct RewriteTestParams {
+  // Query to write the test view.
+  std::string writeQuery_;
+
+  // Enforce a query planning budget to allow testing the greedy query planner
+  // with toy examples.
+  size_t queryPlanningBudget_;
+};
+
+// _____________________________________________________________________________
+class MaterializedViewsQueryRewriteTest
+    : public ::testing::TestWithParam<RewriteTestParams> {
+ protected:
+  std::stringstream log_;
+  std::optional<decltype(setGlobalLoggingStreamForTesting(nullptr))>
+      logStreamCleanup_;
+
+  // ___________________________________________________________________________
+  void SetUp() override {
+    logStreamCleanup_.emplace(setGlobalLoggingStreamForTesting(&log_));
+  }
+
+  // ___________________________________________________________________________
+  void TearDown() override {
+    // Calls the cleanup, restoring the log stream to the previous value.
+    logStreamCleanup_.reset();
+  }
+};
+
+// We make subclasses of `MaterializedViewsQueryRewriteTest` here s.t. we can
+// use different `INSTANTIATE_TEST_SUITE_P` calls for different rewriting tests.
+class MaterializedViewsChainRewriteTest
+    : public MaterializedViewsQueryRewriteTest {};
+class MaterializedViewsStarRewriteTest
+    : public MaterializedViewsQueryRewriteTest {};
+
+// _____________________________________________________________________________
+inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
+  auto& s = *os;
+  s << "write query = '" << p.writeQuery_
+    << "', budget = " << p.queryPlanningBudget_;
+}
+
+// _____________________________________________________________________________
+template <typename Query>
+inline void qpExpect(qlever::Qlever& qlv, const Query& query,
+                     ::testing::Matcher<const QueryExecutionTree&> matcher,
+                     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  // For query planning to produce the expected results reliably, we need to
+  // clear the cache.
+  qlv.clearQueryResultCache();
+  auto plannedQuery = qlv.parseAndPlanQuery(std::string{query});
+  EXPECT_THAT(plannedQuery.queryExecutionTree(), matcher);
+};
+
+// _____________________________________________________________________________
+inline auto viewScan(
+    std::string viewName, std::string a, std::string b, std::string c,
+    std::optional<size_t> strippedSize = std::nullopt,
+    std::vector<std::pair<ColumnIndex, Variable>> additionalColumns = {}) {
+  return h::IndexScanFromStrings(std::move(a), std::move(b), std::move(c),
+                                 {Permutation::Enum::SPO}, std::monostate{},
+                                 additionalColumns | ql::views::values |
+                                     ::ranges::to<std::vector<Variable>>(),
+                                 additionalColumns | ql::views::keys |
+                                     ::ranges::to<std::vector<ColumnIndex>>(),
+                                 strippedSize, viewName);
+};
+
+// _____________________________________________________________________________
+inline auto viewScanSimple(std::string viewName, std::string a, std::string b,
+                           std::string c) {
+  // Helper because `std::bind_front` does not like argument default values.
+  return viewScan(std::move(viewName), std::move(a), std::move(b),
+                  std::move(c));
+};
+
+// _____________________________________________________________________________
+template <typename ViewName, typename Query>
+inline void expectNotSuitableForRewrite(
+    const qlever::Qlever& qlv, const MaterializedViewsManager& manager,
+    const ViewName& viewName, const Query& query,
+    source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  materializedViewsQueryAnalysis::QueryPatternCache qpc;
+  auto plan = qlv.parseAndPlanQuery(query);
+  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+  manager.writeViewToDisk(viewName, plan);
+  auto view = manager.getView(viewName, qec.get());
+  qpc.analyzeView(view, qec.get());
+  // `analyzeView` may still return `true` because the view got registered for
+  // cache-key based rewriting, even for queries that (by design) are not
+  // suitable for the pattern-based (star/chain) rewriting tested here. So
+  // check the latter directly instead of relying on the overall return value.
+  const auto& graphPattern = plan.parsedQuery()._rootGraphPattern;
+  ASSERT_EQ(graphPattern._graphPatterns.size(), 1u);
+  EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(
+                     qec.get(), graphPattern._graphPatterns.at(0).getBasic())
+                  .empty());
+  manager.unloadViewIfLoaded(viewName);
 };
 
 }  // namespace materializedViewsTestHelpers

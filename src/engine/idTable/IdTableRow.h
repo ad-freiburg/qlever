@@ -64,7 +64,7 @@ class Row {
   // default constructor, we also keep the constructor that has a `numCols`
   // argument (which is ignored), in order to facilitate generic code that works
   // for both cases.
-  CPP_template_2(typename = void)(requires(!isDynamic())) Row(){};
+  CPP_template_2(typename = void)(requires(!isDynamic())) Row() {}
 
   CPP_template_2(typename = void)(requires(!isDynamic())) explicit Row(
       size_t numCols)
@@ -81,12 +81,12 @@ class Row {
       Row, ad_utility::AccessViaBracketOperator, ad_utility::IsConst::False>;
   using const_iterator = ad_utility::IteratorForAccessOperator<
       Row, ad_utility::AccessViaBracketOperator, ad_utility::IsConst::True>;
-  iterator begin() { return {this, 0}; };
-  iterator end() { return {this, numColumns()}; };
-  const_iterator cbegin() { return {this, 0}; };
-  const_iterator cend() { return {this, numColumns()}; };
-  const_iterator begin() const { return {this, 0}; };
-  const_iterator end() const { return {this, numColumns()}; };
+  iterator begin() { return {this, 0}; }
+  iterator end() { return {this, numColumns()}; }
+  const_iterator cbegin() { return {this, 0}; }
+  const_iterator cend() { return {this, numColumns()}; }
+  const_iterator begin() const { return {this, 0}; }
+  const_iterator end() const { return {this, numColumns()}; }
 
   size_t numColumns() const { return data_.size(); }
   size_t size() const { return numColumns(); }
@@ -226,15 +226,15 @@ class RowReferenceImpl {
         ad_utility::IsConst::True>;
     // Non-const iterators allow non-const access and are therefore only allowed
     // on rvalues.
-    iterator begin() && { return {this, 0}; };
-    iterator end() && { return {this, numColumns()}; };
+    iterator begin() && { return {this, 0}; }
+    iterator end() && { return {this, numColumns()}; }
     // Const iterators are always fine.
-    const_iterator cbegin() const { return {this, 0}; };
-    const_iterator cend() const { return {this, numColumns()}; };
-    const_iterator begin() const& { return {this, 0}; };
-    const_iterator end() const& { return {this, numColumns()}; };
-    const_iterator begin() const&& { return {this, 0}; };
-    const_iterator end() const&& { return {this, numColumns()}; };
+    const_iterator cbegin() const { return {this, 0}; }
+    const_iterator cend() const { return {this, numColumns()}; }
+    const_iterator begin() const& { return {this, 0}; }
+    const_iterator end() const& { return {this, numColumns()}; }
+    const_iterator begin() const&& { return {this, 0}; }
+    const_iterator end() const&& { return {this, numColumns()}; }
 
     // The number of columns that this row contains.
     size_t numColumns() const { return table_->numColumns(); }
@@ -400,10 +400,10 @@ class RowReference
 
   // The iterators are implemented in the base class and can simply be
   // forwarded.
-  typename Base::iterator begin() { return Base::beginImpl(); };
-  typename Base::iterator end() { return Base::endImpl(); };
-  typename Base::const_iterator begin() const { return Base::begin(); };
-  typename Base::const_iterator end() const { return Base::end(); };
+  typename Base::iterator begin() { return Base::beginImpl(); }
+  typename Base::iterator end() { return Base::endImpl(); }
+  typename Base::const_iterator begin() const { return Base::begin(); }
+  typename Base::const_iterator end() const { return Base::end(); }
   // The `cbegin` and `cend` functions are implicitly inherited from `Base`.
 
   // __________________________________________________________________________

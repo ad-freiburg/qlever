@@ -1,1 +1,2 @@
-addLinkAndDiscoverTestNoLibs(QleverTest qlever)
+addLinkAndDiscoverTestNoLibs(QleverTest qlever testUtil)
+addLinkAndDiscoverTestNoLibs(NamedCachedQueryBlobManagerTest qlever testUtil)

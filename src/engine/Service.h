@@ -108,6 +108,14 @@ class Service : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  // SERVICE queries a remote endpoint and may return different results on
+  // successive invocations, so it is non-deterministic by default. It is
+  // treated as deterministic (and hence cacheable) iff the runtime parameter
+  // `cache-service-results` is enabled, in which case the user guarantees that
+  // the remote endpoint returns a stable result. This is kept consistent with
+  // `getCacheKeyImpl()`, which also reads the parameter live.
+  [[nodiscard]] bool isDeterministicImpl() const override;
+
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;
 
@@ -143,6 +151,9 @@ class Service : public Operation {
       std::string_view msg, std::string_view first100,
       std::string_view last100 = ""sv) const;
 
+  // Throws if the IRI is forbidden by the IRI prefix whitelist.
+  void throwIfIriNotWhitelisted();
+
   // Write the given JSON result to the given result object. The `I` is the
   // width of the result table.
   //
@@ -164,6 +175,7 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching);
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
+  FRIEND_TEST(ServiceTest, pushDownValuesPlacesValuesAtEnd);
 };
 #else
 // In the C++17 mode, where the If we disable the `Service` operation isled,

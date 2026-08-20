@@ -5,9 +5,11 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
@@ -16,7 +18,7 @@
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/IndexBuilderTypes.h"
-#include "index/Vocabulary.h"
+#include "index/vocabulary/Vocabulary.h"
 #include "util/HashMap.h"
 #include "util/ProgressBar.h"
 #include "util/Serializer/FileSerializer.h"
@@ -61,10 +63,11 @@ template <typename T>
 CPP_concept WordCallback =
     ad_utility::InvocableWithExactReturnType<T, uint64_t, std::string_view,
                                              bool>;
-// Concept for a callable that compares two `string_view`s.
+// Concept for a callable that compares two `string_view`s with respective
+// `isExternal` flags.
 template <typename T>
 CPP_concept WordComparator =
-    ranges::predicate<T, std::string_view, std::string_view>;
+    ranges::predicate<T, std::string_view, bool, std::string_view, bool>;
 
 // The result of a call to `mergeVocabulary` (see below).
 struct VocabularyMetaData {
@@ -174,10 +177,15 @@ struct VocabularyMetaData {
 // language tagged predicates. Argument `comparator` gives the way to order
 // strings (case-sensitive or not). Argument `wordCallback`
 // is called for each merged word in the vocabulary in the order of their
-// appearance.
+// appearance. Argument `blankNodeIriRegexes` is a (possibly empty) list of
+// compiled regexes; IRIs that are fully matched by any of them are treated as
+// blank nodes (see `TripleComponentWithIndex::isBlankNode`). The regexes are
+// compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
 template <typename W, typename C>
-auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
-                     C& wordCallback, ad_utility::MemorySize memoryToUse)
+auto mergeVocabulary(
+    const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
+    ad_utility::MemorySize memoryToUse,
+    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes = {})
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
 
@@ -191,16 +199,19 @@ class VocabularyMerger {
   // The result (mostly metadata) which we'll return.
   VocabularyMetaData metaData_;
   std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
+  // Whether `lastTripleComponent_` is a blank node. Cached here so that
+  // `isBlankNode` (which may run a set of regexes) is evaluated only once per
+  // distinct word.
+  bool lastTripleComponentIsBlankNode_ = false;
   // we will store pairs of <partialId, globalId>
   std::vector<IdMapWriter> idMaps_;
 
-  const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE();
-
   // Friend declaration for the publicly available function.
   template <typename W, typename C>
-  friend auto mergeVocabulary(const std::string& basename, size_t numFiles,
-                              W comparator, C& wordCallback,
-                              ad_utility::MemorySize memoryToUse)
+  friend auto mergeVocabulary(
+      const std::string& basename, size_t numFiles, W comparator,
+      C& wordCallback, ad_utility::MemorySize memoryToUse,
+      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
   VocabularyMerger() = default;
@@ -209,9 +220,10 @@ class VocabularyMerger {
   // The function that performs the actual merge. See the static global
   // `mergeVocabulary` function for details.
   template <typename W, typename C>
-  auto mergeVocabulary(const std::string& basename, size_t numFiles,
-                       W comparator, C& wordCallback,
-                       ad_utility::MemorySize memoryToUse)
+  auto mergeVocabulary(
+      const std::string& basename, size_t numFiles, W comparator,
+      C& wordCallback, ad_utility::MemorySize memoryToUse,
+      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
 
@@ -230,6 +242,8 @@ class VocabularyMerger {
     [[nodiscard]] const std::string& iriOrLiteral() const {
       return entry_.iriOrLiteral();
     }
+
+    [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
 
     [[nodiscard]] const auto& id() const { return entry_.index_; }
   };
@@ -250,23 +264,19 @@ class VocabularyMerger {
       requires WordCallback<C> CPP_and ranges::predicate<
           L, TripleComponentWithIndex, TripleComponentWithIndex>)
       // clang-format on
-      void writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
-                                  C& wordCallback, const L& lessThan,
-                                  ad_utility::ProgressBar& progressBar);
+      void writeQueueWordsToIdMap(
+          std::vector<QueueWord>& buffer, C& wordCallback, const L& lessThan,
+          const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes,
+          ad_utility::ProgressBar& progressBar);
 
   // Close all associated files and file-based vectors and reset all internal
   // variables.
   void clear() {
     metaData_ = VocabularyMetaData{};
     lastTripleComponent_ = std::nullopt;
+    lastTripleComponentIsBlankNode_ = false;
     idMaps_.clear();
   }
-
-  // Inner helper function for the parallel pipeline, which performs the actual
-  // write to the IdMaps. Format of argument is `<mapToWriteTo<internalId,
-  // globalId>>`.
-  void doActualWrite(
-      const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer);
 };
 
 // ____________________________________________________________________________
@@ -290,10 +300,9 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
  * @brief for each of the IdTriples in <input>: map the three Ids using the
  * <map> and write the resulting Id triple to <*writePtr>
  */
-template <typename T>
-void writeMappedIdsToExtVec(const T& input,
-                            const ad_utility::HashMap<Id, Id>& map,
-                            std::unique_ptr<TripleVec>* writePtr);
+void writeMappedIdsToExtVec(
+    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
+    const HashMap<Id, Id>& map, std::unique_ptr<TripleVec>* writePtr);
 
 /**
  * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
@@ -312,7 +321,7 @@ void writePartialVocabularyToFile(const ItemVec& els,
  * elements from all the hashMaps into a single vector No reordering or
  * deduplication is done, so result.size() == summed size of all the hash maps
  */
-ItemVec vocabMapsToVector(ItemMapArray& map);
+ItemVec vocabMapsToVector(const ItemMapArray& map);
 
 // _____________________________________________________________________________________________________________
 /**

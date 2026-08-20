@@ -5,6 +5,9 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 
+#include <gtest/gtest_prod.h>
+
+#include <optional>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -65,7 +68,11 @@ struct CompressedBlockMetadataNoBlockIndex {
 
   using GraphInfo = std::optional<std::vector<Id>>;
 
-  std::vector<OffsetAndCompressedSize> offsetsAndCompressedSize_;
+  // For each column, the offset and compressed size of the column in the
+  // underlying file. `std::nullopt` is currently used for the last block which
+  // purely consists of `LocatedTriples`, and thus is not stored at all in the
+  // underlying file.
+  std::optional<std::vector<OffsetAndCompressedSize>> offsetsAndCompressedSize_;
   size_t numRows_;
 
   // Store the first and the last triple of the block. First and last are meant
@@ -130,6 +137,10 @@ struct CompressedBlockMetadataNoBlockIndex {
   bool isConsistentWith(const CompressedBlockMetadataNoBlockIndex& other,
                         size_t columnIndex) const;
 
+  // Get the offset and compressed size for the given column.
+  OffsetAndCompressedSize getOffsetAndCompressedSizeForColumn(
+      ColumnIndex columnIndex) const;
+
   // Two of these are equal if all members are equal.
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       CompressedBlockMetadataNoBlockIndex, offsetsAndCompressedSize_, numRows_,
@@ -161,9 +172,10 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // blocks is being used.
   size_t blockIndex_;
 
-  // Two of these are equal if all members are equal.
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(CompressedBlockMetadata,
-                                              blockIndex_)
+  // Two of these are equal if all members are equal (including the members of
+  // the base class).
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(
+      CompressedBlockMetadata, CompressedBlockMetadataNoBlockIndex, blockIndex_)
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
@@ -177,7 +189,9 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // Return true if a sequence of `CompressedBlockMetadata` is sorted, and if
   // all the triples that are the same when disregarding the graph are in the
   // same block.
-  static bool checkInvariantsForSortedBlocks(const auto& sequenceOfBlocks) {
+  template <typename SequenceOfBlocks>
+  static bool checkInvariantsForSortedBlocks(
+      const SequenceOfBlocks& sequenceOfBlocks) {
     return ::ranges::all_of(
         ::ranges::views::sliding(sequenceOfBlocks, 2),
         [](const auto& adjacent) {
@@ -197,7 +211,16 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata::OffsetAndCompressedSize) {
 
 // Serialization of the block metadata.
 AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
-  serializer | arg.offsetsAndCompressedSize_;
+  if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+    AD_CORRECTNESS_CHECK(arg.offsetsAndCompressedSize_.has_value(),
+                         "When serializing blocks offsets and compressed sizes "
+                         "need to be present.");
+  } else {
+    static_assert(ad_utility::serialization::ReadSerializer<S>);
+    // Insert a dummy to overwrite.
+    arg.offsetsAndCompressedSize_.emplace();
+  }
+  serializer | arg.offsetsAndCompressedSize_.value();
   serializer | arg.numRows_;
   serializer | arg.firstTriple_;
   serializer | arg.lastTriple_;
@@ -286,7 +309,7 @@ class CompressedRelationWriter {
   Id currentCol0Id_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
-  ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
+  ad_utility::TaskQueue<false> blockWriteQueue_;
   ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
   // This callback is invoked for each block of small relations (which share the
@@ -301,19 +324,24 @@ class CompressedRelationWriter {
 
  public:
   /// Create using a filename, to which the relation data will be written.
+  /// If `numWriterThreads` is set, it determines the number of threads that
+  /// compress and write blocks; otherwise the runtime parameter
+  /// `permutation-writer-num-threads` is used (see `makeBlockWriteQueue`).
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f,
-      ad_utility::MemorySize uncompressedBlocksizePerColumn)
+      ad_utility::MemorySize uncompressedBlocksizePerColumn,
+      std::optional<size_t> numWriterThreads = std::nullopt)
       : outfile_{std::move(f)},
         numColumns_{numColumns},
-        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn} {}
+        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn},
+        blockWriteQueue_{makeBlockWriteQueue(numWriterThreads)} {}
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
   using MetadataCallback =
       std::function<void(ql::span<const CompressedRelationMetadata>)>;
 
   struct WriterAndCallback {
-    CompressedRelationWriter& writer_;
+    std::unique_ptr<CompressedRelationWriter> writer_;
     MetadataCallback callback_;
   };
 
@@ -469,7 +497,7 @@ class CompressedRelationWriter {
   // Add a small relation that will be stored in a single block, possibly
   // together with other small relations.
   CompressedRelationMetadata addSmallRelation(Id col0Id, size_t numDistinctC1,
-                                              IdTableView<0> relation);
+                                              const IdTable& relation);
 
   // Add a new block for a large relation that is to be stored in multiple
   // blocks. This function may only be called if one of the following holds:
@@ -504,6 +532,16 @@ class CompressedRelationWriter {
                    std::vector<CompressedRelationMetadata>>
   compressedRelationTestWriteCompressedRelations(
       T inputs, std::string filename, ad_utility::MemorySize blocksize);
+
+  // Create a `TaskQueue` for the compression and writing of blocks. The number
+  // of threads is `numThreadsOverride` if set, and otherwise determined by the
+  // runtime parameter "permutation-writer-num-threads". In both cases, a value
+  // of 0 means "as many threads as the hardware has", and larger values are
+  // capped at that number.
+  static ad_utility::TaskQueue<false> makeBlockWriteQueue(
+      std::optional<size_t> numThreadsOverride);
+  FRIEND_TEST(CompressedRelationWriter,
+              isInitializedWithCorrectNumberOfThreads);
 };
 
 using namespace std::string_view_literals;
@@ -519,6 +557,15 @@ class CompressedRelationReader {
   using ColumnIndicesRef = ql::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
+
+  // Optional override for the number of threads used to read and decompress
+  // blocks in `asyncParallelBlockGenerator`. When set, it takes precedence over
+  // the `lazy-index-scan-num-threads` runtime parameter. This is used by the
+  // runtime index rebuild, which scans the old permutations through a dedicated
+  // reader (see `Permutation::lazyScanWithUnlimitedReader`), to throttle its
+  // read/decompress parallelism without affecting query scans (which use the
+  // permutation's shared reader, where this stays `nullopt`).
+  std::optional<size_t> lazyScanNumThreadsOverride_ = std::nullopt;
 
   // This struct stores a reference to the (optional) graphs by which a result
   // is filtered, the column in which the graph ID will reside in a result,
@@ -541,6 +588,9 @@ class CompressedRelationReader {
     // triples from `desiredGraphs_` and therefore doesn't have to be read from
     // disk, and if this fact can be determined by `blockMetadata` alone.
     bool canBlockBeSkipped(const CompressedBlockMetadata& blockMetadata) const;
+
+    // Delete the `graphColumn_` from `block` if `deleteGraphColumn_` is true.
+    void deleteGraphColumnIfNecessary(IdTable& block) const;
 
    private:
     // Return a lambda that returns true if `desiredGraphs_` allows the given
@@ -680,9 +730,17 @@ class CompressedRelationReader {
   // The file that stores the actual permutations.
   ad_utility::File file_;
 
+  // This setting controls whether filtering on the graph column and
+  // deduplication of rows is performed during scanning. Deactivating this is
+  // used for materialized views where repeated rows are meaningful.
+  bool useGraphPostProcessing_;
+
  public:
-  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
-      : allocator_{std::move(allocator)}, file_{std::move(file)} {}
+  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file,
+                                    bool useGraphPostProcessing = true)
+      : allocator_{std::move(allocator)},
+        file_{std::move(file)},
+        useGraphPostProcessing_{useGraphPostProcessing} {}
 
   // Helper function that enables a comparison of a triple with an `Id` in the
   // function `getBlocksForJoin` below.  If the given triple matches `col0Id` of
@@ -758,6 +816,12 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       const LimitOffsetClause& limitOffset = {}) const;
 
+  // Retrieve all triples in the given block, ignoring updates. This is used in
+  // `DeltaTriples::vacuum` to determine update triples that have no effect and
+  // thus can be dropped.
+  IdTable readBlockWithoutLocatedTriples(CompressedBlockMetadata block,
+                                         ColumnIndices additionalColumns) const;
+
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each
   // of the relevant blocks.
@@ -781,18 +845,10 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
  public:
-  // For a given relation, determine the `col1Id`s and their counts. This is
-  // used for `computeGroupByObjectWithCount`.
-  IdTable getDistinctCol1IdsAndCounts(
-      const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      const LimitOffsetClause& limitOffset) const;
-
-  // For all `col0Ids` determine their counts. This is
-  // used for `computeGroupByForFullScan`.
-  IdTable getDistinctCol0IdsAndCounts(
-      const ScanSpecAndBlocks& scanSpecAndBlocks,
+  // Determine the distinct values and their counts for the column at
+  // `columnIndex` (must be 0 or 1). Used for GROUP BY optimizations.
+  IdTable getDistinctColIdsAndCounts(
+      ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       const LimitOffsetClause& limitOffset) const;
@@ -834,6 +890,17 @@ class CompressedRelationReader {
 
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }
+
+  // Allow to construct a `CompressedRelationReader` using a different
+  // allocator. The underlying file descriptor is duplicated (instead of
+  // opening the file again by name), so this also works when the file has
+  // been renamed since it was opened (see `File::duplicateForReading`).
+  CompressedRelationReader makeReaderWithReboundAllocator(
+      Allocator allocator) const {
+    return CompressedRelationReader{std::move(allocator),
+                                    file_.duplicateForReading(),
+                                    useGraphPostProcessing_};
+  }
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
@@ -918,17 +985,6 @@ class CompressedRelationReader {
   static ScanImplConfig getScanConfig(
       const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
       const LocatedTriplesPerBlock& locatedTriples);
-
-  // The common implementation for `getDistinctCol0IdsAndCounts` and
-  // `getCol1IdsAndCounts`.
-  CPP_template(typename IdGetter)(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          IdGetter, Id, const CompressedBlockMetadata::PermutedTriple&>) IdTable
-      getDistinctColIdsAndCountsImpl(
-          IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
-          const CancellationHandle& cancellationHandle,
-          const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-          const LimitOffsetClause& limitOffset) const;
 };
 
 // TODO<joka921>

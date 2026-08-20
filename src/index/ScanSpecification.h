@@ -7,9 +7,9 @@
 
 #include <optional>
 
-#include "engine/LocalVocab.h"
 #include "global/Id.h"
 #include "index/GraphFilter.h"
+#include "index/LocalVocab.h"
 #include "parser/TripleComponent.h"
 
 // Forward declaration

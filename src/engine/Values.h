@@ -10,13 +10,16 @@
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
 
-class Values : public Operation {
+class Values : virtual public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
 
  private:
   std::vector<float> multiplicities_;
-
   SparqlValues parsedValues_;
+
+ protected:
+  // Accessors for the parsed values.
+  SparqlValues& parsedValues() { return parsedValues_; }
 
  public:
   // Create operation from parsed values. This calls `sanitizeValues`.
@@ -54,6 +57,8 @@ class Values : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Compute the per-column multiplicity of the parsed values.

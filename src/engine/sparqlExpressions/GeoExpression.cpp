@@ -14,8 +14,8 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
-#include "util/GeoSparqlHelpers.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -31,16 +31,16 @@ NARY_EXPRESSION(
     CentroidExpression, 1,
     FV<ad_utility::WktCentroid, GeometryInfoValueGetter<ad_utility::Centroid>>);
 
-NARY_EXPRESSION(DistExpression, 2,
-                FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
-                   GeoPointValueGetter>);
+NARY_EXPRESSION(
+    DistExpression, 2,
+    FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter>);
 NARY_EXPRESSION(MetricDistExpression, 2,
-                FV<NumericIdWrapper<ad_utility::WktMetricDistGeoPoints, true>,
-                   GeoPointValueGetter>);
+                FV<NumericIdWrapper<ad_utility::WktMetricDist, true>,
+                   GeoPointOrWktValueGetter>);
 NARY_EXPRESSION(
     DistWithUnitExpression, 3,
-    FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
-       GeoPointValueGetter, GeoPointValueGetter, UnitOfMeasurementValueGetter>);
+    FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter,
+       GeoPointOrWktValueGetter, UnitOfMeasurementValueGetter>);
 
 NARY_EXPRESSION(
     AreaExpression, 2,
@@ -52,6 +52,14 @@ NARY_EXPRESSION(MetricAreaExpression, 1,
 
 NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
+                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+NARY_EXPRESSION(
+    EnvelopeLowerLeftExpression, 1,
+    FV<ad_utility::WktEnvelopeCorner<ad_utility::BoundingBoxCorner::LOWER_LEFT>,
+       GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+NARY_EXPRESSION(EnvelopeUpperRightExpression, 1,
+                FV<ad_utility::WktEnvelopeCorner<
+                       ad_utility::BoundingBoxCorner::UPPER_RIGHT>,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
 
 NARY_EXPRESSION(GeometryTypeExpression, 1,
@@ -70,10 +78,22 @@ NARY_EXPRESSION(
     GeometryNExpression, 2,
     FV<ad_utility::WktGeometryN, GeoPointOrWktValueGetter, IntValueGetter>);
 
-template <SpatialJoinType Relation>
+NARY_EXPRESSION(
+    SimplifyGeometryExpression, 2,
+    FV<ad_utility::WktSimplify, GeoPointOrWktValueGetter, NumericValueGetter>);
+
+template <SpatialJoinType::Enum Relation>
 NARY_EXPRESSION(
     GeoRelationExpression, 2,
     FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
+
+// The actual `geof:relate` expression is currently unimplemented (see
+// `WktDe9imRelation` in `GeoSparqlHelpers.h`), it is only usable via query
+// rewriting to a `SpatialJoin`. The value getters below are thus dummies for
+// now.
+NARY_EXPRESSION(De9imRelationExpression, 3,
+                FV<ad_utility::WktDe9imRelation, GeoPointValueGetter,
+                   GeoPointValueGetter, StringValueGetter>);
 
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 NARY_EXPRESSION(BoundingCoordinateExpression, 1,
@@ -171,11 +191,26 @@ SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
 }
 
 // _____________________________________________________________________________
-template <SpatialJoinType Relation>
+SparqlExpression::Ptr makeSimplifyGeometryExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2) {
+  return std::make_unique<SimplifyGeometryExpression>(std::move(child1),
+                                                      std::move(child2));
+}
+
+// _____________________________________________________________________________
+template <SpatialJoinType::Enum Relation>
 SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                 SparqlExpression::Ptr child2) {
   return std::make_unique<GeoRelationExpression<Relation>>(std::move(child1),
                                                            std::move(child2));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeDe9imRelationExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
+    SparqlExpression::Ptr child3) {
+  return std::make_unique<De9imRelationExpression>(
+      std::move(child1), std::move(child2), std::move(child3));
 }
 
 // _____________________________________________________________________________
@@ -184,18 +219,30 @@ SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child) {
   return std::make_unique<BoundingCoordinateExpression<RequestedCoordinate>>(
       std::move(child));
-};
+}
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child) {
   return std::make_unique<NumGeometriesExpression>(std::move(child));
 }
 
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeEnvelopeLowerLeftExpression(
+    SparqlExpression::Ptr child) {
+  return std::make_unique<EnvelopeLowerLeftExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
+    SparqlExpression::Ptr child) {
+  return std::make_unique<EnvelopeUpperRightExpression>(std::move(child));
+}
+
 namespace {
 
 // Helper to check if `expr` is a `SparqlExpression` on the `geof:sf[Relation]`
 // function, given the templated `Relation`.
-template <SpatialJoinType Relation>
+template <SpatialJoinType::Enum Relation>
 std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
     const SparqlExpression& expr) {
   // Is this `expr` a call to `geof:sf[Relation](?x, ?y)`?
@@ -224,7 +271,7 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr) {
   // Check against all possible geo relation types
   std::optional<GeoFunctionCall> res;
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
 
   // TODO<C++26 reflection> get all values of `SpatialJoinType` enum
   if ((res = getGeoRelationExpressionParameters<INTERSECTS>(expr))) {
@@ -245,6 +292,41 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     return res;
   }
   return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
+    const SparqlExpression& expr) {
+  // Is this `expr` a call to `geof:relate(?x, ?y, "<pattern>")`?
+  auto de9imExpr = dynamic_cast<const De9imRelationExpression*>(&expr);
+  if (de9imExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Extract variables
+  auto p1 = de9imExpr->children()[0]->getVariableOrNullopt();
+  if (!p1.has_value()) {
+    return std::nullopt;
+  }
+  auto p2 = de9imExpr->children()[1]->getVariableOrNullopt();
+  if (!p2.has_value()) {
+    return std::nullopt;
+  }
+
+  // Extract and validate the DE-9IM filter pattern
+  auto patternLiteral =
+      getLiteralFromLiteralExpression(de9imExpr->children()[2].get());
+  if (!patternLiteral.has_value()) {
+    return std::nullopt;
+  }
+  auto pattern = parseDe9imFilterString(
+      asStringViewUnsafe(patternLiteral.value().getContent()));
+  if (!pattern.has_value() || de9imFilterCanMatchDisjoint(pattern.value())) {
+    return std::nullopt;
+  }
+
+  return De9imRelationCall{{SpatialJoinType::DE9IM, p1.value(), p2.value()},
+                           pattern.value()};
 }
 
 // _____________________________________________________________________________
@@ -335,10 +417,9 @@ using Ptr = sparqlExpression::SparqlExpression::Ptr;
 #ifdef QL_INSTANTIATE_GEO_RELATION_EXPR
 #error "Macro QL_INSTANTIATE_GEO_RELATION_EXPR already defined"
 #endif
-#define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)                            \
-  template Ptr                                                                \
-      sparqlExpression::makeGeoRelationExpression<SpatialJoinType::joinType>( \
-          Ptr, Ptr);
+#define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)          \
+  template Ptr sparqlExpression::makeGeoRelationExpression< \
+      SpatialJoinType::Enum::joinType>(Ptr, Ptr)
 
 QL_INSTANTIATE_GEO_RELATION_EXPR(INTERSECTS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(CONTAINS);
@@ -355,7 +436,7 @@ QL_INSTANTIATE_GEO_RELATION_EXPR(WITHIN);
 #endif
 #define QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(RequestedCoordinate) \
   template Ptr sparqlExpression::makeBoundingCoordinateExpression<   \
-      ad_utility::BoundingCoordinate::RequestedCoordinate>(Ptr);
+      ad_utility::BoundingCoordinate::RequestedCoordinate>(Ptr)
 
 QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_X);
 QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_Y);

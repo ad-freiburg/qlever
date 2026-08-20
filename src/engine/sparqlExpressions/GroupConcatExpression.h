@@ -32,6 +32,10 @@ class GroupConcatExpression : public SparqlExpression {
   [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
+  [[nodiscard]] bool isDeterministic() const override {
+    return child_->isDeterministic();
+  }
+
  private:
   // ___________________________________________________________________________
   ql::span<Ptr> childrenImpl() override { return {&child_, 1}; }

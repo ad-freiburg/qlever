@@ -191,8 +191,6 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                               getAreaForTesting(polygon)}));
   t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                            noGeoInfo);
-  t.checkFromLocalAndNormalVocabAndLiteral(
-      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", noGeoInfo);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfo);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
                                            noGeoInfo);
@@ -257,9 +255,6 @@ TEST(GeoPointOrWktValueGetterTest, OperatorWithLit) {
   auto noGeoInfoOrWkt = geoPointOrWktMatcher(std::nullopt);
   t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                            noGeoInfoOrWkt);
-  t.checkFromLocalAndNormalVocabAndLiteral(
-      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
-      noGeoInfoOrWkt);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfoOrWkt);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
                                            noGeoInfoOrWkt);
@@ -281,10 +276,47 @@ TEST(IntValueGetterTest, OperatorWithLit) {
   IntValueGetterTester t;
   auto noInt = Eq(std::nullopt);
   t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>", noInt);
-  t.checkFromLocalAndNormalVocabAndLiteral(
-      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", noInt);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noInt);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>", noInt);
 }
 
+// _____________________________________________________________________________
+TEST(NumericOrDateValueGetterTest, OperatorWithId) {
+  NumericOrDateValueGetterTester t;
+  auto expectDouble = [](double value)
+      -> Matcher<std::optional<sparqlExpression::detail::NumericOrDateValue>> {
+    return Optional(VariantWith<double>(DoubleNear(value, 0.01)));
+  };
+  auto expectInt = [](int64_t value)
+      -> Matcher<std::optional<sparqlExpression::detail::NumericOrDateValue>> {
+    return Optional(VariantWith<int64_t>(Eq(value)));
+  };
+  auto expectDateYearOrDuration = [](DateYearOrDuration value)
+      -> Matcher<std::optional<sparqlExpression::detail::NumericOrDateValue>> {
+    return Optional(VariantWith<DateYearOrDuration>(Eq(value)));
+  };
+
+  t.checkFromValueId(ValueId::makeFromInt(-42), expectInt(-42));
+  t.checkFromValueId(ValueId::makeFromDouble(50.2), expectDouble(50.2));
+  t.checkFromValueId(ValueId::makeFromBool(true), expectInt(1));
+  t.checkFromValueId(
+      ValueId::makeFromDate(DateYearOrDuration(Date(2013, 5, 16))),
+      expectDateYearOrDuration(DateYearOrDuration(Date(2013, 5, 16))));
+  t.checkFromValueId(
+      ValueId::makeFromDate(DateYearOrDuration(
+          DayTimeDuration(DayTimeDuration::Type::Positive, 102))),
+      expectDateYearOrDuration(DateYearOrDuration(
+          DayTimeDuration(DayTimeDuration::Type::Positive, 102))));
+  auto isNotNumeric =
+      Optional(VariantWith<sparqlExpression::detail::NotNumeric>(_));
+  t.checkFromValueId(ValueId::makeUndefined(), isNotNumeric);
+  t.checkFromValueId(ValueId::makeFromGeoPoint({3, 4}), isNotNumeric);
+
+  // `LiteralOrIri`.
+  t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
+                                           isNotNumeric);
+  t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", isNotNumeric);
+  t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
+                                           isNotNumeric);
+}
 };  // namespace

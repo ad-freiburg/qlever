@@ -9,6 +9,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+// Forward declaration
+class IndexScan;
 class OptionalJoin : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -43,7 +45,17 @@ class OptionalJoin : public Operation {
  private:
   std::string getCacheKeyImpl() const override;
 
+  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+
  public:
+  // We propagate part of the `LimitOffsetClause` to the child operation to
+  // potentially speed it up and save memory, but `OptionalJoin` does not
+  // actually apply its own `LimitOffsetClause` to itself, this still needs to
+  // be done by the `Operation` base class.
+  LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::PARTIAL;
+  }
+
   std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
@@ -70,7 +82,7 @@ class OptionalJoin : public Operation {
   // Joins two result tables on any number of columns, inserting the special
   // value `Id::makeUndefined()` for any entries marked as optional.
   void optionalJoin(
-      const IdTable& left, const IdTable& right,
+      const IdTableView<0>& left, const IdTableView<0>& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
@@ -81,7 +93,21 @@ class OptionalJoin : public Operation {
                           std::shared_ptr<const Result> right,
                           bool requestLaziness);
 
+  // Compute the result for the result from the `left` subtree
+  // and the `rightScan`. This function applied block prefiltering for the
+  // `rightScan`. This function currently only supports single-column OPTIONAL
+  // joins, or OPTIONAL joins on two columns where UNDEF values are only in the
+  // last (i.e. the second) join column. The `left` and `rightScan` have to be
+  // obtained from the members `_left` and `_right` respectively, as those
+  // members will be used to get additional required metadata for the arguments
+  // `left` and `rightScan`.
+  Result optionalJoinWithIndexScan(std::shared_ptr<const Result> left,
+                                   std::shared_ptr<IndexScan> rightScan,
+                                   bool requestLaziness);
+
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Helper function for `tryIndexNestedLoopJoinIfSuitable` which makes the
@@ -105,7 +131,7 @@ class OptionalJoin : public Operation {
   // Check which of the join columns in `left` and `right` contain UNDEF values
   // and return the appropriate `Implementation`.
   static Implementation computeImplementationFromIdTables(
-      const IdTable& left, const IdTable& right,
+      const IdTableView<0>& left, const IdTableView<0>& right,
       const std::vector<std::array<ColumnIndex, 2>>&);
 };
 

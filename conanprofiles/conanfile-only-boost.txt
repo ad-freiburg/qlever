@@ -1,5 +1,5 @@
 [requires]
-boost/1.81.0
+boost/1.83.0
 
 [generators]
 CMakeDeps

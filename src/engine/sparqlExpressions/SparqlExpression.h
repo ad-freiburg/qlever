@@ -30,8 +30,14 @@ class SparqlExpression {
   // Evaluate a Sparql expression.
   virtual ExpressionResult evaluate(EvaluationContext*) const = 0;
 
-  // Return all variables, needed for certain parser methods.
-  virtual std::vector<const Variable*> containedVariables() const final;
+  // Return all variables, needed for certain parser methods. If `excludeExists`
+  // is true, `EXISTS` is treated as a scope boundary: variables that occur only
+  // inside the body of an `EXISTS` are not returned, because they live in their
+  // own scope and thus need not be bound by the surrounding query. This is used
+  // by the parser to check that all variables used in a clause are actually
+  // bound (see e.g. `ParsedQuery::checkUsedVariablesAreVisible`).
+  virtual std::vector<const Variable*> containedVariables(
+      bool excludeExists = false) const final;
 
   // Return all the variables that occur in the expression, but are not
   // aggregated. These variables must be grouped in a GROUP BY. The default
@@ -64,6 +70,19 @@ class SparqlExpression {
   // Get a unique identifier for this expression, used as cache key.
   virtual std::string getCacheKey(
       const VariableToColumnMap& varColMap) const = 0;
+
+  // Return true if we statically (without evaluating the expression) can
+  // determine that its result will never contain undefined values / expression
+  // errors.
+  virtual bool isResultAlwaysDefined(
+      [[maybe_unused]] const VariableToColumnMap& varColMap) const {
+    return false;
+  }
+
+  // Return true iff this expression is guaranteed to produce the same result
+  // on every invocation (i.e. does not contain `BNODE()`, `RAND()`, `UUID()`,
+  // or `STRUUID()`). Every concrete subclass must implement this explicitly.
+  [[nodiscard]] virtual bool isDeterministic() const = 0;
 
   // Get a short, human-readable identifier for this expression.
   virtual const std::string& descriptor() const final;
@@ -111,7 +130,8 @@ class SparqlExpression {
   // <`PrefilterExpression`, `Variable`> pairs (see `getMergeFunction` in
   // NumericBinaryExpression.cpp).
   virtual std::vector<PrefilterExprVariablePair>
-  getPrefilterExpressionForMetadata(bool isNegated = false) const;
+  getPrefilterExpressionForMetadata(const LocalVocabContext& context,
+                                    bool isNegated = false) const;
 
   // Returns true iff this expression is a simple constant. Default
   // implementation returns `false`.
@@ -124,6 +144,17 @@ class SparqlExpression {
   // Returns true iff this expression is an EXISTS(...) expression.  Default
   // implementation returns `false`.
   virtual bool isExistsExpression() const;
+
+  // Returns true iff evaluating this expression (or any of its
+  // subexpressions) reads all the columns that are visible in the query body,
+  // without mentioning any of the corresponding variables explicitly
+  // (currently only `COUNT(DISTINCT *)` does this). Such expressions inhibit
+  // optimizations that strip columns which no variable in the query refers to.
+  // The default implementation only recurses into the children, so an override
+  // has to take care of the recursion itself if it has children. Note that
+  // `COUNT(*)` does not belong here: it only looks at the number of rows, not
+  // at their contents.
+  virtual bool readsAllVisibleColumns() const;
 
   // Return non-null pointers to all `EXISTS` expressions in expression tree.
   // The result is passed in as a reference to simplify the recursive
@@ -152,6 +183,11 @@ class SparqlExpression {
   // class.
   bool isInsideAggregate() const;
 
+  // Return true iff this expression is evaluated on aggregated data, i.e. it is
+  // part of a GROUP BY but not inside an aggregate. In this case the expression
+  // only has to produce a single (constant) value per group.
+  bool worksOnAggregatedData(const EvaluationContext* context) const;
+
  private:
   virtual ql::span<SparqlExpression::Ptr> childrenImpl() = 0;
 
@@ -165,6 +201,10 @@ class SparqlExpression {
   // this expression as well as for all its descendants. This function must be
   // called by all child classes that are aggregate expressions.
   virtual void setIsInsideAggregate() final;
+
+  // Helper for `isDeterministic()` in subclasses: return true iff every direct
+  // child of this expression is deterministic.
+  bool areChildrenDeterministic() const;
 };
 }  // namespace sparqlExpression
 

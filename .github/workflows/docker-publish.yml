@@ -3,19 +3,34 @@ name: Docker build and publish
 on:
   push:
     branches: [ master ]
+    tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ master ]
 
 env:
   IMAGE: adfreiburg/qlever
+  # With the standard length 7 having a collision is possible though not
+  # likely. For 3000 commits the chance is ~1.6%. With a length of 10 the
+  # chance is ~0.0004%.
+  #
+  # NOTE: The `type=sha` tag rule is evaluated in both jobs, so set the length
+  # for the whole workflow.
+  DOCKER_METADATA_SHORT_SHA_LENGTH: 10
 
 concurrency:
   # When this is not a pull request, then we want all the docker containers to be pushed, we therefore
-  # directly fall back to the commit hash which will be distinct for each push to master.
-  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.sha}}'
+  # directly fall back to the run id which is always distinct.
+  #
+  # NOTE: The commit sha is the same between the tag and commit push, which produce differently
+  # tagged images.
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.run_id}}'
   cancel-in-progress: true
 
 # This workflow is heavily based on https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners .
+# The default GITHUB_TOKEN only needs to read the repository here.
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
@@ -28,23 +43,47 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         # Generate metadata for the docker image based on the GH Actions environment.
       - name: Generate image metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
+          flavor: &metadata_flavor |
+            latest=false
+          # The tag rules are shared with the `docker-merge` job via this YAML
+          # anchor, so both jobs derive the same `org.opencontainers.image.version`
+          # for the per-arch labels and the multi-arch index annotations.
+          tags: &image_tags |
+            # `type=semver` only runs for pushed tags.
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            # For pushes to the primary branch, use the normal tags.
+            type=raw,value=latest,enable={{is_default_branch}}
+            # `pr_num` is empty in the `build` job (which does not use the tags) and for pushes to
+            # master whose head commit is not the squash-merge of a PR (no "(#<pr>)" suffix). The
+            # non-empty check prevents publishing a bare `pr-` tag in the latter case.
+            #
+            # NOTE: The check is a GitHub expression, which cannot be combined with the
+            # `{{is_default_branch}}` template into a single boolean, so the template is replaced
+            # by its GitHub-expression equivalent.
+            type=raw,value=pr-${{ steps.pr.outputs.pr_num }},enable=${{ github.ref == 'refs/heads/master' && steps.pr.outputs.pr_num != '' }}
+            # Set `priority` higher than `pr-{number}` and `latest` (both 200) to have `commit-{sha}` as the version.
+            type=sha,prefix=commit-,enable={{is_default_branch}},priority=201
+            # For pull requests, derive a version from the PR number.
+            type=ref,event=pr
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Login to Docker Hub
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build ${{ matrix.platform }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         id: build
         with:
           context: .
@@ -67,7 +106,7 @@ jobs:
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
       - name: Upload digest
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ env.ARTIFACT_NAME }}
           path: ${{ runner.temp }}/digests/*
@@ -78,7 +117,7 @@ jobs:
         # seems to be the recommended way to do it.
       - name: Setup E2E test image
         if: matrix.platform == 'linux/amd64'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           # The cache should already provide this. So no rebuild should occur.
           context: .
@@ -97,31 +136,32 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+      - name: Get PR number
+        id: pr
+        run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
       - name: Generate image metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         env:
           # We build multiplatform images which have an image index above the
           # image manifests. Attach the annotations directly to the image index.
           DOCKER_METADATA_ANNOTATIONS_LEVELS: "index"
         with:
           images: ${{ env.IMAGE }}
+          flavor: *metadata_flavor
+          # Reuse the tag rules defined in the `build` job (the `image_tags`
+          # anchor) so the version is identical in the labels and annotations.
+          tags: *image_tags
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Get short sha
-        id: sha
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-      - name: Get PR number
-        id: pr
-        run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
@@ -131,25 +171,14 @@ jobs:
         # the '*' in printf down below is expanded to the simple filenames without
         # a leading path in the way.
         working-directory: ${{ runner.temp }}/digests
-        # steps.meta.outputs.annotations contains a line for every annotation.
-        # To properly handle the expansion of this multi-line value in bash,
-        # we need to properly transform it into the `EXPANDED_ANNOTATIONS`
-        # variable, which then no longer contains newlines and properly
-        # handles other spaces in the annotations.
         run: |
-          ANNOTATIONS=$(cat <<'EOF'
-          ${{ steps.meta.outputs.annotations }}
-          EOF
-          )
-          EXPANDED_ANNOTATIONS=()
-          while IFS= read -r line; do
-            # Skip empty lines
-            [[ -n "$line" ]] || continue
-            EXPANDED_ANNOTATIONS+=( --annotation "$line" )
-          done <<< "$ANNOTATIONS"
+          # Read tags and annotations into arrays so values containing spaces
+          # (e.g. the image description) survive as a single argument each. The
+          # metadata action already selected the correct tags depending on the
+          # triggering event.
+          mapfile -t TAGS < <(jq -r '.tags[] | "--tag=" + .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          mapfile -t ANNOTATIONS < <(jq -r '.annotations[] | "--annotation=" + .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
           docker buildx imagetools create \
-            -t ${{ env.IMAGE }}:latest \
-            -t ${{ env.IMAGE }}:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }} \
-            -t ${{ env.IMAGE }}:commit-${{ steps.sha.outputs.sha_short }} \
-            "${EXPANDED_ANNOTATIONS[@]}" \
+            "${TAGS[@]}" \
+            "${ANNOTATIONS[@]}" \
             $(printf '${{ env.IMAGE }}@sha256:%s ' *)

@@ -6,6 +6,14 @@
 
 #include "index/TextIndexBuilder.h"
 
+#include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
+
+#include <charconv>
+
+#include "backports/filesystem.h"
+#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 
@@ -17,7 +25,7 @@ void TextIndexBuilder::buildTextIndexFile(
   AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
   AD_LOG_INFO << std::endl;
   AD_LOG_INFO << "Adding text index ..." << std::endl;
-  std::string indexFilename = onDiskBase_ + ".text.index";
+  std::string indexFilename = absl::StrCat(onDiskBase_, TEXT_INDEX_FILE_SUFFIX);
   bool addFromWordAndDocsFile = wordsAndDocsFile.has_value();
   const auto& [wordsFile, docsFile] =
       !addFromWordAndDocsFile ? std::pair{"", ""} : wordsAndDocsFile.value();
@@ -33,7 +41,7 @@ void TextIndexBuilder::buildTextIndexFile(
                 << "onsidering each literal as a text record" << std::endl;
   }
   // We have deleted the vocabulary during the index creation to save RAM, so
-  // now we have to reload it. Also, when IndexBuilderMain is called with option
+  // now we have to reload it. Also, when qlever-index is called with option
   // -A (add text index), this is the first thing we do .
   //
   // NOTE: In the previous version of the code (where the only option was to
@@ -79,7 +87,8 @@ size_t TextIndexBuilder::processWordsForVocabulary(
       distinctWords.insert(line.word_);
     }
   }
-  textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary");
+  textVocab_.createFromSet(distinctWords,
+                           absl::StrCat(onDiskBase_, TEXT_VOCAB_FILE_SUFFIX));
   return numLines;
 }
 
@@ -158,21 +167,22 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
   // ROUND 2: Optionally, consider each literal from the internal vocabulary as
   // a text record.
   if (addWordsFromLiterals) {
-    for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
-         index = index.incremented()) {
-      auto text = vocab_[index];
+    // NOTE: We must iterate via `scanAll()` and not via indices `0, 1, ...,
+    // vocab_.size() - 1`, because a `SplitVocabulary` (e.g. for geometries)
+    // uses non-contiguous, marker-encoded indices for its `operator[]`.
+    // TODO<ullingerc>: Iterating over all geometries here is wasteful, since we
+    // never want them in the text index. Add a configuration option that lets
+    // `scanAll()` skip a sub-vocabulary (e.g. geometries) entirely.
+    for (const auto& [index, text] : vocab_.scanAll()) {
       if (!isLiteral(text)) {
         continue;
       }
 
-      // We need the explicit cast to `std::string` because the return type of
-      // `indexToString` might be `string_view` if the vocabulary is stored
-      // uncompressed in memory.
+      // We need the explicit cast to `std::string` because `text` is a view
+      // into a buffer that is reused when the range is advanced.
       WordsFileLine entityLine{std::string{text}, true, contextId, 1, true};
       co_yield entityLine;
-      std::string_view textView = text;
-      textView = textView.substr(0, textView.rfind('"'));
-      textView.remove_prefix(1);
+      std::string_view textView = stripQuotesAndDatatype(text);
       for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
         WordsFileLine wordLine{std::move(word), false, contextId, 1};
         co_yield wordLine;
@@ -264,7 +274,7 @@ void TextIndexBuilder::addContextToVector(
       AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
       vec.push(std::array{Id::makeFromInt(blockId), Id::makeFromBool(true),
                           Id::makeFromInt(context.get()),
-                          Id::makeFromInt(it->first.getVocabIndex().get()),
+                          Id::makeFromVocabIndex(it->first.getVocabIndex()),
                           Id::makeFromDouble(it->second)});
     }
   }
@@ -274,7 +284,7 @@ void TextIndexBuilder::addContextToVector(
 void TextIndexBuilder::createTextIndex(const std::string& filename,
                                        TextVec& vec) {
   ad_utility::File out(filename.c_str(), "w");
-  currenttOffset_ = 0;
+  off_t currentOffset = 0;
   // Detect block boundaries from the main key of the vec.
   // Write the data for each block.
   // First, there's the classic lists, then the additional entity ones.
@@ -287,15 +297,20 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
     TextBlockIndex textBlockIndex = value[0].getInt();
     bool flag = value[1].getBool();
     TextRecordIndex textRecordIndex = TextRecordIndex::make(value[2].getInt());
-    WordOrEntityIndex wordOrEntityIndex = value[3].getInt();
+    // Entities are stored as a `VocabIndex`-typed `Id` (see
+    // `addContextToVector`), since they do not always fit into the
+    // signed 60-bit range of an integer `Id`; words are stored as a plain
+    // `Int`-typed `Id`.
+    WordOrEntityIndex wordOrEntityIndex =
+        flag ? value[3].getVocabIndex().get() : value[3].getInt();
     Score score = static_cast<Score>(value[4].getDouble());
     if (textBlockIndex != currentBlockIndex) {
       AD_CONTRACT_CHECK(!classicPostings.empty());
       bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
       ContextListMetaData classic = textIndexReadWrite::writePostings(
-          out, classicPostings, currenttOffset_, scoreIsInt);
+          out, classicPostings, currentOffset, scoreIsInt);
       ContextListMetaData entity = textIndexReadWrite::writePostings(
-          out, entityPostings, currenttOffset_, scoreIsInt);
+          out, entityPostings, currentOffset, scoreIsInt);
       textMeta_.addBlock(TextBlockMetaData(
           currentMinWordIndex, currentMaxWordIndex, classic, entity));
       classicPostings.clear();
@@ -317,13 +332,21 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
       entityPostings.emplace_back(textRecordIndex, wordOrEntityIndex, score);
     }
   }
-  // Write the last block
-  AD_CONTRACT_CHECK(!classicPostings.empty());
+  // Write the last block. We always emit one, even when no postings were
+  // accumulated (empty text index), because `TextMetaData` downstream assumes
+  // `_blocks` is non-empty (see `getBlockInfoByWordRange`, `getOffsetAfter`).
+  // In that empty case the word-range bounds are still at their sentinel
+  // values from `numeric_limits`, so normalize them to avoid an inverted
+  // (min > max) range in the emitted metadata.
+  if (classicPostings.empty()) {
+    currentMinWordIndex = 0;
+    currentMaxWordIndex = 0;
+  }
   bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
   ContextListMetaData classic = textIndexReadWrite::writePostings(
-      out, classicPostings, currenttOffset_, scoreIsInt);
+      out, classicPostings, currentOffset, scoreIsInt);
   ContextListMetaData entity = textIndexReadWrite::writePostings(
-      out, entityPostings, currenttOffset_, scoreIsInt);
+      out, entityPostings, currentOffset, scoreIsInt);
   textMeta_.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
                                        classic, entity));
   classicPostings.clear();
@@ -486,11 +509,22 @@ void TextIndexBuilder::calculateBlockBoundaries() {
 // _____________________________________________________________________________
 void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
   AD_LOG_INFO << "Building DocsDB...\n";
+  // If the file doesn't exist, `std::getline` does nothing.
   std::ifstream docsFile{docsFileName};
-  std::ofstream ofs{onDiskBase_ + ".text.docsDB"};
-  // To avoid excessive use of RAM,
-  // we write the offsets to and `ad_utility::MmapVector` first;
-  ad_utility::MmapVectorTmp<off_t> offsets{onDiskBase_ + ".text.docsDB.tmp"};
+  std::ofstream ofs = ad_utility::makeOfstream(
+      absl::StrCat(onDiskBase_, TEXT_DOCS_DB_FILE_SUFFIX));
+  // To avoid excessive use of RAM, we stream the offsets into a temporary file
+  // and append them to the end of the docsDB file once all text records have
+  // been written.
+  ql::filesystem::path offsetsFilename = onDiskBase_ + ".text.docsDB.tmp";
+  absl::Cleanup deleteOffsetsFile{[&offsetsFilename]() {
+    ad_utility::deleteFile(offsetsFilename, /*warnOnFailure=*/false);
+  }};
+  std::ofstream offsets =
+      ad_utility::makeOfstream(offsetsFilename, std::ios::binary);
+  auto writeOffset = [&offsets](off_t offset) {
+    offsets.write(reinterpret_cast<const char*>(&offset), sizeof(off_t));
+  };
   off_t currentOffset = 0;
   uint64_t currentContextId = 0;
   std::string line;
@@ -505,16 +539,21 @@ void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
     lineView = lineView.substr(tab + 1);
     ofs << lineView;
     while (currentContextId < contextId) {
-      offsets.push_back(currentOffset);
+      writeOffset(currentOffset);
       currentContextId++;
     }
-    offsets.push_back(currentOffset);
+    writeOffset(currentOffset);
     currentContextId++;
     currentOffset += static_cast<off_t>(lineView.size());
   }
-  offsets.push_back(currentOffset);
-  ofs.write(reinterpret_cast<const char*>(offsets.data()),
-            sizeof(off_t) * offsets.size());
+  writeOffset(currentOffset);
+  // Append the offsets stored in the temporary file to the docsDB file. We
+  // always wrote at least one offset above, so the temporary file is never
+  // empty (which would otherwise set the failbit on `rdbuf` insertion).
+  offsets.close();
+  std::ifstream offsetsIn =
+      ad_utility::makeIfstream(offsetsFilename, std::ios::binary);
+  ofs << offsetsIn.rdbuf();
   AD_LOG_INFO << "DocsDB done.\n";
 }
 

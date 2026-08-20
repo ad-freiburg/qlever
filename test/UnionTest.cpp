@@ -36,7 +36,7 @@ TEST(Union, computeUnion) {
 
   Union u{qec, leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
-  const auto& result = resultTable.idTable();
+  const auto& result = resultTable.idTableView();
 
   auto U = Id::makeUndefined();
   auto expected = makeIdTableFromVector(
@@ -71,7 +71,7 @@ TEST(Union, computeUnionLarge) {
 
   Union u{qec, leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
-  const auto& result = resultTable.idTable();
+  const auto& result = resultTable.idTableView();
 
   ASSERT_EQ(result, makeIdTableFromVector(expected));
 }
@@ -181,7 +181,7 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
     auto U = Id::makeUndefined();
     auto expected =
         makeIdTableFromVector({{1, 2, 3, 4, 5}, {V(7), V(6), U, U, V(8)}});
-    EXPECT_EQ(resultTable.idTable(), expected);
+    EXPECT_EQ(resultTable.idTableView(), expected);
   }
 }
 
@@ -218,7 +218,7 @@ TEST(Union, inputWithZeroColumns) {
     ASSERT_TRUE(resultTable.isFullyMaterialized());
 
     auto expected = makeIdTableFromVector({{}, {}});
-    EXPECT_EQ(resultTable.idTable(), expected);
+    EXPECT_EQ(resultTable.idTableView(), expected);
   }
 }
 
@@ -293,7 +293,7 @@ TEST(Union, sortedMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U, 4}, {1, 2, 4}, {2, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -327,7 +327,7 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
     qec->getQueryTreeCache().clearAll();
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -352,16 +352,16 @@ TEST(Union, sortedMergeWithLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
 
   LocalVocab vocab1;
-  vocab1.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"Test1\""));
+  vocab1.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+      "\"Test1\"", qec->getLocalVocabContext()));
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}, {2}, {4}}), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0}, vocab1.clone());
 
   LocalVocab vocab2;
-  vocab2.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"Test2\""));
+  vocab2.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+      "\"Test2\"", qec->getLocalVocabContext()));
   std::vector<IdTable> tables;
   tables.push_back(makeIdTableFromVector({{0}}));
   tables.push_back(makeIdTableFromVector({{3}}));
@@ -376,7 +376,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}, {5}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
     EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
                 ::testing::IsSupersetOf(vocab1.getAllWordsForTesting()));
     EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
@@ -434,13 +434,13 @@ TEST(Union, cacheKeyDiffersForDifferentOrdering) {
     auto result =
         unionOperation1.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U, 8}, {1, 4, U}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     auto result =
         unionOperation2.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, 4, U}, {1, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
 }
 
@@ -540,7 +540,7 @@ TEST(Union, testEfficientMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{U, 2}, {1, U}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -554,7 +554,7 @@ TEST(Union, testEfficientMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U}, {U, 2}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
 }
 
@@ -589,7 +589,7 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, U, U, 4}, {1, 2, 4, U}, {2, U, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -607,7 +607,7 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, 2, 4, U}, {1, U, U, 4}, {2, U, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -689,7 +689,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union2{qec, values, index};
   EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?d"}));
   EXPECT_THROW(union2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
@@ -697,7 +697,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union3{qec, index, values};
   EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?d"}));
   EXPECT_THROW(union3.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
@@ -705,7 +705,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union4{qec, index, index};
   EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_THROW(union4.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
                ad_utility::Exception);
@@ -769,4 +769,70 @@ TEST(Union, getCostEstimate) {
   // Union should never be free.
   EXPECT_GT(unsortedUnionSmall.getCostEstimate(),
             valuesSmall->getCostEstimate() * 2);
+}
+
+// _____________________________________________________________________________
+TEST(Union, limitAndOffsetArePushedDownToChildren) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  // The left child yields 1 to 5 and the right child yields 6 to 10, so the
+  // union yields the numbers 1 to 10 in that order.
+  auto makeUnion = [qec]() {
+    auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{1}, {2}, {3}, {4}, {5}}), Vars{Var{"?a"}});
+    auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{6}, {7}, {8}, {9}, {10}}),
+        Vars{Var{"?a"}});
+    return Union{qec, std::move(leftT), std::move(rightT)};
+  };
+  auto expectChildLimits =
+      [](Union& unionOperation, std::optional<uint64_t> limit,
+         ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(loc);
+        for (const auto* child : unionOperation.getChildren()) {
+          EXPECT_EQ(child->getRootOperation()->getLimitOffset(),
+                    LimitOffsetClause{limit});
+        }
+      };
+  auto expectResult = [qec](Union& unionOperation, const IdTable& expected,
+                            ad_utility::source_location loc =
+                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    qec->getQueryTreeCache().clearAll();
+    EXPECT_EQ(unionOperation.getResult(false)->idTableView(), expected);
+  };
+
+  {
+    // Both children only have to supply `limit + offset` rows.
+    auto unionOperation = makeUnion();
+    unionOperation.applyLimitOffset({2, 3});
+    expectChildLimits(unionOperation, 5);
+    // The `Union` still has to apply the `LIMIT`/`OFFSET` to its own result.
+    expectResult(unionOperation, makeIdTableFromVector({{4}, {5}}));
+  }
+  {
+    // A `LIMIT`/`OFFSET` that is applied on top of a previous one (which
+    // happens for nested subqueries) must not shrink the limit of the children
+    // too much. Here the result consists of the rows 5 and 6 of the union, so
+    // the children still have to supply 7 rows.
+    auto unionOperation = makeUnion();
+    unionOperation.applyLimitOffset({10, 5});
+    expectChildLimits(unionOperation, 15);
+    unionOperation.applyLimitOffset({2, 0});
+    expectChildLimits(unionOperation, 7);
+    expectResult(unionOperation, makeIdTableFromVector({{6}, {7}}));
+  }
+  {
+    // Adding up the limit and the offset must not overflow.
+    auto unionOperation = makeUnion();
+    unionOperation.applyLimitOffset({std::numeric_limits<uint64_t>::max(), 1});
+    expectChildLimits(unionOperation, std::nullopt);
+  }
+  {
+    // Without a limit there is no bound that could be pushed down.
+    auto unionOperation = makeUnion();
+    unionOperation.applyLimitOffset({std::nullopt, 8});
+    expectChildLimits(unionOperation, std::nullopt);
+    expectResult(unionOperation, makeIdTableFromVector({{9}, {10}}));
+  }
 }

@@ -21,7 +21,7 @@ struct Join {
   auto operator()(Range&& range) const {
     std::vector<ql::ranges::range_value_t<ql::ranges::range_value_t<Range>>>
         result;
-    auto view = ql::views::join(ad_utility::OwningView{AD_FWD(range)});
+    auto view = ql::views::join(AD_FWD(range));
     ql::ranges::copy(view, std::back_inserter(result));
     return result;
   }
@@ -51,10 +51,10 @@ void testRandomInts() {
   ql::ranges::sort(expected);
 
   std::vector<size_t> result;
-  ql::ranges::copy(ql::views::join(ad_utility::OwningView{
-                       ad_utility::parallelMultiwayMerge<size_t, false>(
-                           1_GB, input, std::less<>{}, blocksize)}),
-                   std::back_inserter(result));
+  ql::ranges::copy(
+      ql::views::join(ad_utility::parallelMultiwayMerge<size_t, false>(
+          1_GB, input, std::less<>{}, blocksize)),
+      std::back_inserter(result));
 
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }

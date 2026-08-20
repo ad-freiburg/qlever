@@ -30,10 +30,11 @@ namespace ad_utility {
 // 3. This class only yields an input range, independent of the range category
 // of the input.
 // 4. Optionally, this class can propagate the `Details` of an underlying view.
-//    To make this work, the template parameters have to be explicitly stated,
-//    and the underlying view must inherit from the `DetailsProvider`. See
-//    `InputRangeUtilsTest.cpp` for an example, and `IndexScan.cpp` for a
-//    real-life usage.
+//    To make this work, pass the desired details type as a
+//    `ql::type_identity<Details>` tag to the constructor (which selects it via
+//    the deduction guide), and let the underlying view inherit from the
+//    `DetailsProvider`. See `InputRangeUtilsTest.cpp` for an example, and
+//    `IndexScan.cpp` for a real-life usage.
 CPP_class_template(typename View, typename F,
                    typename Details = NoDetails)(requires(
     ql::ranges::input_range<View>&& ql::ranges::view<View>&&
@@ -54,14 +55,25 @@ CPP_class_template(typename View, typename F,
 
   // The input view, the function, and the current iterator into the `view_`.
   // The iterator is `nullopt` before the first call to `get`.
+  //
+  // NOTE: We deliberately declare `view_` before `transformation_` so that
+  // `transformation_` is destroyed after `view_`. That way, a `transformation_`
+  // may own resources that `view_` depends on. For example, the transformation
+  // in `Sort::computeResultExternal` owns a `sorter`, to which the view also
+  // has a reference. Destroying the transformation (and hence the `sorter`)
+  // first might then lead to a segmentation fault when the view is still busy
+  // and tries to access the `sorter`.
+  ::ranges::semiregular_box_t<F> transformation_;
   View view_;
-  ::ranges::semiregular_box_t<F> transfomation_;
   std::optional<ql::ranges::iterator_t<View>> it_;
 
  public:
-  // Constructor.
-  explicit CachingTransformInputRange(View view, F transformation = {})
-      : view_{std::move(view)}, transfomation_(std::move(transformation)) {
+  // Constructor. The unused `ql::type_identity<Details>` tag lets a call site
+  // select the `Details` type via the deduction guide below without having to
+  // spell out all the template arguments explicitly.
+  explicit CachingTransformInputRange(View view, F transformation = {},
+                                      ql::type_identity<Details> = {})
+      : transformation_(std::move(transformation)), view_{std::move(view)} {
     if constexpr (!std::is_same_v<Details, NoDetails>) {
       static_cast<Base*>(this)->setDetailsPointer(&view_.base().details());
     }
@@ -82,7 +94,7 @@ CPP_class_template(typename View, typename F,
     if (*it_ == view_.end()) {
       return std::nullopt;
     }
-    return std::invoke(transfomation_, *it_.value());
+    return std::invoke(transformation_, *it_.value());
   }
 
   // Get access to the underlying view.
@@ -93,10 +105,12 @@ CPP_class_template(typename View, typename F,
 };
 
 // Deduction guides to correctly propagate the input as a value or reference.
-// This is the exact same way `std::ranges` and `range-v3` behave.
-template <typename Range, typename F>
-CachingTransformInputRange(Range&&, F)
-    -> CachingTransformInputRange<all_t<Range>, F>;
+// This is the exact same way `std::ranges` and `range-v3` behave. The optional
+// `ql::type_identity<Details>` tag selects the `Details` type to propagate; it
+// defaults to `NoDetails`, so ordinary two-argument usages are unaffected.
+template <typename Range, typename F, typename Details = NoDetails>
+CachingTransformInputRange(Range&&, F, ql::type_identity<Details> = {})
+    -> CachingTransformInputRange<all_t<Range>, F, Details>;
 
 namespace loopControl {
 // A class to represent control flows in generator-like state machines,
@@ -190,7 +204,7 @@ struct LoopControl {
   template <typename R>
   static LoopControl yieldAll(R&& r) {
     return LoopControl{InputRangeTypeErased{ad_utility::allView(AD_FWD(r))}};
-  };
+  }
 };
 
 // `loopControlValueT` is a helper variable to get the stored type out of a
