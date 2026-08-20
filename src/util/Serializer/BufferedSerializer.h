@@ -126,6 +126,22 @@ CPP_template(typename UnderlyingSerializer,
     return serializer;
   }
 
+  // The number of bytes that have been handed to this serializer so far, i.e.
+  // the position that the next serialized byte will have in the output. Only
+  // supported for the `PassthroughBlockProcessor`, because a block processor
+  // that changes the size of the blocks (like a compressing one) makes the
+  // position of buffered bytes unpredictable.
+  [[nodiscard]] SerializationPosition getSerializationPosition() const {
+    static_assert(
+        std::is_same_v<BlockProcessor, PassthroughBlockProcessor>,
+        "`getSerializationPosition` is only supported for the "
+        "`PassthroughBlockProcessor`, because block processors that change the "
+        "size of the blocks make the position of buffered bytes unpredictable");
+    AD_CORRECTNESS_CHECK(underlyingSerializer_.has_value());
+    return underlyingSerializer_.value().getSerializationPosition() +
+           buffer_.size();
+  }
+
  private:
   // Forward the contents of the `buffer_` to the `blockProcessor_` (which
   // writes them to the underlying serializer) and clear it.

@@ -13,8 +13,6 @@
 namespace ad_utility {
 namespace serialization {
 
-using SerializationPosition = uint64_t;
-
 class FileWriteSerializer {
  public:
   using SerializerType = WriteSerializerTag;

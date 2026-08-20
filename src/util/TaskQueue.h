@@ -72,6 +72,10 @@ class TaskQueue {
     }
   }
 
+  // Return the maximal number of tasks that may wait in the queue (see the
+  // constructor for details).
+  size_t maxQueueSize() const { return queuedTasks_.maxSize(); }
+
   /// Add a task to the queue for Execution. Blocks until there is at least
   /// one free spot in the queue.
   /// Note: If the execution of the task throws, `std::terminate` will be
