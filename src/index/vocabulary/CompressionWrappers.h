@@ -7,6 +7,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/span.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/PrefixHeuristic.h"
 #include "util/CompilerWarnings.h"
@@ -36,13 +37,19 @@ CPP_concept BulkResultForDecoder =
 template <typename T>
 CPP_requires(
     CompressionWrapper_,
-    requires(const T& t)(
+    requires(const T& t, std::string& scratch, ql::span<char> out)(
         // Return the number of decoders that are stored.
         concepts::same_as<decltype(t.numDecoders()), size_t>,
         // Decompress the given string, use the Decoder specified by the second
         // argument.
         concepts::same_as<decltype(t.decompress(std::string_view{}, size_t{0})),
                           std::string>,
+        concepts::same_as<decltype(t.maxDecompressedSize(std::string_view{},
+                                                         size_t{0})),
+                          size_t>,
+        concepts::same_as<decltype(t.decompressInto(std::string_view{},
+                                                    size_t{0}, out, scratch)),
+                          size_t>,
         // Compress all the strings and return the strings together with a
         // `Decoder` that can be used to decompress the strings again.
         BulkResultForDecoder<
@@ -80,6 +87,21 @@ struct DecoderMultiplexer {
     return decoders_.at(decoderIndex).decompress(compressed);
     ENABLE_CLANG_WARNINGS
   }
+
+  size_t maxDecompressedSize(std::string_view compressed,
+                             size_t decoderIndex) const {
+    return decoders_.at(decoderIndex).maxDecompressedSize(compressed);
+  }
+
+  // Decode into `out`. `scratch` is used by multi-stage FSST; other decoders
+  // ignore it.
+  size_t decompressInto(std::string_view compressed, size_t decoderIndex,
+                        ql::span<char> out, std::string& scratch) const {
+    DISABLE_CLANG_UNUSED_RESULT_WARNING
+    return decoders_.at(decoderIndex).decompressInto(compressed, out, scratch);
+    ENABLE_CLANG_WARNINGS
+  }
+
   size_t numDecoders() const { return decoders_.size(); }
   const Decoders& getDecoders() const { return decoders_; }
 };

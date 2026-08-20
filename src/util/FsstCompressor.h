@@ -14,10 +14,12 @@
 #include <absl/cleanup/cleanup.h>
 #include <fsst.h>
 
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "backports/span.h"
 #include "util/Concepts.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -57,21 +59,38 @@ class FsstDecoder {
   // `getDecoder()` on that encoder.
   explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {}
 
-  // Decompress a single string.
-  //
-  // TODO<ms2144>: Batch lookup currently pays a temporary string per word.
-  // A follow-up may add a buffer-based decode path (caller-owned out buffer +
-  // optional scratch for FsstRepeatedDecoder intermediates) without replacing
-  // this return-by-string API. See CompressedVocabulary::lookupBatch.
+  // FSST expands by at most this factor (library guarantee).
+  static constexpr size_t maxExpansionFactor = 8;
+
+  // Upper bound on the decompressed size of `str`.
+  static size_t maxDecompressedSize(std::string_view str) {
+    return maxExpansionFactor * str.size();
+  }
+
+  // Decompress `str` into `out`. `out.size()` must be at least
+  // `maxDecompressedSize(str)`. Return the number of bytes written.
+  size_t decompressInto(std::string_view str, ql::span<char> out,
+                        [[maybe_unused]] std::string& scratch) const {
+    const size_t bound = maxDecompressedSize(str);
+    AD_CONTRACT_CHECK(out.size() >= bound);
+    if (bound == 0) {
+      return 0;
+    }
+    auto cast = detail::castToUnsignedPtr;
+    size_t size = fsst_decompress(&decoder_, str.size(), cast(str.data()),
+                                  bound, cast(out.data()));
+    AD_CORRECTNESS_CHECK(size <= bound);
+    return size;
+  }
+
+  // Decompress a single string. Callers that already own an output buffer
+  // should use `decompressInto` instead.
   std::string decompress(std::string_view str) const {
     std::string output;
-    auto cast = detail::castToUnsignedPtr;
-    output.resize(8 * str.size());
-    size_t size = fsst_decompress(&decoder_, str.size(), cast(str.data()),
-                                  output.size(), cast(output.data()));
-    // FSST compresses at most by a factor of 8.
-    AD_CORRECTNESS_CHECK(size <= output.size());
-    output.resize(size);
+    output.resize(maxDecompressedSize(str));
+    std::string scratch;
+    output.resize(decompressInto(
+        str, ql::span<char>{output.data(), output.size()}, scratch));
     return output;
   }
   // Allow this type to be trivially serializable,
@@ -104,16 +123,45 @@ class FsstRepeatedDecoder {
   // `getDecoder()` on that encoder.
   explicit FsstRepeatedDecoder(Decoders decoders) : decoders_{decoders} {}
 
-  // Decompress a  single string.
+  static size_t maxDecompressedSize(std::string_view str) {
+    size_t bound = str.size();
+    for (size_t i = 0; i < N; ++i) {
+      bound *= FsstDecoder::maxExpansionFactor;
+    }
+    return bound;
+  }
+
+  // Decompress `str` into `out`. Intermediate stages write into `scratch`
+  // (resized as needed). `out.size()` must be at least
+  // `maxDecompressedSize(str)`. Return the number of bytes written.
+  size_t decompressInto(std::string_view str, ql::span<char> out,
+                        std::string& scratch) const {
+    AD_CONTRACT_CHECK(out.size() >= maxDecompressedSize(str));
+    std::string_view nextInput = str;
+    for (size_t stage = 0; stage < N; ++stage) {
+      const FsstDecoder& decoder = decoders_[N - 1 - stage];
+      const bool lastStage = stage + 1 == N;
+      if (lastStage) {
+        return decoder.decompressInto(nextInput, out, scratch);
+      }
+      const size_t bound = FsstDecoder::maxDecompressedSize(nextInput);
+      scratch.resize(bound);
+      const size_t n = decoder.decompressInto(
+          nextInput, ql::span<char>{scratch.data(), scratch.size()}, scratch);
+      scratch.resize(n);
+      nextInput = scratch;
+    }
+    AD_FAIL();
+  }
+
+  // Decompress a single string. Callers that already own an output buffer
+  // should use `decompressInto` instead.
   std::string decompress(std::string_view str) const {
     std::string result;
-    std::string_view nextInput = str;
-    auto decompressSingle = [&result, &nextInput](const FsstDecoder& decoder) {
-      result = decoder.decompress(nextInput);
-      nextInput = result;
-    };
-
-    ql::ranges::for_each(ql::views::reverse(decoders_), decompressSingle);
+    result.resize(maxDecompressedSize(str));
+    std::string scratch;
+    result.resize(decompressInto(
+        str, ql::span<char>{result.data(), result.size()}, scratch));
     return result;
   }
   // Allow this type to be trivially serializable,

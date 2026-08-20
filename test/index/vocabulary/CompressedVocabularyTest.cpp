@@ -8,10 +8,12 @@
 
 #include "VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
+#include "backports/span.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
+#include "util/Exception.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
@@ -20,11 +22,25 @@ using namespace vocabulary_test;
 using namespace ad_utility::vocabulary;
 // A stateless "compressor" that applies a trivial transformation to a string
 struct DummyDecoder {
-  static std::string decompress(std::string_view compressed) {
-    std::string result{compressed};
-    for (char& c : result) {
-      c -= 2;
+  static size_t maxDecompressedSize(std::string_view compressed) {
+    return compressed.size();
+  }
+
+  static size_t decompressInto(std::string_view compressed, ql::span<char> out,
+                               [[maybe_unused]] std::string& scratch) {
+    AD_CONTRACT_CHECK(out.size() >= compressed.size());
+    for (size_t i = 0; i < compressed.size(); ++i) {
+      out[i] = static_cast<char>(compressed[i] - 2);
     }
+    return compressed.size();
+  }
+
+  static std::string decompress(std::string_view compressed) {
+    std::string result;
+    result.resize(maxDecompressedSize(compressed));
+    std::string scratch;
+    result.resize(decompressInto(
+        compressed, ql::span<char>{result.data(), result.size()}, scratch));
     return result;
   }
   // This class has no state, but it still needs to be serialized.

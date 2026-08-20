@@ -11,11 +11,11 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 
-#include <cstring>
 #include <string>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/span.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/CompressionWrappers.h"
 #include "index/vocabulary/PrefixCompressor.h"
@@ -110,16 +110,10 @@ CPP_template(typename UnderlyingVocabulary,
 
   // Batch-read the compressed words from the underlying vocabulary, then
   // decompress each word with the decoder of its block. The result order
-  // matches `indices`.
-  //
-  // TODO<ms2144>: Hot-path cost is one temporary std::string (malloc/free) per
-  // word, then an exact-size arena allocate + memcpy into the PMR buffer. A
-  // follow-up should try decoding FSST straight into the arena at the FSST size
-  // bound (8x per stage, 64x for FsstSquared), keep the unused tail, and
-  // measure allocated-vs-used waste before adding trim or a custom bump
-  // resource. Multi-stage FSST still needs a distinct intermediate buffer;
-  // hoist one reusable scratch for the batch rather than changing the existing
-  // decompress() return-by-string API. Tracked outside the lookupBatch wire PR.
+  // matches `indices`. Decode into the PMR arena at the decoder's size bound
+  // (8x per FSST stage). Unused arena tail is kept; trim only after measuring
+  // allocated-vs-used waste. Multi-stage FSST uses one reusable `scratch`
+  // for the batch. `decompress()` still returns `std::string`.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     // Still encoded; decompression into the PMR arena happens below.
@@ -129,21 +123,29 @@ CPP_template(typename UnderlyingVocabulary,
     auto buffer = std::make_unique<ql::pmr::monotonic_buffer_resource>();
     std::vector<std::string_view> views;
     views.reserve(indices.size());
+    std::string scratch;
 
     for (const auto& idxAndCompressedWord :
          ::ranges::views::zip(indices, *compressedWords)) {
       const auto& [idx, compressedWord] = idxAndCompressedWord;
-      std::string decompressed =
-          compressionWrapper_.decompress(compressedWord, getDecoderIdx(idx));
+      const size_t decoderIdx = getDecoderIdx(idx);
+      const size_t bound =
+          compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx);
+      if (bound == 0) {
+        views.emplace_back();
+        continue;
+      }
       // `memory_resource::allocate` returns `void*` to storage we own for
-      // `decompressed.size()` bytes. Casting to `char*` is well-defined and is
-      // the usual way to treat that storage as a byte buffer: we only write
-      // through `memcpy` and then form a `string_view` over the same range.
-      // Alignment is at least `alignof(std::max_align_t)` for this resource,
-      // which is sufficient for an array of `char`.
-      auto* mem = static_cast<char*>(buffer->allocate(decompressed.size()));
-      std::memcpy(mem, decompressed.data(), decompressed.size());
-      views.emplace_back(mem, decompressed.size());
+      // `bound` bytes. Casting to `char*` is well-defined and is the usual
+      // way to treat that storage as a byte buffer: FSST writes through
+      // `fsst_decompress` and then we form a `string_view` over the used
+      // prefix. Alignment is at least `alignof(std::max_align_t)` for this
+      // resource, which is sufficient for an array of `char`.
+      auto* mem = static_cast<char*>(buffer->allocate(bound));
+      const size_t n = compressionWrapper_.decompressInto(
+          compressedWord, decoderIdx, ql::span<char>{mem, bound}, scratch);
+      AD_CORRECTNESS_CHECK(n <= bound);
+      views.emplace_back(mem, n);
     }
 
     return makePmrVocabBatchLookupResult(std::move(buffer), std::move(views));
