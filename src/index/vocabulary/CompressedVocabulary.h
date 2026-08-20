@@ -98,6 +98,9 @@ CPP_template(typename UnderlyingVocabulary,
   // words in batches) and decompress each word. `scanAll()` is expected to
   // yield `IndexAndWord` elements, so we have to apply a transformation at the
   // end.
+  // TODO<ms2144>: Decode into a caller-owned buffer via `decompressInto` /
+  // `maxDecompressedSize` as in `lookupBatch` below, instead of
+  // `decompress()` into a reused `std::string`.
   auto scanAll() const {
     return ad_utility::CachingTransformInputRange(
         underlyingVocabulary_.scanAll(),
