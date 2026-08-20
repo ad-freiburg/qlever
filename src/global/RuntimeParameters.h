@@ -141,6 +141,18 @@ struct RuntimeParameters {
   // This mode should only be activated when running the syntax tests of
   // the SPARQL conformance test suite.
   Bool syntaxTestMode_{false, "syntax-test-mode"};
+  // If set to `true`, follow the SPARQL 1.1 standard also in corner cases
+  // where it mandates behavior that is expensive to compute and of little
+  // practical use. Currently this only affects property paths that can have
+  // length zero (`*` and `?`): the standard mandates that a value that is
+  // bound to the start or end of such a path from outside (e.g. via `VALUES`
+  // or `BIND`) only matches the path of length zero if it occurs as a subject
+  // or object in the graph. Checking this requires an expensive scan over the
+  // whole graph. If set to `false` (the default), such a value matches the
+  // path of length zero unconditionally, which is what Blazegraph and
+  // Virtuoso also do; see
+  // https://github.com/ad-freiburg/qlever/issues/2867.
+  Bool strictSparql_{false, "strict-sparql"};
   // If set to `true`, then a division by zero in an expression will lead
   // to an
   // expression error, meaning that the result is undefined. If set to

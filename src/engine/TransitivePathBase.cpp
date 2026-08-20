@@ -66,10 +66,24 @@ TransitivePathBase::TransitivePathBase(
       lhs_.treeAndCol_.emplace(
           makeEmptyPathSide(qec, activeGraphs_, graphVariable_), 0);
     } else if (!startingSide.isVariable()) {
-      startingSide.treeAndCol_.emplace(
-          joinWithIndexScan(qec, activeGraphs_, graphVariable_,
-                            startingSide.value_),
-          0);
+      if (graphVariable_.has_value()) {
+        // With a graph variable we have to determine, for each graph, whether
+        // the value occurs in that graph, so we need a join with the graph.
+        startingSide.treeAndCol_.emplace(
+            joinWithIndexScan(qec, activeGraphs_, graphVariable_,
+                              startingSide.value_),
+            0);
+      } else {
+        // A fixed value at the start or end of the path matches the path of
+        // length zero unconditionally, in particular also when it does not
+        // occur as a subject or object in the graph. This is mandated by the
+        // SPARQL 1.1 standard (the `ALP` procedure from Section 18.4 includes
+        // the start node without consulting the graph) and tested by the
+        // `zero_or_more_set_start` etc. tests of the W3C conformance test
+        // suite.
+        startingSide.treeAndCol_.emplace(
+            makeSingleValueSide(qec, startingSide.value_), 0);
+      }
     }
   }
 
@@ -175,6 +189,14 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
       std::move(variable).value_or(makeInternalVariable("x")), graphVariable);
   return makeDistinct(ad_utility::makeExecutionTree<Union>(
       qec, std::move(leftScan), std::move(rightScan)));
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeSingleValueSide(
+    QueryExecutionContext* qec, const TripleComponent& tripleComponent) {
+  return ad_utility::makeExecutionTree<Values>(
+      qec, parsedQuery::SparqlValues{{makeInternalVariable("x")},
+                                     {{tripleComponent}}});
 }
 
 // _____________________________________________________________________________
@@ -508,9 +530,22 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
 
   bool graphIsJoin = originalVar == graphVariable_;
 
-  // If we cannot guarantee the values are part of the graph, we have to join
-  // with it first.
-  if (!leftOrRightOp->getRootOperation()->columnOriginatesFromGraphOrUndef(
+  // In strict SPARQL mode, a value that is bound to this side of the path from
+  // outside (e.g. via `VALUES` or `BIND`) only matches the path of length zero
+  // if it occurs as a subject or object in the graph, so if we cannot
+  // guarantee that, we have to join with the graph first. By default, we skip
+  // this check and let any value match the path of length zero: the check is
+  // very expensive (it requires a scan over the whole graph), its only effect
+  // is to remove results that are arguably useful, and Blazegraph and Virtuoso
+  // skip it as well; see
+  // https://github.com/ad-freiburg/qlever/issues/2867. With a graph variable,
+  // the join is needed regardless of the mode to determine the graphs in which
+  // each value occurs.
+  bool valuesMustOccurInGraph =
+      getRuntimeParameter<&RuntimeParameters::strictSparql_>() ||
+      graphVariable_.has_value();
+  if (valuesMustOccurInGraph &&
+      !leftOrRightOp->getRootOperation()->columnOriginatesFromGraphOrUndef(
           originalVar)) {
     auto completeScan = makeEmptyPathSide(
         getExecutionContext(), activeGraphs_,
