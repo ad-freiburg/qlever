@@ -5,6 +5,9 @@
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 
+#include <array>
+#include <memory>
+
 #include "backports/span.h"
 #include "util/FsstCompressor.h"
 
@@ -383,19 +386,43 @@ TEST(FsstEncoder, firstTest) {
   }
 }
 
-TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompress) {
-  std::vector<std::string> words{"alpha", "beta", "gamma-gamma-gamma"};
-  auto [buf1, views1, decoder1] = FsstEncoder::compressAll(words);
-  auto [buf2, views2, decoder2] = FsstEncoder::compressAll(views1);
-  FsstRepeatedDecoder<2> repeated{{decoder1, decoder2}};
+template <size_t N>
+void expectRepeatedDecompressIntoMatches(
+    const std::vector<std::string>& words) {
+  std::vector<std::string_view> views;
+  views.reserve(words.size());
+  for (const auto& w : words) {
+    views.emplace_back(w);
+  }
+  std::array<FsstDecoder, N> decoders{};
+  std::shared_ptr<std::string> keepAlive;
+  std::vector<std::string_view> compressed = views;
+  for (size_t stage = 0; stage < N; ++stage) {
+    auto [buffer, nextViews, decoder] = FsstEncoder::compressAll(compressed);
+    keepAlive = std::move(buffer);
+    compressed.assign(nextViews.begin(), nextViews.end());
+    decoders[stage] = decoder;
+  }
+  FsstRepeatedDecoder<N> repeated{decoders};
   std::string scratch;
   for (size_t i = 0; i < words.size(); ++i) {
-    const std::string viaString = repeated.decompress(views2[i]);
-    std::string intoBuf(repeated.maxDecompressedSize(views2[i]), '\0');
+    const std::string viaString = repeated.decompress(compressed[i]);
+    std::string intoBuf(repeated.maxDecompressedSize(compressed[i]), '\0');
     const size_t n = repeated.decompressInto(
-        views2[i], ql::span<char>{intoBuf.data(), intoBuf.size()}, scratch);
+        compressed[i], ql::span<char>{intoBuf.data(), intoBuf.size()}, scratch);
     EXPECT_EQ(n, viaString.size());
     EXPECT_EQ(std::string_view(intoBuf.data(), n), viaString);
     EXPECT_EQ(viaString, words[i]);
   }
+  EXPECT_GE(scratch.size(), repeated.maxDecompressedSize(compressed.front()));
+}
+
+TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompressTwoStages) {
+  expectRepeatedDecompressIntoMatches<2>(
+      {"alpha", "beta", "gamma-gamma-gamma"});
+}
+
+TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompressThreeStages) {
+  expectRepeatedDecompressIntoMatches<3>(
+      {"alpha", "beta", "gamma-gamma-gamma"});
 }

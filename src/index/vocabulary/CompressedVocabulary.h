@@ -112,8 +112,9 @@ CPP_template(typename UnderlyingVocabulary,
   // decompress each word with the decoder of its block. The result order
   // matches `indices`. Decode into the PMR arena at the decoder's size bound
   // (8x per FSST stage). Unused arena tail is kept; trim only after measuring
-  // allocated-vs-used waste. Multi-stage FSST uses one reusable `scratch`
-  // for the batch. `decompress()` still returns `std::string`.
+  // allocated-vs-used waste. Multi-stage FSST ping-pongs between that arena
+  // slot and one scratch buffer of the same size, grown once to the largest
+  // bound in the batch. `decompress()` still returns `std::string`.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     // Still encoded; decompression into the PMR arena happens below.

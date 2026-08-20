@@ -107,6 +107,8 @@ class FsstDecoder {
 // the N corresponding encoders in the "normal" order (first encoder first).
 template <size_t N = 2>
 class FsstRepeatedDecoder {
+  static_assert(N >= 1, "FsstRepeatedDecoder needs at least one stage");
+
  public:
   using Decoders = std::array<FsstDecoder, N>;
 
@@ -131,27 +133,33 @@ class FsstRepeatedDecoder {
     return bound;
   }
 
-  // Decompress `str` into `out`. Intermediate stages write into `scratch`
-  // (resized as needed). `out.size()` must be at least
-  // `maxDecompressedSize(str)`. Return the number of bytes written.
+  // Decompress `str` into `out`. `out.size()` must be at least
+  // `maxDecompressedSize(str)`. For `N >= 2`, `scratch` is grown once to
+  // that same size and kept; stages ping-pong between `out` and `scratch`
+  // so the last stage always writes `out` and no stage reads and writes
+  // the same buffer. Return the number of bytes written.
   size_t decompressInto(std::string_view str, ql::span<char> out,
                         std::string& scratch) const {
     AD_CONTRACT_CHECK(out.size() >= maxDecompressedSize(str));
-    std::string_view nextInput = str;
-    for (size_t stage = 0; stage < N; ++stage) {
-      const FsstDecoder& decoder = decoders_[N - 1 - stage];
-      const bool lastStage = stage + 1 == N;
-      if (lastStage) {
-        return decoder.decompressInto(nextInput, out, scratch);
+    if constexpr (N >= 2) {
+      if (scratch.size() < out.size()) {
+        scratch.resize(out.size());
       }
-      const size_t bound = FsstDecoder::maxDecompressedSize(nextInput);
-      scratch.resize(bound);
-      const size_t n = decoder.decompressInto(
-          nextInput, ql::span<char>{scratch.data(), scratch.size()}, scratch);
-      scratch.resize(n);
-      nextInput = scratch;
     }
-    AD_FAIL();
+    std::array<ql::span<char>, 2> buffers{
+        out, ql::span<char>{scratch.data(), scratch.size()}};
+    // Even N: first write goes to scratch, last write to `out`.
+    // Odd N: first write goes to `out`, last write to `out`.
+    size_t dest = (N % 2 == 0) ? 1 : 0;
+    std::string_view input = str;
+    size_t n = 0;
+    for (size_t stage = 0; stage < N; ++stage) {
+      n = decoders_[N - 1 - stage].decompressInto(input, buffers[dest],
+                                                  scratch);
+      input = std::string_view{buffers[dest].data(), n};
+      dest ^= 1;
+    }
+    return n;
   }
 
   // Decompress a single string. Callers that already own an output buffer
