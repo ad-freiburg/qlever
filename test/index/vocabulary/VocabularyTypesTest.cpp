@@ -12,7 +12,9 @@
 #include <cstring>
 
 #include "../../util/GTestHelpers.h"
+#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/File.h"
 
 namespace {
 // A class that executes a passed function in its constructor.
@@ -154,18 +156,58 @@ TEST(VocabBatchLookupData, KeepAliveRequiresAnOwner) {
                                ::testing::HasSubstr("owners"));
 }
 
-// A view into an in-memory vocabulary's word storage stays valid after the
-// vocabulary itself is closed, because the result shares ownership of the
-// bytes.
+// A view obtained from VocabularyInMemoryBinSearch stays valid after close()
+// and after the vocabulary object is replaced/destroyed, because the batch
+// result retains wordStorage() shared ownership of the bytes.
 TEST(VocabBatchLookupData, KeepAliveOutlivesSharedWordStorage) {
-  auto stored = std::make_shared<std::string>("ram-word");
-  const char* storedData = stored->data();
-  std::vector<std::string_view> views{*stored};
-  std::vector<VocabBatchOwner> owners{stored};
-  auto result = keepAliveVocabBatch(std::move(owners), std::move(views));
-  stored.reset();
-  EXPECT_THAT(*result, ::testing::ElementsAre("ram-word"));
-  EXPECT_EQ((*result)[0].data(), storedData);
+  const std::string filename =
+      "KeepAliveOutlivesSharedWordStorage.vocabularyTypesTest.dat";
+  ad_utility::deleteFile(filename, false);
+  ad_utility::deleteFile(filename + ".ids", false);
+
+  auto buildVocab = [&](std::string_view word) {
+    VocabularyInMemoryBinSearch vocabulary;
+    {
+      VocabularyInMemoryBinSearch::WordWriter writer{filename};
+      writer(word, 0);
+      writer.finish();
+    }
+    vocabulary.open(filename);
+    return vocabulary;
+  };
+
+  // close() path: vocabulary installs a fresh empty words_ buffer.
+  {
+    auto vocabulary = buildVocab("ram-word");
+    auto maybeWord = vocabulary[0];
+    ASSERT_TRUE(maybeWord.has_value());
+    const char* wordData = maybeWord->data();
+    std::vector<std::string_view> views{maybeWord.value()};
+    std::vector<VocabBatchOwner> owners{vocabulary.wordStorage()};
+    auto result = keepAliveVocabBatch(std::move(owners), std::move(views));
+
+    vocabulary.close();
+    EXPECT_THAT(*result, ::testing::ElementsAre("ram-word"));
+    EXPECT_EQ((*result)[0].data(), wordData);
+  }
+
+  // destruction path: drop the vocabulary object while the result still lives.
+  {
+    auto vocabulary = std::make_optional(buildVocab("other-word"));
+    auto maybeWord = (*vocabulary)[0];
+    ASSERT_TRUE(maybeWord.has_value());
+    const char* wordData = maybeWord->data();
+    std::vector<std::string_view> views{maybeWord.value()};
+    std::vector<VocabBatchOwner> owners{vocabulary->wordStorage()};
+    auto result = keepAliveVocabBatch(std::move(owners), std::move(views));
+
+    vocabulary.reset();
+    EXPECT_THAT(*result, ::testing::ElementsAre("other-word"));
+    EXPECT_EQ((*result)[0].data(), wordData);
+  }
+
+  ad_utility::deleteFile(filename);
+  ad_utility::deleteFile(filename + ".ids", false);
 }
 
 // Tests for `PmrVocabBatchLookupData`: the `monotonic_buffer_resource` backing
