@@ -42,7 +42,7 @@
 #include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
-#include "util/AllocatorWithLimit.h"
+#include "util/Allocator.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 

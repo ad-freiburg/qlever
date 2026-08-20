@@ -20,6 +20,7 @@
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "util/Allocator.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 
@@ -107,7 +108,7 @@ class QueryExecutionContext
   enum struct DisableCaching { True, False, FromRuntimeParameter };
   QueryExecutionContext(
       std::shared_ptr<const Index> index, QueryResultCache* const cache,
-      ad_utility::AllocatorWithLimit<Id> allocator,
+      qlever::Allocator<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
       std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
@@ -155,7 +156,7 @@ class QueryExecutionContext
     return _costFactors.getCostFactor(key);
   }
 
-  const ad_utility::AllocatorWithLimit<Id>& getAllocator() const {
+  const qlever::Allocator<Id>& getAllocator() const {
     return _allocator;
   }
 
@@ -265,7 +266,7 @@ class QueryExecutionContext
       _index->deltaTriplesManager().getCurrentLocatedTriplesSharedState()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
-  ad_utility::AllocatorWithLimit<Id> _allocator;
+  qlever::Allocator<Id> _allocator;
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
   std::function<void(std::string)> updateCallback_;

@@ -1085,7 +1085,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
   // build rtree with one child
   bgi::rtree<Value, bgi::quadratic<16>, bgi::indexable<Value>,
-             bgi::equal_to<Value>, ad_utility::AllocatorWithLimit<Value>>
+             bgi::equal_to<Value>, qlever::Allocator<Value>>
       rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{},
             bgi::equal_to<Value>{}, qec_->getAllocator());
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
