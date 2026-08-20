@@ -132,6 +132,17 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 struct StringVectorVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<std::string>> {};
 
+// Construct a result from owning strings and expose views into their storage.
+inline VocabBatchLookupResult makeStringVectorVocabBatchLookupResult(
+    std::vector<std::string> words) {
+  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+  data->buffer() = std::move(words);
+  data->views() = ::ranges::to_vector(
+      data->buffer() |
+      ql::views::transform(ad_utility::staticCast<std::string_view>));
+  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+}
+
 // Hold child `VocabBatchLookupResult`s so their strings stay alive. Point
 // `views()` into those children or into `indexRamWords`.
 struct MultiOwnerVocabBatchLookupData
@@ -262,13 +273,7 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
       indices | ql::views::transform(
                     [&vocab](size_t idx) { return std::string{vocab[idx]}; }));
 
-  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-  data->buffer() = std::move(words);
-  data->views() = ::ranges::to_vector(
-      data->buffer() |
-      ql::views::transform(ad_utility::staticCast<std::string_view>));
-
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+  return makeStringVectorVocabBatchLookupResult(std::move(words));
 }
 
 // Streamed version of `lookupBatch`: lazily apply `vocab.lookupBatch` for the
