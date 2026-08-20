@@ -6,6 +6,7 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/functional/function_ref.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <array>
@@ -76,14 +77,11 @@ TEST(VocabBatchLookupData, AsResultExposesViewsAndKeepsDataAlive) {
 
   VocabBatchLookupResult result = VocabBatchLookupData::asResult(data);
 
-  ASSERT_EQ(result->size(), 2u);
-  EXPECT_EQ((*result)[0], "foo");
-  EXPECT_EQ((*result)[1], "bar");
+  EXPECT_THAT(*result, ::testing::ElementsAre("foo", "bar"));
 
   // Drop our reference; the aliasing shared_ptr must keep the data alive.
   data.reset();
-  EXPECT_EQ((*result)[0], "foo");
-  EXPECT_EQ((*result)[1], "bar");
+  EXPECT_THAT(*result, ::testing::ElementsAre("foo", "bar"));
 }
 
 // An empty lookup result is valid: no views, empty span.
@@ -96,9 +94,7 @@ TEST(VocabBatchLookupData, AsResultEmpty) {
 TEST(VocabBatchLookupData, MakeStringVectorResultKeepsViewsValid) {
   auto result = makeStringVectorVocabBatchLookupResult({"alpha", "beta"});
 
-  ASSERT_EQ(result->size(), 2u);
-  EXPECT_EQ((*result)[0], "alpha");
-  EXPECT_EQ((*result)[1], "beta");
+  EXPECT_THAT(*result, ::testing::ElementsAre("alpha", "beta"));
 }
 
 TEST(VocabBatchLookupData, ScatterBatchResultRetainsOwner) {
@@ -142,10 +138,7 @@ TEST(VocabBatchLookupData, KeepAliveVocabBatchDoesNotCopyBytes) {
   secondOwner.reset();
 
   auto result = keepAliveVocabBatch(std::move(owners), std::move(mixed));
-  ASSERT_EQ(result->size(), 3u);
-  EXPECT_EQ((*result)[0], "alpha");
-  EXPECT_EQ((*result)[1], "gamma");
-  EXPECT_EQ((*result)[2], "beta");
+  EXPECT_THAT(*result, ::testing::ElementsAre("alpha", "gamma", "beta"));
   EXPECT_EQ((*result)[0].data(), alphaData);
   EXPECT_EQ((*result)[1].data(), gammaData);
 }
@@ -237,15 +230,12 @@ TEST(PmrVocabBatchLookupData, PmrAsResultPointerStableAcrossAppends) {
   EXPECT_EQ(firstView, "foo");
 
   VocabBatchLookupResult result = PmrVocabBatchLookupData::asResult(data);
-  ASSERT_EQ(result->size(), 2u);
-  EXPECT_EQ((*result)[0], "foo");
-  EXPECT_EQ((*result)[1], "barbaz");
+  EXPECT_THAT(*result, ::testing::ElementsAre("foo", "barbaz"));
 
   // The aliasing shared_ptr keeps the resource (and thus its allocations)
   // alive.
   data.reset();
-  EXPECT_EQ((*result)[0], "foo");
-  EXPECT_EQ((*result)[1], "barbaz");
+  EXPECT_THAT(*result, ::testing::ElementsAre("foo", "barbaz"));
 }
 
 // An empty pmr lookup result is valid: no views, empty span (matches the
@@ -281,8 +271,6 @@ TEST(VocabBatchLookupData, MakePmrResultKeepsViewsAlive) {
   const char* firstData = views[0].data();
   auto result =
       makePmrVocabBatchLookupResult(std::move(buffer), std::move(views));
-  ASSERT_EQ(result->size(), 2u);
-  EXPECT_EQ((*result)[0], "one");
-  EXPECT_EQ((*result)[1], "two");
+  EXPECT_THAT(*result, ::testing::ElementsAre("one", "two"));
   EXPECT_EQ((*result)[0].data(), firstData);
 }

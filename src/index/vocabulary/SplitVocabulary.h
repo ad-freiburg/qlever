@@ -127,11 +127,11 @@ class SplitVocabulary {
          }))...);
   }
 
-  // Use per-marker buckets in `lookupBatch`.
+  // Bucket type used by the private `lookupBatch` helpers.
   using IndicesByMarker = std::array<std::vector<size_t>, numberOfVocabs>;
   using ResultsByMarker = std::array<VocabBatchLookupResult, numberOfVocabs>;
 
-  // Split marked indices into lists of underlying vocabulary-local indices.
+  // Partition marked indices into underlying vocabulary-local index lists.
   static IndicesByMarker partitionUnderlyingIndicesByMarker(
       ql::span<const size_t> indices) {
     IndicesByMarker underlyingVocabIndicesByMarker;
@@ -142,14 +142,14 @@ class SplitVocabulary {
     return underlyingVocabIndicesByMarker;
   }
 
-  // One non-empty marker's batch, plus how many markers were non-empty.
+  // Hold each non-empty marker's batch and the count of non-empty markers.
   struct MarkerBatchLookups {
     ResultsByMarker lookupResultByMarker{};
     uint8_t numNonemptyMarkers = 0;
     uint8_t lastNonemptyMarker = 0;
   };
 
-  // Dispatch each non-empty marker group to its underlying `lookupBatch`.
+  // Look up each non-empty marker group via the underlying `lookupBatch`.
   MarkerBatchLookups lookupBatchesByMarker(
       const IndicesByMarker& underlyingVocabIndicesByMarker) const {
     MarkerBatchLookups out;
@@ -170,8 +170,7 @@ class SplitVocabulary {
     return out;
   }
 
-  // Map each input position to its marker so mixed results can be scattered
-  // back into request order.
+  // Partition each input position by marker for scattering mixed results.
   static IndicesByMarker partitionResultPositionsByMarker(
       ql::span<const size_t> indices) {
     IndicesByMarker resultPositionByMarker;
@@ -183,9 +182,9 @@ class SplitVocabulary {
     return resultPositionByMarker;
   }
 
-  // Merge per-marker batches into one result in `indices` order. Callers must
-  // pass more than one non-empty marker; the single-marker fast path returns
-  // that batch directly from `lookupBatch`.
+  // Merge per-marker batches into one result in input order. Require more than
+  // one non-empty marker; the single-marker fast path returns that batch from
+  // `lookupBatch` directly.
   static VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
       ql::span<const size_t> indices, MarkerBatchLookups markerLookups) {
     AD_CONTRACT_CHECK(markerLookups.numNonemptyMarkers > 1);
@@ -204,7 +203,7 @@ class SplitVocabulary {
     return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
   }
 
-  // Unit tests exercise the private lookupBatch helpers directly.
+  // Grant unit tests access to the private `lookupBatch` helpers.
   FRIEND_TEST(Vocabulary, SplitVocabularyPartitionUnderlyingIndicesByMarker);
   FRIEND_TEST(Vocabulary, SplitVocabularyPartitionResultPositionsByMarker);
   FRIEND_TEST(Vocabulary, SplitVocabularyLookupBatchesByMarkerSingleAndMixed);
@@ -281,8 +280,9 @@ class SplitVocabulary {
     return scanAllImpl(std::make_index_sequence<numberOfVocabs>{});
   }
 
-  // Partition `indices` by marker, look up each group, and reassemble in input
-  // order. Single-marker batches return the underlying result without a merge.
+  // Partition `indices` by marker, look up each group, and reassemble the
+  // results in input order. Return the underlying batch unchanged when only
+  // one marker is present.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     auto underlyingVocabIndicesByMarker =
