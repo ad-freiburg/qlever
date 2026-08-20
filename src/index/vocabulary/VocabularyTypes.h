@@ -143,6 +143,16 @@ inline VocabBatchLookupResult makeStringVectorVocabBatchLookupResult(
   return StringVectorVocabBatchLookupData::asResult(std::move(data));
 }
 
+// Construct a PMR-backed result and expose views into its monotonic allocator.
+inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
+    std::unique_ptr<ql::pmr::monotonic_buffer_resource> buffer,
+    std::vector<std::string_view> views) {
+  auto data = std::make_shared<PmrVocabBatchLookupData>();
+  data->buffer() = std::move(buffer);
+  data->views() = std::move(views);
+  return PmrVocabBatchLookupData::asResult(std::move(data));
+}
+
 // Hold child `VocabBatchLookupResult`s so their strings stay alive. Point
 // `views()` into those children or into `indexRamWords`.
 struct MultiOwnerVocabBatchLookupData

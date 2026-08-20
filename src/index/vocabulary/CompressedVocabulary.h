@@ -115,14 +115,20 @@ CPP_template(typename UnderlyingVocabulary,
     auto compressed = underlyingVocabulary_.lookupBatch(indices);
     AD_CORRECTNESS_CHECK(compressed->size() == indices.size());
 
-    // Move strings into the result's underlying buffer.
-    auto words = ::ranges::to_vector(
-        ::ranges::views::zip(indices, *compressed) |
-        ql::views::transform([this](const auto& idxAndWord) {
-          const auto& [idx, word] = idxAndWord;
-          return compressionWrapper_.decompress(word, getDecoderIdx(idx));
-        }));
-    return makeStringVectorVocabBatchLookupResult(std::move(words));
+    auto buffer = std::make_unique<ql::pmr::monotonic_buffer_resource>();
+    std::vector<std::string_view> views;
+    views.reserve(indices.size());
+
+    for (const auto& idxAndWord : ::ranges::views::zip(indices, *compressed)) {
+      const auto& [idx, word] = idxAndWord;
+      std::string decompressed =
+          compressionWrapper_.decompress(word, getDecoderIdx(idx));
+      char* mem = static_cast<char*>(buffer->allocate(decompressed.size()));
+      std::memcpy(mem, decompressed.data(), decompressed.size());
+      views.emplace_back(mem, decompressed.size());
+    }
+
+    return makePmrVocabBatchLookupResult(std::move(buffer), std::move(views));
   }
 
   //____________________________________________________________________________
