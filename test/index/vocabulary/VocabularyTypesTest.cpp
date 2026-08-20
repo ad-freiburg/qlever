@@ -254,8 +254,9 @@ TEST(VocabBatchLookupData, ScatterBatchResultSizeMismatchThrows) {
   std::vector<VocabBatchOwner> owners;
   const std::array<size_t, 2> positions{0, 1};
   // Two positions but one word in the batch.
-  EXPECT_ANY_THROW(scatterVocabBatchLookupResult(std::move(batch), positions,
-                                                 views, owners));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      scatterVocabBatchLookupResult(std::move(batch), positions, views, owners),
+      ::testing::HasSubstr("result->size() == resultPositions.size()"));
 }
 
 // _____________________________________________________________________________

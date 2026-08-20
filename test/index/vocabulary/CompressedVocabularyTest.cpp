@@ -143,7 +143,8 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchMatchesAccessOperator) {
   const std::array<size_t, 7> indices{4, 1, 0, 3, 1, 2, 4};
   auto result = vocab.lookupBatch(indices);
   assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
-  EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
 }
 
 // _______________________________________________________

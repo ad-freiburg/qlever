@@ -30,18 +30,16 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
 
-  std::vector<std::string_view> assembled(indices.size());
   std::vector<size_t> diskIndices;
   std::vector<size_t> diskSlots;
-  bool usesInternalVocabulary = false;
+  std::vector<std::pair<size_t, std::string_view>> internalSlots;
   diskIndices.reserve(indices.size());
   diskSlots.reserve(indices.size());
 
   for (auto [i, idx] : ::ranges::views::enumerate(indices)) {
     auto fromInternal = internalVocab_[idx];
     if (fromInternal.has_value()) {
-      usesInternalVocabulary = true;
-      assembled[static_cast<size_t>(i)] = fromInternal.value();
+      internalSlots.emplace_back(static_cast<size_t>(i), fromInternal.value());
     } else {
       diskSlots.push_back(static_cast<size_t>(i));
       diskIndices.push_back(idx);
@@ -54,6 +52,10 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     return externalVocab_.lookupBatch(diskIndices);
   }
 
+  std::vector<std::string_view> assembled(indices.size());
+  for (auto [position, word] : internalSlots) {
+    assembled[position] = word;
+  }
   std::vector<VocabBatchOwner> owners;
   if (!diskIndices.empty()) {
     auto disk = externalVocab_.lookupBatch(diskIndices);
@@ -61,7 +63,7 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     scatterVocabBatchLookupResult(std::move(disk), diskSlots, assembled,
                                   owners);
   }
-  if (usesInternalVocabulary) {
+  if (!internalSlots.empty()) {
     owners.push_back(internalVocab_.wordStorage());
   }
   return keepAliveVocabBatch(std::move(owners), std::move(assembled));
