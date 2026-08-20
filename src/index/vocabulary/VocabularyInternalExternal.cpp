@@ -30,18 +30,17 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
 
+  // Classify without mixed-result buffers. The pure-disk path returns the
+  // external batch directly and must not allocate `diskSlots` or `assembled`.
   std::vector<size_t> diskIndices;
-  std::vector<size_t> diskSlots;
   std::vector<std::pair<size_t, std::string_view>> internalSlots;
   diskIndices.reserve(indices.size());
-  diskSlots.reserve(indices.size());
 
   for (auto [i, idx] : ::ranges::views::enumerate(indices)) {
     auto fromInternal = internalVocab_[idx];
     if (fromInternal.has_value()) {
       internalSlots.emplace_back(static_cast<size_t>(i), fromInternal.value());
     } else {
-      diskSlots.push_back(static_cast<size_t>(i));
       diskIndices.push_back(idx);
     }
   }
@@ -58,6 +57,21 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   }
   std::vector<VocabBatchOwner> owners;
   if (!diskIndices.empty()) {
+    // Mixed path only: input positions of disk misses, same order as
+    // `diskIndices`.
+    std::vector<char> isInternal(indices.size(), 0);
+    for (const auto& [position, word] : internalSlots) {
+      isInternal[position] = 1;
+    }
+    std::vector<size_t> diskSlots;
+    diskSlots.reserve(diskIndices.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+      if (isInternal[i] == 0) {
+        diskSlots.push_back(i);
+      }
+    }
+    AD_CORRECTNESS_CHECK(diskSlots.size() == diskIndices.size());
+
     auto disk = externalVocab_.lookupBatch(diskIndices);
     owners.reserve(1 + static_cast<size_t>(!internalSlots.empty()));
     scatterVocabBatchLookupResult(std::move(disk), diskSlots, assembled,
