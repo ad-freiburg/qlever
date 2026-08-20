@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cstring>
 
 #include "../../util/GTestHelpers.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -213,4 +214,34 @@ TEST(PmrVocabBatchLookupData, PmrAsResultEmpty) {
   data->buffer() = std::make_unique<ql::pmr::monotonic_buffer_resource>();
   VocabBatchLookupResult result = PmrVocabBatchLookupData::asResult(data);
   EXPECT_TRUE(result->empty());
+}
+
+// _____________________________________________________________________________
+TEST(VocabBatchLookupData, ScatterBatchResultSizeMismatchThrows) {
+  auto batch = makeStringVectorVocabBatchLookupResult({"only-one"});
+  std::vector<std::string_view> views(2);
+  std::vector<VocabBatchOwner> owners;
+  const std::array<size_t, 2> positions{0, 1};
+  // Two positions but one word in the batch.
+  EXPECT_ANY_THROW(scatterVocabBatchLookupResult(std::move(batch), positions,
+                                                 views, owners));
+}
+
+// _____________________________________________________________________________
+TEST(VocabBatchLookupData, MakePmrResultKeepsViewsAlive) {
+  auto buffer = std::make_unique<ql::pmr::monotonic_buffer_resource>();
+  auto* resource = buffer.get();
+  auto allocCopy = [&](std::string_view word) {
+    char* p = static_cast<char*>(resource->allocate(word.size()));
+    std::memcpy(p, word.data(), word.size());
+    return std::string_view{p, word.size()};
+  };
+  std::vector<std::string_view> views{allocCopy("one"), allocCopy("two")};
+  const char* firstData = views[0].data();
+  auto result =
+      makePmrVocabBatchLookupResult(std::move(buffer), std::move(views));
+  ASSERT_EQ(result->size(), 2u);
+  EXPECT_EQ((*result)[0], "one");
+  EXPECT_EQ((*result)[1], "two");
+  EXPECT_EQ((*result)[0].data(), firstData);
 }

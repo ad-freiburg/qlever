@@ -6,6 +6,8 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 
+#include <gtest/gtest_prod.h>
+
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -201,6 +203,12 @@ class SplitVocabulary {
     }
     return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
   }
+
+  // Unit tests exercise the private lookupBatch helpers directly.
+  FRIEND_TEST(Vocabulary, SplitVocabularyPartitionUnderlyingIndicesByMarker);
+  FRIEND_TEST(Vocabulary, SplitVocabularyPartitionResultPositionsByMarker);
+  FRIEND_TEST(Vocabulary, SplitVocabularyLookupBatchesByMarkerSingleAndMixed);
+  FRIEND_TEST(Vocabulary, SplitVocabularyMergeMarkerBatchesInInputOrder);
 
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index
