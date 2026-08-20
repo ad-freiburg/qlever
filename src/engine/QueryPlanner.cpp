@@ -43,7 +43,6 @@
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
 #include "engine/PermutationSelector.h"
-#include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
 #include "engine/Service.h"
@@ -69,6 +68,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
 #include "rdfTypes/Variable.h"
+#include "util/Allocator.h"
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 
@@ -519,8 +519,11 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const p::BasicGraphPattern* pattern) const {
   TripleGraph tg;
   size_t numNodesInTripleGraph = 0;
-  ad_utility::HashMap<Variable, std::string> optTermForCvar;
-  ad_utility::HashMap<Variable, vector<std::string>> potentialTermsForCvar;
+  ad_utility::HashMapWithMemoryLimit<Variable, std::string> optTermForCvar(
+      _qec->getAllocator().as<std::pair<const Variable, std::string>>());
+  ad_utility::HashMapWithMemoryLimit<Variable, std::vector<std::string>>
+      potentialTermsForCvar(
+          _qec->getAllocator().as<std::pair<const Variable, std::vector<std::string>>>());
   vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
@@ -1228,7 +1231,10 @@ std::vector<SubtreePlan> QueryPlanner::merge(
   // esp. with an entire relation but also with something like is-a Person
   // If that is the case look at the size estimate for the other side,
   // if that is rather small, replace the join and scan by a combination.
-  ad_utility::HashMap<std::string, vector<SubtreePlan>> candidates;
+  ad_utility::HashMapWithMemoryLimit<std::string, std::vector<SubtreePlan>>
+      candidates(
+          _qec->getAllocator()
+              .as<std::pair<const std::string, std::vector<SubtreePlan>>>());
   // Find all pairs between a and b that are connected by an edge.
   AD_LOG_TRACE << "Considering joins that merge " << a.size() << " and "
                << b.size() << " plans...\n";
@@ -1526,8 +1532,10 @@ void QueryPlanner::applyTextLimitsIfPossible(vector<SubtreePlan>& row,
 // _____________________________________________________________________________
 size_t QueryPlanner::findUniqueNodeIds(
     const std::vector<SubtreePlan>& connectedComponent,
-    bool allowReplacementPlans) {
-  ad_utility::HashSet<uint64_t> uniqueNodeIds;
+    bool allowReplacementPlans,
+    const qlever::Allocator<Id>& alloc) {
+  ad_utility::HashSetWithMemoryLimit<uint64_t> uniqueNodeIds(
+      alloc.as<uint64_t>());
   auto nodeIds = connectedComponent |
                  ql::views::transform(&SubtreePlan::_idsOfIncludedNodes);
   // Check that all the `_idsOfIncludedNodes` are one-hot encodings of a single
@@ -1553,7 +1561,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   // (there might be duplicates because we already have multiple candidates
   // for each index scan with different permutations.
   dpTab.push_back(std::move(connectedComponent));
-  size_t numSeeds = findUniqueNodeIds(dpTab.back(), false);
+  size_t numSeeds = findUniqueNodeIds(dpTab.back(), false, _qec->getAllocator());
 
   for (size_t k = 2; k <= numSeeds; ++k) {
     AD_LOG_TRACE << "Producing plans that unite " << k << " triples."
@@ -1675,7 +1683,7 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
                                                         filters);
   applyTextLimitsIfPossible(connectedComponent, textLimits, true);
   const size_t numSeeds =
-      findUniqueNodeIds(connectedComponent, !replacementPlans.empty());
+      findUniqueNodeIds(connectedComponent, !replacementPlans.empty(), _qec->getAllocator());
   if (numSeeds <= 1) {
     // Only 0 or 1 nodes in the input, nothing to plan.
     return connectedComponent;
@@ -1791,7 +1799,10 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
   auto componentIndices = QueryGraph::computeConnectedComponents(
       initialPlans, filtersAndOptSubstitutes);
 
-  ad_utility::HashMap<size_t, std::vector<SubtreePlan>> components;
+  ad_utility::HashMapWithMemoryLimit<size_t, std::vector<SubtreePlan>>
+      components(
+          _qec->getAllocator()
+              .as<std::pair<const size_t, std::vector<SubtreePlan>>>());
   for (size_t i = 0; i < componentIndices.size(); ++i) {
     components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
   }
@@ -2627,7 +2638,8 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
   // Check if the user allows query rewriting.
   // TODO<ullingerc> Do we want to forcefully disable query rewriting if delta
   // triples are present in the current index to prevent diverging results?
-  if (_qec->disableMaterializedViewRewriting()) {
+  if (!getRuntimeParameter<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
     return plans;
   }
 
