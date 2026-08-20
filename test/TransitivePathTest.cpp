@@ -980,12 +980,6 @@ TEST_P(TransitivePathTest, amountOfPayloadColumnsExceedsStaticLimit) {
 }
 
 // _____________________________________________________________________________
-TEST_P(TransitivePathTest, amountOfPayloadColumnsExceedsStaticLimitBothBound) {
-  // This tests the specific behaviour of the code when the amount of payload
-  // columns from both sides totals beyond
-  // `DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE`.
-}
-// _____________________________________________________________________________
 TEST_P(TransitivePathTest, startNodesWithNoMatchesRightBound) {
   auto sub = makeIdTableFromVector({
       {1, 2},
