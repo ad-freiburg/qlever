@@ -763,8 +763,11 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
 // _____________________________________________________________________________
 std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
     QueryExecutionContext* qec, const VariableToColumnMap& varToCol,
-    const ColumnMapping& colMap) const {
-  TripleComponent s{dummySubject()};
+    const ColumnMapping& colMap,
+    const std::optional<TripleComponent>& fixedFirstColumn) const {
+  // Without a fixed value, the first column is bound to a variable from
+  // `varToCol` below.
+  TripleComponent s{fixedFirstColumn.value_or(TripleComponent{dummySubject()})};
   TripleComponent p{dummyPredicate()};
   TripleComponent o{dummyObject()};
   AdditionalScanColumns additionalCols;
@@ -777,6 +780,10 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
                          "materialized view.");
     auto col = it->second;
     if (col == 0) {
+      AD_CORRECTNESS_CHECK(
+          !fixedFirstColumn.has_value(),
+          "The first column of a materialized view cannot be both fixed to a "
+          "value and bound to a variable of the query.");
       s = v;
     } else if (col == 1) {
       p = v;
@@ -842,9 +849,44 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
   auto info =
       loadedViews_.rlock()->queryPatternCache_.lookupByCacheKey(cacheKey);
   if (info == nullptr) {
-    return nullptr;
+    // Cache keys for a view with a fixed first column depend on the query and
+    // are therefore stored per query, see
+    // `registerCacheKeysWithFixedFirstColumn`.
+    const auto& perQuery = qec->viewCacheKeysWithFixedFirstColumn();
+    if (perQuery == nullptr) {
+      return nullptr;
+    }
+    auto it = perQuery->keys_.find(cacheKey);
+    if (it == perQuery->keys_.end()) {
+      return nullptr;
+    }
+    info = it->second;
   }
-  return info->view_->makeIndexScan(qec, varToCol, info->colMapping_);
+  return info->view_->makeIndexScan(qec, varToCol, info->colMapping_,
+                                    info->fixedFirstColumn_);
+}
+
+// _____________________________________________________________________________
+void MaterializedViewsManager::registerCacheKeysWithFixedFirstColumn(
+    QueryExecutionContext* qec,
+    const parsedQuery::BasicGraphPattern& triples) const {
+  if (qec == nullptr || triples._triples.empty() ||
+      qec->disableMaterializedViewRewriting() || qec->disableCaching() ||
+      !hasLoadedViews()) {
+    return;
+  }
+  auto& perQuery = qec->viewCacheKeysWithFixedFirstColumn();
+  if (perQuery == nullptr) {
+    perQuery = std::make_shared<
+        materializedViewsQueryAnalysis::ViewCacheKeysWithFixedFirstColumn>();
+  }
+  // Unlike a full replan per candidate value, substituting into the views'
+  // precomputed cache-key templates is cheap (just string replacement), so it
+  // can safely happen right here under the read lock, without the
+  // snapshot-then-unlock dance that planning would otherwise require (see
+  // `MaterializedViewsManager::makeIndexScan`).
+  loadedViews_.rlock()->queryPatternCache_.addCacheKeysWithFixedFirstColumn(
+      triples, *perQuery);
 }
 
 // _____________________________________________________________________________
@@ -856,8 +898,20 @@ std::optional<size_t> MaterializedView::lookupBindTargetColumn(
 }
 
 // _____________________________________________________________________________
+std::optional<Variable> MaterializedView::firstColumnVariable() const {
+  for (const auto& [var, col] : varToColMap_) {
+    if (col.columnIndex_ == 0) {
+      return var;
+    }
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
 MaterializedView::CacheKeyWithAndWithoutInvariantPatterns
-MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
+MaterializedView::computeCacheKey(
+    QueryExecutionContext* qecOriginal,
+    const std::optional<TripleComponent>& fixedFirstColumn) const {
   if (qecOriginal == nullptr || !originalQuery_.has_value()) {
     return {std::nullopt, std::nullopt};
   }
@@ -873,6 +927,18 @@ MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
   auto parsedQuery =
       SparqlParser::parseQuery(&encodedIriManager, originalQuery_.value());
   const auto& viewCols = variableToColumnMap();
+
+  // Restrict the view's own query to the given value of the first column. The
+  // planned tree then has no column for the first column, so `mapping` below
+  // has no entry that maps to it and the scan on the view fixes it instead.
+  if (fixedFirstColumn.has_value()) {
+    auto variable = firstColumnVariable();
+    if (!variable.has_value() ||
+        !materializedViewsQueryAnalysis::substituteFirstColumn(
+            parsedQuery, variable.value(), fixedFirstColumn.value())) {
+      return {std::nullopt, std::nullopt};
+    }
+  }
 
   auto planAndComputeMapping =
       [&](ParsedQuery parsed) -> std::optional<CacheKeyAndColumnMapping> {

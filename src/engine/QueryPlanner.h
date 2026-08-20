@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYPLANNER_H
 #define QLEVER_SRC_ENGINE_QUERYPLANNER_H
 
+#include <absl/functional/function_ref.h>
+
 #include <boost/optional.hpp>
 #include <vector>
 
@@ -580,10 +582,12 @@ class QueryPlanner {
    * Cycles have to be avoided (by previously removing a triple and using
    * it as a filter later on).
    */
+  // `makeReplacementPlans` is only called for connected components that are
+  // planned greedily, see the implementation.
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, std::vector<SparqlFilter> fs,
       TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children,
-      ReplacementPlans replacementPlans);
+      absl::FunctionRef<ReplacementPlans()> makeReplacementPlans);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
@@ -737,11 +741,10 @@ class QueryPlanner {
 
   // Helper for `fillDpTab` that extracts a subset of possible
   // `ReplacementPlans` that is applicable to a connected component given by the
-  // covered node ids of the component.
-  //
-  // If the greedy query planning mode is active, this function guarantees that
-  // the returned replacement plans are disjunctive with regard to their covered
-  // node ids.
+  // covered node ids of the component. The returned replacement plans are
+  // guaranteed to be disjunctive with regard to their covered node ids, as
+  // required by the greedy query planner, which is the only planner that uses
+  // replacement plans (see `fillDpTab`).
   //
   // The function returns the applicable replacement plans and a boolean for
   // quickly checking whether any were found.
@@ -749,8 +752,7 @@ class QueryPlanner {
   // NOTE: This function is destructive w.r.t. `allReplacementPlans`: the used
   // replacement plans are moved out.
   static std::pair<ReplacementPlans, bool> findApplicableReplacementPlans(
-      ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds,
-      bool useGreedyPlanning);
+      ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds);
 
   // Helper for `fillDpTab` that inserts replacement plans into a connected
   // component for greedy query planning. The `IndexScan` plans for triples

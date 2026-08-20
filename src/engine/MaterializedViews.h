@@ -263,16 +263,33 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
 
+  // The variable that the view's query binds to the view's first column, that
+  // is the column the view is sorted on. `nullopt` only for a view without
+  // columns.
+  std::optional<Variable> firstColumnVariable() const;
+
   using ColumnMapping = ad_utility::HashMap<size_t, size_t>;
-  std::shared_ptr<IndexScan> makeIndexScan(QueryExecutionContext* qec,
-                                           const VariableToColumnMap& varToCol,
-                                           const ColumnMapping& colMap) const;
+  // If `fixedFirstColumn` is set, the view's first column does not correspond
+  // to a variable of the matched query but is restricted to that fixed value
+  // (see `materializedViewsQueryAnalysis::ByCacheKeyInfo`).
+  std::shared_ptr<IndexScan> makeIndexScan(
+      QueryExecutionContext* qec, const VariableToColumnMap& varToCol,
+      const ColumnMapping& colMap,
+      const std::optional<TripleComponent>& fixedFirstColumn =
+          std::nullopt) const;
 
   // Compute the cache key corresponding to the query of this materialized view.
   // Requires a `QueryExecutionContext` to access the index, and the
   // materialized view must know its original query. If `qec` is `nullptr` or
   // the view does not know its original query, both members of the returned
   // struct are `nullopt` (currently used by tests).
+  //
+  // If `fixedFirstColumn` is set, the cache key is not computed for the view's
+  // query itself, but for that query with the view's first column restricted to
+  // the given fixed value (see
+  // `materializedViewsQueryAnalysis::substituteFirstColumn`, which also lists
+  // the cases in which this is not supported, and where both members of the
+  // result are `nullopt` as well).
   struct CacheKeyAndColumnMapping {
     std::string cacheKey_;
     ColumnMapping columnMapping_;
@@ -282,7 +299,9 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
     std::optional<CacheKeyAndColumnMapping> withoutInvariants_;
   };
   CacheKeyWithAndWithoutInvariantPatterns computeCacheKey(
-      QueryExecutionContext* qec) const;
+      QueryExecutionContext* qec,
+      const std::optional<TripleComponent>& fixedFirstColumn =
+          std::nullopt) const;
 
   // If the materialized view contains a top-level `BIND` statement where the
   // expression matches the given cache key, return the column index of the
@@ -452,6 +471,18 @@ class MaterializedViewsManager {
   std::shared_ptr<IndexScan> makeIndexScan(
       QueryExecutionContext* qec, const std::string& cacheKey,
       const VariableToColumnMap& varToCol) const;
+
+  // Compute the cache keys of the loaded views whose first column is fixed to a
+  // value occurring in `triples` and store them in `qec` for the rest of this
+  // query, so that the cache-key based rewriting in
+  // `QueryExecutionTree::readFromMaterializedView` can match them. Unlike the
+  // other cache keys of a view, these depend on the query and can therefore not
+  // be computed when the view is loaded. Must be called before any
+  // `QueryExecutionTree` for `triples` is built, see
+  // `materializedViewsQueryAnalysis::addCacheKeysWithFixedFirstColumn`.
+  void registerCacheKeysWithFixedFirstColumn(
+      QueryExecutionContext* qec,
+      const parsedQuery::BasicGraphPattern& triples) const;
 
   // Write a `MaterializedView` given a valid `name` (consisting only of
   // alphanumerics and hyphens) and a `plannedQuery` to be executed. The query's
