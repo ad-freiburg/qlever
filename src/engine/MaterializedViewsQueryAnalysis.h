@@ -51,15 +51,6 @@ struct ViewPattern {
   ViewPtr view_;
 };
 
-// One candidate assignment while searching for an embedding of a
-// `ViewPattern` into a query. `assignment_` maps view variables to the
-// query-side node they are matched to; `coveredTriples_` are the query triple
-// indices used so far.
-struct PatternMatchState {
-  ad_utility::HashMap<Variable, TripleComponent> assignment_;
-  std::vector<size_t> coveredTriples_;
-};
-
 // Query-side triples with a simple IRI predicate, grouped by that predicate,
 // for fast candidate lookup per pattern edge. Keyed by `string_view` into the
 // query triple's own predicate string (valid only for the lifetime of the
