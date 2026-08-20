@@ -341,8 +341,10 @@ TYPED_TEST(LogTestTyped, ThreadSafety) {
   for (auto line : absl::StrSplit(ss.str(), '\n', absl::SkipEmpty())) {
     auto match = ctre::match<kPattern>(line);
     ASSERT_TRUE(match) << "Line does not match expected log format: " << line;
-    auto pair = std::pair{match.get<"thread">().to_number<size_t>(),
-                          match.get<"msg">().to_number<size_t>()};
+    // Note: `std::make_pair` instead of the deduced `std::pair{...}`, because
+    // GCC 11 fails to deduce the template arguments inside a typed test.
+    auto pair = std::make_pair(match.get<"thread">().to_number<size_t>(),
+                               match.get<"msg">().to_number<size_t>());
     ASSERT_TRUE(expected.contains(pair))
         << "Unexpected or duplicate: thread=" << pair.first
         << " msg=" << pair.second;
