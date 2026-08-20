@@ -596,6 +596,18 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // processing had been allowed without access token).
   bool accessTokenOk = checkAccessToken(parsedHttpRequest.accessToken_);
 
+  // Check if the current command is selected in the parameters from the
+  // `parsedHttpRequest.parameters_`. If so, log this information via
+  // `dispatchLog()` and return true. Return false otherwise.
+  auto commandIs = [accessTokenOk,
+                    &checkParameter](std::string_view cmd) -> bool {
+    if (checkParameter("cmd", std::string{cmd})) {
+      dispatchLog(cmd, accessTokenOk);
+      return true;
+    }
+    return false;
+  };
+
   // We call `createJsonResponse` always with the same `request` parameter.
   auto jsonResponse = [&request](const json& j) {
     return createJsonResponse(j, request);
@@ -616,68 +628,60 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   //
   // Some parameters require that "access-token" is set correctly. If not, that
   // parameter is ignored.
-  if (auto cmd = checkParameter("cmd", "stats")) {
-    dispatchLog(*cmd, accessTokenOk);
+  if (commandIs("stats")) {
     response = jsonResponse(composeIndexStats(index));
-  } else if (auto cmd = checkParameter("cmd", "cache-stats")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("cache-stats")) {
     response = jsonResponse(cacheStats());
-  } else if (auto cmd = checkParameter("cmd", "clear-cache")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("clear-cache")) {
     cache().clearUnpinnedOnly();
     response = jsonResponse(cacheStats());
-  } else if (auto cmd = checkParameter("cmd", "clear-cache-complete")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("clear-cache-complete")) {
     cache().clearAll();
     response = jsonResponse(cacheStats());
-  } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("clear-named-cache")) {
     namedResultCache().clear();
     response = jsonResponse(cacheStats());
-  } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("clear-delta-triples")) {
     auto countAfterClear = co_await clearDeltaTriples();
     response = jsonResponse(json(countAfterClear));
-  } else if (auto cmd = checkParameter("cmd", "vacuum-delta-triples")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("vacuum-delta-triples")) {
     auto vacuumStats = co_await processVacuumDeltaTriples(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
+    // Return of empty optional indicates that timeout has been fired in
+    // `verifyUserSubmittedQueryTimeout()`. This means that an error response
+    // has been already sent out to the client. We can stop here.
     if (!vacuumStats.has_value()) {
       co_return;
     }
     response = jsonResponse(vacuumStats.value());
-  } else if (auto cmd = checkParameter("cmd", "get-settings")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("get-settings")) {
     response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
-  } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("get-index-id")) {
     response =
         createOkResponse(index.getIndexId(), request, MediaType::textPlain);
-  } else if (auto cmd = checkParameter("cmd", "dump-active-queries")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("dump-active-queries")) {
     auto json = nlohmann::json::object();
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
       json[nlohmann::json(key)] = std::move(value);
     }
     response = jsonResponse(json);
-  } else if (auto cmd = checkParameter("cmd", "rebuild-index")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("rebuild-index")) {
     response = co_await processRebuildIndex(parameters, request);
-  } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("write-materialized-view")) {
     auto materializedViewStats = co_await processWriteMaterializedView(
         parameters, parsedHttpRequest.operation_, accessTokenOk, requestTimer,
         request, send);
+    // Return of empty optional indicates that timeout has been fired in
+    // `verifyUserSubmittedQueryTimeout()`. This means that an error response
+    // has been already sent out to the client. We can stop here.
     if (!materializedViewStats.has_value()) {
       co_return;
     }
     response = jsonResponse(materializedViewStats.value());
-  } else if (auto cmd = checkParameter("cmd", "load-materialized-view")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("load-materialized-view")) {
     response = jsonResponse(processLoadMaterializedView(
         parameters, indexAndViews, parsedHttpRequest.operation_));
-  } else if (auto cmd = checkParameter("cmd", "delete-materialized-view")) {
-    dispatchLog(*cmd, accessTokenOk);
+  } else if (commandIs("delete-materialized-view")) {
     response = jsonResponse(processDeleteMaterializedView(
         parameters, parsedHttpRequest.operation_));
   }
