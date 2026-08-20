@@ -162,15 +162,15 @@ class SplitVocabulary {
       if (underlyingVocabIndicesByMarker[marker].empty()) {
         continue;
       }
-      out.lookupResultByMarker[marker] = std::visit(
+      out.lookupResultByMarker_[marker] = std::visit(
           [&](const auto& vocab) {
             return vocab.lookupBatch(underlyingVocabIndicesByMarker[marker]);
           },
           underlying_[marker]);
-      AD_CORRECTNESS_CHECK(out.lookupResultByMarker[marker]->size() ==
+      AD_CORRECTNESS_CHECK(out.lookupResultByMarker_[marker]->size() ==
                            underlyingVocabIndicesByMarker[marker].size());
-      ++out.numNonemptyMarkers;
-      out.lastNonemptyMarker = marker;
+      ++out.numNonemptyMarkers_;
+      out.lastNonemptyMarker_ = marker;
     }
     return out;
   }
