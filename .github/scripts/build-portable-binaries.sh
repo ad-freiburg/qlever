@@ -60,10 +60,12 @@ cmake -B "$BUILD_DIR" -S "$REPO_DIR" \
 
 cmake --build "$BUILD_DIR" --target qlever-index qlever-server -- -j "$NUM_THREADS"
 
-# Check that nothing but glibc is linked dynamically.
+# Check that nothing but glibc is linked dynamically (libpthread, libdl,
+# librt, and libresolv are part of glibc and may appear as separate
+# libraries, depending on the glibc version).
 for binary in qlever-index qlever-server; do
     if ldd "$BUILD_DIR/$binary" \
-            | grep -vE 'linux-vdso|ld-linux|libc\.so|libm\.so'; then
+            | grep -vE 'linux-vdso|ld-linux|lib(c|m|pthread|dl|rt|resolv)\.so'; then
         echo "ERROR: $binary has dynamic dependencies beyond glibc (see above)"
         exit 1
     fi
@@ -89,8 +91,8 @@ printf '<a> <p> "\xc3\xa4pfel" .\n<b> <p> "zebra" .\n<c> <p> "Apfel" .\n' > smok
 "$DIST_DIR/qlever-server" -i smoke -p "$SMOKE_PORT" &
 SERVER_PID=$!
 trap 'kill $SERVER_PID 2> /dev/null || true' EXIT
-sleep 3
-RESULT=$(curl -sf "http://localhost:$SMOKE_PORT/" \
+RESULT=$(curl -sf --retry 30 --retry-connrefused --retry-delay 1 \
+    "http://localhost:$SMOKE_PORT/" \
     --data-urlencode 'query=SELECT ?s ?o WHERE { ?s <p> ?o } ORDER BY ?o' \
     -H 'Accept: text/csv' | tr -d '\r')
 EXPECTED='s,o
