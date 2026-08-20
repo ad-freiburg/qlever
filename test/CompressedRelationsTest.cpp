@@ -1100,6 +1100,182 @@ TEST(CompressedRelationReader, getDistinctCol0Ids) {
 }
 
 // _____________________________________________________________________________
+TEST(CompressedRelationReader, getDistinctCol0IdsWithGraphFilter) {
+  // Each of the relations consists of a single triple, and the blocks are so
+  // small that each of these triples ends up in its own block. Relation 1 is in
+  // the graph 10, relation 2 in the graph 11, and relation 3 in the graph 12.
+  std::vector<RelationInput> inputs{
+      {1, {{0, 0, 10}}}, {2, {{0, 0, 11}}}, {3, {{0, 0, 12}}}};
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] =
+      writeAndOpenRelations(inputs, filename, 8_B);
+  LocatedTriplesPerBlock locatedTriples{};
+  locatedTriples.setOriginalMetadata(blocks);
+  locatedTriples.updateAugmentedMetadata();
+  auto makeScanSpecAndBlocks =
+      [&blocks](ScanSpecification::GraphFilter filter) {
+        return CompressedRelationReader::ScanSpecAndBlocks{
+            ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
+                              LocalVocab{}, std::move(filter)},
+            getBlockMetadataRangesfromVec(blocks)};
+      };
+
+  // The block of relation 2 only contains triples from a graph that the filter
+  // doesn't allow, so it is skipped without being read.
+  {
+    auto scanSpecAndBlocks = makeScanSpecAndBlocks(
+        ScanSpecification::GraphFilter::Whitelist({V(10), V(12), V(13)}));
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, false, std::nullopt, locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{1}, {3}}, result);
+    // The graphs of all the blocks are known from their metadata, so no block
+    // has to be read.
+    EXPECT_EQ(numBlocksRead, 0);
+  }
+
+  // The same, but with the graph column and a blacklist.
+  {
+    auto scanSpecAndBlocks =
+        makeScanSpecAndBlocks(ScanSpecification::GraphFilter::Blacklist(V(11)));
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, true, std::nullopt, locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{1, 10}, {3, 12}}, result);
+    EXPECT_EQ(numBlocksRead, 0);
+  }
+
+  // A filter that allows none of the graphs yields an empty result.
+  {
+    auto scanSpecAndBlocks = makeScanSpecAndBlocks(
+        ScanSpecification::GraphFilter::Whitelist({V(13)}));
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, false, std::nullopt, locatedTriples);
+    EXPECT_THAT(result, ::testing::IsEmpty());
+    EXPECT_EQ(numBlocksRead, 0);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, getDistinctCol0IdsWithUnknownGraphsInBlock) {
+  // A single relation with more distinct graphs than the block metadata can
+  // store (`MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`), such that the graphs of
+  // its block are unknown. The graphs are descending in the order in which they
+  // are stored, and the last one is a duplicate.
+  constexpr size_t numGraphs = MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA + 5;
+  constexpr int firstGraph = 100;
+  RelationInput relation{1, {}};
+  for (size_t i = 0; i < numGraphs; ++i) {
+    relation.col1And2_.push_back(
+        {static_cast<int>(i), 0, firstGraph + static_cast<int>(numGraphs - i)});
+  }
+  relation.col1And2_.push_back(
+      {static_cast<int>(numGraphs), 0, firstGraph + 1});
+  std::vector<RelationInput> inputs{std::move(relation)};
+
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  // All the triples fit into a single block.
+  auto [blocks, metaData, reader] =
+      writeAndOpenRelations(inputs, filename, 1_kB);
+  ASSERT_EQ(blocks.size(), 1);
+  ASSERT_FALSE(blocks.at(0).graphInfo_.has_value());
+  LocatedTriplesPerBlock locatedTriples{};
+  locatedTriples.setOriginalMetadata(blocks);
+  locatedTriples.updateAugmentedMetadata();
+  auto makeScanSpecAndBlocks =
+      [&blocks](ScanSpecification::GraphFilter filter) {
+        return CompressedRelationReader::ScanSpecAndBlocks{
+            ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
+                              LocalVocab{}, std::move(filter)},
+            getBlockMetadataRangesfromVec(blocks)};
+      };
+
+  // Without a graph filter and without the graph column, the single `col0Id` is
+  // known from the metadata, so the block doesn't have to be read.
+  {
+    auto scanSpecAndBlocks =
+        makeScanSpecAndBlocks(ScanSpecification::GraphFilter::All());
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, false, std::nullopt, locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{1}}, result);
+    EXPECT_EQ(numBlocksRead, 0);
+  }
+
+  // With the graph column the block has to be read, and the graphs are sorted
+  // and deduplicated.
+  {
+    auto scanSpecAndBlocks =
+        makeScanSpecAndBlocks(ScanSpecification::GraphFilter::All());
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, true, std::nullopt, locatedTriples);
+    std::vector<RowInput> expected;
+    for (size_t i = 1; i <= numGraphs; ++i) {
+      expected.push_back({1, firstGraph + static_cast<int>(i)});
+    }
+    checkThatTablesAreEqual(expected, result);
+    EXPECT_EQ(numBlocksRead, 1);
+  }
+
+  // The graph filter cannot be evaluated on the metadata, so the block has to
+  // be read even without the graph column.
+  {
+    auto scanSpecAndBlocks = makeScanSpecAndBlocks(
+        ScanSpecification::GraphFilter::Whitelist({V(firstGraph + 1)}));
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, false, std::nullopt, locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{1}}, result);
+    EXPECT_EQ(numBlocksRead, 1);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, getDistinctCol0IdsYieldsSeveralChunks) {
+  // More `col0Id`s than fit into a single chunk of the result.
+  constexpr int numRelations = 100'001;
+  std::vector<RelationInput> inputs;
+  inputs.reserve(numRelations);
+  for (int i = 0; i < numRelations; ++i) {
+    inputs.push_back({i, {{0, 0}}});
+  }
+  addGraphColumnIfNecessary(inputs);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] =
+      writeAndOpenRelations(inputs, filename, 1_MB);
+  LocatedTriplesPerBlock locatedTriples{};
+  locatedTriples.setOriginalMetadata(blocks);
+  locatedTriples.updateAugmentedMetadata();
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(blocks)};
+
+  auto range = reader->getDistinctCol0Ids(
+      scanSpecAndBlocks, false, std::nullopt,
+      std::make_shared<ad_utility::CancellationHandle<>>(), locatedTriples);
+  size_t numTables = 0;
+  size_t numRows = 0;
+  for (const IdTable& table : range) {
+    ++numTables;
+    numRows += table.numRows();
+  }
+  EXPECT_EQ(numRows, numRelations);
+  EXPECT_GT(numTables, 1);
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, getDistinctCol0IdsOnlySupportsFullScans) {
+  std::vector<RelationInput> inputs{{1, {{0, 0}}}};
+  addGraphColumnIfNecessary(inputs);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] =
+      writeAndOpenRelations(inputs, filename, 64_B);
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
+      ScanSpecification{V(1), std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(blocks)};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      getDistinctCol0Ids(*reader, scanSpecAndBlocks, false, std::nullopt,
+                         emptyLocatedTriples),
+      ::testing::HasSubstr("only supports full scans"));
+}
+
+// _____________________________________________________________________________
 TEST(CompressedRelationReader, getResultSizeImpl) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
   auto index = ad_utility::testing::makeTestIndex("getResultSizeImpl", "");

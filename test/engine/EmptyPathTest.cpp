@@ -407,3 +407,201 @@ TEST(EmptyPath, deletedTriplesAreRespected) {
   EXPECT_THAT(computeResult(emptyPath).getColumn(0),
               ElementsAreArray(expected));
 }
+
+// _____________________________________________________________________________
+TEST(EmptyPath, objectsThatPrecedeAllSubjectsAreMergedCorrectly) {
+  // `<a>` only occurs as an object and is smaller than all the subjects, so the
+  // objects are exhausted before the subjects. The opposite order is covered by
+  // the tests that use the knowledge graph `kg` above.
+  auto* qec = makeQec("<b> <p> <a> . <c> <p> <a> .");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt};
+
+  std::vector<Id> expected{getId("<a>"), getId("<b>"), getId("<c>")};
+  ql::ranges::sort(expected);
+  EXPECT_THAT(computeResult(emptyPath).getColumn(0),
+              ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, estimatesAndMultiplicities) {
+  auto* qec = makeQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  const auto& index = qec->getIndex();
+  {
+    EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt};
+    // Without a child we have to read both permutations completely, and the
+    // size is the (pessimistic) upper bound for the number of distinct
+    // entities.
+    EXPECT_EQ(
+        emptyPath.getSizeEstimate(),
+        index.numDistinctSubjects().normal + index.numDistinctObjects().normal);
+    EXPECT_EQ(emptyPath.getCostEstimate(), 2 * index.numTriples().normal);
+    EXPECT_FLOAT_EQ(emptyPath.getMultiplicity(0), 1.0f);
+  }
+  {
+    // The child has three columns, the second of which is the join column, so
+    // the result has four columns (entity, graph, and the two payload columns).
+    auto emptyPath = makeExistenceCheck(
+        qec, Variable{"?g"},
+        makeIdTableFromVector({{getId("<a>"), getId("<b>"), getId("<c>")}}),
+        {Variable{"?y"}, Variable{"?x"}, Variable{"?z"}}, 1);
+    ASSERT_EQ(emptyPath.getResultWidth(), 4);
+    // The existence check can only remove rows, so the child's estimate is
+    // used, and the cost is dominated by the cost of the child.
+    EXPECT_EQ(emptyPath.getSizeEstimate(), 1);
+    EXPECT_EQ(emptyPath.getCostEstimate(), 2);
+    // `ValuesForTesting` reports a multiplicity of `42 * (column + 1)`.
+    EXPECT_FLOAT_EQ(emptyPath.getMultiplicity(0), 2 * 42.0f);
+    // Nothing is known about the graph column.
+    EXPECT_FLOAT_EQ(emptyPath.getMultiplicity(1), 1.0f);
+    EXPECT_FLOAT_EQ(emptyPath.getMultiplicity(2), 1 * 42.0f);
+    EXPECT_FLOAT_EQ(emptyPath.getMultiplicity(3), 3 * 42.0f);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, theGraphColumnAlsoOriginatesFromTheKnowledgeGraph) {
+  auto* qec = makeQec(nquads, true);
+  EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), Variable{"?g"}};
+  EXPECT_TRUE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?x"}));
+  EXPECT_TRUE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, fullyMaterializedChildrenAreSupported) {
+  auto* qec = makeQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{getId("<a>")}, {getId("<p>")}}),
+      Vars{Variable{"?x"}}, false, std::vector<ColumnIndex>{}, LocalVocab{},
+      std::nullopt, true);
+  EmptyPath emptyPath{qec,          Variable{"?x"},   Graphs::All(),
+                      std::nullopt, std::move(child), 0};
+
+  EXPECT_THAT(computeResult(emptyPath).getColumn(0),
+              ElementsAreArray({getId("<a>")}));
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, lazyChildrenWithMultipleTablesAreSupported) {
+  auto* qec = makeQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  std::vector<IdTable> tables;
+  tables.push_back(makeIdTableFromVector({{getId("<a>")}, {getId("<p>")}}));
+  tables.push_back(makeIdTableFromVector({{getId("<z>")}}));
+  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(tables), Vars{Variable{"?x"}});
+  EmptyPath emptyPath{qec,          Variable{"?x"},   Graphs::All(),
+                      std::nullopt, std::move(child), 0};
+
+  EXPECT_THAT(computeResult(emptyPath).getColumn(0),
+              ElementsAreArray({getId("<a>"), getId("<z>")}));
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, theJoinColumnMustBeInsideTheChild) {
+  auto* qec = makeQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{getId("<a>")}}), Vars{Variable{"?x"}});
+  EXPECT_THROW((EmptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
+                          std::move(child), 1}),
+               ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, theGraphColumnOfTheChildMustNotBeTheJoinColumn) {
+  auto* qec = makeQec(nquads, true);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{getId("<a>")}}), Vars{Variable{"?g"}});
+  EXPECT_THROW((EmptyPath{qec, Variable{"?x"}, Graphs::All(), Variable{"?g"},
+                          std::move(child), 0}),
+               ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, theResultOfTheExistenceCheckIsYieldedInChunks) {
+  auto* qec = makeQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  // A little more than the chunk size of 100'000 rows that match `<a>`,
+  // followed by enough UNDEF rows to also fill a chunk with the entities of the
+  // full empty path (which has four entities).
+  constexpr size_t numDefined = 100'001;
+  constexpr size_t numUndefined = 25'001;
+  IdTable input{1, qec->getAllocator()};
+  input.resize(numDefined + numUndefined);
+  ql::ranges::fill(input.getColumn(0).subspan(0, numDefined), getId("<a>"));
+  ql::ranges::fill(input.getColumn(0).subspan(numDefined), Id::makeUndefined());
+
+  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input), Vars{Variable{"?x"}});
+  EmptyPath emptyPath{qec,          Variable{"?x"},   Graphs::All(),
+                      std::nullopt, std::move(child), 0};
+
+  auto result = emptyPath.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+  size_t numTables = 0;
+  size_t numRows = 0;
+  for (const auto& [table, localVocab] : result.idTables()) {
+    ++numTables;
+    numRows += table.numRows();
+  }
+  EXPECT_EQ(numRows, numDefined + 4 * numUndefined);
+  EXPECT_GT(numTables, 2);
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, allEntitiesAreYieldedInChunks) {
+  // More distinct entities than the chunk size of 100'000 rows, such that the
+  // result is yielded in several chunks. The entities are added via delta
+  // triples, because building an index with that many triples would be much too
+  // slow for a unit test. See `deletedTriplesAreRespected` above for the
+  // reasons behind the dedicated index and `QueryExecutionContext`.
+  auto index = std::make_shared<Index>(
+      ad_utility::testing::makeTestIndex(std::string{kg}));
+  auto getId = ad_utility::testing::makeGetId(*index);
+
+  constexpr size_t numEntities = 100'001;
+  Id predicate = getId("<p>");
+  Id graph = getId(std::string{DEFAULT_GRAPH_IRI});
+  std::vector<IdTriple<0>> triples;
+  triples.reserve(numEntities);
+  for (size_t i : ad_utility::integerRange(numEntities)) {
+    // Integers are valid subjects and objects for the index, and using them
+    // avoids having to add anything to the vocabulary.
+    Id entity = Id::makeFromInt(static_cast<int64_t>(i));
+    triples.push_back(IdTriple<0>{{entity, predicate, entity, graph}});
+  }
+  index->deltaTriplesManager().modify<void>(
+      [&triples](DeltaTriples& deltaTriples) {
+        deltaTriples.insertTriples(
+            std::make_shared<ad_utility::CancellationHandle<>>(),
+            std::move(triples));
+      });
+
+  QueryResultCache cache{};
+  NamedResultCache namedCache{};
+  auto materializedViews = std::make_shared<MaterializedViewsManager>();
+  QueryExecutionContext qec{index,
+                            &cache,
+                            ad_utility::testing::makeAllocator(
+                                ad_utility::MemorySize::megabytes(100)),
+                            SortPerformanceEstimator{},
+                            &namedCache,
+                            materializedViews};
+
+  EmptyPath emptyPath{&qec, Variable{"?x"}, Graphs::All(), std::nullopt};
+  auto result = emptyPath.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+  size_t numTables = 0;
+  size_t numRows = 0;
+  for (const auto& [table, localVocab] : result.idTables()) {
+    ++numTables;
+    numRows += table.numRows();
+  }
+  // The four entities of `kg` are added to the inserted ones.
+  EXPECT_EQ(numRows, numEntities + 4);
+  EXPECT_GT(numTables, 1);
+}
