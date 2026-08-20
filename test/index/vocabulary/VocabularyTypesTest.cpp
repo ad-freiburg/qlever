@@ -113,8 +113,8 @@ TEST(VocabBatchLookupData, ScatterBatchResultRetainsOwner) {
   scatterVocabBatchLookupResult(std::move(second), secondPositions,
                                 viewsInInputOrder, owners);
 
-  auto result = keepAliveVocabBatch(
-      std::move(owners), std::move(viewsInInputOrder));
+  auto result =
+      keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
   EXPECT_THAT(*result, ::testing::ElementsAre("beta", "gamma", "alpha"));
   EXPECT_EQ((*result)[2].data(), alphaData);
   EXPECT_EQ((*result)[1].data(), gammaData);
