@@ -127,11 +127,11 @@ class SplitVocabulary {
          }))...);
   }
 
-  // Per-marker buckets used by `lookupBatch`.
+  // Use per-marker buckets in `lookupBatch`.
   using IndicesByMarker = std::array<std::vector<size_t>, numberOfVocabs>;
   using ResultsByMarker = std::array<VocabBatchLookupResult, numberOfVocabs>;
 
-  // Split marked indices into underlying vocab-local index lists.
+  // Split marked indices into lists of underlying vocabulary-local indices.
   static IndicesByMarker partitionUnderlyingIndicesByMarker(
       ql::span<const size_t> indices) {
     IndicesByMarker underlyingVocabIndicesByMarker;

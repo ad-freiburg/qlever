@@ -164,8 +164,7 @@ TEST(VocabBatchLookupData, KeepAliveOutlivesSharedWordStorage) {
   std::vector<VocabBatchOwner> owners{stored};
   auto result = keepAliveVocabBatch(std::move(owners), std::move(views));
   stored.reset();
-  ASSERT_EQ(result->size(), 1u);
-  EXPECT_EQ((*result)[0], "ram-word");
+  EXPECT_THAT(*result, ::testing::ElementsAre("ram-word"));
   EXPECT_EQ((*result)[0].data(), storedData);
 }
 
