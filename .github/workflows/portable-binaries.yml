@@ -1,0 +1,70 @@
+name: Portable Linux binaries
+
+# Build portable binaries of `qlever-index` and `qlever-server` for Linux
+# x86_64 and arm64: statically linked except for glibc, so they run on any
+# distribution with a glibc at least as new as the build runner's (which is
+# why this uses the oldest supported Ubuntu LTS). See
+# `.github/scripts/build-portable-binaries.sh` for the details.
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libjemalloc-dev pipx
+          pipx install conan
+
+      # The default gcc 11 of Ubuntu 22.04 crashes with an internal compiler
+      # error on QLever's C++20 code (at least on arm64), so install gcc 13.
+      - name: Install gcc 13
+        uses: ./.github/workflows/install-compiler-ubuntu
+        with:
+          compiler: gcc
+          compiler-version: 13
+
+      - name: Cache conan packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.conan2
+          key: conan-portable-gcc13-${{ matrix.arch }}-${{ hashFiles('conanfile.txt') }}
+
+      - name: Build, check, and smoke-test the binaries
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: .github/scripts/build-portable-binaries.sh
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v5
+        with:
+          name: qlever-binaries-linux-${{ matrix.arch }}
+          path: build-portable/dist/
+          if-no-files-found: error
