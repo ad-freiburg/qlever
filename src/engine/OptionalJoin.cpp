@@ -695,3 +695,22 @@ OptionalJoin::makeTreeWithStrippedColumns(
       getExecutionContext(), std::move(left), std::move(right),
       keepJoinColumns);
 }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left (non-optional) child. Pushing
+  // it into the right (optional) child would be unsound: for left rows that
+  // don't find a match, `OptionalJoin` fills all of the right side's columns
+  // with `UNDEF`, including the pushed-down `BIND` column, instead of
+  // evaluating the `BIND` expression on the (genuinely) unbound input. This
+  // silently changes the result for any expression that isn't `UNDEF` itself
+  // on `UNDEF` input, e.g. `COALESCE`.
+  auto newLeft = QueryExecutionTree::makeTreeWithBindColumn(_left, bind);
+  if (!newLeft.has_value()) {
+    return std::nullopt;
+  }
+  return ad_utility::makeExecutionTree<OptionalJoin>(getExecutionContext(),
+                                                     std::move(newLeft.value()),
+                                                     _right, keepJoinColumns_);
+}

@@ -10,6 +10,7 @@
 #include "backports/span.h"
 #include "engine/CallFixedSize.h"
 #include "engine/SortedUnionImpl.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/ChunkedForLoop.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
@@ -387,6 +388,56 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
     subtree = subtree->clone();
   }
   return copy;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // We can't rewrite if the target variable is already covered.
+  if (getExternallyVisibleVariableColumns().contains(bind._target)) {
+    return std::nullopt;
+  }
+
+  // TODO<joka921/RobinTF> Implement this optimization for the `sortedUnion`
+  // case. `computeVariableToColumnMap` assigns column indices to variables in
+  // order of their physical column index within each subtree; inserting the
+  // `BIND`'s column into the middle of a child's columns can therefore shift
+  // the `UNION`-level column index of every variable that used to come after
+  // it, so `targetOrder_` can no longer be reused as-is and would first have
+  // to be translated to the new indices.
+  if (!targetOrder_.empty()) {
+    return std::nullopt;
+  }
+
+  // For a `UNION`, the `BIND` must be pushed into every child. A child that
+  // doesn't cover the expression variables can't compute the `BIND` at all,
+  // and leaving it unchanged would rely on `UNION`'s generic `UNDEF`-filling
+  // for the missing target column -- which just fills in `UNDEF` instead of
+  // evaluating the `BIND` expression, silently changing the result for any
+  // expression that isn't itself `UNDEF` on `UNDEF` input (e.g. `COALESCE`).
+  const auto& bindExpressionVars = bind._expression.containedVariables();
+
+  std::array<std::shared_ptr<QueryExecutionTree>, 2> results;
+  // This also guarantees equality of `std::tuple_size<T>::value`, because the
+  // size is a template parameter.
+  static_assert(std::is_same_v<decltype(_subtrees), decltype(results)>);
+
+  for (const auto& [i, subtree] : ::ranges::views::enumerate(_subtrees)) {
+    if (!subtree->getRootOperation()->coversVariables(bindExpressionVars)) {
+      return std::nullopt;
+    }
+    auto result = QueryExecutionTree::makeTreeWithBindColumn(subtree, bind);
+    if (!result.has_value()) {
+      return std::nullopt;
+    }
+    results[i] = std::move(result.value());
+  }
+
+  // All children have the `BIND` target column added. Make a new `UNION`
+  // object with the new children (there is no sort order to preserve here,
+  // see the `targetOrder_` check above).
+  return ad_utility::makeExecutionTree<Union>(
+      getExecutionContext(), std::move(results[0]), std::move(results[1]));
 }
 
 // _____________________________________________________________________________

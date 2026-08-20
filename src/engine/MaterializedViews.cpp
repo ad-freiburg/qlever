@@ -852,7 +852,7 @@ std::optional<size_t> MaterializedView::lookupBindTargetColumn(
     const std::string& bindCacheKey) const {
   auto opt = ad_utility::findOptional(coveredBinds_, bindCacheKey);
   // Convert `boost::optional<const size_t&>` to `std::optional<size_t>`.
-  return opt ? std::optional<size_t>{opt.value()} : std::optional<size_t>{};
+  return opt ? std::optional<size_t>{*opt} : std::nullopt;
 }
 
 // _____________________________________________________________________________

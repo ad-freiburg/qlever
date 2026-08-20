@@ -352,6 +352,45 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+QueryExecutionTree::makeTreeWithBindColumn(
+    const std::shared_ptr<QueryExecutionTree>& qet,
+    const parsedQuery::Bind& bind) {
+  const auto& rootOperation = qet->getRootOperation();
+  auto optTree = rootOperation->makeTreeWithBindColumn(bind);
+  if (!optTree.has_value()) {
+    return std::nullopt;
+  }
+
+  auto& resultTree = optTree.value();
+  AD_CORRECTNESS_CHECK(resultTree != nullptr);
+  AD_CORRECTNESS_CHECK(
+      resultTree->getRootOperation()->getLimitOffset().isUnconstrained(),
+      "`LIMIT` and `OFFSET` are applied by "
+      "`QueryExecutionTree::makeTreeWithBindColumn`, not by the individual "
+      "implementations.");
+  // We cannot use `applyLimitOffset` here, for the same reason as in
+  // `makeTreeWithStrippedColumns` above.
+  resultTree->setLimitOffsetDirectlyWithoutTriggeringHooks(
+      rootOperation->getLimitOffset());
+
+  // Restore the externally visible variables of the original root (e.g. a
+  // restricted `SELECT` clause of a subquery), which the rewrite otherwise
+  // silently drops because it constructs a fresh `Operation` for the
+  // rewritten subtree. Also expose the `BIND`'s target, which was computed at
+  // (or below) what used to be the root and would otherwise be hidden again.
+  std::vector<Variable> visibleVariables;
+  ql::ranges::copy(
+      rootOperation->getExternallyVisibleVariableColumns() | ql::views::keys,
+      std::back_inserter(visibleVariables));
+  visibleVariables.push_back(bind._target);
+  resultTree->getRootOperation()->setSelectedVariablesForSubquery(
+      visibleVariables);
+
+  return resultTree;
+}
+
+// _____________________________________________________________________________
 std::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
     const QueryExecutionTree& qetA, const QueryExecutionTree& qetB) {
   std::vector<std::array<ColumnIndex, 2>> jcs;

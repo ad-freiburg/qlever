@@ -90,6 +90,9 @@ class CartesianProductJoin : public Operation {
     return LimitOffsetHandling::FULL;
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+
   // The Cartesian product is distinct wrt `distinctIndices` iff every child is
   // distinct wrt the subset of `distinctIndices` that falls into its columns
   // (because the children have disjoint columns). A child without any such
