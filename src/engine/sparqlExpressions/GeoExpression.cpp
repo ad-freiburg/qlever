@@ -240,6 +240,27 @@ SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
 
 namespace {
 
+// Extract a `GeoOperand` (a variable or a fixed value) from an argument
+// expression of a geo relation or distance function. Returns `std::nullopt`
+// if `expr` is neither a variable nor one of the constant literal expression
+// types below (for example, an arbitrary non-constant function call).
+std::optional<GeoOperand> getVariableOrFixedGeoOperand(
+    const SparqlExpression& expr) {
+  if (auto var = expr.getVariableOrNullopt(); var.has_value()) {
+    return GeoOperand{std::move(var).value()};
+  }
+  if (const auto* id = dynamic_cast<const IdExpression*>(&expr)) {
+    return GeoOperand{TripleComponent{id->value()}};
+  }
+  if (const auto* lit = dynamic_cast<const StringLiteralExpression*>(&expr)) {
+    return GeoOperand{TripleComponent{lit->value()}};
+  }
+  if (const auto* iri = dynamic_cast<const IriExpression*>(&expr)) {
+    return GeoOperand{TripleComponent{iri->value()}};
+  }
+  return std::nullopt;
+}
+
 // Helper to check if `expr` is a `SparqlExpression` on the `geof:sf[Relation]`
 // function, given the templated `Relation`.
 template <SpatialJoinType::Enum Relation>
@@ -251,17 +272,18 @@ std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
     return std::nullopt;
   }
 
-  // Extract variables
-  auto p1 = geoRelExpr->children()[0]->getVariableOrNullopt();
+  // Extract variables or fixed values
+  auto p1 = getVariableOrFixedGeoOperand(*geoRelExpr->children()[0]);
   if (!p1.has_value()) {
     return std::nullopt;
   }
-  auto p2 = geoRelExpr->children()[1]->getVariableOrNullopt();
+  auto p2 = getVariableOrFixedGeoOperand(*geoRelExpr->children()[1]);
   if (!p2.has_value()) {
     return std::nullopt;
   }
 
-  return GeoFunctionCall{Relation, p1.value(), p2.value()};
+  return GeoFunctionCall{Relation, std::move(p1).value(),
+                         std::move(p2).value()};
 }
 
 }  // namespace
@@ -303,12 +325,12 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
     return std::nullopt;
   }
 
-  // Extract variables
-  auto p1 = de9imExpr->children()[0]->getVariableOrNullopt();
+  // Extract variables or fixed values
+  auto p1 = getVariableOrFixedGeoOperand(*de9imExpr->children()[0]);
   if (!p1.has_value()) {
     return std::nullopt;
   }
-  auto p2 = de9imExpr->children()[1]->getVariableOrNullopt();
+  auto p2 = getVariableOrFixedGeoOperand(*de9imExpr->children()[1]);
   if (!p2.has_value()) {
     return std::nullopt;
   }
@@ -325,15 +347,16 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
     return std::nullopt;
   }
 
-  return De9imRelationCall{{SpatialJoinType::DE9IM, p1.value(), p2.value()},
-                           pattern.value()};
+  return De9imRelationCall{
+      {SpatialJoinType::DE9IM, std::move(p1).value(), std::move(p2).value()},
+      pattern.value()};
 }
 
 // _____________________________________________________________________________
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr) {
   using namespace ad_utility::use_type_identity;
-  using DistArgs = std::tuple<Variable, Variable, UnitOfMeasurement>;
+  using DistArgs = std::tuple<GeoOperand, GeoOperand, UnitOfMeasurement>;
 
   // Helper lambda to extract a unit of measurement from a SparqlExpression (IRI
   // or literal with xsd:anyURI datatype)
@@ -366,12 +389,12 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
       return std::nullopt;
     }
 
-    // Extract variables
-    auto p1 = distExpr->children()[0]->getVariableOrNullopt();
+    // Extract variables or fixed values
+    auto p1 = getVariableOrFixedGeoOperand(*distExpr->children()[0]);
     if (!p1.has_value()) {
       return std::nullopt;
     }
-    auto p2 = distExpr->children()[1]->getVariableOrNullopt();
+    auto p2 = getVariableOrFixedGeoOperand(*distExpr->children()[1]);
     if (!p2.has_value()) {
       return std::nullopt;
     }

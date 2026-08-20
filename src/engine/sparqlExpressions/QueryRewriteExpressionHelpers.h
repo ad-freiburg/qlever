@@ -7,6 +7,7 @@
 
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
 #include "util/UnitOfMeasurement.h"
 
@@ -20,11 +21,17 @@
 
 namespace sparqlExpression {
 
+// An argument of a geo relation: either a variable (resolved via the query's
+// existing bindings) or a fixed value (a literal or IRI given directly in the
+// query, to be bound to a fresh internal variable via a one-row `VALUES`
+// clause -- see `QueryRewriteUtils.cpp`).
+using GeoOperand = std::variant<Variable, TripleComponent>;
+
 // Helper struct for `getGeoFunctionExpressionParameters`
 struct GeoFunctionCall {
   SpatialJoinType function_;
-  Variable left_;
-  Variable right_;
+  GeoOperand left_;
+  GeoOperand right_;
 };
 
 // Helper to extract spatial join parameters from a parsed `geof:` function
