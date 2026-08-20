@@ -254,6 +254,14 @@ DeltaTriplesCount Qlever::clearDeltaTriples() const {
 }
 
 // _____________________________________________________________________________
+nlohmann::json Qlever::vacuumDeltaTriples(
+    SharedCancellationHandle handle) const {
+  auto snapshot = indexAndViewsSnapshot();
+  return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
+      [handle](auto& deltaTriples) { return deltaTriples.vacuum(handle); });
+}
+
+// _____________________________________________________________________________
 void Qlever::eraseResultWithName(std::string name) {
   namedResultCache_.erase(name);
 }

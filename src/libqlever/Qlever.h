@@ -538,11 +538,19 @@ class Qlever {
   // `Qlever`, independent of the HTTP `Server` layer (covered today only via
   // `ServerTest.clearDeltaTriples`), because `Qlever` has no public API to
   // populate delta triples on its own -- SPARQL updates are only executed via
-  // `Server::processUpdateImpl`.
+  // `Server::processUpdateImpl`. The same applies to `vacuumDeltaTriples`
+  // below (covered today only via `ServerTest.vacuumDeltaTriples`).
   // TODO<damekt> Once `processUpdateImpl` (or equivalent) also moves to
-  // `Qlever`, add a `QleverTest.cpp` test that populates delta triples
-  // through it and calls `clearDeltaTriples` directly on `Qlever`.
+  // `Qlever`, add `QleverTest.cpp` tests that populate delta triples through
+  // it and call `clearDeltaTriples`/`vacuumDeltaTriples` directly on
+  // `Qlever`.
   DeltaTriplesCount clearDeltaTriples() const;
+
+  // Remove redundant delta triples of the index snapshot that is active when
+  // this is called, and return aggregated statistics about the removal.
+  // Cancellable via `handle`. Has the same concurrent-rebuild caveat, and the
+  // same test-coverage gap (see the NOTE/TODO above), as `clearDeltaTriples`.
+  nlohmann::json vacuumDeltaTriples(SharedCancellationHandle handle) const;
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.

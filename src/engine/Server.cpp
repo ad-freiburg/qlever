@@ -380,15 +380,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this, handle] {
-        // Snapshot on the update thread (see `clearDeltaTriples` above).
-        auto snapshot = indexAndViewsSnapshot();
-        return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
-            [handle](auto& deltaTriples) {
-              return deltaTriples.vacuum(handle);
-            });
-      },
-      handle);
+      [this, handle] { return qlever().vacuumDeltaTriples(handle); }, handle);
   co_return co_await std::move(coroutine);
 }
 
