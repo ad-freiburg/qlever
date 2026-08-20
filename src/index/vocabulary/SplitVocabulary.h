@@ -202,17 +202,11 @@ class SplitVocabulary {
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
 
-    std::array<std::vector<size_t>, numberOfVocabs> resultPositionByMarker;
     std::array<std::vector<size_t>, numberOfVocabs>
         underlyingVocabIndicesByMarker;
 
-    for (auto [resultPosition, markedIndex] :
-         ::ranges::views::enumerate(indices)) {
-      const uint8_t marker = getMarker(markedIndex);
-      resultPositionByMarker[marker].push_back(
-          static_cast<size_t>(resultPosition));
-
-      underlyingVocabIndicesByMarker[marker].push_back(
+    for (auto markedIndex : indices) {
+      underlyingVocabIndicesByMarker[getMarker(markedIndex)].push_back(
           getVocabIndex(markedIndex));
     }
 
@@ -240,6 +234,13 @@ class SplitVocabulary {
     // One marker: return that batch. Mixed markers cannot share one buffer.
     if (numNonemptyMarkers == 1) {
       return std::move(lookupResultByMarker[lastNonemptyMarker]);
+    }
+
+    std::array<std::vector<size_t>, numberOfVocabs> resultPositionByMarker;
+    for (auto [resultPosition, markedIndex] :
+         ::ranges::views::enumerate(indices)) {
+      resultPositionByMarker[getMarker(markedIndex)].push_back(
+          static_cast<size_t>(resultPosition));
     }
 
     std::vector<std::string_view> viewsInInputOrder(indices.size());
