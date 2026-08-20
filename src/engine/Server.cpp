@@ -344,7 +344,7 @@ void Server::configurePinnedResultWithName(
 }
 
 // _____________________________________________________________________________
-Awaitable<DeltaTriplesCount> Server::clearDeltaTriples() {
+Awaitable<DeltaTriplesCount> Server::processClearDeltaTriples() {
   // The function requires a SharedCancellationHandle, but the operation is
   // not cancellable.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
@@ -627,7 +627,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     namedResultCache().clear();
     response = jsonResponse(cacheStats());
   } else if (commandIs("clear-delta-triples")) {
-    auto countAfterClear = co_await clearDeltaTriples();
+    auto countAfterClear = co_await processClearDeltaTriples();
     response = jsonResponse(json(countAfterClear));
   } else if (commandIs("vacuum-delta-triples")) {
     auto vacuumStats = co_await processVacuumDeltaTriples(

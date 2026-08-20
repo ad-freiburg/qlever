@@ -169,14 +169,15 @@ class Server {
   // resulting counts. Not cancellable. Unlike `processVacuumDeltaTriples`
   // below, this is unconditional and has no timeout, so it neither needs the
   // request/response nor can it fail partway through.
-  Awaitable<DeltaTriplesCount> clearDeltaTriples();
+  Awaitable<DeltaTriplesCount> processClearDeltaTriples();
 
   // Vacuum (remove redundant) delta triples of the currently active index,
   // honoring a user-submitted timeout (see `verifyUserSubmittedQueryTimeout`).
-  // Unlike `clearDeltaTriples` above, this can fail (an invalid timeout), in
-  // which case an error response has already been sent to the client and an
-  // empty optional is returned; the caller must stop processing in that
-  // case. Otherwise the resulting vacuum stats are returned.
+  // Unlike `processClearDeltaTriples` above, this can fail (an invalid
+  // timeout), in which case an error response has already been sent to the
+  // client and an empty optional is returned; the caller must stop
+  // processing in that case. Otherwise the resulting vacuum stats are
+  // returned.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<std::optional<json>> processVacuumDeltaTriples(

@@ -527,12 +527,9 @@ class Qlever {
   void clearQueryResultCache();
 
   // Clear the delta triples of the index snapshot that is active when this
-  // is called, and return the resulting counts. Does not itself guard
-  // against a concurrent rebuild swapping in a different index while this
-  // runs -- `Server::clearDeltaTriples` gets that guarantee by scheduling
-  // this call onto its single-threaded update thread pool, which also
-  // serializes rebuild swaps; a caller that doesn't do the same has no such
-  // protection.
+  // is called, and return the resulting counts. Threadsafe against queries
+  // and updates, but not against a concurrent index rebuild swapping out
+  // `indexAndViewsSnapshot()`'s current snapshot.
   //
   // NOTE: There is currently no test that exercises this directly through
   // `Qlever`, independent of the HTTP `Server` layer (covered today only via
