@@ -33,12 +33,14 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   std::vector<std::string_view> assembled(indices.size());
   std::vector<size_t> diskIndices;
   std::vector<size_t> diskSlots;
+  bool usesInternalVocabulary = false;
   diskIndices.reserve(indices.size());
   diskSlots.reserve(indices.size());
 
   for (auto [i, idx] : ::ranges::views::enumerate(indices)) {
     auto fromInternal = internalVocab_[idx];
     if (fromInternal.has_value()) {
+      usesInternalVocabulary = true;
       assembled[static_cast<size_t>(i)] = fromInternal.value();
     } else {
       diskSlots.push_back(static_cast<size_t>(i));
@@ -52,16 +54,17 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     return externalVocab_.lookupBatch(diskIndices);
   }
 
+  std::vector<VocabBatchOwner> owners;
   if (!diskIndices.empty()) {
     auto disk = externalVocab_.lookupBatch(diskIndices);
-    std::vector<VocabBatchLookupResult> owners;
-    owners.reserve(1);
+    owners.reserve(1 + static_cast<size_t>(usesInternalVocabulary));
     scatterVocabBatchLookupResult(std::move(disk), diskSlots, assembled,
                                   owners);
-    return keepAliveVocabBatch(std::move(owners), std::move(assembled),
-                               internalVocab_);
   }
-  return keepAliveVocabBatch({}, std::move(assembled), internalVocab_);
+  if (usesInternalVocabulary) {
+    owners.push_back(internalVocab_.wordStorage());
+  }
+  return keepAliveVocabBatch(std::move(owners), std::move(assembled));
 }
 
 // _____________________________________________________________________________

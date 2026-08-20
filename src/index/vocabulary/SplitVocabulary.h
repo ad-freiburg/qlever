@@ -244,7 +244,7 @@ class SplitVocabulary {
     }
 
     std::vector<std::string_view> viewsInInputOrder(indices.size());
-    std::vector<VocabBatchLookupResult> owners;
+    std::vector<VocabBatchOwner> owners;
     owners.reserve(numNonemptyMarkers);
     for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
       if (lookupResultByMarker[marker] == nullptr) {
@@ -254,8 +254,7 @@ class SplitVocabulary {
                                     resultPositionByMarker[marker],
                                     viewsInInputOrder, owners);
     }
-    return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder),
-                               NoIndexRamWords{});
+    return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
   }
 
   //____________________________________________________________________________
