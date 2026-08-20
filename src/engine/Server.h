@@ -56,6 +56,8 @@ class ServerForTesting;
 class Server {
   using json = nlohmann::json;
   using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
+  using ParamValueMap = ad_utility::url_parser::ParamValueMap;
+  using Operation = ad_utility::url_parser::sparqlOperation::Operation;
   // Build a `QueryExecutionContext` for a given `IndexAndViews` snapshot,
   // capturing the request-specific settings (message sender, pinning). This
   // lets the caller bind the context to whichever snapshot is current when the
@@ -177,7 +179,7 @@ class Server {
   // case. Otherwise the resulting vacuum stats are returned.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<std::optional<nlohmann::json>> processVacuumDeltaTriples(
+      Awaitable<std::optional<json>> processVacuumDeltaTriples(
           std::optional<std::string_view> userTimeout, bool accessTokenOk,
           const RequestT& request, ResponseT& send);
 
@@ -190,9 +192,8 @@ class Server {
   // `process()` doesn't also try to execute it as a regular query.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<std::optional<nlohmann::json>> processWriteMaterializedView(
-          const ad_utility::url_parser::ParamValueMap& parameters,
-          const ad_utility::url_parser::sparqlOperation::Operation& operation,
+      Awaitable<std::optional<json>> processWriteMaterializedView(
+          const ParamValueMap& parameters, const Operation& operation,
           bool accessTokenOk, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send);
 
@@ -204,9 +205,8 @@ class Server {
   // executes a query nor honors a timeout, so it runs synchronously and
   // either returns its result or throws -- there's no optional-json/
   // early-return convention needed here.
-  nlohmann::json processLoadMaterializedView(
-      const ad_utility::url_parser::ParamValueMap& parameters,
-      SharedIndexAndView& indexAndViews);
+  json processLoadMaterializedView(const ParamValueMap& parameters,
+                                   SharedIndexAndView& indexAndViews);
 
   // Handle a `delete-materialized-view` command: extract the view name from
   // `parameters`, delete it via a freshly taken index/views snapshot (not the
@@ -214,8 +214,7 @@ class Server {
   // cannot make this operate on a stale manager). The caller is responsible
   // for resetting the request's operation to `None{}`, like
   // `processLoadMaterializedView` above.
-  nlohmann::json processDeleteMaterializedView(
-      const ad_utility::url_parser::ParamValueMap& parameters);
+  json processDeleteMaterializedView(const ParamValueMap& parameters);
 
   // Handle a `rebuild-index` command: extract the tmp-dir/previous-index-dir
   // parameters and trigger a rebuild unless one is already in progress.
@@ -225,8 +224,7 @@ class Server {
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<ad_utility::httpUtils::ResponseT> processRebuildIndex(
-          const ad_utility::url_parser::ParamValueMap& parameters,
-          const RequestT& request);
+          const ParamValueMap& parameters, const RequestT& request);
 
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
@@ -249,10 +247,9 @@ class Server {
   CPP_template(typename VisitorT, typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processOperation(
-          ad_utility::url_parser::sparqlOperation::Operation operation,
-          VisitorT visitor, const ad_utility::Timer& requestTimer,
-          const RequestT& request, ResponseT& send,
-          const std::optional<PlannedQuery>& plannedQuery);
+          Operation operation, VisitorT visitor,
+          const ad_utility::Timer& requestTimer, const RequestT& request,
+          ResponseT& send, const std::optional<PlannedQuery>& plannedQuery);
 
   // Out of a list of allowed media types, choose the one that best fits the
   // given query type. Currently it just chooses the first from the list. If the
@@ -266,8 +263,8 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processQuery(
-          const ad_utility::url_parser::ParamValueMap& params,
-          ParsedQuery&& query, const ad_utility::Timer& requestTimer,
+          const ParamValueMap& params, ParsedQuery&& query,
+          const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
@@ -292,9 +289,8 @@ class Server {
   auto prepareOperation(std::string_view operationName,
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
-                        const ad_utility::url_parser::ParamValueMap& params,
-                        TimeLimit timeLimit, bool accessTokenOk,
-                        std::string_view clientIp);
+                        const ParamValueMap& params, TimeLimit timeLimit,
+                        bool accessTokenOk, std::string_view clientIp);
 
   // Configure pinning of a named result on the `qec`. If `pinResultWithName`
   // is set, then the `qec` is configured such that the query result will be

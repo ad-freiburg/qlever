@@ -291,8 +291,8 @@ auto Server::setupCancellationHandle(
 auto Server::prepareOperation(
     std::string_view operationName, std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
-    const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
-    bool accessTokenOk, std::string_view clientIp) {
+    const ParamValueMap& params, TimeLimit timeLimit, bool accessTokenOk,
+    std::string_view clientIp) {
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
   auto resultPinning = qlever::http_api_helpers::determineResultPinning(params);
@@ -388,11 +388,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<std::optional<nlohmann::json>> Server::
-        processWriteMaterializedView(
-            const ad_utility::url_parser::ParamValueMap& parameters,
-            const ad_utility::url_parser::sparqlOperation::Operation& operation,
-            bool accessTokenOk, const ad_utility::Timer& requestTimer,
-            const RequestT& request, ResponseT& send) {
+        processWriteMaterializedView(const ParamValueMap& parameters,
+                                     const Operation& operation,
+                                     bool accessTokenOk,
+                                     const ad_utility::Timer& requestTimer,
+                                     const RequestT& request, ResponseT& send) {
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Writing");
   AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
@@ -445,8 +445,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
 // _____________________________________________________________________________
 nlohmann::json Server::processLoadMaterializedView(
-    const ad_utility::url_parser::ParamValueMap& parameters,
-    SharedIndexAndView& indexAndViews) {
+    const ParamValueMap& parameters, SharedIndexAndView& indexAndViews) {
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
@@ -458,7 +457,7 @@ nlohmann::json Server::processLoadMaterializedView(
 
 // _____________________________________________________________________________
 nlohmann::json Server::processDeleteMaterializedView(
-    const ad_utility::url_parser::ParamValueMap& parameters) {
+    const ParamValueMap& parameters) {
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
 
@@ -1025,8 +1024,8 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processQuery(
-        const ad_utility::url_parser::ParamValueMap& params,
-        ParsedQuery&& query, const ad_utility::Timer& requestTimer,
+        const ParamValueMap& params, ParsedQuery&& query,
+        const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
@@ -1317,10 +1316,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processOperation(
-        ad_utility::url_parser::sparqlOperation::Operation operation,
-        VisitorT visitor, const ad_utility::Timer& requestTimer,
-        const RequestT& request, ResponseT& send,
-        const std::optional<PlannedQuery>& plannedQuery) {
+        Operation operation, VisitorT visitor,
+        const ad_utility::Timer& requestTimer, const RequestT& request,
+        ResponseT& send, const std::optional<PlannedQuery>& plannedQuery) {
   // Copy the operation string for the error case before processing the
   // operation, because processing moves it.
   const std::string operationString = [&operation] {
@@ -1581,8 +1579,7 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<ad_utility::httpUtils::ResponseT> Server::processRebuildIndex(
-        const ad_utility::url_parser::ParamValueMap& parameters,
-        const RequestT& request) {
+        const ParamValueMap& parameters, const RequestT& request) {
   using namespace ad_utility::httpUtils;
   auto config = co_await rebuildIndexUnlessInProgress(
       ad_utility::url_parser::checkParameter(parameters, "rebuild-tmp-dir",
