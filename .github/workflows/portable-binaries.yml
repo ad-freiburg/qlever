@@ -51,7 +51,7 @@ jobs:
           compiler-version: 13
 
       - name: Cache conan packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.conan2
           key: conan-portable-gcc13-${{ matrix.arch }}-${{ hashFiles('conanfile.txt') }}
@@ -63,7 +63,7 @@ jobs:
         run: .github/scripts/build-portable-binaries.sh
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: qlever-binaries-linux-${{ matrix.arch }}
           path: build-portable/dist/
