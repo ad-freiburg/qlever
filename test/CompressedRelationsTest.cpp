@@ -998,6 +998,108 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
 }
 
+namespace {
+// Collect all the IDs (and graph IDs) that `getDistinctCol0Ids` yields for the
+// given arguments, together with the number of blocks that had to be read.
+struct DistinctCol0IdsResult {
+  IdTable idTable_;
+  size_t numBlocksRead_;
+  size_t numBlocksAll_;
+};
+DistinctCol0IdsResult getDistinctCol0Ids(
+    const CompressedRelationReader& reader,
+    const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
+    bool addGraphColumn, std::optional<std::vector<Id>> idFilter,
+    const LocatedTriplesPerBlock& locatedTriples) {
+  auto range = reader.getDistinctCol0Ids(
+      scanSpecAndBlocks, addGraphColumn, std::move(idFilter),
+      std::make_shared<ad_utility::CancellationHandle<>>(), locatedTriples);
+  IdTable result{addGraphColumn ? 2u : 1u,
+                 ad_utility::makeUnlimitedAllocator<Id>()};
+  for (const IdTable& table : range) {
+    result.insertAtEnd(table);
+  }
+  return {std::move(result), range.details().numBlocksRead_,
+          range.details().numBlocksAll_};
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, getDistinctCol0Ids) {
+  // The first relation is large enough to span several blocks, all but one of
+  // which don't contribute a new `col0Id` and thus don't have to be read. The
+  // other relations are small and are all stored in a single block, which has
+  // to be read because it contains more than one `col0Id`.
+  std::vector<RelationInput> inputs{
+      {1, {}}, {2, {{0, 0}}}, {3, {{0, 0}}}, {4, {{0, 0}}}};
+  for (int i = 0; i < 100; ++i) {
+    inputs.at(0).col1And2_.push_back({0, i});
+  }
+  addGraphColumnIfNecessary(inputs);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] =
+      writeAndOpenRelations(inputs, filename, 64_B);
+  LocatedTriplesPerBlock locatedTriples{};
+  locatedTriples.setOriginalMetadata(blocks);
+  locatedTriples.updateAugmentedMetadata();
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(blocks)};
+
+  // All the `col0Id`s, without any filter.
+  {
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, false, std::nullopt, locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{1}, {2}, {3}, {4}}, result);
+    // The blocks of the large relation that only repeat its `col0Id` are not
+    // read at all.
+    EXPECT_LT(numBlocksRead, numBlocksAll);
+    EXPECT_EQ(numBlocksAll, blocks.size());
+  }
+
+  // Only the `col0Id` of the large relation is requested. All of its blocks
+  // contain nothing but that single `col0Id`, so none of them has to be read.
+  {
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, false, std::vector{V(1)}, locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{1}}, result);
+    EXPECT_EQ(numBlocksRead, 0);
+  }
+
+  // Only a subset of the `col0Id`s is requested, so all the blocks of the large
+  // relation can be skipped.
+  {
+    auto [result, numBlocksRead, numBlocksAll] =
+        getDistinctCol0Ids(*reader, scanSpecAndBlocks, false,
+                           std::vector{V(3), V(17)}, locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{3}}, result);
+    // Only the block(s) that hold the small relations have to be read.
+    EXPECT_LE(numBlocksRead, 2);
+  }
+
+  // A filter that matches nothing doesn't read a single block.
+  {
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, false, std::vector<Id>{}, locatedTriples);
+    EXPECT_THAT(result, ::testing::IsEmpty());
+    EXPECT_EQ(numBlocksRead, 0);
+  }
+
+  // With the graph column, the pairs of `col0Id` and graph ID are returned. All
+  // the triples of the test input are in the same graph (the dummy graph that
+  // `addGraphColumnIfNecessary` adds).
+  {
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, true, std::nullopt, locatedTriples);
+    ASSERT_EQ(result.numColumns(), 2);
+    EXPECT_THAT(result.getColumn(0),
+                ::testing::ElementsAre(V(1), V(2), V(3), V(4)));
+    EXPECT_THAT(result.getColumn(1),
+                ::testing::Each(::testing::Eq(V(103496581))));
+  }
+}
+
+// _____________________________________________________________________________
 TEST(CompressedRelationReader, getResultSizeImpl) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
   auto index = ad_utility::testing::makeTestIndex("getResultSizeImpl", "");

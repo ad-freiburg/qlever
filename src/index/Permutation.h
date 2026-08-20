@@ -127,6 +127,21 @@ class Permutation {
       const LocatedTriplesState& locatedTriplesState,
       const LimitOffsetClause& limitOffset) const;
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Lazily compute the distinct `col0Id`s of a full scan of this permutation.
+  // The `scanSpec` must not fix any of the columns, it is only used for its
+  // graph filter. See `CompressedRelationReader::getDistinctCol0Ids` for the
+  // exact semantics of `addGraphColumn` and `idFilter`.
+  //
+  // NOTE: `locatedTriplesState` has to be kept alive until the returned
+  // generator has been fully consumed.
+  cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
+  getDistinctCol0Ids(const ScanSpecification& scanSpec, bool addGraphColumn,
+                     std::optional<std::vector<Id>> idFilter,
+                     const CancellationHandle& cancellationHandle,
+                     const LocatedTriplesState& locatedTriplesState) const;
+#endif
+
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks =
       CompressedRelationReader::ScanSpecAndBlocksAndBounds;
