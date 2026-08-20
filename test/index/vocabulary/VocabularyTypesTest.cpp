@@ -105,7 +105,7 @@ TEST(VocabBatchLookupData, ScatterBatchResultRetainsOwner) {
   const char* gammaData = (*second)[0].data();
 
   std::vector<std::string_view> viewsInInputOrder(3);
-  std::vector<VocabBatchLookupResult> owners;
+  std::vector<VocabBatchOwner> owners;
   const std::array<size_t, 2> firstPositions{2, 0};
   const std::array<size_t, 1> secondPositions{1};
   scatterVocabBatchLookupResult(std::move(first), firstPositions,
@@ -114,7 +114,7 @@ TEST(VocabBatchLookupData, ScatterBatchResultRetainsOwner) {
                                 viewsInInputOrder, owners);
 
   auto result = keepAliveVocabBatch(
-      std::move(owners), std::move(viewsInInputOrder), NoIndexRamWords{});
+      std::move(owners), std::move(viewsInInputOrder));
   EXPECT_THAT(*result, ::testing::ElementsAre("beta", "gamma", "alpha"));
   EXPECT_EQ((*result)[2].data(), alphaData);
   EXPECT_EQ((*result)[1].data(), gammaData);
