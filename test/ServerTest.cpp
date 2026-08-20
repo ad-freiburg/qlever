@@ -588,6 +588,62 @@ TEST(ServerTest, vacuumDeltaTriples) {
 }
 
 // _____________________________________________________________________________
+TEST(ServerTest, handleHttpRequest) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+  auto response = server.handleHttpRequest(makeRequest(http::verb::options));
+
+  // OPTIONS is answered directly with CORS headers, without dispatching.
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_origin,
+                                      testing::StrEq("*")));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_headers,
+                                      testing::StrEq("*")));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_methods,
+                                      testing::StrEq("GET, POST, OPTIONS")));
+
+  // A normal successful request also gets the CORS headers.
+  response = server.handleHttpRequest(makeGetRequest("/?default"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_origin,
+                                      testing::StrEq("*")));
+
+  // Valid token format, wrong value: `HttpError` -> forbidden.
+  response = server.handleHttpRequest(makeRequest(
+      http::verb::get, "/",
+      {{http::field::authorization, "Bearer correct_format_wrong_token"}}));
+  EXPECT_THAT(response, StatusIs(http::status::forbidden));
+
+  // Missing "Bearer " prefix: generic exception -> bad_request.
+  response = server.handleHttpRequest(makeRequest(
+      http::verb::get, "/",
+      {{http::field::authorization, "correct_token_wrong_format"}}));
+  EXPECT_THAT(response, StatusIs(http::status::bad_request));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, makeWebSocketSessionSupplier) {
+  Server server{4511, 1, "accessToken", getDefaultConfig()};
+  boost::asio::any_io_executor ioExecutor;
+
+  ASSERT_TRUE(server.queryHub_.expired());
+  {
+    auto handler = server.makeWebSocketSessionSupplier(ioExecutor);
+    // `handler` owns the `QueryHub` via its captured `shared_ptr`, so the
+    // `weak_ptr` member is alive as long as `handler` is.
+    EXPECT_FALSE(server.queryHub_.expired());
+
+    // Calling it again while the first handler is still alive violates the
+    // "only once" contract.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        server.makeWebSocketSessionSupplier(ioExecutor),
+        testing::HasSubstr(
+            "`queryHub_` has already been initialized; "
+            "`makeWebSocketSessionSupplier` must only be called once."));
+  }  // Here is the local variable `handler` out of scope and destroyed.
+  EXPECT_TRUE(server.queryHub_.expired());
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, gspHead) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
   // Each request runs on a fresh server, so that the sub-tests are

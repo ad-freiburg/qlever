@@ -71,6 +71,20 @@ Server::Server(
       metricsReader_(std::move(metricsReader)) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
+  initializeServerMetrics(config.memoryLimit_);
+
+  if (noAccessCheck_) {
+    AD_LOG_INFO << "No access token required for restricted API calls"
+                << std::endl;
+  } else {
+    AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
+                << "\"" << std::endl;
+  }
+}
+
+// _____________________________________________________________________________
+void Server::initializeServerMetrics(
+    std::optional<ad_utility::MemorySize> memoryLimit) {
   metrics_ = std::make_unique<ServerMetrics>(
       [this]() {
         auto counts = indexAndViewsSnapshot()
@@ -89,16 +103,8 @@ Server::Server(
       [this]() -> int64_t {
         return static_cast<int64_t>(rebuildInProgress_.load());
       },
-      config.memoryLimit_);
+      memoryLimit);
   metrics_->registerCallbacks();
-
-  if (noAccessCheck_) {
-    AD_LOG_INFO << "No access token required for restricted API calls"
-                << std::endl;
-  } else {
-    AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
-                << "\"" << std::endl;
-  }
 }
 
 // _____________________________________________________________________________
@@ -118,87 +124,101 @@ void Server::configureQueryEventLog(const ql::filesystem::path& path) {
 }
 
 // _____________________________________________________________________________
-void Server::run() {
+CPP_template_def(typename RequestT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Server::HttpErrorResponse Server::reportHttpError(
+        std::string_view message, http::status status, const RequestT& request,
+        const MetricLabel& errorType) const {
+  using namespace ad_utility::httpUtils;
+  AD_LOG_ERROR << message << std::endl;
+  metrics_->httpErrors_->Add(1, {errorType});
+  return createHttpResponseFromString(std::string{message}, status, request,
+                                      MediaType::textPlain);
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename RequestT, typename SendT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<void> Server::handleHttpRequest(RequestT request, SendT& send) {
   using namespace ad_utility::httpUtils;
 
-  // Function that handles a request asynchronously, will be passed as argument
-  // to `HttpServer` below.
-  auto httpSessionHandler =
-      [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
-    // Version of send with maximally permissive CORS header (which allows the
-    // client that receives the response to do with it what it wants).
-    // NOTE: For POST and GET requests, the "allow origin" header is sufficient,
-    // while the "allow headers" header is needed only for OPTIONS request. The
-    // "allow methods" header is purely informational. To avoid two similar
-    // lambdas here, we send the same headers for GET, POST, and OPTIONS.
-    auto sendWithAccessControlHeaders =
-        [&send](auto response) -> boost::asio::awaitable<void> {
-      response.set(http::field::access_control_allow_origin, "*");
-      response.set(http::field::access_control_allow_headers, "*");
-      response.set(http::field::access_control_allow_methods,
-                   "GET, POST, OPTIONS");
-      co_return co_await send(std::move(response));
-    };
-    // Reply to OPTIONS requests immediately by allowing everything.
-    // NOTE: Handling OPTIONS requests is necessary because some POST queries
-    // (in particular, from the QLever UI) are preceded by an OPTIONS request (a
-    // so-called "preflight" request, which asks permission for the POST query).
-    if (request.method() == http::verb::options) {
-      AD_LOG_INFO << std::endl;
-      AD_LOG_INFO << "Request received via " << request.method()
-                  << ", allowing everything" << std::endl;
-      co_return co_await sendWithAccessControlHeaders(
-          createOkResponse("", request, MediaType::textPlain));
-    }
-    // Process the request using the `process` method and if it throws an
-    // exception, log the error message and send a HTTP/1.1 400 Bad Request
-    // response with that message. Note that the C++ standard forbids co_await
-    // in the catch block, hence the workaround with the `exceptionErrorMsg`.
-    std::optional<std::string> exceptionErrorMsg;
-    std::optional<boost::beast::http::status> httpResponseStatus;
-    try {
-      co_await process(request, sendWithAccessControlHeaders);
-    } catch (const HttpError& e) {
-      httpResponseStatus = e.status();
-      exceptionErrorMsg = e.what();
-      metrics_->httpErrors_->Add(1, {HttpErrorType::http});
-    } catch (const std::exception& e) {
-      exceptionErrorMsg = e.what();
-      metrics_->httpErrors_->Add(1, {HttpErrorType::internal});
-    }
-    if (exceptionErrorMsg.has_value()) {
-      AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
-      auto status =
-          httpResponseStatus.value_or(boost::beast::http::status::bad_request);
-      auto response = createHttpResponseFromString(
-          exceptionErrorMsg.value(), status, request, MediaType::textPlain);
-      co_return co_await sendWithAccessControlHeaders(std::move(response));
-    }
+  auto sendWithAccessControlHeaders =
+      [&send](auto response) -> boost::asio::awaitable<void> {
+    response.set(http::field::access_control_allow_origin, "*");
+    response.set(http::field::access_control_allow_headers, "*");
+    response.set(http::field::access_control_allow_methods,
+                 "GET, POST, OPTIONS");
+    co_return co_await send(std::move(response));
   };
 
-  auto webSocketSessionSupplier = [this](net::any_io_executor& ioExecutor) {
-    // This must only be called once
-    AD_CONTRACT_CHECK(queryHub_.expired());
-    auto queryHub =
-        std::make_shared<ad_utility::websocket::QueryHub>(ioExecutor);
-    // Make sure the `queryHub` does not outlive the ioContext it has a
-    // reference to, by only storing a `weak_ptr` in the `queryHub_`. Note: This
-    // `weak_ptr` may only be converted back to a `shared_ptr` inside a task
-    // running on the `io_context`.
-    queryHub_ = queryHub;
-    return [this, queryHub = std::move(queryHub)](
-               const http::request<http::string_body>& request,
-               tcp::socket socket) {
-      return ad_utility::websocket::WebSocketSession::handleSession(
-          *queryHub, queryRegistry_, request, std::move(socket));
-    };
+  if (request.method() == http::verb::options) {
+    AD_LOG_INFO << std::endl;
+    AD_LOG_INFO << "Request received via " << request.method()
+                << ", allowing everything" << std::endl;
+    co_return co_await sendWithAccessControlHeaders(
+        createOkResponse("", request, MediaType::textPlain));
+  }
+
+  // The C++ standard forbids a suspend point (`co_await`) inside a `catch`
+  // block, so the actual `send` cannot happen here. Building the error
+  // response, however, is synchronous and can happen right in the `catch`
+  // block.
+  std::optional<HttpErrorResponse> errorResponse;
+  try {
+    co_await process(request, sendWithAccessControlHeaders);
+  } catch (const HttpError& e) {
+    errorResponse =
+        reportHttpError(e.what(), e.status(), request, HttpErrorType::http);
+  } catch (const std::exception& e) {
+    errorResponse = reportHttpError(e.what(), http::status::bad_request,
+                                    request, HttpErrorType::internal);
+  }
+  if (errorResponse.has_value()) {
+    co_return co_await sendWithAccessControlHeaders(
+        std::move(errorResponse.value()));
+  }
+}
+
+// Explicit instantiation so that friend test code (`ServerForTesting`, the
+// `IndexRebuilder` `FRIEND_TEST`s), which cannot see this template's
+// definition, can call `handleHttpRequest` directly with a `MockSend` to
+// capture the response instead of sending it.
+template Server::Awaitable<void> Server::handleHttpRequest<
+    Server::StringBodyRequest, Server::MockSend>(StringBodyRequest, MockSend&);
+
+// _____________________________________________________________________________
+std::function<Server::Awaitable<void>(const Server::StringBodyRequest&,
+                                      tcp::socket)>
+Server::makeWebSocketSessionSupplier(net::any_io_executor& ioExecutor) {
+  AD_CONTRACT_CHECK(queryHub_.expired(),
+                    "`queryHub_` has already been initialized; "
+                    "`makeWebSocketSessionSupplier` must only be called once.");
+  auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(ioExecutor);
+  // Make sure the `queryHub` does not outlive the ioContext it has a
+  // reference to, by only storing a `weak_ptr` in the `queryHub_`. Note: This
+  // `weak_ptr` may only be converted back to a `shared_ptr` inside a task
+  // running on the `io_context`.
+  queryHub_ = queryHub;
+  return [this, queryHub = std::move(queryHub)](
+             const StringBodyRequest& request, tcp::socket socket) {
+    return ad_utility::websocket::WebSocketSession::handleSession(
+        *queryHub, queryRegistry_, request, std::move(socket));
+  };
+}
+
+// _____________________________________________________________________________
+void Server::run() {
+  auto httpSessionHandler = [this](auto request, auto&& send) {
+    return handleHttpRequest(std::move(request), AD_FWD(send));
   };
 
-  // First set up the HTTP server, so that it binds to the socket, and
-  // the "socket already in use" error appears quickly.
-  auto httpServer = HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
-                               std::move(httpSessionHandler),
-                               std::move(webSocketSessionSupplier)};
+  // `HttpServer`'s constructor binds the socket synchronously; keep this as
+  // the first statement in `run()` so a port already in use fails fast,
+  // before any other startup work.
+  auto httpServer =
+      HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
+                 std::move(httpSessionHandler),
+                 absl::bind_front(&Server::makeWebSocketSessionSupplier, this)};
 
   AD_LOG_INFO << "The server is ready, listening for requests on port "
               << std::to_string(httpServer.getPort()) << " ..." << std::endl;
@@ -884,6 +904,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       requestTimer, request, send, plannedQuery);
 }
 
+// Explicit instantiation so that friend test code (`ServerForTesting`, the
+// `IndexRebuilder` `FRIEND_TEST`s), which cannot see this template's
+// definition, can call `process` directly with a `MockSend` to capture the
+// response instead of sending it.
+template Server::Awaitable<void>
+Server::process<Server::StringBodyRequest, Server::MockSend&>(
+    StringBodyRequest&, MockSend&);
+
 // ____________________________________________________________________________
 Server::PlannedQuery Server::planQuery(
     ParsedQuery&& operation, QueryExecutionContext& qec,
@@ -1476,10 +1504,9 @@ bool Server::checkAccessToken(
 
 // _____________________________________________________________________________
 template ad_utility::websocket::MessageSender
-Server::createMessageSender<http::request<http::string_body>>(
+Server::createMessageSender<Server::StringBodyRequest>(
     const std::weak_ptr<ad_utility::websocket::QueryHub>&,
-    const http::request<http::string_body>&, std::string_view,
-    std::string_view);
+    const StringBodyRequest&, std::string_view, std::string_view);
 
 // _____________________________________________________________________________
 Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
@@ -1666,24 +1693,3 @@ void Server::logAutomaticRebuildFailure(std::exception_ptr exception) {
     AD_LOG_ERROR << "Automatic index rebuild failed: " << e.what() << std::endl;
   }
 }
-
-// For helper function `Server::onlyForTestingProcess`
-using StreamedResponse = http::response<ad_utility::httpUtils::streamable_body>;
-using SimpleRequest = http::request<http::string_body>;
-
-// _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<ResponseT> Server::onlyForTestingProcess(RequestT& request) {
-  ResponseT res;
-  auto mockSend = [&](auto response) -> Awaitable<void> {
-    res = std::move(response);
-    co_return;
-  };
-  co_await process(request, mockSend);
-  co_return res;
-}
-
-// Explicit template instantiation for unit test helper function
-template Awaitable<StreamedResponse> Server::onlyForTestingProcess(
-    SimpleRequest&);

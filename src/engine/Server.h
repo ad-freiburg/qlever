@@ -12,6 +12,7 @@
 
 #include <absl/functional/any_invocable.h>
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -143,6 +144,28 @@ class Server {
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
   using PlannedQuery = qlever::PlannedQuery;
+  using HttpErrorResponse = ad_utility::httpUtils::ResponseT;
+  using StringBodyRequest =
+      boost::beast::http::request<boost::beast::http::string_body>;
+
+  // A `send` callable for `process`/`handleHttpRequest` that captures
+  // whatever response it is invoked with into `response_` instead of
+  // actually sending it. Used by friend test code (`ServerForTesting` and the
+  // `FRIEND_TEST`s above) to call `process`/`handleHttpRequest` directly and
+  // inspect the response that would have been sent. A named type is required
+  // here (rather than an ad-hoc lambda) because `process`/`handleHttpRequest`
+  // are only defined in `Server.cpp`, so callers in other translation units
+  // can only invoke them through an explicit template instantiation, which in
+  // turn requires a type with linkage.
+  class MockSend {
+   public:
+    Awaitable<void> operator()(auto response) {
+      response_ = std::move(response);
+      co_return;
+    }
+
+    ad_utility::httpUtils::ResponseT response_;
+  };
 
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<
@@ -227,6 +250,50 @@ class Server {
       Awaitable<ad_utility::httpUtils::ResponseT> processRebuildIndex(
           const ParamValueMap& parameters, const RequestT& request);
 
+  // Initialize and register server metrics which are stored in `metrics_`.
+  void initializeServerMetrics(
+      std::optional<ad_utility::MemorySize> memoryLimit);
+
+  // Log `message`, record it under `errorType` in the HTTP error metrics,
+  // and build the corresponding HTTP error response for `request`.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) HttpErrorResponse
+      reportHttpError(std::string_view message,
+                      ad_utility::httpUtils::http::status status,
+                      const RequestT& request,
+                      const ad_utility::metrics::MetricLabel& errorType) const;
+
+  // The `HttpHandler` passed to `HttpServer` in `run()`. This function
+  // satisfies the constraints for the `HttpHandler` in `HttpServer.h`.
+  //
+  // Reply to OPTIONS requests immediately by allowing everything. This is
+  // necessary because some POST queries (in particular, from the QLever UI)
+  // are preceded by an OPTIONS request (a so-called "preflight" request,
+  // which asks permission for the POST query).
+  //
+  // Process all other requests using `process()`. If that throws, turn the
+  // exception into an HTTP error response via `reportHttpError` (which also
+  // logs it and updates the error metrics).
+  //
+  // Send every response (including error responses) with a maximally
+  // permissive CORS header, which allows the client that receives the
+  // response to do with it what it wants. Strictly, only OPTIONS requests
+  // need the "allow headers" header, while GET and POST only need "allow
+  // origin"; the same headers are sent for all three to avoid two similar
+  // code paths.
+  CPP_template(typename RequestT, typename SendT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> handleHttpRequest(RequestT request, SendT& send);
+
+  // Build the `WebSocketHandler` passed to `HttpServer` in `run()`. Call once
+  // at server startup with the server's `io_context` executor; set up the
+  // `QueryHub` for that executor and return the handler that dispatches
+  // individual WebSocket sessions to it.
+  std::function<Awaitable<void>(const StringBodyRequest&,
+                                boost::asio::ip::tcp::socket)>
+  makeWebSocketSessionSupplier(boost::asio::any_io_executor& ioExecutor);
+  FRIEND_TEST(ServerTest, makeWebSocketSessionSupplier);
+
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
   /// requires the constraints for the `HttpHandler` in `HttpServer.h`.
@@ -236,12 +303,6 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> process(RequestT& request, ResponseT&& send);
-
-  // Helper function for unit tests, calls `process` with the given request and
-  // returns the response that would have been sent.
-  CPP_template(typename RequestT, typename ResponseT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<ResponseT> onlyForTestingProcess(RequestT& request);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.

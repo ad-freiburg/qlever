@@ -67,6 +67,54 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
 //______________________________________________________________________________
 
 // _____________________________________________________________________________
+TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
+  auto [expr1, exp1] = makeDe9imRelation();
+  checkDe9imRelationCall(getDe9imRelationExpressionParameters(*expr1), exp1);
+
+  // Not a `geof:relate` call
+  auto [expr2, exp2] = makeUnrelated();
+  checkDe9imRelationCall(getDe9imRelationExpressionParameters(*expr2),
+                         std::nullopt);
+
+  // Invalid DE-9IM pattern (wrong length / characters) is rejected
+  auto invalidPtr = makeDe9imRelationExpression(
+      getExpr(V{"?a"}), getExpr(V{"?b"}),
+      getExpr(Literal::literalWithoutQuotes("invalid")));
+  checkDe9imRelationCall(getDe9imRelationExpressionParameters(*invalidPtr),
+                         std::nullopt);
+
+  // The third argument must be a fixed string literal: a variable is
+  // rejected, even if it happens to be bound to a valid pattern at runtime.
+  auto variablePatternPtr = makeDe9imRelationExpression(
+      getExpr(V{"?a"}), getExpr(V{"?b"}), getExpr(V{"?pattern"}));
+  checkDe9imRelationCall(
+      getDe9imRelationExpressionParameters(*variablePatternPtr), std::nullopt);
+
+  // The left argument must be a variable; a constant is rejected.
+  auto nonVarLeftPtr = makeDe9imRelationExpression(
+      getExpr(ValueId::makeFromInt(42)), getExpr(V{"?b"}),
+      getExpr(Literal::literalWithoutQuotes("T*T***T**")));
+  checkDe9imRelationCall(getDe9imRelationExpressionParameters(*nonVarLeftPtr),
+                         std::nullopt);
+
+  // The right argument must be a variable; a constant is rejected.
+  auto nonVarRightPtr = makeDe9imRelationExpression(
+      getExpr(V{"?a"}), getExpr(ValueId::makeFromInt(42)),
+      getExpr(Literal::literalWithoutQuotes("T*T***T**")));
+  checkDe9imRelationCall(getDe9imRelationExpressionParameters(*nonVarRightPtr),
+                         std::nullopt);
+
+  // A syntactically valid pattern that could still match disjoint geometries
+  // is rejected, because `geof:relate` currently only supports patterns that
+  // already imply an intersection.
+  auto disjointPatternPtr = makeDe9imRelationExpression(
+      getExpr(V{"?a"}), getExpr(V{"?b"}),
+      getExpr(Literal::literalWithoutQuotes("FF*FF****")));
+  checkDe9imRelationCall(
+      getDe9imRelationExpressionParameters(*disjointPatternPtr), std::nullopt);
+}
+
+// _____________________________________________________________________________
 TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
   auto D = &ValueId::makeFromDouble;
 
@@ -95,6 +143,23 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
       std::move(unrelExprSharedPtr),
       "<http://www.w3.org/2005/xpath-functions/math#pow>(?a, ?b) <= 10.0"}};
   ASSERT_FALSE(rewriteFilterToSpatialJoinConfig(unrelFilter).has_value());
+
+  // Construct `FILTER(geof:relate(?a, ?b, "T*T***T**"))`
+  auto [de9imExpr, de9imCall] = makeDe9imRelation();
+  std::shared_ptr<SparqlExpression> de9imSharedPtr = std::move(de9imExpr);
+  SparqlFilter de9imFilter{
+      SparqlExpressionPimpl{std::move(de9imSharedPtr),
+                            "<http://www.opengis.net/def/function/geosparql/"
+                            "relate>(?a, ?b, \"T*T***T**\")"}};
+
+  auto de9imSjConf = rewriteFilterToSpatialJoinConfig(de9imFilter);
+  ASSERT_TRUE(de9imSjConf.has_value());
+  ASSERT_EQ(de9imSjConf.value().left_, V{"?a"});
+  ASSERT_EQ(de9imSjConf.value().right_, V{"?b"});
+  ASSERT_EQ(de9imSjConf.value().joinType_, DE9IM);
+  const auto& de9imTask =
+      std::get<LibSpatialJoinConfig>(de9imSjConf.value().task_);
+  ASSERT_EQ(de9imTask.de9imFilter_, parseDe9imFilterString("T*T***T**"));
 }
 
 // TODO<ullingerc> #2140: Add tests for `getGeoFunctionExpressionParameters` +
