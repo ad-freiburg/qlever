@@ -28,6 +28,25 @@ namespace ad_utility {
 
 namespace resource_monitor {
 
+// The columns of the resource-usage TSV. `rss` is the resident set size of
+// the process in bytes; `cpu_percent` is its CPU usage as a percentage of
+// one core; `io_stall_percent` is the percentage of wall time in which at
+// least one task (system-wide) was stalled on I/O; `read_bytes` and
+// `write_bytes` are the cumulative bytes this process has read from and
+// written to the storage layer; `cached_bytes` is the current size of the
+// OS page cache (system-wide). The three I/O columns and `cached_bytes` are
+// only available on Linux and stay empty elsewhere.
+constexpr std::string_view tsvHeader =
+    "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tio_stall_percent"
+    "\tread_bytes\twrite_bytes\tcached_bytes";
+
+// Cumulative I/O counters of this process: bytes actually read from and
+// written to the storage layer (not the page cache).
+struct IoBytes {
+  uint64_t readBytes_;
+  uint64_t writeBytes_;
+};
+
 // Current resident set size (RSS) of this process in bytes.
 std::optional<uint64_t> currentRssBytes();
 
@@ -40,8 +59,29 @@ std::optional<uint64_t> rssBytesFromStatm(std::istream& statm);
 // Total CPU time (user + system) used by this process so far, in seconds.
 std::optional<double> cpuTimeSeconds();
 
-// Turns successive cumulative CPU-time readings into CPU usage as a percentage
-// of one core. Stateful: each `update` is the baseline for the next.
+// Cumulative time (in seconds) in which at least one task, system-wide, was
+// stalled waiting for I/O, from the pressure stall information (PSI). Linux
+// only (and only if the kernel has PSI enabled); `std::nullopt` otherwise.
+std::optional<double> ioStallSeconds();
+
+// Cumulative storage-layer I/O of this process. Linux only.
+std::optional<IoBytes> currentIoBytes();
+
+// Current size of the OS page cache in bytes (system-wide). Linux only.
+std::optional<uint64_t> currentCachedBytes();
+
+#if defined(__linux__)
+// The parsers behind the three readers above, on streams with the format of
+// `/proc/pressure/io`, `/proc/self/io`, and `/proc/meminfo` respectively;
+// `std::nullopt` if the content is malformed.
+std::optional<double> ioStallSecondsFromPressure(std::istream& pressure);
+std::optional<IoBytes> ioBytesFromProcIo(std::istream& io);
+std::optional<uint64_t> cachedBytesFromMeminfo(std::istream& meminfo);
+#endif
+
+// Turns successive cumulative time readings (CPU seconds, or I/O stall
+// seconds) into a usage percentage over the elapsed wall time. Stateful:
+// each `update` is the baseline for the next.
 class CpuPercentTracker {
  public:
   explicit CpuPercentTracker(std::optional<double> initialCpuSeconds)
@@ -57,10 +97,14 @@ class CpuPercentTracker {
   double lastElapsed_ = 0.0;
 };
 
-// One TSV row; a missing `rss` or `cpuPercent` becomes an empty cell.
+// One TSV row (in the order of `tsvHeader`); a missing reading becomes an
+// empty cell (`ioBytes` covers the two cells `read_bytes` and `write_bytes`).
 std::string formatTsvRow(double elapsed, int64_t timestampMs,
                          std::optional<uint64_t> rss,
-                         std::optional<double> cpuPercent);
+                         std::optional<double> cpuPercent,
+                         std::optional<double> ioStallPercent,
+                         std::optional<IoBytes> ioBytes,
+                         std::optional<uint64_t> cachedBytes);
 
 // The two OS readers, as swappable function objects (see
 // `ResourceMonitor::setReadersForTesting`).
@@ -69,14 +113,17 @@ using CpuReader = absl::AnyInvocable<std::optional<double>()>;
 
 }  // namespace resource_monitor
 
-// Samples the RSS and CPU usage of this process on a background thread
-// and appends one TSV row (`elapsed_s`, `timestamp_ms`, `rss`,
-// `cpu_percent`) per interval; failed readings become empty cells. The
-// destructor stops the sampling thread and closes the file.
+// Samples resource usage of this process (and some system-wide I/O and
+// page-cache statistics, see `resource_monitor::tsvHeader`) on a background
+// thread and appends one TSV row per interval; failed readings become empty
+// cells. The destructor stops the sampling thread and closes the file.
 class ResourceMonitor {
  public:
   // `Truncate` starts a fresh file per run (index builds); `Append`
-  // accumulates rows across runs (server restarts).
+  // accumulates rows across runs (server restarts). When appending to a file
+  // whose header does not match the current format (older QLever versions
+  // wrote fewer columns), the old file is renamed to `<path>.old` and a
+  // fresh file is started, so that every file is internally consistent.
   enum class Mode { Truncate, Append };
 
   ResourceMonitor() = default;
