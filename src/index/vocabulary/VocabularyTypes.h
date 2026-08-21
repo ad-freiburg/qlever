@@ -159,13 +159,15 @@ inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
   return PmrVocabBatchLookupData::asResult(std::move(data));
 }
 
-// Hold whatever keeps the words of a mixed batch alive: child
-// `VocabBatchLookupResult`s and/or shared ownership of an in-memory
-// vocabulary's word storage. `views()` point into those owners. Because every
-// view is backed by an owner held here, the result is self-contained: no view
-// can dangle, and no caller has to guarantee that some other object outlives
-// it.
+// Type-erased smart pointer holding whatever keeps word storage alive. Used
+// to store child `VocabBatchLookupResult`s or references to vocabulary state
+// (e.g., shared ownership of a vocabulary's in-memory word storage).
 using VocabBatchOwner = std::shared_ptr<const void>;
+
+// `VocabBatchLookupResult` that owns multiple independent storage sources.
+// Stores a list of `VocabBatchOwner`s that back the `string_view`s. Because
+// every view is backed by an owner stored here, the result is self-contained:
+// no view can dangle, and callers don't need to manage external lifetimes.
 struct MultiOwnerVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<VocabBatchOwner>> {};
 
@@ -189,8 +191,8 @@ inline void scatterVocabBatchLookupResult(
 
 // Create a `VocabBatchLookupResult` for the given `words`. The result will
 // additionally keep the `owners` alive. Only call this if the storage for the
-// words is managed by the owners; see `scatterVocabBatchLookupResult()` for an
-// example.
+// words is managed by the `owners`; see `scatterVocabBatchLookupResult()` for
+// an example.
 //
 // TODO<ms2144>: This API takes independent owner and view lists, so the
 // lifetime link is a call-site convention rather than a structural type. A
