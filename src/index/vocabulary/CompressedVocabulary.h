@@ -157,6 +157,22 @@ CPP_template(typename UnderlyingVocabulary,
     return makePmrVocabBatchLookupResult(std::move(buffer), std::move(views));
   }
 
+  // Compressed words only, no FSST. Used by `vocab-decode-arena-bench` to
+  // build a RAM fixture for the decode-only (layer 0) arm.
+  VocabBatchLookupResult lookupCompressedBatch(
+      ql::span<const size_t> indices) const {
+    AD_CONTRACT_CHECK(!indices.empty());
+    return underlyingVocabulary_.lookupBatch(indices);
+  }
+
+  [[nodiscard]] size_t decoderIndex(size_t idx) const {
+    return getDecoderIdx(idx);
+  }
+
+  [[nodiscard]] const CompressionWrapper& compressionWrapper() const {
+    return compressionWrapper_;
+  }
+
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
     return ad_utility::vocabulary::lookupBatchesStreamed(*this,
