@@ -169,7 +169,7 @@ TEST(VocabBatchLookupData, KeepAliveOutlivesSharedWordStorage) {
     return vocabulary;
   };
 
-  // close() path: vocabulary installs a fresh empty words_ buffer.
+  // `close()` path: vocabulary installs a fresh empty `words_` buffer.
   {
     auto vocabulary = buildVocab("ram-word");
     auto maybeWord = vocabulary[0];
