@@ -52,7 +52,7 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   }
 
   std::vector<std::string_view> assembled(indices.size());
-  for (auto [position, word] : internalSlots) {
+  for (const auto& [position, word] : internalSlots) {
     assembled[position] = word;
   }
   std::vector<VocabBatchOwner> owners;
