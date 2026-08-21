@@ -35,6 +35,9 @@ class VocabularyInMemoryBinSearch
   // `VocabBatchLookupResult` can keep the referenced bytes alive after
   // `close()` and destruction of the vocabulary. Keep the pointer non-null;
   // `close()` installs a fresh empty buffer rather than clearing in place.
+  // Note: `lookupBatch` is not implemented here; it is provided by
+  // `InternalExternalVocabulary` which wraps this vocabulary and manages
+  // the actual batch-lookup logic.
   std::shared_ptr<const Words> words_ = std::make_shared<const Words>();
   Indices indices_;
 
