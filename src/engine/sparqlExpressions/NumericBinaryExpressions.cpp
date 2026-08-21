@@ -4,6 +4,9 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include <chrono>
+#include <typeinfo>
 
 namespace sparqlExpression {
 namespace detail {
@@ -75,6 +78,422 @@ struct AddImpl {
   }
 };
 NARY_EXPRESSION(AddExpression, 2, FV<AddImpl, NumericOrDateValueGetter>);
+
+//oldgetNumericBatch impl
+// std::vector<NumericValue> getNumericBatch(
+//     std::span<const ValueId> ids,
+//     const EvaluationContext* context) {
+//   NumericValueGetter getter;
+
+//   std::vector<NumericValue> result;
+//   result.reserve(ids.size());
+
+//   for (const auto& id : ids) {
+//     result.push_back(getter(id, context));
+//   }
+
+//   return result;
+// }
+
+//old isAllInt impl
+// __attribute__((noinline))
+// bool isAllInt(std::span<const ValueId> ids) {
+//   for (const auto& id : ids) {
+//     if (id.getDatatype() != Datatype::Int) {
+//       return false;
+//     }
+//   }
+//   return true;
+// }
+
+__attribute__((noinline))
+bool isAllInt(std::span<const ValueId> ids) {
+  size_t intCount = 0;
+  size_t nonIntCount = 0;
+
+  for (const auto& id : ids) {
+    if (id.getDatatype() == Datatype::Int) {
+      ++intCount;
+    } else {
+      ++nonIntCount;
+    }
+  }
+
+  // static size_t callCount = 0;
+
+  // if (callCount < 4) {
+
+  //   const size_t total = intCount + nonIntCount;
+
+  //   const double intPercentage =
+  //       total == 0
+  //           ? 0.0
+  //           : 100.0 * static_cast<double>(intCount) /
+  //                 static_cast<double>(total);
+
+  //   const double nonIntPercentage =
+  //       total == 0
+  //           ? 0.0
+  //           : 100.0 * static_cast<double>(nonIntCount) /
+  //                 static_cast<double>(total);
+
+  //   std::cerr << "\n===== isAllInt Datatype Distribution =====\n";
+  //   std::cerr << "Total      : " << total << "\n";
+  //   std::cerr << "Int        : " << intCount
+  //             << " (" << intPercentage << "%)\n";
+  //   std::cerr << "Non-Int    : " << nonIntCount
+  //             << " (" << nonIntPercentage << "%)\n";
+  //   std::cerr << "==========================================\n";
+  // }
+  // ++callCount;
+
+  return nonIntCount == 0;
+}
+
+__attribute__((noinline))
+std::vector<NumericValue> getNumericBatchInt(
+    std::span<const ValueId> ids) {
+
+  std::vector<NumericValue> result;
+  result.reserve(ids.size());
+
+  for (const auto& id : ids) {
+    result.push_back(id.getInt());
+  }
+
+  return result;
+}
+
+//speculative integer
+std::optional<sparqlExpression::VectorWithMemoryLimit<ValueId>>
+tryAddIntegerVectorsDirect(
+    const sparqlExpression::VectorWithMemoryLimit<ValueId>& left,
+    const sparqlExpression::VectorWithMemoryLimit<ValueId>& right,
+    sparqlExpression::EvaluationContext* context) {
+    auto datatypeName = [](Datatype datatype) -> std::string_view {
+    switch (datatype) {
+      case Datatype::Double:
+        return "Double";
+      case Datatype::Int:
+        return "Int";
+      case Datatype::Bool:
+        return "Bool";
+      case Datatype::Undefined:
+        return "Undefined";
+      case Datatype::EncodedVal:
+        return "EncodedVal";
+      case Datatype::VocabIndex:
+        return "VocabIndex";
+      case Datatype::LocalVocabIndex:
+        return "LocalVocabIndex";
+      case Datatype::TextRecordIndex:
+        return "TextRecordIndex";
+      case Datatype::WordVocabIndex:
+        return "WordVocabIndex";
+      case Datatype::Date:
+        return "Date";
+      case Datatype::GeoPoint:
+        return "GeoPoint";
+      case Datatype::BlankNodeIndex:
+        return "BlankNodeIndex";
+    }
+
+    return "Unknown";
+  };
+  AD_CONTRACT_CHECK(left.size() == right.size());
+
+  sparqlExpression::VectorWithMemoryLimit<ValueId> result{
+      context->_allocator};
+  result.reserve(left.size());
+
+  for (size_t i = 0; i < left.size(); ++i) {
+    const auto& leftId = left[i];
+    const auto& rightId = right[i];
+
+    const auto leftType = leftId.getDatatype();
+    const auto rightType = rightId.getDatatype();
+
+    if (leftType != Datatype::Int || rightType != Datatype::Int) {
+      std::cerr << "SPECULATIVE MISMATCH at index " << i << '\n';
+      std::cerr << "Left datatype: "
+                << datatypeName(leftType) << '\n';
+      std::cerr << "Right datatype: "
+                << datatypeName(rightType) << '\n';
+      return std::nullopt;
+    }
+
+    const auto sum =
+        static_cast<double>(leftId.getInt()) +
+        static_cast<double>(rightId.getInt());
+
+    result.push_back(ValueId::makeFromDouble(sum));
+  }
+
+  return result;
+}
+
+//integer fast path
+__attribute__((noinline))
+sparqlExpression::VectorWithMemoryLimit<ValueId> addIntegerVectorsDirect(
+    std::span<const ValueId> left,
+    std::span<const ValueId> right,
+    sparqlExpression::EvaluationContext* context) {
+  AD_CONTRACT_CHECK(left.size() == right.size());
+
+  sparqlExpression::VectorWithMemoryLimit<ValueId> result{
+      context->_allocator};
+  result.reserve(left.size());
+
+  for (size_t i = 0; i < left.size(); ++i) {
+    const double sum =
+        static_cast<double>(left[i].getInt()) +
+        static_cast<double>(right[i].getInt());
+
+    result.push_back(Id::makeFromDouble(sum));
+  }
+
+  return result;
+}
+
+//new getNumericBatch direct impl
+std::vector<NumericValue> getNumericBatchGeneric(
+    std::span<const ValueId> ids,
+    const sparqlExpression::EvaluationContext* context) {
+  (void)context;
+  static size_t totalInts = 0;
+  static size_t totalDoubles = 0;
+  static size_t totalBools = 0;
+  static size_t totalOthers = 0;
+  static size_t totalValues = 0;
+  
+  std::vector<NumericValue> result;
+  result.reserve(ids.size());
+
+  for (const auto& id : ids) {
+    switch (id.getDatatype()) {
+      case Datatype::Double:
+        ++totalDoubles;
+        ++totalValues;
+        result.push_back(id.getDouble());
+        break;
+      case Datatype::Int:
+        ++totalInts;
+        ++totalValues;
+        result.push_back(id.getInt());
+        break;
+      case Datatype::Bool:
+        ++totalBools;
+        ++totalValues;
+        result.push_back(static_cast<int64_t>(id.getBool()));
+        break;
+      default:
+        ++totalOthers;
+        ++totalValues;
+        result.push_back(NotNumeric{});
+        break;
+    }
+  }
+  return result;
+}
+
+std::vector<NumericValue> getNumericBatch(
+    std::span<const ValueId> ids,
+    const sparqlExpression::EvaluationContext* context) {
+
+  if (isAllInt(ids)) {
+    static bool printed = false;
+    if (!printed) {
+      std::cerr << "DEBUG: Integer fast path\n";
+      printed = true;
+    }
+    return getNumericBatchInt(ids);
+  }
+
+  std::cerr << "DEBUG: Generic path\n";
+  return getNumericBatchGeneric(ids, context);
+}
+
+//batch addition impl
+class BatchedAddExpression : public SparqlExpression {
+ public:
+  using Children = std::array<SparqlExpression::Ptr, 2>;
+
+ private:
+  Children children_;
+
+ public:
+  explicit BatchedAddExpression(Children children)
+      : children_{std::move(children)} {}
+
+  ExpressionResult evaluate(EvaluationContext* context) const override {
+    // std::cerr << "DEBUG: BatchedAddExpression reached\n";
+
+    using Clock = std::chrono::steady_clock;
+
+    auto ms = [](auto start, auto end) {
+      return std::chrono::duration_cast<std::chrono::microseconds>(
+                end - start)
+          .count();
+    };
+
+    auto t0 = Clock::now();
+
+    auto left = children_[0]->evaluate(context);
+    auto right = children_[1]->evaluate(context);
+
+    // std::cerr << "DEBUG: left variant index = " << left.index() << "\n";
+    // std::cerr << "DEBUG: right variant index = " << right.index() << "\n";
+
+    // std::visit(
+    //     [](const auto& value) {
+    //       std::cerr << "DEBUG: left actual type = "
+    //                 << typeid(value).name() << "\n";
+    //     },
+    //     left);
+
+    // std::visit(
+    //     [](const auto& value) {
+    //       std::cerr << "DEBUG: right actual type = "
+    //                 << typeid(value).name() << "\n";
+    //     },
+    //     right);
+
+    auto t1 = Clock::now();
+
+    if (auto* leftVec = std::get_if<sparqlExpression::VectorWithMemoryLimit<ValueId>>(&left);
+      leftVec != nullptr) {
+        auto* rightVec = std::get_if<sparqlExpression::VectorWithMemoryLimit<ValueId>>(&right);
+        AD_CONTRACT_CHECK(rightVec != nullptr);
+
+        auto t2 = Clock::now();
+
+        // std::cerr << "DEBUG: Processing vector inputs "
+        //           << leftVec->size() << " rows\n";
+
+        AD_CONTRACT_CHECK(leftVec->size() == rightVec->size());
+
+        // static bool printedDistribution = false;
+
+        // std::cerr << "Checking LEFT operand\n";
+        const bool leftAllInt = isAllInt(*leftVec);
+
+        // std::cerr << "Checking RIGHT operand\n";
+        const bool rightAllInt = isAllInt(*rightVec);
+
+        // if (!printedDistribution) {
+        //   printedDistribution = true;
+
+        //   std::cerr << "LEFT all integers: "
+        //             << std::boolalpha << leftAllInt << "\n";
+        //   std::cerr << "RIGHT all integers: "
+        //             << std::boolalpha << rightAllInt << "\n";
+        // }
+
+        // Direct integer path.
+        if (leftAllInt && rightAllInt) {
+          auto t3 = Clock::now();
+
+          auto result =
+              addIntegerVectorsDirect(*leftVec, *rightVec, context);
+
+          auto t4 = Clock::now();
+
+          std::cerr << "DEBUG: Direct integer addition path\n";
+          std::cerr << "ROWS = " << leftVec->size() << "\n";
+          // std::cerr << "TIMING child evaluate us = "
+          //           << ms(t0, t1) << "\n";
+          std::cerr << "TIMING integer type checks us = "
+                    << ms(t2, t3) << "\n";
+          std::cerr << "TIMING direct integer addition us = "
+                    << ms(t3, t4) << "\n";
+          std::cerr << "TIMING total old integer path us = "
+                    << ms(t2, t4) << "\n";
+
+          return result;
+        }
+        
+        //speculative integer path
+        // auto speculativeStart = Clock::now();
+
+        // auto speculativeResult =
+        //     tryAddIntegerVectorsDirect(*leftVec, *rightVec, context);
+
+        // auto speculativeEnd  = Clock::now();
+
+        // if (speculativeResult.has_value()) {
+        //   std::cerr << "ROWS = " << leftVec->size() << "\n";
+        //   // std::cerr << "DEBUG: Speculative integer path succeeded\n";
+        //   // std::cerr << "TIMING child evaluate us = "
+        //   //           << ms(t0, t1) << "\n";
+        //   std::cerr << "TIMING setup/vector check us = "
+        //             << ms(t1, t2) << "\n";
+        //   std::cerr << "TIMING speculative integer loop us = "
+        //             << ms(speculativeStart, speculativeEnd) << "\n";
+
+        //   return std::move(*speculativeResult);
+        // }
+
+        // std::cerr << "DEBUG: Speculative integer path failed; "
+        //             "using generic fallback\n";
+        // std::cerr << "TIMING failed speculative attempt us = "
+        //           << ms(speculativeStart, speculativeEnd) << "\n";
+
+        //Generic path
+        sparqlExpression::VectorWithMemoryLimit<ValueId> result{context->_allocator};
+        result.reserve(leftVec->size());
+
+        auto genericStart = Clock::now();
+
+        auto leftNumericBatch = getNumericBatch(*leftVec, context);
+        auto rightNumericBatch = getNumericBatch(*rightVec, context);
+
+        auto batchesReady  = Clock::now();
+
+        for (size_t i = 0; i < leftNumericBatch.size(); ++i) {
+          auto added = std::visit(
+              [](const auto& l, const auto& r) -> NumericValue {
+                using L = std::decay_t<decltype(l)>;
+                using R = std::decay_t<decltype(r)>;
+
+                if constexpr (std::is_same_v<L, NotNumeric> ||
+                              std::is_same_v<R, NotNumeric>) {
+                  return NotNumeric{};
+                } else {
+                  return static_cast<double>(l) + static_cast<double>(r);
+                }
+              },
+              leftNumericBatch[i], rightNumericBatch[i]);
+
+          result.push_back(makeNumericId(added));
+        }
+
+      auto genericEnd  = Clock::now();
+
+      std::cerr << "DEBUG: Generic variant path\n";
+      std::cerr << "TIMING child evaluate us = " << ms(t0, t1) << "\n";
+      std::cerr << "TIMING setup/vector check us = " << ms(t1, t2) << "\n";
+      std::cerr << "TIMING getNumericBatch us = " << ms(genericStart, batchesReady) << "\n";
+      std::cerr << "TIMING addition loop us = " << ms(batchesReady, genericEnd) << "\n";
+
+      return result;
+    }
+
+    std::cerr << "DEBUG: BatchedAddExpression unsupported input types\n";
+    return Id::makeUndefined();
+  }
+
+  [[nodiscard]] std::string getCacheKey(
+      const VariableToColumnMap& varColMap) const override {
+    return absl::StrCat("BatchedAddExpression",
+                        children_[0]->getCacheKey(varColMap),
+                        children_[1]->getCacheKey(varColMap));
+  }
+
+ private:
+  ql::span<SparqlExpression::Ptr> childrenImpl() override {
+    return {children_.data(), children_.size()};
+  }
+};
 
 // _____________________________________________________________________________
 // Subtraction.
@@ -478,7 +897,10 @@ using OrExpression = constructPrefilterExpr::LogicalBinaryExpressionImpl<
 using namespace detail;
 SparqlExpression::Ptr makeAddExpression(SparqlExpression::Ptr child1,
                                         SparqlExpression::Ptr child2) {
-  return std::make_unique<AddExpression>(std::move(child1), std::move(child2));
+  return std::make_unique<BatchedAddExpression>(
+    BatchedAddExpression::Children{std::move(child1), std::move(child2)});
+  // return std::make_unique<AddExpression>(std::move(child1),
+  //                                        std::move(child2));
 }
 
 SparqlExpression::Ptr makeDivideExpression(SparqlExpression::Ptr child1,
