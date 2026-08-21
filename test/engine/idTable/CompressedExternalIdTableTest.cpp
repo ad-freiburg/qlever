@@ -4,6 +4,7 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -14,6 +15,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
 #include "util/ConstexprUtils.h"
+#include "util/jthread.h"
 
 using ad_utility::source_location;
 using namespace ad_utility::memory_literals;
@@ -96,18 +98,27 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
 }
 
 template <size_t NumStaticColumns>
-void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
-                            ad_utility::MemorySize memoryToUse,
-                            bool mergeMultipleTimes,
-                            source_location l = AD_CURRENT_SOURCE_LOC()) {
+void testExternalSorterImpl(
+    size_t numDynamicColumns, size_t numRows,
+    ad_utility::MemorySize memoryToUse, bool mergeMultipleTimes,
+    ad_utility::parallelBlockMerge::SharedMergeScheduler scheduler = nullptr,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto tr = generateLocationTrace(l);
-  std::string filename = "idTableCompressedSorter.testExternalSorter.dat";
+  // NOTE: The filename has to be derived from the name of the currently running
+  // test, because `ctest` runs the individual tests as concurrent processes in
+  // the same directory. A hardcoded name would make the tests that use this
+  // helper overwrite each other's sorter file.
+  std::string filename = gtestCurrentTestName() + ".testExternalSorter.dat";
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
   using namespace ad_utility::memory_literals;
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns>
       writer{filename, numDynamicColumns, memoryToUse,
              ad_utility::testing::makeAllocator(), 5_kB};
+  if (scheduler != nullptr) {
+    writer.setMergeScheduler(std::move(scheduler));
+  }
 
   for (size_t i = 0; i < 2; ++i) {
     CopyableIdTable<NumStaticColumns> randomTable =
@@ -162,13 +173,15 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
 };
 
 template <size_t NumStaticColumns>
-void testExternalSorter(size_t numDynamicColumns, size_t numRows,
-                        ad_utility::MemorySize memoryToUse,
-                        source_location l = AD_CURRENT_SOURCE_LOC()) {
+void testExternalSorter(
+    size_t numDynamicColumns, size_t numRows,
+    ad_utility::MemorySize memoryToUse,
+    ad_utility::parallelBlockMerge::SharedMergeScheduler scheduler = nullptr,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
   testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
-                                           memoryToUse, true, l);
-  testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
-                                           memoryToUse, false, l);
+                                           memoryToUse, true, scheduler, l);
+  testExternalSorterImpl<NumStaticColumns>(
+      numDynamicColumns, numRows, memoryToUse, false, std::move(scheduler), l);
 }
 
 // Test for static (`<NUM_COLS>) and dynamic (`<0>`) tables. The second
@@ -405,4 +418,345 @@ TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
 
   using namespace ::testing;
   EXPECT_THAT(result, ElementsAreArray(expected));
+}
+
+namespace {
+// The number of rows per block that results from the given uncompressed block
+// size. The blocks are formed per column, hence the size of a single `Id`.
+size_t rowsPerBlockFor(ad_utility::MemorySize blockSize) {
+  return blockSize.getBytes() / sizeof(Id);
+}
+
+// Write all the `tables` to the `writer` and then flush it, such that the
+// written blocks can be read again.
+void writeAndFlush(ad_utility::CompressedExternalIdTableWriter& writer,
+                   const std::vector<CopyableIdTable<0>>& tables) {
+  for (const auto& table : tables) {
+    writer.writeIdTable(table);
+  }
+  writer.flush();
+}
+
+// Check that the block boundary metadata of the `writer` exactly matches the
+// `tables` from which it was built.
+void checkBlockMetadata(
+    const ad_utility::CompressedExternalIdTableWriter& writer,
+    const std::vector<CopyableIdTable<0>>& tables, size_t rowsPerBlock,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  ASSERT_EQ(writer.numIdTables(), tables.size());
+  for (size_t i = 0; i < tables.size(); ++i) {
+    const auto& table = tables.at(i);
+    size_t expectedNumBlocks =
+        (table.numRows() + rowsPerBlock - 1) / rowsPerBlock;
+    ASSERT_EQ(writer.numBlocksOfIdTable(i), expectedNumBlocks);
+    for (size_t b = 0; b < expectedNumBlocks; ++b) {
+      size_t lower = b * rowsPerBlock;
+      size_t upper = std::min(lower + rowsPerBlock, table.numRows());
+      EXPECT_EQ(writer.numRowsInBlock(i, b), upper - lower);
+      EXPECT_EQ(writer.firstRowOfBlock(i, b), table.at(lower));
+      EXPECT_EQ(writer.lastRowOfBlock(i, b), table.at(upper - 1));
+    }
+  }
+}
+
+// Check that `readBlockOfIdTable` returns exactly the rows of the `tables` from
+// which the `writer` was built.
+void checkBlockContents(
+    const ad_utility::CompressedExternalIdTableWriter& writer,
+    const std::vector<CopyableIdTable<0>>& tables, size_t rowsPerBlock,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  ASSERT_EQ(writer.numIdTables(), tables.size());
+  for (size_t i = 0; i < tables.size(); ++i) {
+    const auto& table = tables.at(i);
+    for (size_t b = 0; b < writer.numBlocksOfIdTable(i); ++b) {
+      auto block = writer.readBlockOfIdTable(i, b);
+      size_t lower = b * rowsPerBlock;
+      size_t upper = std::min(lower + rowsPerBlock, table.numRows());
+      ASSERT_EQ(block.numRows(), upper - lower);
+      for (size_t row = 0; row < block.numRows(); ++row) {
+        EXPECT_EQ(block.at(row), table.at(lower + row));
+      }
+    }
+  }
+}
+
+// Three `IdTable`s with 3 columns each. The number of rows (6, 5, 1) is chosen
+// such that it is both divisible and not divisible by the block sizes used in
+// the tests below.
+std::vector<CopyableIdTable<0>> testTables() {
+  std::vector<CopyableIdTable<0>> tables;
+  tables.push_back(makeIdTableFromVector(
+      {{2, 4, 7}, {3, 6, 8}, {4, 3, 2}, {5, 1, 9}, {7, 0, 3}, {8, 8, 8}}));
+  tables.push_back(makeIdTableFromVector(
+      {{2, 3, 7}, {3, 6, 8}, {4, 2, 123}, {9, 9, 9}, {11, 0, 1}}));
+  tables.push_back(makeIdTableFromVector({{0, 4, 7}}));
+  return tables;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, blockBoundaryMetadata) {
+  auto tables = testTables();
+  // With 16 bytes per block we get 2 rows per block (divides the 6 rows of the
+  // first table, but not the 5 rows of the second one). With 24 bytes we get 3
+  // rows per block (divides the 6 rows, not the 5 rows). With 800 bytes each
+  // table fits into a single block.
+  for (auto blockSize : {16_B, 24_B, 800_B}) {
+    std::string filename =
+        gtestCurrentTestName() + std::to_string(blockSize.getBytes()) + ".dat";
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+    writeAndFlush(writer, tables);
+    checkBlockMetadata(writer, tables, rowsPerBlockFor(blockSize));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, readBlockOfIdTableMatchesSource) {
+  auto tables = testTables();
+  for (auto blockSize : {16_B, 24_B, 800_B}) {
+    std::string filename =
+        gtestCurrentTestName() + std::to_string(blockSize.getBytes()) + ".dat";
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+    writeAndFlush(writer, tables);
+    checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, concurrentBlockReads) {
+  auto tables = testTables();
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+  writeAndFlush(writer, tables);
+
+  // Read all blocks concurrently from 8 threads. This only works if
+  // `readBlockOfIdTable` takes a shared lock on the underlying file.
+  writer.registerActiveReader();
+  std::vector<ad_utility::JThread> threads;
+  for ([[maybe_unused]] size_t i : ql::views::iota(0, 8)) {
+    threads.emplace_back([&writer, &tables, blockSize]() {
+      checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+    });
+  }
+  threads.clear();
+  writer.unregisterActiveReader();
+
+  // After all readers are gone, the writer can be written to again.
+  EXPECT_NO_THROW(writer.writeIdTable(tables.at(0)));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, clearResetsBoundaryMetadata) {
+  auto tables = testTables();
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+  writeAndFlush(writer, tables);
+  writer.clear();
+
+  // After clearing, only the second batch is visible.
+  std::vector<CopyableIdTable<0>> secondBatch;
+  secondBatch.push_back(
+      makeIdTableFromVector({{1, 1, 1}, {2, 2, 2}, {3, 3, 3}}));
+  writeAndFlush(writer, secondBatch);
+  checkBlockMetadata(writer, secondBatch, rowsPerBlockFor(blockSize));
+  checkBlockContents(writer, secondBatch, rowsPerBlockFor(blockSize));
+}
+
+namespace {
+// The number of rows and the memory limit that are used by the tests of the
+// parallel merge below. With 4 columns and a memory limit of 1 MB, a single
+// presorted run holds `1'000'000 / (4 * 8 * 2) = 15'625` rows, so that 200'000
+// rows yield 13 runs. The number of rows is also well above
+// `DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD`, such that the genuinely
+// parallel code path of the merge is taken.
+constexpr size_t NUM_ROWS_PARALLEL_MERGE = 200'000;
+constexpr size_t EXPECTED_NUM_RUNS_PARALLEL_MERGE = 13;
+constexpr size_t BLOCKSIZE_OUTPUT_PARALLEL_MERGE = 10'000;
+
+// A `MergeScheduler` that counts how many tasks were scheduled and forwards
+// them to an owned `TaskQueueMergeScheduler`. It allows to assert that the
+// genuinely parallel code path of the merge (which is the only one that
+// schedules anything at all) was really taken.
+class CountingMergeScheduler
+    : public ad_utility::parallelBlockMerge::MergeScheduler {
+ private:
+  ad_utility::parallelBlockMerge::TaskQueueMergeScheduler scheduler_;
+  std::atomic<size_t> numScheduledTasks_{0};
+
+ public:
+  explicit CountingMergeScheduler(size_t numThreads, std::string name)
+      : scheduler_{numThreads, std::move(name)} {}
+
+  // ___________________________________________________________________________
+  void schedule(absl::AnyInvocable<void()> task) override {
+    ++numScheduledTasks_;
+    scheduler_.schedule(std::move(task));
+  }
+
+  // ___________________________________________________________________________
+  size_t maxParallelism() const override { return scheduler_.maxParallelism(); }
+
+  // The number of tasks (= chunks of the merge) that were scheduled so far.
+  size_t numScheduledTasks() const { return numScheduledTasks_.load(); }
+};
+
+// Sort the `input` with a `CompressedExternalIdTableSorter` that uses the given
+// `scheduler` for its merge phase, and return the sorted result.
+CopyableIdTable<0> sortWithScheduler(
+    const IdTable& input,
+    ad_utility::parallelBlockMerge::SharedMergeScheduler scheduler,
+    const std::string& filename) {
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+      filename, NUM_COLS, 1_MB, ad_utility::testing::makeAllocator(), 5_kB};
+  sorter.setMergeScheduler(std::move(scheduler));
+  for (const auto& row : input) {
+    sorter.push(row);
+  }
+  auto blocks = sorter.getSortedBlocks<0>(BLOCKSIZE_OUTPUT_PARALLEL_MERGE);
+  return idTableFromBlockGenerator(blocks);
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// The same assertions as in `sorterRandomInputs`, but with an
+// `InlineMergeScheduler`, which gives a deterministic single-threaded
+// reference implementation of the merge.
+TEST(CompressedExternalIdTable, sorterWithInlineScheduler) {
+  auto makeScheduler = []() {
+    return std::make_shared<
+        ad_utility::parallelBlockMerge::InlineMergeScheduler>();
+  };
+  testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB, makeScheduler());
+  testExternalSorter<NUM_COLS>(NUM_COLS, 1000, 1_MB, makeScheduler());
+  testExternalSorter<NUM_COLS>(NUM_COLS, 0, 1_MB, makeScheduler());
+
+  testExternalSorter<0>(NUM_COLS, 10'000, 10_kB, makeScheduler());
+  testExternalSorter<0>(NUM_COLS, 1000, 1_MB, makeScheduler());
+  testExternalSorter<0>(NUM_COLS, 0, 1_MB, makeScheduler());
+}
+
+// _____________________________________________________________________________
+// The parallel merge has to produce exactly the same output as the serial one.
+// This holds exactly (and not only up to the order of equal elements), because
+// `SortByOSP` compares all four columns and is therefore a total order.
+TEST(CompressedExternalIdTable, sorterParallelMatchesSerial) {
+  std::string serialFilename = gtestCurrentTestName() + ".serial.dat";
+  std::string parallelFilename = gtestCurrentTestName() + ".parallel.dat";
+  absl::Cleanup cleanup = [&serialFilename, &parallelFilename] {
+    ad_utility::deleteFile(serialFilename, false);
+    ad_utility::deleteFile(parallelFilename, false);
+  };
+  IdTable input =
+      createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS);
+
+  auto serial = sortWithScheduler(
+      input,
+      std::make_shared<ad_utility::parallelBlockMerge::InlineMergeScheduler>(),
+      serialFilename);
+  auto parallel = sortWithScheduler(
+      input,
+      std::make_shared<ad_utility::parallelBlockMerge::TaskQueueMergeScheduler>(
+          8, "sorterParallelMatchesSerial"),
+      parallelFilename);
+
+  ASSERT_EQ(serial.numRows(), input.numRows());
+  EXPECT_THAT(parallel, ::testing::ElementsAreArray(serial));
+}
+
+// _____________________________________________________________________________
+// Merge an input with many presorted runs via the genuinely parallel code path
+// and check that the result is exactly the sorted input.
+TEST(CompressedExternalIdTable, sorterManyRunsParallel) {
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  IdTable input =
+      createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS);
+  CopyableIdTable<0> expected{NUM_COLS, ad_utility::testing::makeAllocator()};
+  for (const auto& row : input) {
+    expected.push_back(row);
+  }
+  ql::ranges::sort(expected, SortByOSP{});
+
+  auto scheduler =
+      std::make_shared<CountingMergeScheduler>(8, "sorterManyRunsParallel");
+  auto result = sortWithScheduler(input, scheduler, filename);
+
+  // The input is large enough to be split into many presorted runs, so the
+  // merge really has to merge more than a handful of runs.
+  ASSERT_GE(EXPECTED_NUM_RUNS_PARALLEL_MERGE, 8u);
+  // Only the parallel code path of the merge schedules tasks at all, and it
+  // schedules exactly one task per chunk.
+  EXPECT_GT(scheduler->numScheduledTasks(), 1u);
+  ASSERT_EQ(result.numRows(), input.numRows());
+  EXPECT_TRUE(ql::ranges::is_sorted(result, SortByOSP{}));
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+// If the memory limit only permits a single in-flight chunk, then the merge
+// still works, but a warning is logged.
+TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  // The following values are chosen such that (with 4 columns) exactly two
+  // presorted runs are created, that `computeBlockSizeForMergePhase` does not
+  // throw, and that a single in-flight chunk (2 MB of input blocks plus 0.5 MB
+  // of output block) already occupies more than half of the memory limit.
+  const auto memory = ad_utility::MemorySize::bytes(4'000'000);
+  const auto blocksizeCompression = ad_utility::MemorySize::bytes(250'000);
+  // One run holds `4'000'000 / (4 * 8 * 2) = 62'500` rows, so the following
+  // number of rows yields exactly two complete runs and an empty last block.
+  constexpr size_t numRows = 125'000;
+
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+      filename, NUM_COLS, memory, ad_utility::testing::makeAllocator(),
+      blocksizeCompression};
+  sorter.setMergeScheduler(
+      std::make_shared<ad_utility::parallelBlockMerge::TaskQueueMergeScheduler>(
+          8, "sorterReducedParallelismWarning"));
+  IdTable input = createRandomlyFilledIdTable(numRows, NUM_COLS);
+  for (const auto& row : input) {
+    sorter.push(row);
+  }
+
+  CopyableIdTable<0> result{NUM_COLS, ad_utility::testing::makeAllocator()};
+  std::string logOutput;
+  {
+    auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    auto blocks = sorter.getSortedBlocks<0>();
+    result = idTableFromBlockGenerator(blocks);
+    logOutput = logStream.str();
+  }
+  EXPECT_THAT(logOutput,
+              ::testing::ContainsRegex(
+                  "merge phase of the external sorter can only merge 1 chunks "
+                  "concurrently instead of the 8 chunks"));
+  EXPECT_EQ(result.numRows(), numRows);
+  EXPECT_TRUE(ql::ranges::is_sorted(result, SortByOSP{}));
 }

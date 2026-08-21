@@ -9,6 +9,7 @@
 #include <absl/functional/bind_front.h>
 
 #include "util/AsyncStream.h"
+#include "util/Forward.h"
 #include "util/Generator.h"
 #include "util/TypeTraits.h"
 #include "util/ValueSizeGetters.h"
@@ -222,27 +223,22 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
         MemorySize maxMemPerNode, size_t blocksize, R&& rangeOfRanges,
         ComparisonFuncT comparison) {
   AD_CORRECTNESS_CHECK(!rangeOfRanges.empty());
-  auto moveIf = [](auto& range) -> decltype(auto) {
-    if constexpr (moveElements) {
-      return std::move(range);
-    } else {
-      return range;
-    }
-  };
 
   using ResultT = InputRangeTypeErased<std::vector<T>>;
 
   if (rangeOfRanges.size() == 1) {
     return ResultT{BatchToVector<T, moveElements, SizeGetter,
                                  ql::ranges::range_value_t<R>>(
-        maxMemPerNode, blocksize, moveIf(rangeOfRanges.front()))};
+        maxMemPerNode, blocksize,
+        ad_utility::moveIf<moveElements>(rangeOfRanges.front()))};
   } else if (rangeOfRanges.size() == 2) {
     return ResultT{
         LazyBinaryMerge<T, moveElements, SizeGetter,
                         ql::ranges::range_value_t<R>,
                         ql::ranges::range_value_t<R>, ComparisonFuncT>(
-            maxMemPerNode, blocksize, moveIf(rangeOfRanges[0]),
-            moveIf(rangeOfRanges[1]), comparison)};
+            maxMemPerNode, blocksize,
+            ad_utility::moveIf<moveElements>(rangeOfRanges[0]),
+            ad_utility::moveIf<moveElements>(rangeOfRanges[1]), comparison)};
   } else {
     size_t size = ql::ranges::size(rangeOfRanges);
     size_t split = size / 2;

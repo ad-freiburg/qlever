@@ -31,4 +31,25 @@ using MoveType =
 // `std::string`.
 #define AD_MOVE(x) static_cast<ad_utility::detail::MoveType<decltype((x))>>(x)
 
+namespace ad_utility {
+
+// Return `std::move(x)` if the template parameter `move` is `true`, and `x`
+// itself otherwise. Use this in generic code that is parameterized on whether
+// it may consume its input, so that a single use site like
+// `sink.push(ad_utility::moveIf<moveElements>(element))` suffices instead of an
+// explicit `if constexpr`.
+//
+// NOTE: The constness of `x` is preserved, so `moveIf<true>` on a `const`
+// lvalue yields a `const` rvalue reference, which does not actually move.
+template <bool move, typename T>
+constexpr decltype(auto) moveIf(T& x) {
+  if constexpr (move) {
+    return std::move(x);
+  } else {
+    return (x);
+  }
+}
+
+}  // namespace ad_utility
+
 #endif  // QLEVER_FORWARD_H
