@@ -6,9 +6,10 @@
 #include <gmock/gmock.h>
 
 #include <array>
+#include <utility>
 #include <variant>
 
-#include "VocabularyTestHelpers.h"
+#include "./VocabularyTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 #include "index/vocabulary/Vocabulary.h"
@@ -494,7 +495,7 @@ TEST(Vocabulary, SplitVocabularyLookupBatchMatchesItemAt) {
 
 }  // namespace
 
-// Test fixture to share common SplitVocabulary setup across multiple tests.
+// Share common SplitVocabulary setup across multiple tests.
 // Populates the vocabulary once per test suite with:
 //   index 0: "" (marker 0) / "xyz" (marker 1)
 //   index 1: "abc" (marker 0) / "axyz" (marker 1)
@@ -563,7 +564,7 @@ TEST_F(SplitVocabularyWithDataTest,
   markerLookups.lookupResultByMarker_[0] = sv_.lookupBatch(markerZeroIndices);
   markerLookups.lookupResultByMarker_[1] = sv_.lookupBatch(markerOneIndices);
   auto merged = TwoSplitVocabulary::mergeMarkerBatchesInInputOrder(
-      markerLookups, partitions);
+      std::move(markerLookups), partitions);
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(sv_, merged,
                                                                 indices);
 }

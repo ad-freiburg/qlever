@@ -133,7 +133,6 @@ class SplitVocabulary {
   }
 
   // Bucket type used by the private `lookupBatch` helpers.
-  using IndicesByMarker = std::array<std::vector<size_t>, numberOfVocabs>;
   using ResultsByMarker = std::array<VocabBatchLookupResult, numberOfVocabs>;
 
   // Paired lookup data for one marker: for each position `i` in the arrays,
@@ -203,22 +202,23 @@ class SplitVocabulary {
 
   // Merge per-marker batches into one result in input order.
   static VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
-      const MarkerBatchLookups& markerLookups,
+      MarkerBatchLookups markerLookups,
       const IndicesAndPositionsByMarker& markerIndicesAndPositions) {
     std::vector<std::string_view> viewsInInputOrder(std::accumulate(
         markerIndicesAndPositions.begin(), markerIndicesAndPositions.end(),
         size_t(0),
         [](size_t sum, const auto& entry) { return sum + entry.size(); }));
     std::vector<VocabBatchOwner> owners;
-    for (size_t marker = 0; marker < markerIndicesAndPositions.size();
-         ++marker) {
-      if (markerLookups.lookupResultByMarker_[marker] == nullptr) {
+    for (auto [marker, markerIndices] :
+         ::ranges::views::enumerate(markerIndicesAndPositions)) {
+      if (markerIndices.empty()) {
         continue;
       }
+      AD_CORRECTNESS_CHECK(markerLookups.lookupResultByMarker_[marker] !=
+                           nullptr);
       scatterVocabBatchLookupResult(
           std::move(markerLookups.lookupResultByMarker_[marker]),
-          markerIndicesAndPositions[marker].getResultPositions(),
-          viewsInInputOrder, owners);
+          markerIndices.getResultPositions(), viewsInInputOrder, owners);
     }
     return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
   }
@@ -300,6 +300,7 @@ class SplitVocabulary {
     return scanAllImpl(std::make_index_sequence<numberOfVocabs>{});
   }
 
+  //____________________________________________________________________________
   // Partition `indices` by marker, look up each group, and reassemble the
   // results in input order.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
@@ -307,7 +308,6 @@ class SplitVocabulary {
     auto markerIndicesAndPositions =
         partitionMarkerIndicesAndPositions(indices);
 
-    // Look up each marker's indices via its vocabulary.
     MarkerBatchLookups markerLookups;
     for (size_t marker = 0; marker < markerIndicesAndPositions.size();
          ++marker) {
@@ -325,8 +325,7 @@ class SplitVocabulary {
           markerIndicesAndPositions[marker].size());
     }
 
-    // Merge all marker batches into one result in input order.
-    return mergeMarkerBatchesInInputOrder(markerLookups,
+    return mergeMarkerBatchesInInputOrder(std::move(markerLookups),
                                           markerIndicesAndPositions);
   }
 

@@ -29,7 +29,6 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
-#include "util/TransparentFunctors.h"
 
 namespace detail {
 

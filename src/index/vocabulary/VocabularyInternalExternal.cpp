@@ -12,6 +12,7 @@
 
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -26,8 +27,9 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
 }
 
 // _____________________________________________________________________________
-// Partition input indices into internal matches and external misses, keeping
-// track of their positions in the original input.
+// Partition input indices into internal-vocabulary hits and indices that must
+// be resolved by the external vocabulary, while keeping their positions in the
+// original input.
 struct IndexPartition {
   // (inputPosition, word)
   std::vector<std::pair<size_t, std::string_view>> internalSlots_;
@@ -77,13 +79,15 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
 
   auto partition = partitionIndicesBySource(indices, internalVocab_);
 
-  // Fast path: all indices are in the external (disk) vocabulary.
+  // Take the fast path when all indices are resolved through the external
+  // (disk) vocabulary.
   if (partition.internalSlots_.empty()) {
     auto diskData = extractDiskLookupData(partition.diskSlots_);
     return externalVocab_.lookupBatch(diskData.indices);
   }
 
-  // Slow path: mixed internal + external. Assemble results from both sources.
+  // Handle mixed internal and external indices by assembling results from both
+  // sources.
   std::vector<std::string_view> assembled(indices.size());
 
   // Fill in internal results first.
