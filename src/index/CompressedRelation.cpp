@@ -221,8 +221,11 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       // holding the lock. We still perform it inside the lock to avoid
       // contention of the file. On a fast SSD we could possibly change this,
       // but this has to be investigated.
+      auto extendedColumns = columnsToReadForBlock(scanConfig_, blockMetadata);
       auto compressedBlock = reader_->readCompressedBlockFromFile(
-          blockMetadata, scanConfig_.scanColumns_);
+          blockMetadata, extendedColumns.empty()
+                             ? ColumnIndicesRef{scanConfig_.scanColumns_}
+                             : ColumnIndicesRef{extendedColumns});
 
       lock.unlock();
       auto decompressedBlockAndMetadata =
@@ -774,8 +777,11 @@ IdTable CompressedRelationReader::scan(
   IdTable result(columnIndices.size(), allocator_);
   // Compute an upper bound for the size and reserve enough space in the
   // result.
-  auto sizes = scanSpecAndBlocks.getBlockMetadataView() |
-               ql::views::transform(&CompressedBlockMetadata::numRows_);
+  auto sizes =
+      scanSpecAndBlocks.getBlockMetadataView() |
+      ql::views::transform([](const CompressedBlockMetadata& blockMetadata) {
+        return blockMetadata.numRowsEstimate();
+      });
   auto upperBoundSize = std::accumulate(sizes.begin(), sizes.end(), size_t{0});
   if (limitOffset._limit.has_value()) {
     upperBoundSize = std::min(upperBoundSize,
@@ -930,14 +936,13 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
               ? 1
               : getRuntimeParameter<
                     &RuntimeParameters::smallIndexScanSizeEstimateDivisor_>();
-      const auto [ins, del] =
-          locatedTriplesPerBlock.numTriples(block.blockIndex_);
+      const auto [ins, del] = locatedTriplesPerBlock.numTriples(block);
       auto trunc = [divisor](size_t num) {
         return std::max<size_t>(std::min<size_t>(num, 1), num / divisor);
       };
       inserted += trunc(ins);
       deleted += trunc(del);
-      numResults += trunc(block.numRows_);
+      numResults += trunc(block.numRowsEstimate());
     }
   };
 
@@ -954,12 +959,13 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
 
   ql::ranges::for_each(
       ql::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
-        const auto [ins, del] =
-            locatedTriplesPerBlock.numTriples(block.blockIndex_);
-        if (!exactSize || (ins == 0 && del == 0)) {
+        const auto [ins, del] = locatedTriplesPerBlock.numTriples(block);
+        // Note: For a partial block, `numRowsEstimate()` is only an estimate,
+        // so we always have to read such a block if the exact size is required.
+        if (!exactSize || (ins == 0 && del == 0 && !block.isPartial())) {
           inserted += ins;
           deleted += del;
-          numResults += block.numRows_;
+          numResults += block.numRowsEstimate();
         } else {
           // TODO<joka921> We could cache the exact size as soon as we
           // have merged the block once since the last update.
@@ -1056,10 +1062,13 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
   // the count from the metadata.
   for (const auto& [i, blockMetadata] : ranges::views::enumerate(blocks)) {
     // The `numRows_` metadata shortcut is safe iff all rows of the block
-    // agree on the grouped column AND the block has no delta triples. The
-    // column uniformity is equivalent to `firstTriple_` and `lastTriple_`
-    // agreeing on the first `columnIndex + 1` columns.
+    // agree on the grouped column AND the block has no delta triples AND the
+    // block is not only a part of an on-disk block (in which case `numRows_`
+    // refers to the whole on-disk block). The column uniformity is equivalent
+    // to `firstTriple_` and `lastTriple_` agreeing on the first `columnIndex +
+    // 1` columns.
     if (!blockMetadata.containsInconsistentTriples(columnIndex + 1) &&
+        !blockMetadata.isPartial() &&
         !locatedTriplesPerBlock.containsTriples(blockMetadata.blockIndex_)) {
       // The whole block has the same `colId` and no delta triples ->
       // we get all the information from the metadata.
@@ -1165,6 +1174,77 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
 }
 
 // ____________________________________________________________________________
+size_t CompressedRelationReader::numAdditionalColumnsForPartialBlock(
+    const ScanImplConfig& scanConfig, const CompressedBlockMetadata& metadata) {
+  if (!metadata.isPartial()) {
+    return 0;
+  }
+  // Those leading columns of a triple that are fixed by the scan specification
+  // are not part of the `scanColumns_`, but we need them to compare the rows of
+  // the on-disk block with the bounds of the partial block. Note that we cannot
+  // simply take their values from the scan specification, because the on-disk
+  // block also contains the rows of the other parts, which may well have
+  // different values in those columns.
+  auto [numIndexColumns, includeGraphColumn] =
+      prepareLocatedTriples(scanConfig.scanColumns_);
+  return 3 - numIndexColumns;
+}
+
+// ____________________________________________________________________________
+std::vector<ColumnIndex> CompressedRelationReader::columnsToReadForBlock(
+    const ScanImplConfig& scanConfig, const CompressedBlockMetadata& metadata) {
+  size_t numAdditionalColumns =
+      numAdditionalColumnsForPartialBlock(scanConfig, metadata);
+  if (numAdditionalColumns == 0) {
+    return {};
+  }
+  std::vector<ColumnIndex> columns;
+  columns.reserve(numAdditionalColumns + scanConfig.scanColumns_.size());
+  ql::ranges::copy(ad_utility::integerRange(ColumnIndex{numAdditionalColumns}),
+                   std::back_inserter(columns));
+  ql::ranges::copy(scanConfig.scanColumns_, std::back_inserter(columns));
+  return columns;
+}
+
+// ____________________________________________________________________________
+void CompressedRelationReader::restrictBlockToPartialBlockBounds(
+    DecompressedBlock& block, const CompressedBlockMetadata& metadata,
+    size_t numAdditionalColumns) {
+  // Because of the `numAdditionalColumns` (see
+  // `numAdditionalColumnsForPartialBlock`), the first three columns of the
+  // `block` are exactly the three columns of a triple.
+  AD_CORRECTNESS_CHECK(block.numColumns() > 3);
+
+  // Return the index of the first row of the `block` that is greater than or
+  // equal to the `bound`, ignoring the graph.
+  auto lowerBoundRow =
+      [&block](const CompressedBlockMetadata::PermutedTriple& bound) {
+        std::array<Id, 3> boundIds{bound.col0Id_, bound.col1Id_, bound.col2Id_};
+        auto rowLessThanBound = [&boundIds](const auto& row) {
+          return std::array<Id, 3>{row[0], row[1], row[2]} < boundIds;
+        };
+        return static_cast<size_t>(
+            ql::ranges::partition_point(block, rowLessThanBound) -
+            block.begin());
+      };
+
+  auto lowerBound = metadata.inclusiveLowerBound();
+  auto upperBound = metadata.exclusiveUpperBound();
+  size_t end = upperBound.has_value() ? lowerBoundRow(upperBound.value())
+                                      : block.numRows();
+  size_t begin = lowerBound.has_value() ? lowerBoundRow(lowerBound.value()) : 0;
+  AD_CORRECTNESS_CHECK(begin <= end);
+  block.resize(end);
+  block.erase(block.begin(), block.begin() + begin);
+
+  // Remove the columns that were only read for the comparisons above.
+  for ([[maybe_unused]] size_t i :
+       ad_utility::integerRange(numAdditionalColumns)) {
+    block.deleteColumn(0);
+  }
+}
+
+// ____________________________________________________________________________
 DecompressedBlockAndMetadata
 CompressedRelationReader::decompressAndPostprocessBlock(
     const CompressedBlock& compressedBlock, size_t numRowsToRead,
@@ -1173,11 +1253,17 @@ CompressedRelationReader::decompressAndPostprocessBlock(
   auto decompressedBlock = decompressBlock(compressedBlock, numRowsToRead);
   auto [numIndexColumns, includeGraphColumn] =
       prepareLocatedTriples(scanConfig.scanColumns_);
+  // If the `metadata` describes only a part of the on-disk block, then drop all
+  // the rows that belong to a different part.
+  if (metadata.isPartial()) {
+    restrictBlockToPartialBlockBounds(
+        decompressedBlock, metadata,
+        numAdditionalColumnsForPartialBlock(scanConfig, metadata));
+  }
   bool hasUpdates = false;
-  if (scanConfig.locatedTriples_.containsTriples(metadata.blockIndex_)) {
+  if (scanConfig.locatedTriples_.containsTriples(metadata)) {
     decompressedBlock = scanConfig.locatedTriples_.mergeTriples(
-        metadata.blockIndex_, decompressedBlock, numIndexColumns,
-        includeGraphColumn);
+        metadata, decompressedBlock, numIndexColumns, includeGraphColumn);
     hasUpdates = true;
   }
   bool wasPostprocessed = false;
@@ -1212,8 +1298,11 @@ CompressedRelationReader::readAndDecompressBlock(
   if (scanConfig.graphFilter_.canBlockBeSkipped(blockMetaData)) {
     return std::nullopt;
   }
-  CompressedBlock compressedColumns =
-      readCompressedBlockFromFile(blockMetaData, scanConfig.scanColumns_);
+  auto extendedColumns = columnsToReadForBlock(scanConfig, blockMetaData);
+  CompressedBlock compressedColumns = readCompressedBlockFromFile(
+      blockMetaData, extendedColumns.empty()
+                         ? ColumnIndicesRef{scanConfig.scanColumns_}
+                         : ColumnIndicesRef{extendedColumns});
   const auto numRowsToRead = blockMetaData.numRows_;
   return decompressAndPostprocessBlock(compressedColumns, numRowsToRead,
                                        scanConfig, blockMetaData);
@@ -1646,12 +1735,24 @@ CompressedRelationReader::getMetadataForSmallRelation(
   // happen that a relation starts in a single block, but added triples land in
   // an adjacent block (because the relation was right at the end of a block).
   // In this case we might also see two blocks here.
-  AD_CONTRACT_CHECK(scanSpecAndBlocks.sizeBlockMetadata_ <= 2,
+  //
+  // Note: We count the distinct `blockIndex_`es, because a single block may be
+  // split into several parts because of the update triples (see
+  // `CompressedBlockMetadata::PartialBlockInfo`).
+  size_t numDistinctBlockIndices = 0;
+  std::optional<size_t> previousBlockIndex;
+  for (const auto& blockMetadata : blocks) {
+    if (blockMetadata.blockIndex_ != previousBlockIndex) {
+      ++numDistinctBlockIndices;
+      previousBlockIndex = blockMetadata.blockIndex_;
+    }
+  }
+  AD_CONTRACT_CHECK(numDistinctBlockIndices <= 2,
                     "Should only be called for small relations (contained in "
                     "at most one block), or relations that started in a single "
                     "block, but were extended into the adjacent block by "
                     "SPARQL UPDATE, but found a relation which spans ",
-                    scanSpecAndBlocks.sizeBlockMetadata_, "block.");
+                    numDistinctBlockIndices, "block.");
 
   ad_utility::HashSet<Id> distinctCol2;
   size_t numRowsTotal = 0;
@@ -1750,15 +1851,19 @@ CPP_template(typename Range)(
     return;
   }
 
+  // Note: Two consecutive blocks may have the same `blockIndex_`, namely if
+  // they are two parts of the same on-disk block (see
+  // `CompressedBlockMetadata::PartialBlockInfo`). Such blocks are still unique
+  // and strictly ordered w.r.t. their `lastTriple_`.
   auto checkUniquenessAndOrder = [](const auto& blockPair) {
     const auto& [b1, b2] = blockPair;
     // Blocks must be unique.
-    AD_CONTRACT_CHECK(b1 != b2 && b1.blockIndex_ != b2.blockIndex_, [&] {
+    AD_CONTRACT_CHECK(b1 != b2, [&] {
       return createErrorMessage(b1, b2, "Found block metadata duplicates\n");
     });
     // Blocks must adhere to ascending order.
     AD_CONTRACT_CHECK(
-        b1.lastTriple_ < b2.lastTriple_ && b1.blockIndex_ < b2.blockIndex_,
+        b1.lastTriple_ < b2.lastTriple_ && b1.blockIndex_ <= b2.blockIndex_,
         [&] {
           return createErrorMessage(b1, b2,
                                     "Found block metadata order violation\n");

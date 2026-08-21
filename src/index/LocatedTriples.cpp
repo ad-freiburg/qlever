@@ -82,6 +82,23 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   return {0, 0};
 }
 
+// ____________________________________________________________________________
+NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(
+    const CompressedBlockMetadata& blockMetadata) const {
+  if (!blockMetadata.isPartial()) {
+    return numTriples(blockMetadata.blockIndex_);
+  }
+  auto blockUpdateTriples = getUpdatesIfPresent(blockMetadata.blockIndex_);
+  if (!blockUpdateTriples) {
+    return {0, 0};
+  }
+  // See the comment in the header file for why we return the same number twice.
+  size_t numTriplesInPart = blockUpdateTriples->sizeUpperBoundInRange(
+      blockMetadata.inclusiveLowerBound(), blockMetadata.exclusiveUpperBound(),
+      CompareTripleWithBlockBoundIgnoringGraph{});
+  return {numTriplesInPart, numTriplesInPart};
+}
+
 namespace {
 
 // This code works for `std::integer_sequence` as well as
@@ -141,20 +158,18 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
 
 // ____________________________________________________________________________
 template <size_t numIndexColumns, bool includeGraphColumn>
-IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
-                                                 const IdTable& block) const {
+IdTable LocatedTriplesPerBlock::mergeTriplesImpl(
+    const CompressedBlockMetadata& blockMetadata, const IdTable& block) const {
   // This method should only be called if there are located triples in the
   // specified block.
-  AD_CONTRACT_CHECK(map_.contains(blockIndex));
+  AD_CONTRACT_CHECK(map_.contains(blockMetadata.blockIndex_));
 
   AD_CONTRACT_CHECK(numIndexColumns + static_cast<size_t>(includeGraphColumn) <=
                     block.numColumns());
 
-  auto numInsertsAndDeletes = numTriples(blockIndex);
+  auto numInsertsAndDeletes = numTriples(blockMetadata);
   IdTable result{block.numColumns(), block.getAllocator()};
   result.resize(block.numRows() + numInsertsAndDeletes.numAdded_);
-
-  const auto& locatedTriples = map_.at(blockIndex);
 
   auto lessThan = [](const auto& lt, const auto& row) {
     return tieLocatedTriple<numIndexColumns, includeGraphColumn>(lt) <
@@ -166,7 +181,7 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   };
 
   auto rowIt = block.begin();
-  auto sortedLocatedTriples = locatedTriples.getSortedView();
+  auto sortedLocatedTriples = getUpdatesForBlock(blockMetadata);
   auto locatedTripleIt = sortedLocatedTriples.begin();
   auto locatedTripleEnd = sortedLocatedTriples.end();
   auto resultIt = result.begin();
@@ -229,21 +244,20 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 }
 
 // ____________________________________________________________________________
-IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
-                                             const IdTable& block,
-                                             size_t numIndexColumns,
-                                             bool includeGraphColumn) const {
+IdTable LocatedTriplesPerBlock::mergeTriples(
+    const CompressedBlockMetadata& blockMetadata, const IdTable& block,
+    size_t numIndexColumns, bool includeGraphColumn) const {
   // The following code does nothing more than turn `numIndexColumns` and
   // `includeGraphColumn` into template parameters of `mergeTriplesImpl`.
-  auto mergeTriplesImplHelper = [numIndexColumns, blockIndex, &block,
+  auto mergeTriplesImplHelper = [numIndexColumns, &blockMetadata, &block,
                                  this](auto hasGraphColumn) {
     if (numIndexColumns == 3) {
-      return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block);
+      return mergeTriplesImpl<3, hasGraphColumn>(blockMetadata, block);
     } else if (numIndexColumns == 2) {
-      return mergeTriplesImpl<2, hasGraphColumn>(blockIndex, block);
+      return mergeTriplesImpl<2, hasGraphColumn>(blockMetadata, block);
     } else {
       AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return mergeTriplesImpl<1, hasGraphColumn>(blockIndex, block);
+      return mergeTriplesImpl<1, hasGraphColumn>(blockMetadata, block);
     }
   };
   using ad_utility::use_value_identity::vi;
@@ -432,79 +446,268 @@ void LocatedTriplesPerBlock::setOriginalMetadata(
   originalMetadata_ = std::move(metadata);
 }
 
+namespace {
+
+// The information about the update triples of a single part of a block that is
+// required to compute the metadata of that part. The parts of a block are
+// determined in `appendAugmentedMetadataForBlock`.
+struct UpdateInfoForPart {
+  using PermutedTriple = CompressedBlockMetadata::PermutedTriple;
+  // The first and the last update triple of this part.
+  PermutedTriple firstTriple_{};
+  PermutedTriple lastTriple_{};
+  // The distinct graphs of the *inserted* triples of this part. `nullopt` if
+  // there are more than `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA` of them.
+  std::optional<std::vector<Id>> insertedGraphs_{std::vector<Id>{}};
+  // True iff this part contains at least one inserted (as opposed to deleted)
+  // triple.
+  bool hasInsertions_ = false;
+  // The number of update triples of this part.
+  size_t numTriples_ = 0;
+
+  // Add a single update triple. The triples have to be added in sorted order.
+  void addTriple(const LocatedTriple& locatedTriple) {
+    auto triple = locatedTriple.triple_.toPermutedTriple();
+    if (numTriples_ == 0) {
+      firstTriple_ = triple;
+    }
+    lastTriple_ = triple;
+    ++numTriples_;
+    if (!locatedTriple.insertOrDelete_) {
+      return;
+    }
+    hasInsertions_ = true;
+    if (!insertedGraphs_.has_value()) {
+      return;
+    }
+    auto& graphs = insertedGraphs_.value();
+    // Note: We compare the bits, exactly as `computeDistinctGraphs` does.
+    if (ql::ranges::find(graphs, triple.graphId_.getBits(), &Id::getBits) !=
+        graphs.end()) {
+      return;
+    }
+    if (graphs.size() == MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
+      insertedGraphs_.reset();
+      return;
+    }
+    graphs.push_back(triple.graphId_);
+  }
+};
+
+// Return a copy of the `triple` that can be used as the bound between two parts
+// of a block. The graph is set to the minimal possible ID, because the bounds
+// are compared while ignoring the graph, and this makes the fact that all
+// triples that are equal to the `triple` except for their graph belong to the
+// part *after* this bound explicit.
+CompressedBlockMetadata::PermutedTriple makeBoundBetweenParts(
+    CompressedBlockMetadata::PermutedTriple triple) {
+  triple.graphId_ = Id::min();
+  return triple;
+}
+
 // Update the `blockMetadata`, such that its graph info is consistent with the
-// `locatedTriples` which are added to that block. In particular, all graphs to
-// which at least one triple is inserted become part of the graph info, and if
-// the number of total graphs becomes larger than the configured threshold, then
-// the graph info is set to `nullopt`, which means that there is no info.
+// update triples described by `updateInfo` which are added to that block. In
+// particular, all graphs to which at least one triple is inserted become part
+// of the graph info, and if the number of total graphs becomes larger than the
+// configured threshold, then the graph info is set to `nullopt`, which means
+// that there is no info.
 void updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
-                         const LocatedTriples& locatedTriples) {
+                         const UpdateInfoForPart& updateInfo) {
   auto& graphs = blockMetadata.graphInfo_;
   // We only insert graphs, never delete them, so if `graphs` is already
   // `nullopt`, then it will stay `nullopt`.
   if (graphs.has_value()) {
-    graphs = computeDistinctGraphs(
-        locatedTriples.getSortedView() |
-            ql::views::filter(&LocatedTriple::insertOrDelete_) |
-            ql::views::transform([](const LocatedTriple& lt) {
-              return lt.triple_.ids().at(ADDITIONAL_COLUMN_GRAPH_ID);
-            }),
-        graphs.value());
+    if (updateInfo.insertedGraphs_.has_value()) {
+      graphs = computeDistinctGraphs(updateInfo.insertedGraphs_.value(),
+                                     graphs.value());
+    } else {
+      graphs.reset();
+    }
   }
 
   if (!hasOnlyOneGraph(graphs)) {
     // We do not know anything about the triples contained in the block, so we
-    // also cannot know if the `locatedTriples` introduces duplicates. We thus
-    // have to be conservative and assume that there are duplicates when data
-    // was inserted.
-    blockMetadata.containsDuplicatesWithDifferentGraphs_ |= ql::ranges::any_of(
-        locatedTriples.getSortedView(), &LocatedTriple::insertOrDelete_);
+    // also cannot know if the update triples introduce duplicates. We thus have
+    // to be conservative and assume that there are duplicates when data was
+    // inserted.
+    blockMetadata.containsDuplicatesWithDifferentGraphs_ |=
+        updateInfo.hasInsertions_;
+  }
+}
+
+}  // namespace
+
+// ____________________________________________________________________________
+void LocatedTriplesPerBlock::appendAugmentedMetadataForBlock(
+    std::vector<CompressedBlockMetadata>& result,
+    CompressedBlockMetadata blockMetadata, size_t blockIndex) const {
+  using PermutedTriple = CompressedBlockMetadata::PermutedTriple;
+  // Note: The `blockIndex` is the position of the block in the metadata, which
+  // is what the `LocatedTriple`s refer to. For metadata that was created by the
+  // `CompressedRelationWriter` it is equal to `blockMetadata.blockIndex_`.
+  auto blockUpdates = getUpdatesIfPresent(blockIndex);
+  if (!blockUpdates) {
+    result.push_back(std::move(blockMetadata));
+    return;
+  }
+  // A block without any rows in the underlying file consists of update triples
+  // only. This is the case for the very last block, which holds the update
+  // triples that are larger than all triples in the index.
+  const bool hasRowsInFile =
+      blockMetadata.offsetsAndCompressedSize_.has_value();
+  AD_CORRECTNESS_CHECK(hasRowsInFile || blockMetadata.numRows_ == 0);
+
+  // Determine into how many parts this block has to be split, such that each
+  // part has at most `maxBlockSize` rows (rows in the file plus update
+  // triples).
+  size_t maxBlockSize =
+      getRuntimeParameter<&RuntimeParameters::maxBlockSizeWithUpdates_>();
+  size_t numUpdates = blockUpdates->sizeUpperBound();
+  size_t totalSize = numUpdates + blockMetadata.numRows_;
+  size_t numParts = maxBlockSize > 0 && totalSize > maxBlockSize
+                        ? (totalSize + maxBlockSize - 1) / maxBlockSize
+                        : 1;
+  size_t numUpdatesPerPart =
+      std::max<size_t>(1, (numUpdates + numParts - 1) / numParts);
+
+  // Distribute the update triples over the parts. A new part is started as soon
+  // as the current part has at least `numUpdatesPerPart` triples, but only at a
+  // triple that differs from the previous one also when the graph is ignored,
+  // because triples that only differ in their graph must stay in the same part.
+  // Note: The number of parts computed above is only an upper bound for the
+  // number of parts that are actually created.
+  std::vector<UpdateInfoForPart> parts(1);
+  for (const LocatedTriple& locatedTriple : blockUpdates->getSortedView()) {
+    if (parts.back().numTriples_ >= numUpdatesPerPart &&
+        parts.back().lastTriple_.tieWithoutGraph() !=
+            locatedTriple.triple_.toPermutedTriple().tieWithoutGraph()) {
+      parts.emplace_back();
+    }
+    parts.back().addTriple(locatedTriple);
+  }
+  const bool isSplit = parts.size() > 1;
+
+  // Return true iff the part with the given bounds can contain rows of the
+  // underlying on-disk block. The rows in the file lie in the range
+  // `[firstTriple_, lastTriple_]` of the original metadata.
+  auto canContainRowsInFile =
+      [&blockMetadata, hasRowsInFile](
+          const std::optional<PermutedTriple>& lowerBound,
+          const std::optional<PermutedTriple>& upperBound) {
+        return hasRowsInFile &&
+               (!upperBound.has_value() ||
+                blockMetadata.firstTriple_.tieWithoutGraph() <
+                    upperBound.value().tieWithoutGraph()) &&
+               (!lowerBound.has_value() ||
+                lowerBound.value().tieWithoutGraph() <=
+                    blockMetadata.lastTriple_.tieWithoutGraph());
+      };
+
+  // The bounds of the part with the given index. The first part has no lower
+  // and the last part has no upper bound, such that the parts always cover the
+  // complete range of the original block. This is important, because update
+  // triples may be added after this function has been called; those then still
+  // belong to exactly one of the parts.
+  auto boundsOfPart = [&parts](size_t partIndex) {
+    std::optional<PermutedTriple> lowerBound;
+    std::optional<PermutedTriple> upperBound;
+    if (partIndex > 0) {
+      lowerBound = makeBoundBetweenParts(parts.at(partIndex).firstTriple_);
+    }
+    if (partIndex + 1 < parts.size()) {
+      upperBound = makeBoundBetweenParts(parts.at(partIndex + 1).firstTriple_);
+    }
+    return std::pair{lowerBound, upperBound};
+  };
+
+  // Distribute the rows in the file over those parts that can contain them.
+  size_t numPartsWithRowsInFile = 0;
+  for (size_t partIndex = 0; partIndex < parts.size(); ++partIndex) {
+    auto [lowerBound, upperBound] = boundsOfPart(partIndex);
+    numPartsWithRowsInFile +=
+        static_cast<size_t>(canContainRowsInFile(lowerBound, upperBound));
+  }
+  size_t numRowsPerPart =
+      numPartsWithRowsInFile == 0
+          ? 0
+          : (blockMetadata.numRows_ + numPartsWithRowsInFile - 1) /
+                numPartsWithRowsInFile;
+
+  for (size_t partIndex = 0; partIndex < parts.size(); ++partIndex) {
+    const auto& part = parts.at(partIndex);
+    auto [lowerBound, upperBound] = boundsOfPart(partIndex);
+    CompressedBlockMetadata metadata = blockMetadata;
+    // The first and last triple of a part. For the outermost parts, the triples
+    // in the file also have to be taken into account; for the parts in between,
+    // the first triple is the inclusive lower and the last triple is the
+    // *exclusive* upper bound of that part.
+    metadata.firstTriple_ = lowerBound.value_or(
+        std::min(blockMetadata.firstTriple_, part.firstTriple_));
+    metadata.lastTriple_ = upperBound.value_or(
+        std::max(blockMetadata.lastTriple_, part.lastTriple_));
+    if (isSplit) {
+      if (canContainRowsInFile(lowerBound, upperBound)) {
+        metadata.partialBlockInfo_ = CompressedBlockMetadata::PartialBlockInfo{
+            static_cast<uint32_t>(std::min<size_t>(
+                numRowsPerPart, std::numeric_limits<uint32_t>::max())),
+            lowerBound.has_value(), upperBound.has_value()};
+      } else {
+        // This part provably contains none of the rows in the file, so it does
+        // not have to be read from disk at all.
+        metadata.offsetsAndCompressedSize_.reset();
+        metadata.numRows_ = 0;
+        metadata.partialBlockInfo_ = CompressedBlockMetadata::PartialBlockInfo{
+            0, lowerBound.has_value(), upperBound.has_value()};
+      }
+    }
+    updateGraphMetadata(metadata, part);
+    result.push_back(std::move(metadata));
   }
 }
 
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::updateAugmentedMetadata() {
-  // TODO<C++23> use view::enumerate
-  size_t blockIndex = 0;
-  // Copy to preserve originalMetadata_.
+  static const std::vector<CompressedBlockMetadata> emptyMetadata{};
   if (!originalMetadata_.has_value()) {
     AD_LOG_WARN << "The original metadata has not been set, but updates are "
                    "being performed. This should only happen in unit tests\n";
-    augmentedMetadata_.emplace();
-  } else {
-    augmentedMetadata_ = *originalMetadata_.value();
   }
-  for (auto& blockMetadata : augmentedMetadata_.value()) {
-    if (auto blockUpdates = getUpdatesIfPresent(blockIndex)) {
-      blockMetadata.firstTriple_ =
-          std::min(blockMetadata.firstTriple_,
-                   blockUpdates->front().triple_.toPermutedTriple());
-      blockMetadata.lastTriple_ =
-          std::max(blockMetadata.lastTriple_,
-                   blockUpdates->back().triple_.toPermutedTriple());
-      updateGraphMetadata(blockMetadata, *blockUpdates);
-    }
-    blockIndex++;
+  const auto& originalMetadata = originalMetadata_.has_value()
+                                     ? *originalMetadata_.value()
+                                     : emptyMetadata;
+
+  std::vector<CompressedBlockMetadata> augmentedMetadata;
+  augmentedMetadata.reserve(originalMetadata.size() + 1);
+  // TODO<C++23> use `ql::views::enumerate`.
+  size_t blockIndex = 0;
+  for (const auto& blockMetadata : originalMetadata) {
+    appendAugmentedMetadataForBlock(augmentedMetadata, blockMetadata,
+                                    blockIndex);
+    ++blockIndex;
   }
   // Also account for the last block that contains the triples that are larger
-  // than all the inserted triples.
-  if (auto blockUpdates = getUpdatesIfPresent(blockIndex)) {
-    auto firstTriple = blockUpdates->front().triple_.toPermutedTriple();
-    auto lastTriple = blockUpdates->back().triple_.toPermutedTriple();
-
+  // than all the triples in the index.
+  size_t lastBlockIndex = originalMetadata.size();
+  if (containsTriples(lastBlockIndex)) {
     // The first `std::nullopt` means that this block contains only
-    // `LocatedTriple`s.
+    // `LocatedTriple`s, so it has no rows in the file. Its first and last
+    // triple are initialized to the largest and smallest possible triple
+    // respectively, such that computing the minimum and maximum with the update
+    // triples (in `appendAugmentedMetadataForBlock`) yields exactly the bounds
+    // of the update triples.
+    using PermutedTriple = CompressedBlockMetadata::PermutedTriple;
+    PermutedTriple maxTriple{Id::max(), Id::max(), Id::max(), Id::max()};
+    PermutedTriple minTriple{Id::min(), Id::min(), Id::min(), Id::min()};
     CompressedBlockMetadataNoBlockIndex lastBlockN{
-        std::nullopt, 0, firstTriple, lastTriple, std::nullopt, true};
+        std::nullopt, 0, maxTriple, minTriple, std::nullopt, true};
     lastBlockN.graphInfo_.emplace();
-    CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
-    updateGraphMetadata(lastBlock, *blockUpdates);
-    augmentedMetadata_->push_back(lastBlock);
-
-    AD_CORRECTNESS_CHECK(
-        CompressedBlockMetadata::checkInvariantsForSortedBlocks(
-            *augmentedMetadata_));
+    appendAugmentedMetadataForBlock(
+        augmentedMetadata, CompressedBlockMetadata{lastBlockN, lastBlockIndex},
+        lastBlockIndex);
   }
+  AD_CORRECTNESS_CHECK(CompressedBlockMetadata::checkInvariantsForSortedBlocks(
+      augmentedMetadata));
+  augmentedMetadata_ = std::move(augmentedMetadata);
 }
 
 // ____________________________________________________________________________

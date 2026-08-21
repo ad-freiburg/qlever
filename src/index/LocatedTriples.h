@@ -112,6 +112,32 @@ using SortedLocatedTriplesVector = ad_utility::SortedSequence<
 
 using LocatedTriples = SortedLocatedTriplesVector;
 
+// Compare the triple of a `LocatedTriple` with one of the bounds of a partial
+// block (see `CompressedBlockMetadata::PartialBlockInfo`), ignoring the graph.
+// Ignoring the graph is important, because triples that only differ in their
+// graph must never be split across two blocks.
+// NOTE: All four combinations of the argument types are required, because the
+// standard algorithms require the comparison to be a strict weak order on the
+// union of the compared types.
+struct CompareTripleWithBlockBoundIgnoringGraph {
+  using PermutedTriple = CompressedBlockMetadata::PermutedTriple;
+  // Note: We deliberately return the IDs by value (and not, for example, via
+  // `PermutedTriple::tieWithoutGraph`), because the `IdTriple` overload would
+  // otherwise return references into a temporary.
+  static std::array<Id, 3> idsWithoutGraph(const IdTriple<0>& triple) {
+    return {triple.ids()[0], triple.ids()[1], triple.ids()[2]};
+  }
+  static std::array<Id, 3> idsWithoutGraph(const PermutedTriple& triple) {
+    return {triple.col0Id_, triple.col1Id_, triple.col2Id_};
+  }
+  CPP_template(typename T, typename U)(
+      requires ad_utility::SimilarToAny<T, IdTriple<0>, PermutedTriple> CPP_and
+          ad_utility::SimilarToAny<U, IdTriple<0>, PermutedTriple>) bool
+  operator()(const T& a, const U& b) const {
+    return idsWithoutGraph(a) < idsWithoutGraph(b);
+  }
+};
+
 // Sorted sets of located triples, grouped by block. We use this to store all
 // located triples for a permutation.
 class LocatedTriplesPerBlock {
@@ -125,7 +151,16 @@ class LocatedTriplesPerBlock {
   // Implementation of the `mergeTriples` function (which has `numIndexColumns`
   // as a normal argument, and translates it into a template argument).
   template <size_t numIndexColumns, bool includeGraphColumn>
-  IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
+  IdTable mergeTriplesImpl(const CompressedBlockMetadata& blockMetadata,
+                           const IdTable& block) const;
+
+  // Append the augmented metadata for the single block `blockMetadata`, which
+  // is the block with the index `blockIndex`, to the `result`. If the block is
+  // large (because many update triples fall into it), then it is split into
+  // several parts, see the documentation of `updateAugmentedMetadata` below.
+  void appendAugmentedMetadataForBlock(
+      std::vector<CompressedBlockMetadata>& result,
+      CompressedBlockMetadata blockMetadata, size_t blockIndex) const;
 
   // Stores the block metadata where the block borders have been adjusted for
   // the updated triples.
@@ -134,6 +169,23 @@ class LocatedTriplesPerBlock {
       originalMetadata_;
 
  public:
+  // Recompute the block metadata that is augmented for the update triples, see
+  // `getAugmentedMetadata` below. Must be called after the update triples have
+  // been modified (and consolidated), otherwise the augmented metadata is
+  // stale.
+  //
+  // A block into which many update triples fall is split into several parts,
+  // such that a scan does not have to merge all the update triples of that
+  // block even if it only touches a small part of it. All parts of a block
+  // share the same `blockIndex_` (which is the index of the block in the
+  // original metadata, and which is how the update triples of a block are
+  // found), and the key range that each part covers is delimited by the bounds
+  // in its `CompressedBlockMetadata::PartialBlockInfo`. In particular, several
+  // parts may share the same on-disk block, which is then read once per part,
+  // but each of its rows belongs to exactly one part. Parts that provably
+  // contain no rows of the on-disk block (for example all parts of the very
+  // last block, which consists of update triples only) are not read from disk
+  // at all.
   void updateAugmentedMetadata();
 
  public:
@@ -154,10 +206,28 @@ class LocatedTriplesPerBlock {
   // know whether an insertion or deletion is actually effective.
   NumAddedAndDeleted numTriples(size_t blockIndex) const;
 
+  // Same as above, but only count the located triples that belong to the part
+  // of the block that is described by `blockMetadata` (which is only relevant
+  // if that block is partial, see `CompressedBlockMetadata::PartialBlockInfo`).
+  NumAddedAndDeleted numTriples(
+      const CompressedBlockMetadata& blockMetadata) const;
+
   // Returns an optional reference to update triples for the block with the
   // index `blockIndex`. If no such block exists, return `std::nullopt`.
   boost::optional<const LocatedTriples&> getUpdatesIfPresent(
       size_t blockIndex) const;
+
+  // Return a view of those update triples of the block described by
+  // `blockMetadata` that belong to the part of that block that `blockMetadata`
+  // describes (which is all of them if that block is not partial, see
+  // `CompressedBlockMetadata::PartialBlockInfo`). The block must have update
+  // triples, that is, `containsTriples(blockMetadata)` must be `true`.
+  auto getUpdatesForBlock(const CompressedBlockMetadata& blockMetadata) const {
+    return map_.at(blockMetadata.blockIndex_)
+        .getSortedViewInRange(blockMetadata.inclusiveLowerBound(),
+                              blockMetadata.exclusiveUpperBound(),
+                              CompareTripleWithBlockBoundIgnoringGraph{});
+  }
 
   // Merge located triples for `blockIndex_` (there must be at least one,
   // otherwise this function must not be called) with the given input `block`.
@@ -178,13 +248,24 @@ class LocatedTriplesPerBlock {
   // and that `block` has block has two additional payload columns X and Y.
   // Then the result has five columns (like the input `block`), and each merged
   // located triple will have values for OSG and UNDEF for X and Y.
-  IdTable mergeTriples(size_t blockIndex, const IdTable& block,
-                       size_t numIndexColumns, bool includeGraphColumn) const;
+  IdTable mergeTriples(const CompressedBlockMetadata& blockMetadata,
+                       const IdTable& block, size_t numIndexColumns,
+                       bool includeGraphColumn) const;
 
   // Return true iff there are located triples in the block with the given
   // index.
   bool containsTriples(size_t blockIndex) const {
     return map_.contains(blockIndex);
+  }
+
+  // Same as above, but only consider the located triples that belong to the
+  // part of the block that is described by `blockMetadata` (which is only
+  // relevant if that block is partial, see
+  // `CompressedBlockMetadata::PartialBlockInfo`).
+  bool containsTriples(const CompressedBlockMetadata& blockMetadata) const {
+    return containsTriples(blockMetadata.blockIndex_) &&
+           (!blockMetadata.isPartial() ||
+            !ql::ranges::empty(getUpdatesForBlock(blockMetadata)));
   }
 
   // Add unsorted `locatedTriples` to the `LocatedTriplesPerBlock`.
