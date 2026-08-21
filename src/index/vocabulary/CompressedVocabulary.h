@@ -124,17 +124,13 @@ CPP_template(typename UnderlyingVocabulary,
     for (const auto& idxAndCompressedWord :
          ::ranges::views::zip(indices, *compressedWords)) {
       const auto& [idx, compressedWord] = idxAndCompressedWord;
-      // TODO<marvin>: The allocation pattern here can be improved (get some
-      // bound in advance to pre-inform the allocator etc.). Also, consider to
-      // reuse a buffer here.
       std::string decompressed =
           compressionWrapper_.decompress(compressedWord, getDecoderIdx(idx));
-      ql::pmr::polymorphic_allocator<char> alloc(buffer.get());
-      std::basic_string<char, std::char_traits<char>,
-                        ql::pmr::polymorphic_allocator<char>>
-          result(alloc);
-      ql::ranges::copy(decompressed, std::back_inserter(result));
-      views.emplace_back(result.data(), result.size());
+      auto* storage = static_cast<char*>(
+          buffer->allocate(decompressed.size() + 1, alignof(char)));
+      std::memcpy(storage, decompressed.data(), decompressed.size());
+      storage[decompressed.size()] = '\0';
+      views.emplace_back(storage, decompressed.size());
     }
 
     return makePmrVocabBatchLookupResult(std::move(buffer), std::move(views));
