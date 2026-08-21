@@ -38,6 +38,12 @@
 #endif
 
 #include <boost/asio.hpp>
+// `HttpClient.cpp` uses `boost::asio::error::get_ssl_category()`, which is
+// declared here. Most Boost configurations pull this header in transitively via
+// one of the two below, but not the ones that define
+// `BOOST_ASIO_SEPARATE_COMPILATION` or `BOOST_BEAST_SEPARATE_COMPILATION`, so
+// it has to be included explicitly.
+#include <boost/asio/ssl/error.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/beast.hpp>
 
