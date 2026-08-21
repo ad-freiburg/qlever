@@ -1862,11 +1862,18 @@ TEST(SparqlExpression, ifAndCoalesce) {
   // If all children are unbound constants, the result is a single UNDEF.
   checkCoalesce(U, std::tuple{U, U});
 
-  // Check COALESCE with no arguments or empty arguments.
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}, Ids{}});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}, Ids{}, Ids{}});
+  // Check COALESCE with no arguments or empty arguments. The result is a single
+  // UNDEF and not an empty vector, by the same rule as in the case directly
+  // above: nothing is bound, and for an empty input nothing ever can be. Both
+  // representations are equivalent for an ordinary expression (the number of
+  // result rows is determined by the input, not by this result), but only a
+  // constant is accepted when the `COALESCE` is evaluated as part of an
+  // implicit `GROUP BY` over an empty input, see the
+  // `CoalesceWithAggregateOnEmptyImplicitGroup` test in `GroupByTest.cpp`.
+  checkCoalesce(U, std::tuple{});
+  checkCoalesce(U, std::tuple{Ids{}});
+  checkCoalesce(U, std::tuple{Ids{}, Ids{}});
+  checkCoalesce(U, std::tuple{Ids{}, Ids{}, Ids{}});
 
   auto coalesceExpr = makeCoalesceExpressionVariadic(
       std::make_unique<IriExpression>(iri("<bim>")),
