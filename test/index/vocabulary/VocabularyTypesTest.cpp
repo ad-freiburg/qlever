@@ -149,9 +149,9 @@ TEST(VocabBatchLookupData, KeepAliveRequiresAnOwner) {
                                ::testing::HasSubstr("owners"));
 }
 
-// A view obtained from VocabularyInMemoryBinSearch stays valid after close()
-// and after the vocabulary object is replaced/destroyed, because the batch
-// result retains wordStorage() shared ownership of the bytes.
+// A view obtained from `VocabularyInMemoryBinSearch` stays valid after
+// `close()` and after the vocabulary object is replaced/destroyed, because the
+// batch result retains `wordStorage()` shared ownership of the bytes.
 TEST(VocabBatchLookupData, KeepAliveOutlivesSharedWordStorage) {
   const std::string filename =
       "KeepAliveOutlivesSharedWordStorage.vocabularyTypesTest.dat";
