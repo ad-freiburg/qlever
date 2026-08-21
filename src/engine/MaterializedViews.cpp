@@ -54,6 +54,8 @@ MaterializedViewWriter::MaterializedViewWriter(
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
+  throwIfLimitOffset();
+
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
@@ -61,6 +63,63 @@ MaterializedViewWriter::MaterializedViewWriter(
   columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
       columnNamesAndPermutation | ql::views::values);
   numAddEmptyColumns_ = numAddEmptyColumns;
+
+  throwIfOrderByInconsistentWithViewOrder();
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::throwIfLimitOffset() const {
+  if (!parsedQuery_._limitOffset.isUnconstrained()) {
+    throw MaterializedViewConfigException(
+        "The query to write a materialized view may not contain a `LIMIT` or "
+        "`OFFSET` clause as this might produce unintended results because the "
+        "view is sorted after query execution. If you are aware of this and "
+        "want to forcefully apply a `LIMIT` or `OFFSET`, use an explicit "
+        "subquery.");
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
+  const auto& orderBy = parsedQuery_._orderBy;
+  // No particular sorting is fine.
+  if (orderBy.empty()) {
+    return;
+  }
+
+  // An explicit `ORDER BY` is always rejected.
+  if (parsedQuery_._isInternalSort == IsInternalSort::False) {
+    throw MaterializedViewConfigException(
+        "The query to write a materialized view may not contain an `ORDER BY` "
+        "clause, because a view is always stored sorted by `INTERNAL SORT BY` "
+        "on its first three columns which would silently drop the `ORDER BY` "
+        "clause's sorting.");
+  }
+
+  // The user has explicitly written `INTERNAL SORT BY`. This is fine if the
+  // sorting is a prefix of the view's SPO sorting.
+  auto isConsistentWithViewOrder = [&]() {
+    // View sorting makes no guarantee on stable sorting.
+    if (orderBy.size() > columnPermutation_.size()) {
+      return false;
+    }
+    // Check prefix.
+    return ql::ranges::all_of(
+        ::ranges::views::zip(orderBy, columnPermutation_),
+        [this](const auto& pair) {
+          auto [order, target] = pair;
+          auto col = qet_->getVariableColumnOrNullopt(order.variable_);
+          return !order.isDescending_ && col == target;
+        });
+  };
+
+  if (!isConsistentWithViewOrder()) {
+    throw MaterializedViewConfigException(
+        "The `INTERNAL SORT BY` clause of the query to write a materialized "
+        "view must be a prefix of the view's columns in their `SELECT`ed "
+        "order, because a view is always stored sorted by these columns; any "
+        "other order would be silently discarded.");
+  }
 }
 
 // _____________________________________________________________________________
@@ -116,6 +175,11 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
   // Add dummy columns such that the view has at least four columns in total.
   uint8_t numAddEmptyCols = 0;
+  if (numCols < 1) {
+    throw MaterializedViewConfigException{
+        "A query to write a materialized view needs to select at least one "
+        "column."};
+  }
   if (numCols < 4) {
     AD_LOG_INFO << "The query to write the materialized view \"" << name_
                 << "\" selects only " << numCols << " column(s), "
