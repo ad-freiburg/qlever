@@ -374,9 +374,7 @@ TEST(ServerTest, metricsEndpoint) {
                           ad_utility::source_location l =
                               AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    auto request = accessToken.has_value()
-                       ? makeGetRequest("/metrics", accessToken.value())
-                       : makeGetRequest("/metrics");
+    auto request = makeGetRequest("/metrics", accessToken);
     auto response = server.process(request);
 
     EXPECT_THAT(response, responseMatcher);

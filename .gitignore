@@ -1,7 +1,6 @@
 # Build directory
 build/
 cmake-build*
-/compile_commands.json
 
 # End-to-End data
 e2e_data/*
