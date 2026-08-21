@@ -12,6 +12,7 @@
 
 #include "./MaterializedViewsTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 
 namespace {
 
@@ -112,7 +113,9 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
                                         source_location sourceLocation =
                                             AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(sourceLocation);
-    expectNotSuitableForRewrite(qlv, manager, "noStarRewriteView", query);
+    expectNotSuitableForRewrite(qlv, manager, "noStarRewriteView", query,
+                                "No supported query pattern for rewriting "
+                                "joins was found");
   };
 
   noStarRewrite("SELECT * { <s1> <p1> ?o1 . ?s <p2> ?o2 }");
@@ -160,38 +163,46 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
   qlever::Qlever qlv{config};
   MaterializedViewsManager manager{onDiskBase};
 
+  constexpr std::string_view kAggregatingReason = "The view's query aggregates";
+
   expectNotSuitableForRewrite(
       qlv, manager, "aggregatingStarView",
       "SELECT ?s (COUNT(?o1) AS ?c) { ?s <p1> ?o1 . ?s <p2> ?o2 } "
-      "GROUP BY ?s");
+      "GROUP BY ?s",
+      kAggregatingReason);
   expectNotSuitableForRewrite(
       qlv, manager, "aggregatingChainView",
       "SELECT ?s (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
-      "GROUP BY ?s");
+      "GROUP BY ?s",
+      kAggregatingReason);
 
   // Same as above, but the star's subject (rather than one of its arms) is
   // aggregated away.
   expectNotSuitableForRewrite(
       qlv, manager, "aggregatingStarSubjectView",
       "SELECT ?o1 ?o2 (COUNT(?s) AS ?c) { ?s <p1> ?o1 . ?s <p2> ?o2 } "
-      "GROUP BY ?o1 ?o2");
+      "GROUP BY ?o1 ?o2",
+      kAggregatingReason);
 
   // Same as `aggregatingChainView` above, but the chain's first (subject) or
   // last (object) variable is aggregated away instead of the middle one.
   expectNotSuitableForRewrite(
       qlv, manager, "aggregatingChainSubjectView",
       "SELECT ?m ?o (COUNT(?s) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
-      "GROUP BY ?m ?o");
+      "GROUP BY ?m ?o",
+      kAggregatingReason);
   expectNotSuitableForRewrite(
       qlv, manager, "aggregatingChainObjectView",
       "SELECT ?s ?m (COUNT(?o) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
-      "GROUP BY ?s ?m");
+      "GROUP BY ?s ?m",
+      kAggregatingReason);
 
   // Same as `aggregatingChainView` above, but the `GROUP BY` is implicit (no
   // explicit `GROUP BY` clause, just an aggregate in the `SELECT` clause).
   expectNotSuitableForRewrite(
       qlv, manager, "implicitlyAggregatingChainView",
-      "SELECT (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o }");
+      "SELECT (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o }",
+      kAggregatingReason);
 }
 
 // _____________________________________________________________________________
@@ -211,20 +222,106 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
   qlever::Qlever qlv{config};
   MaterializedViewsManager manager{onDiskBase};
 
+  constexpr std::string_view kNoPatternReason =
+      "No supported query pattern for rewriting joins was found";
+
   // Star: the subject is not selected.
   expectNotSuitableForRewrite(qlv, manager, "unprojectedStarSubjectView",
-                              "SELECT ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }");
+                              "SELECT ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }",
+                              kNoPatternReason);
   // Star: one arm's object is not selected.
   expectNotSuitableForRewrite(qlv, manager, "unprojectedStarArmView",
-                              "SELECT ?s ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }");
+                              "SELECT ?s ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }",
+                              kNoPatternReason);
 
   // Chain: the subject is not selected.
   expectNotSuitableForRewrite(qlv, manager, "unprojectedChainSubjectView",
-                              "SELECT ?m ?o { ?s <p1> ?m . ?m <p2> ?o }");
+                              "SELECT ?m ?o { ?s <p1> ?m . ?m <p2> ?o }",
+                              kNoPatternReason);
   // Chain: the middle (chain) variable is not selected.
   expectNotSuitableForRewrite(qlv, manager, "unprojectedChainMiddleView",
-                              "SELECT ?s ?o { ?s <p1> ?m . ?m <p2> ?o }");
+                              "SELECT ?s ?o { ?s <p1> ?m . ?m <p2> ?o }",
+                              kNoPatternReason);
   // Chain: the object is not selected.
   expectNotSuitableForRewrite(qlv, manager, "unprojectedChainObjectView",
-                              "SELECT ?s ?m { ?s <p1> ?m . ?m <p2> ?o }");
+                              "SELECT ?s ?m { ?s <p1> ?m . ?m <p2> ?o }",
+                              kNoPatternReason);
+}
+
+// _____________________________________________________________________________
+// Regression test: a top-level FILTER, a trailing VALUES clause, or
+// DISTINCT/REDUCED in the view's defining query restrict which rows actually
+// end up on disk, but (unlike aggregation) do not remove any variable from
+// `variableToColumnMap()`. Without an explicit check for these, a query with
+// the same star/chain pattern could be silently rewritten to read the view
+// even though its content is only a restricted subset of the join.
+TEST(MaterializedViewsStarRewriteAggregationTest,
+     restrictingModifiersNotRewritten) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string starTtl =
+      " <s1> <p1> <o1a> . \n"
+      " <s1> <p2> <o2a> . \n"
+      " <s2> <p1> <o1b> . \n"
+      " <s2> <p2> <o2b> . \n";
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  MaterializedViewsManager manager{onDiskBase};
+
+  // Star / chain with a top-level FILTER.
+  expectNotSuitableForRewrite(
+      qlv, manager, "filteredStarView",
+      "SELECT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 . FILTER(?s = <s1>) }",
+      "top-level FILTER");
+  expectNotSuitableForRewrite(
+      qlv, manager, "filteredChainView",
+      "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o . FILTER(?s = <s1>) }",
+      "top-level FILTER");
+
+  // Star / chain with a trailing VALUES clause.
+  expectNotSuitableForRewrite(
+      qlv, manager, "valuesStarView",
+      "SELECT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 } VALUES ?s { <s1> }",
+      "trailing VALUES clause");
+  expectNotSuitableForRewrite(
+      qlv, manager, "valuesChainView",
+      "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o } VALUES ?s { <s1> }",
+      "trailing VALUES clause");
+
+  // Star with DISTINCT, chain with REDUCED.
+  expectNotSuitableForRewrite(
+      qlv, manager, "distinctStarView",
+      "SELECT DISTINCT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }",
+      "DISTINCT or REDUCED");
+  expectNotSuitableForRewrite(
+      qlv, manager, "reducedChainView",
+      "SELECT REDUCED ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o }",
+      "DISTINCT or REDUCED");
+
+  // Star with LIMIT, chain with OFFSET.
+  expectNotSuitableForRewrite(
+      qlv, manager, "limitStarView",
+      "SELECT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 } LIMIT 1",
+      "LIMIT or OFFSET clause");
+  expectNotSuitableForRewrite(
+      qlv, manager, "offsetChainView",
+      "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o } OFFSET 1",
+      "LIMIT or OFFSET clause");
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsStarRewriteAggregationTest,
+     emptyGraphPatternNotRewritten) {
+  ParsedQuery parsed;
+  parsed._rootGraphPattern._graphPatterns.emplace_back(
+      parsedQuery::BasicGraphPattern{});
+
+  auto result =
+      materializedViewsQueryAnalysis::getTriplesForPatternRewrite(parsed);
+  EXPECT_THAT(result, ::testing::VariantWith<
+                          materializedViewsQueryAnalysis::RewriteIgnoreReason>(
+                          ::testing::HasSubstr("query body is empty")));
 }

@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 
+#include <variant>
+
 #include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternAnalysis.h"
 #include "parser/GraphPatternOperation.h"
@@ -166,6 +168,21 @@ class QueryPatternCache {
 // helper.
 std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
     const ParsedQuery& parsed);
+
+// Human-readable explanation why a query is not eligible for pattern-based
+// (star/chain) rewriting, as returned by `getTriplesForPatternRewrite`.
+using RewriteIgnoreReason = std::string;
+
+// Helper for `QueryPatternCache::analyzeView` that extracts the triples of a
+// view's defining query's single `BasicGraphPattern` for further (star/chain)
+// pattern analysis, provided the query even has a shape that pattern-based
+// rewriting could apply to: no aggregation, no top-level
+// FILTER/VALUES/DISTINCT/REDUCED/LIMIT/OFFSET that would restrict the on-disk
+// rows, and exactly one `BasicGraphPattern` with at least one triple (after
+// skipping invariant patterns like `BIND`). If `parsed` does not have such a
+// shape, a `RewriteIgnoreReason` explaining why is returned instead.
+std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
+getTriplesForPatternRewrite(const ParsedQuery& parsed);
 
 // Hash map for the `BIND`-to-column map.
 using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;
