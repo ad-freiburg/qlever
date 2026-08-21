@@ -18,6 +18,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsPatternMatcher.h"
 #include "engine/VariableToColumnMap.h"
+#include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/Algorithm.h"
@@ -79,6 +80,16 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
     if (!predicate.has_value()) {
       return std::nullopt;
     }
+    // Full-text pseudo-predicates are rewritten by `QueryPlanner` into
+    // special text operations (one planner node per word for
+    // `ql:contains-word`, deferred handling for `ql:contains-entity`) rather
+    // than a plain triple, and may additionally be restricted by `TEXTLIMIT`.
+    // None of that is reflected in `coveredTriples_`/`buildPatternEdges`, so
+    // such triples must not become pattern edges.
+    if (predicate.value() == CONTAINS_WORD_PREDICATE ||
+        predicate.value() == CONTAINS_ENTITY_PREDICATE) {
+      return std::nullopt;
+    }
     // At least one endpoint must be a variable, or the edge can't connect to
     // the rest of the pattern (see `isConnected`).
     if (!triple.s_.isVariable() && !triple.o_.isVariable()) {
@@ -94,6 +105,22 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
     edges.push_back({triple.s_, std::string{predicate.value()}, triple.o_});
   }
   if (!isConnected(edges)) {
+    return std::nullopt;
+  }
+  // The view's physical column 0 must be assigned during matching, or
+  // `emitIfLegal`'s call to `makeIndexScan` throws (`throwIfScanColumnMissing`)
+  // because the resulting `MaterializedViewQuery` never binds it.
+  auto col0 = ql::ranges::find_if(viewCols, [](const auto& varAndCol) {
+    return varAndCol.second.columnIndex_ == 0;
+  });
+  AD_CORRECTNESS_CHECK(col0 != viewCols.end());
+  auto isCol0 = [&col0](const TripleComponent& side) {
+    return side.isVariable() && side.getVariable() == col0->first;
+  };
+  bool col0InPattern = ql::ranges::any_of(edges, [&isCol0](const auto& edge) {
+    return isCol0(edge.subject_) || isCol0(edge.object_);
+  });
+  if (!col0InPattern) {
     return std::nullopt;
   }
   return edges;

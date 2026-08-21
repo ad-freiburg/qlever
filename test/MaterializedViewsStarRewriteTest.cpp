@@ -257,6 +257,73 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
       qlv, manager, "disconnectedPatternView",
       "SELECT * { ?s1 <p1> ?o1 . ?s2 <p2> ?o2 }",
       "No supported query pattern for rewriting joins was found");
+
+  // A `BIND` that is filtered out as invariant (see
+  // `graphPatternInvariantFilter`) can still occupy the view's physical
+  // column 0 (the first variable in the `SELECT` clause becomes column 0),
+  // in which case matching the remaining triples never assigns that column.
+  // `emitIfLegal` must not reach `MaterializedView::makeIndexScan`, which
+  // throws when column 0 is unassigned, for such a view. Checked directly
+  // against `QueryPatternCache` like the cases above, since the view's own
+  // query has more than one graph pattern (the triples and the `BIND`),
+  // which `expectNotSuitableForRewrite` does not support.
+  {
+    auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    auto plan = qlv.parseAndPlanQuery(
+        "SELECT * { ?s <p2> ?o1 . ?s <p3> ?o2 . ?s <p9> ?o9 }");
+    auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+    manager.writeViewToDisk(
+        "bindOccupiesColumnZeroView",
+        qlv.parseAndPlanQuery("SELECT ?x ?s ?o1 ?o2 { ?s <p2> ?o1 . ?s <p3> "
+                              "?o2 . BIND(1 AS ?x) }"));
+    auto view = manager.getView("bindOccupiesColumnZeroView", qec.get());
+    materializedViewsQueryAnalysis::QueryPatternCache qpc;
+    qpc.analyzeView(view, qec.get());
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr(
+                    "No supported query pattern for rewriting joins was "
+                    "found"));
+    const auto& triples =
+        plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
+    EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
+    manager.unloadViewIfLoaded("bindOccupiesColumnZeroView");
+  }
+}
+
+// _____________________________________________________________________________
+// `QueryPlanner` expands a `ql:contains-word` triple into one planner node
+// per word (and defers `ql:contains-entity` handling), so a view pattern edge
+// built directly from such a triple would report the wrong/incomplete set of
+// covered planner nodes in `coveredTriples_`. These pseudo-predicates must
+// therefore be rejected as pattern edges outright rather than treated like a
+// plain IRI predicate.
+TEST(MaterializedViewsGeneralPatternRewriteTest,
+     fullTextPseudoPredicateNotRewritten) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string ttlFilename = absl::StrCat(onDiskBase, ".ttl");
+  {
+    std::ofstream ttl{ttlFilename};
+    ttl << " <s1> <p1> \"some text with several needle words\" . \n"
+           " <s1> <p2> <o1> . \n";
+  }
+  qlever::IndexBuilderConfig indexConfig;
+  indexConfig.inputFiles_.emplace_back(ttlFilename, qlever::Filetype::Turtle);
+  indexConfig.baseName_ = onDiskBase;
+  indexConfig.addWordsFromLiterals_ = true;
+  qlever::Qlever::buildIndex(indexConfig);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  config.loadTextIndex_ = true;
+  qlever::Qlever qlv{config};
+  MaterializedViewsManager manager{onDiskBase};
+
+  expectNotSuitableForRewrite(
+      qlv, manager, "fullTextView",
+      "SELECT ?s ?o { ?s ql:contains-word \"needle\" . ?s <p2> ?o }",
+      "No supported query pattern for rewriting joins was found");
 }
 
 // _____________________________________________________________________________

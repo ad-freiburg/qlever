@@ -112,9 +112,11 @@ class QueryPatternCache {
 
  private:
   // Helper for `analyzeView`: build the view's pattern graph (one `PatternEdge`
-  // per triple). Returns `nullopt` if a triple has a non-simple predicate,
+  // per triple). Returns `nullopt` if a triple has a non-simple predicate, a
+  // full-text pseudo-predicate (`ql:contains-word`/`ql:contains-entity`),
   // both subject and object fixed, a variable subject/object not in the
-  // view's columns, or (see `isConnected`) the pattern is disconnected.
+  // view's columns, (see `isConnected`) the pattern is disconnected, or the
+  // view's physical column 0 never occurs in the pattern.
   static std::optional<std::vector<PatternEdge>> buildPatternEdges(
       const ViewPtr& view, const std::vector<SparqlTriple>& triples);
 
