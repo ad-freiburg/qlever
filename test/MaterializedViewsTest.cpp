@@ -543,55 +543,55 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
       manager.writeViewToDisk("Something Out!of~the.ordinary",
                               qlv().parseAndPlanQuery(simpleWriteQuery_)),
       ::testing::HasSubstr("not a valid name for a materialized view"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk(
-          "testView2",
-          qlv().parseAndPlanQuery(
-              "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }")),
-      ::testing::HasSubstr(
-          "The query to write a materialized view returned a string not "
-          "contained in the index (local vocabulary entry)"));
-  // `LIMIT`/`OFFSET` in the defining query must be rejected, see
-  // `MaterializedViewWriter`'s constructor. (A `LIMIT`/`OFFSET` hidden inside
-  // a subquery is *not* detected, see the NOTE there.)
-  for (const std::string& suffix : {" LIMIT 1", " OFFSET 1"}) {
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        manager.writeViewToDisk(
-            "testViewLimitOffset",
-            qlv().parseAndPlanQuery(simpleWriteQuery_ + suffix)),
-        ::testing::HasSubstr("may not contain a LIMIT or OFFSET clause"));
-  }
-  // A `semantic` `ORDER BY` clause is always rejected, because a view is
-  // always stored in the `internal` order, see
-  // `throwIfOrderByInconsistentWithViewOrder`. This holds even if the
-  // `ORDER BY` happens to be an ascending prefix of the view's columns.
-  for (const std::string& query :
-       {simpleWriteQuery_ + " ORDER BY ?p",
-        simpleWriteQuery_ + " ORDER BY DESC(?s)",
-        simpleWriteQuery_ + " ORDER BY ?doesNotExist",
-        simpleWriteQuery_ + " ORDER BY ?s ?p ?o"}) {
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        manager.writeViewToDisk("testViewOrderBy",
-                                qlv().parseAndPlanQuery(query)),
-        ::testing::HasSubstr("may not contain an ORDER BY clause"));
-  }
-  // An `INTERNAL SORT BY` inconsistent with the view's storage order must be
-  // rejected as well.
-  for (const std::string& query :
-       {simpleWriteQuery_ + " INTERNAL SORT BY ?p",
-        simpleWriteQuery_ + " INTERNAL SORT BY ?doesNotExist",
-        std::string{"SELECT ?s ?p { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o"}}) {
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        manager.writeViewToDisk("testViewInternalSortBy",
-                                qlv().parseAndPlanQuery(query)),
-        ::testing::HasSubstr(
-            "must be an ascending prefix of the view's columns"));
-  }
+
+  // Helper that checks that writing a materialized view for `query` throws an
+  // exception whose message contains `expectedError`.
+  auto expectWriteViewToDiskError =
+      [&](std::string query, std::string expectedError,
+          ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(location);
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            manager.writeViewToDisk("invalidTestView",
+                                    qlv().parseAndPlanQuery(std::move(query))),
+            ::testing::HasSubstr(expectedError));
+      };
+
+  // `LocalVocabularyEntry` is rejected.
+  expectWriteViewToDiskError(
+      "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }",
+      "The query to write a materialized view returned a string not "
+      "contained in the index (local vocabulary entry)");
+
+  // `LIMIT`/`OFFSET` is rejected.
+  expectWriteViewToDiskError(simpleWriteQuery_ + " LIMIT 1",
+                             "may not contain a `LIMIT` or `OFFSET` clause");
+  expectWriteViewToDiskError(simpleWriteQuery_ + " OFFSET 1",
+                             "may not contain a `LIMIT` or `OFFSET` clause");
+
+  // An explicit `ORDER BY` clause is always rejected, because a
+  // view is always stored sorted by `INTERNAL SORT BY`.
+  expectWriteViewToDiskError(simpleWriteQuery_ + " ORDER BY ?p",
+                             "may not contain an `ORDER BY` clause");
+  expectWriteViewToDiskError(simpleWriteQuery_ + " ORDER BY DESC(?s)",
+                             "may not contain an `ORDER BY` clause");
+
+  // An `INTERNAL SORT BY` inconsistent with the view's SPO order is rejected.
+  expectWriteViewToDiskError(simpleWriteQuery_ + " INTERNAL SORT BY ?p",
+                             "must be a prefix of the view's columns");
+  expectWriteViewToDiskError(
+      simpleWriteQuery_ + " INTERNAL SORT BY ?doesNotExist",
+      "must be a prefix of the view's columns");
+
+  // More `INTERNAL SORT BY` keys than the view has columns.
+  expectWriteViewToDiskError(
+      "SELECT ?s ?p { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o",
+      "must be a prefix of the view's columns");
+
   // An `INTERNAL SORT BY` that is consistent with the view's storage order
-  // (an ascending prefix of the SELECTed columns) is allowed.
-  manager.writeViewToDisk(
+  // (a prefix of the SELECTed columns) is allowed.
+  EXPECT_NO_THROW(manager.writeViewToDisk(
       "testView7", qlv().parseAndPlanQuery(simpleWriteQuery_ +
-                                           " INTERNAL SORT BY ?s ?p ?o"));
+                                           " INTERNAL SORT BY ?s ?p ?o")));
 }
 
 // _____________________________________________________________________________
