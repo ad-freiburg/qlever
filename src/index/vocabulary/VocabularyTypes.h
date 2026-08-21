@@ -172,7 +172,7 @@ struct MultiOwnerVocabBatchLookupData
 // Scatter string_views from `result` into `viewsInInputOrder` at positions
 // given by `resultPositions`, and keep `result` in `owners` to retain storage.
 // Called multiple times to merge multiple `VocabBatchLookupResult`s into a
-// single combined result via `keepAliveVocabBatch()`.
+// single combined `VocabBatchLookupResult` via `keepAliveVocabBatch()`.
 inline void scatterVocabBatchLookupResult(
     VocabBatchLookupResult result, ql::span<const size_t> resultPositions,
     ql::span<std::string_view> viewsInInputOrder,
@@ -187,23 +187,22 @@ inline void scatterVocabBatchLookupResult(
   owners.push_back(std::move(result));
 }
 
-// Return a result that keeps `owners` alive and exposes `viewsInInputOrder`
-// without copying word bytes. Every view must point into storage owned by one
-// of the `owners`; the caller establishes that by construction, so there is
-// nothing to verify here.
+// Create a `VocabBatchLookupResult` for the given `words`. The result will
+// additionally keep the `owners` alive. Only call this if the storage for the
+// words is managed by the owners; see `scatterVocabBatchLookupResult()` for an
+// example.
 //
 // TODO<ms2144>: This API takes independent owner and view lists, so the
 // lifetime link is a call-site convention rather than a structural type. A
 // later redesign could replace it with a builder or an owned-view capability
 // type so slots are only filled together with their storage.
 inline VocabBatchLookupResult keepAliveVocabBatch(
-    std::vector<VocabBatchOwner> owners,
-    std::vector<std::string_view> viewsInInputOrder) {
+    std::vector<VocabBatchOwner> owners, std::vector<std::string_view> words) {
   AD_CONTRACT_CHECK(!owners.empty());
-  AD_CONTRACT_CHECK(!viewsInInputOrder.empty());
+  AD_CONTRACT_CHECK(!words.empty());
   auto data = std::make_shared<MultiOwnerVocabBatchLookupData>();
   data->buffer() = std::move(owners);
-  data->views() = std::move(viewsInInputOrder);
+  data->views() = std::move(words);
   return MultiOwnerVocabBatchLookupData::asResult(std::move(data));
 }
 
