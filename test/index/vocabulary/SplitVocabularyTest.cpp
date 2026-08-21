@@ -492,7 +492,6 @@ TEST(Vocabulary, SplitVocabularyLookupBatchMatchesItemAt) {
   sv.close();
 }
 
-// _____________________________________________________________________________
 }  // namespace
 
 // Direct tests of the private lookupBatch helpers (FRIEND_TEST).
