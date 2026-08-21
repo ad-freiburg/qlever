@@ -552,49 +552,46 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
           "The query to write a materialized view returned a string not "
           "contained in the index (local vocabulary entry)"));
   // `LIMIT`/`OFFSET` in the defining query must be rejected, see
-  // `MaterializedViewWriter`'s constructor.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk(
-          "testView3", qlv().parseAndPlanQuery(simpleWriteQuery_ + " LIMIT 1")),
-      ::testing::HasSubstr("may not contain a LIMIT or OFFSET clause"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk(
-          "testView4",
-          qlv().parseAndPlanQuery(simpleWriteQuery_ + " OFFSET 1")),
-      ::testing::HasSubstr("may not contain a LIMIT or OFFSET clause"));
-  // An `ORDER BY`/`INTERNAL SORT BY` inconsistent with the view's storage
-  // order must be rejected, see `throwIfOrderByInconsistentWithViewOrder`.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk(
-          "testView5",
-          qlv().parseAndPlanQuery(simpleWriteQuery_ + " ORDER BY ?p")),
-      ::testing::HasSubstr(
-          "must be an ascending prefix of the view's columns"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk(
-          "testView6",
-          qlv().parseAndPlanQuery(simpleWriteQuery_ + " ORDER BY DESC(?s)")),
-      ::testing::HasSubstr(
-          "must be an ascending prefix of the view's columns"));
-  // More `ORDER BY` keys than the view has columns.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk(
-          "testView8", qlv().parseAndPlanQuery(
-                           "SELECT ?s ?p { ?s ?p ?o } ORDER BY ?s ?p ?o")),
-      ::testing::HasSubstr(
-          "must be an ascending prefix of the view's columns"));
-  // An `ORDER BY` key that is not a column of the query result at all.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk(
-          "testView9", qlv().parseAndPlanQuery(simpleWriteQuery_ +
-                                               " ORDER BY ?doesNotExist")),
-      ::testing::HasSubstr(
-          "must be an ascending prefix of the view's columns"));
-  // An `ORDER BY` that is consistent with the view's storage order (an
-  // ascending prefix of the SELECTed columns) is allowed.
+  // `MaterializedViewWriter`'s constructor. (A `LIMIT`/`OFFSET` hidden inside
+  // a subquery is *not* detected, see the NOTE there.)
+  for (const std::string& suffix : {" LIMIT 1", " OFFSET 1"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        manager.writeViewToDisk(
+            "testViewLimitOffset",
+            qlv().parseAndPlanQuery(simpleWriteQuery_ + suffix)),
+        ::testing::HasSubstr("may not contain a LIMIT or OFFSET clause"));
+  }
+  // A `semantic` `ORDER BY` clause is always rejected, because a view is
+  // always stored in the `internal` order, see
+  // `throwIfOrderByInconsistentWithViewOrder`. This holds even if the
+  // `ORDER BY` happens to be an ascending prefix of the view's columns.
+  for (const std::string& query :
+       {simpleWriteQuery_ + " ORDER BY ?p",
+        simpleWriteQuery_ + " ORDER BY DESC(?s)",
+        simpleWriteQuery_ + " ORDER BY ?doesNotExist",
+        simpleWriteQuery_ + " ORDER BY ?s ?p ?o"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        manager.writeViewToDisk("testViewOrderBy",
+                                qlv().parseAndPlanQuery(query)),
+        ::testing::HasSubstr("may not contain an ORDER BY clause"));
+  }
+  // An `INTERNAL SORT BY` inconsistent with the view's storage order must be
+  // rejected as well.
+  for (const std::string& query :
+       {simpleWriteQuery_ + " INTERNAL SORT BY ?p",
+        simpleWriteQuery_ + " INTERNAL SORT BY ?doesNotExist",
+        std::string{"SELECT ?s ?p { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o"}}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        manager.writeViewToDisk("testViewInternalSortBy",
+                                qlv().parseAndPlanQuery(query)),
+        ::testing::HasSubstr(
+            "must be an ascending prefix of the view's columns"));
+  }
+  // An `INTERNAL SORT BY` that is consistent with the view's storage order
+  // (an ascending prefix of the SELECTed columns) is allowed.
   manager.writeViewToDisk(
-      "testView7",
-      qlv().parseAndPlanQuery(simpleWriteQuery_ + " ORDER BY ?s ?p ?o"));
+      "testView7", qlv().parseAndPlanQuery(simpleWriteQuery_ +
+                                           " INTERNAL SORT BY ?s ?p ?o"));
 }
 
 // _____________________________________________________________________________

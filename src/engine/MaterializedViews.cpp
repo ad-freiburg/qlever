@@ -59,6 +59,9 @@ MaterializedViewWriter::MaterializedViewWriter(
   // ever selects an arbitrary subset of rows to begin with) would not even
   // consistently determine which rows end up in the view. Reject it outright
   // instead of writing a view with confusing, implementation-defined content.
+  // NOTE: this only looks at the top-level query; a `LIMIT`/`OFFSET` hidden
+  // inside a subquery (e.g. `SELECT * { SELECT * { ... } LIMIT 1 }`) is not
+  // detected and silently produces the same implementation-defined content.
   if (!plannedQuery.parsedQuery()._limitOffset.isUnconstrained()) {
     throw MaterializedViewConfigException(
         "The query to write a materialized view may not contain a LIMIT or "
@@ -81,6 +84,23 @@ void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
   if (orderBy.empty()) {
     return;
   }
+  // A view is always stored sorted by the `internal` (cheap, `Id`-based)
+  // order of its columns (see `Sort.h`). An explicit `INTERNAL SORT BY`
+  // requests exactly that internal order, so it can be consistent with the
+  // view's storage order if it is an ascending prefix of the SELECTed
+  // columns. A semantic `ORDER BY`, however, requests the `semantic` order
+  // (proper collation, numeric comparison, etc.), which is in general
+  // different from the internal order even for matching columns, so it can
+  // never be consistent with how a view is stored.
+  if (parsedQuery_._isInternalSort == IsInternalSort::False) {
+    throw MaterializedViewConfigException(
+        "The query to write a materialized view may not contain an ORDER BY "
+        "clause, because a view is always stored sorted by the `internal` "
+        "(cheap) order of its columns, which is in general different from "
+        "the `semantic` order computed by ORDER BY; any other order would "
+        "be silently discarded. Use `INTERNAL SORT BY` instead if the "
+        "view's storage order is what you need.");
+  }
   auto isConsistentWithViewOrder = [&]() {
     if (orderBy.size() > columnPermutation_.size()) {
       return false;
@@ -97,11 +117,10 @@ void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
   };
   if (!isConsistentWithViewOrder()) {
     throw MaterializedViewConfigException(
-        "The ORDER BY or INTERNAL SORT BY clause of the query to write a "
-        "materialized view must be an ascending prefix of the view's "
-        "columns in their SELECTed order, because a view is always stored "
-        "sorted by these columns; any other order would be silently "
-        "discarded.");
+        "The INTERNAL SORT BY clause of the query to write a materialized "
+        "view must be an ascending prefix of the view's columns in their "
+        "SELECTed order, because a view is always stored sorted by these "
+        "columns; any other order would be silently discarded.");
   }
 }
 
