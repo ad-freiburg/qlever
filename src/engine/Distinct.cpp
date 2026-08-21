@@ -255,9 +255,9 @@ Distinct::makeTreeWithStrippedColumns(
     if (!ad_utility::contains(variables, var)) {
       if (allNeededVars == &variables) {
         newVariables = variables;
+        allNeededVars = &newVariables;
       }
       newVariables.insert(var);
-      allNeededVars = &newVariables;
     }
   }
 
