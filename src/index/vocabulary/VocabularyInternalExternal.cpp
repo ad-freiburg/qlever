@@ -26,60 +26,87 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
 }
 
 // _____________________________________________________________________________
+// Partition input indices into internal matches and external misses, keeping
+// track of their positions in the original input.
+struct IndexPartition {
+  std::vector<std::pair<size_t, std::string_view>> internalSlots;
+  std::vector<std::pair<size_t, size_t>> diskSlots;  // (inputPosition, idx)
+};
+
+static IndexPartition partitionIndicesBySource(
+    ql::span<const size_t> indices,
+    const VocabularyInMemoryBinSearch& internalVocab) {
+  IndexPartition result;
+  result.internalSlots.reserve(indices.size());
+  result.diskSlots.reserve(indices.size());
+
+  for (auto [i, idx] : ::ranges::views::enumerate(indices)) {
+    auto fromInternal = internalVocab[idx];
+    if (fromInternal.has_value()) {
+      result.internalSlots.emplace_back(static_cast<size_t>(i),
+                                        fromInternal.value());
+    } else {
+      result.diskSlots.emplace_back(static_cast<size_t>(i), idx);
+    }
+  }
+  return result;
+}
+
 VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
 
-  // Classify without mixed-result buffers. The pure-disk path returns the
-  // external batch directly and must not allocate `diskSlots` or `assembled`.
-  std::vector<size_t> diskIndices;
-  std::vector<std::pair<size_t, std::string_view>> internalSlots;
-  diskIndices.reserve(indices.size());
+  // Partition indices by source (internal vs external). The helper computes
+  // both the vocabulary indices and their positions in the original input,
+  // avoiding duplicate classification logic.
+  auto partition = partitionIndicesBySource(indices, internalVocab_);
 
-  for (auto [i, idx] : ::ranges::views::enumerate(indices)) {
-    auto fromInternal = internalVocab_[idx];
-    if (fromInternal.has_value()) {
-      internalSlots.emplace_back(static_cast<size_t>(i), fromInternal.value());
-    } else {
+  // Fast path: all indices are in the external (disk) vocabulary.
+  if (partition.internalSlots.empty()) {
+    std::vector<size_t> diskIndices;
+    diskIndices.reserve(partition.diskSlots.size());
+    for (const auto& [position, idx] : partition.diskSlots) {
       diskIndices.push_back(idx);
     }
-  }
-
-  // Hand the disk batch through so we do not copy the already-owned compressed
-  // bytes.
-  if (diskIndices.size() == indices.size()) {
     return externalVocab_.lookupBatch(diskIndices);
   }
 
+  // Slow path: mixed internal + external. Assemble results from both sources.
   std::vector<std::string_view> assembled(indices.size());
-  for (const auto& [position, word] : internalSlots) {
+
+  // Fill in internal results first.
+  for (const auto& [position, word] : partition.internalSlots) {
     assembled[position] = word;
   }
+
+  // Gather disk results and scatter them into the assembled vector.
   std::vector<VocabBatchOwner> owners;
-  if (!diskIndices.empty()) {
-    // Mixed path only: input positions of disk misses, same order as
-    // `diskIndices`.
-    std::vector<char> isInternal(indices.size(), 0);
-    for (const auto& [position, word] : internalSlots) {
-      isInternal[position] = 1;
+  if (!partition.diskSlots.empty()) {
+    // Extract the disk indices (second element of each pair).
+    std::vector<size_t> diskIndices;
+    diskIndices.reserve(partition.diskSlots.size());
+    for (const auto& [position, idx] : partition.diskSlots) {
+      diskIndices.push_back(idx);
     }
+
+    // Extract the positions in the original input (first element of each pair).
     std::vector<size_t> diskSlots;
-    diskSlots.reserve(diskIndices.size());
-    for (size_t i = 0; i < indices.size(); ++i) {
-      if (isInternal[i] == 0) {
-        diskSlots.push_back(i);
-      }
+    diskSlots.reserve(partition.diskSlots.size());
+    for (const auto& [position, idx] : partition.diskSlots) {
+      diskSlots.push_back(position);
     }
-    AD_CORRECTNESS_CHECK(diskSlots.size() == diskIndices.size());
 
     auto disk = externalVocab_.lookupBatch(diskIndices);
-    owners.reserve(1 + static_cast<size_t>(!internalSlots.empty()));
+    owners.reserve(1 + static_cast<size_t>(!partition.internalSlots.empty()));
     scatterVocabBatchLookupResult(std::move(disk), diskSlots, assembled,
                                   owners);
   }
-  if (!internalSlots.empty()) {
+
+  // Add ownership of internal data.
+  if (!partition.internalSlots.empty()) {
     owners.push_back(internalVocab_.wordStorage());
   }
+
   return keepAliveVocabBatch(std::move(owners), std::move(assembled));
 }
 
