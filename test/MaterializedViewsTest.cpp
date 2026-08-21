@@ -961,11 +961,9 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     auto request = makePostRequest(
         "/?cmd=write-materialized-view&view-name=testViewFromHTTP3",
         "application/sparql-query", simpleWriteQuery_);
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        responseBodyAsJson(
-            makeServerForTesting(testIndexBase_).process(request)),
-        ::testing::HasSubstr("write-materialized-view requires a valid access "
-                             "token but no access token was provided"));
+    expectRequiresValidAccessToken("write-materialized-view", [&] {
+      makeServerForTesting(testIndexBase_).process(request);
+    });
   }
 
   // Test check for name of the view (missing).
@@ -1021,11 +1019,9 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   {
     auto request = makeGetRequest(
         "/?cmd=delete-materialized-view&view-name=testViewFromHTTP");
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        responseBodyAsJson(
-            makeServerForTesting(testIndexBase_).process(request)),
-        ::testing::HasSubstr("delete-materialized-view requires a valid access "
-                             "token but no access token was provided"));
+    expectRequiresValidAccessToken("delete-materialized-view", [&] {
+      makeServerForTesting(testIndexBase_).process(request);
+    });
   }
 }
 #endif  // __EMSCRIPTEN__
