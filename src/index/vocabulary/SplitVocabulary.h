@@ -137,7 +137,14 @@ class SplitVocabulary {
   using ResultsByMarker = std::array<VocabBatchLookupResult, numberOfVocabs>;
   // Partition marked indices into underlying vocabulary-local index lists.
   static IndicesByMarker partitionUnderlyingIndicesByMarker(
-      ql::span<const size_t> indices);
+      ql::span<const size_t> indices) {
+    IndicesByMarker underlyingVocabIndicesByMarker;
+    for (auto markedIndex : indices) {
+      underlyingVocabIndicesByMarker[getMarker(markedIndex)].push_back(
+          getVocabIndex(markedIndex));
+    }
+    return underlyingVocabIndicesByMarker;
+  }
 
   // Hold each non-empty marker's batch and the count of non-empty markers.
   struct MarkerBatchLookups {

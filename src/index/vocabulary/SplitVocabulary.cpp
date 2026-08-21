@@ -20,21 +20,3 @@ template class SplitVocabulary<
 template class SplitVocabulary<GeoSplitFunc, GeoFilenameFunc,
                                VocabularyInMemory,
                                GeoVocabulary<VocabularyInMemory>>;
-
-// _____________________________________________________________________________
-// Partition marked indices into underlying vocabulary-local index lists.
-template <typename SplitFunc, typename FilenameFunc, typename... VocabTypes>
-QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SplitFunc>&&
-        SplitFilenameFunctionT<FilenameFunc, sizeof...(VocabTypes)>)
-typename SplitVocabulary<SplitFunc, FilenameFunc,
-                         VocabTypes...>::IndicesByMarker
-    SplitVocabulary<SplitFunc, FilenameFunc, VocabTypes...>::
-        partitionUnderlyingIndicesByMarker(ql::span<const size_t> indices) {
-  IndicesByMarker underlyingVocabIndicesByMarker;
-  for (auto markedIndex : indices) {
-    underlyingVocabIndicesByMarker[getMarker(markedIndex)].push_back(
-        getVocabIndex(markedIndex));
-  }
-  return underlyingVocabIndicesByMarker;
-}
