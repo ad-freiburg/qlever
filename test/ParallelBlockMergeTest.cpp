@@ -30,6 +30,15 @@
 #include "util/Random.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 
+// The tests of the Boost.Asio based merge at the bottom of this file require
+// coroutines and are therefore not available in the C++17 backports mode.
+#ifndef QLEVER_CPP_17
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/thread_pool.hpp>
+
+#include "util/AsyncTestHelpers.h"
+#endif
+
 using namespace ad_utility::parallelBlockMerge;
 
 namespace {
@@ -708,3 +717,224 @@ TEST(ParallelBlockMerge, chunksWithoutAnyOutputBlockDoNotHang) {
   EXPECT_THAT(mergeWithSplitters(std::move(manySplitters)),
               ::testing::ElementsAreArray(expected));
 }
+
+#ifndef QLEVER_CPP_17
+namespace {
+// Merge the `input` on a Boost.Asio thread pool with `numThreads` threads and
+// return the elements of all output blocks in a single vector.
+template <bool moveElements = false, typename Input, typename Comparator>
+std::vector<typename Input::value_type> mergeToVectorAsio(
+    Input input, Comparator comparator, MergeOptions options = {},
+    size_t numThreads = 4,
+    ad_utility::SharedCancellationHandle cancellationHandle = nullptr) {
+  net::thread_pool pool{numThreads};
+  std::vector<typename Input::value_type> result;
+  {
+    auto blocks = parallelBlockMergeToRangeAsio<moveElements>(
+        pool.get_executor(), std::move(input), std::move(comparator),
+        std::move(options), numThreads, std::move(cancellationHandle));
+    for (auto& block : blocks) {
+      for (auto& element : block) {
+        result.push_back(std::move(element));
+      }
+    }
+  }
+  // All the coroutines that are still in flight have to finish, otherwise this
+  // hangs.
+  pool.join();
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(AsioParallelBlockMerge, binaryMerge) {
+  SizeVec v1{1, 3, 5};
+  SizeVec v2{2, 4, 6};
+  MergeOptions options = parallelOptions(3);
+  auto result =
+      mergeToVectorAsio(SizeRuns{{v1, v2}, 3}, std::less<>{}, options);
+  EXPECT_THAT(result, ::testing::ElementsAre(1u, 2u, 3u, 4u, 5u, 6u));
+
+  v2 = SizeVec{};
+  result = mergeToVectorAsio(SizeRuns{{v1, v2}, 3}, std::less<>{}, options);
+  EXPECT_THAT(result, ::testing::ElementsAre(1u, 3u, 5u));
+
+  std::swap(v1, v2);
+  result = mergeToVectorAsio(SizeRuns{{v1, v2}, 3}, std::less<>{}, options);
+  EXPECT_THAT(result, ::testing::ElementsAre(1u, 3u, 5u));
+
+  // A merge of zero runs yields nothing.
+  EXPECT_THAT(mergeToVectorAsio(SizeRuns{{}, 3}, std::less<>{}, options),
+              ::testing::IsEmpty());
+}
+
+// _____________________________________________________________________________
+TEST(AsioParallelBlockMerge, moveOfElements) {
+  using V = std::vector<std::string>;
+  V v1{"alphaalpha", "deltadelta"};
+  V v2{"betabeta", "epsilonepsilon"};
+  // NOTE: The virtual block size is one, such that no input block is shared
+  // between two chunks. `VectorRunsInput` hands out blocks that alias the
+  // underlying vectors, so a chunk that reads a block from which a neighboring
+  // chunk has already moved the elements out would see empty strings and
+  // therefore locate its own elements incorrectly. This is a property of this
+  // test-only input policy (a realistic policy returns a freshly decompressed
+  // block) and it affects `parallelBlockMergeToRange` in exactly the same way.
+  StringRuns input{
+      {StringRun{v1.begin(), v1.end()}, StringRun{v2.begin(), v2.end()}},
+      1,
+      true};
+  auto result = mergeToVectorAsio<true>(std::move(input), std::less<>{},
+                                        parallelOptions(3));
+  EXPECT_THAT(result, ::testing::ElementsAre("alphaalpha", "betabeta",
+                                             "deltadelta", "epsilonepsilon"));
+  // The strings were moved out.
+  EXPECT_THAT(v1, ::testing::Each(::testing::IsEmpty()));
+  EXPECT_THAT(v2, ::testing::Each(::testing::IsEmpty()));
+}
+
+// _____________________________________________________________________________
+TEST(AsioParallelBlockMerge, randomInputs) {
+  auto testRandomInts = [](size_t blockSize, size_t numRuns, size_t minSize,
+                           size_t maxSize) {
+    auto runs = makeRandomRuns(numRuns, minSize, maxSize);
+    auto expected = sortedConcatenation(runs);
+    auto result = mergeToVectorAsio(SizeRuns{runs, blockSize}, std::less<>{},
+                                    parallelOptions(blockSize), 4);
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  };
+  testRandomInts(12, 2000, 20, 50);
+  testRandomInts(13, 1, 40, 40);
+  testRandomInts(5, 2, 40, 50);
+  testRandomInts(1, 3, 30, 50);
+}
+
+// _____________________________________________________________________________
+TEST(AsioParallelBlockMerge, manyRunsManyChunks) {
+  auto runs = makeRandomRuns(50, 500, 1500);
+  auto expected = sortedConcatenation(runs);
+  MergeOptions options = parallelOptions(64);
+  options.targetChunksPerThread = 5;
+  options.bufferedBlocksPerChunk = 1;
+  auto result =
+      mergeToVectorAsio(SizeRuns{runs, 32}, std::less<>{}, options, 8);
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(AsioParallelBlockMerge, singleInFlightChunk) {
+  // In contrast to `parallelBlockMergeToRange`, a single in-flight chunk is
+  // perfectly legal here and does not fall back to the serial merge, because a
+  // chunk that runs out of credits suspends its coroutine instead of blocking
+  // its thread.
+  auto runs = makeRandomRuns(16, 200, 300);
+  auto expected = sortedConcatenation(runs);
+  MergeOptions options = parallelOptions(16);
+  options.maxInFlightChunks = 1;
+  options.bufferedBlocksPerChunk = 1;
+  EXPECT_THAT(mergeToVectorAsio(SizeRuns{runs, 16}, std::less<>{}, options, 4),
+              ::testing::ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(AsioParallelBlockMerge, sameTieOrderAsTheSchedulerBasedMerge) {
+  // The chunk boundaries only depend on the input, the comparator, and
+  // `parallelismHint * targetChunksPerThread`, so the two implementations have
+  // to produce exactly the same order, also for the elements that the
+  // comparator considers equal.
+  auto runs = makeTiedPairRuns();
+  MergeOptions options = parallelOptions(64);
+  auto reference = mergeToVector(PairRuns{runs, 32}, ComparePairs{}, options,
+                                 makeScheduler(4));
+  auto result =
+      mergeToVectorAsio(PairRuns{runs, 32}, ComparePairs{}, options, 4);
+  EXPECT_THAT(result, ::testing::ElementsAreArray(reference));
+  // Make sure that this really compares a non-trivial order.
+  EXPECT_EQ(result.size(), numTiedRuns * numTiedElementsPerRun);
+  EXPECT_TRUE(ql::ranges::is_sorted(getKeys(result)));
+}
+
+// _____________________________________________________________________________
+TEST(AsioParallelBlockMerge, exceptionFromChunkPropagates) {
+  auto runs = makeRandomRuns(16, 200, 300);
+  InstrumentedInput input{SizeRuns{runs, 16}};
+  // Throw from the third call to `readBlock` onwards, so that some of the
+  // chunks succeed and others fail.
+  input.state_->throwAtRead_ = 3;
+  // This must throw and must in particular not call `std::terminate`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      mergeToVectorAsio(input, std::less<>{}, parallelOptions(16), 4),
+      ::testing::HasSubstr("readBlock failed"));
+}
+
+// _____________________________________________________________________________
+TEST(AsioParallelBlockMerge, cancellation) {
+  auto runs = makeRandomRuns(16, 200, 300);
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(mergeToVectorAsio(SizeRuns{runs, 16}, std::less<>{},
+                                 parallelOptions(16), 4, handle),
+               ad_utility::CancellationException);
+}
+
+// _____________________________________________________________________________
+TEST(AsioParallelBlockMerge, consumerAbandonsRangeEarly) {
+  auto runs = makeRandomRuns(50, 2000, 2000);
+  net::thread_pool pool{8};
+  // This must neither hang, nor crash, nor leak. The destructor of the range
+  // has to abort the merge, and the state has to stay alive until the last
+  // coroutine that refers to it is done.
+  {
+    auto blocks = parallelBlockMergeToRangeAsio<false>(
+        pool.get_executor(), SizeRuns{runs, 64}, std::less<>{},
+        parallelOptions(16), 8);
+    auto it = blocks.begin();
+    ASSERT_NE(it, blocks.end());
+    EXPECT_FALSE(it->empty());
+    ++it;
+    ASSERT_NE(it, blocks.end());
+    EXPECT_FALSE(it->empty());
+  }
+  // Abandoning the range without consuming anything at all also works.
+  {
+    auto blocks = parallelBlockMergeToRangeAsio<false>(
+        pool.get_executor(), SizeRuns{runs, 64}, std::less<>{},
+        parallelOptions(16), 8);
+  }
+  pool.join();
+}
+
+// _____________________________________________________________________________
+TEST(AsioParallelBlockMerge, chunksAreActuallyMergedInParallel) {
+  // Make sure that the tests above really exercise the parallel code path (and
+  // not silently the serial fast path).
+  auto runs = makeRandomRuns(32, 1000, 2000);
+  auto expected = sortedConcatenation(runs);
+  InstrumentedInput input{SizeRuns{runs, 32}};
+  auto state = input.state_;
+  EXPECT_THAT(mergeToVectorAsio(std::move(input), std::less<>{},
+                                parallelOptions(64), 8),
+              ::testing::ElementsAreArray(expected));
+  EXPECT_GT(state->readingThreads_.size(), 1u);
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(AsioParallelBlockMerge, singleThreadedConsumer) {
+  // A single thread suffices for the Boost.Asio based merge, even if many more
+  // chunks than that are in flight, because a chunk that has to wait for the
+  // consumer suspends its coroutine instead of blocking the only thread. The
+  // scheduler-based `ParallelMergeState` in contrast needs one thread per
+  // in-flight chunk.
+  auto runs = makeRandomRuns(8, 300, 400);
+  auto expected = sortedConcatenation(runs);
+  MergeOptions options = parallelOptions(16);
+  options.bufferedBlocksPerChunk = 1;
+  auto state = parallelBlockMergeAsio<false>(
+      ioContext.get_executor(), SizeRuns{runs, 16}, std::less<>{}, options, 8);
+  SizeVec result;
+  while (auto block = co_await state->next()) {
+    result.insert(result.end(), block->begin(), block->end());
+  }
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+#endif  // QLEVER_CPP_17

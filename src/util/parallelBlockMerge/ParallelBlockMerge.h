@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <memory>
+#include <thread>
 #include <utility>
 
 #include "backports/concepts.h"
@@ -109,6 +110,89 @@ CPP_template(bool moveElements, typename Input,
       std::move(scheduler), std::move(cancellationHandle), std::move(splitters),
       maxInFlight)};
 }
+
+#ifndef QLEVER_CPP_17
+// ___________________________________________________________________________
+// The public entry points of the Boost.Asio based merge.
+// ___________________________________________________________________________
+
+// Set up a Boost.Asio based parallel merge of the presorted runs of `input`
+// according to `comparator` and start it. All the work is scheduled on the
+// `executor`, which somebody else has to run. Return the state of the merge,
+// whose `next()` yields the merged elements as an awaitable sequence of blocks
+// in globally sorted order; see `AsioParallelMergeState` for the details and in
+// particular for its lifetime requirements.
+//
+// The `parallelismHint` is the number of threads that are expected to run the
+// `executor`; it is only used to derive the number of chunks and the number of
+// chunks that are in flight, both of which may safely exceed the actual
+// parallelism. A value of `0` means "as many threads as the hardware offers".
+//
+// The requirements on the `comparator` and the meaning of `moveElements` are
+// the same as for `parallelBlockMergeToRange` above. In contrast to that
+// function, this one has no serial fast path, because a merge with a single
+// chunk is already the serial merge, just performed by a single coroutine.
+CPP_template(bool moveElements, typename Input,
+             typename Comparator)(requires BlockedRunsInput<Input>)
+    std::shared_ptr<detail::AsioParallelMergeState<
+        moveElements, Input,
+        Comparator>> parallelBlockMergeAsio(net::any_io_executor executor,
+                                            Input input, Comparator comparator,
+                                            MergeOptions options = {},
+                                            size_t parallelismHint = 0,
+                                            ad_utility::SharedCancellationHandle
+                                                cancellationHandle = nullptr) {
+  using State = detail::AsioParallelMergeState<moveElements, Input, Comparator>;
+  if (parallelismHint == 0) {
+    parallelismHint = std::max<size_t>(1, std::thread::hardware_concurrency());
+  }
+  auto splitters = computeSplitters(
+      input, comparator, parallelismHint * options.targetChunksPerThread);
+  size_t requested = options.maxInFlightChunks == 0 ? parallelismHint
+                                                    : options.maxInFlightChunks;
+  // NOTE: In contrast to `parallelBlockMergeToRange` the number of in-flight
+  // chunks is deliberately *not* bounded by the available parallelism, because
+  // a chunk that has to wait suspends its coroutine instead of blocking a
+  // thread. A single in-flight chunk is legal as well.
+  size_t maxInFlight = std::min(requested, splitters.numChunks());
+  return State::create(std::move(executor), std::move(input),
+                       std::move(comparator), std::move(options),
+                       std::move(cancellationHandle), std::move(splitters),
+                       maxInFlight);
+}
+
+// The same as `parallelBlockMergeToRange` above, but schedule all the work on
+// the Boost.Asio `executor` instead of on a `MergeScheduler`. See
+// `parallelBlockMergeAsio` above for the meaning of the `parallelismHint`.
+//
+// IMPORTANT: The `executor` has to be run by *other* threads (for example by a
+// `boost::asio::thread_pool`), because the thread that iterates over the
+// returned range is blocked while it waits for the next block and can therefore
+// not run any of the merge's coroutines itself. Consumers that are themselves
+// asynchronous should use `parallelBlockMergeAsio` above instead.
+CPP_template(bool moveElements, typename Input,
+             typename Comparator)(requires BlockedRunsInput<Input>) ad_utility::
+    InputRangeTypeErased<typename Input::Block> parallelBlockMergeToRangeAsio(
+        net::any_io_executor executor, Input input, Comparator comparator,
+        MergeOptions options = {}, size_t parallelismHint = 0,
+        ad_utility::SharedCancellationHandle cancellationHandle = nullptr) {
+  using Block = typename Input::Block;
+  using SerialState = detail::SerialMergeState<moveElements, Input, Comparator>;
+  using Range = detail::AsioParallelMergeRange<moveElements, Input, Comparator>;
+  using Result = ad_utility::InputRangeTypeErased<Block>;
+
+  // For small inputs the overhead of setting up the merge dominates the actual
+  // merging, so merge them directly in the calling thread.
+  if (detail::totalNumElements(input) <= options.serialNumElementsThreshold) {
+    return Result{std::make_unique<SerialState>(
+        std::move(input), std::move(comparator), std::move(options),
+        std::move(cancellationHandle))};
+  }
+  return Result{std::make_unique<Range>(parallelBlockMergeAsio<moveElements>(
+      std::move(executor), std::move(input), std::move(comparator),
+      std::move(options), parallelismHint, std::move(cancellationHandle)))};
+}
+#endif  // QLEVER_CPP_17
 
 }  // namespace ad_utility::parallelBlockMerge
 

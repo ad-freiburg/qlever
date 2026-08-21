@@ -14,6 +14,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <exception>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <utility>
@@ -30,6 +31,21 @@
 #include "util/parallelBlockMerge/OutputSinkPolicy.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 #include "util/parallelBlockMerge/SchedulerPolicy.h"
+
+// The Boost.Asio based `AsioParallelMergeState` at the bottom of this file
+// requires coroutines and is therefore not available in the C++17 backports
+// mode.
+#ifndef QLEVER_CPP_17
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/as_tuple.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/experimental/concurrent_channel.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/use_future.hpp>
+#include <boost/system/error_code.hpp>
+#endif
 
 namespace ad_utility::parallelBlockMerge {
 namespace detail {
@@ -231,6 +247,251 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     markTaskAsFinished();
   }
 };
+#ifndef QLEVER_CPP_17
+// ___________________________________________________________________________
+// The Boost.Asio based alternative to `ParallelMergeState`.
+// ___________________________________________________________________________
+
+// The state of a parallel merge that schedules *all* of its work on a
+// Boost.Asio executor. It plays the same role as `ParallelMergeState` above,
+// but instead of occupying one thread per in-flight chunk it runs one coroutine
+// per chunk, so that a chunk which currently cannot make progress (because the
+// consumer has not caught up yet) releases its thread. The corresponding
+// back-pressure and the reordering of the blocks live in
+// `AsioInOrderBlockSink`, see there.
+//
+// The number of chunks that are merged concurrently is bounded by
+// `maxInFlight`, which is enforced by `permits_`, a channel that is used as a
+// counting semaphore. This bound is a pure *memory* bound (every live chunk
+// holds one input block per run plus its heap) and, in contrast to
+// `ParallelMergeState`, no longer a correctness requirement: a value of `1` and
+// a value that far exceeds the available parallelism are both perfectly fine.
+//
+// LIFETIME: There is deliberately no destructor that waits for the coroutines
+// that are still in flight. Instead, every coroutine holds a `shared_ptr` to
+// this object, so that this object simply outlives all of them; this is also
+// why it can only be created via `create()`. A consumer that abandons the merge
+// has to call `abort()`, so that those coroutines actually finish instead of
+// waiting for a consumer that is gone. `AsioParallelMergeRange` below does this
+// in its destructor.
+CPP_template(bool moveElements, typename Input, typename Comparator)(
+    requires BlockedRunsInput<Input>) class AsioParallelMergeState
+    : public std::enable_shared_from_this<
+          AsioParallelMergeState<moveElements, Input, Comparator>>,
+      public ad_utility::NoCopyNoMove {
+ public:
+  using Block = typename Input::Block;
+  using Key = typename Input::Key;
+  using Sink = AsioInOrderBlockSink<Block>;
+  // The counting semaphore that bounds the number of chunks that are merged
+  // concurrently. It initially holds `maxInFlight` permits; a chunk coroutine
+  // is only spawned once a permit could be taken out, and returns that permit
+  // when it is done.
+  using PermitChannel =
+      net::experimental::concurrent_channel<void(boost::system::error_code)>;
+
+ private:
+  // A tag that makes the constructor unusable from the outside, such that a
+  // `AsioParallelMergeState` can only be created via `create()` and hence only
+  // ever exists inside a `shared_ptr`, see the LIFETIME note above.
+  struct PrivateTag {};
+
+  net::any_io_executor executor_;
+  Input input_;
+  Comparator comparator_;
+  MergeOptions options_;
+  ad_utility::SharedCancellationHandle cancellationHandle_;
+  Splitters<Key> splitters_;
+  size_t maxInFlight_;
+  // NOTE: The order of these members matters, both of them are initialized from
+  // the members above.
+  Sink sink_;
+  PermitChannel permits_;
+
+ public:
+  // Create the state of a merge and start dispatching its chunks. All the work
+  // is scheduled on the `executor`, which somebody else has to run.
+  static std::shared_ptr<AsioParallelMergeState> create(
+      net::any_io_executor executor, Input input, Comparator comparator,
+      MergeOptions options,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      Splitters<Key> splitters, size_t maxInFlight) {
+    auto self = std::make_shared<AsioParallelMergeState>(
+        PrivateTag{}, std::move(executor), std::move(input),
+        std::move(comparator), std::move(options),
+        std::move(cancellationHandle), std::move(splitters), maxInFlight);
+    // NOTE: The dispatching can only be started once the `shared_ptr` exists,
+    // because the coroutines keep this object alive via `shared_from_this`.
+    net::co_spawn(self->executor_, self->dispatchChunks(), net::detached);
+    return self;
+  }
+
+  // The constructor is effectively private, use `create()` instead.
+  AsioParallelMergeState(
+      PrivateTag, net::any_io_executor executor, Input input,
+      Comparator comparator, MergeOptions options,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      Splitters<Key> splitters, size_t maxInFlight)
+      : executor_{std::move(executor)},
+        input_{std::move(input)},
+        comparator_{std::move(comparator)},
+        options_{std::move(options)},
+        cancellationHandle_{std::move(cancellationHandle)},
+        splitters_{std::move(splitters)},
+        maxInFlight_{maxInFlight},
+        sink_{executor_, splitters_.numChunks(),
+              options_.bufferedBlocksPerChunk},
+        // NOTE: The channel has one slot more than there are permits, which is
+        // reserved for the additional permit that wakes up the dispatcher when
+        // the merge is aborted.
+        permits_{executor_, maxInFlight + 1} {
+    AD_CORRECTNESS_CHECK(maxInFlight_ > 0);
+    AD_CORRECTNESS_CHECK(maxInFlight_ <= splitters_.numChunks());
+    for (size_t i = 0; i < maxInFlight_; ++i) {
+      bool permitWasSent = permits_.try_send(boost::system::error_code{});
+      AD_CORRECTNESS_CHECK(permitWasSent);
+    }
+  }
+
+  // Return the executor on which all the work of this merge is scheduled.
+  const net::any_io_executor& executor() const { return executor_; }
+
+  // Return the next block in the global order, or `std::nullopt` if the merge
+  // is exhausted or was aborted. Rethrow an exception of one of the chunks.
+  // Suspend until the next block is available.
+  //
+  // NOTE: Await this from a single consuming coroutine only, and never
+  // concurrently with itself.
+  net::awaitable<std::optional<Block>> next() {
+    // Keep this object alive for as long as the consumer is inside the sink.
+    auto self = this->shared_from_this();
+    co_return co_await sink_.nextBlock();
+  }
+
+  // Stop the merge, so that no coroutine is left waiting for a consumer that is
+  // gone. The blocks that are still buffered are dropped and `next()` returns
+  // `std::nullopt` from now on. NOTE: This returns immediately, it does *not*
+  // wait for the coroutines that are still in flight, see the LIFETIME note
+  // above.
+  void abort() noexcept {
+    sink_.abort();
+    ad_utility::terminateIfThrows(
+        [this] { permits_.try_send(boost::system::error_code{}); },
+        "Waking up the chunk dispatcher in `AsioParallelMergeState` failed.");
+  }
+
+ private:
+  // Spawn one coroutine per chunk, in strictly increasing order of the chunk
+  // index and never more than `maxInFlight_` of them at the same time. Suspend
+  // while all permits are taken.
+  net::awaitable<void> dispatchChunks() {
+    auto self = this->shared_from_this();
+    try {
+      for (size_t chunkIndex = 0; chunkIndex < splitters_.numChunks();
+           ++chunkIndex) {
+        if (sink_.stopRequested()) {
+          break;
+        }
+        auto [errorCode] =
+            co_await permits_.async_receive(net::as_tuple(net::use_awaitable));
+        if (errorCode || sink_.stopRequested()) {
+          break;
+        }
+        net::co_spawn(executor_, runChunk(chunkIndex), net::detached);
+      }
+    } catch (...) {
+      // This can only happen if the frame of a chunk coroutine cannot be
+      // allocated. Forward the exception to the consumer, which also stops the
+      // chunks that are already running.
+      sink_.pushException(std::current_exception());
+    }
+  }
+
+  // Merge a single chunk and push its blocks to the sink. This never throws,
+  // all exceptions are forwarded to the consumer via
+  // `AsioInOrderBlockSink::pushException`.
+  net::awaitable<void> runChunk(size_t chunkIndex) {
+    auto self = this->shared_from_this();
+    try {
+      ChunkMerger<moveElements, Input, Comparator> merger{
+          &input_, &comparator_, options_,
+          splitters_.getSplittersAt(chunkIndex), cancellationHandle_};
+      while (!sink_.stopRequested()) {
+        // NOTE: Merging a single output block is ordinary blocking work that
+        // may even do I/O, so a chunk occupies its thread for the duration of
+        // one output block. The only suspension point is the `push` below.
+        auto block = merger.get();
+        if (!block.has_value()) {
+          break;
+        }
+        if (!co_await sink_.push(chunkIndex, std::move(block.value()))) {
+          break;
+        }
+      }
+    } catch (...) {
+      sink_.pushException(std::current_exception());
+    }
+    // NOTE: `finishChunk` has to be called on every path, because the consumer
+    // would wait for this chunk forever otherwise.
+    sink_.finishChunk(chunkIndex);
+    releasePermit();
+  }
+
+  // Return the permit of a chunk that is complete, such that the next chunk may
+  // be dispatched in its place.
+  void releasePermit() noexcept {
+    ad_utility::terminateIfThrows(
+        [this] {
+          bool permitWasSent = permits_.try_send(boost::system::error_code{});
+          // At most `maxInFlight_` permits exist and the channel has one slot
+          // more, so this can only fail if the additional wake-up permit of
+          // `abort()` has taken that slot.
+          AD_CORRECTNESS_CHECK(permitWasSent || sink_.stopRequested());
+        },
+        "Releasing the permit of a chunk in `AsioParallelMergeState` failed.");
+  }
+};
+
+// A synchronous adapter for an `AsioParallelMergeState`: a lazy range of blocks
+// whose `get()` blocks the calling thread until the next block is available.
+// Use this to plug the Boost.Asio based merge into a consumer that is not
+// itself asynchronous.
+//
+// IMPORTANT: The executor of the merge has to be run by *other* threads (for
+// example by a `boost::asio::thread_pool`), because the thread that iterates
+// over this range is blocked while it waits for the next block and can
+// therefore not run any of the merge's coroutines itself.
+CPP_template(bool moveElements, typename Input, typename Comparator)(
+    requires BlockedRunsInput<Input>) class AsioParallelMergeRange
+    : public ad_utility::InputRangeFromGet<typename Input::Block>,
+      public ad_utility::NoCopyNoMove {
+ public:
+  using Block = typename Input::Block;
+  using State = AsioParallelMergeState<moveElements, Input, Comparator>;
+
+ private:
+  std::shared_ptr<State> state_;
+
+ public:
+  // Construct from the `state` of a merge that was already started, see
+  // `AsioParallelMergeState::create`.
+  explicit AsioParallelMergeRange(std::shared_ptr<State> state)
+      : state_{std::move(state)} {
+    AD_CONTRACT_CHECK(state_ != nullptr);
+  }
+
+  // Stop the merge, such that the coroutines that are still in flight finish
+  // instead of waiting for a consumer that is gone.
+  ~AsioParallelMergeRange() override { state_->abort(); }
+
+  // ________________________________________________________________________
+  std::optional<Block> get() override {
+    return net::co_spawn(state_->executor(), state_->next(), net::use_future)
+        .get();
+  }
+};
+#endif  // QLEVER_CPP_17
+
 }  // namespace detail
 }  // namespace ad_utility::parallelBlockMerge
 

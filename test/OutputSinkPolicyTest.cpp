@@ -21,6 +21,21 @@
 #include "util/jthread.h"
 #include "util/parallelBlockMerge/OutputSinkPolicy.h"
 
+// The tests of the Boost.Asio based `AsioInOrderBlockSink` at the bottom of
+// this file require coroutines and are therefore not available in the C++17
+// backports mode.
+#ifndef QLEVER_CPP_17
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
+#include <functional>
+#include <memory>
+#include <optional>
+
+#include "util/AsyncTestHelpers.h"
+#endif
+
 using namespace ad_utility::parallelBlockMerge;
 
 namespace {
@@ -193,3 +208,197 @@ TEST(OutputSinkPolicy, AbortUnblocksProducers) {
   }
   EXPECT_TRUE(producerIsDone);
 }
+
+#ifndef QLEVER_CPP_17
+namespace {
+using AsioSink = AsioInOrderBlockSink<Block>;
+// A counted latch via which a producer coroutine signals that it is done.
+using Latch =
+    net::experimental::concurrent_channel<void(boost::system::error_code)>;
+
+// Push all `blocks` to the `sink` as the chunk with the given `chunkIndex`,
+// then finish that chunk and open the `latch`. Stop early if the merge was
+// stopped, and count the blocks that were actually pushed in `numPushed`.
+net::awaitable<void> pushBlocks(AsioSink& sink, size_t chunkIndex,
+                                std::vector<Block> blocks, Latch& latch,
+                                std::atomic<size_t>* numPushed = nullptr) {
+  for (auto& block : blocks) {
+    if (!co_await sink.push(chunkIndex, std::move(block))) {
+      break;
+    }
+    if (numPushed != nullptr) {
+      ++(*numPushed);
+    }
+  }
+  sink.finishChunk(chunkIndex);
+  latch.try_send(boost::system::error_code{});
+}
+
+// Consume all the blocks of the `sink` and return them.
+net::awaitable<std::vector<Block>> collectAsync(AsioSink& sink) {
+  std::vector<Block> result;
+  while (auto block = co_await sink.nextBlock()) {
+    result.push_back(std::move(block.value()));
+  }
+  co_return result;
+}
+
+// Wait until the `latch` was opened `numTimes` times, so that the producers are
+// guaranteed to not touch the sink anymore.
+net::awaitable<void> waitForLatch(Latch& latch, size_t numTimes = 1) {
+  for (size_t i = 0; i < numTimes; ++i) {
+    co_await latch.async_receive(net::as_tuple(net::use_awaitable));
+  }
+}
+
+// Yield to the other coroutines until `condition` holds.
+net::awaitable<void> yieldUntil(net::io_context& ioContext,
+                                std::function<bool()> condition) {
+  while (!condition()) {
+    co_await net::post(ioContext, net::use_awaitable);
+  }
+}
+}  // namespace
+
+// _____________________________________________________________________________
+ASYNC_TEST(AsioOutputSinkPolicy, inOrderAcrossChunks) {
+  AsioSink sink{ioContext.get_executor(), 3, 2};
+  Latch latch{ioContext.get_executor(), 3};
+  // Spawn the producers in reverse order, so that the blocks of the later
+  // chunks are produced first.
+  net::co_spawn(ioContext, pushBlocks(sink, 2, {{4, 5}}, latch), net::detached);
+  net::co_spawn(ioContext, pushBlocks(sink, 1, {{2}, {3}}, latch),
+                net::detached);
+  net::co_spawn(ioContext, pushBlocks(sink, 0, {{0, 1}}, latch), net::detached);
+  auto blocks = co_await collectAsync(sink);
+  EXPECT_THAT(blocks, ::testing::ElementsAre(Block{0, 1}, Block{2}, Block{3},
+                                             Block{4, 5}));
+  co_await waitForLatch(latch, 3);
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(AsioOutputSinkPolicy, empty) {
+  AsioSink sink{ioContext.get_executor(), 0, 2};
+  auto block = co_await sink.nextBlock();
+  EXPECT_FALSE(block.has_value());
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(AsioOutputSinkPolicy, chunksWithoutAnyBlock) {
+  AsioSink sink{ioContext.get_executor(), 3, 2};
+  Latch latch{ioContext.get_executor(), 3};
+  net::co_spawn(ioContext, pushBlocks(sink, 0, {}, latch), net::detached);
+  net::co_spawn(ioContext, pushBlocks(sink, 1, {{7}}, latch), net::detached);
+  net::co_spawn(ioContext, pushBlocks(sink, 2, {}, latch), net::detached);
+  auto blocks = co_await collectAsync(sink);
+  EXPECT_THAT(blocks, ::testing::ElementsAre(Block{7}));
+  co_await waitForLatch(latch, 3);
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(AsioOutputSinkPolicy, backPressure) {
+  // With a single buffered block per chunk, the producer of the second chunk
+  // cannot run ahead while the consumer still drains the first one.
+  AsioSink sink{ioContext.get_executor(), 2, 1};
+  Latch latch{ioContext.get_executor(), 2};
+  std::atomic<size_t> numPushed{0};
+  net::co_spawn(ioContext,
+                pushBlocks(sink, 1, {{10}, {11}, {12}}, latch, &numPushed),
+                net::detached);
+  net::co_spawn(ioContext, pushBlocks(sink, 0, {{0}}, latch), net::detached);
+  auto firstBlock = co_await sink.nextBlock();
+  EXPECT_THAT(firstBlock, ::testing::Optional(Block{0}));
+  // The producer of chunk `1` may have filled its single buffer slot, but it
+  // cannot have pushed more than that, because the consumer has not consumed
+  // any of its blocks yet.
+  EXPECT_LE(numPushed.load(), 1u);
+  auto rest = co_await collectAsync(sink);
+  EXPECT_THAT(rest, ::testing::ElementsAre(Block{10}, Block{11}, Block{12}));
+  EXPECT_EQ(numPushed.load(), 3u);
+  co_await waitForLatch(latch, 2);
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(AsioOutputSinkPolicy, pushExceptionSurfaces) {
+  AsioSink sink{ioContext.get_executor(), 2, 2};
+  sink.pushException(std::make_exception_ptr(std::runtime_error{"kaboom"}));
+  EXPECT_TRUE(sink.stopRequested());
+  bool didThrow = false;
+  try {
+    co_await sink.nextBlock();
+  } catch (const std::runtime_error& exception) {
+    didThrow = true;
+    EXPECT_STREQ(exception.what(), "kaboom");
+  }
+  EXPECT_TRUE(didThrow);
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(AsioOutputSinkPolicy, exceptionUnblocksProducers) {
+  AsioSink sink{ioContext.get_executor(), 2, 1};
+  Latch latch{ioContext.get_executor(), 2};
+  std::atomic<size_t> numPushed{0};
+  net::co_spawn(ioContext,
+                pushBlocks(sink, 1, {{10}, {11}, {12}}, latch, &numPushed),
+                net::detached);
+  // Let the producer of chunk `1` fill its single buffer slot, such that it is
+  // suspended while it waits for the consumer to catch up.
+  co_await yieldUntil(ioContext,
+                      [&numPushed] { return numPushed.load() == 1; });
+  sink.pushException(std::make_exception_ptr(std::runtime_error{"kaboom"}));
+  // The suspended producer has to wake up, otherwise this hangs.
+  co_await waitForLatch(latch);
+  EXPECT_EQ(numPushed.load(), 1u);
+  bool didThrow = false;
+  try {
+    co_await sink.nextBlock();
+  } catch (const std::runtime_error& exception) {
+    didThrow = true;
+    EXPECT_STREQ(exception.what(), "kaboom");
+  }
+  EXPECT_TRUE(didThrow);
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(AsioOutputSinkPolicy, abortUnblocksProducers) {
+  AsioSink sink{ioContext.get_executor(), 2, 1};
+  Latch latch{ioContext.get_executor(), 2};
+  std::atomic<size_t> numPushed{0};
+  net::co_spawn(ioContext,
+                pushBlocks(sink, 1, {{10}, {11}, {12}}, latch, &numPushed),
+                net::detached);
+  co_await yieldUntil(ioContext,
+                      [&numPushed] { return numPushed.load() == 1; });
+  sink.abort();
+  // The suspended producer has to wake up, otherwise this hangs.
+  co_await waitForLatch(latch);
+  EXPECT_EQ(numPushed.load(), 1u);
+  // An aborted sink yields nothing anymore, not even the block that is still
+  // buffered.
+  auto block = co_await sink.nextBlock();
+  EXPECT_FALSE(block.has_value());
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST_N(AsioOutputSinkPolicy, multiThreaded, 4) {
+  // The same as `inOrderAcrossChunks`, but with several threads and many more
+  // blocks, so that the producers and the consumer really run concurrently.
+  constexpr size_t numChunks = 8;
+  constexpr size_t numBlocksPerChunk = 20;
+  AsioSink sink{ioContext.get_executor(), numChunks, 2};
+  Latch latch{ioContext.get_executor(), numChunks};
+  std::vector<Block> expected;
+  for (size_t chunk = 0; chunk < numChunks; ++chunk) {
+    std::vector<Block> blocks;
+    for (size_t i = 0; i < numBlocksPerChunk; ++i) {
+      blocks.push_back(Block{static_cast<int>(chunk * numBlocksPerChunk + i)});
+      expected.push_back(blocks.back());
+    }
+    net::co_spawn(ioContext, pushBlocks(sink, chunk, std::move(blocks), latch),
+                  net::detached);
+  }
+  auto blocks = co_await collectAsync(sink);
+  EXPECT_THAT(blocks, ::testing::ElementsAreArray(expected));
+  co_await waitForLatch(latch, numChunks);
+}
+#endif  // QLEVER_CPP_17
