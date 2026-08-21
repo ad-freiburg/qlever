@@ -18,4 +18,4 @@ addLinkAndDiscoverTest(GeoVocabularyTest vocabulary sparqlParser qlever_util)
 
 addLinkAndDiscoverTest(SplitVocabularyTest vocabulary)
 
-addLinkAndDiscoverTest(VocabularyTypesTest)
+addLinkAndDiscoverTestNoLibs(VocabularyTypesTest)
