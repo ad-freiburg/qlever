@@ -790,16 +790,17 @@ TEST(GeometryInfoTest, ProjectionVisitor) {
 
   EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
               parseResultNear(ParseResult{
-                  std::nullopt, NONE, CRSType::UNSUPPORTED, CRSType::CRS84}));
+                  std::nullopt, NONE, CRSType::WEB_MERCATOR, CRSType::CRS84}));
   EXPECT_EQ(projectWebMerc(std::optional<ParsedWkt>{}), std::nullopt);
   EXPECT_THAT(
       projectWebMerc(GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
       parseResultNear(
           ParseResult{projectWebMerc(expectedSmallRealWorldPolygon1), POLYGON,
-                      defaultCrs, defaultCrs}));
+                      CRSType::WEB_MERCATOR, defaultCrs}));
   EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litCollection}}),
               parseResultNear(ParseResult{projectWebMerc(expectedCollection),
-                                          COLLECTION, defaultCrs, defaultCrs}));
+                                          COLLECTION, CRSType::WEB_MERCATOR,
+                                          defaultCrs}));
   EXPECT_THAT(projectWebMerc(expectedLine),
               utilLineNear(DLine{{222638.9816, 222684.2085},
                                  {445277.9632, 445640.1097}}));

@@ -216,9 +216,9 @@ inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
 // Convert a `GeoPoint` to a point as required by `pb_util`.
 // Optionally this can directly project the point into a different goal CRS.
 inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point,
-                                            CRSType projCrs = CRS84) {
-  return projectToCRS(Point<CoordType>{point.getLng(), point.getLat()}, CRS84,
-                      projCrs);
+                                            CRSType projCrs = defaultCrs) {
+  return projectToCRS(Point<CoordType>{point.getLng(), point.getLat()},
+                      defaultCrs, projCrs);
 }
 
 // Serialize a bounding box given by a pair of `GeoPoint`s to a WKT literal
@@ -615,10 +615,19 @@ inline std::optional<ParsedWkt> simplifyGeometry(
       geometry.value());
 }
 
-// Implements the web mercator projection for points. Use together via
-// `ProjectionVisitor<WebMercatorProjection>` for other geometry types.
-struct WebMercatorProjection {
-  DPoint operator()(const DPoint& p) const { return latLngToWebMerc(p); }
+// Implements a projection between coordinate reference systems for points. Use
+// together via `ProjectionVisitor<CrsProjection>` for other geometry types.
+struct CrsProjection {
+  // For this projection to work accordingly the points need to be in
+  // 'sourceCrs'. After the projection the actual CRS Type will be 'targetCrs_'.
+  CRSType sourceCrs_;
+  CRSType targetCrs_;
+
+  CRSType getTargetCrs() const { return targetCrs_; }
+
+  DPoint operator()(const DPoint& p) const {
+    return projectToCRS(p, sourceCrs_, targetCrs_);
+  }
 };
 
 // Concept to generically model a projection function (that is, point to point
@@ -626,7 +635,7 @@ struct WebMercatorProjection {
 template <typename T>
 CPP_concept IsProjectionFunction =
     InvocableWithExactReturnType<T, DPoint, const DPoint&>;
-static_assert(IsProjectionFunction<WebMercatorProjection>);
+static_assert(IsProjectionFunction<CrsProjection>);
 
 // Helper for `UtilGeomProjectionVisitor`.
 template <typename T>
@@ -688,17 +697,19 @@ CPP_template(typename Projection)(
   }
 
   // Handle `GeoPointOrWkt` (raw unparsed geometry).
-  ParseResult operator()(std::optional<GeoPointOrWkt> geoPointOrWkt) const {
+  ParseResult operator()(
+      const std::optional<GeoPointOrWkt>& geoPointOrWkt) const {
     auto [parsed, wktType, crsType, sourceCrs] =
         ParseGeoPointOrWktVisitor{}(geoPointOrWkt);
-    return ParseResult{(*this)(std::move(parsed)), wktType, crsType, sourceCrs};
+    return ParseResult{(*this)(std::move(parsed)), wktType,
+                       Projection::getTargetCrs(), sourceCrs};
   }
 };
 
 // Instantiation for projection to web mercator of the various supported
 // geometry types.
-static constexpr UtilGeomProjectionVisitor<WebMercatorProjection>
-    projectWebMerc;
+static constexpr UtilGeomProjectionVisitor<CrsProjection> projectWebMerc{
+    CrsProjection{CRSType::CRS84, CRSType::WEB_MERCATOR}};
 
 // Helper for `MetricDistanceVisitor`.
 template <typename T, typename U>
