@@ -329,7 +329,7 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       1, aPermuted, bPermuted, std::move(*result), cancellationHandle_,
-      keepJoinColumn_);
+      keepJoinColumn_, CHUNK_SIZE, ad_utility::noop, allocator());
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
                  &rowAdder](const auto& itLeft, const auto& itRight) {
@@ -760,7 +760,8 @@ ad_utility::AddCombinedRowToIdTable JoinImpl::makeRowAdder(
       cancellationHandle_,
       keepJoinColumn_,
       CHUNK_SIZE,
-      std::move(callback)};
+      std::move(callback),
+      allocator()};
 }
 
 // _____________________________________________________________________________
