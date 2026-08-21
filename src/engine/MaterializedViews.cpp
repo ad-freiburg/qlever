@@ -104,14 +104,13 @@ void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
       return false;
     }
     // Check prefix.
-    for (auto [order, target] :
-         ::ranges::views::zip(orderBy, columnPermutation_)) {
-      auto col = qet_->getVariableColumnOrNullopt(order.variable_);
-      if (order.isDescending_ || !col.has_value() || col.value() != target) {
-        return false;
-      }
-    }
-    return true;
+    return ql::ranges::all_of(
+        ::ranges::views::zip(orderBy, columnPermutation_),
+        [this](const auto& pair) {
+          auto [order, target] = pair;
+          auto col = qet_->getVariableColumnOrNullopt(order.variable_);
+          return !order.isDescending_ && col == target;
+        });
   };
 
   if (!isConsistentWithViewOrder()) {
