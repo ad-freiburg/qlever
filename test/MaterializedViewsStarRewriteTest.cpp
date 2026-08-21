@@ -12,6 +12,7 @@
 
 #include "./MaterializedViewsTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 
 namespace {
 
@@ -309,4 +310,18 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
       qlv, manager, "offsetChainView",
       "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o } OFFSET 1",
       "LIMIT or OFFSET clause");
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsStarRewriteAggregationTest,
+     emptyGraphPatternNotRewritten) {
+  ParsedQuery parsed;
+  parsed._rootGraphPattern._graphPatterns.emplace_back(
+      parsedQuery::BasicGraphPattern{});
+
+  auto result =
+      materializedViewsQueryAnalysis::getTriplesForPatternRewrite(parsed);
+  EXPECT_THAT(result, ::testing::VariantWith<
+                          materializedViewsQueryAnalysis::RewriteIgnoreReason>(
+                          ::testing::HasSubstr("query body is empty")));
 }
