@@ -113,7 +113,6 @@ CPP_template(typename UnderlyingVocabulary,
   // matches `indices`.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
-    // Still encoded; decompression into the PMR arena happens below.
     auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
     AD_CORRECTNESS_CHECK(compressedWords->size() == indices.size());
 
@@ -124,6 +123,9 @@ CPP_template(typename UnderlyingVocabulary,
     for (const auto& idxAndCompressedWord :
          ::ranges::views::zip(indices, *compressedWords)) {
       const auto& [idx, compressedWord] = idxAndCompressedWord;
+      // TODO<marvin>: The allocation pattern here can be improved (get some
+      // bound in advance to pre-inform the allocator etc.). Also, consider to
+      // reuse a buffer here.
       std::string decompressed =
           compressionWrapper_.decompress(compressedWord, getDecoderIdx(idx));
       // `memory_resource::allocate` returns `void*` to storage we own for
