@@ -564,11 +564,10 @@ TEST_F(SplitVocabularyWithDataTest,
     auto lookups = sv_.lookupBatchesByMarker(byMarker);
     EXPECT_EQ(lookups.numNonemptyMarkers_, 1);
     EXPECT_EQ(lookups.lastNonemptyMarker_, 1);
-    ASSERT_NE(lookups.lookupResultByMarker_[1], nullptr);
-    EXPECT_EQ(lookups.lookupResultByMarker_[0], nullptr);
-    EXPECT_EQ(lookups.lookupResultByMarker_[1]->size(), 2u);
-    EXPECT_EQ((*lookups.lookupResultByMarker_[1])[0], sv_[sv_.addMarker(0, 1)]);
-    EXPECT_EQ((*lookups.lookupResultByMarker_[1])[1], sv_[sv_.addMarker(1, 1)]);
+    EXPECT_THAT(lookups.lookupResultByMarker_[0], ::testing::IsNull());
+    EXPECT_THAT(lookups.lookupResultByMarker_[1],
+                ::testing::Pointee(::testing::ElementsAre(
+                    sv_[sv_.addMarker(0, 1)], sv_[sv_.addMarker(1, 1)])));
   }
 
   // Mixed markers: both batches filled.
@@ -582,10 +581,10 @@ TEST_F(SplitVocabularyWithDataTest,
         TwoSplitVocabulary::partitionUnderlyingIndicesByMarker(indices);
     auto lookups = sv_.lookupBatchesByMarker(byMarker);
     EXPECT_EQ(lookups.numNonemptyMarkers_, 2);
-    ASSERT_NE(lookups.lookupResultByMarker_[0], nullptr);
-    ASSERT_NE(lookups.lookupResultByMarker_[1], nullptr);
-    EXPECT_EQ(lookups.lookupResultByMarker_[0]->size(), 2u);
-    EXPECT_EQ(lookups.lookupResultByMarker_[1]->size(), 1u);
+    EXPECT_THAT(lookups.lookupResultByMarker_[0],
+                ::testing::Pointee(::testing::SizeIs(2u)));
+    EXPECT_THAT(lookups.lookupResultByMarker_[1],
+                ::testing::Pointee(::testing::SizeIs(1u)));
   }
 }
 
