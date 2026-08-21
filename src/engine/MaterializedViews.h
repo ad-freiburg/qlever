@@ -103,13 +103,19 @@ class MaterializedViewWriter {
                          ad_utility::AllocatorWithLimit<Id> allocator);
 
   // Called from the constructor. A view is always stored sorted by the
-  // `internal` order of its first (up to three) columns (SPO order). An
-  // `ORDER BY` (which requests the `semantic` order) is therefore never
-  // consistent with the view's storage order and always rejected; an
-  // `INTERNAL SORT BY` that does not request exactly that ascending prefix of
-  // the view's columns would have its requested order silently discarded when
-  // writing the view. Throws in both of these cases instead.
+  // internal order of its first three columns (SPO). An `ORDER BY`, which
+  // requests the `semantic` order, is therefore never consistent with the
+  // view's storage order and always rejected; an `INTERNAL SORT BY` that does
+  // not request a prefix of the view's columns would have its requested order
+  // silently discarded when writing the view and is therefore also rejected.
   void throwIfOrderByInconsistentWithViewOrder() const;
+
+  // Called from the constructor. A view is always re-sorted into SPO order for
+  // on-disk storage, so a `LIMIT`/`OFFSET` in the defining query would not even
+  // consistently determine which rows end up in the view. It is therefore
+  // rejected. If the user wants to circumvent this, they can use an explicit
+  // subquery.
+  void throwIfLimitOffset() const;
 
   // Get the base filename for the view's permutation and metadata files. This
   // name is the result of concatenating `onDiskBase` and `name`.

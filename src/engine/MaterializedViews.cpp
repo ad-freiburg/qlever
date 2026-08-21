@@ -54,19 +54,8 @@ MaterializedViewWriter::MaterializedViewWriter(
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
-  // A view is always re-sorted into SPO order for on-disk storage, so a
-  // `LIMIT`/`OFFSET` in the defining query (which, without an `ORDER BY`, only
-  // ever selects an arbitrary subset of rows to begin with) would not even
-  // consistently determine which rows end up in the view. Reject it outright
-  // instead of writing a view with confusing, implementation-defined content.
-  // NOTE: this only looks at the top-level query; a `LIMIT`/`OFFSET` hidden
-  // inside a subquery (e.g. `SELECT * { SELECT * { ... } LIMIT 1 }`) is not
-  // detected and silently produces the same implementation-defined content.
-  if (!plannedQuery.parsedQuery()._limitOffset.isUnconstrained()) {
-    throw MaterializedViewConfigException(
-        "The query to write a materialized view may not contain a LIMIT or "
-        "OFFSET clause.");
-  }
+  throwIfLimitOffset();
+
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
@@ -79,48 +68,57 @@ MaterializedViewWriter::MaterializedViewWriter(
 }
 
 // _____________________________________________________________________________
+void MaterializedViewWriter::throwIfLimitOffset() const {
+  if (!parsedQuery_._limitOffset.isUnconstrained()) {
+    throw MaterializedViewConfigException(
+        "The query to write a materialized view may not contain a `LIMIT` or "
+        "`OFFSET` clause as this might produce unintended results because the "
+        "view is sorted after query execution. If you are aware of this and "
+        "want to forcefully apply an `LIMIT` or `OFFSET` use an explicit "
+        "subquery.");
+  }
+}
+
+// _____________________________________________________________________________
 void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
   const auto& orderBy = parsedQuery_._orderBy;
+  // No particular sorting is fine.
   if (orderBy.empty()) {
     return;
   }
-  // A view is always stored sorted by the `internal` (cheap, `Id`-based)
-  // order of its columns (see `Sort.h`). An explicit `INTERNAL SORT BY`
-  // requests exactly that internal order, so it can be consistent with the
-  // view's storage order if it is an ascending prefix of the SELECTed
-  // columns. A semantic `ORDER BY`, however, requests the `semantic` order
-  // (proper collation, numeric comparison, etc.), which is in general
-  // different from the internal order even for matching columns, so it can
-  // never be consistent with how a view is stored.
+  // An explicit `ORDER BY` is always rejected.
   if (parsedQuery_._isInternalSort == IsInternalSort::False) {
     throw MaterializedViewConfigException(
-        "The query to write a materialized view may not contain an ORDER BY "
-        "clause, because a view is always stored sorted by the `internal` "
-        "(cheap) order of its columns, which is in general different from "
-        "the `semantic` order computed by ORDER BY; any other order would "
-        "be silently discarded. Use `INTERNAL SORT BY` instead if the "
-        "view's storage order is what you need.");
+        "The query to write a materialized view may not contain an `ORDER BY` "
+        "clause, because a view is always stored sorted by `INTERNAL SORT BY` "
+        "on its first three columns which would silently drop the `ORDER BY` "
+        "clause's sorting.");
   }
+
+  // The user has explicitly written `INTERNAL SORT BY`. This is fine if the
+  // sorting is a prefix of the view's SPO sorting.
   auto isConsistentWithViewOrder = [&]() {
+    // View sorting makes no guarantee on stable sorting.
     if (orderBy.size() > columnPermutation_.size()) {
       return false;
     }
-    for (size_t i = 0; i < orderBy.size(); ++i) {
-      const auto& key = orderBy[i];
-      auto col = qet_->getVariableColumnOrNullopt(key.variable_);
-      if (key.isDescending_ || !col.has_value() ||
-          col.value() != columnPermutation_[i]) {
+    // Check prefix.
+    for (auto [order, target] :
+         ::ranges::views::zip(orderBy, columnPermutation_)) {
+      auto col = qet_->getVariableColumnOrNullopt(order.variable_);
+      if (order.isDescending_ || !col.has_value() || col.value() != target) {
         return false;
       }
     }
     return true;
   };
+
   if (!isConsistentWithViewOrder()) {
     throw MaterializedViewConfigException(
-        "The INTERNAL SORT BY clause of the query to write a materialized "
-        "view must be an ascending prefix of the view's columns in their "
-        "SELECTed order, because a view is always stored sorted by these "
-        "columns; any other order would be silently discarded.");
+        "The `INTERNAL SORT BY` clause of the query to write a materialized "
+        "view must be a prefix of the view's columns in their `SELECT`ed "
+        "order, because a view is always stored sorted by these columns; any "
+        "other order would be silently discarded.");
   }
 }
 
