@@ -196,40 +196,29 @@ class SplitVocabulary {
 
   // Batch lookup results for each underlying vocabulary, keyed by vocabulary
   // index ("marker"). Includes results only from vocabularies that have lookup
-  // indices in this batch (others remain null). Also caches counts for
-  // fast-path optimizations (single-vocabulary case, vector reservation).
+  // indices in this batch (others remain null).
   struct MarkerBatchLookups {
     ResultsByMarker lookupResultByMarker_{};
-    // Count of vocabularies that have results (non-null entries in
-    // lookupResultByMarker_). Used to detect single-vocabulary fast path.
-    uint8_t numNonemptyMarkers_ = 0;
-    // Index of the last vocabulary with a result. Used to retrieve that result
-    // in the single-vocabulary fast path.
-    uint8_t lastNonemptyMarker_ = 0;
   };
 
-  // Merge per-marker batches into one result in input order. Require more than
-  // one non-empty marker; the single-marker fast path returns that batch from
-  // `lookupBatch` directly.
+  // Merge per-marker batches into one result in input order.
   static VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
       const MarkerBatchLookups& markerLookups,
       const IndicesAndPositionsByMarker& markerIndicesAndPositions) {
-    AD_CONTRACT_CHECK(markerLookups.numNonemptyMarkers_ > 1);
     std::vector<std::string_view> viewsInInputOrder(std::accumulate(
         markerIndicesAndPositions.begin(), markerIndicesAndPositions.end(),
-        size_t(0), [](size_t sum, const auto& entry) {
-          return sum + entry.resultPositions.size();
-        }));
+        size_t(0),
+        [](size_t sum, const auto& entry) { return sum + entry.size(); }));
     std::vector<VocabBatchOwner> owners;
-    owners.reserve(markerLookups.numNonemptyMarkers_);
-    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
+    for (size_t marker = 0; marker < markerIndicesAndPositions.size();
+         ++marker) {
       if (markerLookups.lookupResultByMarker_[marker] == nullptr) {
         continue;
       }
       scatterVocabBatchLookupResult(
           std::move(markerLookups.lookupResultByMarker_[marker]),
-          markerIndicesAndPositions[marker].resultPositions, viewsInInputOrder,
-          owners);
+          markerIndicesAndPositions[marker].getResultPositions(),
+          viewsInInputOrder, owners);
     }
     return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
   }
@@ -317,26 +306,16 @@ class SplitVocabulary {
   }
 
   // Partition `indices` by marker, look up each group, and reassemble the
-  // results in input order. Return the underlying batch unchanged when only
-  // one marker is present.
+  // results in input order.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     auto markerIndicesAndPositions =
         partitionMarkerIndicesAndPositions(indices);
 
-    // Count non-empty markers and find last one for optimization.
-    uint8_t numNonemptyMarkers = 0;
-    uint8_t lastNonemptyMarker = 0;
-    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
-      if (!markerIndicesAndPositions[marker].underlyingIndices.empty()) {
-        ++numNonemptyMarkers;
-        lastNonemptyMarker = marker;
-      }
-    }
-
     // Look up each marker's indices via its vocabulary.
     MarkerBatchLookups markerLookups;
-    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
+    for (size_t marker = 0; marker < markerIndicesAndPositions.size();
+         ++marker) {
       if (markerIndicesAndPositions[marker].empty()) {
         continue;
       }
@@ -349,16 +328,9 @@ class SplitVocabulary {
       AD_CORRECTNESS_CHECK(
           markerLookups.lookupResultByMarker_[marker]->size() ==
           markerIndicesAndPositions[marker].size());
-      ++markerLookups.numNonemptyMarkers_;
-      markerLookups.lastNonemptyMarker_ = marker;
     }
 
-    // One marker: return that batch. Mixed markers cannot share one buffer.
-    if (markerLookups.numNonemptyMarkers_ == 1) {
-      return std::move(
-          markerLookups
-              .lookupResultByMarker_[markerLookups.lastNonemptyMarker_]);
-    }
+    // Merge all marker batches into one result in input order.
     return mergeMarkerBatchesInInputOrder(markerLookups,
                                           markerIndicesAndPositions);
   }
