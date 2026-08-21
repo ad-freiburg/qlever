@@ -409,7 +409,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<std::optional<nlohmann::json>> Server::
         processWriteMaterializedView(const ParamValueMap& parameters,
-                                     const Operation& operation,
+                                     const SparqlOperation& operation,
                                      bool accessTokenOk,
                                      const ad_utility::Timer& requestTimer,
                                      const RequestT& request, ResponseT& send) {
@@ -465,7 +465,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
 // _____________________________________________________________________________
 nlohmann::json Server::processLoadMaterializedView(
-    const ParamValueMap& parameters, SharedIndexAndView& indexAndViews) {
+    const ParamValueMap& parameters, const SharedIndexAndView& indexAndViews) {
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
@@ -477,7 +477,7 @@ nlohmann::json Server::processLoadMaterializedView(
 
 // _____________________________________________________________________________
 nlohmann::json Server::processDeleteMaterializedView(
-    const ParamValueMap& parameters) {
+    const ParamValueMap& parameters) const {
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
 
@@ -604,8 +604,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Check if the current command is selected in the parameters from the
   // `parsedHttpRequest.parameters_`. If so, log this information via
   // `dispatchLog()` and return true. Return false otherwise.
-  auto commandIs = [accessTokenOk,
-                    &checkParameter](std::string_view cmd) -> bool {
+  auto commandIs = [accessTokenOk, &checkParameter](std::string_view cmd) {
     if (checkParameter("cmd", std::string{cmd})) {
       dispatchLog(cmd, accessTokenOk);
       return true;
@@ -1344,7 +1343,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processOperation(
-        Operation operation, VisitorT visitor,
+        SparqlOperation operation, VisitorT visitor,
         const ad_utility::Timer& requestTimer, const RequestT& request,
         ResponseT& send, const std::optional<PlannedQuery>& plannedQuery) {
   // Copy the operation string for the error case before processing the

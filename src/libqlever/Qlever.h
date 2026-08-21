@@ -527,9 +527,9 @@ class Qlever {
   void clearQueryResultCache();
 
   // Clear the delta triples of the index snapshot that is active when this
-  // is called, and return the resulting counts. Threadsafe against queries
-  // and updates, but not against a concurrent index rebuild swapping out
-  // `indexAndViewsSnapshot()`'s current snapshot.
+  // is called, and return the resulting counts. This function is threadsafe
+  // against queries and updates, but not against a concurrent index rebuild
+  // swapping out `indexAndViewsSnapshot()`'s current snapshot.
   //
   // NOTE: There is currently no test that exercises this directly through
   // `Qlever`, independent of the HTTP `Server` layer (covered today only via

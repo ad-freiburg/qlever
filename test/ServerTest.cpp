@@ -45,16 +45,6 @@ auto expectForbiddenError = [](auto call, auto messageMatcher,
     EXPECT_THAT(e.what(), messageMatcher);
   }
 };
-
-// Build a GET request for `target` with an `access-token` Bearer header
-// attached.
-auto makeGetRequestWithAccessToken = [](std::string target,
-                                        std::string accessToken) {
-  auto request = makeGetRequest(std::move(target));
-  request.set(http::field::authorization, "Bearer " + accessToken);
-  return request;
-};
-
 }  // namespace
 
 // _____________________________________________________________________________
@@ -384,10 +374,9 @@ TEST(ServerTest, metricsEndpoint) {
                           ad_utility::source_location l =
                               AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    auto request =
-        accessToken.has_value()
-            ? makeGetRequestWithAccessToken("/metrics", accessToken.value())
-            : makeGetRequest("/metrics");
+    auto request = accessToken.has_value()
+                       ? makeGetRequest("/metrics", accessToken.value())
+                       : makeGetRequest("/metrics");
     auto response = server.process(request);
 
     EXPECT_THAT(response, responseMatcher);
@@ -533,8 +522,8 @@ TEST(ServerTest, clearDeltaTriples) {
 
   // With a valid access token, the delta triples are cleared and the response
   // reports the (now empty) resulting counts.
-  auto response = server.process(makeGetRequestWithAccessToken(
-      "/?cmd=clear-delta-triples", "accessToken"));
+  auto response = server.process(
+      makeGetRequest("/?cmd=clear-delta-triples", "accessToken"));
   EXPECT_THAT(response, StatusIs(http::status::ok));
   EXPECT_THAT(responseBodyAsJson(std::move(response)),
               testing::Optional(testing::Eq(
@@ -578,8 +567,8 @@ TEST(ServerTest, vacuumDeltaTriples) {
 
   // With a valid access token, the redundant insertion is vacuumed away and
   // the response reports the resulting stats.
-  auto response = server.process(makeGetRequestWithAccessToken(
-      "/?cmd=vacuum-delta-triples", "accessToken"));
+  auto response = server.process(
+      makeGetRequest("/?cmd=vacuum-delta-triples", "accessToken"));
   EXPECT_THAT(response, StatusIs(http::status::ok));
   auto body = responseBodyAsJson(std::move(response));
   ASSERT_TRUE(body.has_value());

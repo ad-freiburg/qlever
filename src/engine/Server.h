@@ -58,7 +58,7 @@ class Server {
   using json = nlohmann::json;
   using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
   using ParamValueMap = ad_utility::url_parser::ParamValueMap;
-  using Operation = ad_utility::url_parser::sparqlOperation::Operation;
+  using SparqlOperation = ad_utility::url_parser::sparqlOperation::Operation;
   // Build a `QueryExecutionContext` for a given `IndexAndViews` snapshot,
   // capturing the request-specific settings (message sender, pinning). This
   // lets the caller bind the context to whichever snapshot is current when the
@@ -196,9 +196,9 @@ class Server {
 
   // Vacuum (remove redundant) delta triples of the currently active index,
   // honoring a user-submitted timeout (see `verifyUserSubmittedQueryTimeout`).
-  // Unlike `processClearDeltaTriples` above, this can fail (an invalid
-  // timeout), in which case an error response has already been sent to the
-  // client and an empty optional is returned; the caller must stop
+  // Unlike `processClearDeltaTriples` above, this can fail (because of an
+  // invalid timeout), in which case an error response has already been sent to
+  // the client and an empty optional is returned; the caller must stop
   // processing in that case. Otherwise the resulting vacuum stats are
   // returned.
   CPP_template(typename RequestT, typename ResponseT)(
@@ -217,7 +217,7 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<std::optional<json>> processWriteMaterializedView(
-          const ParamValueMap& parameters, const Operation& operation,
+          const ParamValueMap& parameters, const SparqlOperation& operation,
           bool accessTokenOk, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send);
 
@@ -230,7 +230,7 @@ class Server {
   // either returns its result or throws -- there's no optional-json/
   // early-return convention needed here.
   json processLoadMaterializedView(const ParamValueMap& parameters,
-                                   SharedIndexAndView& indexAndViews);
+                                   const SharedIndexAndView& indexAndViews);
 
   // Handle a `delete-materialized-view` command: extract the view name from
   // `parameters`, delete it via a freshly taken index/views snapshot (not the
@@ -238,7 +238,7 @@ class Server {
   // cannot make this operate on a stale manager). The caller is responsible
   // for resetting the request's operation to `None{}`, like
   // `processLoadMaterializedView` above.
-  json processDeleteMaterializedView(const ParamValueMap& parameters);
+  json processDeleteMaterializedView(const ParamValueMap& parameters) const;
 
   // Handle a `rebuild-index` command: extract the tmp-dir/previous-index-dir
   // parameters and trigger a rebuild unless one is already in progress.
@@ -309,7 +309,7 @@ class Server {
   CPP_template(typename VisitorT, typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processOperation(
-          Operation operation, VisitorT visitor,
+          SparqlOperation operation, VisitorT visitor,
           const ad_utility::Timer& requestTimer, const RequestT& request,
           ResponseT& send, const std::optional<PlannedQuery>& plannedQuery);
 
