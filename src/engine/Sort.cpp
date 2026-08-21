@@ -275,9 +275,9 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
     if (!ad_utility::contains(variables, var)) {
       if (vars == &variables) {
         newVariables = variables;
+        vars = &newVariables;
       }
       newVariables.insert(var);
-      vars = &newVariables;
     }
   }
 
