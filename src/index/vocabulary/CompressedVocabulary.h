@@ -128,10 +128,6 @@ CPP_template(typename UnderlyingVocabulary,
       // reuse a buffer here.
       std::string decompressed =
           compressionWrapper_.decompress(compressedWord, getDecoderIdx(idx));
-      // Wrap the buffer in a polymorphic_allocator and use ranges::copy for
-      // safe, allocator-aware copying. This avoids raw `void*` casts and
-      // provides clarity (self-documenting intent). The compiler optimizes
-      // ranges::copy to memcpy internally, so there is zero runtime cost.
       ql::pmr::polymorphic_allocator<char> alloc(buffer.get());
       std::pmr::string result(alloc);
       ql::ranges::copy(decompressed, std::back_inserter(result));

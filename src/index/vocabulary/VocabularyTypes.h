@@ -169,31 +169,10 @@ using VocabBatchOwner = std::shared_ptr<const void>;
 struct MultiOwnerVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<VocabBatchOwner>> {};
 
-// Merge a single batch-lookup result into a combined multi-batch result.
-//
-// Used during multi-vocabulary lookups (e.g., in `SplitVocabulary`) to merge
-// results from individual vocabulary queries into a single result ordered by
-// the user's original input indices.
-//
-// Parameters:
-// - `result`: A batch-lookup result from one vocabulary containing
-// `string_view`s
-//   into decompressed/materialized word storage. Must not be nullptr.
-// - `resultPositions`: Positions where each string_view from `result` should be
-//   placed in the combined output. Element i of `result` goes to position
-//   `resultPositions[i]` in `viewsInInputOrder`.
-// - `viewsInInputOrder` (output): Span that collects all string_views from all
-//   individual lookups, rearranged back into the user's original input order.
-//   Caller allocates this span; this function fills in the elements at
-//   positions given by `resultPositions`.
-// - `owners` (output): List of all batch-lookup results from all queries. Each
-//   result must remain alive (shared_ptr kept in `owners`) to preserve the
-//   validity of the string_views it contains.
-//
-// Behavior: Copies string_views from `result` into `viewsInInputOrder` at the
-// specified positions, then stores `result` in `owners` to keep the underlying
-// storage alive. No word bytes are copied; only pointers and lengths are
-// rearranged.
+// Scatter string_views from `result` into `viewsInInputOrder` at positions
+// given by `resultPositions`, and keep `result` in `owners` to retain storage.
+// Called multiple times to merge multiple `VocabBatchLookupResult`s into a
+// single combined result via `keepAliveVocabBatch()`.
 inline void scatterVocabBatchLookupResult(
     VocabBatchLookupResult result, ql::span<const size_t> resultPositions,
     ql::span<std::string_view> viewsInInputOrder,
