@@ -26,6 +26,12 @@ using namespace geoInfoTestHelpers;
 // Example WKT literals for all supported geometry types
 constexpr std::string_view litPoint =
     "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litPointWGS84 =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(4 "
+    "3)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litPointWebMerc =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(333958.4723798207 "
+    "445640.10965602624)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DPoint expectedPoint{3, 4};
 constexpr std::string_view litLineString =
     "\"LINESTRING(2 2,4 4)\""
@@ -71,10 +77,19 @@ constexpr std::string_view litInvalidNumCoords =
 constexpr std::string_view litCoordOutOfRange =
     "\"LINESTRING(2 -500, 4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litUnsupportedCrsIri =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/5070> LINESTRING(2 2,4 "
+    "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidCrsIri =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/3485 LINESTRING(2 2,4 "
+    "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 constexpr std::string_view litShortRealWorldLine =
     "\"LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946000)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+const DLine expectLitShortRealWorldLine{DPoint{7.8412948, 47.9977308},
+                                        DPoint{7.8450491, 47.9946000}};
 
 // University building 101 in Freiburg: ca. 1611 square-meters (osmway:33903391)
 constexpr std::string_view litSmallRealWorldPolygon1 =
@@ -181,23 +196,27 @@ const double areaRealWorldMultiPolygonHoleIntersection =
 
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
-      litPoint,           litLineString,   litPolygon,   litMultiPoint,
+      litPoint,           litPointWGS84,   litPointWebMerc,
+      litLineString,      litPolygon,      litMultiPoint,
       litMultiLineString, litMultiPolygon, litCollection};
 };
 
 const auto getAllExpectedParseResults = []() {
   using enum WKTType;
-  return std::vector<ParseResult>{{POINT, expectedPoint},
-                                  {LINESTRING, expectedLine},
-                                  {POLYGON, expectedPolygon},
-                                  {MULTIPOINT, expectedMultiPoint},
-                                  {MULTILINESTRING, expectedMultiLineString},
-                                  {MULTIPOLYGON, expectedMultiPolygon},
-                                  {COLLECTION, expectedCollection}};
+  return std::vector<ParseResult>{
+      {expectedPoint, POINT, CRS84, CRS84},
+      {expectedPoint, POINT, CRS84, WGS84},
+      {expectedPoint, POINT, CRS84, WEB_MERCATOR},
+      {expectedLine, LINESTRING, CRS84, CRS84},
+      {expectedPolygon, POLYGON, CRS84, CRS84},
+      {expectedMultiPoint, MULTIPOINT, CRS84, CRS84},
+      {expectedMultiLineString, MULTILINESTRING, CRS84, CRS84},
+      {expectedMultiPolygon, MULTIPOLYGON, CRS84, CRS84},
+      {expectedCollection, COLLECTION, CRS84, CRS84}};
 };
 
-constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
-                                                              2, 2, 3};
+constexpr std::array<uint32_t, 9> allTestLiteralNumGeometries{1, 1, 1, 1, 1,
+                                                              2, 2, 2, 3};
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
@@ -386,12 +405,17 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_NEAR(g.getLng(), p2.getX(), 0.0001);
   EXPECT_NEAR(g.getLat(), p2.getY(), 0.0001);
 
+  // Test projection to WGS84 (swapped coordinates).
+  auto p3 = geoPointToUtilPoint(g, WGS84);
+  EXPECT_NEAR(g.getLng(), p3.getY(), 0.0001);
+  EXPECT_NEAR(g.getLat(), p3.getX(), 0.0001);
+
   EXPECT_EQ(removeDatatype(litPoint), "POINT(3 4)");
 
   auto parseRes1 = parseWkt(litPoint);
-  EXPECT_EQ(parseRes1.first, util::geo::WKTType::POINT);
-  ASSERT_TRUE(parseRes1.second.has_value());
-  auto parsed1 = parseRes1.second.value();
+  EXPECT_THAT(parseRes1, parseResultNear(ParseResult{expectedPoint, POINT,
+                                                     defaultCrs, defaultCrs}));
+  auto parsed1 = parseRes1.parsedWkt_.value();
 
   auto centroid1 = centroidAsGeoPoint(parsed1);
   Centroid centroidExp1{{4, 3}};
@@ -415,14 +439,26 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
   EXPECT_EQ(computeMetricLength(parsed1).length(), 0);
   auto parseRes2 = parseWkt(litShortRealWorldLine);
-  EXPECT_EQ(parseRes2.first, 2);
-  ASSERT_TRUE(parseRes2.second.has_value());
-  auto parsed2 = parseRes2.second.value();
+  EXPECT_THAT(parseRes2,
+              parseResultNear(ParseResult{expectLitShortRealWorldLine,
+                                          LINESTRING, defaultCrs, defaultCrs}));
+  auto parsed2 = parseRes2.parsedWkt_.value();
   EXPECT_NEAR(computeMetricLength(parsed2).length(), 446.363, 1);
   EXPECT_EQ(GeometryInfo::getMetricLength(litInvalidType), std::nullopt);
 
   EXPECT_EQ(computeMetricArea(ParsedWkt{DPoint{4, 5}}), 0);
   EXPECT_EQ(computeMetricArea(ParsedWkt{DLine{DPoint{1, 2}, DPoint{3, 4}}}), 0);
+
+  // Test different Crs Iris.
+  auto parseRes3 = parseWkt(litPointWGS84);
+  EXPECT_THAT(parseRes3,
+              parseResultNear(ParseResult{expectedPoint, POINT, defaultCrs,
+                                          util::geo::CRSType::WGS84}));
+
+  auto parseRes4 = parseWkt(litPointWebMerc);
+  EXPECT_THAT(parseRes4,
+              parseResultNear(ParseResult{expectedPoint, POINT, defaultCrs,
+                                          util::geo::CRSType::WEB_MERCATOR}));
 }
 
 // ____________________________________________________________________________
@@ -600,12 +636,12 @@ TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
     expected += getLengthForTesting(lit).length();
 
     auto parsed = parseWkt(lit);
-    ASSERT_TRUE(parsed.second.has_value());
+    ASSERT_TRUE(parsed.parsedWkt_.has_value());
     std::visit(
         [&](const auto& value) -> void {
           collection.push_back(AnyGeometry<CoordType>{value});
         },
-        parsed.second.value());
+        parsed.parsedWkt_.value());
   }
 
   MetricLength result{computeMetricLength(collection)};
@@ -639,12 +675,13 @@ TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
 
   // Test for `GeoPoint`.
   EXPECT_THAT(parseGeoPointOrWkt(GeoPoint{1, 2}),
-              parseResultNear(ParseResult{POINT, DPoint(2, 1)}));
+              parseResultNear(ParseResult{DPoint(2, 1), POINT, defaultCrs,
+                                          CRSType::WGS84}));
 
   // Explicit test for a real-world WKT string.
-  EXPECT_THAT(
-      parseGeoPointOrWkt(std::string{litSmallRealWorldPolygon1}),
-      parseResultNear(ParseResult{POLYGON, expectedSmallRealWorldPolygon1}));
+  EXPECT_THAT(parseGeoPointOrWkt(std::string{litSmallRealWorldPolygon1}),
+              parseResultNear(ParseResult{expectedSmallRealWorldPolygon1,
+                                          POLYGON, defaultCrs, defaultCrs}));
 
   // Tests for other geometry types (WKT strings).
   auto literals = getAllTestLiterals();
@@ -666,7 +703,12 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
   ASSERT_EQ(literals.size(), geometries.size());
 
   for (size_t i = 0; i < literals.size(); ++i) {
-    auto parsedWkt = geometries[i].second;
+    // TODO<yarox-1> Skip tests with a CRS IRI. Currently 'getWKT' cannot
+    // reconstruct with the appropriate IRI.
+    if ((literals[i] == litPointWGS84) || (literals[i] == litPointWebMerc))
+      continue;
+
+    auto parsedWkt = geometries[i].parsedWkt_;
     auto expected = removeDatatype(literals[i]);
     ASSERT_TRUE(parsedWkt.has_value());
 
@@ -726,7 +768,7 @@ TEST(GeometryInfoTest, GeometryN) {
                 parsedWktNear(expectedGeom));
 
     // Test with already parsed geometry.
-    auto [type, parsed] = parseWkt(wkt);
+    auto [parsed, wktType, crsType, sourceCrs] = parseWkt(wkt);
     EXPECT_THAT(getGeometryN(parsed, n), parsedWktNear(expectedGeom));
 
     // Invalid indexes.
@@ -747,15 +789,18 @@ TEST(GeometryInfoTest, ProjectionVisitor) {
   using namespace ad_utility::detail;
 
   EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
-              parseResultNear(ParseResult{NONE, std::nullopt}));
+              parseResultNear(ParseResult{
+                  std::nullopt, NONE, CRSType::WEB_MERCATOR, CRSType::CRS84}));
   EXPECT_EQ(projectWebMerc(std::optional<ParsedWkt>{}), std::nullopt);
   EXPECT_THAT(
       projectWebMerc(GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
-      parseResultNear(ParseResult{
-          POLYGON, projectWebMerc(expectedSmallRealWorldPolygon1)}));
+      parseResultNear(
+          ParseResult{projectWebMerc(expectedSmallRealWorldPolygon1), POLYGON,
+                      CRSType::WEB_MERCATOR, defaultCrs}));
   EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litCollection}}),
-              parseResultNear(
-                  ParseResult{COLLECTION, projectWebMerc(expectedCollection)}));
+              parseResultNear(ParseResult{projectWebMerc(expectedCollection),
+                                          COLLECTION, CRSType::WEB_MERCATOR,
+                                          defaultCrs}));
   EXPECT_THAT(projectWebMerc(expectedLine),
               utilLineNear(DLine{{222638.9816, 222684.2085},
                                  {445277.9632, 445640.1097}}));
@@ -773,41 +818,77 @@ TEST(GeometryInfoTest, MetricDistanceVisitor) {
   using namespace ad_utility::detail;
   // Distance between points (Freiburg Central Railway Station and Freiburg
   // Cathedral).
-  EXPECT_THAT(computeMetricDistance(
-                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.997731, 7.841295}}),
-                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.995562, 7.852918}})),
-              Optional(DoubleNear(900, 25)));
+  EXPECT_THAT(
+      computeMetricDistance(GeoPointOrWkt{GeoPoint{47.997731, 7.841295}},
+                            GeoPointOrWkt{GeoPoint{47.995562, 7.852918}}),
+      Optional(DoubleNear(900, 25)));
+
+  // Distance between same points (in WGS84).
+  EXPECT_THAT(
+      computeMetricDistance(
+          GeoPointOrWkt{std::string{
+              "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(47.997731 "
+              "7.841295)\"^^<http://www.opengis.net/ont/"
+              "geosparql#wktLiteral>"}},
+          GeoPointOrWkt{std::string{
+              "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(47.995562 "
+              "7.852918)\"^^<http://www.opengis.net/ont/"
+              "geosparql#wktLiteral>"}}),
+      Optional(DoubleNear(900, 25)));
+
+  // Distance between same points (in WebMercator).
+  EXPECT_THAT(
+      computeMetricDistance(GeoPointOrWkt{std::string{
+                                "\"<http://www.opengis.net/def/crs/EPSG/0/"
+                                "3857> POINT(872888.9665598421 "
+                                "6106477.362433697)\"^^<http://www.opengis.net/"
+                                "ont/geosparql#wktLiteral>"}},
+                            GeoPointOrWkt{std::string{
+                                "\"<http://www.opengis.net/def/crs/EPSG/0/"
+                                "3857> POINT(874182.8330013324 "
+                                "6106116.541572356)\"^^<http://www.opengis.net/"
+                                "ont/geosparql#wktLiteral>"}}),
+      Optional(DoubleNear(900, 25)));
 
   // Distance between a multi-polygon (university buildings 101 and 106) and
   // Freiburg Cathedral.
-  EXPECT_THAT(computeMetricDistance(
-                  projectWebMerc(GeoPointOrWkt{
-                      std::string{litRealWorldMultiPolygonNonIntersecting}}),
-                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.995562, 7.852918}})),
-              Optional(DoubleNear(2'300, 50)));
+  EXPECT_THAT(
+      computeMetricDistance(
+          GeoPointOrWkt{std::string{litRealWorldMultiPolygonNonIntersecting}},
+          GeoPointOrWkt{GeoPoint{47.995562, 7.852918}}),
+      Optional(DoubleNear(2'300, 50)));
 
   // Distance between a multi-polygon (university buildings 101 and 106) and
   // a short line in Freiburg.
   EXPECT_THAT(
       computeMetricDistance(
-          projectWebMerc(GeoPointOrWkt{
-              std::string{litRealWorldMultiPolygonNonIntersecting}}),
-          projectWebMerc(GeoPointOrWkt{std::string{litShortRealWorldLine}})),
+          GeoPointOrWkt{std::string{litRealWorldMultiPolygonNonIntersecting}},
+          GeoPointOrWkt{std::string{litShortRealWorldLine}}),
       Optional(DoubleNear(1'700, 50)));
 
   // One polygon is contained in the larger multi-polygon.
-  EXPECT_THAT(computeMetricDistance(
-                  projectWebMerc(GeoPointOrWkt{
-                      std::string{litRealWorldMultiPolygonNonIntersecting}}),
-                  projectWebMerc(
-                      GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}})),
-              Optional(Eq(0.0)));
+  EXPECT_THAT(
+      computeMetricDistance(
+          GeoPointOrWkt{std::string{litRealWorldMultiPolygonNonIntersecting}},
+          GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
+      Optional(Eq(0.0)));
 
   // Test invalid case.
   EXPECT_EQ(computeMetricDistance(
-                projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
-                projectWebMerc(
-                    GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}})),
+                GeoPointOrWkt{std::string{litInvalidType}},
+                GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
+            std::nullopt);
+
+  // Test case with unsupported CRS IRI.
+  EXPECT_EQ(computeMetricDistance(
+                GeoPointOrWkt{std::string{litUnsupportedCrsIri}},
+                GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
+            std::nullopt);
+
+  // Test case with invalid CRS IRI.
+  EXPECT_EQ(computeMetricDistance(
+                GeoPointOrWkt{std::string{litInvalidCrsIri}},
+                GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
             std::nullopt);
 }
 
