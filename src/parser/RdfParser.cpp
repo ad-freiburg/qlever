@@ -565,7 +565,7 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
         << " could not be parsed as an object of type " << type << sep
         << errorMsg
         << ". It is treated as a plain string literal without datatype "
-           "instead."
+           "instead"
         << std::endl;
     lastParseResult_ = std::move(literal);
   };

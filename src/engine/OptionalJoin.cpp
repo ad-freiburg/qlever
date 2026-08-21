@@ -177,7 +177,7 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
 
   checkCancellation();
 
-  AD_LOG_DEBUG << "OptionalJoin subresult computation done." << std::endl;
+  AD_LOG_DEBUG << "OptionalJoin subresult computation done" << std::endl;
 
   if (!leftResult->isFullyMaterialized() ||
       !rightResult->isFullyMaterialized()) {
@@ -194,7 +194,7 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
 
   checkCancellation();
 
-  AD_LOG_DEBUG << "OptionalJoin result computation done." << endl;
+  AD_LOG_DEBUG << "OptionalJoin result computation done" << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),

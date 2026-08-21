@@ -249,7 +249,7 @@ Result Union::computeResult(bool requestLaziness) {
             resultSortedOn()};
   }
 
-  AD_LOG_DEBUG << "Union subresult computation done." << std::endl;
+  AD_LOG_DEBUG << "Union subresult computation done" << std::endl;
 
   IdTable idTable = computeUnion(subRes1->idTableView(), subRes2->idTableView(),
                                  _columnOrigins);

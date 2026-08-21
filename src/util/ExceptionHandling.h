@@ -186,7 +186,7 @@ class ExceptionCollector {
     AD_LOG_WARN << "`ExceptionCollector` was destroyed without a call to "
                    "`rethrow()` even though an exception was captured. The "
                    "exception will be rethrown now (or logged if rethrowing "
-                   "would call `std::terminate`)."
+                   "would call `std::terminate`)"
                 << std::endl;
     throwIfSafe_(
         [this]() { std::rethrow_exception(std::move(firstException_)); },
@@ -211,7 +211,7 @@ class ExceptionCollector {
                   << ex.what() << std::endl;
     } catch (...) {
       AD_LOG_WARN << "Additional exception of unknown type captured by "
-                     "`ExceptionCollector` while one was already stored."
+                     "`ExceptionCollector` while one was already stored"
                   << std::endl;
     }
   }

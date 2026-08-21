@@ -100,7 +100,7 @@ auto SortPerformanceEstimator::estimatedSortTime(
   AD_LOG_TRACE << "Closest sample result was " << sampleValuesRows[rowIndex]
                << " rows with " << sampleValuesCols[columnIndex]
                << " columns and an estimate of " << Timer::toSeconds(result)
-               << " seconds." << std::endl;
+               << " seconds" << std::endl;
 
   auto numRowsInSample = static_cast<double>(sampleValuesRows[rowIndex]);
   double rowRatio = static_cast<double>(numRows) / numRowsInSample;
@@ -186,11 +186,11 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
           AD_LOG_WARN
               << "Could not create any estimate for the sorting performance. "
               << "Setting all estimates to 0. This means that no sort "
-              << "operations will be canceled." << std::endl;
+              << "operations will be canceled" << std::endl;
         }
         AD_LOG_TRACE << "Estimated the sort time to be " << std::fixed
                      << std::setprecision(3) << Timer::toSeconds(_samples[i][j])
-                     << " seconds." << std::endl;
+                     << " seconds" << std::endl;
       }
     }
   }

@@ -338,7 +338,7 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
     AD_LOG_DEBUG << "language filter variable " + variable.name() +
                         " did not appear as object in any suitable "
                         "triple. "
-                        "Using literal-to-language predicate instead.\n";
+                        "Using literal-to-language predicate instead\n";
 
     std::vector<BasicGraphPattern> operations;
     for (const auto& langTag : langTags) {

@@ -72,7 +72,7 @@ Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
 
   checkCancellation();
 
-  AD_LOG_DEBUG << "MultiColumnJoin subresult computation done." << std::endl;
+  AD_LOG_DEBUG << "MultiColumnJoin subresult computation done" << std::endl;
 
   AD_LOG_DEBUG << "Computing a multi column join between results of size "
                << leftResult->idTableView().size() << " and "

@@ -71,7 +71,7 @@ Result Filter::computeResult(bool requestLaziness) {
 
   if (subRes->isFullyMaterialized()) {
     IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTableView());
-    AD_LOG_DEBUG << "Filter result computation done." << endl;
+    AD_LOG_DEBUG << "Filter result computation done" << endl;
 
     return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
   }
@@ -108,7 +108,7 @@ Result Filter::computeResult(bool requestLaziness) {
         }
       });
 
-  AD_LOG_DEBUG << "Filter result computation done." << endl;
+  AD_LOG_DEBUG << "Filter result computation done" << endl;
 
   return {std::move(result), resultSortedOn(), std::move(resultLocalVocab)};
 }

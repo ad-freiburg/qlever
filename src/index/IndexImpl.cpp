@@ -1121,7 +1121,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     AD_LOG_INFO
         << "No permutations were loaded due to `doNotLoadPermutations` "
            "being set to true. Only queries that don't contain any triples "
-           "can be executed."
+           "can be executed"
         << std::endl;
   } else {
     load(pso_, true);
@@ -1161,6 +1161,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (persistUpdatesOnDisk) {
     setFilenamesForPersistentUpdates(true);
   }
+  wasLoadedFromDisk_ = true;
 }
 
 // _____________________________________________________________________________
@@ -1398,7 +1399,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                " (PR = "
             << indexFormatVersion.prNumber_
             << ", Date = " << indexFormatVersion.date_.toStringAndType().first
-            << ")." << std::endl;
+            << ")" << std::endl;
       } else {
         AD_LOG_ERROR
             << "The index is too old for this version of QLever. "
@@ -1408,7 +1409,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                "this index (PR = "
             << indexFormatVersion.prNumber_
             << ", Date = " << indexFormatVersion.date_.toStringAndType().first
-            << ")." << std::endl;
+            << ")" << std::endl;
       }
       throw std::runtime_error{
           "Incompatible index format, see log message for details"};
@@ -1417,7 +1418,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
     AD_LOG_ERROR
         << "This index was built before versioning was introduced for "
            "QLever's index format. Please rebuild your index using the "
-           "current version of QLever."
+           "current version of QLever"
         << std::endl;
     throw std::runtime_error{
         "Incompatible index format, see log message for details"};
@@ -1678,7 +1679,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     parserBatchSize_ = size_t{j["parser-batch-size"]};
     AD_LOG_INFO << "Overriding setting parser-batch-size to "
                 << parserBatchSize_
-                << " This might influence performance during index build."
+                << " This might influence performance during index build"
                 << std::endl;
   }
 

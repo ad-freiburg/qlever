@@ -18,8 +18,10 @@ Index::Index(Index&&) noexcept = default;
 // See
 // https://stackoverflow.com/questions/13414652/forward-declaration-with-unique-ptr
 Index::~Index() {
-  if (pimpl_) {
-    AD_LOG_INFO << "Index at " << pimpl_->getOnDiskBase() << " was unloaded."
+  // Only log for an index that was actually loaded from disk (e.g. the old
+  // index after a `rebuild-index` swap), not for a freshly built one.
+  if (pimpl_ && pimpl_->wasLoadedFromDisk()) {
+    AD_LOG_INFO << "Index at " << pimpl_->getOnDiskBase() << " was unloaded"
                 << std::endl;
   }
 }

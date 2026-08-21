@@ -307,7 +307,7 @@ void JoinImpl::computeSizeEstimateAndMultiplicities() {
 
 void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
                     IdTable* result) const {
-  AD_LOG_DEBUG << "Performing join between two tables.\n";
+  AD_LOG_DEBUG << "Performing join between two tables\n";
   AD_LOG_DEBUG << "A: width = " << a.numColumns() << ", size = " << a.size()
                << "\n";
   AD_LOG_DEBUG << "B: width = " << b.numColumns() << ", size = " << b.size()
@@ -391,7 +391,7 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
   // the order.
   result->setColumnSubset(joinColumnData.permutationResult());
 
-  AD_LOG_DEBUG << "Join done.\n";
+  AD_LOG_DEBUG << "Join done\n";
   AD_LOG_DEBUG << "Result: width = " << result->numColumns()
                << ", size = " << result->size() << "\n";
 }
@@ -434,7 +434,7 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
   const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
-  AD_LOG_DEBUG << "Performing hashJoin between two tables.\n";
+  AD_LOG_DEBUG << "Performing hashJoin between two tables\n";
   AD_LOG_DEBUG << "A: width = " << a.numColumns() << ", size = " << a.size()
                << "\n";
   AD_LOG_DEBUG << "B: width = " << b.numColumns() << ", size = " << b.size()
@@ -518,7 +518,7 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
   }
   *dynRes = std::move(result).toDynamic();
 
-  AD_LOG_DEBUG << "HashJoin done.\n";
+  AD_LOG_DEBUG << "HashJoin done\n";
   AD_LOG_DEBUG << "Result: width = " << dynRes->numColumns()
                << ", size = " << dynRes->size() << "\n";
 }
