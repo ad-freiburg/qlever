@@ -116,15 +116,15 @@ CPP_template(typename Input)(requires BlockedRunsInput<Input>) size_t
       size_t{0});
 }
 
-// The half-open range of block indices `[firstBlock_, endBlock_)` of a single
-// run that a chunk has to look at.
+// The half-open range of block indices `[firstBlockIdx_, endBlockIdx_)` of a
+// single run that a chunk has to look at.
 struct BlockRange {
-  size_t firstBlock_;
-  size_t endBlock_;
+  size_t firstBlockIdx_;
+  size_t endBlockIdx_;
 
   // Return `true` if the range contains no block at all, in which case the run
   // does not contribute to the chunk.
-  bool empty() const { return firstBlock_ >= endBlock_; }
+  bool empty() const { return firstBlockIdx_ >= endBlockIdx_; }
 };
 
 // Return the range of blocks of the given `run` that can contain elements in
@@ -146,9 +146,9 @@ CPP_template(typename Input,
 
   // The first block that may contain an element that is not smaller than `lo`,
   // that is the first block the last key of which is not smaller than `lo`.
-  size_t firstBlock = 0;
+  size_t firstBlockIdx = 0;
   if (split.lo_.has_value()) {
-    firstBlock = lengthOfPrefixWhere([&](size_t block) {
+    firstBlockIdx = lengthOfPrefixWhere([&](size_t block) {
       return comparator(input.lastKey(run, block), split.lo_.value());
     });
   }
@@ -158,13 +158,13 @@ CPP_template(typename Input,
   // NOTE: The predicate is deliberately `comparator(firstKey, hi)` and not
   // `!comparator(hi, firstKey)`. The latter would be off by one and would read
   // one superfluous block whenever `firstKey(block) == hi`.
-  size_t endBlock = input.numBlocks(run);
+  size_t endBlockIdx = input.numBlocks(run);
   if (split.hi_.has_value()) {
-    endBlock = lengthOfPrefixWhere([&](size_t block) {
+    endBlockIdx = lengthOfPrefixWhere([&](size_t block) {
       return comparator(input.firstKey(run, block), split.hi_.value());
     });
   }
-  return {firstBlock, endBlock};
+  return {firstBlockIdx, endBlockIdx};
 }
 
 // Return the number of elements of the `block`.

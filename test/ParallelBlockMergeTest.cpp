@@ -377,7 +377,8 @@ TEST(ParallelBlockMerge, blockRangeForRun) {
                                      std::optional<size_t> hi, size_t run) {
     auto result = detail::blockRangeForRun(
         input, comparator, Split<size_t>{std::move(lo), std::move(hi)}, run);
-    return std::pair<size_t, size_t>{result.firstBlock_, result.endBlock_};
+    return std::pair<size_t, size_t>{result.firstBlockIdx_,
+                                     result.endBlockIdx_};
   };
   // Without any bounds, all blocks of the run are in the range.
   EXPECT_EQ(range(std::nullopt, std::nullopt, 0), Pair(0u, 3u));
@@ -426,11 +427,11 @@ TEST(ParallelBlockMerge, chunkBoundaryPredicatesDoNotReadSuperfluousBlocks) {
   {
     InstrumentedInput input{SizeRuns{{run}, 3}};
     detail::ChunkMerger<false, InstrumentedInput, std::less<>> merger{
-        input, comparator, options, Split<size_t>{std::nullopt, 3}, nullptr};
-    auto block = merger.nextBlock();
+        &input, &comparator, options, Split<size_t>{std::nullopt, 3}, nullptr};
+    auto block = merger.get();
     ASSERT_TRUE(block.has_value());
     EXPECT_THAT(block.value(), ::testing::ElementsAre(0u, 1u, 2u));
-    EXPECT_FALSE(merger.nextBlock().has_value());
+    EXPECT_FALSE(merger.get().has_value());
     EXPECT_THAT(input.state_->readBlocks_,
                 ::testing::ElementsAre(::testing::Pair(0u, 0u)));
   }
@@ -439,11 +440,11 @@ TEST(ParallelBlockMerge, chunkBoundaryPredicatesDoNotReadSuperfluousBlocks) {
   {
     InstrumentedInput input{SizeRuns{{run}, 3}};
     detail::ChunkMerger<false, InstrumentedInput, std::less<>> merger{
-        input, comparator, options, Split<size_t>{3, std::nullopt}, nullptr};
-    auto block = merger.nextBlock();
+        &input, &comparator, options, Split<size_t>{3, std::nullopt}, nullptr};
+    auto block = merger.get();
     ASSERT_TRUE(block.has_value());
     EXPECT_THAT(block.value(), ::testing::ElementsAre(3u, 4u, 5u, 6u, 7u, 8u));
-    EXPECT_FALSE(merger.nextBlock().has_value());
+    EXPECT_FALSE(merger.get().has_value());
     EXPECT_THAT(input.state_->readBlocks_,
                 ::testing::ElementsAre(::testing::Pair(0u, 1u),
                                        ::testing::Pair(0u, 2u)));
@@ -453,11 +454,11 @@ TEST(ParallelBlockMerge, chunkBoundaryPredicatesDoNotReadSuperfluousBlocks) {
   {
     InstrumentedInput input{SizeRuns{{run}, 3}};
     detail::ChunkMerger<false, InstrumentedInput, std::less<>> merger{
-        input, comparator, options, Split<size_t>{4, 5}, nullptr};
-    auto block = merger.nextBlock();
+        &input, &comparator, options, Split<size_t>{4, 5}, nullptr};
+    auto block = merger.get();
     ASSERT_TRUE(block.has_value());
     EXPECT_THAT(block.value(), ::testing::ElementsAre(4u));
-    EXPECT_FALSE(merger.nextBlock().has_value());
+    EXPECT_FALSE(merger.get().has_value());
     EXPECT_THAT(input.state_->readBlocks_,
                 ::testing::ElementsAre(::testing::Pair(0u, 1u)));
   }

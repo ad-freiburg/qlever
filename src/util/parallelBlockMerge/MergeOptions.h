@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <limits>
 
+#include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 
 // The tuning knobs of the parallel block merge (see
@@ -72,7 +73,8 @@ class OutputBlockSize {
   }
 
   // Return `true` if a block that contains `numElements` elements and occupies
-  // `memory` is complete and should be emitted.
+  // `memory` is complete and should be emitted. This is never `true` for an
+  // empty block, see the constructor below.
   bool isBlockLargeEnough(size_t numElements, MemorySize memory) const {
     return numElements >= maxNumElements_ || memory >= maxMemory_;
   }
@@ -84,8 +86,15 @@ class OutputBlockSize {
  private:
   // The general constructor, only reachable via the named constructors above,
   // so that a call site always states which criteria it cares about.
+  //
+  // NOTE: Both limits have to be strictly positive, because consumers of the
+  // merge rely on an empty block never being large enough (an output block that
+  // is complete while still being empty would never make any progress).
   OutputBlockSize(size_t maxNumElements, MemorySize maxMemory)
-      : maxNumElements_{maxNumElements}, maxMemory_{maxMemory} {}
+      : maxNumElements_{maxNumElements}, maxMemory_{maxMemory} {
+    AD_CONTRACT_CHECK(maxNumElements > 0);
+    AD_CONTRACT_CHECK(maxMemory > MemorySize::bytes(0));
+  }
 };
 
 // The tuning knobs of the parallel merge. All of them have sensible defaults,

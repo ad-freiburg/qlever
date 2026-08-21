@@ -19,6 +19,7 @@
 #include "backports/concepts.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
@@ -31,7 +32,7 @@ namespace detail {
 
 // Merge that part of the runs of a `BlockedRunsInput` that lies in the
 // half-open key range of a `Split` and yield the result as a lazy range of
-// output blocks (see `nextBlock()`).
+// output blocks (see `get()`).
 //
 // The blocks of the input are read lazily and one at a time per run, so the
 // memory that a single `ChunkMerger` requires is one input block per run plus
@@ -52,25 +53,32 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
 
  private:
   // The lazy cursor over that part of a single run that lies in the key range
-  // of the chunk. The current element is `begin(block_)[idx_]`, and the cursor
-  // is exhausted if `idx_ == end_` and there is no further block to read.
+  // of the chunk. The current element is `*it_`, and the cursor is exhausted if
+  // `it_ == end_` and there is no further block to read.
+  //
+  // NOTE: `it_` and `end_` are iterators into `block_`, so a `Cursor` must not
+  // be relocated once it has been set up. This is guaranteed because
+  // `cursors_` is reserved to its final capacity before the first
+  // `emplace_back` (the `heap_` relies on the very same property).
   struct Cursor {
-    size_t run_;
-    size_t firstBlock_;
-    size_t nextBlock_;
-    size_t endBlock_;
+    using Iterator = ql::ranges::iterator_t<Block>;
+
+    size_t runIdx_;
+    size_t nextBlockIdx_;
+    size_t endBlockIdx_;
     Block block_;
-    size_t idx_ = 0;
-    size_t end_ = 0;
+    Iterator it_;
+    Iterator end_;
 
     // NOTE: The `block` is only passed in because `Block` need not be default
     // constructible; it is always the result of `makeEmptyBlock()`.
-    Cursor(size_t run, size_t firstBlock, size_t endBlock, Block block)
-        : run_{run},
-          firstBlock_{firstBlock},
-          nextBlock_{firstBlock},
-          endBlock_{endBlock},
-          block_{std::move(block)} {}
+    Cursor(size_t runIdx, size_t firstBlockIdx, size_t endBlockIdx, Block block)
+        : runIdx_{runIdx},
+          nextBlockIdx_{firstBlockIdx},
+          endBlockIdx_{endBlockIdx},
+          block_{std::move(block)},
+          it_{ql::ranges::begin(block_)},
+          end_{it_} {}
   };
 
   const Input* input_;
@@ -84,26 +92,31 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   bool isInitialized_ = false;
 
  public:
-  // Construct from the `input` and the `comparator` (both of which have to
-  // outlive the `ChunkMerger`), the `options`, the key range of the chunk, and
-  // an optional `cancellationHandle`.
+  // Construct from the `input` and the `comparator` (both of which must not be
+  // `nullptr` and have to outlive the `ChunkMerger`), the `options`, the key
+  // range of the chunk, and an optional `cancellationHandle`.
   //
   // NOTE: The merger holds pointers into itself (the `heap_` points into
   // `cursors_`) as well as to the `input` and the `comparator`, which is why it
-  // is a `NoCopyNoMove`.
-  ChunkMerger(const Input& input, const Comparator& comparator,
+  // is a `NoCopyNoMove`, and why the latter two are passed as pointers.
+  ChunkMerger(const Input* input, const Comparator* comparator,
               MergeOptions options, Split<Key> split,
               ad_utility::SharedCancellationHandle cancellationHandle)
-      : input_{&input},
-        comparator_{&comparator},
+      : input_{input},
+        comparator_{comparator},
         options_{std::move(options)},
         split_{std::move(split)},
-        cancellationHandle_{std::move(cancellationHandle)} {}
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(input_ != nullptr);
+    AD_CONTRACT_CHECK(comparator_ != nullptr);
+  }
 
-  // Return the next output block, or `std::nullopt` if the chunk is exhausted.
-  // The returned block is never empty. This is the only function that performs
+  // Return the next output block, or `std::nullopt` if the chunk is exhausted
+  // (the `ChunkMerger` is itself a lazy range of the output blocks of its
+  // chunk). The returned block is never empty, because an `OutputBlockSize` is
+  // never satisfied by an empty block. This is the only function that performs
   // I/O and it must not be called concurrently for the same `ChunkMerger`.
-  std::optional<Block> nextBlock() {
+  std::optional<Block> get() override {
     initializeIfNecessary();
     if (heap_.empty()) {
       return std::nullopt;
@@ -112,18 +125,15 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     size_t numElements = 0;
     MemorySize memory = MemorySize::bytes(0);
     auto comparator = heapComparator();
-    while (!heap_.empty()) {
+    while (!heap_.empty() &&
+           !options_.outputBlockSize.isBlockLargeEnough(numElements, memory)) {
       ql::ranges::pop_heap(heap_, comparator);
       Cursor* cursor = heap_.back();
-      auto&& element = ql::ranges::begin(cursor->block_)[cursor->idx_];
+      auto&& element = *cursor->it_;
       memory += input_->memorySizeOfElement(element);
-      if constexpr (moveElements) {
-        input_->appendToBlock(block, std::move(element));
-      } else {
-        input_->appendToBlock(block, element);
-      }
+      input_->appendToBlock(block, ad_utility::moveIf<moveElements>(element));
       ++numElements;
-      ++cursor->idx_;
+      ++cursor->it_;
       // NOTE: `readNextBlockIfNecessary` may replace `cursor->block_`, which
       // invalidates `element`. This is fine, because the element was already
       // appended.
@@ -132,9 +142,6 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
       } else {
         heap_.pop_back();
       }
-      if (options_.outputBlockSize.isBlockLargeEnough(numElements, memory)) {
-        break;
-      }
     }
     if (cancellationHandle_ != nullptr) {
       cancellationHandle_->throwIfCancelled();
@@ -142,17 +149,12 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     return block;
   }
 
-  // The `ChunkMerger` is itself a lazy range of the output blocks of its chunk.
-  std::optional<Block> get() override { return nextBlock(); }
-
  private:
   // Return the comparator of the `heap_`. Its arguments are reversed, such that
   // the max-heap of the standard library acts as a min-heap.
   auto heapComparator() const {
     return [comparator = comparator_](const Cursor* a, const Cursor* b) {
-      const auto& elA = ql::ranges::begin(a->block_)[a->idx_];
-      const auto& elB = ql::ranges::begin(b->block_)[b->idx_];
-      return (*comparator)(elB, elA);
+      return (*comparator)(*b->it_, *a->it_);
     };
   }
 
@@ -164,17 +166,18 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     }
     size_t numRuns = input_->numRuns();
     cursors_.reserve(numRuns);
-    for (size_t run = 0; run < numRuns; ++run) {
-      auto blockRange = blockRangeForRun(*input_, *comparator_, split_, run);
+    for (size_t runIdx = 0; runIdx < numRuns; ++runIdx) {
+      auto blockRange = blockRangeForRun(*input_, *comparator_, split_, runIdx);
       if (blockRange.empty()) {
         continue;
       }
-      cursors_.emplace_back(run, blockRange.firstBlock_, blockRange.endBlock_,
-                            input_->makeEmptyBlock());
+      cursors_.emplace_back(runIdx, blockRange.firstBlockIdx_,
+                            blockRange.endBlockIdx_, input_->makeEmptyBlock());
     }
     heap_.reserve(cursors_.size());
     for (auto& cursor : cursors_) {
-      if (readNextBlockIfNecessary(cursor)) {
+      // This is the only place where the *first* block of a cursor is read.
+      if (readNextBlockIfNecessary(cursor, true)) {
         heap_.push_back(&cursor);
       }
     }
@@ -182,33 +185,34 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   }
 
   // Make sure that the `cursor` points to a valid element, reading further
-  // blocks if necessary. Return `false` if the `cursor` is exhausted.
-  bool readNextBlockIfNecessary(Cursor& cursor) {
-    while (cursor.idx_ == cursor.end_) {
-      if (cursor.nextBlock_ == cursor.endBlock_) {
+  // blocks if necessary. Return `false` if the `cursor` is exhausted. Pass
+  // `isFirstBlock == true` if the next block that is read is the first block of
+  // the cursor, which is the only one that may have to be trimmed at the front;
+  // note that this only applies to the first iteration of the loop below,
+  // because a first block that is trimmed away completely is directly followed
+  // by the second one.
+  bool readNextBlockIfNecessary(Cursor& cursor, bool isFirstBlock = false) {
+    while (cursor.it_ == cursor.end_) {
+      if (cursor.nextBlockIdx_ == cursor.endBlockIdx_) {
         return false;
       }
-      size_t block = cursor.nextBlock_;
-      ++cursor.nextBlock_;
-      cursor.block_ = input_->readBlock(cursor.run_, block);
-      cursor.idx_ = 0;
-      cursor.end_ = blockSize(cursor.block_);
+      size_t blockIdx = cursor.nextBlockIdx_;
+      ++cursor.nextBlockIdx_;
+      cursor.block_ = input_->readBlock(cursor.runIdx_, blockIdx);
+      cursor.it_ = ql::ranges::begin(cursor.block_);
+      cursor.end_ = cursor.it_ + blockSize(cursor.block_);
       // Only the very first block of the chunk can contain elements that are
       // smaller than `lo`, and only the very last one can contain elements that
       // are not smaller than `hi`.
-      if (block == cursor.firstBlock_ && split_.lo_.has_value()) {
-        cursor.idx_ = static_cast<size_t>(
-            ql::ranges::lower_bound(cursor.block_, split_.lo_.value(),
-                                    *comparator_) -
-            ql::ranges::begin(cursor.block_));
+      if (std::exchange(isFirstBlock, false) && split_.lo_.has_value()) {
+        cursor.it_ = ql::ranges::lower_bound(cursor.block_, split_.lo_.value(),
+                                             *comparator_);
       }
-      if (block + 1 == cursor.endBlock_ && split_.hi_.has_value()) {
-        cursor.end_ = static_cast<size_t>(
-            ql::ranges::lower_bound(cursor.block_, split_.hi_.value(),
-                                    *comparator_) -
-            ql::ranges::begin(cursor.block_));
+      if (blockIdx + 1 == cursor.endBlockIdx_ && split_.hi_.has_value()) {
+        cursor.end_ = ql::ranges::lower_bound(cursor.block_, split_.hi_.value(),
+                                              *comparator_);
       }
-      AD_CORRECTNESS_CHECK(cursor.idx_ <= cursor.end_);
+      AD_CORRECTNESS_CHECK(cursor.it_ <= cursor.end_);
     }
     return true;
   }

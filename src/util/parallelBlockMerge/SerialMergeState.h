@@ -49,7 +49,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   SerialMergeState(Input input, Comparator comparator, MergeOptions options,
                    ad_utility::SharedCancellationHandle cancellationHandle)
       : input_{std::move(input)}, comparator_{std::move(comparator)} {
-    merger_.emplace(input_, comparator_, std::move(options), Split<Key>{},
+    merger_.emplace(&input_, &comparator_, std::move(options), Split<Key>{},
                     std::move(cancellationHandle));
   }
 

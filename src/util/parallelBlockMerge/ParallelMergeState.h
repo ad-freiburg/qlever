@@ -193,10 +193,10 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   void runChunkImpl(size_t chunkIndex) {
     try {
       ChunkMerger<moveElements, Input, Comparator> merger{
-          input_, comparator_, options_, splitters_.getSplittersAt(chunkIndex),
-          cancellationHandle_};
+          &input_, &comparator_, options_,
+          splitters_.getSplittersAt(chunkIndex), cancellationHandle_};
       while (!stopRequested_.load()) {
-        auto block = merger.nextBlock();
+        auto block = merger.get();
         if (!block.has_value()) {
           break;
         }
