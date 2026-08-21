@@ -224,10 +224,10 @@ class SplitVocabulary {
   }
 
   // Grant unit tests access to the private `lookupBatch` helpers.
-  FRIEND_TEST(Vocabulary, SplitVocabularyPartitionUnderlyingIndicesByMarker);
-  FRIEND_TEST(Vocabulary, SplitVocabularyPartitionResultPositionsByMarker);
-  FRIEND_TEST(Vocabulary, SplitVocabularyLookupBatchesByMarkerSingleAndMixed);
-  FRIEND_TEST(Vocabulary, SplitVocabularyMergeMarkerBatchesInInputOrder);
+  FRIEND_TEST(SplitVocabularyWithDataTest,
+              SplitVocabularyPartitionMarkerIndicesAndPositions);
+  FRIEND_TEST(SplitVocabularyWithDataTest,
+              SplitVocabularyMergeMarkerBatchesInInputOrder);
 
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index

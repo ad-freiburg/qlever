@@ -517,10 +517,10 @@ class SplitVocabularyWithDataTest : public ::testing::Test {
 
 TwoSplitVocabulary SplitVocabularyWithDataTest::sv_;
 
-// Direct tests of the private lookupBatch helpers (FRIEND_TEST).
+// Test the private lookupBatch helpers directly via FRIEND_TEST.
 TEST_F(SplitVocabularyWithDataTest,
-       SplitVocabularyPartitionUnderlyingIndicesByMarker) {
-  // Marker 0: plain words; marker 1: words starting with "a".
+       SplitVocabularyPartitionMarkerIndicesAndPositions) {
+  // Use marker `0` for plain words and marker `1` for words starting with `"a`.
   const std::array<size_t, 5> indices{
       static_cast<size_t>(TwoSplitVocabulary::addMarker(3, 0)),
       static_cast<size_t>(TwoSplitVocabulary::addMarker(1, 1)),
@@ -528,91 +528,44 @@ TEST_F(SplitVocabularyWithDataTest,
       static_cast<size_t>(TwoSplitVocabulary::addMarker(1, 1)),
       static_cast<size_t>(TwoSplitVocabulary::addMarker(2, 0)),
   };
-  auto byMarker =
-      TwoSplitVocabulary::partitionUnderlyingIndicesByMarker(indices);
-  EXPECT_THAT(byMarker[0], ::testing::ElementsAre(3u, 0u, 2u));
-  EXPECT_THAT(byMarker[1], ::testing::ElementsAre(1u, 1u));
-}
-
-// _____________________________________________________________________________
-TEST_F(SplitVocabularyWithDataTest,
-       SplitVocabularyPartitionResultPositionsByMarker) {
-  const std::array<size_t, 4> indices{
-      static_cast<size_t>(TwoSplitVocabulary::addMarker(0, 1)),
-      static_cast<size_t>(TwoSplitVocabulary::addMarker(0, 0)),
-      static_cast<size_t>(TwoSplitVocabulary::addMarker(1, 1)),
-      static_cast<size_t>(TwoSplitVocabulary::addMarker(2, 0)),
-  };
-  auto positions =
-      TwoSplitVocabulary::partitionResultPositionsByMarker(indices);
-  // Input positions of marker 0: 1, 3; of marker 1: 0, 2.
-  EXPECT_THAT(positions[0], ::testing::ElementsAre(1u, 3u));
-  EXPECT_THAT(positions[1], ::testing::ElementsAre(0u, 2u));
-}
-
-// _____________________________________________________________________________
-TEST_F(SplitVocabularyWithDataTest,
-       SplitVocabularyLookupBatchesByMarkerSingleAndMixed) {
-  // Single marker (marker 1 only): one non-empty batch.
-  {
-    const std::array<size_t, 2> indices{
-        static_cast<size_t>(sv_.addMarker(0, 1)),
-        static_cast<size_t>(sv_.addMarker(1, 1)),
-    };
-    auto byMarker =
-        TwoSplitVocabulary::partitionUnderlyingIndicesByMarker(indices);
-    auto lookups = sv_.lookupBatchesByMarker(byMarker);
-    EXPECT_EQ(lookups.numNonemptyMarkers_, 1);
-    EXPECT_EQ(lookups.lastNonemptyMarker_, 1);
-    EXPECT_THAT(lookups.lookupResultByMarker_[0], ::testing::IsNull());
-    EXPECT_THAT(lookups.lookupResultByMarker_[1],
-                ::testing::Pointee(::testing::ElementsAre(
-                    sv_[sv_.addMarker(0, 1)], sv_[sv_.addMarker(1, 1)])));
-  }
-
-  // Mixed markers: both batches filled.
-  {
-    const std::array<size_t, 3> indices{
-        static_cast<size_t>(sv_.addMarker(1, 0)),
-        static_cast<size_t>(sv_.addMarker(0, 1)),
-        static_cast<size_t>(sv_.addMarker(0, 0)),
-    };
-    auto byMarker =
-        TwoSplitVocabulary::partitionUnderlyingIndicesByMarker(indices);
-    auto lookups = sv_.lookupBatchesByMarker(byMarker);
-    EXPECT_EQ(lookups.numNonemptyMarkers_, 2);
-    EXPECT_THAT(lookups.lookupResultByMarker_[0],
-                ::testing::Pointee(::testing::SizeIs(2u)));
-    EXPECT_THAT(lookups.lookupResultByMarker_[1],
-                ::testing::Pointee(::testing::SizeIs(1u)));
-  }
+  auto partitions =
+      TwoSplitVocabulary::partitionMarkerIndicesAndPositions(indices);
+  EXPECT_THAT(partitions[0].getUnderlyingIndices(),
+              ::testing::ElementsAre(3u, 0u, 2u));
+  EXPECT_THAT(partitions[0].getResultPositions(),
+              ::testing::ElementsAre(0u, 2u, 4u));
+  EXPECT_THAT(partitions[1].getUnderlyingIndices(),
+              ::testing::ElementsAre(1u, 1u));
+  EXPECT_THAT(partitions[1].getResultPositions(),
+              ::testing::ElementsAre(1u, 3u));
 }
 
 // _____________________________________________________________________________
 TEST_F(SplitVocabularyWithDataTest,
        SplitVocabularyMergeMarkerBatchesInInputOrder) {
   const std::array<size_t, 4> indices{
-      static_cast<size_t>(sv_.addMarker(1, 0)),  // "xyz"
-      static_cast<size_t>(sv_.addMarker(0, 1)),  // "abc"
-      static_cast<size_t>(sv_.addMarker(1, 1)),  // "axyz"
-      static_cast<size_t>(sv_.addMarker(0, 0)),  // ""
+      static_cast<size_t>(sv_.addMarker(1, 0)),
+      static_cast<size_t>(sv_.addMarker(0, 1)),
+      static_cast<size_t>(sv_.addMarker(1, 1)),
+      static_cast<size_t>(sv_.addMarker(0, 0)),
   };
-  auto byMarker =
-      TwoSplitVocabulary::partitionUnderlyingIndicesByMarker(indices);
-  auto lookups = sv_.lookupBatchesByMarker(byMarker);
-  ASSERT_EQ(lookups.numNonemptyMarkers_, 2);
+  auto partitions =
+      TwoSplitVocabulary::partitionMarkerIndicesAndPositions(indices);
+  TwoSplitVocabulary::MarkerBatchLookups markerLookups;
+  const std::array<size_t, 2> markerZeroIndices{
+      static_cast<size_t>(sv_.addMarker(1, 0)),
+      static_cast<size_t>(sv_.addMarker(0, 0)),
+  };
+  const std::array<size_t, 2> markerOneIndices{
+      static_cast<size_t>(sv_.addMarker(0, 1)),
+      static_cast<size_t>(sv_.addMarker(1, 1)),
+  };
+  markerLookups.lookupResultByMarker_[0] = sv_.lookupBatch(markerZeroIndices);
+  markerLookups.lookupResultByMarker_[1] = sv_.lookupBatch(markerOneIndices);
   auto merged = TwoSplitVocabulary::mergeMarkerBatchesInInputOrder(
-      indices, std::move(lookups));
+      markerLookups, partitions);
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(sv_, merged,
                                                                 indices);
-
-  // Merge requires more than one non-empty marker.
-  auto singleByMarker = TwoSplitVocabulary::partitionUnderlyingIndicesByMarker(
-      std::array<size_t, 1>{static_cast<size_t>(sv_.addMarker(0, 0))});
-  auto singleLookups = sv_.lookupBatchesByMarker(singleByMarker);
-  EXPECT_ANY_THROW(TwoSplitVocabulary::mergeMarkerBatchesInInputOrder(
-      std::array<size_t, 1>{static_cast<size_t>(sv_.addMarker(0, 0))},
-      std::move(singleLookups)));
 }
 
 // _____________________________________________________________________________
