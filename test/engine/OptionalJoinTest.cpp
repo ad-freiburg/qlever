@@ -1299,3 +1299,86 @@ INSTANTIATE_TEST_SUITE_P(
       return absl::StrCat(requestLaziness ? "LazyResult" : "MaterializedResult",
                           materializeLeft ? "MaterializedLeft" : "LazyLeft");
     }));
+
+namespace {
+// _____________________________________________________________________________
+// Build an `OptionalJoin` on `?a` that reports being sorted on `?a`, but
+// switches to the index nested loop join (which does not preserve the order of
+// its left input) as soon as its left input becomes smaller than its right
+// input. `leftSize` rows are used for the left input, `rightSize` for the
+// right one, and all values of `?a` are matched by both inputs.
+std::shared_ptr<QueryExecutionTree> makeOptionalJoinThatIsResortedOnLimit(
+    QueryExecutionContext* qec, size_t leftSize, size_t rightSize) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  auto makeTable = [](size_t numRows, size_t offset, bool ascending) {
+    VectorTable table;
+    for (size_t i = 0; i < numRows; ++i) {
+      auto value = static_cast<long long>(ascending ? i : numRows - 1 - i);
+      table.push_back({value, value + static_cast<long long>(offset)});
+    }
+    return makeIdTableFromVector(table);
+  };
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeTable(leftSize, 100, true), Vars{Var{"?a"}, Var{"?b"}}, false,
+      std::vector<ColumnIndex>{0});
+  // Deliberately unsorted, so that the `OptionalJoin` wraps it in a `Sort`,
+  // which is a precondition for the index nested loop join, and so that the
+  // reordering by that join is actually observable.
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeTable(rightSize, 200, false), Vars{Var{"?a"}, Var{"?c"}});
+  auto result = ad_utility::makeExecutionTree<OptionalJoin>(
+      qec, std::move(left), std::move(right));
+  // Without a limit the left input is the larger one, so the sort order is
+  // preserved.
+  EXPECT_TRUE(result->getRootOperation()->isSortedBy({0}));
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Pushing a `LIMIT` into the left input can change the algorithm and with it
+// the sort order of an `OptionalJoin` inside that input, see the caution note
+// on `Operation::applyLimitOffset`. Check that the sort order this operation
+// requires of its left input is restored in that case.
+TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInput) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  auto* qec = ad_utility::testing::getQec();
+  auto left = makeOptionalJoinThatIsResortedOnLimit(qec, 10, 5);
+  // Matches every value of `?a` in `left`, so that no row of the result may
+  // contain an UNDEF.
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector({{0, 7},
+                             {1, 7},
+                             {2, 7},
+                             {3, 7},
+                             {4, 7},
+                             {5, 7},
+                             {6, 7},
+                             {7, 7},
+                             {8, 7},
+                             {9, 7}}),
+      Vars{Var{"?a"}, Var{"?d"}}, false, std::vector<ColumnIndex>{0});
+
+  OptionalJoin optionalJoin{qec, std::move(left), std::move(right)};
+  // The limit is small enough to make the left input of the inner
+  // `OptionalJoin` smaller than its right input.
+  optionalJoin.applyLimitOffset({3});
+
+  EXPECT_TRUE(
+      optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy({0}));
+
+  qec->getQueryTreeCache().clearAll();
+  // Required because the children apply their `LIMIT` externally, which updates
+  // their runtime information.
+  optionalJoin.createRuntimeInfoFromEstimates(
+      optionalJoin.getRuntimeInfoPointer());
+  auto result = optionalJoin.computeResultOnlyForTesting();
+  for (const auto& row : result.idTableView()) {
+    for (const Id& id : row) {
+      EXPECT_NE(id, Id::makeUndefined());
+    }
+  }
+}
