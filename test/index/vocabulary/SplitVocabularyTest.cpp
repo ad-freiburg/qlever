@@ -609,10 +609,6 @@ TEST(Vocabulary, SplitVocabularyMergeMarkerBatchesInInputOrder) {
   sv.close();
 }
 
-namespace {
-using namespace splitVocabTestHelpers;
-using namespace ad_utility;
-
 // _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
   // Create a `SplitVocabulary::WordWriter` and destruct it without a call to
