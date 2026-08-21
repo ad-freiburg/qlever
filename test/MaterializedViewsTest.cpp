@@ -562,6 +562,10 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
       "The query to write a materialized view returned a string not "
       "contained in the index (local vocabulary entry)");
 
+  // Empty query is rejected.
+  expectWriteViewToDiskError("SELECT * { }",
+                             "needs to select at least one column");
+
   // `LIMIT`/`OFFSET` is rejected.
   expectWriteViewToDiskError(simpleWriteQuery_ + " LIMIT 1",
                              "may not contain a `LIMIT` or `OFFSET` clause");

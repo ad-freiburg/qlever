@@ -176,6 +176,11 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
   // Add dummy columns such that the view has at least four columns in total.
   uint8_t numAddEmptyCols = 0;
+  if (numCols < 1) {
+    throw MaterializedViewConfigException{
+        "A query to write a materialized view needs to select at least one "
+        "column."};
+  }
   if (numCols < 4) {
     AD_LOG_INFO << "The query to write the materialized view \"" << name_
                 << "\" selects only " << numCols << " column(s), "
