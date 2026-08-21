@@ -136,13 +136,43 @@ class SplitVocabulary {
   using IndicesByMarker = std::array<std::vector<size_t>, numberOfVocabs>;
   using ResultsByMarker = std::array<VocabBatchLookupResult, numberOfVocabs>;
 
-  // Paired lookup indices for each marker: (underlying_index, result_position).
-  // For a given marker, underlying_index[i] is looked up from the i-th
-  // vocabulary, and the result is scattered to result_position[i] in the final
-  // output.
+  // Paired lookup data for one marker: for each position `i` in the arrays,
+  // `underlyingIndices[i]` is the index to look up, and `resultPositions[i]` is
+  // where the result goes in the final output. The arrays are always kept in
+  // sync (same size).
   struct MarkerIndicesAndPositions {
-    std::vector<size_t> underlyingIndices;
-    std::vector<size_t> resultPositions;
+   private:
+    std::vector<size_t> underlyingIndices_;
+    std::vector<size_t> resultPositions_;
+
+   public:
+    // Reserve capacity for the given number of pairs.
+    void reserve(size_t capacity) {
+      underlyingIndices_.reserve(capacity);
+      resultPositions_.reserve(capacity);
+    }
+
+    // Add a (`underlyingIndex`, `resultPosition`) pair.
+    void addPair(size_t underlyingIndex, size_t resultPosition) {
+      underlyingIndices_.push_back(underlyingIndex);
+      resultPositions_.push_back(resultPosition);
+    }
+
+    // Access the underlying indices for batch-lookup.
+    ql::span<const size_t> getUnderlyingIndices() const {
+      return underlyingIndices_;
+    }
+
+    // Access the result positions for scatter-back.
+    ql::span<const size_t> getResultPositions() const {
+      return resultPositions_;
+    }
+
+    // Check if this marker has any pairs.
+    bool empty() const { return underlyingIndices_.empty(); }
+
+    // Number of pairs.
+    size_t size() const { return underlyingIndices_.size(); }
   };
   using IndicesAndPositionsByMarker =
       std::array<MarkerIndicesAndPositions, numberOfVocabs>;
@@ -150,7 +180,8 @@ class SplitVocabulary {
   // Partition marked indices into paired (underlying_index, result_position)
   // lists per marker. For each input index with a marker: extract the
   // underlying vocabulary index, pair it with its position in the input, and
-  // group both by marker.
+  // group both by marker. Each marker's indices can be pre-reserved via
+  // reserve() to avoid reallocations during partitioning.
   static IndicesAndPositionsByMarker partitionMarkerIndicesAndPositions(
       ql::span<const size_t> indices) {
     IndicesAndPositionsByMarker out;
@@ -158,9 +189,7 @@ class SplitVocabulary {
          ::ranges::views::enumerate(indices)) {
       auto marker = getMarker(markedIndex);
       auto underlyingIndex = getIndex(markedIndex);
-      out[marker].underlyingIndices.push_back(underlyingIndex);
-      out[marker].resultPositions.push_back(
-          static_cast<size_t>(resultPosition));
+      out[marker].addPair(underlyingIndex, static_cast<size_t>(resultPosition));
     }
     return out;
   }
@@ -226,6 +255,11 @@ class SplitVocabulary {
     uint64_t marker = (indexWithMarker & markerBitMask) >> markerShift;
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs);
     return static_cast<uint8_t>(marker);
+  }
+
+  // Extract the underlying vocabulary-local index from a marked index.
+  static constexpr uint64_t getIndex(uint64_t indexWithMarker) {
+    return indexWithMarker & underlyingIndexBitMask;
   }
 
   // Use the SplitFunction to determine the marker for a given word (that is, in
@@ -303,18 +337,18 @@ class SplitVocabulary {
     // Look up each marker's indices via its vocabulary.
     MarkerBatchLookups markerLookups;
     for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
-      if (markerIndicesAndPositions[marker].underlyingIndices.empty()) {
+      if (markerIndicesAndPositions[marker].empty()) {
         continue;
       }
       markerLookups.lookupResultByMarker_[marker] = std::visit(
           [&](const auto& vocab) {
             return vocab.lookupBatch(
-                markerIndicesAndPositions[marker].underlyingIndices);
+                markerIndicesAndPositions[marker].getUnderlyingIndices());
           },
           underlying_[marker]);
       AD_CORRECTNESS_CHECK(
           markerLookups.lookupResultByMarker_[marker]->size() ==
-          markerIndicesAndPositions[marker].underlyingIndices.size());
+          markerIndicesAndPositions[marker].size());
       ++markerLookups.numNonemptyMarkers_;
       markerLookups.lastNonemptyMarker_ = marker;
     }
