@@ -691,7 +691,6 @@ TEST(Result, assertionOnNullptrConstruction) {
   EXPECT_ANY_THROW(Result(Result::IdTablePtr(nullptr), {}, LocalVocab{}));
 }
 
-// _____________________________________________________________________________
 // Tests for the `IdTableView<0>`-backed `Result` constructor and the
 // corresponding `if constexpr` branches in `makeView` and `applyLimitOffset`.
 
@@ -760,4 +759,18 @@ TEST(Result, viewBackedSortOrderIsRespected) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE((Result{view, {1}, LocalVocab{}}),
                                         HasSubstr("compareRowsBySortColumns"),
                                         ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(Result, assertCorrectStatistic) {
+
+  auto u = Id::makeUndefined();
+  auto Table1 = makeIdTableFromVector({{u, 7}, {1, 6}, {2, 5}, {3, 4}});
+  Result result{Table1.clone(), {}, LocalVocab{}};
+  std::array<std::array<
+    int, static_cast<int>(Datatype::MaxValue) + 1>, IdTable::numStaticColumns> counts{};
+  counts[0][0] = 1; // undefined
+  counts[0][2] = 3; // ints
+  counts[1][2] = 4;
+  EXPECT_EQ(counts, result.getStatistics());
 }
