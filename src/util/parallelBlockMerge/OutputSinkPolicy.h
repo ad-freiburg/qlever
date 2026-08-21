@@ -286,39 +286,77 @@ namespace net = boost::asio;
 // catch up, as well as a consumer that has to wait for the next block, suspend
 // their coroutine and thereby release their thread.
 //
-// The state of a single chunk consists of two channels, and only the chunks
-// that are currently active have such a state at all (see `chunks_`):
+// Each chunk that is currently active owns a single channel with a capacity of
+// `maxBufferedBlocksPerChunk`, via which its producer sends the finished output
+// blocks to the consumer. Suspending in `async_send` on a full channel *is* the
+// back-pressure. The end of a chunk is signalled by an explicit `std::nullopt`
+// sentinel, upon which the consumer erases the state of that chunk, so that the
+// memory consumption is proportional to the number of chunks that are in flight
+// and not to the total number of chunks.
 //
-// 1. The `BlockChannel` transports the finished output blocks from the producer
-//    of the chunk to the consumer. The end of a chunk is signalled by an
-//    explicit `std::nullopt` sentinel and *not* by closing the channel, see
-//    the note on `close()` below.
-// 2. The `CreditChannel` transports the permissions to push a block in the
-//    opposite direction. A producer needs one credit per block, and the
-//    consumer returns one credit for every block that it has taken out of the
-//    `BlockChannel`. This is where the back-pressure happens: the
-//    `maxBufferedBlocksPerChunk` credits of a chunk are the only ones that
-//    ever exist for it.
-//
-// IMPORTANT: This class deliberately never calls `close()` or `cancel()` on any
-// of its channels. `close()` does *not* wake up a producer that is currently
-// suspended in `async_send`, and calling `cancel()` after `close()` is
-// undefined behavior, because `cancel()` tells a suspended sender from a
-// suspended receiver by the send state of the channel, which `close()` has
-// overwritten by then. Instead, the throttling is inverted as described above,
-// such that a waiter is always woken up by a plain `try_send` into the very
-// channel that it receives from. If such a `try_send` fails, then that channel
-// is full, which in turn means that the waiter is *not* suspended and will
-// observe `stopRequested_` on its own. Waking up a waiter is therefore
-// race-free, and no channel is ever closed or cancelled.
+// The `mutex_` guards the ordinary shared state only (the map of channels, the
+// index of the chunk that is currently read, and the exception). It is *never*
+// held while a channel operation is performed, and in particular never across a
+// suspension point. The channels are held by `shared_ptr`, so that a producer
+// or the consumer may keep one alive across a suspension even though the
+// consumer erases its map entry as soon as the chunk is done.
 //
 // DEADLOCK-FREEDOM: The consumer always drains the lowest chunk that has not
-// yet been fully consumed, so the producer of a *higher* chunk may well run out
-// of credits. In contrast to `InOrderBlockSink` this is not a problem even if
-// there is only a single thread, because such a producer suspends its coroutine
-// instead of blocking its thread. In particular the number of chunks that are
-// in flight does not have to be bounded by the available parallelism, see
-// `AsioParallelMergeState`.
+// yet been fully consumed, so the producer of a *higher* chunk may well fill
+// its channel and suspend. In contrast to `InOrderBlockSink` this is not a
+// problem even if there is only a single thread, because such a producer
+// suspends its coroutine instead of blocking its thread. In particular the
+// number of chunks that are in flight does not have to be bounded by the
+// available parallelism, see `AsioParallelMergeState`.
+//
+// TODO<joka921> The teardown of this sink (`abort()` and `pushException()`) is
+// built on `cancel()` and `close()`, which is the minimal thing that works but
+// which is not airtight. The following cases are known to be fishy; all of them
+// are benign for the way the parallel merge uses this class, but they should be
+// revisited before this sink is used more widely.
+//
+// 1. THE MAIN HOLE: an operation that is initiated just after the teardown
+//    sweep has passed it. `push`, `finishChunk`, and `nextBlock` check
+//    `stopRequested_` while they hold the mutex, but they initiate their
+//    channel operation only after they have released it. An `abort()` in that
+//    window neither sees the operation (it is not suspended yet) nor stops it.
+//    It is only harmless because the sweep additionally `close()`s every
+//    channel, so the operation fails immediately instead of suspending -- but a
+//    channel that is created in that very window (by a `finishChunk` of a chunk
+//    that never pushed a block) is created *before* the sweep records it and
+//    closed *after*, so the send can still suspend forever. A producer that
+//    hangs this way also keeps the `AsioParallelMergeState` alive forever,
+//    because every chunk coroutine holds a `shared_ptr` to it. Closing this
+//    hole properly needs either per-operation cancellation slots (whose
+//    cancellation state is sticky and therefore also catches an operation that
+//    has not started yet), or an inversion of the throttling in which a waiter
+//    is woken by a *buffered value* rather than by an edge-triggered
+//    `cancel()`.
+// 2. `cancel()` MUST BE CALLED BEFORE `close()`, NEVER AFTER. `cancel()` tells
+// a
+//    suspended sender from a suspended receiver by the internal send state of
+//    the channel, which `close()` overwrites. Cancelling an already closed
+//    channel therefore `static_cast`s a suspended send operation to a receive
+//    operation, which is undefined behavior. This is why `requestStop()` runs
+//    exactly once per channel (`stopSweepDone_`) and why a channel that is
+//    created after the sweep is closed immediately and never cancelled.
+// 3. `close()` alone would not do. It does not wake a sender that is already
+//    suspended on a full channel, it only makes *later* sends fail. And
+//    `cancel()` alone would not do either, because it is edge-triggered: a send
+//    that is initiated after the cancel simply suspends again. Only the
+//    combination covers both, and only in that order (see 2).
+// 4. `nextBlock()` interprets *any* error of `async_receive` as "the merge was
+//    stopped" and asserts `stopRequested_`. If a caller ever attaches a
+//    cancellation slot to one of these operations, or cancels the surrounding
+//    coroutine, that assertion fires instead of the cancellation being handled.
+// 5. `push()` drops its block whenever the send reports an error, without
+//    distinguishing "was not delivered" from "was delivered". That is correct
+//    here because a channel is only ever cancelled or closed while the merge is
+//    being torn down, but it would silently lose data if `cancel()` were used
+//    for anything else.
+// 6. The `node_hash_map` is redundant by now. Its stable addresses were needed
+//    when the channels were stored by value; with `shared_ptr` values a
+//    `flat_hash_map` would do.
 //
 // NOTE: The class is neither copyable nor movable, because the producers and
 // the consumer refer to it by reference.
@@ -326,61 +364,33 @@ template <typename Block>
 class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
  public:
   using value_type = Block;
-  // The value that travels through a `BlockChannel`. A `std::nullopt` is the
+  // The value that travels through a channel. A `std::nullopt` is the
   // end-of-chunk sentinel. NOTE: The `std::optional` is also required because
   // `Block` need not be default-constructible, but the completion signature of
   // a channel has to be.
   using OptionalBlock = std::optional<Block>;
   // The channel that transports the finished output blocks of a single chunk
-  // from its producer to the consumer, see the class comment.
+  // from its producer to the consumer.
   using BlockChannel = net::experimental::concurrent_channel<void(
       boost::system::error_code, OptionalBlock)>;
-  // The channel that transports the credits of a single chunk from the consumer
-  // to its producer, see the class comment.
-  using CreditChannel =
-      net::experimental::concurrent_channel<void(boost::system::error_code)>;
+  // The channels are shared, because both the producer of a chunk and the
+  // consumer may hold on to one across a suspension, while the consumer erases
+  // the map entry of a chunk as soon as that chunk is done.
+  using SharedBlockChannel = std::shared_ptr<BlockChannel>;
 
  private:
-  // The state of a chunk that is currently active, that is, of a chunk that has
-  // a producer or that the consumer is currently reading from.
-  struct ActiveChunk {
-    BlockChannel blocks_;
-    CreditChannel credits_;
-
-    // Create the two channels and hand out the initial credits. NOTE: Both
-    // channels have one slot more than there are credits. For the `blocks_`
-    // this slot is reserved for the end-of-chunk sentinel, and for the
-    // `credits_` it is reserved for the additional credit that wakes up a
-    // suspended producer when the merge is stopped.
-    ActiveChunk(const net::any_io_executor& executor, size_t maxBufferedBlocks)
-        : blocks_{executor, maxBufferedBlocks + 1},
-          credits_{executor, maxBufferedBlocks + 1} {
-      for (size_t i = 0; i < maxBufferedBlocks; ++i) {
-        bool creditWasSent = credits_.try_send(boost::system::error_code{});
-        AD_CORRECTNESS_CHECK(creditWasSent);
-      }
-    }
-  };
-
   net::any_io_executor executor_;
   size_t maxBufferedBlocksPerChunk_;
   size_t numChunks_;
-  // Guard all of the following members. NOTE: This mutex is never held across a
-  // suspension point, so it is only ever contended for the very short time that
-  // a lookup in `chunks_` or a `try_send` takes.
+  // Guard the members below, and only those. NOTE: No channel operation is ever
+  // performed while this mutex is held.
   std::mutex mutex_;
-  // The state of the currently active chunks. Entries are created on demand
-  // (by the producer of a chunk, or by the consumer if it happens to arrive
-  // first) and erased as soon as the consumer has seen the end-of-chunk
-  // sentinel, so the memory consumption is proportional to the number of chunks
-  // that are in flight and not to the total number of chunks.
-  //
-  // NOTE: This is a `node_hash_map` and not a `flat_hash_map`, because
-  // references to the values have to stay valid when other entries are inserted
-  // or erased.
-  absl::node_hash_map<size_t, ActiveChunk> chunks_;
+  absl::node_hash_map<size_t, SharedBlockChannel> chunks_;
   size_t nextChunkToRead_ = 0;
   std::exception_ptr exception_;
+  // Whether the teardown sweep of `requestStop()` has already run. It must run
+  // exactly once per channel, see the TODO above.
+  bool stopSweepDone_ = false;
   // Set as soon as the merge is stopped, either because the consumer has
   // abandoned it or because a producer has pushed an exception. NOTE: This is
   // an atomic (although it is also guarded by `mutex_`), such that a producer
@@ -400,66 +410,41 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   }
 
   // Return `true` if the merge was stopped, either by `abort()` or by
-  // `pushException`. A producer should poll this between two output blocks, so
-  // that it does not do any superfluous work.
+  // `pushException()`. A producer should poll this between two output blocks,
+  // so that it does not do any superfluous work.
   bool stopRequested() const noexcept { return stopRequested_.load(); }
 
   // Push a finished output `block` of the chunk with the given `chunkIndex`.
-  // Suspend while the chunk has no credit left, that is, while its buffer is
-  // full. Return `false` if the merge was stopped, in which case the `block` is
-  // silently dropped and the producer should stop producing. Thread-safe.
+  // Suspend while the channel of that chunk is full. Return `false` if the
+  // merge was stopped, in which case the `block` is silently dropped and the
+  // producer should stop producing. Thread-safe.
   net::awaitable<bool> push(size_t chunkIndex, Block block) {
     AD_CONTRACT_CHECK(chunkIndex < numChunks_);
-    CreditChannel* credits = nullptr;
-    {
-      std::lock_guard lock{mutex_};
-      if (stopRequested_.load()) {
-        co_return false;
-      }
-      credits = &getOrCreateChunk(chunkIndex).credits_;
-    }
-    // NOTE: It is safe to use the `credits` channel without holding the mutex,
-    // because only the consumer erases a chunk, and only after it has seen the
-    // end-of-chunk sentinel, which this producer has not sent yet.
-    auto [errorCode] =
-        co_await credits->async_receive(net::as_tuple(net::use_awaitable));
-    if (errorCode || stopRequested_.load()) {
+    auto channel = channelIfRunning(chunkIndex);
+    if (channel == nullptr) {
       co_return false;
     }
-    std::lock_guard lock{mutex_};
-    if (stopRequested_.load()) {
-      co_return false;
-    }
-    // The credit that we just received is the permission to occupy one slot of
-    // the block channel, so this `try_send` cannot fail.
-    bool blockWasSent = chunks_.at(chunkIndex)
-                            .blocks_.try_send(boost::system::error_code{},
-                                              OptionalBlock{std::move(block)});
-    AD_CORRECTNESS_CHECK(blockWasSent);
-    co_return true;
+    auto [errorCode] = co_await channel->async_send(
+        boost::system::error_code{}, OptionalBlock{std::move(block)},
+        net::as_tuple(net::use_awaitable));
+    co_return !errorCode && !stopRequested_.load();
   }
 
   // Announce that no further blocks will be pushed for the chunk with the given
-  // `chunkIndex`. Call this exactly once per chunk. This never suspends and
-  // never throws, because the core also calls it while it cleans up after a
-  // failed chunk. Thread-safe.
-  void finishChunk(size_t chunkIndex) noexcept {
-    ad_utility::terminateIfThrows(
-        [this, chunkIndex] {
-          AD_CONTRACT_CHECK(chunkIndex < numChunks_);
-          std::lock_guard lock{mutex_};
-          // NOTE: The channel is created here if the chunk has not pushed a
-          // single block, because the consumer has to see the sentinel.
-          bool sentinelWasSent =
-              getOrCreateChunk(chunkIndex)
-                  .blocks_.try_send(boost::system::error_code{},
-                                    OptionalBlock{std::nullopt});
-          // The slot for the sentinel is reserved (see `ActiveChunk`), so this
-          // can only fail if the wake-up sentinel of `requestStop` has taken
-          // that slot, in which case the consumer is gone anyway.
-          AD_CORRECTNESS_CHECK(sentinelWasSent || stopRequested_.load());
-        },
-        "Finishing a chunk in `AsioInOrderBlockSink` failed.");
+  // `chunkIndex`, by sending the end-of-chunk sentinel. Call this exactly once
+  // per chunk, and on every path, because the consumer would otherwise wait for
+  // that chunk forever. Suspend while the channel of the chunk is full.
+  // Thread-safe.
+  net::awaitable<void> finishChunk(size_t chunkIndex) {
+    AD_CONTRACT_CHECK(chunkIndex < numChunks_);
+    // NOTE: The channel is created here if the chunk did not push a single
+    // block, because the consumer still has to see the sentinel.
+    auto channel = getOrCreateChannel(chunkIndex);
+    // NOTE: The error is deliberately ignored. It means that the merge was
+    // stopped, in which case there is no consumer left that could care.
+    co_await channel->async_send(boost::system::error_code{},
+                                 OptionalBlock{std::nullopt},
+                                 net::as_tuple(net::use_awaitable));
   }
 
   // Forward an `exception` to the consumer, which will rethrow it. Only the
@@ -468,9 +453,11 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   void pushException(std::exception_ptr exception) noexcept {
     ad_utility::terminateIfThrows(
         [this, &exception] {
-          std::lock_guard lock{mutex_};
-          if (exception_ == nullptr) {
-            exception_ = std::move(exception);
+          {
+            std::lock_guard lock{mutex_};
+            if (exception_ == nullptr) {
+              exception_ = std::move(exception);
+            }
           }
           requestStop();
         },
@@ -482,23 +469,20 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   // blocks. Call this when the consumer stops iterating early (or exits via an
   // exception), so that no producer is left suspended forever. Thread-safe.
   void abort() noexcept {
-    ad_utility::terminateIfThrows(
-        [this] {
-          std::lock_guard lock{mutex_};
-          requestStop();
-        },
-        "Aborting an `AsioInOrderBlockSink` failed.");
+    ad_utility::terminateIfThrows([this] { requestStop(); },
+                                  "Aborting an `AsioInOrderBlockSink` failed.");
   }
 
   // Return the next block in the global order, or `std::nullopt` if all chunks
-  // are exhausted or the merge was stopped. Rethrow a pushed exception.
-  // Suspend until one of these conditions holds.
+  // are exhausted or the merge was stopped. Rethrow a pushed exception. Suspend
+  // until one of these conditions holds.
   //
   // NOTE: Call this from a single consuming coroutine only, and never
   // concurrently with itself.
   net::awaitable<std::optional<Block>> nextBlock() {
     while (true) {
-      BlockChannel* blocks = nullptr;
+      SharedBlockChannel channel;
+      size_t chunkIndex = 0;
       {
         std::unique_lock lock{mutex_};
         if (exception_ != nullptr) {
@@ -509,79 +493,87 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
         if (stopRequested_.load() || nextChunkToRead_ >= numChunks_) {
           co_return std::nullopt;
         }
-        blocks = &getOrCreateChunk(nextChunkToRead_).blocks_;
+        chunkIndex = nextChunkToRead_;
+        channel = getOrCreateChannelLocked(chunkIndex);
       }
-      // NOTE: It is safe to use the `blocks` channel without holding the mutex,
-      // because only this consumer erases a chunk.
       auto [errorCode, block] =
-          co_await blocks->async_receive(net::as_tuple(net::use_awaitable));
+          co_await channel->async_receive(net::as_tuple(net::use_awaitable));
       if (errorCode) {
-        // This can only happen if the channel is destroyed while we are
-        // suspended, which in turn cannot happen before this coroutine is
-        // resumed. We nevertheless handle it, instead of relying on that
-        // argument.
-        co_return std::nullopt;
+        // The channel was cancelled or closed, which only happens while the
+        // merge is torn down. Continue, such that the next iteration either
+        // rethrows the pushed exception or reports the end of the range.
+        AD_CORRECTNESS_CHECK(stopRequested_.load());
+        continue;
       }
       if (block.has_value()) {
-        returnCredit(nextChunkToRead_);
         co_return std::move(block);
       }
-      // The end-of-chunk sentinel, so move on to the next chunk.
+      // The end-of-chunk sentinel, so move on to the next chunk. NOTE: Erasing
+      // the entry is safe even if the producer of that chunk still holds the
+      // channel, because the channels are shared.
       std::lock_guard lock{mutex_};
-      if (!stopRequested_.load()) {
-        // NOTE: The producer of this chunk is done with its channels, and if
-        // the merge was stopped, then the sentinel may well be the wake-up
-        // sentinel of `requestStop` while the producer is still running, so the
-        // chunk must not be erased in that case.
-        chunks_.erase(nextChunkToRead_);
-      }
+      chunks_.erase(chunkIndex);
       ++nextChunkToRead_;
     }
   }
 
  private:
-  // Return the state of the chunk with the given `chunkIndex`, creating it if
+  // Return the channel of the chunk with the given `chunkIndex`, creating it if
   // it does not exist yet. The `mutex_` has to be held.
-  ActiveChunk& getOrCreateChunk(size_t chunkIndex) {
-    return chunks_
-        .try_emplace(chunkIndex, executor_, maxBufferedBlocksPerChunk_)
-        .first->second;
-  }
-
-  // Give the credit for a block that was just consumed back to the producer of
-  // the chunk with the given `chunkIndex`.
-  void returnCredit(size_t chunkIndex) {
-    std::lock_guard lock{mutex_};
-    auto iterator = chunks_.find(chunkIndex);
-    AD_CORRECTNESS_CHECK(iterator != chunks_.end());
-    bool creditWasSent =
-        iterator->second.credits_.try_send(boost::system::error_code{});
-    // At most `maxBufferedBlocksPerChunk_` credits exist per chunk and the
-    // channel has one slot more, so this can only fail if the additional
-    // wake-up credit of `requestStop` has taken that slot.
-    AD_CORRECTNESS_CHECK(creditWasSent || stopRequested_.load());
-  }
-
-  // Stop the merge and wake up everybody who might currently be suspended. The
-  // `mutex_` has to be held.
-  //
-  // NOTE: Every `try_send` here is best-effort by design: if it fails, then the
-  // corresponding channel is full, which means that its receiver is not
-  // suspended and will observe `stopRequested_` on its own. See the class
-  // comment for why this makes the wake-up race-free.
-  void requestStop() {
-    stopRequested_.store(true);
-    // Wake up the producers that wait for a credit.
-    for (auto& chunk : chunks_) {
-      chunk.second.credits_.try_send(boost::system::error_code{});
+  SharedBlockChannel getOrCreateChannelLocked(size_t chunkIndex) {
+    auto& channel = chunks_[chunkIndex];
+    if (channel == nullptr) {
+      channel =
+          std::make_shared<BlockChannel>(executor_, maxBufferedBlocksPerChunk_);
+      if (stopSweepDone_) {
+        // The teardown sweep has already run, so this channel would never be
+        // closed by it. Close it right away, such that nobody can suspend on
+        // it. NOTE: It must not be cancelled afterwards, see the TODO above.
+        channel->close();
+      }
     }
-    // Wake up the consumer, which can only be suspended on the chunk that it
-    // currently reads. NOTE: This has to happen after the loop above, because
-    // it may insert into `chunks_`.
-    if (nextChunkToRead_ < numChunks_) {
-      getOrCreateChunk(nextChunkToRead_)
-          .blocks_.try_send(boost::system::error_code{},
-                            OptionalBlock{std::nullopt});
+    return channel;
+  }
+
+  // The same as `getOrCreateChannelLocked`, but acquire the `mutex_`.
+  SharedBlockChannel getOrCreateChannel(size_t chunkIndex) {
+    std::lock_guard lock{mutex_};
+    return getOrCreateChannelLocked(chunkIndex);
+  }
+
+  // Return the channel of the chunk with the given `chunkIndex`, or `nullptr`
+  // if the merge was stopped.
+  SharedBlockChannel channelIfRunning(size_t chunkIndex) {
+    std::lock_guard lock{mutex_};
+    if (stopRequested_.load()) {
+      return nullptr;
+    }
+    return getOrCreateChannelLocked(chunkIndex);
+  }
+
+  // Stop the merge and wake up everybody who is currently suspended. The sweep
+  // over the channels runs exactly once, and it first cancels (which wakes the
+  // suspended operations) and then closes (which makes all later operations
+  // fail immediately instead of suspending). Both the order and the "exactly
+  // once" are mandatory, see the TODO at the top of this class.
+  void requestStop() {
+    std::vector<SharedBlockChannel> channels;
+    {
+      std::lock_guard lock{mutex_};
+      stopRequested_.store(true);
+      if (stopSweepDone_) {
+        return;
+      }
+      stopSweepDone_ = true;
+      channels.reserve(chunks_.size());
+      for (const auto& chunk : chunks_) {
+        channels.push_back(chunk.second);
+      }
+    }
+    // NOTE: This deliberately happens outside of the `mutex_`.
+    for (const auto& channel : channels) {
+      channel->cancel();
+      channel->close();
     }
   }
 };

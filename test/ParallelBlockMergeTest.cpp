@@ -825,8 +825,8 @@ TEST(AsioParallelBlockMerge, manyRunsManyChunks) {
 TEST(AsioParallelBlockMerge, singleInFlightChunk) {
   // In contrast to `parallelBlockMergeToRange`, a single in-flight chunk is
   // perfectly legal here and does not fall back to the serial merge, because a
-  // chunk that runs out of credits suspends its coroutine instead of blocking
-  // its thread.
+  // chunk whose channel is full suspends its coroutine instead of blocking its
+  // thread.
   auto runs = makeRandomRuns(16, 200, 300);
   auto expected = sortedConcatenation(runs);
   MergeOptions options = parallelOptions(16);

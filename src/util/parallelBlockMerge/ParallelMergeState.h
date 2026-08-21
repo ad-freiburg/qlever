@@ -307,6 +307,8 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   // the members above.
   Sink sink_;
   PermitChannel permits_;
+  // Whether `abort()` has already cancelled and closed `permits_`.
+  std::atomic<bool> permitsAreClosed_{false};
 
  public:
   // Create the state of a merge and start dispatching its chunks. All the work
@@ -341,10 +343,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
         maxInFlight_{maxInFlight},
         sink_{executor_, splitters_.numChunks(),
               options_.bufferedBlocksPerChunk},
-        // NOTE: The channel has one slot more than there are permits, which is
-        // reserved for the additional permit that wakes up the dispatcher when
-        // the merge is aborted.
-        permits_{executor_, maxInFlight + 1} {
+        permits_{executor_, maxInFlight} {
     AD_CORRECTNESS_CHECK(maxInFlight_ > 0);
     AD_CORRECTNESS_CHECK(maxInFlight_ <= splitters_.numChunks());
     for (size_t i = 0; i < maxInFlight_; ++i) {
@@ -376,7 +375,16 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   void abort() noexcept {
     sink_.abort();
     ad_utility::terminateIfThrows(
-        [this] { permits_.try_send(boost::system::error_code{}); },
+        [this] {
+          // Wake up the dispatcher if it currently waits for a free permit, and
+          // make sure that it cannot start waiting again. NOTE: The order and
+          // the "exactly once" are mandatory for the very same reasons as in
+          // `AsioInOrderBlockSink::requestStop`, see the TODO there.
+          if (!permitsAreClosed_.exchange(true)) {
+            permits_.cancel();
+            permits_.close();
+          }
+        },
         "Waking up the chunk dispatcher in `AsioParallelMergeState` failed.");
   }
 
@@ -412,6 +420,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   // `AsioInOrderBlockSink::pushException`.
   net::awaitable<void> runChunk(size_t chunkIndex) {
     auto self = this->shared_from_this();
+    std::exception_ptr chunkException;
     try {
       ChunkMerger<moveElements, Input, Comparator> merger{
           &input_, &comparator_, options_,
@@ -429,11 +438,22 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
         }
       }
     } catch (...) {
-      sink_.pushException(std::current_exception());
+      // NOTE: The exception is only stashed here and forwarded below, because
+      // `co_await` must not appear in an exception handler.
+      chunkException = std::current_exception();
     }
-    // NOTE: `finishChunk` has to be called on every path, because the consumer
-    // would wait for this chunk forever otherwise.
-    sink_.finishChunk(chunkIndex);
+    if (chunkException != nullptr) {
+      sink_.pushException(std::move(chunkException));
+    }
+    // NOTE: The end-of-chunk sentinel has to be sent on every path, because the
+    // consumer would wait for this chunk forever otherwise.
+    try {
+      co_await sink_.finishChunk(chunkIndex);
+    } catch (...) {
+      // `finishChunk` reports a stopped merge via its `error_code` and not via
+      // an exception, so this can only be an allocation failure, and the merge
+      // is being torn down anyway.
+    }
     releasePermit();
   }
 
@@ -443,10 +463,10 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     ad_utility::terminateIfThrows(
         [this] {
           bool permitWasSent = permits_.try_send(boost::system::error_code{});
-          // At most `maxInFlight_` permits exist and the channel has one slot
-          // more, so this can only fail if the additional wake-up permit of
-          // `abort()` has taken that slot.
-          AD_CORRECTNESS_CHECK(permitWasSent || sink_.stopRequested());
+          // At most `maxInFlight_` permits exist, so the channel always has a
+          // free slot. It can only reject the permit once `abort()` has closed
+          // it, in which case no chunk will be dispatched anymore anyway.
+          AD_CORRECTNESS_CHECK(permitWasSent || permitsAreClosed_.load());
         },
         "Releasing the permit of a chunk in `AsioParallelMergeState` failed.");
   }

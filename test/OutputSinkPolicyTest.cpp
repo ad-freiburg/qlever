@@ -230,7 +230,20 @@ net::awaitable<void> pushBlocks(AsioSink& sink, size_t chunkIndex,
       ++(*numPushed);
     }
   }
-  sink.finishChunk(chunkIndex);
+  co_await sink.finishChunk(chunkIndex);
+  latch.try_send(boost::system::error_code{});
+}
+
+// Push a single block to the `sink`, then finish the chunk and open the
+// `latch`. Record in `pushedBlock` that the block was pushed, such that the
+// caller can wait until this coroutine is suspended inside `finishChunk`.
+net::awaitable<void> pushOneBlockAndFinish(AsioSink& sink, size_t chunkIndex,
+                                           Block block, Latch& latch,
+                                           std::atomic<bool>& pushedBlock) {
+  if (co_await sink.push(chunkIndex, std::move(block))) {
+    pushedBlock.store(true);
+  }
+  co_await sink.finishChunk(chunkIndex);
   latch.try_send(boost::system::error_code{});
 }
 
@@ -377,6 +390,25 @@ ASYNC_TEST(AsioOutputSinkPolicy, abortUnblocksProducers) {
   // buffered.
   auto block = co_await sink.nextBlock();
   EXPECT_FALSE(block.has_value());
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(AsioOutputSinkPolicy, abortUnblocksFinishChunk) {
+  // The end-of-chunk sentinel travels through the same bounded channel as the
+  // blocks, so a producer may also be suspended inside `finishChunk`. Aborting
+  // has to wake that one up, too.
+  AsioSink sink{ioContext.get_executor(), 2, 1};
+  Latch latch{ioContext.get_executor(), 2};
+  std::atomic<bool> pushedBlock{false};
+  net::co_spawn(ioContext,
+                pushOneBlockAndFinish(sink, 1, Block{10}, latch, pushedBlock),
+                net::detached);
+  // The single buffer slot of chunk `1` is taken by the block, so the producer
+  // is now suspended while it sends the sentinel.
+  co_await yieldUntil(ioContext, [&pushedBlock] { return pushedBlock.load(); });
+  sink.abort();
+  // The suspended producer has to wake up, otherwise this hangs.
+  co_await waitForLatch(latch);
 }
 
 // _____________________________________________________________________________
