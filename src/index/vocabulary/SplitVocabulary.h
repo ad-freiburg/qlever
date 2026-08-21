@@ -135,7 +135,11 @@ class SplitVocabulary {
   // Bucket type used by the private `lookupBatch` helpers.
   using IndicesByMarker = std::array<std::vector<size_t>, numberOfVocabs>;
   using ResultsByMarker = std::array<VocabBatchLookupResult, numberOfVocabs>;
-  // Partition marked indices into underlying vocabulary-local index lists.
+  // Partition marked indices into vocabulary-local index lists. Each marked
+  // input index (combining marker + underlying index) is grouped by marker so
+  // each vocabulary gets its own batch-lookup call with only its indices.
+  // See also `partitionResultPositionsByMarker` which does the dual grouping
+  // for scatter-back.
   static IndicesByMarker partitionUnderlyingIndicesByMarker(
       ql::span<const size_t> indices) {
     IndicesByMarker underlyingVocabIndicesByMarker;
@@ -181,7 +185,12 @@ class SplitVocabulary {
     return out;
   }
 
-  // Partition each input position by marker for scattering mixed results.
+  // Partition input indices and result positions by marker. Complements
+  // `partitionUnderlyingIndicesByMarker`: groups the input positions where each
+  // result should be scattered back, paired with the marker of each index.
+  // Together with `partitionUnderlyingIndicesByMarker`, this enables:
+  // (1) batch-lookup per marker with the underlying indices
+  // (2) scatter results back to original positions per marker
   static IndicesByMarker partitionResultPositionsByMarker(
       ql::span<const size_t> indices) {
     IndicesByMarker resultPositionByMarker;
