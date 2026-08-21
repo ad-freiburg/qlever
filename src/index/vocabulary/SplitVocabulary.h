@@ -146,10 +146,17 @@ class SplitVocabulary {
     return underlyingVocabIndicesByMarker;
   }
 
-  // Hold each non-empty marker's batch and the count of non-empty markers.
+  // Batch lookup results for each underlying vocabulary, keyed by vocabulary
+  // index ("marker"). Includes results only from vocabularies that have lookup
+  // indices in this batch (others remain null). Also caches counts for
+  // fast-path optimizations (single-vocabulary case, vector reservation).
   struct MarkerBatchLookups {
     ResultsByMarker lookupResultByMarker_{};
+    // Count of vocabularies that have results (non-null entries in
+    // lookupResultByMarker_). Used to detect single-vocabulary fast path.
     uint8_t numNonemptyMarkers_ = 0;
+    // Index of the last vocabulary with a result. Used to retrieve that result
+    // in the single-vocabulary fast path.
     uint8_t lastNonemptyMarker_ = 0;
   };
 
