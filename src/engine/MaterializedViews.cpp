@@ -74,7 +74,7 @@ void MaterializedViewWriter::throwIfLimitOffset() const {
         "The query to write a materialized view may not contain a `LIMIT` or "
         "`OFFSET` clause as this might produce unintended results because the "
         "view is sorted after query execution. If you are aware of this and "
-        "want to forcefully apply an `LIMIT` or `OFFSET` use an explicit "
+        "want to forcefully apply a `LIMIT` or `OFFSET`, use an explicit "
         "subquery.");
   }
 }
@@ -86,6 +86,7 @@ void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
   if (orderBy.empty()) {
     return;
   }
+
   // An explicit `ORDER BY` is always rejected.
   if (parsedQuery_._isInternalSort == IsInternalSort::False) {
     throw MaterializedViewConfigException(

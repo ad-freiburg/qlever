@@ -567,6 +567,8 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
                              "may not contain a `LIMIT` or `OFFSET` clause");
   expectWriteViewToDiskError(simpleWriteQuery_ + " OFFSET 1",
                              "may not contain a `LIMIT` or `OFFSET` clause");
+  expectWriteViewToDiskError(simpleWriteQuery_ + " LIMIT 5 OFFSET 10",
+                             "may not contain a `LIMIT` or `OFFSET` clause");
 
   // An explicit `ORDER BY` clause is always rejected, because a
   // view is always stored sorted by `INTERNAL SORT BY`.
