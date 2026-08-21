@@ -56,8 +56,8 @@ class VocabularyInMemoryBinSearch
 
   // Return the total number of words
   [[nodiscard]] size_t size() const {
-    AD_CORRECTNESS_CHECK(indices_.size() == words_->size());
-    return words_->size();
+    AD_CORRECTNESS_CHECK(indices_.size() == words().size());
+    return words().size();
   }
 
   // Return the word with index `index`. If this index is not part of the
@@ -90,15 +90,20 @@ class VocabularyInMemoryBinSearch
   void close();
 
   // Const access to the underlying words.
-  auto begin() const { return words_->begin(); }
-  auto end() const { return words_->end(); }
+  auto begin() const { return words().begin(); }
+  auto end() const { return words().end(); }
 
   // Return shared ownership of the word bytes. A batch-lookup result that
   // hands out `string_view`s into this vocabulary stores this pointer, so the
   // bytes cannot be freed while the result is alive.
   std::shared_ptr<const Words> wordStorage() const { return words_; }
 
-  // Generic serialization support.
+ private:
+  // Access the words for internal use. Prefer this over words_-> to avoid
+  // cascading changes if the storage representation changes in the future.
+  const Words& words() const { return *words_; }
+
+ public:
   AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemoryBinSearch) {
     (void)serializer;
     (void)arg;
