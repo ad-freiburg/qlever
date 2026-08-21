@@ -130,7 +130,7 @@ CPP_template(typename UnderlyingVocabulary,
       std::string decompressed =
           compressionWrapper_.decompress(compressedWord, getDecoderIdx(idx));
       ql::pmr::polymorphic_allocator<char> alloc(buffer.get());
-      std::pmr::string result(alloc);
+      ql::pmr::string result(alloc);
       ql::ranges::copy(decompressed, std::back_inserter(result));
       views.emplace_back(result.data(), result.size());
     }
