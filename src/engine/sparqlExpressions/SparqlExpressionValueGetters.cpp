@@ -637,6 +637,7 @@ template struct GeometryInfoValueGetter<ad_utility::BoundingBox>;
 template struct GeometryInfoValueGetter<ad_utility::NumGeometries>;
 template struct GeometryInfoValueGetter<ad_utility::MetricLength>;
 template struct GeometryInfoValueGetter<ad_utility::MetricArea>;
+template struct GeometryInfoValueGetter<ad_utility::ParsedGeometry>;
 }  // namespace sparqlExpression::detail
 
 //______________________________________________________________________________
@@ -714,6 +715,8 @@ template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::MetricLength>>;
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::MetricArea>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::ParsedGeometry>>;
 template struct TypeErasedValueGetter<StringOrDateGetter>;
 template struct TypeErasedValueGetter<IntValueGetter>;
 template struct TypeErasedValueGetter<RegexValueGetter>;

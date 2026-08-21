@@ -147,6 +147,24 @@ class InvalidPolygonError : public std::runtime_error {
             "Computation encountered an invalid polygon geometry."} {}
 };
 
+// Represents the offset of the parsed (indexed) representation of a geometry
+// in a supplementary file. This is currently only a placeholder: no such file
+// exists yet and the offset is not actually computed. A value of `-1` means
+// that no offset is available.
+struct ParsedGeometry {
+ private:
+  int64_t offset_;
+
+ public:
+  explicit ParsedGeometry(int64_t offset) : offset_{offset} {};
+
+  int64_t offset() const { return offset_; }
+
+  constexpr bool operator==(const ParsedGeometry& other) const {
+    return offset_ == other.offset_;
+  };
+};
+
 // Forward declaration for concept
 class GeometryInfo;
 
@@ -155,14 +173,14 @@ class GeometryInfo;
 template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
-              NumGeometries, MetricLength, MetricArea>;
+              NumGeometries, MetricLength, MetricArea, ParsedGeometry>;
 
 // Where the actual geometries are required, this type can be used.
 using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 
 // The version of the `GeometryInfo`: to ensure correctness when reading disk
 // serialized objects of this class.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 5;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 6;
 
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
@@ -180,9 +198,12 @@ class GeometryInfo {
   MetricLength metricLength_;
   MetricArea metricArea_;
 
-  // TODO<ullingerc>: Implement the behavior for the following two
-  // attributes
-  //   int64_t parsedGeometryOffset_ = -1;
+  // Offset of the parsed geometry in a supplementary file, once the
+  // `GeoVocabulary` actually parses and stores geometries there. For now this
+  // is only a placeholder: it is set to `0` when writing a `GeoVocabulary`
+  // (see `GeoVocabulary::WordWriter`) and to `-1` (meaning "not available")
+  // everywhere else.
+  int64_t parsedGeometryOffset_ = -1;
 
   static constexpr uint64_t bitMaskGeometryType =
       bitMaskForHigherBits(ValueId::numDatatypeBits);
@@ -192,7 +213,8 @@ class GeometryInfo {
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                Centroid centroid, NumGeometries numGeometries,
-               MetricLength metricLength, MetricArea metricArea);
+               MetricLength metricLength, MetricArea metricArea,
+               ParsedGeometry parsedGeometry = ParsedGeometry{-1});
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Required for `bit_cast`.
   GeometryInfo() = default;
@@ -244,6 +266,22 @@ class GeometryInfo {
   // Parse an arbitrary WKT literal and compute only the length in meters.
   static std::optional<MetricLength> getMetricLength(
       const std::string_view& wkt);
+
+  // Extract the offset of the parsed geometry (currently always `-1`, see
+  // `parsedGeometryOffset_`).
+  ParsedGeometry getParsedGeometry() const;
+
+  // Parse an arbitrary WKT literal and compute only the parsed geometry
+  // offset. This is not yet implemented and will always yield `-1`.
+  static std::optional<ParsedGeometry> getParsedGeometry(std::string_view wkt);
+
+  // Set the offset of the parsed geometry. This is meant to be used by
+  // `GeoVocabulary` once it actually parses and stores geometries in a
+  // supplementary file. For now it is only used to write the placeholder
+  // value `0`.
+  void setParsedGeometryOffset(int64_t offset) {
+    parsedGeometryOffset_ = offset;
+  }
 
   // Extract the requested information from this object.
   CPP_template(typename RequestedInfo = GeometryInfo)(

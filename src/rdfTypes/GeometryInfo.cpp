@@ -19,12 +19,14 @@ namespace ad_utility {
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                            Centroid centroid, NumGeometries numGeometries,
-                           MetricLength metricLength, MetricArea metricArea)
+                           MetricLength metricLength, MetricArea metricArea,
+                           ParsedGeometry parsedGeometry)
     : boundingBox_{boundingBox.lowerLeft().toBitRepresentation(),
                    boundingBox.upperRight().toBitRepresentation()},
       numGeometries_{numGeometries.numGeometries()},
       metricLength_{metricLength},
-      metricArea_{metricArea} {
+      metricArea_{metricArea},
+      parsedGeometryOffset_{parsedGeometry.offset()} {
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -196,6 +198,22 @@ std::optional<MetricLength> GeometryInfo::getMetricLength(
 }
 
 // ____________________________________________________________________________
+ParsedGeometry GeometryInfo::getParsedGeometry() const {
+  return ParsedGeometry{parsedGeometryOffset_};
+}
+
+// ____________________________________________________________________________
+std::optional<ParsedGeometry> GeometryInfo::getParsedGeometry(
+    std::string_view wkt) {
+  auto [type, parsed] = detail::parseWkt(wkt);
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
+  // TODO<ullingerc>: Not yet implemented, always yields the placeholder `-1`.
+  return ParsedGeometry{-1};
+}
+
+// ____________________________________________________________________________
 MetricArea::MetricArea(double area) : area_{area} {
   AD_CORRECTNESS_CHECK(area >= 0 || std::isnan(area),
                        "Metric area must be positive");
@@ -262,6 +280,8 @@ CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
     return getMetricLength();
   } else if constexpr (std::is_same_v<RequestedInfo, MetricArea>) {
     return getMetricArea();
+  } else if constexpr (std::is_same_v<RequestedInfo, ParsedGeometry>) {
+    return getParsedGeometry();
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -275,6 +295,7 @@ template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
 template NumGeometries GeometryInfo::getRequestedInfo<NumGeometries>() const;
 template MetricLength GeometryInfo::getRequestedInfo<MetricLength>() const;
 template MetricArea GeometryInfo::getRequestedInfo<MetricArea>() const;
+template ParsedGeometry GeometryInfo::getRequestedInfo<ParsedGeometry>() const;
 
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
@@ -294,6 +315,8 @@ CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
     return GeometryInfo::getMetricLength(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, MetricArea>) {
     return GeometryInfo::getMetricArea(wkt);
+  } else if constexpr (std::is_same_v<RequestedInfo, ParsedGeometry>) {
+    return GeometryInfo::getParsedGeometry(wkt);
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -314,5 +337,7 @@ template std::optional<MetricLength>
 GeometryInfo::getRequestedInfo<MetricLength>(std::string_view wkt);
 template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>(
     std::string_view wkt);
+template std::optional<ParsedGeometry>
+GeometryInfo::getRequestedInfo<ParsedGeometry>(std::string_view wkt);
 
 }  // namespace ad_utility

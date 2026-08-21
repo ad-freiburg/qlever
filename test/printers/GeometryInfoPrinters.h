@@ -54,6 +54,12 @@ inline void PrintTo(const MetricArea& gt, std::ostream* os) {
 }
 
 // _____________________________________________________________________________
+inline void PrintTo(const ParsedGeometry& pg, std::ostream* os) {
+  auto& s = *os;
+  s << "ParsedGeometry(" << pg.offset() << ")";
+}
+
+// _____________________________________________________________________________
 inline void PrintTo(const GeometryInfo& gi, std::ostream* os) {
   auto& s = *os;
   s << "GeometryInfo(";
@@ -68,6 +74,8 @@ inline void PrintTo(const GeometryInfo& gi, std::ostream* os) {
   PrintTo(gi.getMetricLength(), os);
   s << ",";
   PrintTo(gi.getMetricArea(), os);
+  s << ",";
+  PrintTo(gi.getParsedGeometry(), os);
   s << ")";
 }
 

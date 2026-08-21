@@ -66,6 +66,10 @@ NARY_EXPRESSION(GeometryTypeExpression, 1,
                 FV<ad_utility::WktGeometryType,
                    GeometryInfoValueGetter<ad_utility::GeometryType>>);
 
+NARY_EXPRESSION(ParsedGeometryExpression, 1,
+                FV<ad_utility::WktParsedGeometry,
+                   GeometryInfoValueGetter<ad_utility::ParsedGeometry>>);
+
 NARY_EXPRESSION(
     LengthExpression, 2,
     FV<ad_utility::WktLength, GeometryInfoValueGetter<ad_utility::MetricLength>,
@@ -169,6 +173,12 @@ SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<GeometryTypeExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeParsedGeometryExpression(
+    SparqlExpression::Ptr child) {
+  return std::make_unique<ParsedGeometryExpression>(std::move(child));
 }
 
 // _____________________________________________________________________________
