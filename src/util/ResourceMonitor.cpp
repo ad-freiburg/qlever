@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <fstream>
 #include <string_view>
 #include <type_traits>
 
@@ -38,8 +39,6 @@
 #elif defined(__linux__)
 #include <sys/resource.h>
 #include <unistd.h>
-
-#include <fstream>
 #endif
 
 namespace ad_utility::resource_monitor {
@@ -124,9 +123,8 @@ DiskIoBytes currentDiskIoBytes() {
                       reinterpret_cast<rusage_info_t*>(&info)) != 0) {
     return {};
   }
-  return DiskIoBytes{
-      .readBytes_ = static_cast<double>(info.ri_diskio_bytesread),
-      .writeBytes_ = static_cast<double>(info.ri_diskio_byteswritten)};
+  return DiskIoBytes{.numBytesRead_ = info.ri_diskio_bytesread,
+                     .numBytesWritten_ = info.ri_diskio_byteswritten};
 #elif defined(__linux__)
   std::ifstream procIo{"/proc/self/io"};
   return diskIoBytesFromProcIo(procIo);
@@ -146,9 +144,9 @@ DiskIoBytes diskIoBytesFromProcIo(std::istream& procIo) {
 
   while (procIo >> key >> value) {
     if (key == "read_bytes:") {
-      bytes.readBytes_ = static_cast<double>(value);
+      bytes.numBytesRead_ = value;
     } else if (key == "write_bytes:") {
-      bytes.writeBytes_ = static_cast<double>(value);
+      bytes.numBytesWritten_ = value;
     }
   }
 
@@ -169,9 +167,23 @@ std::optional<double> ioStallSeconds() {
 #if defined(__linux__)
 // _____________________________________________________________________________
 std::optional<double> ioStallSecondsFromPressure(std::istream& pressure) {
-  // The relevant line is `some avg10=... avg60=... avg300=... total=<n>`
-  // Read `some` (at least one task stalled), not `full` (every
-  // runnable task stalled), which undercounts a busy server.
+  // `/proc/pressure/io` reports how much time tasks lost waiting for disk
+  // I/O. It always has these two lines:
+  //
+  //   some avg10=1.45 avg60=0.64 avg300=0.35 total=23634153
+  //   full avg10=0.00 avg60=0.26 avg300=0.26 total=22059793
+  //
+  // `some` counts the time during which at least one task was stalled on I/O,
+  // `full` only the time during which every runnable task was stalled. As the
+  // example shows, `full` stops moving as soon as anything else can run, so
+  // `some` is the line that reflects the stall. This function reads `some`.
+  //
+  // The `avg` fields are ready-made percentages over the last 10, 60 and 300
+  // seconds, which do not match our sampling interval. This function instead
+  // takes `total`, the raw counter in microseconds, and scales it to seconds.
+  //
+  // The parsing below therefore looks for the line starting with `some ` and
+  // then for the token starting with `total=`.
   constexpr std::string_view totalPrefix = "total=";
   std::string line;
   while (std::getline(pressure, line)) {
@@ -219,10 +231,42 @@ std::string formatTsvRow(const Sample& sample) {
                             formatCell(sample.timestampMs_),
                             formatCell(sample.rssBytes_),
                             formatCell(sample.cpuPercent_),
-                            formatCell(sample.readBytesPerSecond_),
-                            formatCell(sample.writeBytesPerSecond_),
+                            formatCell(sample.bytesReadPerSecond_),
+                            formatCell(sample.bytesWrittenPerSecond_),
                             formatCell(sample.ioStallPercent_)};
   return absl::StrJoin(tsvCells, "\t") + "\n";
+}
+
+// _____________________________________________________________________________
+bool rotateLogIfHeaderOutdated(const ql::filesystem::path& path) {
+  std::string firstLine;
+  {
+    std::ifstream existingFile{path};
+    std::getline(existingFile, firstLine);
+  }
+  if (firstLine == tsvHeader) {
+    return false;
+  }
+  // Name the archive `<name_without_extension>.<rotation_time>.tsv`
+  auto rotated =
+      path.parent_path() /
+      absl::StrCat(path.stem().string(), ".",
+                   absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, absl::Now(),
+                                    absl::UTCTimeZone()),
+                   path.extension().string());
+  ql::error_code renameEc;
+  ql::filesystem::rename(path, rotated, renameEc);
+  if (renameEc) {
+    AD_LOG_WARN << "ResourceMonitor: could not move the resource-usage "
+                   "log of an older format out of the way. Writing a second "
+                   "header line and appending rows in the current format to it."
+                << std::endl;
+  } else {
+    AD_LOG_INFO << "ResourceMonitor: moved the resource-usage log of an "
+                   "older format to \""
+                << rotated.string() << "\"" << std::endl;
+  }
+  return true;
 }
 
 }  // namespace ad_utility::resource_monitor
@@ -257,38 +301,11 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
   const auto openMode =
       mode == Mode::Truncate ? std::ios::trunc : std::ios::app;
 
-  if (!writeHeader) {
-    // Appending to an existing file: if it was written by a QLever version
-    // with a different TSV format (its header differs), rotate it away, so
-    // that every file is internally consistent (header matches all rows).
-    std::string firstLine;
-    {
-      std::ifstream existingFile{path};
-      std::getline(existingFile, firstLine);
-    }
-    if (firstLine != resource_monitor::tsvHeader) {
-      // Name the archive `<name_without_extension>.<rotation_time>.tsv`
-      auto rotated =
-          path.parent_path() /
-          absl::StrCat(path.stem().string(), ".",
-                       absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, absl::Now(),
-                                        absl::UTCTimeZone()),
-                       path.extension().string());
-      ql::error_code renameEc;
-      fs::rename(path, rotated, renameEc);
-      if (renameEc) {
-        AD_LOG_WARN
-            << "ResourceMonitor: could not move the resource-usage "
-               "log of an older format out of the way. Writing a second "
-               "header line and appending rows in the current format to it."
-            << std::endl;
-      } else {
-        AD_LOG_INFO << "ResourceMonitor: moved the resource-usage log of an "
-                       "older format to \""
-                    << rotated.string() << "\"" << std::endl;
-      }
-      writeHeader = true;
-    }
+  // A file that is appended to may come from a QLever version with a different
+  // TSV format, in which case it is moved aside instead of being mixed with
+  // rows in the current format.
+  if (!writeHeader && resource_monitor::rotateLogIfHeaderOutdated(path)) {
+    writeHeader = true;
   }
 
   stream_.open(path, std::ios::out | openMode);
@@ -339,8 +356,9 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
   resource_monitor::RateTracker cpuTracker{readers_.cpuReader_()};
   resource_monitor::RateTracker ioStallTracker{readers_.ioStallReader_()};
   const auto initialDiskIo = readers_.diskIoReader_();
-  resource_monitor::RateTracker readBytesTracker{initialDiskIo.readBytes_};
-  resource_monitor::RateTracker writeBytesTracker{initialDiskIo.writeBytes_};
+  resource_monitor::RateTracker bytesReadTracker{initialDiskIo.numBytesRead_};
+  resource_monitor::RateTracker bytesWrittenTracker{
+      initialDiskIo.numBytesWritten_};
 
   // Cpu time and I/O stall are in seconds, so their rate is a fraction of
   // the wall clock; the log stores it as a percentage.
@@ -363,11 +381,13 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     deadline += interval;
     const double elapsed = Timer::toSeconds(timer.value());
 
-    const auto [readBytes, writeBytes] = readers_.diskIoReader_();
+    const auto [numBytesRead, numBytesWritten] = readers_.diskIoReader_();
 
-    // A stall is a fraction of one timeline, so it cannot exceed 100%; the
-    // reading and the elapsed clock are taken at slightly different instants,
-    // so a tick can still compute a hair over.
+    // `ioStallReader_` counts the total time during which at least one task
+    // was stalled on I/O, so its rate is a fraction between 0 and 1 and the
+    // percentage cannot exceed 100. The reading and the elapsed clock are
+    // taken at slightly different instants, so a tick can compute a value
+    // slightly above 100, which the clamp brings back down.
     std::optional<double> ioStallPercent{
         toPercent(ioStallTracker.update(readers_.ioStallReader_(), elapsed))};
     if (ioStallPercent.has_value()) {
@@ -379,8 +399,9 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
          .rssBytes_ = readers_.rssReader_(),
          .cpuPercent_ =
              toPercent(cpuTracker.update(readers_.cpuReader_(), elapsed)),
-         .readBytesPerSecond_ = readBytesTracker.update(readBytes, elapsed),
-         .writeBytesPerSecond_ = writeBytesTracker.update(writeBytes, elapsed),
+         .bytesReadPerSecond_ = bytesReadTracker.update(numBytesRead, elapsed),
+         .bytesWrittenPerSecond_ =
+             bytesWrittenTracker.update(numBytesWritten, elapsed),
          .ioStallPercent_ = ioStallPercent});
     stream_.flush();
     if (stream_.fail()) {

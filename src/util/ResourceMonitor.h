@@ -58,29 +58,35 @@ class RateTracker {
   double lastElapsed_ = 0.0;
 };
 
-// Cumulative bytes read from and written to disk, as `double` to feed a
-// `RateTracker`. Each counter is empty if the OS did not report it.
+// Holds the cumulative number of bytes that this process has read from and
+// written to disk, as the OS reports them. A counter is empty if the OS did
+// not report it.
 struct DiskIoBytes {
-  std::optional<double> readBytes_;
-  std::optional<double> writeBytes_;
+  std::optional<uint64_t> numBytesRead_;
+  std::optional<uint64_t> numBytesWritten_;
 };
 
-// Cumulative disk bytes of this process; both empty when unavailable.
+// Returns the cumulative disk bytes of this process. Both counters are empty
+// on platforms where the OS does not expose them.
 DiskIoBytes currentDiskIoBytes();
 
 #if defined(__linux__)
-// Disk bytes from a `/proc/self/io` stream, read by the `read_bytes:` and
-// `write_bytes:` keys, never by position.
+// Parses the cumulative disk bytes of this process from a `/proc/self/io`
+// stream. The values are taken from the lines with the `read_bytes:` and
+// `write_bytes:` keys. A counter whose key does not appear in the stream stays
+// empty.
 DiskIoBytes diskIoBytesFromProcIo(std::istream& procIo);
 #endif
 
-// Cumulative seconds during which at least one task was stalled on I/O, or
-// `std::nullopt` if unavailable. Linux-only as not supported elsewhere.
+// Returns the cumulative number of seconds during which at least one task was
+// stalled on I/O. The result is `std::nullopt` on platforms other than Linux,
+// which do not expose this figure.
 std::optional<double> ioStallSeconds();
 
 #if defined(__linux__)
-// Stall seconds from a `/proc/pressure/io` stream: the `total=` microseconds
-// on the `some` line, scaled to seconds.
+// Parses the I/O stall seconds from a `/proc/pressure/io` stream. The value is
+// the `total=` field on the `some` line, which the kernel reports in
+// microseconds and this function converts to seconds.
 std::optional<double> ioStallSecondsFromPressure(std::istream& pressure);
 #endif
 
@@ -90,8 +96,8 @@ struct Sample {
   int64_t timestampMs_;
   std::optional<uint64_t> rssBytes_;
   std::optional<double> cpuPercent_;
-  std::optional<double> readBytesPerSecond_;
-  std::optional<double> writeBytesPerSecond_;
+  std::optional<double> bytesReadPerSecond_;
+  std::optional<double> bytesWrittenPerSecond_;
   std::optional<double> ioStallPercent_;
 };
 
@@ -104,6 +110,12 @@ inline constexpr std::string_view tsvHeader =
 
 // One TSV row; a missing field becomes an empty cell.
 std::string formatTsvRow(const Sample& sample);
+
+// Moves the log at `path` aside if its first line is not `tsvHeader`, so that
+// rows of two TSV formats do not land in one file. Returns true if a fresh
+// header has to be written. If the move fails, the function still returns
+// true, and the file keeps its old rows followed by a second header.
+bool rotateLogIfHeaderOutdated(const ql::filesystem::path& path);
 
 // The OS readers, as swappable function objects (see
 // `ResourceMonitor::setReadersForTesting`).
@@ -128,7 +140,9 @@ struct Readers {
 // (`elapsed_s`, `timestamp_ms`, `rss`, `cpu_percent`, `read_bytes_per_s`,
 // `write_bytes_per_s`, `io_stall_percent`) per interval; failed readings
 // become empty cells. The destructor stops the sampling thread and closes
-// the file.
+// the file. Sampling is designed for intervals on the order of a second, as
+// set by the `--resource-usage-interval-s` option. One tick reads a few small
+// OS counters and costs a handful of microseconds.
 class ResourceMonitor {
  public:
   // `Truncate` starts a fresh file per run (index builds); `Append`
@@ -148,9 +162,10 @@ class ResourceMonitor {
   void start(const ql::filesystem::path& path, Mode mode,
              std::chrono::milliseconds interval);
 
-  // Test-only: swap the OS readers before `start`, e.g. a throwing reader to
-  // exercise the sampler's error handling. Readers that are not named keep
-  // their real implementation.
+  // Test-only: swaps the OS readers before `start`, for example a throwing
+  // reader that exercises the sampler's error handling. The readers that a
+  // test does not set keep the defaults from `Readers`, which are the real OS
+  // readers, so no reader is ever empty.
   void setReadersForTesting(resource_monitor::Readers readers);
 
  private:
