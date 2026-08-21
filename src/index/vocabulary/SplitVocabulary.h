@@ -135,19 +135,34 @@ class SplitVocabulary {
   // Bucket type used by the private `lookupBatch` helpers.
   using IndicesByMarker = std::array<std::vector<size_t>, numberOfVocabs>;
   using ResultsByMarker = std::array<VocabBatchLookupResult, numberOfVocabs>;
-  // Partition marked indices into vocabulary-local index lists. Each marked
-  // input index (combining marker + underlying index) is grouped by marker so
-  // each vocabulary gets its own batch-lookup call with only its indices.
-  // See also `partitionResultPositionsByMarker` which does the dual grouping
-  // for scatter-back.
-  static IndicesByMarker partitionUnderlyingIndicesByMarker(
+
+  // Paired lookup indices for each marker: (underlying_index, result_position).
+  // For a given marker, underlying_index[i] is looked up from the i-th
+  // vocabulary, and the result is scattered to result_position[i] in the final
+  // output.
+  struct MarkerIndicesAndPositions {
+    std::vector<size_t> underlyingIndices;
+    std::vector<size_t> resultPositions;
+  };
+  using IndicesAndPositionsByMarker =
+      std::array<MarkerIndicesAndPositions, numberOfVocabs>;
+
+  // Partition marked indices into paired (underlying_index, result_position)
+  // lists per marker. For each input index with a marker: extract the
+  // underlying vocabulary index, pair it with its position in the input, and
+  // group both by marker.
+  static IndicesAndPositionsByMarker partitionMarkerIndicesAndPositions(
       ql::span<const size_t> indices) {
-    IndicesByMarker underlyingVocabIndicesByMarker;
-    for (auto markedIndex : indices) {
-      underlyingVocabIndicesByMarker[getMarker(markedIndex)].push_back(
-          getVocabIndex(markedIndex));
+    IndicesAndPositionsByMarker out;
+    for (auto [resultPosition, markedIndex] :
+         ::ranges::views::enumerate(indices)) {
+      auto marker = getMarker(markedIndex);
+      auto underlyingIndex = getIndex(markedIndex);
+      out[marker].underlyingIndices.push_back(underlyingIndex);
+      out[marker].resultPositions.push_back(
+          static_cast<size_t>(resultPosition));
     }
-    return underlyingVocabIndicesByMarker;
+    return out;
   }
 
   // Batch lookup results for each underlying vocabulary, keyed by vocabulary
@@ -164,52 +179,18 @@ class SplitVocabulary {
     uint8_t lastNonemptyMarker_ = 0;
   };
 
-  // Look up each non-empty marker group via the underlying `lookupBatch`.
-  MarkerBatchLookups lookupBatchesByMarker(
-      const IndicesByMarker& underlyingVocabIndicesByMarker) const {
-    MarkerBatchLookups out;
-    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
-      if (underlyingVocabIndicesByMarker[marker].empty()) {
-        continue;
-      }
-      out.lookupResultByMarker_[marker] = std::visit(
-          [&](const auto& vocab) {
-            return vocab.lookupBatch(underlyingVocabIndicesByMarker[marker]);
-          },
-          underlying_[marker]);
-      AD_CORRECTNESS_CHECK(out.lookupResultByMarker_[marker]->size() ==
-                           underlyingVocabIndicesByMarker[marker].size());
-      ++out.numNonemptyMarkers_;
-      out.lastNonemptyMarker_ = marker;
-    }
-    return out;
-  }
-
-  // Partition input indices and result positions by marker. Complements
-  // `partitionUnderlyingIndicesByMarker`: groups the input positions where each
-  // result should be scattered back, paired with the marker of each index.
-  // Together with `partitionUnderlyingIndicesByMarker`, this enables:
-  // (1) batch-lookup per marker with the underlying indices
-  // (2) scatter results back to original positions per marker
-  static IndicesByMarker partitionResultPositionsByMarker(
-      ql::span<const size_t> indices) {
-    IndicesByMarker resultPositionByMarker;
-    for (auto [resultPosition, markedIndex] :
-         ::ranges::views::enumerate(indices)) {
-      resultPositionByMarker[getMarker(markedIndex)].push_back(
-          static_cast<size_t>(resultPosition));
-    }
-    return resultPositionByMarker;
-  }
-
   // Merge per-marker batches into one result in input order. Require more than
   // one non-empty marker; the single-marker fast path returns that batch from
   // `lookupBatch` directly.
   static VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
-      ql::span<const size_t> indices, MarkerBatchLookups markerLookups) {
+      const MarkerBatchLookups& markerLookups,
+      const IndicesAndPositionsByMarker& markerIndicesAndPositions) {
     AD_CONTRACT_CHECK(markerLookups.numNonemptyMarkers_ > 1);
-    auto resultPositionByMarker = partitionResultPositionsByMarker(indices);
-    std::vector<std::string_view> viewsInInputOrder(indices.size());
+    std::vector<std::string_view> viewsInInputOrder(std::accumulate(
+        markerIndicesAndPositions.begin(), markerIndicesAndPositions.end(),
+        size_t(0), [](size_t sum, const auto& entry) {
+          return sum + entry.resultPositions.size();
+        }));
     std::vector<VocabBatchOwner> owners;
     owners.reserve(markerLookups.numNonemptyMarkers_);
     for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
@@ -218,7 +199,8 @@ class SplitVocabulary {
       }
       scatterVocabBatchLookupResult(
           std::move(markerLookups.lookupResultByMarker_[marker]),
-          resultPositionByMarker[marker], viewsInInputOrder, owners);
+          markerIndicesAndPositions[marker].resultPositions, viewsInInputOrder,
+          owners);
     }
     return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
   }
@@ -305,16 +287,46 @@ class SplitVocabulary {
   // one marker is present.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
-    auto underlyingVocabIndicesByMarker =
-        partitionUnderlyingIndicesByMarker(indices);
-    auto markerLookups = lookupBatchesByMarker(underlyingVocabIndicesByMarker);
+    auto markerIndicesAndPositions =
+        partitionMarkerIndicesAndPositions(indices);
+
+    // Count non-empty markers and find last one for optimization.
+    uint8_t numNonemptyMarkers = 0;
+    uint8_t lastNonemptyMarker = 0;
+    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
+      if (!markerIndicesAndPositions[marker].underlyingIndices.empty()) {
+        ++numNonemptyMarkers;
+        lastNonemptyMarker = marker;
+      }
+    }
+
+    // Look up each marker's indices via its vocabulary.
+    MarkerBatchLookups markerLookups;
+    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
+      if (markerIndicesAndPositions[marker].underlyingIndices.empty()) {
+        continue;
+      }
+      markerLookups.lookupResultByMarker_[marker] = std::visit(
+          [&](const auto& vocab) {
+            return vocab.lookupBatch(
+                markerIndicesAndPositions[marker].underlyingIndices);
+          },
+          underlying_[marker]);
+      AD_CORRECTNESS_CHECK(
+          markerLookups.lookupResultByMarker_[marker]->size() ==
+          markerIndicesAndPositions[marker].underlyingIndices.size());
+      ++markerLookups.numNonemptyMarkers_;
+      markerLookups.lastNonemptyMarker_ = marker;
+    }
+
     // One marker: return that batch. Mixed markers cannot share one buffer.
     if (markerLookups.numNonemptyMarkers_ == 1) {
       return std::move(
           markerLookups
               .lookupResultByMarker_[markerLookups.lastNonemptyMarker_]);
     }
-    return mergeMarkerBatchesInInputOrder(indices, std::move(markerLookups));
+    return mergeMarkerBatchesInInputOrder(markerLookups,
+                                          markerIndicesAndPositions);
   }
 
   //____________________________________________________________________________
