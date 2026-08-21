@@ -188,7 +188,7 @@ class SplitVocabulary {
     for (auto [resultPosition, markedIndex] :
          ::ranges::views::enumerate(indices)) {
       auto marker = getMarker(markedIndex);
-      auto underlyingIndex = getIndex(markedIndex);
+      auto underlyingIndex = getVocabIndex(markedIndex);
       out[marker].addPair(underlyingIndex, static_cast<size_t>(resultPosition));
     }
     return out;
@@ -244,11 +244,6 @@ class SplitVocabulary {
     uint64_t marker = (indexWithMarker & markerBitMask) >> markerShift;
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs);
     return static_cast<uint8_t>(marker);
-  }
-
-  // Extract the underlying vocabulary-local index from a marked index.
-  static constexpr uint64_t getIndex(uint64_t indexWithMarker) {
-    return indexWithMarker & underlyingIndexBitMask;
   }
 
   // Use the SplitFunction to determine the marker for a given word (that is, in
