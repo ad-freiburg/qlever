@@ -211,10 +211,11 @@ class SplitVocabulary {
   static VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
       MarkerBatchLookups markerLookups,
       const IndicesAndPositionsByMarker& markerIndicesAndPositions) {
-    std::vector<std::string_view> viewsInInputOrder(std::accumulate(
-        markerIndicesAndPositions.begin(), markerIndicesAndPositions.end(),
-        size_t(0),
-        [](size_t sum, const auto& entry) { return sum + entry.size(); }));
+    size_t numberOfResults = 0;
+    for (const auto& markerIndices : markerIndicesAndPositions) {
+      numberOfResults += markerIndices.size();
+    }
+    std::vector<std::string_view> viewsInInputOrder(numberOfResults);
     std::vector<VocabBatchOwner> resultOwners;
     for (auto [vocabMarker, markerIndices] :
          ::ranges::views::enumerate(markerIndicesAndPositions)) {
