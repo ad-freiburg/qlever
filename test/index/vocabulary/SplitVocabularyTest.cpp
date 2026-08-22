@@ -495,6 +495,8 @@ TEST(Vocabulary, SplitVocabularyLookupBatchMatchesItemAt) {
 
 }  // namespace
 
+using namespace splitVocabTestHelpers;
+
 // Share common SplitVocabulary setup across multiple tests.
 // Populates the vocabulary once per test suite with:
 //   index 0: "" (marker 0) / "xyz" (marker 1)
