@@ -8,9 +8,7 @@ using std::string;
 
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::open(const string& fileName) {
-  AD_CORRECTNESS_CHECK(
-      words_->size() == 0 && indices_.empty(),
-      "Calling open on the same vocabulary twice is probably a bug");
+  AD_CORRECTNESS_CHECK(words().empty() && indices_.empty());
   {
     auto words = std::make_shared<Words>();
     ad_utility::serialization::FileReadSerializer file(fileName);
@@ -28,7 +26,7 @@ std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
     uint64_t index) const {
   auto it = ql::ranges::lower_bound(indices_, index);
   if (it != indices_.end() && *it == index) {
-    return (*words_)[it - indices_.begin()];
+    return words()[it - indices_.begin()];
   }
   return std::nullopt;
 }
@@ -36,11 +34,11 @@ std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
 // _____________________________________________________________________________
 WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
     ql::ranges::iterator_t<Words> it) const {
-  if (it == words_->end()) {
+  if (it == words().end()) {
     return WordAndIndex::end();
   }
-  auto idx = static_cast<uint64_t>(it - words_->begin());
-  WordAndIndex result{(*words_)[idx], indices_[idx]};
+  auto idx = static_cast<uint64_t>(it - words().begin());
+  WordAndIndex result{words()[idx], indices_[idx]};
   if (idx > 0) {
     result.previousIndex() = indices_[idx - 1];
   }
