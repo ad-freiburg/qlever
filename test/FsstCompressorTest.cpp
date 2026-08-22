@@ -1,6 +1,7 @@
-// Copyright 2024, University of Freiburg,
+// Copyright 2024, 2026, University of Freiburg,
 //                 Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+//         Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
@@ -386,53 +387,59 @@ TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
 }
 
 // _____________________________________________________________________________
-template <size_t N>
-void expectRepeatedDecompressIntoMatches(
-    const std::vector<std::string>& words) {
-  std::vector<std::string_view> views;
-  views.reserve(words.size());
-  for (const auto& w : words) {
-    views.emplace_back(w);
+class FsstRepeatedDecoderTest : public ::testing::Test {
+ protected:
+  template <size_t N>
+  static void expectRepeatedDecompressIntoMatches(
+      const std::vector<std::string>& words) {
+    std::vector<std::string_view> views;
+    views.reserve(words.size());
+    for (const auto& w : words) {
+      views.emplace_back(w);
+    }
+    std::array<FsstDecoder, N> decoders{};
+    std::shared_ptr<std::string> keepAlive;
+    std::vector<std::string_view> compressed = views;
+    for (size_t stage = 0; stage < N; ++stage) {
+      auto [buffer, nextViews, decoder] = FsstEncoder::compressAll(compressed);
+      keepAlive = std::move(buffer);
+      compressed.assign(nextViews.begin(), nextViews.end());
+      decoders[stage] = decoder;
+    }
+    FsstRepeatedDecoder<N> repeated{decoders};
+    std::string scratch;
+    for (size_t i = 0; i < words.size(); ++i) {
+      const std::string viaString = repeated.decompress(compressed[i]);
+      std::string intoBuf(repeated.maxDecompressedSize(compressed[i]), '\0');
+      const size_t n = repeated.decompressInto(
+          compressed[i], ql::span<char>{intoBuf.data(), intoBuf.size()},
+          scratch);
+      EXPECT_THAT(n, ::testing::Eq(viaString.size()));
+      EXPECT_THAT(std::string_view(intoBuf.data(), n),
+                  ::testing::Eq(viaString));
+      EXPECT_THAT(viaString, ::testing::Eq(words[i]));
+    }
+    if constexpr (N >= 2) {
+      EXPECT_GE(scratch.size(),
+                repeated.maxDecompressedSize(compressed.front()));
+    }
   }
-  std::array<FsstDecoder, N> decoders{};
-  std::shared_ptr<std::string> keepAlive;
-  std::vector<std::string_view> compressed = views;
-  for (size_t stage = 0; stage < N; ++stage) {
-    auto [buffer, nextViews, decoder] = FsstEncoder::compressAll(compressed);
-    keepAlive = std::move(buffer);
-    compressed.assign(nextViews.begin(), nextViews.end());
-    decoders[stage] = decoder;
-  }
-  FsstRepeatedDecoder<N> repeated{decoders};
-  std::string scratch;
-  for (size_t i = 0; i < words.size(); ++i) {
-    const std::string viaString = repeated.decompress(compressed[i]);
-    std::string intoBuf(repeated.maxDecompressedSize(compressed[i]), '\0');
-    const size_t n = repeated.decompressInto(
-        compressed[i], ql::span<char>{intoBuf.data(), intoBuf.size()}, scratch);
-    EXPECT_THAT(n, ::testing::Eq(viaString.size()));
-    EXPECT_THAT(std::string_view(intoBuf.data(), n), ::testing::Eq(viaString));
-    EXPECT_THAT(viaString, ::testing::Eq(words[i]));
-  }
-  if constexpr (N >= 2) {
-    EXPECT_GE(scratch.size(), repeated.maxDecompressedSize(compressed.front()));
-  }
-}
+};
 
 // _____________________________________________________________________________
-TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompressOneStage) {
+TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressOneStage) {
   expectRepeatedDecompressIntoMatches<1>(
       {"alpha", "beta", "gamma-gamma-gamma"});
 }
 
 // _____________________________________________________________________________
-TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompressTwoStages) {
+TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressTwoStages) {
   expectRepeatedDecompressIntoMatches<2>(
       {"alpha", "beta", "gamma-gamma-gamma"});
 }
 
 // _____________________________________________________________________________
-TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompressThreeStages) {
+TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressThreeStages) {
   expectRepeatedDecompressIntoMatches<3>(
       {"alpha", "beta", "gamma-gamma-gamma"});
 }

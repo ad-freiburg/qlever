@@ -70,7 +70,8 @@ struct HasThreeArgumentDecompressInto : std::false_type {};
 
 template <typename Decoder>
 struct HasThreeArgumentDecompressInto<
-    Decoder, std::void_t<decltype(std::declval<const Decoder&>().decompressInto(
+    Decoder,
+    std::void_t<decltype(std::declval<const Decoder&>().decompressInto(
         std::declval<std::string_view>(), std::declval<ql::span<char>>(),
         std::declval<std::string&>()))>> : std::true_type {};
 // A class that holds a `vector<DecoderT>` and forwards `decompress`,
