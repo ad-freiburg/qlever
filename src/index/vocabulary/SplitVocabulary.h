@@ -309,20 +309,20 @@ class SplitVocabulary {
         partitionMarkerIndicesAndPositions(indices);
 
     MarkerBatchLookups markerLookups;
-    for (size_t marker = 0; marker < markerIndicesAndPositions.size();
-         ++marker) {
-      if (markerIndicesAndPositions[marker].empty()) {
+    for (auto&& [marker, markerIndicesAndPositionsForMarker] :
+         ::ranges::views::enumerate(markerIndicesAndPositions)) {
+      if (markerIndicesAndPositionsForMarker.empty()) {
         continue;
       }
       markerLookups.lookupResultByMarker_[marker] = std::visit(
           [&](const auto& vocab) {
             return vocab.lookupBatch(
-                markerIndicesAndPositions[marker].getUnderlyingIndices());
+                markerIndicesAndPositionsForMarker.getUnderlyingIndices());
           },
           underlying_[marker]);
       AD_CORRECTNESS_CHECK(
           markerLookups.lookupResultByMarker_[marker]->size() ==
-          markerIndicesAndPositions[marker].size());
+          markerIndicesAndPositionsForMarker.size());
     }
 
     return mergeMarkerBatchesInInputOrder(std::move(markerLookups),
