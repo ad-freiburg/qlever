@@ -6,6 +6,8 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <numeric>
+
 #include "VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "backports/span.h"
@@ -257,6 +259,51 @@ TYPED_TEST(CompressedVocabularyF, ScanAll) {
     IndexAndWord indexAndWord = *it;
     EXPECT_EQ(indexAndWord.index_, 0);
     EXPECT_EQ(indexAndWord.word_, words.at(0));
+  }
+}
+
+// _____________________________________________________________________________
+// Regression test for a dangling-view bug this lookup path once had: an
+// intermediate local `std::pmr::string` uses the small-string optimization
+// regardless of its allocator, so for short words a saved `string_view`
+// pointed into the destroyed local object instead of the arena.
+//
+// Detection strength:
+//  - Under AddressSanitizer builds (CMAKE_BUILD_TYPE=Asan) this test is a
+//    DETERMINISTIC detector: ASan poisons returned stack frames, so any read
+//    through the dangling view is reported as stack-use-after-return.
+//  - In normal builds it is a practical tripwire, not a proof: reading a
+//    dangling view is UB, so we clobber the stack with sentinel bytes and
+//    verify content byte-for-byte, which makes corruption overwhelmingly
+//    likely but not formally guaranteed.
+TYPED_TEST(CompressedVocabularyF, LookupBatchShortWordViewsStayValid) {
+  // All words deliberately short (<= ~15 chars): every one takes the SSO
+  // path in a `pmr::string`-based implementation, and none would end up in
+  // the monotonic buffer that owns the result's storage.
+  std::vector<std::string> words;
+  words.reserve(64);
+  for (int i = 0; i < 64; ++i) {
+    words.push_back(absl::StrCat("s", i));
+  }
+  auto vocab = this->createCompressedVocabulary()(words);
+
+  std::vector<size_t> indices(words.size());
+  ql::ranges::iota(indices, size_t{0});
+  auto result = vocab.lookupBatch(indices);
+  ASSERT_EQ(result->size(), indices.size());
+
+  // Clobber the stack region a dangling SSO view would point into. Two deep
+  // frames of sentinel bytes leave no plausible intact copy behind.
+  auto churn = []() {
+    volatile char sentinel[2048];
+    ql::ranges::fill(sentinel, '#');
+    static_cast<void>(sentinel);
+  };
+  churn();
+  churn();
+
+  for (size_t i = 0; i < indices.size(); ++i) {
+    ASSERT_EQ((*result)[i], words[i]);
   }
 }
 
