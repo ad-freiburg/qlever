@@ -158,7 +158,6 @@ CPP_template(typename UnderlyingVocabulary,
     return makePmrVocabBatchLookupResult(std::move(buffer), std::move(views));
   }
 
-
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
     return ad_utility::vocabulary::lookupBatchesStreamed(*this,
