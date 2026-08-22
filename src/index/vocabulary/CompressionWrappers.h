@@ -70,15 +70,21 @@ CPP_concept CompressionWrapper = CPP_requires_ref(CompressionWrapper_, T);
 
 namespace detail {
 
-template <typename Decoder, typename = void>
-struct HasThreeArgumentDecompressInto : std::false_type {};
+// Detect whether a decoder requires a 3rd `scratch` buffer for multi-stage
+// decoding (e.g. `FsstRepeatedDecoder<N>`). Single-stage decoders (e.g.
+// `FsstDecoder` and `PrefixCompressor`) decode directly into `out` in a single
+// pass via `decompressInto(compressed, out)`.
+template <typename Decoder>
+CPP_requires(RequiresScratchDecompressInto_,
+             requires(const Decoder& decoder, std::string_view compressed,
+                      ql::span<char> out, std::string& scratch)(
+                 concepts::same_as<
+                     decltype(decoder.decompressInto(compressed, out, scratch)),
+                     size_t>));
 
 template <typename Decoder>
-struct HasThreeArgumentDecompressInto<
-    Decoder,
-    std::void_t<decltype(std::declval<const Decoder&>().decompressInto(
-        std::declval<std::string_view>(), std::declval<ql::span<char>>(),
-        std::declval<std::string&>()))>> : std::true_type {};
+CPP_concept RequiresScratchDecompressInto =
+    CPP_requires_ref(RequiresScratchDecompressInto_, Decoder);
 
 // A class that holds a `vector<DecoderT>` and forwards `decompress`,
 // `maxDecompressedSize`, and `decompressInto` to `decoders_[index]`. It is
@@ -119,7 +125,7 @@ struct DecoderMultiplexer {
                                       std::string& scratch) const {
     DISABLE_CLANG_UNUSED_RESULT_WARNING
     auto& decoder = decoders_.at(decoderIndex);
-    if constexpr (HasThreeArgumentDecompressInto<Decoder>::value) {
+    if constexpr (RequiresScratchDecompressInto<Decoder>) {
       return decoder.decompressInto(compressed, out, scratch);
     } else {
       (void)scratch;
