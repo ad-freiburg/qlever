@@ -147,8 +147,10 @@ CPP_template(typename UnderlyingVocabulary,
       // Alignment is at least `alignof(std::max_align_t)` for this resource,
       // which is sufficient for an array of `char`.
       auto* mem = static_cast<char*>(buffer->allocate(bound));
+      // Treat the allocated storage as the decoder output buffer.
+      const ql::span<char> outputBuffer{mem, bound};
       const size_t n = compressionWrapper_.decompressInto(
-          compressedWord, decoderIdx, ql::span<char>{mem, bound}, scratch);
+          compressedWord, decoderIdx, outputBuffer, scratch);
       AD_CORRECTNESS_CHECK(n <= bound);
       views.emplace_back(mem, n);
     }
@@ -156,13 +158,6 @@ CPP_template(typename UnderlyingVocabulary,
     return makePmrVocabBatchLookupResult(std::move(buffer), std::move(views));
   }
 
-  [[nodiscard]] size_t decoderIndex(size_t idx) const {
-    return getDecoderIdx(idx);
-  }
-
-  [[nodiscard]] const CompressionWrapper& compressionWrapper() const {
-    return compressionWrapper_;
-  }
 
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
