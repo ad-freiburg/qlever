@@ -1,7 +1,9 @@
-// Copyright 2024, 2026, University of Freiburg,
-//                 Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
-//         Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
