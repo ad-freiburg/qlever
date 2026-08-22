@@ -125,11 +125,7 @@ CPP_template(typename UnderlyingVocabulary,
       const auto& [idx, compressedWord] = idxAndCompressedWord;
       std::string decompressed =
           compressionWrapper_.decompress(compressedWord, getDecoderIdx(idx));
-      auto* storage = static_cast<char*>(
-          buffer->allocate(decompressed.size() + 1, alignof(char)));
-      std::memcpy(storage, decompressed.data(), decompressed.size());
-      storage[decompressed.size()] = '\0';
-      views.emplace_back(storage, decompressed.size());
+      views.push_back(copyIntoMonotonicBuffer(*buffer, decompressed));
     }
 
     return makePmrVocabBatchLookupResult(std::move(buffer), std::move(views));

@@ -148,6 +148,19 @@ inline VocabBatchLookupResult makeStringVectorVocabBatchLookupResult(
   return StringVectorVocabBatchLookupData::asResult(std::move(data));
 }
 
+// Copy `word` into the monotonic `buffer` and return a view of the copy
+// (null-terminated; the terminator is not part of the view). Use this instead
+// of a local `std::pmr::string`: short strings use SSO and would store their
+// characters inside the destroyed local object, so saved views would dangle.
+inline std::string_view copyIntoMonotonicBuffer(
+    ql::pmr::monotonic_buffer_resource& buffer, const std::string& word) {
+  auto* storage =
+      static_cast<char*>(buffer.allocate(word.size() + 1, alignof(char)));
+  std::memcpy(storage, word.data(), word.size());
+  storage[word.size()] = '\0';
+  return {storage, word.size()};
+}
+
 // Construct a PMR-backed result and expose views into its monotonic allocator.
 // `views` must all point into `buffer`, else we get UB.
 inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
@@ -162,6 +175,7 @@ inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
 // Type-erased smart pointer holding whatever keeps word storage alive. Used
 // to store child `VocabBatchLookupResult`s or references to vocabulary state
 // (e.g., shared ownership of a vocabulary's in-memory word storage).
+// See the usage below.
 using VocabBatchOwner = std::shared_ptr<const void>;
 
 // `VocabBatchLookupResult` that owns multiple independent storage sources.
@@ -191,7 +205,7 @@ inline void scatterVocabBatchLookupResult(
 
 // Create a `VocabBatchLookupResult` for the given `words`. The result will
 // additionally keep the `owners` alive. Only call this if the storage for the
-// words is managed by the `owners`; see `scatterVocabBatchLookupResult()` for
+// `words` is managed by the `owners`; see `scatterVocabBatchLookupResult()` for
 // an example.
 //
 // TODO<ms2144>: This API takes independent owner and view lists, so the
