@@ -88,12 +88,14 @@ CPP_template(typename UnderlyingVocabulary,
     return result;
   }
 
+  //____________________________________________________________________________
   // Get the uncompressed word at the given index.
   std::string operator[](uint64_t idx) const {
     return compressionWrapper_.decompress(
         toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
   }
 
+  //____________________________________________________________________________
   // Wrap the underlying vocabulary's `scanAll` (which reads the compressed
   // words in batches) and decompress each word. `scanAll()` is expected to
   // yield `IndexAndWord` elements, so we have to apply a transformation at the
@@ -111,6 +113,7 @@ CPP_template(typename UnderlyingVocabulary,
         });
   }
 
+  //____________________________________________________________________________
   // Batch-read the compressed words from the underlying vocabulary, then
   // decompress each word with the decoder of its block. The result order
   // matches `indices`. Allocate each word at the wrapper's
@@ -139,19 +142,19 @@ CPP_template(typename UnderlyingVocabulary,
     views.reserve(indices.size());
     std::string scratch;
 
-    for (const auto& idxAndCompressedWord :
+    for (const auto& [idx, compressedWord] :
          ::ranges::views::zip(indices, *compressedWords)) {
-      const auto& [idx, compressedWord] = idxAndCompressedWord;
       const size_t decoderIdx = getDecoderIdx(idx);
 
       AD_CORRECTNESS_CHECK(
           decoderIdx < compressionWrapper_.numDecoders(), "decoder index ",
           decoderIdx,
           " out of range; the index encoding in `ValueId` does "
-          "not match the configured number of decoders");
+          "not match the configured number of decoders.");
 
       const size_t boundOnDecompressedWordSize =
           compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx);
+
       if (boundOnDecompressedWordSize == 0) {
         views.emplace_back();
         continue;
@@ -168,18 +171,19 @@ CPP_template(typename UnderlyingVocabulary,
 
       // Treat the allocated storage as the decoder output buffer.
       const ql::span<char> outputBuffer{mem, boundOnDecompressedWordSize};
-      const size_t n = compressionWrapper_.decompressInto(
+      const size_t numBytesWritten = compressionWrapper_.decompressInto(
           compressedWord, decoderIdx, outputBuffer, scratch);
 
-      AD_CORRECTNESS_CHECK(n <= boundOnDecompressedWordSize, "decoder wrote ",
-                           n,
-                           " bytes but the `boundOnDecompressedWordSize` was ",
+      AD_CORRECTNESS_CHECK(numBytesWritten <= boundOnDecompressedWordSize,
+                           "decoder wrote ", numBytesWritten,
+                           " bytes but the "
+                           "`boundOnDecompressedWordSize` was ",
                            boundOnDecompressedWordSize,
-                           "; `maxDecompressedSize` underestimates the "
+                           "; `maxDecompressedSize` is an upper bound on the "
                            "decompressed size, so the arena view would read "
-                           "past the allocation");
+                           "past the allocation.");
 
-      views.emplace_back(mem, n);
+      views.emplace_back(mem, numBytesWritten);
     }
 
     return makePmrVocabBatchLookupResult(std::move(buffer), std::move(views));
