@@ -73,8 +73,8 @@ class PrefixCompressor {
   // negative index.
   [[nodiscard]] static size_t prefixIndex(std::string_view compressedWord) {
     AD_CONTRACT_CHECK(!compressedWord.empty());
-    return static_cast<size_t>(static_cast<uint8_t>(compressedWord[0])) -
-           static_cast<size_t>(MIN_COMPRESSION_PREFIX);
+    const auto leadingByte = static_cast<uint8_t>(compressedWord.front());
+    return static_cast<size_t>(leadingByte) - MIN_COMPRESSION_PREFIX;
   }
 
   // Return an upper bound on the decompressed size of `compressedWord`.
