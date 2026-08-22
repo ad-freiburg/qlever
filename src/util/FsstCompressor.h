@@ -44,8 +44,9 @@ constexpr CastToUnsignedPtr castToUnsignedPtr{};
 
 // Allocate `bound` bytes, run `decode` into that buffer, and shrink to the
 // number of bytes written.
-template <typename Decode>
-std::string decompressToOwnedString(size_t bound, Decode decode) {
+CPP_template(typename Decode)(
+    requires ql::concepts::invocable<Decode, ql::span<char>>) std::string
+    decompressToOwnedString(size_t bound, Decode decode) {
   std::string output;
   output.resize(bound);
   output.resize(decode(ql::span<char>{output.data(), output.size()}));
