@@ -163,8 +163,7 @@ TEST(VocabBatchLookupData, KeepAliveRequiresAnOwner) {
 // batch result retains `wordStorage()` shared ownership of the bytes.
 // _____________________________________________________________________________
 TEST(VocabBatchLookupData, KeepAliveOutlivesSharedWordStorage) {
-  const std::string filename =
-      "KeepAliveOutlivesSharedWordStorage.vocabularyTypesTest.dat";
+  const std::string filename = gtestCurrentTestName();
   ad_utility::deleteFile(filename, false);
   ad_utility::deleteFile(filename + ".ids", false);
 

@@ -461,13 +461,14 @@ TEST(Vocabulary, SplitVocabularyScanAll) {
 TEST(Vocabulary, SplitVocabularyLookupBatchMatchesItemAt) {
   // Mixed markers, reordered indices, and a duplicate must match `operator[]`.
   TwoSplitVocabulary sv;
-  auto ww = sv.makeDiskWriterPtr("splitVocabLookupBatch.dat");
+  const auto filename = gtestCurrentTestName();
+  auto ww = sv.makeDiskWriterPtr(filename);
   (*ww)("\"\"", true);
   (*ww)("\"abc\"", true);
   (*ww)("\"axyz\"", true);
   (*ww)("\"xyz\"", true);
   ww->finish();
-  sv.readFromFile("splitVocabLookupBatch.dat");
+  sv.readFromFile(filename);
 
   const std::array<size_t, 6> indices{
       static_cast<size_t>(sv.addMarker(1, 0)),
