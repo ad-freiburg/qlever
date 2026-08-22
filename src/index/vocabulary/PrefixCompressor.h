@@ -72,7 +72,9 @@ class PrefixCompressor {
   // below `MIN_COMPRESSION_PREFIX` wrap to large values instead of producing a
   // negative index.
   [[nodiscard]] static size_t prefixIndex(std::string_view compressedWord) {
-    AD_CONTRACT_CHECK(!compressedWord.empty());
+    AD_CONTRACT_CHECK(!compressedWord.empty(),
+                      "the compressed encoding always has at least the prefix "
+                      "code byte, so an empty word is a corrupt input");
     return static_cast<size_t>(static_cast<uint8_t>(compressedWord[0])) -
            static_cast<size_t>(MIN_COMPRESSION_PREFIX);
   }
@@ -82,6 +84,7 @@ class PrefixCompressor {
       std::string_view compressedWord) const {
     const size_t idx = prefixIndex(compressedWord);
     const size_t rest = compressedWord.size() - 1;
+
     if (idx < NUM_COMPRESSION_PREFIXES) {
       return prefixToCode_[idx].size() + rest;
     }
@@ -93,7 +96,9 @@ class PrefixCompressor {
   [[nodiscard]] size_t decompressInto(std::string_view compressedWord,
                                       ql::span<char> out) const {
     const size_t bound = maxDecompressedSize(compressedWord);
-    AD_CONTRACT_CHECK(out.size() >= bound);
+    AD_CONTRACT_CHECK(out.size() >= bound,
+                      "output buffer too small: ", out.size(),
+                      " bytes, but the decompressed word needs ", bound);
     const size_t idx = prefixIndex(compressedWord);
     const std::string_view rest = compressedWord.substr(1);
     size_t n = 0;

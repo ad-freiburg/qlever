@@ -121,9 +121,15 @@ CPP_template(typename UnderlyingVocabulary,
   // TODO<ms2144>: Measure arena bound-vs-used waste on Wikidata label batches
   // before adding trim or a custom bump resource.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    AD_CONTRACT_CHECK(!indices.empty());
+    AD_CONTRACT_CHECK(!indices.empty(),
+                      "batch lookup with no indices is a caller bug; return "
+                      "an empty result instead of going through the lookup "
+                      "machinery");
     auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
-    AD_CORRECTNESS_CHECK(compressedWords->size() == indices.size());
+    AD_CORRECTNESS_CHECK(compressedWords->size() == indices.size(),
+                         "underlying vocabulary returned ",
+                         compressedWords->size(), " words for ", indices.size(),
+                         " requested indices; batch contract violated");
 
     auto buffer = std::make_unique<ql::pmr::monotonic_buffer_resource>();
     std::vector<std::string_view> views;
@@ -134,7 +140,10 @@ CPP_template(typename UnderlyingVocabulary,
          ::ranges::views::zip(indices, *compressedWords)) {
       const auto& [idx, compressedWord] = idxAndCompressedWord;
       const size_t decoderIdx = getDecoderIdx(idx);
-      AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
+      AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders(),
+                           "decoder index ", decoderIdx,
+                           " out of range; the index encoding in ValueId does "
+                           "not match the configured number of decoders");
       const size_t bound =
           compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx);
       if (bound == 0) {
@@ -152,7 +161,11 @@ CPP_template(typename UnderlyingVocabulary,
       const ql::span<char> outputBuffer{mem, bound};
       const size_t n = compressionWrapper_.decompressInto(
           compressedWord, decoderIdx, outputBuffer, scratch);
-      AD_CORRECTNESS_CHECK(n <= bound);
+      AD_CORRECTNESS_CHECK(n <= bound, "decoder wrote ", n,
+                           " bytes but the bound was ", bound,
+                           "; maxDecompressedSize underestimates the "
+                           "decompressed size, so the arena view would read "
+                           "past the allocation");
       views.emplace_back(mem, n);
     }
 

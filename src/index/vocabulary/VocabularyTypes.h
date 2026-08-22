@@ -180,13 +180,24 @@ inline void scatterVocabBatchLookupResult(
     VocabBatchLookupResult result, ql::span<const size_t> resultPositions,
     ql::span<std::string_view> viewsInInputOrder,
     std::vector<VocabBatchOwner>& owners) {
-  AD_CONTRACT_CHECK(result != nullptr);
-  AD_CONTRACT_CHECK(result->size() == resultPositions.size());
+  AD_CONTRACT_CHECK(result != nullptr,
+                    "scatterVocabBatchLookupResult called with a null child "
+                    "batch; lookupBatch must never return null");
+  AD_CONTRACT_CHECK(result->size() == resultPositions.size(),
+                    "each decompressed word of the child batch needs exactly "
+                    "one target position");
   std::vector<bool> written(viewsInInputOrder.size());
   for (auto [resultPosition, word] :
        ::ranges::views::zip(resultPositions, *result)) {
-    AD_CORRECTNESS_CHECK(resultPosition < viewsInInputOrder.size());
-    AD_CORRECTNESS_CHECK(!written[resultPosition]);
+    AD_CORRECTNESS_CHECK(resultPosition < viewsInInputOrder.size(),
+                         "child batch position ", resultPosition,
+                         " points outside the assembled result; the "
+                         "resultPositions arrays are inconsistent with the "
+                         "requested batch size");
+    AD_CORRECTNESS_CHECK(!written[resultPosition], "result position ",
+                         resultPosition,
+                         " is written twice; two child batches claim the same "
+                         "output slot, so their positions overlap");
     written[resultPosition] = true;
     viewsInInputOrder[resultPosition] = word;
   }
@@ -208,8 +219,12 @@ inline void scatterVocabBatchLookupResult(
 // type so slots are only filled together with their storage.
 inline VocabBatchLookupResult keepAliveVocabBatch(
     std::vector<VocabBatchOwner> owners, std::vector<std::string_view> words) {
-  AD_CONTRACT_CHECK(!owners.empty());
-  AD_CONTRACT_CHECK(!words.empty());
+  AD_CONTRACT_CHECK(!owners.empty(),
+                    "without owners, the returned views would dangle; the "
+                    "owners keep the backing storage alive");
+  AD_CONTRACT_CHECK(!words.empty(),
+                    "an empty word batch would produce an empty result; use "
+                    "an empty `VocabBatchLookupResult` instead");
   auto data = std::make_shared<MultiOwnerVocabBatchLookupData>();
   data->buffer() = std::move(owners);
   data->views() = std::move(words);
