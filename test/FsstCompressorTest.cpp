@@ -379,8 +379,8 @@ TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
     std::string output(decoder.maxDecompressedSize(compressed), '\0');
     const size_t size = decoder.decompressInto(
         compressed, ql::span<char>{output.data(), output.size()});
-    EXPECT_THAT(std::string_view{output.data(), size},
-                ::testing::Eq(viaString));
+    const std::string_view decompressedView{output.data(), size};
+    EXPECT_EQ(decompressedView, viaString);
     EXPECT_THAT(viaString, ::testing::Eq(*word));
     ++word;
   }
