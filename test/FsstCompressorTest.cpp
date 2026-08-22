@@ -377,9 +377,8 @@ TEST(FsstEncoder, firstTest) {
 TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
   const std::vector<std::string> words{"alpha", "beta", "gamma"};
   auto [buffer, compressedViews, decoder] = FsstEncoder::compressAll(words);
-  auto word = words.begin();
-
-  for (const auto& compressed : compressedViews) {
+  for (const auto& [word, compressed] :
+       ::ranges::views::zip(words, compressedViews)) {
     const std::string viaString = decoder.decompress(compressed);
     std::string output(decoder.maxDecompressedSize(compressed), '\0');
     const size_t size = decoder.decompressInto(
@@ -387,9 +386,7 @@ TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
     const std::string_view decompressedView{output.data(), size};
 
     EXPECT_EQ(decompressedView, viaString);
-    EXPECT_THAT(viaString, ::testing::Eq(*word));
-
-    ++word;
+    EXPECT_THAT(viaString, ::testing::Eq(word));
   }
 }
 
