@@ -12,6 +12,9 @@ void VocabularyInMemoryBinSearch::open(const string& fileName) {
       words().size() == 0 && indices_.empty(),
       "Calling open on the same vocabulary twice is probably a bug");
   {
+    // Deserialize into a mutable buffer first (`words_` stores `const Words`
+    // for immutable sharing via `wordStorage()`, and moving on success ensures
+    // strong exception safety).
     auto words = std::make_shared<Words>();
     ad_utility::serialization::FileReadSerializer file(fileName);
     file >> *words;
