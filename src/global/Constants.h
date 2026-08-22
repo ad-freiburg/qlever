@@ -268,7 +268,7 @@ constexpr inline std::string_view LOCALE_DEFAULT_COUNTRY = "US";
 constexpr inline bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
 
 // Constants for the range of valid compression prefixes
-// all ASCII- printable characters are left out.
+// all ASCII-printable characters are left out.
 // when adding more special characters to the vocabulary make sure to leave out
 // \n since the vocabulary is stored in a text file line by line.
 // All prefix codes have a most significant bit of 1. This means the prefix

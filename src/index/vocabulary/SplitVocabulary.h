@@ -208,22 +208,24 @@ class SplitVocabulary {
   };
 
   // Merge the per-vocabulary batches into one result in input order.
+  // `numberOfResults` is the total number of requested indices (the sum of
+  // the per-marker position counts; the caller knows it without re-summing).
   static VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
       MarkerBatchLookups markerLookups,
-      const IndicesAndPositionsByMarker& markerIndicesAndPositions) {
-    size_t numberOfResults = 0;
-    for (const auto& markerIndices : markerIndicesAndPositions) {
-      numberOfResults += markerIndices.size();
-    }
+      const IndicesAndPositionsByMarker& markerIndicesAndPositions,
+      size_t numberOfResults) {
     std::vector<std::string_view> viewsInInputOrder(numberOfResults);
     std::vector<VocabBatchOwner> resultOwners;
+
     for (const auto& [vocabMarker, markerIndices] :
          ::ranges::views::enumerate(markerIndicesAndPositions)) {
       if (markerIndices.empty()) {
         continue;
       }
+
       AD_CORRECTNESS_CHECK(markerLookups.lookupResultByMarker_[vocabMarker] !=
                            nullptr);
+
       scatterVocabBatchLookupResult(
           std::move(markerLookups.lookupResultByMarker_[vocabMarker]),
           markerIndices.getResultPositions(), viewsInInputOrder, resultOwners);
@@ -335,8 +337,8 @@ class SplitVocabulary {
           markerIndicesAndPositionsForMarker.size());
     }
 
-    return mergeMarkerBatchesInInputOrder(std::move(markerLookups),
-                                          markerIndicesAndPositions);
+    return mergeMarkerBatchesInInputOrder(
+        std::move(markerLookups), markerIndicesAndPositions, indices.size());
   }
 
   //____________________________________________________________________________
