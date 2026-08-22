@@ -87,8 +87,8 @@ struct DecoderMultiplexer {
     ENABLE_CLANG_WARNINGS
   }
 
-  // Return an upper bound on the decompressed size of `compressed` using
-  // `decoderIndex`.
+  // Return the maximum number of output bytes needed to decompress
+  // `compressed` with `decoderIndex`.
   [[nodiscard]] size_t maxDecompressedSize(std::string_view compressed,
                                            size_t decoderIndex) const {
     return decoders_.at(decoderIndex).maxDecompressedSize(compressed);

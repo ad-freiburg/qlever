@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "backports/span.h"
+#include "backports/zip.h"
 #include "util/FsstCompressor.h"
 
 TEST(FsstEncoder, firstTest) {
@@ -366,22 +367,21 @@ TEST(FsstEncoder, firstTest) {
     }
     EXPECT_THAT(s3, ::testing::ElementsAreArray(s));
   }
+}
 
-  // Verify that `decompressInto` writes the same bytes as `decompress` when
-  // using a caller-owned buffer sized to `maxDecompressedSize`.
-  {
-    auto [buffer, compressedViews, intoDecoder] = FsstEncoder::compressAll(s);
-    for (size_t i = 0; i < s.size(); ++i) {
-      const std::string viaString = intoDecoder.decompress(compressedViews[i]);
-      std::string intoBuf(intoDecoder.maxDecompressedSize(compressedViews[i]),
-                          '\0');
-      const size_t n = intoDecoder.decompressInto(
-          compressedViews[i], ql::span<char>{intoBuf.data(), intoBuf.size()});
-      EXPECT_THAT(n, ::testing::Eq(viaString.size()));
-      EXPECT_THAT(std::string_view(intoBuf.data(), n),
-                  ::testing::Eq(viaString));
-      EXPECT_THAT(viaString, ::testing::Eq(s[i]));
-    }
+// _____________________________________________________________________________
+TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma"};
+  auto [buffer, compressedViews, decoder] = FsstEncoder::compressAll(words);
+  for (const auto& [word, compressed] :
+       ql::ranges::views::zip(words, compressedViews)) {
+    const std::string viaString = decoder.decompress(compressed);
+    std::string output(decoder.maxDecompressedSize(compressed), '\0');
+    const size_t size = decoder.decompressInto(
+        compressed, ql::span<char>{output.data(), output.size()});
+    EXPECT_THAT(std::string_view{output.data(), size},
+                ::testing::Eq(viaString));
+    EXPECT_THAT(viaString, ::testing::Eq(word));
   }
 }
 
