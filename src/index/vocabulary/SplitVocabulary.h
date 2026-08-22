@@ -135,10 +135,10 @@ class SplitVocabulary {
   // Bucket type used by the private `lookupBatch` helpers.
   using ResultsByMarker = std::array<VocabBatchLookupResult, numberOfVocabs>;
 
-  // Paired lookup data for one marker: for each position `i` in the arrays,
-  // `underlyingIndices[i]` is the index to look up, and `resultPositions[i]` is
-  // where the result goes in the final output. The arrays are always kept in
-  // sync (same size).
+  // Paired lookup data for one vocabulary marker: for each position `i` in the
+  // arrays, `underlyingIndices[i]` is the index to look up, and
+  // `resultPositions[i]` is where the result goes in the final output. The
+  // arrays are always kept in sync (same size).
   struct MarkerIndicesAndPositions {
    private:
     std::vector<size_t> underlyingIndices_;
@@ -176,11 +176,11 @@ class SplitVocabulary {
   using IndicesAndPositionsByMarker =
       std::array<MarkerIndicesAndPositions, numberOfVocabs>;
 
-  // Partition marked indices into paired (underlying_index, result_position)
-  // lists per marker. For each input index with a marker: extract the
-  // underlying vocabulary index, pair it with its position in the input, and
-  // group both by marker. Each marker's indices can be pre-reserved via
-  // reserve() to avoid reallocations during partitioning.
+  // Partition marked indices into paired (`underlyingIndex`, `resultPosition`)
+  // lists per marker. For each input index, extract the marker that identifies
+  // the underlying vocabulary, pair its index with its position in the input,
+  // and group both by marker. Pre-reserve each marker's indices via `reserve()`
+  // to avoid reallocations during partitioning.
   static IndicesAndPositionsByMarker partitionMarkerIndicesAndPositions(
       ql::span<const size_t> indices) {
     IndicesAndPositionsByMarker out;
@@ -315,14 +315,14 @@ class SplitVocabulary {
       if (markerIndicesAndPositionsForMarker.empty()) {
         continue;
       }
-      markerLookups.lookupResultByMarker_[vocabMarker] = std::visit(
+      markerLookups.lookupResultByMarker_[marker] = std::visit(
           [&](const auto& vocab) {
             return vocab.lookupBatch(
                 markerIndicesAndPositionsForMarker.getUnderlyingIndices());
           },
           underlying_[marker]);
       AD_CORRECTNESS_CHECK(
-          markerLookups.lookupResultByMarker_[vocabMarker]->size() ==
+          markerLookups.lookupResultByMarker_[marker]->size() ==
           markerIndicesAndPositionsForMarker.size());
     }
 
