@@ -1,6 +1,7 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Copyright 2024, 2026, University of Freiburg,
+//                 Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+//         Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
@@ -34,10 +35,6 @@ class VocabularyInMemoryBinSearch
   // Store the word data through a `shared_ptr` so a
   // `VocabBatchLookupResult` can keep the referenced bytes alive after
   // `close()` and destruction of the vocabulary. Keep the pointer non-null;
-  // `close()` installs a fresh empty buffer rather than clearing in place.
-  // Note: `lookupBatch` is not implemented here; it is provided by
-  // `InternalExternalVocabulary` which wraps this vocabulary and manages
-  // the actual batch-lookup logic.
   std::shared_ptr<const Words> words_ = std::make_shared<const Words>();
   Indices indices_;
 

@@ -1,6 +1,7 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022, 2026, University of Freiburg,
+//                 Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//         Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 
 #ifndef QLEVER_PREFIXCOMPRESSOR_H
 #define QLEVER_PREFIXCOMPRESSOR_H
@@ -72,10 +73,12 @@ class PrefixCompressor {
       std::string_view compressedWord) {
     AD_CONTRACT_CHECK(!compressedWord.empty());
     const auto leadingByte = static_cast<uint8_t>(compressedWord.front());
+
     if (leadingByte >= MIN_COMPRESSION_PREFIX &&
         leadingByte < MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES) {
       return leadingByte - MIN_COMPRESSION_PREFIX;
     }
+
     return std::nullopt;
   }
 
@@ -95,23 +98,24 @@ class PrefixCompressor {
   // `maxDecompressedSize(compressedWord)`. Return the number of bytes written.
   [[nodiscard]] size_t decompressInto(std::string_view compressedWord,
                                       ql::span<char> out) const {
-    const size_t bound = maxDecompressedSize(compressedWord);
-    AD_CONTRACT_CHECK(out.size() >= bound);
+    AD_CONTRACT_CHECK(out.size() >= maxDecompressedSize(compressedWord));
+
     const auto idx = prefixIndex(compressedWord);
     const std::string_view rest = compressedWord.substr(1);
-    size_t n = 0;
+
+    size_t numBytesWritten = 0;
     if (idx.has_value()) {
       const std::string& prefix = prefixToCode_[idx.value()];
       if (!prefix.empty()) {
         std::memcpy(out.data(), prefix.data(), prefix.size());
-        n = prefix.size();
+        numBytesWritten = prefix.size();
       }
     }
     if (!rest.empty()) {
-      std::memcpy(out.data() + n, rest.data(), rest.size());
-      n += rest.size();
+      std::memcpy(out.data() + numBytesWritten, rest.data(), rest.size());
+      numBytesWritten += rest.size();
     }
-    return n;
+    return numBytesWritten;
   }
 
   // Decompress the given `compressedWord`.

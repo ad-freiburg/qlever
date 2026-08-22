@@ -1,6 +1,7 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Copyright 2024, 2026, University of Freiburg,
+//                 Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+//         Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 
