@@ -188,6 +188,7 @@ class SplitVocabulary {
   // the underlying vocabulary, pair its index with its position in the input,
   // and group both by marker. Pre-reserve each marker's indices via `reserve()`
   // to avoid reallocations during partitioning.
+  // _____________________________________________________________________________
   static IndicesAndPositionsByMarker partitionMarkerIndicesAndPositions(
       ql::span<const size_t> indices) {
     IndicesAndPositionsByMarker out;
@@ -203,6 +204,7 @@ class SplitVocabulary {
   // Batch lookup results for each underlying vocabulary, keyed by vocabulary
   // index ("marker"). Includes results only from vocabularies that have lookup
   // indices in this batch (others remain null).
+  // _____________________________________________________________________________
   struct MarkerBatchLookups {
     ResultsByMarker lookupResultByMarker_{};
   };
@@ -210,6 +212,7 @@ class SplitVocabulary {
   // Merge the per-vocabulary batches into one result in input order.
   // `numberOfResults` is the total number of requested indices (the sum of
   // the per-marker position counts; the caller knows it without re-summing).
+  // _____________________________________________________________________________
   static VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
       MarkerBatchLookups markerLookups,
       const IndicesAndPositionsByMarker& markerIndicesAndPositions,
