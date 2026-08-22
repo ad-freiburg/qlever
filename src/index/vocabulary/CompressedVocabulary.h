@@ -126,10 +126,13 @@ CPP_template(typename UnderlyingVocabulary,
                       "an empty result instead of going through the lookup "
                       "machinery");
     auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
+
     AD_CORRECTNESS_CHECK(compressedWords->size() == indices.size(),
                          "underlying vocabulary returned ",
                          compressedWords->size(), " words for ", indices.size(),
-                         " requested indices; batch contract violated");
+                         " requested indices to be looked up in the vocabulary "
+                         "mapping an id to a compressed word; "
+                         "batch contract violated");
 
     auto buffer = std::make_unique<ql::pmr::monotonic_buffer_resource>();
     std::vector<std::string_view> views;
@@ -140,32 +143,42 @@ CPP_template(typename UnderlyingVocabulary,
          ::ranges::views::zip(indices, *compressedWords)) {
       const auto& [idx, compressedWord] = idxAndCompressedWord;
       const size_t decoderIdx = getDecoderIdx(idx);
-      AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders(),
-                           "decoder index ", decoderIdx,
-                           " out of range; the index encoding in ValueId does "
-                           "not match the configured number of decoders");
-      const size_t bound =
+
+      AD_CORRECTNESS_CHECK(
+          decoderIdx < compressionWrapper_.numDecoders(), "decoder index ",
+          decoderIdx,
+          " out of range; the index encoding in `ValueId` does "
+          "not match the configured number of decoders");
+
+      const size_t boundOnDecompressedWordSize =
           compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx);
-      if (bound == 0) {
+      if (boundOnDecompressedWordSize == 0) {
         views.emplace_back();
         continue;
       }
+
       // `memory_resource::allocate` returns `void*` to storage we own for
-      // `bound` bytes. Casting to `char*` is well-defined and is the usual
-      // way to treat that storage as a byte buffer: the selected decoder
-      // writes into it, then we form a `string_view` over the used prefix.
-      // Alignment is at least `alignof(std::max_align_t)` for this resource,
-      // which is sufficient for an array of `char`.
-      auto* mem = static_cast<char*>(buffer->allocate(bound));
+      // `boundOnDecompressedWordSize` bytes. Casting to `char*` is well-defined
+      // and is the usual way to treat that storage as a byte buffer: the
+      // selected decoder writes into it, then we form a `string_view` over the
+      // used prefix. Alignment is at least `alignof(std::max_align_t)` for this
+      // resource, which is sufficient for an array of `char`.
+      auto* mem =
+          static_cast<char*>(buffer->allocate(boundOnDecompressedWordSize));
+
       // Treat the allocated storage as the decoder output buffer.
-      const ql::span<char> outputBuffer{mem, bound};
+      const ql::span<char> outputBuffer{mem, boundOnDecompressedWordSize};
       const size_t n = compressionWrapper_.decompressInto(
           compressedWord, decoderIdx, outputBuffer, scratch);
-      AD_CORRECTNESS_CHECK(n <= bound, "decoder wrote ", n,
-                           " bytes but the bound was ", bound,
-                           "; maxDecompressedSize underestimates the "
+
+      AD_CORRECTNESS_CHECK(n <= boundOnDecompressedWordSize, "decoder wrote ",
+                           n,
+                           " bytes but the `boundOnDecompressedWordSize` was ",
+                           boundOnDecompressedWordSize,
+                           "; `maxDecompressedSize` underestimates the "
                            "decompressed size, so the arena view would read "
                            "past the allocation");
+
       views.emplace_back(mem, n);
     }
 
@@ -235,6 +248,7 @@ CPP_template(typename UnderlyingVocabulary,
     std::vector<typename CompressionWrapper::Decoder> decoders;
     decoderReader >> decoders;
     compressionWrapper_ = CompressionWrapper{{std::move(decoders)}};
+
     AD_CORRECTNESS_CHECK((size() == 0) || (getDecoderIdx(size()) <=
                                            compressionWrapper_.numDecoders()));
   }
