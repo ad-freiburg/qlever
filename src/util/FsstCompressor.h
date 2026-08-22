@@ -71,13 +71,13 @@ class FsstDecoder {
   explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {}
 
   // Use the FSST library guarantee: expansion is at most this factor.
-  static constexpr size_t MAX_EXPANSION_FACTOR = 8;
+  static constexpr size_t maxExpansionFactor = 8;
 
   // Return an upper bound on the decompressed size of `str`.
   [[nodiscard]] static size_t maxDecompressedSize(std::string_view str) {
     AD_CONTRACT_CHECK(str.size() <= std::numeric_limits<size_t>::max() /
-                                        MAX_EXPANSION_FACTOR);
-    return MAX_EXPANSION_FACTOR * str.size();
+                                        maxExpansionFactor);
+    return maxExpansionFactor * str.size();
   }
 
   // Decompress `str` into `out`. `out.size()` must be at least
@@ -140,8 +140,8 @@ class FsstRepeatedDecoder {
     size_t bound = str.size();
     for (size_t stage = 0; stage < N; ++stage) {
       AD_CONTRACT_CHECK(bound <= std::numeric_limits<size_t>::max() /
-                                     FsstDecoder::MAX_EXPANSION_FACTOR);
-      bound *= FsstDecoder::MAX_EXPANSION_FACTOR;
+                                     FsstDecoder::maxExpansionFactor);
+      bound *= FsstDecoder::maxExpansionFactor;
     }
     return bound;
   }

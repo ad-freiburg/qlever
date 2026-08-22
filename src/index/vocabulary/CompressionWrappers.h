@@ -112,9 +112,7 @@ struct DecoderMultiplexer {
                                       std::string& scratch) const {
     DISABLE_CLANG_UNUSED_RESULT_WARNING
     auto& decoder = decoders_.at(decoderIndex);
-    if constexpr (requires {
-                    decoder.decompressInto(compressed, out, scratch);
-                  }) {
+    if constexpr (HasThreeArgumentDecompressInto<Decoder>::value) {
       return decoder.decompressInto(compressed, out, scratch);
     } else {
       (void)scratch;

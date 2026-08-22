@@ -195,7 +195,7 @@ class SplitVocabulary {
          ::ranges::views::enumerate(indices)) {
       auto marker = getMarker(markedIndex);
       auto underlyingIndex = getVocabIndex(markedIndex);
-      out[marker].addPair(underlyingIndex, static_cast<size_t>(resultPosition));
+      out[marker].addPair(underlyingIndex, resultPosition);
     }
     return out;
   }
@@ -217,7 +217,7 @@ class SplitVocabulary {
     }
     std::vector<std::string_view> viewsInInputOrder(numberOfResults);
     std::vector<VocabBatchOwner> resultOwners;
-    for (auto [vocabMarker, markerIndices] :
+    for (const auto& [vocabMarker, markerIndices] :
          ::ranges::views::enumerate(markerIndicesAndPositions)) {
       if (markerIndices.empty()) {
         continue;

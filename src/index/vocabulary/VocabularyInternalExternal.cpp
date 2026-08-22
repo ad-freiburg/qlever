@@ -100,15 +100,13 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   if (!partition.diskSlots_.empty()) {
     auto diskData = extractDiskLookupData(partition.diskSlots_);
     auto disk = externalVocab_.lookupBatch(diskData.indices);
-    owners.reserve(1 + static_cast<size_t>(!partition.internalSlots_.empty()));
+    owners.reserve(2);
     scatterVocabBatchLookupResult(std::move(disk), diskData.positions,
                                   assembled, owners);
   }
 
   // Add ownership of internal data.
-  if (!partition.internalSlots_.empty()) {
-    owners.push_back(internalVocab_.wordStorage());
-  }
+  owners.push_back(internalVocab_.wordStorage());
 
   return keepAliveVocabBatch(std::move(owners), std::move(assembled));
 }
