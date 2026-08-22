@@ -8,7 +8,9 @@ using std::string;
 
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::open(const string& fileName) {
-  AD_CORRECTNESS_CHECK(words().empty() && indices_.empty());
+  AD_CORRECTNESS_CHECK(
+      words().size() == 0 && indices_.empty(),
+      "Calling open on the same vocabulary twice is probably a bug");
   {
     auto words = std::make_shared<Words>();
     ad_utility::serialization::FileReadSerializer file(fileName);
