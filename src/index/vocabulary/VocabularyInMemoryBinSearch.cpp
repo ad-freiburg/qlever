@@ -52,9 +52,11 @@ WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
 
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::close() {
-  // Install a fresh empty buffer instead of clearing in place: any
-  // outstanding `VocabBatchLookupResult` still shares ownership of the old one
-  // and must keep reading valid bytes.
+  // Install a fresh empty buffer instead of clearing the existing one in place:
+  // outstanding `VocabBatchLookupResult`s hold non-owning string_views into the
+  // old character buffer along with a shared_ptr to it. Mutating the old buffer
+  // in place would invalidate those views; replacing the pointer lets the old
+  // buffer remain valid until all downstream results are destroyed.
   words_ = std::make_shared<const Words>();
   indices_.clear();
 }

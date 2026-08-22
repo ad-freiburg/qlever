@@ -195,6 +195,7 @@ TEST_F(VocabBatchLookupDataVocabTest, KeepAliveOutlivesClose) {
   auto result = keepAliveVocabBatch(std::move(owners), std::move(views));
 
   vocabulary.close();
+  EXPECT_EQ(vocabulary.size(), 0u);
   EXPECT_THAT(*result, ::testing::ElementsAre("ram-word"));
   EXPECT_EQ((*result)[0].data(), wordData);
 }
