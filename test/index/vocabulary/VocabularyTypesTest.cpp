@@ -92,6 +92,7 @@ TEST(VocabBatchLookupData, AsResultEmpty) {
 }
 
 // Verify that an owning string batch exposes all input words as valid views.
+// _____________________________________________________________________________
 TEST(VocabBatchLookupData, MakeStringVectorResultKeepsViewsValid) {
   auto result = makeStringVectorVocabBatchLookupResult({"alpha", "beta"});
 
@@ -100,6 +101,7 @@ TEST(VocabBatchLookupData, MakeStringVectorResultKeepsViewsValid) {
 
 // Verify that scattering preserves input order and retains the child batch
 // owner.
+// _____________________________________________________________________________
 TEST(VocabBatchLookupData, ScatterBatchResultRetainsOwner) {
   auto first = makeStringVectorVocabBatchLookupResult({"alpha", "beta"});
   auto second = makeStringVectorVocabBatchLookupResult({"gamma"});
@@ -124,6 +126,7 @@ TEST(VocabBatchLookupData, ScatterBatchResultRetainsOwner) {
 
 // Verify that keeping child batches alive preserves their original string
 // storage.
+// _____________________________________________________________________________
 TEST(VocabBatchLookupData, KeepAliveVocabBatchDoesNotCopyBytes) {
   auto firstOwner = std::make_shared<StringVectorVocabBatchLookupData>();
   firstOwner->buffer() = {"alpha", "beta"};
@@ -148,6 +151,7 @@ TEST(VocabBatchLookupData, KeepAliveVocabBatchDoesNotCopyBytes) {
   EXPECT_EQ((*result)[1].data(), gammaData);
 }
 
+// _____________________________________________________________________________
 TEST(VocabBatchLookupData, KeepAliveRequiresAnOwner) {
   std::vector<std::string_view> views{"orphan"};
   AD_EXPECT_THROW_WITH_MESSAGE(keepAliveVocabBatch({}, std::move(views)),
@@ -157,6 +161,7 @@ TEST(VocabBatchLookupData, KeepAliveRequiresAnOwner) {
 // A view obtained from `VocabularyInMemoryBinSearch` stays valid after
 // `close()` and after the vocabulary object is replaced/destroyed, because the
 // batch result retains `wordStorage()` shared ownership of the bytes.
+// _____________________________________________________________________________
 TEST(VocabBatchLookupData, KeepAliveOutlivesSharedWordStorage) {
   const std::string filename =
       "KeepAliveOutlivesSharedWordStorage.vocabularyTypesTest.dat";
