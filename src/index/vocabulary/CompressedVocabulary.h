@@ -124,18 +124,10 @@ CPP_template(typename UnderlyingVocabulary,
   // TODO<ms2144>: Measure arena bound-vs-used waste on Wikidata label batches
   // before adding trim or a custom bump resource.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    AD_CONTRACT_CHECK(!indices.empty(),
-                      "batch lookup with no indices is a caller bug; return "
-                      "an empty result instead of going through the lookup "
-                      "machinery");
+    AD_CONTRACT_CHECK(!indices.empty());
     auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
 
-    AD_CORRECTNESS_CHECK(compressedWords->size() == indices.size(),
-                         "underlying vocabulary returned ",
-                         compressedWords->size(), " words for ", indices.size(),
-                         " requested indices to be looked up in the vocabulary "
-                         "mapping an id to a compressed word; "
-                         "batch contract violated");
+    AD_CORRECTNESS_CHECK(compressedWords->size() == indices.size());
 
     auto buffer = std::make_unique<ql::pmr::monotonic_buffer_resource>();
     std::vector<std::string_view> views;
@@ -146,15 +138,15 @@ CPP_template(typename UnderlyingVocabulary,
          ::ranges::views::zip(indices, *compressedWords)) {
       const size_t decoderIdx = getDecoderIdx(idx);
 
-      AD_CORRECTNESS_CHECK(
-          decoderIdx < compressionWrapper_.numDecoders(), "decoder index ",
-          decoderIdx,
-          " out of range; the index encoding in `ValueId` does "
-          "not match the configured number of decoders.");
+      AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
 
       const size_t boundOnDecompressedWordSize =
           compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx);
 
+      // An empty word ("") in the vocabulary (e.g. the empty string literal in
+      // RDF) compresses to 0 bytes under FSST / empty prefix, yielding an upper
+      // bound of 0. Skip PMR allocation and decompression, emitting an empty
+      // view directly.
       if (boundOnDecompressedWordSize == 0) {
         views.emplace_back();
         continue;
@@ -174,14 +166,7 @@ CPP_template(typename UnderlyingVocabulary,
       const size_t numBytesWritten = compressionWrapper_.decompressInto(
           compressedWord, decoderIdx, outputBuffer, scratch);
 
-      AD_CORRECTNESS_CHECK(numBytesWritten <= boundOnDecompressedWordSize,
-                           "decoder wrote ", numBytesWritten,
-                           " bytes but the "
-                           "`boundOnDecompressedWordSize` was ",
-                           boundOnDecompressedWordSize,
-                           "; `maxDecompressedSize` is an upper bound on the "
-                           "decompressed size, so the arena view would read "
-                           "past the allocation.");
+      AD_CORRECTNESS_CHECK(numBytesWritten <= boundOnDecompressedWordSize);
 
       views.emplace_back(mem, numBytesWritten);
     }
