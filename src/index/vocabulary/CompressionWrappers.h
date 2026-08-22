@@ -1,12 +1,19 @@
-//  Copyright 2024, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSIONWRAPPERS_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSIONWRAPPERS_H
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/span.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/PrefixHeuristic.h"
 #include "util/CompilerWarnings.h"
@@ -36,13 +43,19 @@ CPP_concept BulkResultForDecoder =
 template <typename T>
 CPP_requires(
     CompressionWrapper_,
-    requires(const T& t)(
+    requires(const T& t, std::string& scratch, ql::span<char> out)(
         // Return the number of decoders that are stored.
         concepts::same_as<decltype(t.numDecoders()), size_t>,
         // Decompress the given string, use the Decoder specified by the second
         // argument.
         concepts::same_as<decltype(t.decompress(std::string_view{}, size_t{0})),
                           std::string>,
+        concepts::same_as<decltype(t.maxDecompressedSize(std::string_view{},
+                                                         size_t{0})),
+                          size_t>,
+        concepts::same_as<decltype(t.decompressInto(std::string_view{},
+                                                    size_t{0}, out, scratch)),
+                          size_t>,
         // Compress all the strings and return the strings together with a
         // `Decoder` that can be used to decompress the strings again.
         BulkResultForDecoder<
@@ -56,11 +69,25 @@ template <typename T>
 CPP_concept CompressionWrapper = CPP_requires_ref(CompressionWrapper_, T);
 
 namespace detail {
-// A class that holds a `vector<DecoderT>` and implements the
-// `decompress(string_view, index)` method by forwarding this call to
-// `decoders_[index].decompress(string_view)`. It is used as a building block
-// for types that are supposed to fulfill the `CompressionWrapper` concept
-// above.
+
+// Detect whether a decoder requires a 3rd `scratch` buffer for multi-stage
+// decoding (e.g. `FsstRepeatedDecoder<N>`). Single-stage decoders (e.g.
+// `FsstDecoder` and `PrefixCompressor`) decode directly into `out` in a single
+// pass via `decompressInto(compressed, out)`.
+template <typename Decoder>
+CPP_requires(RequiresScratchDecompressInto_,
+             requires(const Decoder& decoder, std::string_view compressed,
+                      ql::span<char> out, std::string& scratch)(
+                 decoder.decompressInto(compressed, out, scratch)));
+
+template <typename Decoder>
+CPP_concept RequiresScratchDecompressInto =
+    CPP_requires_ref(RequiresScratchDecompressInto_, Decoder);
+
+// A class that holds a `vector<DecoderT>` and forwards `decompress`,
+// `maxDecompressedSize`, and `decompressInto` to `decoders_[index]`. It is
+// used as a building block for types that fulfill the `CompressionWrapper`
+// concept above.
 template <typename DecoderT>
 struct DecoderMultiplexer {
   using Decoder = DecoderT;
@@ -80,6 +107,31 @@ struct DecoderMultiplexer {
     return decoders_.at(decoderIndex).decompress(compressed);
     ENABLE_CLANG_WARNINGS
   }
+
+  // Return the maximum number of output bytes needed to decompress
+  // `compressed` with `decoderIndex`.
+  [[nodiscard]] size_t maxDecompressedSize(std::string_view compressed,
+                                           size_t decoderIndex) const {
+    return decoders_.at(decoderIndex).maxDecompressedSize(compressed);
+  }
+
+  // Decode `compressed` with decoder at `decoderIndex` in `decoders_` into
+  // the `out` buffer. `scratch` is used only by multi-stage FSST; single-stage
+  // decoders ignore it. Return the number of bytes written to `out`.
+  [[nodiscard]] size_t decompressInto(std::string_view compressed,
+                                      size_t decoderIndex, ql::span<char> out,
+                                      std::string& scratch) const {
+    DISABLE_CLANG_UNUSED_RESULT_WARNING
+    auto& decoder = decoders_.at(decoderIndex);
+    if constexpr (RequiresScratchDecompressInto<Decoder>) {
+      return decoder.decompressInto(compressed, out, scratch);
+    } else {
+      (void)scratch;
+      return decoder.decompressInto(compressed, out);
+    }
+    ENABLE_CLANG_WARNINGS
+  }
+
   size_t numDecoders() const { return decoders_.size(); }
   const Decoders& getDecoders() const { return decoders_; }
 };

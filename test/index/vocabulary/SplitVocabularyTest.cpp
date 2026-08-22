@@ -1,11 +1,17 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026, The QLever Authors, in particular:
+//
+// 2025        Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <gmock/gmock.h>
 
+#include <array>
+#include <utility>
 #include <variant>
 
+#include "./VocabularyTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 #include "index/vocabulary/Vocabulary.h"
@@ -454,6 +460,122 @@ TEST(Vocabulary, SplitVocabularyScanAll) {
 }
 
 // _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyLookupBatchMatchesItemAt) {
+  // Mixed markers, reordered indices, and a duplicate must match `operator[]`.
+  TwoSplitVocabulary sv;
+  const auto filename = gtestCurrentTestName();
+  auto ww = sv.makeDiskWriterPtr(filename);
+  (*ww)("\"\"", true);
+  (*ww)("\"abc\"", true);
+  (*ww)("\"axyz\"", true);
+  (*ww)("\"xyz\"", true);
+  ww->finish();
+  sv.readFromFile(filename);
+
+  const std::array<size_t, 6> indices{
+      static_cast<size_t>(sv.addMarker(1, 0)),
+      static_cast<size_t>(sv.addMarker(0, 1)),
+      static_cast<size_t>(sv.addMarker(1, 1)),
+      static_cast<size_t>(sv.addMarker(0, 0)),
+      static_cast<size_t>(sv.addMarker(1, 0)),
+      static_cast<size_t>(sv.addMarker(0, 1)),
+  };
+  auto result = sv.lookupBatch(indices);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(sv, result,
+                                                                indices);
+  AD_EXPECT_THROW_WITH_MESSAGE(sv.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
+
+  const std::array<size_t, 3> oneMarker{
+      static_cast<size_t>(sv.addMarker(0, 1)),
+      static_cast<size_t>(sv.addMarker(0, 0)),
+      static_cast<size_t>(sv.addMarker(0, 1)),
+  };
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      sv, sv.lookupBatch(oneMarker), oneMarker);
+  sv.close();
+}
+
+}  // namespace
+
+using namespace splitVocabTestHelpers;
+
+// Share common SplitVocabulary setup across multiple tests.
+// Populates the vocabulary once per test suite with:
+//   index 0: "" (marker 0) / "xyz" (marker 1)
+//   index 1: "abc" (marker 0) / "axyz" (marker 1)
+class SplitVocabularyWithDataTest : public ::testing::Test {
+ protected:
+  static void SetUpTestSuite() {
+    auto ww = sv_.makeDiskWriterPtr("SplitVocabularyTestData.dat");
+    (*ww)("\"\"", true);
+    (*ww)("\"abc\"", true);
+    (*ww)("\"axyz\"", true);
+    (*ww)("\"xyz\"", true);
+    ww->finish();
+    sv_.readFromFile("SplitVocabularyTestData.dat");
+  }
+
+  static void TearDownTestSuite() { sv_.close(); }
+
+  static TwoSplitVocabulary sv_;
+};
+
+TwoSplitVocabulary SplitVocabularyWithDataTest::sv_;
+
+// _____________________________________________________________________________
+// Test the private lookupBatch helpers directly via FRIEND_TEST.
+TEST_F(SplitVocabularyWithDataTest,
+       SplitVocabularyPartitionMarkerIndicesAndPositions) {
+  // Use marker `0` for plain words and marker `1` for words starting with `"a`.
+  const std::array<size_t, 5> indices{
+      static_cast<size_t>(TwoSplitVocabulary::addMarker(3, 0)),
+      static_cast<size_t>(TwoSplitVocabulary::addMarker(1, 1)),
+      static_cast<size_t>(TwoSplitVocabulary::addMarker(0, 0)),
+      static_cast<size_t>(TwoSplitVocabulary::addMarker(1, 1)),
+      static_cast<size_t>(TwoSplitVocabulary::addMarker(2, 0)),
+  };
+  auto partitions =
+      TwoSplitVocabulary::partitionMarkerIndicesAndPositions(indices);
+  EXPECT_THAT(partitions[0].getUnderlyingIndices(),
+              ::testing::ElementsAre(3u, 0u, 2u));
+  EXPECT_THAT(partitions[0].getResultPositions(),
+              ::testing::ElementsAre(0u, 2u, 4u));
+  EXPECT_THAT(partitions[1].getUnderlyingIndices(),
+              ::testing::ElementsAre(1u, 1u));
+  EXPECT_THAT(partitions[1].getResultPositions(),
+              ::testing::ElementsAre(1u, 3u));
+}
+
+// _____________________________________________________________________________
+TEST_F(SplitVocabularyWithDataTest,
+       SplitVocabularyMergeMarkerBatchesInInputOrder) {
+  const std::array<size_t, 4> indices{
+      static_cast<size_t>(sv_.addMarker(1, 0)),
+      static_cast<size_t>(sv_.addMarker(0, 1)),
+      static_cast<size_t>(sv_.addMarker(1, 1)),
+      static_cast<size_t>(sv_.addMarker(0, 0)),
+  };
+  auto partitions =
+      TwoSplitVocabulary::partitionMarkerIndicesAndPositions(indices);
+  TwoSplitVocabulary::MarkerBatchLookups markerLookups;
+  const std::array<size_t, 2> markerZeroIndices{
+      static_cast<size_t>(sv_.addMarker(1, 0)),
+      static_cast<size_t>(sv_.addMarker(0, 0)),
+  };
+  const std::array<size_t, 2> markerOneIndices{
+      static_cast<size_t>(sv_.addMarker(0, 1)),
+      static_cast<size_t>(sv_.addMarker(1, 1)),
+  };
+  markerLookups[0] = sv_.lookupBatch(markerZeroIndices);
+  markerLookups[1] = sv_.lookupBatch(markerOneIndices);
+  auto merged = TwoSplitVocabulary::mergeMarkerBatchesInInputOrder(
+      std::move(markerLookups), partitions, indices.size());
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(sv_, merged,
+                                                                indices);
+}
+
+// _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
   // Create a `SplitVocabulary::WordWriter` and destruct it without a call to
   // `finish()`.
@@ -474,5 +596,3 @@ TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
   ASSERT_TRUE(wordWriter2->finishWasCalled());
   wordWriter2.reset();
 }
-
-}  // namespace

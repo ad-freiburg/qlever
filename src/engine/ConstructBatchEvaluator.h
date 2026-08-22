@@ -1,8 +1,9 @@
-// Copyright 2026 The QLever Authors, in particular:
+// Copyright 2026, The QLever Authors, in particular:
+//
 // 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
@@ -37,6 +38,8 @@ struct BatchEvaluationResult {
   // set of evaluated columns may be sparse: some variables in the WHERE-clause
   // (in the `IdTable`) may not appear in the CONSTRUCT template and are thus
   // not evaluated.
+  // TODO<marvin7122> can this be a vector? How can we do this more cache
+  // friendly. We always look at the same variables here.
   ad_utility::HashMap<ColumnIndex, EvaluatedVariableValues> variablesByColumn_;
   size_t numRows_ = 0;
 

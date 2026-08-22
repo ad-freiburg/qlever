@@ -1,15 +1,24 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_PREFIXCOMPRESSOR_H
 #define QLEVER_PREFIXCOMPRESSOR_H
 
 #include <array>
+#include <cstring>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/span.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -63,15 +72,64 @@ class PrefixCompressor {
     return static_cast<char>(NO_PREFIX_CHAR) + word;
   }
 
+  // Return the index in `prefixToCode_` if the word was stored with a valid
+  // compression prefix, or `std::nullopt` if it was stored uncompressed.
+  [[nodiscard]] static std::optional<size_t> prefixIndex(
+      std::string_view compressedWord) {
+    AD_CONTRACT_CHECK(!compressedWord.empty());
+    const auto leadingByte = static_cast<uint8_t>(compressedWord.front());
+
+    if (leadingByte >= MIN_COMPRESSION_PREFIX &&
+        leadingByte < MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES) {
+      return leadingByte - MIN_COMPRESSION_PREFIX;
+    }
+
+    return std::nullopt;
+  }
+
+  // Return an upper bound on the decompressed size of `compressedWord`.
+  [[nodiscard]] size_t maxDecompressedSize(
+      std::string_view compressedWord) const {
+    const auto idx = prefixIndex(compressedWord);
+    const size_t rest = compressedWord.size() - 1;
+
+    if (idx.has_value()) {
+      return prefixToCode_[idx.value()].size() + rest;
+    }
+    return rest;
+  }
+
+  // Decompress `compressedWord` into `out`. `out.size()` must be at least
+  // `maxDecompressedSize(compressedWord)`. Return the number of bytes written.
+  [[nodiscard]] size_t decompressInto(std::string_view compressedWord,
+                                      ql::span<char> out) const {
+    AD_CONTRACT_CHECK(out.size() >= maxDecompressedSize(compressedWord));
+
+    const auto idx = prefixIndex(compressedWord);
+    const std::string_view rest = compressedWord.substr(1);
+
+    size_t numBytesWritten = 0;
+    if (idx.has_value()) {
+      const std::string& prefix = prefixToCode_[idx.value()];
+      if (!prefix.empty()) {
+        std::memcpy(out.data(), prefix.data(), prefix.size());
+        numBytesWritten = prefix.size();
+      }
+    }
+    if (!rest.empty()) {
+      std::memcpy(out.data() + numBytesWritten, rest.data(), rest.size());
+      numBytesWritten += rest.size();
+    }
+    return numBytesWritten;
+  }
+
   // Decompress the given `compressedWord`.
   [[nodiscard]] std::string decompress(std::string_view compressedWord) const {
-    AD_CONTRACT_CHECK(!compressedWord.empty());
-    auto idx = static_cast<uint8_t>(compressedWord[0]) - MIN_COMPRESSION_PREFIX;
-    if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
-      return prefixToCode_[idx] + compressedWord.substr(1);
-    } else {
-      return std::string(compressedWord.substr(1));
+    const auto idx = prefixIndex(compressedWord);
+    if (idx.has_value()) {
+      return prefixToCode_[idx.value()] + compressedWord.substr(1);
     }
+    return std::string(compressedWord.substr(1));
   }
 
   // From the given list of prefixes, build the internal data structure for

@@ -1,8 +1,15 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <gtest/gtest.h>
+
+#include <array>
+#include <string>
+#include <vector>
 
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
@@ -111,14 +118,38 @@ TEST(VocabularyInternalExternal, AccessOperator) {
       createVocabularyFromDisk("AccessOperator2"));
 }
 
+// _____________________________________________________________________________
+// `lookupBatch` must match `operator[]` in request order, including cache
+// hits (even `i` in the writer: stored in RAM) and misses (odd `i`: disk
+// only), plus reordered and duplicated indices.
+TEST(VocabularyInternalExternal, LookupBatchMatchesAccessOperator) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+  auto vocab = createVocabulary("LookupBatch")(words);
+  const std::array<size_t, 7> indices{4, 1, 0, 3, 1, 2, 4};
+  auto result = vocab.lookupBatch(indices);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
+
+  // Even writer indices are RAM-cached; odd indices are disk-only.
+  const std::array<size_t, 3> ramOnly{0, 2, 4};
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.lookupBatch(ramOnly), ramOnly);
+  const std::array<size_t, 3> diskOnly{1, 3, 1};
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.lookupBatch(diskOnly), diskOnly);
+}
+
+// _____________________________________________________________________________
 TEST(VocabularyInternalExternal, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary("EmptyVocabulary"));
 }
 
 // _____________________________________________________________________________
+// `scanAll` delegates to the external vocabulary and must yield all words in
+// order.
 TEST(VocabularyInternalExternal, ScanAll) {
-  // `scanAll` delegates to the external vocabulary and must yield all words in
-  // order.
   const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
   auto vocab = createVocabulary("ScanAll")(words);
   EXPECT_THAT(scanAllToVector(vocab.scanAll()),
