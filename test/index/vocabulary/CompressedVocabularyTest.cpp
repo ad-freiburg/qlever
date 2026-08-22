@@ -176,6 +176,24 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchMatchesAccessOperator) {
                                ::testing::HasSubstr("!indices.empty()"));
 }
 
+//______________________________________________________________________________
+// A vocabulary containing the empty string word ("") must decompress correctly
+// through `lookupBatch` without allocations or crashes across all compressors
+// (exercising the `boundOnDecompressedWordSize == 0` fast path).
+TYPED_TEST(CompressedVocabularyF, LookupBatchEmptyWordInVocabulary) {
+  const std::vector<std::string> words{"alpha", "", "beta", "", "gamma"};
+  auto vocab = this->createCompressedVocabulary()(words);
+  const std::array<size_t, 6> indices{1, 0, 3, 2, 4, 1};
+  auto result = vocab.lookupBatch(indices);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+  EXPECT_TRUE((*result)[0].empty());
+  EXPECT_EQ((*result)[1], "alpha");
+  EXPECT_TRUE((*result)[2].empty());
+  EXPECT_EQ((*result)[3], "beta");
+  EXPECT_EQ((*result)[4], "gamma");
+  EXPECT_TRUE((*result)[5].empty());
+}
+
 // The generic framework's empty-vocabulary contract: lookups, iteration, and
 // size must all behave on a vocabulary with zero words.
 // _______________________________________________________

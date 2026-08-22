@@ -437,14 +437,14 @@ class FsstRepeatedDecoderTest : public ::testing::Test {
 // _____________________________________________________________________________
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressOneStage) {
   expectRepeatedDecompressIntoMatches<1>(
-      {"alpha", "beta", "gamma-gamma-gamma"});
+      {"alpha", "", "beta", "gamma-gamma-gamma", ""});
 }
 
 // See above, with two cascaded FSST stages.
 // _____________________________________________________________________________
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressTwoStages) {
   expectRepeatedDecompressIntoMatches<2>(
-      {"alpha", "beta", "gamma-gamma-gamma"});
+      {"alpha", "", "beta", "gamma-gamma-gamma", ""});
 }
 
 // See above, with three cascaded FSST stages (the deepest staging used in
@@ -452,5 +452,5 @@ TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressTwoStages) {
 // _____________________________________________________________________________
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressThreeStages) {
   expectRepeatedDecompressIntoMatches<3>(
-      {"alpha", "beta", "gamma-gamma-gamma"});
+      {"alpha", "", "beta", "gamma-gamma-gamma", ""});
 }

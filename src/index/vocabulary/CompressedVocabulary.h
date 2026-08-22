@@ -117,26 +117,16 @@ CPP_template(typename UnderlyingVocabulary,
   // Batch-read the compressed words from the underlying vocabulary, then
   // decompress each word with the decoder of its block into memory owned by the
   // returned result. The order of words in the result matches `indices`.
-  //
-  // Memory layout and allocation strategy:
-  // Each word is allocated directly in a PMR monotonic buffer resource using
-  // the upper bound returned by `maxDecompressedSize(compressedWord)` (e.g. up
-  // to 8x expansion for FSST). The decoder decompresses directly into that
-  // allocated slot, and a `std::string_view` over the actual decompressed bytes
-  // is recorded. Multi-stage FSST (e.g. 2-stage) uses a local `scratch` string
-  // to ping-pong intermediate stage results, resizing it only when a larger
-  // decompressed bound is encountered.
-  //
   // Return a `VocabBatchLookupResult` keeping the PMR monotonic buffer resource
-  // alive and providing string_views for each requested index in `indices`.
+  // alive and providing `string_view`s for each requested index in `indices`.
   //
   // TODO<ms2144>: Because `ql::pmr::monotonic_buffer_resource` does not support
   // reclaiming or shrinking individual allocations in place, any unused memory
   // between the actual decompressed length and `maxDecompressedSize` remains
-  // allocated in the arena until the entire batch result is destroyed. Measure
-  // the empirical bound-vs-used memory waste on large-scale workloads (such as
-  // Wikidata label batches) to determine whether a custom bump allocator with
-  // in-place tail trimming or batch compaction is worthwhile.
+  // allocated in the allocation arena until the entire batch result is
+  // destroyed. Measure the empirical bound-vs-used memory waste on large-scale
+  // workloads to determine whether a custom bump allocator with in-place tail
+  // trimming or batch compaction is worthwhile.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
