@@ -100,9 +100,9 @@ CPP_template(typename UnderlyingVocabulary,
   // words in batches) and decompress each word. `scanAll()` is expected to
   // yield `IndexAndWord` elements, so we have to apply a transformation at the
   // end.
-  // TODO<ms2144>: Decode into a caller-owned buffer via `decompressInto` /
-  // `maxDecompressedSize` as in `lookupBatch` below, instead of
-  // `decompress()` into a reused `std::string`.
+  // TODO<ms2144>: Think about decoding into a caller-owned buffer via
+  //  `decompressInto` / `maxDecompressedSize` as in `lookupBatch` below,
+  //  instead of `decompress()` into a reused `std::string`.
   auto scanAll() const {
     return ad_utility::CachingTransformInputRange(
         underlyingVocabulary_.scanAll(),
@@ -115,14 +115,28 @@ CPP_template(typename UnderlyingVocabulary,
 
   //____________________________________________________________________________
   // Batch-read the compressed words from the underlying vocabulary, then
-  // decompress each word with the decoder of its block. The result order
-  // matches `indices`. Allocate each word at the wrapper's
-  // `maxDecompressedSize` in the PMR arena and decode into that slot. Keep
-  // the unused tail; do not trim until allocated-vs-used waste is measured
-  // (`TODO<ms2144>`). Multi-stage FSST reuses `scratch` and grows it when a
-  // larger bound appears. `decompress()` still returns `std::string`.
-  // TODO<ms2144>: Measure arena bound-vs-used waste on Wikidata label batches
-  // before adding trim or a custom bump resource.
+  // decompress each word with the decoder of its block into memory owned by the
+  // returned result. The order of words in the result matches `indices`.
+  //
+  // Memory layout and allocation strategy:
+  // Each word is allocated directly in a PMR monotonic buffer resource using
+  // the upper bound returned by `maxDecompressedSize(compressedWord)` (e.g. up
+  // to 8x expansion for FSST). The decoder decompresses directly into that
+  // allocated slot, and a `std::string_view` over the actual decompressed bytes
+  // is recorded. Multi-stage FSST (e.g. 2-stage) uses a local `scratch` string
+  // to ping-pong intermediate stage results, resizing it only when a larger
+  // decompressed bound is encountered.
+  //
+  // Return a `VocabBatchLookupResult` keeping the PMR monotonic buffer resource
+  // alive and providing string_views for each requested index in `indices`.
+  //
+  // TODO<ms2144>: Because `ql::pmr::monotonic_buffer_resource` does not support
+  // reclaiming or shrinking individual allocations in place, any unused memory
+  // between the actual decompressed length and `maxDecompressedSize` remains
+  // allocated in the arena until the entire batch result is destroyed. Measure
+  // the empirical bound-vs-used memory waste on large-scale workloads (such as
+  // Wikidata label batches) to determine whether a custom bump allocator with
+  // in-place tail trimming or batch compaction is worthwhile.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
