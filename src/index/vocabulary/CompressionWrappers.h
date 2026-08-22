@@ -74,6 +74,7 @@ struct HasThreeArgumentDecompressInto<
     std::void_t<decltype(std::declval<const Decoder&>().decompressInto(
         std::declval<std::string_view>(), std::declval<ql::span<char>>(),
         std::declval<std::string&>()))>> : std::true_type {};
+
 // A class that holds a `vector<DecoderT>` and forwards `decompress`,
 // `maxDecompressedSize`, and `decompressInto` to `decoders_[index]`. It is
 // used as a building block for types that fulfill the `CompressionWrapper`
@@ -105,8 +106,9 @@ struct DecoderMultiplexer {
     return decoders_.at(decoderIndex).maxDecompressedSize(compressed);
   }
 
-  // Decode `compressed` with `decoderIndex` into `out`. `scratch` is used
-  // only by multi-stage FSST; single-stage decoders ignore it.
+  // Decode `compressed` with decoder at `decoderIndex` in `decoders_` into
+  // the `out` buffer. `scratch` is used only by multi-stage FSST; single-stage
+  // decoders ignore it. Return the number of bytes written to `out`.
   [[nodiscard]] size_t decompressInto(std::string_view compressed,
                                       size_t decoderIndex, ql::span<char> out,
                                       std::string& scratch) const {
