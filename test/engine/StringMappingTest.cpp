@@ -13,7 +13,7 @@
 #include "engine/StringMapping.h"
 #include "global/Id.h"
 #include "index/IndexImpl.h"
-#include "index/vocabulary/AuxVocabulary.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 
 using namespace qlever::binary_export;
 
@@ -43,10 +43,10 @@ TEST(StringMapping, remapId) {
   Id id3 = Id::makeFromTextRecordIndex(TextRecordIndex::make(42));
   Id id4 = Id::makeFromWordVocabIndex(WordVocabIndex::make(1010));
   Id id5 = Id::makeFromLocalVocabIndex(&duplicateWord);
-  // The words of an auxiliary vocabulary also point to strings, so they are
+  // The words of a secondary vocabulary also point to strings, so they are
   // remapped as well. Note that `remapId` only inspects the datatype, so no
-  // auxiliary vocabulary has to be set on the index here.
-  Id id6 = Id::makeFromAuxVocabIndex(AuxVocabIndex::make(7));
+  // secondary vocabulary has to be set on the index here.
+  Id id6 = Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(7));
 
   // Mapped ids start counting from zero.
   binaryEq(mapping.remapId(id1), toMappedId(0));
@@ -68,21 +68,23 @@ TEST(StringMapping, remapId) {
 }
 
 // _____________________________________________________________________________
-TEST(StringMapping, flushResolvesAuxVocabIds) {
+TEST(StringMapping, flushResolvesSecondaryVocabIds) {
   // `flush` resolves the collected `Id`s via `ql::exportIds::idToLiteralOrIri`,
-  // so an `Id` of an auxiliary vocabulary requires the index to actually have
+  // so an `Id` of a secondary vocabulary requires the index to actually have
   // such a vocabulary. Use a fresh index instead of the shared one of `getQec`,
-  // because `setAuxVocabForTesting` must not leak into other tests.
+  // because `setSecondaryVocabForTesting` must not leak into other tests.
   Index index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                    "<a> <b> <c> .");
-  index.getImpl().setAuxVocabForTesting(
-      std::make_shared<AuxVocabulary>(std::vector<std::string>{"<d>", "<e>"}));
+  index.getImpl().setSecondaryVocabForTesting(
+      std::make_shared<SecondaryVocabulary>(
+          std::vector<std::string>{"<d>", "<e>"}));
 
   StringMapping mapping;
   Id vocabId = Id::makeFromVocabIndex(VocabIndex::make(1));
-  Id auxId = Id::makeFromAuxVocabIndex(AuxVocabIndex::make(1));
+  Id secondaryVocabId =
+      Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(1));
   mapping.remapId(vocabId);
-  mapping.remapId(auxId);
+  mapping.remapId(secondaryVocabId);
 
   EXPECT_THAT(mapping.flush(index), ::testing::ElementsAre("<b>", "<e>"));
 }

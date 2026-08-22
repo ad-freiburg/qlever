@@ -37,8 +37,8 @@
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
 #include "index/VocabularyMerger.h"
-#include "index/vocabulary/AuxVocabulary.h"
 #include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
@@ -209,15 +209,15 @@ class IndexImpl {
 
   GraphNameManager graphNameManager_ = GraphNameManager();
 
-  // The auxiliary vocabulary, see `auxVocab()`.
-  std::shared_ptr<const AuxVocabulary> auxVocab_;
+  // The secondary vocabulary, see `secondaryVocab()`.
+  std::shared_ptr<const SecondaryVocabulary> secondaryVocab_;
 
   // The implementation of the `LocalVocabContext` interface for this index.
   // NOTE: `IndexImpl` deliberately does not implement that interface itself, so
   // that it doesn't become a polymorphic type. There must be exactly one of
   // these per index, see `LocalVocabContext.h`.
-  LocalVocabContextImpl localVocabContext_{&vocab_, &encodedIriManager_,
-                                           &blankNodeManager_, &auxVocab_};
+  LocalVocabContextImpl localVocabContext_{
+      &vocab_, &encodedIriManager_, &blankNodeManager_, &secondaryVocab_};
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -276,24 +276,28 @@ class IndexImpl {
   const auto& getVocab() const { return vocab_; }
   auto& getNonConstVocabForTesting() { return vocab_; }
 
-  // Return the auxiliary vocabulary of this index (see
-  // `index/vocabulary/AuxVocabulary.h`), or `nullptr` if it has none. Note that
-  // this member is immutable once the index has been loaded, because the `Id`s
-  // of an auxiliary vocabulary are only valid for the very vocabulary that they
-  // were created for.
+  // Return the secondary vocabulary of this index (see
+  // `index/vocabulary/SecondaryVocabulary.h`), or `nullptr` if it has none.
+  // Note that this member is immutable once the index has been loaded, because
+  // the `Id`s of a secondary vocabulary are only valid for the very vocabulary
+  // that they were created for.
   //
   // TODO<joka921> Nothing sets this yet, except for unit tests. It will be set
-  // when the index is read from disk, together with the auxiliary index that
-  // the words belong to; until then the only way to obtain an auxiliary
-  // vocabulary is `setAuxVocabForTesting`.
-  const AuxVocabulary* auxVocab() const { return auxVocab_.get(); }
+  // when the index is read from disk, together with the persisted data that
+  // the words belong to; until then the only way to obtain a secondary
+  // vocabulary is `setSecondaryVocabForTesting`.
+  const SecondaryVocabulary* secondaryVocab() const {
+    return secondaryVocab_.get();
+  }
 
-  // Set the auxiliary vocabulary, see above. NOTE: Tests that need an index
-  // with an auxiliary vocabulary should not call this directly, but set
-  // `TestIndexConfig::auxVocabWords` (see `test/util/IndexTestHelpers.h`), such
-  // that the vocabulary is part of the index right from its creation.
-  void setAuxVocabForTesting(std::shared_ptr<const AuxVocabulary> auxVocab) {
-    auxVocab_ = std::move(auxVocab);
+  // Set the secondary vocabulary, see above. NOTE: Tests that need an index
+  // with a secondary vocabulary should not call this directly, but set
+  // `TestIndexConfig::secondaryVocabWords` (see
+  // `test/util/IndexTestHelpers.h`), such that the vocabulary is part of the
+  // index right from its creation.
+  void setSecondaryVocabForTesting(
+      std::shared_ptr<const SecondaryVocabulary> secondaryVocab) {
+    secondaryVocab_ = std::move(secondaryVocab);
   }
 
   // Replace the currently loaded vocabulary with a zero-copy view directly

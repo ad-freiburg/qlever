@@ -26,10 +26,11 @@ auto LocalVocabContext::lookupWordInVocabularies(std::string_view word) const
     return Id::makeFromVocabIndex(lower);
   }
   // The word is not in the vocabulary of the main index, so it may be in the
-  // auxiliary vocabulary. Note that the two vocabularies are disjoint, so we
+  // secondary vocabulary. Note that the two vocabularies are disjoint, so we
   // only have to look there if the lookup above has failed.
-  if (auto auxIndex = getAuxVocabIndex(word); auxIndex.has_value()) {
-    return Id::makeFromAuxVocabIndex(auxIndex.value());
+  if (auto secondaryIndex = getSecondaryVocabIndex(word);
+      secondaryIndex.has_value()) {
+    return Id::makeFromSecondaryVocabIndex(secondaryIndex.value());
   }
   return VocabBounds{lower, upper};
 }

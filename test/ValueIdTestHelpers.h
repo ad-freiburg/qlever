@@ -57,8 +57,8 @@ inline ValueId makeWordVocabId(uint64_t value) {
 inline ValueId makeBlankNodeId(uint64_t value) {
   return ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(value));
 }
-inline ValueId makeAuxVocabId(uint64_t value) {
-  return ValueId::makeFromAuxVocabIndex(AuxVocabIndex::make(value));
+inline ValueId makeSecondaryVocabId(uint64_t value) {
+  return ValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(value));
 }
 
 inline uint64_t getVocabIndex(ValueId id) { return id.getVocabIndex().get(); }
@@ -73,8 +73,8 @@ inline uint64_t getTextRecordIndex(ValueId id) {
 inline uint64_t getWordVocabIndex(ValueId id) {
   return id.getWordVocabIndex().get();
 }
-inline uint64_t getAuxVocabIndex(ValueId id) {
-  return id.getAuxVocabIndex().get();
+inline uint64_t getSecondaryVocabIndex(ValueId id) {
+  return id.getSecondaryVocabIndex().get();
 }
 
 inline auto addIdsFromGenerator = [](auto& generator, auto makeIds,
@@ -121,7 +121,7 @@ inline auto makeRandomIds = []() {
   addIdsFromGenerator(indexGenerator, &makeTextRecordId, ids);
   addIdsFromGenerator(indexGenerator, &makeWordVocabId, ids);
   addIdsFromGenerator(indexGenerator, &makeBlankNodeId, ids);
-  addIdsFromGenerator(indexGenerator, &makeAuxVocabId, ids);
+  addIdsFromGenerator(indexGenerator, &makeSecondaryVocabId, ids);
   addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
   addIdsFromGenerator(overflowingNBitGenerator, &ValueId::makeFromInt, ids);
   addIdsFromGenerator(underflowingNBitGenerator, &ValueId::makeFromInt, ids);

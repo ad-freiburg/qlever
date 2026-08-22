@@ -32,15 +32,16 @@ class LocalVocabContext;
 //
 // WARNING: The order that `positionInVocab()` and `compareThreeWay()` implement
 // is the order in which the index scans emit their `Id`s (call it the
-// *internal* order, see `ValueId::compareThreeWay`). Without an auxiliary
-// vocabulary (see `index/vocabulary/AuxVocabulary.h`) that order coincides with
-// the semantic (that is, by string value) order, except for the encoded IRIs
+// *internal* order, see `ValueId::compareThreeWay`). Without a secondary
+// vocabulary (see `index/vocabulary/SecondaryVocabulary.h`) that order
+// coincides with the semantic (that is, by string value) order, except for the
+// encoded IRIs
 // (see `LocalVocabContext::encodeAsId`), which are ordered by their encoding
 // (a pre-existing deviation that is tracked separately, see the note at
 // `compareThreeWay` below). As soon as an index has such a vocabulary, the two
-// orders differ much more fundamentally: a word of the auxiliary vocabulary is
+// orders differ much more fundamentally: a word of the secondary vocabulary is
 // positioned after *all* words of the main vocabulary, no matter what it is. An
-// entry whose word is stored in the auxiliary vocabulary therefore compares
+// entry whose word is stored in the secondary vocabulary therefore compares
 // greater than every word of the main vocabulary, and greater than every entry
 // that is contained in neither vocabulary — even if its string value is
 // smaller. Both `compareThreeWay()` and the `Id` comparison then deviate
@@ -49,10 +50,10 @@ class LocalVocabContext;
 // prefilters), see the detailed note at
 // `valueIdComparators::detail::compareIdsImpl`.
 //
-// This is deliberate for now: nothing but a unit test can currently create an
-// auxiliary vocabulary (see `IndexImpl::setAuxVocabForTesting`), so no query is
-// affected. It has to be fixed *before* the auxiliary index is wired up, most
-// likely by keeping the position in the main vocabulary (which is what a
+// This is deliberate for now: nothing but a unit test can currently create a
+// secondary vocabulary (see `IndexImpl::setSecondaryVocabForTesting`), so no
+// query is affected. It has to be fixed *before* anything else creates one,
+// most likely by keeping the position in the main vocabulary (which is what a
 // semantic comparison needs, and which can always be computed from the word)
 // separately from the position in the internal order, and by exposing the two
 // orders as two explicitly named comparisons instead of a single
@@ -77,9 +78,9 @@ class alignas(16) LocalVocabEntry
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
   // the first *larger* word in the vocabulary. Note that the position may also
-  // be in the auxiliary vocabulary of the index, in which case it is an `Id` of
-  // type `Datatype::AuxVocabIndex` — see the warning in the class comment above
-  // for why that makes this position currently unsuitable for semantic
+  // be in the secondary vocabulary of the index, in which case it is an `Id` of
+  // type `Datatype::SecondaryVocabIndex` — see the warning in the class comment
+  // above for why that makes this position currently unsuitable for semantic
   // comparisons.
   // Note: we store the cache as three separate atomics to avoid mutexes. The
   // downside is, that in parallel code multiple threads might look up the
@@ -105,7 +106,7 @@ class alignas(16) LocalVocabEntry
   // the caller has to guarantee that `lower` and `upper` are exactly the bounds
   // that `positionInVocabExpensiveCase` would compute, which the expensive
   // check below verifies. In particular, a word that is contained in neither
-  // the main nor the auxiliary vocabulary still has to be given the bounds of
+  // the main nor the secondary vocabulary still has to be given the bounds of
   // the position at which it would be sorted into the main vocabulary.
   //
   // NOTE: The only caller outside of the tests is `toValueId` (see
@@ -163,14 +164,14 @@ class alignas(16) LocalVocabEntry
   // settings there might be a range of words that are considered equal for the
   // purposes of comparing and sorting them.
   //
-  // The bounds are `Id`s of type `VocabIndex`, `EncodedVal`, or `AuxVocabIndex`
-  // (the latter only if the index has an auxiliary vocabulary that contains
-  // this word, see the warning in the class comment above), and this entry
-  // compares exactly like an `Id` at that position. NOTE: An `Id` of an
-  // unrelated datatype (like `Int` or `Date`) is deliberately *not* compared to
-  // this position, but to the datatype bits of the `LocalVocabIndex`, which
-  // yields the same result unless the bounds are of type `EncodedVal`, see the
-  // note at `ValueId::compareThreeWay`.
+  // The bounds are `Id`s of type `VocabIndex`, `EncodedVal`, or
+  // `SecondaryVocabIndex` (the latter only if the index has a secondary
+  // vocabulary that contains this word, see the warning in the class comment
+  // above), and this entry compares exactly like an `Id` at that position.
+  // NOTE: An `Id` of an unrelated datatype (like `Int` or `Date`) is
+  // deliberately *not* compared to this position, but to the datatype bits of
+  // the `LocalVocabIndex`, which yields the same result unless the bounds are
+  // of type `EncodedVal`, see the note at `ValueId::compareThreeWay`.
   struct PositionInVocab {
     IdProxy lowerBound_;
     IdProxy upperBound_;
@@ -198,25 +199,25 @@ class alignas(16) LocalVocabEntry
 
   // Compare two entries in the internal order (see the warning in the class
   // comment above; in particular this is NOT a semantic comparison as soon as
-  // the index has an auxiliary vocabulary). If the index has such an auxiliary
+  // the index has a secondary vocabulary). If the index has such a secondary
   // vocabulary, then this first compares the positions in the vocabularies (see
   // `positionInVocab()`) and only falls back to the comparison of the strings
   // if those positions are equal. Comparing the strings alone would then not be
-  // a valid strict weak ordering: a word that is stored in the auxiliary
+  // a valid strict weak ordering: a word that is stored in the secondary
   // vocabulary of the index is positioned after all words of the main
   // vocabulary, so comparing it to a word that is in neither vocabulary has to
   // yield the same result as comparing the corresponding `Id`s, which are
   // compared by their positions.
   //
-  // If the index has no auxiliary vocabulary, then the comparison of the
+  // If the index has no secondary vocabulary, then the comparison of the
   // strings alone already yields the same result as the comparison of the
   // positions, so the position is deliberately NOT looked up
-  // (`LocalVocabContext` has the cheap `hasAuxVocabulary()` for exactly this
-  // purpose). This matters because that lookup goes to the (on-disk) vocabulary
-  // of the index, which the comparison of two entries would otherwise require
-  // even for a workload that only ever compares entries of a `LocalVocab` to
-  // each other, and never to an `Id` of the index (which needs the position
-  // anyway).
+  // (`LocalVocabContext` has the cheap `hasSecondaryVocabulary()` for exactly
+  // this purpose). This matters because that lookup goes to the (on-disk)
+  // vocabulary of the index, which the comparison of two entries would
+  // otherwise require even for a workload that only ever compares entries of a
+  // `LocalVocab` to each other, and never to an `Id` of the index (which needs
+  // the position anyway).
   //
   // NOTE: This shortcut also means that an entry whose word is an encoded IRI
   // (see `LocalVocabContext::encodeAsId`) is compared by its string value here,
@@ -231,7 +232,7 @@ class alignas(16) LocalVocabEntry
   // forward to the base class instead of going through `compareThreeWay`, which
   // would use the much more expensive collation of the vocabulary, and which
   // would additionally look up the position in the vocabulary if the index has
-  // an auxiliary vocabulary (see the note above). This is what
+  // a secondary vocabulary (see the note above). This is what
   // happens implicitly anyway (the operators defined by the macro above do not
   // include `operator==`), but state it explicitly so that it doesn't silently
   // change when `compareThreeWay` does.

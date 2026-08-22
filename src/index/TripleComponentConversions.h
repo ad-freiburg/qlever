@@ -37,8 +37,8 @@ class IndexImpl;
 
 // Convert `tripleComponent` to an `Id`. If it is a literal or IRI, resolve it
 // using the vocabularies of `index`, that is, its main vocabulary (which yields
-// an `Id` of type `VocabIndex`) and its auxiliary vocabulary (which yields an
-// `Id` of type `AuxVocabIndex`), see
+// an `Id` of type `VocabIndex`) and its secondary vocabulary (which yields an
+// `Id` of type `SecondaryVocabIndex`), see
 // `LocalVocabContext::lookupWordInVocabularies`. If it is found in neither of
 // them, return the positions of the two neighboring entries of the main
 // vocabulary (which then are equal).

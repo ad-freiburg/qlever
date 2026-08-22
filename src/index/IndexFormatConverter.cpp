@@ -65,9 +65,9 @@ std::string versionAsString(const IndexFormatVersion& version) {
 // the numeric values that they had in that format. In other words, an `Id`
 // whose datatype bits are `i` in the source format is an `Id` of datatype
 // `datatypesOfSourceFormat[i]` in the target format. The only difference
-// between the two formats is that `Datatype::AuxVocabIndex` was inserted (see
-// the note there), which is why this array is exactly the current enum without
-// that datatype.
+// between the two formats is that `Datatype::SecondaryVocabIndex` was inserted
+// (see the note there), which is why this array is exactly the current enum
+// without that datatype.
 constexpr std::array<Datatype, 12> datatypesOfSourceFormat{
     Datatype::Undefined,
     Datatype::Bool,
@@ -654,7 +654,7 @@ std::string conversionDescription() {
       "Convert an index in the index format (", versionAsString(sourceVersion),
       ") to an index in the index format (", versionAsString(targetVersion),
       "). The only difference between the two formats is the numbering of the "
-      "datatypes of the IDs: the datatype for the words of an auxiliary "
+      "datatypes of the IDs: the datatype for the words of a secondary "
       "vocabulary was inserted in the middle, which renumbered the datatypes "
       "after it. The IDs of the index are therefore rewritten, and nothing "
       "else "

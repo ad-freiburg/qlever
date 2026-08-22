@@ -62,21 +62,21 @@ class LocalVocabContext {
   // Return the bounds of `word` in the vocabulary, see `VocabBounds`.
   virtual VocabBounds getPositionOfWord(std::string_view word) const = 0;
 
-  // Return true iff this index has an auxiliary vocabulary at all (see
-  // `index/vocabulary/AuxVocabulary.h`). This is the cheap check that lets
-  // `LocalVocabEntry::compareThreeWay` skip the (expensive) lookup of the
-  // position in the vocabulary, which is only needed if there is an auxiliary
+  // Return true iff this index has a secondary vocabulary at all (see
+  // `index/vocabulary/SecondaryVocabulary.h`). This is the cheap check that
+  // lets `LocalVocabEntry::compareThreeWay` skip the (expensive) lookup of the
+  // position in the vocabulary, which is only needed if there is a secondary
   // vocabulary.
-  virtual bool hasAuxVocabulary() const = 0;
+  virtual bool hasSecondaryVocabulary() const = 0;
 
-  // Look up `word` in the auxiliary vocabulary of this index (see
-  // `index/vocabulary/AuxVocabulary.h`). Return `std::nullopt` if it is not
-  // contained there, and in particular also if the index has no auxiliary
-  // vocabulary at all. Note that the auxiliary vocabulary is disjoint from the
+  // Look up `word` in the secondary vocabulary of this index (see
+  // `index/vocabulary/SecondaryVocabulary.h`). Return `std::nullopt` if it is
+  // not contained there, and in particular also if the index has no secondary
+  // vocabulary at all. Note that the secondary vocabulary is disjoint from the
   // vocabulary of the main index, so this only has to be called if
   // `getPositionOfWord` above has already reported that `word` is not contained
   // in the latter.
-  virtual std::optional<AuxVocabIndex> getAuxVocabIndex(
+  virtual std::optional<SecondaryVocabIndex> getSecondaryVocabIndex(
       std::string_view word) const = 0;
 
   // Try to encode `word` directly in an `Id` instead of looking it up in the
@@ -86,10 +86,10 @@ class LocalVocabContext {
 
   // Look up `word` in the vocabularies of this index. Return its `Id` if it is
   // contained in the vocabulary of the main index (an `Id` of type
-  // `VocabIndex`) or in the auxiliary vocabulary (an `Id` of type
-  // `AuxVocabIndex`), and else the bounds of the position at which it would be
-  // sorted into the vocabulary of the main index (in which case the two bounds
-  // are equal, see `VocabBounds`).
+  // `VocabIndex`) or in the secondary vocabulary (an `Id` of type
+  // `SecondaryVocabIndex`), and else the bounds of the position at which it
+  // would be sorted into the vocabulary of the main index (in which case the
+  // two bounds are equal, see `VocabBounds`).
   //
   // NOTE: This function is deliberately not virtual, but implemented in terms
   // of the virtual functions above. It is the single place that knows how the

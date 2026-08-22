@@ -89,7 +89,7 @@ std::optional<Literal> idToLiteral(const IndexImpl& index, Id id,
                                 onlyReturnLiteralsWithXsdString);
     case VocabIndex:
     case LocalVocabIndex:
-    case AuxVocabIndex:
+    case SecondaryVocabIndex:
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab),
           onlyReturnLiteralsWithXsdString);
@@ -156,7 +156,7 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
       return getLiteralOrIriFromWordVocabIndex(index, id);
     case VocabIndex:
     case LocalVocabIndex:
-    case AuxVocabIndex:
+    case SecondaryVocabIndex:
     case EncodedVal:
       return ql::exportIds::getLiteralOrIriFromVocabIndex(index, id,
                                                           localVocab);
@@ -206,14 +206,13 @@ LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                           std::string_view>);
       return LiteralOrIri::fromStringRepresentation(std::string(getEntity()));
     }
-    case Datatype::AuxVocabIndex: {
-      const auto* auxVocab = index.auxVocab();
-      AD_CORRECTNESS_CHECK(
-          auxVocab != nullptr,
-          "Encountered an `Id` of an auxiliary vocabulary, but "
-          "the index has no auxiliary vocabulary");
+    case Datatype::SecondaryVocabIndex: {
+      const auto* secondaryVocab = index.secondaryVocab();
+      AD_CORRECTNESS_CHECK(secondaryVocab != nullptr,
+                           "Encountered an `Id` of a secondary vocabulary, but "
+                           "the index has no secondary vocabulary");
       return LiteralOrIri::fromStringRepresentation(
-          std::string((*auxVocab)[id.getAuxVocabIndex()]));
+          std::string((*secondaryVocab)[id.getSecondaryVocabIndex()]));
     }
     case Datatype::EncodedVal:
       return encodedIdToLiteralOrIri(id, index);

@@ -26,8 +26,8 @@ namespace qlever::indexFormatConverter {
 // The index format that this converter converts from, and the index format that
 // it converts to. They are deliberately hardcoded here, because the conversion
 // is specific to exactly this pair of formats: the *only* difference between
-// them is that the datatype `Datatype::AuxVocabIndex` was inserted into the
-// `Datatype` enum (directly after `Datatype::LocalVocabIndex`, see the note
+// them is that the datatype `Datatype::SecondaryVocabIndex` was inserted into
+// the `Datatype` enum (directly after `Datatype::LocalVocabIndex`, see the note
 // there), which renumbered the datatypes after it. The `Id`s of an index in the
 // source format are therefore converted by rewriting their datatype bits, and
 // nothing else in the index changes.

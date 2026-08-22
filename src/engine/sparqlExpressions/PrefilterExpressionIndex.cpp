@@ -705,15 +705,16 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // `VocabIndex`/`LocalVocabIndex`) and encoded IRIs (datatype `EncodedVal`).
   // We therefore have to keep the blocks for *both* representations.
   //
-  // TODO<joka921> There is a third range: the IRIs of an auxiliary vocabulary
-  // (datatype `AuxVocabIndex`, see `index/vocabulary/AuxVocabulary.h`). Those
-  // sort after all of the ranges below, so neither the `> <>` prefilter nor the
-  // datatype range of the encoded IRIs covers them, which means that blocks
-  // consisting entirely of such IRIs are incorrectly pruned. This is deliberate
-  // for now, because nothing but a unit test can currently create an auxiliary
-  // vocabulary, but it has to be fixed *before* the auxiliary index is wired
-  // up, together with the semantic comparison of those `Id`s (see the detailed
-  // note at `valueIdComparators::detail::compareIdsImpl`).
+  // TODO<joka921> There is a third range: the IRIs of a secondary vocabulary
+  // (datatype `SecondaryVocabIndex`, see
+  // `index/vocabulary/SecondaryVocabulary.h`). Those sort after all of the
+  // ranges below, so neither the `> <>` prefilter nor the datatype range of
+  // the encoded IRIs covers them, which means that blocks consisting entirely
+  // of such IRIs are incorrectly pruned. This is deliberate for now, because
+  // nothing but a unit test can currently create a secondary vocabulary, but
+  // it has to be fixed *before* anything else does, together with the semantic
+  // comparison of those `Id`s (see the detailed note at
+  // `valueIdComparators::detail::compareIdsImpl`).
   //
   // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
   // in order. The smallest possible IRI is represented by "<>", we use its
@@ -756,8 +757,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
   // the beginning of IRI values as an upper bound and add all the value types
   // that are literals inlined into a compact representation.
   //
-  // TODO<joka921> Just as for `IsDatatype::IRI` above, the literals of an
-  // auxiliary vocabulary are not covered, because their `Id`s sort after the
+  // TODO<joka921> Just as for `IsDatatype::IRI` above, the literals of a
+  // secondary vocabulary are not covered, because their `Id`s sort after the
   // `< <>` bound that is used here. See the note there.
   std::array datatypes{Datatype::Int, Datatype::Double, Datatype::Date,
                        Datatype::Bool, Datatype::GeoPoint};

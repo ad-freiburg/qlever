@@ -42,10 +42,10 @@ TEST(LocalVocabEntry, compareThreeWayRequiresMatchingContexts) {
 TEST(LocalVocabEntry, compareThreeWayOnlyOneEntryIsContainedInVocabulary) {
   using namespace ad_utility::testing;
   // The comparison only looks at the position in the vocabulary if the index
-  // has an auxiliary vocabulary, so create one. Note that this must not leak
+  // has a secondary vocabulary, so create one. Note that this must not leak
   // into other tests, so build a fresh index instead of using a shared one.
   TestIndexConfig config{"<a> <b> <c> ."};
-  config.auxVocabWords = std::vector<std::string>{"<zzz>"};
+  config.secondaryVocabWords = std::vector<std::string>{"<zzz>"};
   Index index = makeTestIndex(gtestCurrentTestName(), std::move(config));
   const auto& ctx = index.getImpl().getLocalVocabContext();
 

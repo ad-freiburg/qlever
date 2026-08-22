@@ -16,8 +16,8 @@
 
 #include "global/Id.h"
 #include "index/LocalVocabContext.h"
-#include "index/vocabulary/AuxVocabulary.h"
 #include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "util/BlankNodeManager.h"
 
@@ -31,7 +31,7 @@ class LocalVocabContextImpl : public LocalVocabContext {
  private:
   using BlankNodeManagerPtr = std::unique_ptr<ad_utility::BlankNodeManager>;
 
-  using AuxVocabularyPtr = std::shared_ptr<const AuxVocabulary>;
+  using SecondaryVocabularyPtr = std::shared_ptr<const SecondaryVocabulary>;
 
   const RdfsVocabulary* vocabulary_;
   const EncodedIriManager* encodedIriManager_;
@@ -40,24 +40,24 @@ class LocalVocabContextImpl : public LocalVocabContext {
   // being read, long after this object has been constructed.
   const BlankNodeManagerPtr* blankNodeManager_;
   // NOTE: This also is a pointer to the owning smart pointer, because the
-  // auxiliary vocabulary is only set while the index is being read, see
-  // `IndexImpl::auxVocab()`.
-  const AuxVocabularyPtr* auxVocab_;
+  // secondary vocabulary is only set while the index is being read, see
+  // `IndexImpl::secondaryVocab()`.
+  const SecondaryVocabularyPtr* secondaryVocab_;
 
  public:
   LocalVocabContextImpl(const RdfsVocabulary* vocabulary,
                         const EncodedIriManager* encodedIriManager,
                         const BlankNodeManagerPtr* blankNodeManager,
-                        const AuxVocabularyPtr* auxVocab)
+                        const SecondaryVocabularyPtr* secondaryVocab)
       : vocabulary_{vocabulary},
         encodedIriManager_{encodedIriManager},
         blankNodeManager_{blankNodeManager},
-        auxVocab_{auxVocab} {}
+        secondaryVocab_{secondaryVocab} {}
 
   int compareWords(std::string_view a, std::string_view b) const override;
   VocabBounds getPositionOfWord(std::string_view word) const override;
-  bool hasAuxVocabulary() const override;
-  std::optional<AuxVocabIndex> getAuxVocabIndex(
+  bool hasSecondaryVocabulary() const override;
+  std::optional<SecondaryVocabIndex> getSecondaryVocabIndex(
       std::string_view word) const override;
   std::optional<Id> encodeAsId(std::string_view word) const override;
   ad_utility::BlankNodeManager* getBlankNodeManager() const override;

@@ -7,7 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "index/vocabulary/AuxVocabulary.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 
 #include <utility>
 
@@ -15,25 +15,27 @@
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
-AuxVocabulary::AuxVocabulary(std::vector<std::string> words)
+SecondaryVocabulary::SecondaryVocabulary(std::vector<std::string> words)
     : words_{std::move(words)} {
   AD_CONTRACT_CHECK(ql::ranges::is_sorted(words_),
-                    "The words of an auxiliary vocabulary have to be sorted");
+                    "The words of a secondary vocabulary have to be sorted");
   AD_CONTRACT_CHECK(ql::ranges::adjacent_find(words_) == words_.end(),
-                    "The words of an auxiliary vocabulary have to be distinct");
+                    "The words of a secondary vocabulary have to be distinct");
 }
 
 // _____________________________________________________________________________
-std::string_view AuxVocabulary::operator[](AuxVocabIndex index) const {
+std::string_view SecondaryVocabulary::operator[](
+    SecondaryVocabIndex index) const {
   AD_CONTRACT_CHECK(index.get() < words_.size());
   return words_[index.get()];
 }
 
 // _____________________________________________________________________________
-std::optional<AuxVocabIndex> AuxVocabulary::getId(std::string_view word) const {
+std::optional<SecondaryVocabIndex> SecondaryVocabulary::getId(
+    std::string_view word) const {
   auto it = ql::ranges::lower_bound(words_, word);
   if (it == words_.end() || *it != word) {
     return std::nullopt;
   }
-  return AuxVocabIndex::make(static_cast<uint64_t>(it - words_.begin()));
+  return SecondaryVocabIndex::make(static_cast<uint64_t>(it - words_.begin()));
 }

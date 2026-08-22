@@ -36,14 +36,14 @@ enum struct Datatype {
   Double,
   VocabIndex,
   LocalVocabIndex,
-  // See `index/vocabulary/AuxVocabulary.h`. NOTE: The position of this datatype
-  // is not arbitrary. It has to be greater than `VocabIndex` (the words of an
-  // auxiliary vocabulary are all sorted after the words of the main
+  // See `index/vocabulary/SecondaryVocabulary.h`. NOTE: The position of this
+  // datatype is not arbitrary. It has to be greater than `VocabIndex` (the
+  // words of a secondary vocabulary are all sorted after the words of the main
   // vocabulary), and it has to be directly adjacent to `VocabIndex` and
   // `LocalVocabIndex`, which makes the comparison of an `Id` of type
   // `LocalVocabIndex` with an `Id` of an unrelated datatype cheap, see
   // `ValueId::compareThreeWay`.
-  AuxVocabIndex,
+  SecondaryVocabIndex,
   TextRecordIndex,
   Date,
   GeoPoint,
@@ -99,8 +99,8 @@ inline QL_CONSTEXPR std::string_view toString(Datatype type) {
       return "GeoPoint";
     case Datatype::BlankNodeIndex:
       return "BlankNodeIndex";
-    case Datatype::AuxVocabIndex:
-      return "AuxVocabIndex";
+    case Datatype::SecondaryVocabIndex:
+      return "SecondaryVocabIndex";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
   AD_FAIL();
@@ -136,12 +136,12 @@ class ValueId {
   // types form a consecutive range of IDs when sorted. Within this range, the
   // IDs are ordered by their string values, not by their IDs (and hence also
   // not by their types).
-  // TODO<joka921> `AuxVocabIndex` also stores strings, but it is deliberately
-  // not listed here (yet): the IDs of that type are directly adjacent to the
-  // ones listed here, but they are *not* ordered by their string value, so
-  // listing them here would break the semantic (that is, by string value)
-  // comparison of IDs in `ValueIdComparators.h`. Teaching that comparison about
-  // the auxiliary vocabulary is a separate step.
+  // TODO<joka921> `SecondaryVocabIndex` also stores strings, but it is
+  // deliberately not listed here (yet): the IDs of that type are directly
+  // adjacent to the ones listed here, but they are *not* ordered by their
+  // string value, so listing them here would break the semantic (that is, by
+  // string value) comparison of IDs in `ValueIdComparators.h`. Teaching that
+  // comparison about the secondary vocabulary is a separate step.
   static constexpr std::array<Datatype, 2> stringTypes_{
       Datatype::VocabIndex, Datatype::LocalVocabIndex};
 
@@ -152,7 +152,8 @@ class ValueId {
   // the comparison of the bits already yields the correct result, see
   // `compareThreeWay` below.
   static constexpr std::array<Datatype, 3> datatypesOfPositionInVocab_{
-      Datatype::VocabIndex, Datatype::AuxVocabIndex, Datatype::EncodedVal};
+      Datatype::VocabIndex, Datatype::SecondaryVocabIndex,
+      Datatype::EncodedVal};
 
   // A mapping that decides if a Datatype is bitwise comparable or not. See
   // `canBeComparedBitwise()` below.
@@ -168,13 +169,13 @@ class ValueId {
                     static_cast<size_t>(minStringType_) + 1 ==
                 stringTypes_.size());
 
-  // Assert that `VocabIndex`, `LocalVocabIndex`, and `AuxVocabIndex` are
+  // Assert that `VocabIndex`, `LocalVocabIndex`, and `SecondaryVocabIndex` are
   // directly adjacent, in this order. The comparison of an `Id` of type
   // `LocalVocabIndex` with an `Id` of an unrelated datatype relies on this, see
   // `compareThreeWay` below.
   static_assert(static_cast<size_t>(Datatype::LocalVocabIndex) ==
                 static_cast<size_t>(Datatype::VocabIndex) + 1);
-  static_assert(static_cast<size_t>(Datatype::AuxVocabIndex) ==
+  static_assert(static_cast<size_t>(Datatype::SecondaryVocabIndex) ==
                 static_cast<size_t>(Datatype::LocalVocabIndex) + 1);
 
   // Assert that the size of an encoded GeoPoint equals the available bits in a
@@ -227,11 +228,11 @@ class ValueId {
   // if the other `Id` is of one of the datatypes that such a position can have
   // (`datatypesOfPositionInVocab_`, see there). For all other datatypes the
   // comparison of the bits already yields the same result, because
-  // `LocalVocabIndex` is directly adjacent to `VocabIndex` and `AuxVocabIndex`
-  // (see the `static_assert`s above), so an `Id` of any other datatype compares
-  // to the datatype bits of a `LocalVocabIndex` exactly like it compares to the
-  // datatype bits of the position.
-  // NOTE: The single exception is a word that is stored as an encoded IRI (see
+  // `LocalVocabIndex` is directly adjacent to `VocabIndex` and
+  // `SecondaryVocabIndex` (see the `static_assert`s above), so an `Id` of any
+  // other datatype compares to the datatype bits of a `LocalVocabIndex` exactly
+  // like it compares to the datatype bits of the position. NOTE: The single
+  // exception is a word that is stored as an encoded IRI (see
   // `LocalVocabContext::encodeAsId`), whose position is of type `EncodedVal`,
   // which is *not* adjacent to `LocalVocabIndex`. Comparing such a word to an
   // `Id` of an unrelated datatype hence deviates from comparing the positions.
@@ -407,8 +408,8 @@ class ValueId {
   static ValueId makeFromBlankNodeIndex(BlankNodeIndex index) {
     return makeFromIndex(index.get(), Datatype::BlankNodeIndex);
   }
-  static ValueId makeFromAuxVocabIndex(AuxVocabIndex index) {
-    return makeFromIndex(index.get(), Datatype::AuxVocabIndex);
+  static ValueId makeFromSecondaryVocabIndex(SecondaryVocabIndex index) {
+    return makeFromIndex(index.get(), Datatype::SecondaryVocabIndex);
   }
 
   // Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()`
@@ -436,8 +437,9 @@ class ValueId {
     return BlankNodeIndex::make(removeDatatypeBits(_bits));
   }
 
-  [[nodiscard]] constexpr AuxVocabIndex getAuxVocabIndex() const noexcept {
-    return AuxVocabIndex::make(removeDatatypeBits(_bits));
+  [[nodiscard]] constexpr SecondaryVocabIndex getSecondaryVocabIndex()
+      const noexcept {
+    return SecondaryVocabIndex::make(removeDatatypeBits(_bits));
   }
 
   // Store or load a `Date` object.
@@ -561,8 +563,8 @@ class ValueId {
         return std::invoke(visitor, getGeoPoint());
       case Datatype::BlankNodeIndex:
         return std::invoke(visitor, getBlankNodeIndex());
-      case Datatype::AuxVocabIndex:
-        return std::invoke(visitor, getAuxVocabIndex());
+      case Datatype::SecondaryVocabIndex:
+        return std::invoke(visitor, getSecondaryVocabIndex());
     }
     AD_FAIL();
   }

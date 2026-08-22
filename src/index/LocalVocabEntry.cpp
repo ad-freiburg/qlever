@@ -18,12 +18,12 @@ ql::strong_ordering LocalVocabEntry::compareThreeWay(
       "Contexts of LocalVocabEntries have to be identical. If this is not the "
       "case this means that stale entries associated with an old index are "
       "falsely carried over somewhere.");
-  // If the index has an auxiliary vocabulary, then first compare the positions
+  // If the index has a secondary vocabulary, then first compare the positions
   // in the vocabularies, see the documentation of this function in the header
   // for why this is required. Without such a vocabulary the comparison of the
   // strings below already yields the same result, so skip the position, which
   // would require a lookup in the vocabulary of the index.
-  if (context_->hasAuxVocabulary()) {
+  if (context_->hasSecondaryVocabulary()) {
     auto position = positionInVocab();
     auto rhsPosition = rhs.positionInVocab();
     if (position.lowerBound_ != rhsPosition.lowerBound_) {

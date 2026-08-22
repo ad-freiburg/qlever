@@ -29,7 +29,7 @@
 #include "index/LocalVocab.h"
 #include "index/LocalVocabEntry.h"
 #include "index/TripleComponentConversions.h"
-#include "index/vocabulary/AuxVocabulary.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
@@ -52,38 +52,38 @@ using ::testing::HasSubstr;
 using ::testing::Optional;
 using ::testing::UnorderedElementsAre;
 
-// The words of the auxiliary vocabulary that the tests below use. In the order
-// of the main vocabulary (see `makeIndexWithAuxVocab`), `"a"` is sorted before
-// all of its words, `<b>` between `<a>` and `<c>`, and `<d>` between `<c>` and
-// `<p>`.
+// The words of the secondary vocabulary that the tests below use. In the order
+// of the main vocabulary (see `makeIndexWithSecondaryVocab`), `"a"` is sorted
+// before all of its words, `<b>` between `<a>` and `<c>`, and `<d>` between
+// `<c>` and `<p>`.
 //
-// NOTE: An `AuxVocabulary` requires its words to be sorted with respect to
-// `std::string`'s comparison, whereas the actual implementation will use the
-// collation of the vocabulary of the main index (see `AuxVocabulary`). These
-// words are deliberately chosen such that the two orders agree: their content
-// is a single ASCII letter, for which the collation is the byte order, and `"`
-// (the first byte of a literal) sorts before `<` (the first byte of an IRI) in
-// both.
-const std::vector<std::string> auxWords{"\"a\"", "<b>", "<d>"};
+// NOTE: A `SecondaryVocabulary` requires its words to be sorted with respect
+// to `std::string`'s comparison, whereas the actual implementation will use the
+// collation of the vocabulary of the main index (see `SecondaryVocabulary`).
+// These words are deliberately chosen such that the two orders agree: their
+// content is a single ASCII letter, for which the collation is the byte order,
+// and `"` (the first byte of a literal) sorts before `<` (the first byte of an
+// IRI) in both.
+const std::vector<std::string> secondaryVocabWords{"\"a\"", "<b>", "<d>"};
 
-// The `Id` of the word of the auxiliary vocabulary at the given index.
-Id auxId(uint64_t index) {
-  return Id::makeFromAuxVocabIndex(AuxVocabIndex::make(index));
+// The `Id` of the word of the secondary vocabulary at the given index.
+Id secondaryVocabId(uint64_t index) {
+  return Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(index));
 }
 
 // An index whose main vocabulary holds `<a>`, `<c>`, `<p>`, and `<s>`, and
-// whose auxiliary vocabulary holds `auxWords`.
-Index makeIndexWithAuxVocab(const std::string& indexBasename) {
+// whose secondary vocabulary holds `secondaryVocabWords`.
+Index makeIndexWithSecondaryVocab(const std::string& indexBasename) {
   ad_utility::testing::TestIndexConfig config{"<s> <p> <a> . <s> <p> <c> ."};
-  config.auxVocabWords = auxWords;
+  config.secondaryVocabWords = secondaryVocabWords;
   return ad_utility::testing::makeTestIndex(indexBasename, std::move(config));
 }
 
-// A fixture for the tests that need an index with an auxiliary vocabulary, see
-// `makeIndexWithAuxVocab`.
-class AuxVocabIndexTest : public ::testing::Test {
+// A fixture for the tests that need an index with a secondary vocabulary, see
+// `makeIndexWithSecondaryVocab`.
+class SecondaryVocabIndexTest : public ::testing::Test {
  protected:
-  Index index_ = makeIndexWithAuxVocab(gtestCurrentTestName());
+  Index index_ = makeIndexWithSecondaryVocab(gtestCurrentTestName());
   std::function<Id(const std::string&)> getId_ =
       ad_utility::testing::makeGetId(index_);
   const LocalVocabContext& context_ = index_.getImpl().getLocalVocabContext();
@@ -101,58 +101,60 @@ class AuxVocabIndexTest : public ::testing::Test {
 };
 
 // _____________________________________________________________________________
-TEST(AuxVocabulary, wordsAndLookup) {
-  AuxVocabulary vocab{auxWords};
-  EXPECT_EQ(vocab.numWords(), auxWords.size());
+TEST(SecondaryVocabulary, wordsAndLookup) {
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  EXPECT_EQ(vocab.numWords(), secondaryVocabWords.size());
   // Each word is stored at its index and is found again by that index.
-  for (size_t i = 0; i < auxWords.size(); ++i) {
+  for (size_t i = 0; i < secondaryVocabWords.size(); ++i) {
     SCOPED_TRACE(i);
-    EXPECT_EQ(vocab[AuxVocabIndex::make(i)], auxWords.at(i));
-    EXPECT_EQ(vocab.getId(auxWords.at(i)), AuxVocabIndex::make(i));
+    EXPECT_EQ(vocab[SecondaryVocabIndex::make(i)], secondaryVocabWords.at(i));
+    EXPECT_EQ(vocab.getId(secondaryVocabWords.at(i)),
+              SecondaryVocabIndex::make(i));
   }
   // Words that are not contained, before, between, and after the contained
   // ones.
   EXPECT_EQ(vocab.getId("\"A\""), std::nullopt);
   EXPECT_EQ(vocab.getId("<c>"), std::nullopt);
   EXPECT_EQ(vocab.getId("<e>"), std::nullopt);
-  AD_EXPECT_THROW_WITH_MESSAGE(vocab[AuxVocabIndex::make(3)],
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab[SecondaryVocabIndex::make(3)],
                                HasSubstr("index.get() < words_.size()"));
 
-  // A default-constructed vocabulary is empty, which is how an index without an
-  // auxiliary vocabulary behaves.
-  AuxVocabulary empty{};
+  // A default-constructed vocabulary is empty, which is how an index without a
+  // secondary vocabulary behaves.
+  SecondaryVocabulary empty{};
   EXPECT_EQ(empty.numWords(), 0);
   EXPECT_EQ(empty.getId("<b>"), std::nullopt);
 }
 
 // _____________________________________________________________________________
-TEST(AuxVocabulary, wordsHaveToBeSortedAndDistinct) {
+TEST(SecondaryVocabulary, wordsHaveToBeSortedAndDistinct) {
   // The words are looked up by binary search, so unsorted or duplicate words
   // are a programming error.
-  AD_EXPECT_THROW_WITH_MESSAGE((AuxVocabulary{{"<d>", "<b>"}}),
+  AD_EXPECT_THROW_WITH_MESSAGE((SecondaryVocabulary{{"<d>", "<b>"}}),
                                HasSubstr("have to be sorted"));
-  AD_EXPECT_THROW_WITH_MESSAGE((AuxVocabulary{{"<b>", "<b>"}}),
+  AD_EXPECT_THROW_WITH_MESSAGE((SecondaryVocabulary{{"<b>", "<b>"}}),
                                HasSubstr("have to be distinct"));
 }
 
 // _____________________________________________________________________________
-TEST(AuxVocabIndex, valueIdBasics) {
-  auto id = auxId(17);
-  EXPECT_EQ(id.getDatatype(), Datatype::AuxVocabIndex);
-  EXPECT_EQ(id.getAuxVocabIndex(), AuxVocabIndex::make(17));
-  EXPECT_EQ(toString(Datatype::AuxVocabIndex), "AuxVocabIndex");
+TEST(SecondaryVocabIndex, valueIdBasics) {
+  auto id = secondaryVocabId(17);
+  EXPECT_EQ(id.getDatatype(), Datatype::SecondaryVocabIndex);
+  EXPECT_EQ(id.getSecondaryVocabIndex(), SecondaryVocabIndex::make(17));
+  EXPECT_EQ(toString(Datatype::SecondaryVocabIndex), "SecondaryVocabIndex");
   // The words are stored in the index, so the `Id` is not self-contained and
   // has to be remapped when results of different indices are combined.
-  EXPECT_FALSE(isDatatypeTrivial(Datatype::AuxVocabIndex));
-  // Unlike a `LocalVocabIndex`, an `AuxVocabIndex` carries its value in its
-  // bits.
+  EXPECT_FALSE(isDatatypeTrivial(Datatype::SecondaryVocabIndex));
+  // Unlike a `LocalVocabIndex`, a `SecondaryVocabIndex` carries its value in
+  // its bits.
   EXPECT_TRUE(id.canBeComparedBitwise());
-  EXPECT_THROW(Id::makeFromAuxVocabIndex(AuxVocabIndex::make(Id::maxIndex + 1)),
+  EXPECT_THROW(Id::makeFromSecondaryVocabIndex(
+                   SecondaryVocabIndex::make(Id::maxIndex + 1)),
                Id::IndexTooLargeException);
 
   auto visitor = [](const auto& value) -> std::optional<uint64_t> {
     if constexpr (std::is_same_v<std::decay_t<decltype(value)>,
-                                 AuxVocabIndex>) {
+                                 SecondaryVocabIndex>) {
       return value.get();
     } else {
       return std::nullopt;
@@ -162,7 +164,7 @@ TEST(AuxVocabIndex, valueIdBasics) {
 }
 
 // _____________________________________________________________________________
-TEST(AuxVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
+TEST(SecondaryVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
   // One `Id` per datatype, except for `LocalVocabIndex`, which is not ordered
   // by its bits and is covered by the test below. If a datatype is added to the
   // `Datatype` enum, it has to be added here as well, which the check below
@@ -178,8 +180,8 @@ TEST(AuxVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
                       Id::makeFromWordVocabIndex(WordVocabIndex::make(3)),
                       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3)),
                       Id::makeFromEncodedVal(7),
-                      auxId(0),
-                      auxId(1)};
+                      secondaryVocabId(0),
+                      secondaryVocabId(1)};
   for (size_t i = 0; i <= static_cast<size_t>(Datatype::MaxValue); ++i) {
     auto datatype = static_cast<Datatype>(i);
     bool isCovered = ::ranges::contains(ids, datatype, &Id::getDatatype);
@@ -187,44 +189,44 @@ TEST(AuxVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
         << toString(datatype);
   }
   ql::ranges::sort(ids);
-  // The `Id`s of the auxiliary vocabulary are greater than the `Id`s of the
-  // main vocabulary (which is what makes the words of an auxiliary vocabulary
+  // The `Id`s of the secondary vocabulary are greater than the `Id`s of the
+  // main vocabulary (which is what makes the words of a secondary vocabulary
   // mergeable into a scan of the main index), and they directly follow them, in
   // ascending order of their indices.
   auto positionOfVocabIndex =
       ql::ranges::find(ids, Datatype::VocabIndex, &Id::getDatatype);
   ASSERT_GE(ids.end() - positionOfVocabIndex, 3);
-  EXPECT_EQ(*(positionOfVocabIndex + 1), auxId(0));
-  EXPECT_EQ(*(positionOfVocabIndex + 2), auxId(1));
+  EXPECT_EQ(*(positionOfVocabIndex + 1), secondaryVocabId(0));
+  EXPECT_EQ(*(positionOfVocabIndex + 2), secondaryVocabId(1));
 }
 
 // _____________________________________________________________________________
 // NOTE: All the comparisons in this test are in the *internal* order, that is,
 // the order in which the index scans emit their `Id`s. That order deliberately
 // is not the semantic (by string value) order as soon as an index has an
-// auxiliary vocabulary, see the warning in `index/LocalVocabEntry.h`.
-TEST_F(AuxVocabIndexTest, localVocabEntryInAuxVocabulary) {
-  EXPECT_TRUE(context_.hasAuxVocabulary());
+// secondary vocabulary, see the warning in `index/LocalVocabEntry.h`.
+TEST_F(SecondaryVocabIndexTest, localVocabEntryInSecondaryVocabulary) {
+  EXPECT_TRUE(context_.hasSecondaryVocabulary());
 
-  // `<b>` is a word of the auxiliary vocabulary, `<e>` is contained in neither
+  // `<b>` is a word of the secondary vocabulary, `<e>` is contained in neither
   // vocabulary and would be sorted between `<c>` and `<p>` of the main one.
   auto entryB = entry("<b>");
   auto entryE = entry("<e>");
   auto idB = idOf(entryB);
   auto idE = idOf(entryE);
 
-  // A local vocab entry that is stored in the auxiliary vocabulary is
+  // A local vocab entry that is stored in the secondary vocabulary is
   // positioned at the `Id` of that vocabulary, and hence compares equal to it.
   auto position = entryB.positionInVocab();
-  EXPECT_EQ(Id::fromBits(position.lowerBound_.get()), auxId(1));
+  EXPECT_EQ(Id::fromBits(position.lowerBound_.get()), secondaryVocabId(1));
   EXPECT_NE(position.lowerBound_, position.upperBound_);
-  EXPECT_EQ(idB, auxId(1));
-  EXPECT_LT(auxId(0), idB);
-  EXPECT_LT(idB, auxId(2));
+  EXPECT_EQ(idB, secondaryVocabId(1));
+  EXPECT_LT(secondaryVocabId(0), idB);
+  EXPECT_LT(idB, secondaryVocabId(2));
 
   // It is greater than all `Id`s of the main vocabulary, and it is ordered with
   // respect to the unrelated datatypes exactly like its position, that is, by
-  // the datatype bits of `Datatype::AuxVocabIndex`.
+  // the datatype bits of `Datatype::SecondaryVocabIndex`.
   EXPECT_LT(getId_("<a>"), idB);
   EXPECT_LT(getId_("<s>"), idB);
   EXPECT_LT(Id::makeFromInt(42), idB);
@@ -232,12 +234,13 @@ TEST_F(AuxVocabIndexTest, localVocabEntryInAuxVocabulary) {
 
   // More precisely: comparing either of the two entries to an `Id` of an
   // unrelated datatype yields exactly the same result as comparing the position
-  // of that entry (`auxId(1)` resp. the `VocabIndex` where `<e>` would be
-  // sorted) to that `Id`. This is what makes the comparison of `Id`s a valid
-  // strict weak ordering, and it is guaranteed by `Datatype::AuxVocabIndex`
-  // being directly adjacent to `Datatype::VocabIndex` and
-  // `Datatype::LocalVocabIndex`, which is also why the comparison can be done
-  // on the bits alone for these datatypes (see `ValueId::compareThreeWay`).
+  // of that entry (`secondaryVocabId(1)` resp. the `VocabIndex` where `<e>`
+  // would be sorted) to that `Id`. This is what makes the comparison of `Id`s a
+  // valid strict weak ordering, and it is guaranteed by
+  // `Datatype::SecondaryVocabIndex` being directly adjacent to
+  // `Datatype::VocabIndex` and `Datatype::LocalVocabIndex`, which is also why
+  // the comparison can be done on the bits alone for these datatypes (see
+  // `ValueId::compareThreeWay`).
   for (Id other : {Id::makeUndefined(), Id::makeFromBool(true),
                    Id::makeFromInt(42), Id::makeFromDouble(3.14),
                    Id::makeFromTextRecordIndex(TextRecordIndex::make(3)),
@@ -247,7 +250,7 @@ TEST_F(AuxVocabIndexTest, localVocabEntryInAuxVocabulary) {
                    Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3))}) {
     SCOPED_TRACE(toString(other.getDatatype()));
     for (const auto& [id, position] :
-         {std::pair{idB, auxId(1)},
+         {std::pair{idB, secondaryVocabId(1)},
           std::pair{
               idE, Id::fromBits(entryE.positionInVocab().lowerBound_.get())}}) {
       SCOPED_TRACE(position);
@@ -278,7 +281,7 @@ TEST_F(AuxVocabIndexTest, localVocabEntryInAuxVocabulary) {
 // Unlike the ordering above, the equality of two `LocalVocabEntry`s is (and
 // always was) the equality of their string representations, no matter which
 // vocabulary the words are stored in, see `index/LocalVocabEntry.h`.
-TEST_F(AuxVocabIndexTest, localVocabEntryEqualityIgnoresPositionInVocab) {
+TEST_F(SecondaryVocabIndexTest, localVocabEntryEqualityIgnoresPositionInVocab) {
   // Check `==` and `!=` in both directions.
   auto expectEqual = [](const auto& a, const auto& b, bool equal) {
     EXPECT_EQ(a == b, equal);
@@ -287,7 +290,7 @@ TEST_F(AuxVocabIndexTest, localVocabEntryEqualityIgnoresPositionInVocab) {
     EXPECT_EQ(b != a, !equal);
   };
 
-  // `<b>` is a word of the auxiliary vocabulary, `<e>` is contained in neither
+  // `<b>` is a word of the secondary vocabulary, `<e>` is contained in neither
   // vocabulary, and `<a>` is a word of the main vocabulary.
   auto entryB = entry("<b>");
   auto entryE = entry("<e>");
@@ -306,15 +309,15 @@ TEST_F(AuxVocabIndexTest, localVocabEntryEqualityIgnoresPositionInVocab) {
 }
 
 // _____________________________________________________________________________
-TEST(AuxVocabIndex, localVocabEntryWithoutAuxVocabulary) {
-  // Without an auxiliary vocabulary, the word `<b>` is simply positioned in the
+TEST(SecondaryVocabIndex, localVocabEntryWithoutSecondaryVocabulary) {
+  // Without a secondary vocabulary, the word `<b>` is simply positioned in the
   // main vocabulary, as it always was.
   Index index = ad_utility::testing::makeTestIndex(
       gtestCurrentTestName(), "<s> <p> <a> . <s> <p> <c> .");
   auto getId = ad_utility::testing::makeGetId(index);
   const auto& context = index.getImpl().getLocalVocabContext();
-  EXPECT_EQ(index.getImpl().auxVocab(), nullptr);
-  EXPECT_FALSE(context.hasAuxVocabulary());
+  EXPECT_EQ(index.getImpl().secondaryVocab(), nullptr);
+  EXPECT_FALSE(context.hasSecondaryVocabulary());
   auto entry = [&context](std::string_view iriref) {
     return LocalVocabEntry::fromIriref(iriref, context);
   };
@@ -326,7 +329,7 @@ TEST(AuxVocabIndex, localVocabEntryWithoutAuxVocabulary) {
   EXPECT_LT(Id::makeFromLocalVocabIndex(&entryB), getId("<c>"));
   EXPECT_LT(getId("<a>"), Id::makeFromLocalVocabIndex(&entryB));
 
-  // Without an auxiliary vocabulary, two entries are compared by their string
+  // Without a secondary vocabulary, two entries are compared by their string
   // values alone, without looking up their positions (see the documentation of
   // `LocalVocabEntry::compareThreeWay`). The result is the same as it would be
   // with the positions, no matter whether the words are contained in the
@@ -341,12 +344,12 @@ TEST(AuxVocabIndex, localVocabEntryWithoutAuxVocabulary) {
 }
 
 // _____________________________________________________________________________
-TEST_F(AuxVocabIndexTest, exportOfAuxVocabIds) {
+TEST_F(SecondaryVocabIndexTest, exportOfSecondaryVocabIds) {
   const IndexImpl& impl = index_.getImpl();
   LocalVocab localVocab{};
 
-  auto iriId = auxId(1);
-  auto literalId = auxId(0);
+  auto iriId = secondaryVocabId(1);
+  auto literalId = secondaryVocabId(0);
   // Matchers for the return values of the export functions below, which are an
   // optional `LiteralOrIri` resp. `Literal` with the given string
   // representation.
@@ -377,7 +380,7 @@ TEST_F(AuxVocabIndexTest, exportOfAuxVocabIds) {
               Optional(StringAndType{"<b>", nullptr}));
   EXPECT_THAT(idToStringAndType(index_, literalId, localVocab),
               Optional(StringAndType{"\"a\"", nullptr}));
-  // `returnOnlyLiterals` also has to work for the auxiliary vocabulary.
+  // `returnOnlyLiterals` also has to work for the secondary vocabulary.
   EXPECT_EQ((idToStringAndType<true, true>(index_, iriId, localVocab)),
             std::nullopt);
   EXPECT_THAT((idToStringAndType<true, true>(index_, literalId, localVocab)),
@@ -385,20 +388,20 @@ TEST_F(AuxVocabIndexTest, exportOfAuxVocabIds) {
 }
 
 // _____________________________________________________________________________
-TEST(AuxVocabIndex, exportWithoutAuxVocabularyThrows) {
+TEST(SecondaryVocabIndex, exportWithoutSecondaryVocabularyThrows) {
   Index index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                    "<s> <p> <a> .");
   AD_EXPECT_THROW_WITH_MESSAGE(
-      idToLiteralOrIri(index.getImpl(), auxId(0), LocalVocab{}),
-      HasSubstr("the index has no auxiliary vocabulary"));
+      idToLiteralOrIri(index.getImpl(), secondaryVocabId(0), LocalVocab{}),
+      HasSubstr("the index has no secondary vocabulary"));
 }
 
 // _____________________________________________________________________________
 // Resolving a word to an `Id` has to consult the same vocabularies as
 // `LocalVocabEntry::positionInVocab()`, else the two disagree about the
-// position of a word of the auxiliary vocabulary, which yields wrong results
+// position of a word of the secondary vocabulary, which yields wrong results
 // and trips the check in the corresponding constructor of `LocalVocabEntry`.
-TEST_F(AuxVocabIndexTest, toValueIdUsesAllVocabularies) {
+TEST_F(SecondaryVocabIndexTest, toValueIdUsesAllVocabularies) {
   const IndexImpl& impl = index_.getImpl();
 
   // Resolve `iriref` via `toValueId`, which is the conversion that all callers
@@ -409,12 +412,12 @@ TEST_F(AuxVocabIndexTest, toValueIdUsesAllVocabularies) {
     return toValueId(std::move(tc), impl, localVocab);
   };
 
-  // A word of the auxiliary vocabulary becomes a bare `Id` of that vocabulary.
+  // A word of the secondary vocabulary becomes a bare `Id` of that vocabulary.
   {
     LocalVocab localVocab;
     Id id = toId("<b>", localVocab);
-    EXPECT_EQ(id.getDatatype(), Datatype::AuxVocabIndex);
-    EXPECT_EQ(id, auxId(1));
+    EXPECT_EQ(id.getDatatype(), Datatype::SecondaryVocabIndex);
+    EXPECT_EQ(id, secondaryVocabId(1));
     EXPECT_EQ(localVocab.size(), 0);
   }
 
@@ -450,9 +453,9 @@ TEST_F(AuxVocabIndexTest, toValueIdUsesAllVocabularies) {
 
 // _____________________________________________________________________________
 // The same three cases, but for the `TripleComponent` overload that does not
-// add to a local vocabulary. A word of the auxiliary vocabulary now has an
+// add to a local vocabulary. A word of the secondary vocabulary now has an
 // `Id`, so this no longer reports it as "not found".
-TEST_F(AuxVocabIndexTest, toValueIdWithoutLocalVocab) {
+TEST_F(SecondaryVocabIndexTest, toValueIdWithoutLocalVocab) {
   const IndexImpl& impl = index_.getImpl();
   auto toId = [&impl](std::string_view iriref) {
     return toValueId(
@@ -460,23 +463,23 @@ TEST_F(AuxVocabIndexTest, toValueIdWithoutLocalVocab) {
             ad_utility::triple_component::Iri::fromIriref(std::string{iriref})},
         impl);
   };
-  EXPECT_THAT(toId("<b>"), Optional(auxId(1)));
+  EXPECT_THAT(toId("<b>"), Optional(secondaryVocabId(1)));
   EXPECT_THAT(toId("<c>"), Optional(getId_("<c>")));
   EXPECT_EQ(toId("<e>"), std::nullopt);
 }
 
 // The end-to-end tests below run actual SPARQL queries and updates against an
-// index with an auxiliary vocabulary. Every query that mentions a word of that
+// index with a secondary vocabulary. Every query that mentions a word of that
 // vocabulary goes through `toValueId` (see the tests above), so these are the
 // tests that would have caught the mismatch between that function and
 // `LocalVocabEntry::positionInVocab()` when it was introduced.
 
-// A `QueryExecutionContext` for an index with the auxiliary vocabulary
-// `auxWords`, plus everything that such a context owns. NOTE: This deliberately
-// does not use `ad_utility::testing::getQec`, because the updates below modify
-// the index, which must not leak into the shared indices that that function
-// caches.
-struct ContextWithAuxVocab {
+// A `QueryExecutionContext` for an index with the secondary vocabulary
+// `secondaryVocabWords`, plus everything that such a context owns. NOTE: This
+// deliberately does not use `ad_utility::testing::getQec`, because the updates
+// below modify the index, which must not leak into the shared indices that that
+// function caches.
+struct ContextWithSecondaryVocab {
   std::string indexBasename_;
   std::shared_ptr<Index> index_;
   QueryResultCache cache_{};
@@ -485,9 +488,10 @@ struct ContextWithAuxVocab {
       std::make_shared<MaterializedViewsManager>();
   QueryExecutionContext qec_;
 
-  explicit ContextWithAuxVocab(std::string indexBasename)
+  explicit ContextWithSecondaryVocab(std::string indexBasename)
       : indexBasename_{std::move(indexBasename)},
-        index_{std::make_shared<Index>(makeIndexWithAuxVocab(indexBasename_))},
+        index_{std::make_shared<Index>(
+            makeIndexWithSecondaryVocab(indexBasename_))},
         qec_{index_,
              &cache_,
              ad_utility::testing::makeAllocator(
@@ -500,7 +504,7 @@ struct ContextWithAuxVocab {
   // this point (the `QueryExecutionContext` also holds a reference to it), but
   // deleting a file that is still open is fine on the platforms that QLever
   // supports, and the index is only ever read from.
-  ~ContextWithAuxVocab() {
+  ~ContextWithSecondaryVocab() {
     for (const std::string& filename :
          ad_utility::testing::getAllIndexFilenames(indexBasename_)) {
       ad_utility::deleteFile(filename, false);
@@ -544,7 +548,7 @@ std::vector<std::string> runQueryAndGetRows(QueryExecutionContext* qec,
 }
 
 // Run the SPARQL `update` on `context`.
-void runUpdate(ContextWithAuxVocab& context, const std::string& update) {
+void runUpdate(ContextWithSecondaryVocab& context, const std::string& update) {
   static const EncodedIriManager encodedIriManager;
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
@@ -568,15 +572,15 @@ void runUpdate(ContextWithAuxVocab& context, const std::string& update) {
 }
 
 // _____________________________________________________________________________
-// Queries that mention a word of the auxiliary vocabulary. NOTE: The words of
-// that vocabulary are not part of any permutation of the index (the auxiliary
-// index that they belong to is not wired up yet, see `AuxVocabulary`), so a
+// Queries that mention a word of the secondary vocabulary. NOTE: The words of
+// that vocabulary are not part of any permutation of the index (nothing but a
+// unit test fills a secondary vocabulary yet, see `SecondaryVocabulary`), so a
 // triple pattern with such a word matches nothing. The point of these tests is
 // that the queries run at all and yield the words unchanged.
-TEST(AuxVocabIndex, queriesWithWordsOfTheAuxVocabulary) {
-  ContextWithAuxVocab context{gtestCurrentTestName()};
+TEST(SecondaryVocabIndex, queriesWithWordsOfTheSecondaryVocabulary) {
+  ContextWithSecondaryVocab context{gtestCurrentTestName()};
 
-  // A word of the auxiliary vocabulary survives a round trip through `VALUES`,
+  // A word of the secondary vocabulary survives a round trip through `VALUES`,
   // no matter whether it is an IRI or a literal.
   EXPECT_EQ(runQuery(&context.qec_, "SELECT * WHERE { VALUES ?o { <b> } }"),
             "?o\n<b>\n");
@@ -598,7 +602,7 @@ TEST(AuxVocabIndex, queriesWithWordsOfTheAuxVocabulary) {
   EXPECT_EQ(runQuery(&context.qec_, "SELECT * WHERE { <b> ?p ?o }"),
             "?p\t?o\n");
 
-  // A word of the auxiliary vocabulary can be combined with a scan of the main
+  // A word of the secondary vocabulary can be combined with a scan of the main
   // index, here via an `OPTIONAL` that matches nothing.
   EXPECT_EQ(runQuery(&context.qec_,
                      "SELECT * WHERE { VALUES ?o { <b> } . "
@@ -607,19 +611,19 @@ TEST(AuxVocabIndex, queriesWithWordsOfTheAuxVocabulary) {
 }
 
 // _____________________________________________________________________________
-// An update that inserts a triple whose object is a word of the auxiliary
-// vocabulary. This is the case that the auxiliary vocabulary exists for, and it
+// An update that inserts a triple whose object is a word of the secondary
+// vocabulary. This is the case that the secondary vocabulary exists for, and it
 // goes through `toValueId` twice: once for the triple that is inserted, and
 // once for the query that reads it back.
-TEST(AuxVocabIndex, updateWithWordOfTheAuxVocabulary) {
-  ContextWithAuxVocab context{gtestCurrentTestName()};
+TEST(SecondaryVocabIndex, updateWithWordOfTheSecondaryVocabulary) {
+  ContextWithSecondaryVocab context{gtestCurrentTestName()};
   auto objectsOfS = [&context]() {
     return runQueryAndGetRows(&context.qec_,
                               "SELECT ?o WHERE { <s> <p> ?o } ORDER BY ?o");
   };
   ASSERT_THAT(objectsOfS(), ElementsAre("<a>", "<c>"));
 
-  // Insert a triple whose object is a word of the auxiliary vocabulary, and
+  // Insert a triple whose object is a word of the secondary vocabulary, and
   // then one whose object is in none of the vocabularies. Both have to become
   // visible. NOTE: These assertions deliberately ignore the order, which the
   // separate assertion below pins down.
@@ -630,7 +634,7 @@ TEST(AuxVocabIndex, updateWithWordOfTheAuxVocabulary) {
 
   // WARNING: The following assertion pins down the *order* of the result, which
   // currently is the internal order (see the warning in
-  // `index/LocalVocabEntry.h`): a word of the auxiliary vocabulary is
+  // `index/LocalVocabEntry.h`): a word of the secondary vocabulary is
   // positioned after all words of the main vocabulary and after all words that
   // are in none of the vocabularies, no matter what its string value is. So
   // `<b>` comes last here, instead of between `<a>` and `<c>` where its string
@@ -645,12 +649,12 @@ TEST(AuxVocabIndex, updateWithWordOfTheAuxVocabulary) {
 }
 
 // _____________________________________________________________________________
-// A query that does not mention any word of the auxiliary vocabulary has to
+// A query that does not mention any word of the secondary vocabulary has to
 // yield exactly the same result as it does on the same index without such a
 // vocabulary. This covers the whole query engine (scans over several blocks,
 // joins, filters, prefilters, sorting, and grouping) at once, and it is the
-// test that a future change of the auxiliary vocabulary has to keep passing.
-TEST(AuxVocabIndex, sameResultsWithAndWithoutAuxVocabulary) {
+// test that a future change of the secondary vocabulary has to keep passing.
+TEST(SecondaryVocabIndex, sameResultsWithAndWithoutSecondaryVocabulary) {
   // A knowledge graph with enough triples to span several blocks per
   // permutation (a block holds two `Id`s per column in the tests, see
   // `TestIndexConfig::blocksizePermutations`), and with objects of several
@@ -661,13 +665,13 @@ TEST(AuxVocabIndex, sameResultsWithAndWithoutAuxVocabulary) {
     absl::StrAppend(&kg, "<s", i, "> <label> \"name", i, "\" .\n");
     absl::StrAppend(&kg, "<s", i, "> <rank> ", i, " .\n");
   }
-  ad_utility::testing::TestIndexConfig configWithAuxVocab{kg};
-  configWithAuxVocab.auxVocabWords = auxWords;
+  ad_utility::testing::TestIndexConfig configWithSecondaryVocab{kg};
+  configWithSecondaryVocab.secondaryVocabWords = secondaryVocabWords;
   auto* qecWithout =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{kg});
-  auto* qecWith = ad_utility::testing::getQec(configWithAuxVocab);
-  ASSERT_TRUE(qecWith->getIndex().getImpl().auxVocab() != nullptr);
-  ASSERT_TRUE(qecWithout->getIndex().getImpl().auxVocab() == nullptr);
+  auto* qecWith = ad_utility::testing::getQec(configWithSecondaryVocab);
+  ASSERT_TRUE(qecWith->getIndex().getImpl().secondaryVocab() != nullptr);
+  ASSERT_TRUE(qecWithout->getIndex().getImpl().secondaryVocab() == nullptr);
 
   for (const std::string& query :
        {"SELECT * WHERE { ?s ?p ?o } ORDER BY ?s ?p ?o"s,

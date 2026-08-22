@@ -512,7 +512,7 @@ TEST_F(IndexFormatConverterTest, equalBasenamesAreAUserFacingError) {
 // the two formats differ only in the numbering of the datatypes:
 //
 // The conversion of an `Id` is the identity for every datatype that precedes
-// `Datatype::AuxVocabIndex` (which is the datatype that was inserted, see
+// `Datatype::SecondaryVocabIndex` (which is the datatype that was inserted, see
 // `datatypesOfSourceFormat`). This includes `Datatype::Undefined`,
 // `Datatype::Int`, and `Datatype::VocabIndex`, so an index whose input consists
 // only of IRIs contains only `Id`s that are converted to themselves (the
@@ -796,7 +796,7 @@ TEST(IndexFormatConverter, conversionDescription) {
   }
   // It also states the difference between the two formats and that the index
   // that is converted is not modified.
-  EXPECT_THAT(description, HasSubstr("auxiliary vocabulary"));
+  EXPECT_THAT(description, HasSubstr("secondary vocabulary"));
   EXPECT_THAT(description,
               HasSubstr("The index that is converted is not modified."));
 }

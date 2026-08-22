@@ -374,7 +374,7 @@ addLinkAndDiscoverTest(LocalVocabTest engine)
 
 addLinkAndDiscoverTest(LocalVocabEntryTest index)
 
-addLinkAndDiscoverTest(AuxVocabularyTest index engine sparqlParser)
+addLinkAndDiscoverTest(SecondaryVocabularyTest index engine sparqlParser)
 
 addLinkAndDiscoverTest(ValuesTest engine)
 

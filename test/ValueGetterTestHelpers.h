@@ -17,7 +17,7 @@
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
 #include "index/LocalVocabEntry.h"
-#include "index/vocabulary/AuxVocabulary.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -93,7 +93,7 @@ using LiteralValueGetterVariant = std::variant<
 
 // Apply `getter` to `id` in the given context, then check the content and the
 // datatype of the resulting literal, see `checkLiteralContentAndDatatype`. The
-// context is a `TestContextWithGivenTTl` or an `AuxVocabTestContext`.
+// context is a `TestContextWithGivenTTl` or a `SecondaryVocabTestContext`.
 template <typename Context>
 void checkLiteralContentAndDatatypeForId(
     Context& testContext, Id id,
@@ -147,35 +147,37 @@ inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
                                         expectedDatatype);
 };
 
-// The words of the auxiliary vocabulary of an index (see
-// `index/vocabulary/AuxVocabulary.h`) that the tests use, in the order in which
-// an `AuxVocabulary` stores them. NOTE: That order is the one of `std::string`,
-// whereas the actual implementation will use the collation of the vocabulary of
-// the main index. These words are deliberately chosen such that the two orders
-// agree (verified against the vocabulary of a test index), so that the tests do
-// not encode a wrong assumption about the order.
-inline const std::vector<std::string> auxVocabWords{
+// The words of the secondary vocabulary of an index (see
+// `index/vocabulary/SecondaryVocabulary.h`) that the tests use, in the order in
+// which a `SecondaryVocabulary` stores them. NOTE: That order is the one of
+// `std::string`, whereas the actual implementation will use the collation of
+// the vocabulary of the main index. These words are deliberately chosen such
+// that the two orders agree (verified against the vocabulary of a test index),
+// so that the tests do not encode a wrong assumption about the order.
+inline const std::vector<std::string> secondaryVocabWords{
     "\"\"",
     "\"LINESTRING(6 6, 8 8)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-    "\"noAuxType\"",
-    "\"someAuxType\"^^<someType>",
-    "\"withAuxLang\"@en",
+    "\"noSecondaryType\"",
+    "\"someSecondaryType\"^^<someType>",
+    "\"withSecondaryLang\"@en",
     "<http://qudt.org/vocab/unit/M>",
-    "<https://example.com/aux>"};
+    "<https://example.com/secondary>"};
 
-// Names for the words of `auxVocabWords`, to be used with the helpers below.
-inline const std::string auxEmptyLiteral = auxVocabWords.at(0);
-inline const std::string auxWktLiteral = auxVocabWords.at(1);
-inline const std::string auxPlainLiteral = auxVocabWords.at(2);
-inline const std::string auxTypedLiteral = auxVocabWords.at(3);
-inline const std::string auxLangLiteral = auxVocabWords.at(4);
-inline const std::string auxUnitIri = auxVocabWords.at(5);
-inline const std::string auxIri = auxVocabWords.at(6);
+// Names for the words of `secondaryVocabWords`, to be used with the helpers
+// below.
+inline const std::string secondaryEmptyLiteral = secondaryVocabWords.at(0);
+inline const std::string secondaryWktLiteral = secondaryVocabWords.at(1);
+inline const std::string secondaryPlainLiteral = secondaryVocabWords.at(2);
+inline const std::string secondaryTypedLiteral = secondaryVocabWords.at(3);
+inline const std::string secondaryLangLiteral = secondaryVocabWords.at(4);
+inline const std::string secondaryUnitIri = secondaryVocabWords.at(5);
+inline const std::string secondaryIri = secondaryVocabWords.at(6);
 
-// The words of the vocabulary of the main index of `AuxVocabTestContext`, one
-// per kind of literal and IRI that the value getters distinguish. They are
-// deliberately disjoint from `auxVocabWords`, because the two vocabularies are.
+// The words of the vocabulary of the main index of `SecondaryVocabTestContext`,
+// one per kind of literal and IRI that the value getters distinguish. They are
+// deliberately disjoint from `secondaryVocabWords`, because the two
+// vocabularies are.
 inline const std::string mainPlainLiteral = "\"noMainType\"";
 inline const std::string mainTypedLiteral = "\"someMainType\"^^<someType>";
 inline const std::string mainLangLiteral = "\"withMainLang\"@en";
@@ -184,30 +186,30 @@ inline const std::string mainWktLiteral =
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 inline const std::string mainIri = "<https://example.com/main>";
 
-// The prefix of the IRIs that the index of `AuxVocabTestContext` encodes
+// The prefix of the IRIs that the index of `SecondaryVocabTestContext` encodes
 // directly in the `Id`, and an IRI that has that prefix.
 inline const std::string encodedIriPrefix = "https://encoded.example.com/";
 inline const std::string encodedIri = "<https://encoded.example.com/123>";
 
-// A test context whose index has an auxiliary vocabulary that holds
-// `auxVocabWords`. Its knowledge graph holds the `main...` words above, and its
-// index encodes the IRIs that start with `encodedIriPrefix` directly in the
-// `Id`, such that an `Id` of every `Datatype` can be created for it (see the
-// fixture in `ValueGetterTest.cpp`).
+// A test context whose index has a secondary vocabulary that holds
+// `secondaryVocabWords`. Its knowledge graph holds the `main...` words above,
+// and its index encodes the IRIs that start with `encodedIriPrefix` directly in
+// the `Id`, such that an `Id` of every `Datatype` can be created for it (see
+// the fixture in `ValueGetterTest.cpp`).
 //
-// NOTE: The knowledge graph deliberately contains none of the `auxVocabWords`,
-// because an auxiliary vocabulary is disjoint from the vocabulary of the main
-// index.
-struct AuxVocabTestContext : TestContextWithGivenTTl {
-  AuxVocabTestContext() : TestContextWithGivenTTl{makeConfig()} {}
+// NOTE: The knowledge graph deliberately contains none of the
+// `secondaryVocabWords`, because a secondary vocabulary is disjoint from the
+// vocabulary of the main index.
+struct SecondaryVocabTestContext : TestContextWithGivenTTl {
+  SecondaryVocabTestContext() : TestContextWithGivenTTl{makeConfig()} {}
 
-  // The `Id` of the given word of the auxiliary vocabulary. The word has to be
-  // one of `auxVocabWords`.
-  Id auxId(const std::string& word) const {
-    auto index = qec->getIndex().getImpl().auxVocab()->getId(word);
+  // The `Id` of the given word of the secondary vocabulary. The word has to be
+  // one of `secondaryVocabWords`.
+  Id secondaryVocabId(const std::string& word) const {
+    auto index = qec->getIndex().getImpl().secondaryVocab()->getId(word);
     AD_CONTRACT_CHECK(index.has_value(),
-                      "The given word is not one of `auxVocabWords`");
-    return Id::makeFromAuxVocabIndex(index.value());
+                      "The given word is not one of `secondaryVocabWords`");
+    return Id::makeFromSecondaryVocabIndex(index.value());
   }
 
   // The `Id` of `encodedIri`, which the index encodes directly in the `Id`.
@@ -246,22 +248,22 @@ struct AuxVocabTestContext : TestContextWithGivenTTl {
         mainLangLiteral, " , ", mainWktLiteral, " , ", mainIri, " .\n")};
     config.encodedPrefixesWithoutAngleBrackets =
         std::vector<std::string>{encodedIriPrefix};
-    config.auxVocabWords = auxVocabWords;
+    config.secondaryVocabWords = secondaryVocabWords;
     return config;
   }
 };
 
-// Helper function to get a literal from the `Id` of a word of the auxiliary
+// Helper function to get a literal from the `Id` of a word of the secondary
 // vocabulary and then check its content and datatype. This mirrors
 // `checkLiteralContentAndDatatypeFromId` above.
-inline void checkLiteralContentAndDatatypeFromAuxVocabId(
+inline void checkLiteralContentAndDatatypeFromSecondaryVocabId(
     const std::string& word, const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype,
     LiteralValueGetterVariant getter) {
-  AuxVocabTestContext testContext;
-  checkLiteralContentAndDatatypeForId(testContext, testContext.auxId(word),
-                                      expectedContent, expectedDatatype,
-                                      std::move(getter));
+  SecondaryVocabTestContext testContext;
+  checkLiteralContentAndDatatypeForId(
+      testContext, testContext.secondaryVocabId(word), expectedContent,
+      expectedDatatype, std::move(getter));
 };
 
 }  // namespace valueGetterTestHelpers
@@ -287,7 +289,7 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
   )";
 
 // Apply `getter` to `id` in the given context and check the result. The context
-// is a `TestContextWithGivenTTl` or an `AuxVocabTestContext`.
+// is a `TestContextWithGivenTTl` or a `SecondaryVocabTestContext`.
 template <typename Context>
 void checkUnitValueGetterForId(
     Context& testContext, Id id, UnitOfMeasurement expectedResult,
@@ -314,13 +316,13 @@ inline void checkUnitValueGetterFromIdEncodedValue(
 }
 
 // Helper to test `UnitOfMeasurementValueGetter` on the given word of an
-// auxiliary vocabulary, see `checkUnitValueGetterFromId` above. The word has to
-// be one of `auxVocabWords`.
-inline void checkUnitValueGetterFromAuxVocabId(
+// secondary vocabulary, see `checkUnitValueGetterFromId` above. The word has to
+// be one of `secondaryVocabWords`.
+inline void checkUnitValueGetterFromSecondaryVocabId(
     const std::string& word, UnitOfMeasurement expectedResult,
     sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
-  AuxVocabTestContext testContext;
-  checkUnitValueGetterForId(testContext, testContext.auxId(word),
+  SecondaryVocabTestContext testContext;
+  checkUnitValueGetterForId(testContext, testContext.secondaryVocabId(word),
                             expectedResult, getter);
 }
 
@@ -421,25 +423,27 @@ class ValueGetterTester {
   }
 
   // Helper that tests the `ValueGetter` using the `ValueId` of the given word
-  // of the auxiliary vocabulary of the index, see `AuxVocabTestContext`. The
-  // word has to be one of `auxVocabWords`.
-  void checkFromAuxVocab(const std::string& word,
-                         ::testing::Matcher<std::optional<ReturnType>> expected,
-                         Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(sourceLocation);
-    AuxVocabTestContext testContext;
-    checkImpl(testContext, testContext.auxId(word), expected);
-  }
-
-  // Same as `checkFromAuxVocab` above, but for every word of `auxVocabWords`.
-  // Use this for a `ValueGetter` whose result is the same for all of them.
-  void checkFromAllAuxVocabWords(
+  // of the secondary vocabulary of the index, see `SecondaryVocabTestContext`.
+  // The word has to be one of `secondaryVocabWords`.
+  void checkFromSecondaryVocab(
+      const std::string& word,
       ::testing::Matcher<std::optional<ReturnType>> expected,
       Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(sourceLocation);
-    for (const auto& word : auxVocabWords) {
+    SecondaryVocabTestContext testContext;
+    checkImpl(testContext, testContext.secondaryVocabId(word), expected);
+  }
+
+  // Same as `checkFromSecondaryVocab` above, but for every word of
+  // `secondaryVocabWords`. Use this for a `ValueGetter` whose result is the
+  // same for all of them.
+  void checkFromAllSecondaryVocabWords(
+      ::testing::Matcher<std::optional<ReturnType>> expected,
+      Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(sourceLocation);
+    for (const auto& word : secondaryVocabWords) {
       SCOPED_TRACE(word);
-      checkFromAuxVocab(word, expected);
+      checkFromSecondaryVocab(word, expected);
     }
   }
 

@@ -21,7 +21,7 @@
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "index/TripleComponentConversions.h"
-#include "index/vocabulary/AuxVocabulary.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/FilesystemHelpers.h"
 #include "util/ProgressBar.h"
@@ -314,9 +314,10 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.addTextFromOnDiskIndex();
   }
 
-  if (c.auxVocabWords.has_value()) {
-    index.getImpl().setAuxVocabForTesting(
-        std::make_shared<AuxVocabulary>(std::move(c.auxVocabWords).value()));
+  if (c.secondaryVocabWords.has_value()) {
+    index.getImpl().setSecondaryVocabForTesting(
+        std::make_shared<SecondaryVocabulary>(
+            std::move(c.secondaryVocabWords).value()));
   }
 
   if (c.usePatterns && c.loadAllPermutations) {

@@ -155,7 +155,8 @@ TEST_F(ValueIdTest, Indices) {
   testRandomIds(&makeLocalVocabId, localVocabWordToInt,
                 Datatype::LocalVocabIndex);
   testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
-  testRandomIds(&makeAuxVocabId, &getAuxVocabIndex, Datatype::AuxVocabIndex);
+  testRandomIds(&makeSecondaryVocabId, &getSecondaryVocabIndex,
+                Datatype::SecondaryVocabIndex);
 }
 
 TEST_F(ValueIdTest, Undefined) {
@@ -201,7 +202,7 @@ TEST_F(ValueIdTest, IndexOrdering) {
   testOrder(&makeVocabId, &getVocabIndex);
   testOrder(&makeLocalVocabId, &getLocalVocabIndex);
   testOrder(&makeWordVocabId, &getWordVocabIndex);
-  testOrder(&makeAuxVocabId, &getAuxVocabIndex);
+  testOrder(&makeSecondaryVocabId, &getSecondaryVocabIndex);
   testOrder(&makeTextRecordId, &getTextRecordIndex);
 }
 
@@ -497,22 +498,25 @@ TEST(ValueId, canBeComparedBitwise) {
 TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   using namespace ad_utility::testing;
   // Use a fresh index (and not the shared one of `getQec`), because the
-  // auxiliary vocabulary must not leak into other tests.
+  // secondary vocabulary must not leak into other tests.
   TestIndexConfig config{"<a> <b> <c> ."};
-  config.auxVocabWords = std::vector<std::string>{"<zzz>"};
+  config.secondaryVocabWords = std::vector<std::string>{"<zzz>"};
   Index index = makeTestIndex(gtestCurrentTestName(), std::move(config));
   auto mkId = makeGetId(index);
   const auto& ctx = index.getLocalVocabContext();
 
   // `<b>` is stored in the vocabulary of the main index, so the position of
   // `entryInVocab` is of type `VocabIndex`, and `<zzz>` is stored in the
-  // auxiliary vocabulary, so the position of `entryInAuxVocab` is of type
-  // `AuxVocabIndex`.
+  // secondary vocabulary, so the position of `entryInSecondaryVocab` is of type
+  // `SecondaryVocabIndex`.
   LocalVocabEntry entryInVocab = LocalVocabEntry::fromIriref("<b>", ctx);
-  LocalVocabEntry entryInAuxVocab = LocalVocabEntry::fromIriref("<zzz>", ctx);
+  LocalVocabEntry entryInSecondaryVocab =
+      LocalVocabEntry::fromIriref("<zzz>", ctx);
   Id localVocabId = Id::makeFromLocalVocabIndex(&entryInVocab);
-  Id localVocabIdAux = Id::makeFromLocalVocabIndex(&entryInAuxVocab);
-  Id auxVocabId = Id::makeFromAuxVocabIndex(AuxVocabIndex::make(0));
+  Id localVocabIdSecondary =
+      Id::makeFromLocalVocabIndex(&entryInSecondaryVocab);
+  Id secondaryVocabId =
+      Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
   // `Int` is a datatype that is smaller than `LocalVocabIndex` and `Date` is
   // one that is greater, and neither of them is a datatype that a position in
   // the vocabularies can have.
@@ -525,11 +529,11 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   EXPECT_LT(mkId("<a>"), localVocabId);
   EXPECT_EQ(mkId("<b>"), localVocabId);
   EXPECT_GT(mkId("<c>"), localVocabId);
-  // The same combination, but with `type == Datatype::AuxVocabIndex`. Note that
-  // every word of the auxiliary vocabulary is positioned after every word of
-  // the vocabulary of the main index.
-  EXPECT_EQ(auxVocabId, localVocabIdAux);
-  EXPECT_GT(auxVocabId, localVocabId);
+  // The same combination, but with `type == Datatype::SecondaryVocabIndex`.
+  // Note that every word of the secondary vocabulary is positioned after every
+  // word of the vocabulary of the main index.
+  EXPECT_EQ(secondaryVocabId, localVocabIdSecondary);
+  EXPECT_GT(secondaryVocabId, localVocabId);
   // NOTE: The combination `isDatatypeOfPositionInVocab(type) == true` and
   // `otherType != LocalVocabIndex` is unreachable. This point is only reached
   // if exactly one of the two datatypes is `LocalVocabIndex`, so
@@ -550,8 +554,8 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   EXPECT_GT(localVocabId, mkId("<a>"));
   EXPECT_EQ(localVocabId, mkId("<b>"));
   EXPECT_LT(localVocabId, mkId("<c>"));
-  EXPECT_EQ(localVocabIdAux, auxVocabId);
-  EXPECT_LT(localVocabId, auxVocabId);
+  EXPECT_EQ(localVocabIdSecondary, secondaryVocabId);
+  EXPECT_LT(localVocabId, secondaryVocabId);
   // Both operands of the first condition are false, and in the second condition
   // `type == LocalVocabIndex` is true, but
   // `isDatatypeOfPositionInVocab(otherType)` is false, so the bits are

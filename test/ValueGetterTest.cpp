@@ -27,15 +27,15 @@ using namespace geoInfoVGTestHelpers;
 // the same inputs and differ only in those expectations, so they share this
 // table.
 struct LiteralGetterTestCase {
-  // The word, and whether it is a word of the auxiliary vocabulary (as opposed
+  // The word, and whether it is a word of the secondary vocabulary (as opposed
   // to one of the vocabulary of the main index).
   std::string word_;
-  bool isFromAuxVocab_;
+  bool isFromSecondaryVocab_;
   std::optional<std::string> expectedWithStrFunction_;
   std::optional<std::string> expectedWithoutStrFunction_;
 };
 
-// The words of the auxiliary vocabulary are deliberately handled just like the
+// The words of the secondary vocabulary are deliberately handled just like the
 // words of the vocabulary of the main index.
 const std::vector<LiteralGetterTestCase> literalGetterTestCases{
     {"\"noType\"", false, "noType", "noType"},
@@ -43,9 +43,9 @@ const std::vector<LiteralGetterTestCase> literalGetterTestCases{
     {"\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>", false,
      "anXsdString", "anXsdString"},
     {"<x>", false, "x", std::nullopt},
-    {auxPlainLiteral, true, "noAuxType", "noAuxType"},
-    {auxTypedLiteral, true, "someAuxType", std::nullopt},
-    {auxIri, true, "https://example.com/aux", std::nullopt}};
+    {secondaryPlainLiteral, true, "noSecondaryType", "noSecondaryType"},
+    {secondaryTypedLiteral, true, "someSecondaryType", std::nullopt},
+    {secondaryIri, true, "https://example.com/secondary", std::nullopt}};
 
 // Run all of `literalGetterTestCases` against `getter`, where `getExpected`
 // selects the expectation that belongs to that getter.
@@ -54,9 +54,9 @@ void checkAllLiteralGetterTestCases(LiteralValueGetterVariant getter,
   for (const auto& testCase : literalGetterTestCases) {
     SCOPED_TRACE(testCase.word_);
     const auto& expected = getExpected(testCase);
-    if (testCase.isFromAuxVocab_) {
-      checkLiteralContentAndDatatypeFromAuxVocabId(testCase.word_, expected,
-                                                   std::nullopt, getter);
+    if (testCase.isFromSecondaryVocab_) {
+      checkLiteralContentAndDatatypeFromSecondaryVocabId(
+          testCase.word_, expected, std::nullopt, getter);
     } else {
       checkLiteralContentAndDatatypeFromId(testCase.word_, expected,
                                            std::nullopt, getter);
@@ -158,14 +158,14 @@ TEST(UnitOfMeasurementValueGetter, OperatorWithId) {
   checkUnitValueGetterFromId("\"http://qudt.org/vocab/unit/MI\"",
                              UnitOfMeasurement::UNKNOWN, unitValueGetter);
 
-  // A word of an auxiliary vocabulary is resolved just like a word of the
+  // A word of a secondary vocabulary is resolved just like a word of the
   // vocabulary of the main index.
-  checkUnitValueGetterFromAuxVocabId(auxUnitIri, UnitOfMeasurement::METERS,
-                                     unitValueGetter);
-  checkUnitValueGetterFromAuxVocabId(auxIri, UnitOfMeasurement::UNKNOWN,
-                                     unitValueGetter);
-  checkUnitValueGetterFromAuxVocabId(
-      auxPlainLiteral, UnitOfMeasurement::UNKNOWN, unitValueGetter);
+  checkUnitValueGetterFromSecondaryVocabId(
+      secondaryUnitIri, UnitOfMeasurement::METERS, unitValueGetter);
+  checkUnitValueGetterFromSecondaryVocabId(
+      secondaryIri, UnitOfMeasurement::UNKNOWN, unitValueGetter);
+  checkUnitValueGetterFromSecondaryVocabId(
+      secondaryPlainLiteral, UnitOfMeasurement::UNKNOWN, unitValueGetter);
 }
 
 // _____________________________________________________________________________
@@ -240,18 +240,20 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
                                            noGeoInfo);
 
-  // The WKT literals of an auxiliary vocabulary are parsed just like those of
-  // the vocabulary of the main index. NOTE: The placeholder `AuxVocabulary`
-  // stores no precomputed `GeometryInfo`, so it is computed from the string.
-  t.checkFromAuxVocab(auxWktLiteral, geoInfoMatcher(ad_utility::GeometryInfo{
-                                         2,
-                                         {{6, 6}, {8, 8}},
-                                         {7, 7},
-                                         {1},
-                                         getLengthForTesting(auxWktLiteral),
-                                         MetricArea{0}}));
-  t.checkFromAuxVocab(auxPlainLiteral, noGeoInfo);
-  t.checkFromAuxVocab(auxIri, noGeoInfo);
+  // The WKT literals of a secondary vocabulary are parsed just like those of
+  // the vocabulary of the main index. NOTE: The placeholder
+  // `SecondaryVocabulary` stores no precomputed `GeometryInfo`, so it is
+  // computed from the string.
+  t.checkFromSecondaryVocab(secondaryWktLiteral,
+                            geoInfoMatcher(ad_utility::GeometryInfo{
+                                2,
+                                {{6, 6}, {8, 8}},
+                                {7, 7},
+                                {1},
+                                getLengthForTesting(secondaryWktLiteral),
+                                MetricArea{0}}));
+  t.checkFromSecondaryVocab(secondaryPlainLiteral, noGeoInfo);
+  t.checkFromSecondaryVocab(secondaryIri, noGeoInfo);
 }
 
 // _____________________________________________________________________________
@@ -317,11 +319,12 @@ TEST(GeoPointOrWktValueGetterTest, OperatorWithLit) {
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
                                            noGeoInfoOrWkt);
 
-  // A WKT literal of an auxiliary vocabulary is returned as it is, just like
+  // A WKT literal of a secondary vocabulary is returned as it is, just like
   // one of the vocabulary of the main index.
-  t.checkFromAuxVocab(auxWktLiteral, geoPointOrWktMatcher(auxWktLiteral));
-  t.checkFromAuxVocab(auxPlainLiteral, noGeoInfoOrWkt);
-  t.checkFromAuxVocab(auxIri, noGeoInfoOrWkt);
+  t.checkFromSecondaryVocab(secondaryWktLiteral,
+                            geoPointOrWktMatcher(secondaryWktLiteral));
+  t.checkFromSecondaryVocab(secondaryPlainLiteral, noGeoInfoOrWkt);
+  t.checkFromSecondaryVocab(secondaryIri, noGeoInfoOrWkt);
 }
 
 // _____________________________________________________________________________
@@ -333,9 +336,9 @@ TEST(IntValueGetterTest, OperatorWithId) {
   t.checkFromValueId(ValueId::makeUndefined(), Eq(std::nullopt));
   t.checkFromValueId(ValueId::makeFromDouble(4.5), Eq(std::nullopt));
   t.checkFromValueId(ValueId::makeFromGeoPoint({3, 4}), Eq(std::nullopt));
-  // No word of a vocabulary is an integer, not even a word of an auxiliary
+  // No word of a vocabulary is an integer, not even a word of a secondary
   // vocabulary.
-  t.checkFromAllAuxVocabWords(Eq(std::nullopt));
+  t.checkFromAllSecondaryVocabWords(Eq(std::nullopt));
 }
 
 // _____________________________________________________________________________
@@ -386,21 +389,21 @@ TEST(NumericOrDateValueGetterTest, OperatorWithId) {
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
                                            isNotNumeric);
 
-  // No word of an auxiliary vocabulary is numeric either.
-  t.checkFromAllAuxVocabWords(isNotNumeric);
+  // No word of a secondary vocabulary is numeric either.
+  t.checkFromAllSecondaryVocabWords(isNotNumeric);
 }
 
 // The value getters below had no test of their own in this file yet. Each of
 // them is now tested for an `Id` of every `Datatype` (including the
-// `AuxVocabIndex` of an auxiliary vocabulary), using the fixture below.
+// `SecondaryVocabIndex` of a secondary vocabulary), using the fixture below.
 
 // A test fixture that provides an `Id` of every `Datatype` that a value getter
 // can encounter, together with the context in which those `Id`s are valid (see
-// `AuxVocabTestContext`). The `Id`s are created once per test, such that the
-// tests below can simply use them.
+// `SecondaryVocabTestContext`). The `Id`s are created once per test, such that
+// the tests below can simply use them.
 class ValueGetterFixture : public ::testing::Test {
  protected:
-  AuxVocabTestContext context_;
+  SecondaryVocabTestContext context_;
 
   // The `Id`s that encode their value directly in the `Id`.
   Id undefined_ = Id::makeUndefined();
@@ -415,11 +418,12 @@ class ValueGetterFixture : public ::testing::Test {
 
   // The `Id`s that point into a data structure of the index, but that denote
   // neither a literal nor an IRI of one of its vocabularies. NOTE: The index
-  // has no text index (see `AuxVocabTestContext::makeConfig`), so the last two
-  // of these must only be used with a value getter that does not resolve them,
-  // which is the case for every getter below: all of them either ignore those
-  // two datatypes outright, or resolve them via `idToStringAndType` with
-  // `returnOnlyLiterals`, which discards them before the lookup.
+  // has no text index (see `SecondaryVocabTestContext::makeConfig`), so the
+  // last two of these must only be used with a value getter that does not
+  // resolve them, which is the case for every getter below: all of them either
+  // ignore those two datatypes outright, or resolve them via
+  // `idToStringAndType` with `returnOnlyLiterals`, which discards them before
+  // the lookup.
   Id blankNode_ = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
   Id textRecord_ = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
   Id wordVocab_ = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
@@ -434,13 +438,13 @@ class ValueGetterFixture : public ::testing::Test {
   Id wktLiteral_ = context_.getId(mainWktLiteral);
   Id iri_ = context_.getId(mainIri);
 
-  // The same kinds of word, but from the auxiliary vocabulary.
-  Id auxEmptyLiteral_ = context_.auxId(auxEmptyLiteral);
-  Id auxPlainLiteral_ = context_.auxId(auxPlainLiteral);
-  Id auxTypedLiteral_ = context_.auxId(auxTypedLiteral);
-  Id auxLangLiteral_ = context_.auxId(auxLangLiteral);
-  Id auxWktLiteral_ = context_.auxId(auxWktLiteral);
-  Id auxIri_ = context_.auxId(auxIri);
+  // The same kinds of word, but from the secondary vocabulary.
+  Id secondaryEmptyLiteral_ = context_.secondaryVocabId(secondaryEmptyLiteral);
+  Id secondaryPlainLiteral_ = context_.secondaryVocabId(secondaryPlainLiteral);
+  Id secondaryTypedLiteral_ = context_.secondaryVocabId(secondaryTypedLiteral);
+  Id secondaryLangLiteral_ = context_.secondaryVocabId(secondaryLangLiteral);
+  Id secondaryWktLiteral_ = context_.secondaryVocabId(secondaryWktLiteral);
+  Id secondaryIri_ = context_.secondaryVocabId(secondaryIri);
 
   // And from the local vocabulary, which holds the words that are contained in
   // neither vocabulary of the index.
@@ -455,21 +459,21 @@ class ValueGetterFixture : public ::testing::Test {
   std::vector<std::pair<Id, std::string>> plainLiterals_{
       {plainLiteral_, "noMainType"},
       {localPlainLiteral_, "noLocalType"},
-      {auxPlainLiteral_, "noAuxType"}};
+      {secondaryPlainLiteral_, "noSecondaryType"}};
   // The same for the literals with a datatype resp. a language tag, and for the
   // IRIs.
   std::vector<std::pair<Id, std::string>> typedLiterals_{
       {typedLiteral_, "someMainType"},
       {localTypedLiteral_, "someLocalType"},
-      {auxTypedLiteral_, "someAuxType"}};
+      {secondaryTypedLiteral_, "someSecondaryType"}};
   std::vector<std::pair<Id, std::string>> langLiterals_{
       {langLiteral_, "withMainLang"},
       {localLangLiteral_, "withLocalLang"},
-      {auxLangLiteral_, "withAuxLang"}};
+      {secondaryLangLiteral_, "withSecondaryLang"}};
   std::vector<std::pair<Id, std::string>> iris_{
       {iri_, "https://example.com/main"},
       {localIri_, "https://example.com/local"},
-      {auxIri_, "https://example.com/aux"}};
+      {secondaryIri_, "https://example.com/secondary"}};
 
   // Apply the `ValueGetter` to `id` in the context of this fixture.
   template <typename ValueGetter>
@@ -525,8 +529,8 @@ TEST_F(NumericValueGetterTest, OperatorWithId) {
   // vocabularies that store strings, and no encoded IRI.
   expectAll<Getter>(
       {undefined_, date_, geoPoint_, blankNode_, textRecord_, wordVocab_,
-       encodedIri_, plainLiteral_, localPlainLiteral_, auxPlainLiteral_,
-       wktLiteral_, auxWktLiteral_, iri_, auxIri_},
+       encodedIri_, plainLiteral_, localPlainLiteral_, secondaryPlainLiteral_,
+       wktLiteral_, secondaryWktLiteral_, iri_, secondaryIri_},
       VariantWith<NotNumeric>(_));
 }
 
@@ -548,11 +552,11 @@ TEST_F(EffectiveBooleanValueGetterTest, OperatorWithId) {
                      iri_,
                      localPlainLiteral_,
                      localIri_,
-                     auxPlainLiteral_,
-                     auxTypedLiteral_,
-                     auxLangLiteral_,
-                     auxWktLiteral_,
-                     auxIri_,
+                     secondaryPlainLiteral_,
+                     secondaryTypedLiteral_,
+                     secondaryLangLiteral_,
+                     secondaryWktLiteral_,
+                     secondaryIri_,
                      encodedIri_,
                      date_,
                      geoPoint_,
@@ -560,7 +564,7 @@ TEST_F(EffectiveBooleanValueGetterTest, OperatorWithId) {
                      wordVocab_},
                     Eq(Result::True));
   expectAll<Getter>({intZero_, doubleZero_, boolFalse_,
-                     Id::makeFromDouble(std::nan("")), auxEmptyLiteral_},
+                     Id::makeFromDouble(std::nan("")), secondaryEmptyLiteral_},
                     Eq(Result::False));
   expectAll<Getter>({undefined_, blankNode_}, Eq(Result::Undef));
 }
@@ -592,7 +596,8 @@ TEST_F(DatatypeValueGetterTest, OperatorWithId) {
   expectAllWords<Getter>(typedLiterals_, ignoreContent(iriMatcher("someType")));
   expectAllWords<Getter>(langLiterals_,
                          ignoreContent(iriMatcher(RDF_LANGTAG_STRING)));
-  expectAll<Getter>({wktLiteral_, auxWktLiteral_}, iriMatcher(GEO_WKT_LITERAL));
+  expectAll<Getter>({wktLiteral_, secondaryWktLiteral_},
+                    iriMatcher(GEO_WKT_LITERAL));
 
   // An IRI has no datatype, and neither have the remaining datatypes.
   expectAllWords<Getter>(iris_, ignoreContent(Eq(std::nullopt)));
@@ -616,12 +621,13 @@ TEST_F(LanguageTagValueGetterTest, OperatorWithId) {
   // literals.
   expectAll<Getter>(
       {boolTrue_, int_, double_, date_, geoPoint_, plainLiteral_, typedLiteral_,
-       wktLiteral_, localPlainLiteral_, localTypedLiteral_, auxPlainLiteral_,
-       auxTypedLiteral_, auxWktLiteral_, auxEmptyLiteral_},
+       wktLiteral_, localPlainLiteral_, localTypedLiteral_,
+       secondaryPlainLiteral_, secondaryTypedLiteral_, secondaryWktLiteral_,
+       secondaryEmptyLiteral_},
       Optional(::testing::IsEmpty()));
   // An IRI is not a literal, so it has no language tag at all, and neither have
   // the remaining datatypes.
-  expectAll<Getter>({iri_, localIri_, auxIri_, encodedIri_, undefined_,
+  expectAll<Getter>({iri_, localIri_, secondaryIri_, encodedIri_, undefined_,
                      blankNode_, textRecord_, wordVocab_},
                     Eq(std::nullopt));
 }
@@ -646,8 +652,8 @@ TEST_F(ToNumericValueGetterTest, OperatorWithId) {
 
   // An IRI is not a literal, so there is nothing to convert, and the remaining
   // datatypes have no string representation that this getter uses.
-  expectAll<Getter>({iri_, localIri_, auxIri_, encodedIri_, undefined_, date_,
-                     blankNode_, textRecord_, wordVocab_},
+  expectAll<Getter>({iri_, localIri_, secondaryIri_, encodedIri_, undefined_,
+                     date_, blankNode_, textRecord_, wordVocab_},
                     VariantWith<std::monostate>(_));
 }
 
@@ -667,16 +673,18 @@ TEST_F(IsIriAndIsLiteralValueGetterTest, OperatorWithId) {
   // random): `Vocabulary::prefixRanges` describes the literals by a single
   // contiguous range of indices, but the indices of a `SplitVocabulary` are
   // marker-encoded, so the words of the geo sub-vocabulary lie far outside that
-  // range. The WKT literal of the auxiliary vocabulary below is unaffected,
+  // range. The WKT literal of the secondary vocabulary below is unaffected,
   // because that vocabulary does not split its words.
   // TODO<joka921> Fix that bug, then add `wktLiteral_` here.
   expectIsIriAndIsLiteral(
       {plainLiteral_, typedLiteral_, langLiteral_, localPlainLiteral_,
-       localTypedLiteral_, localLangLiteral_, auxEmptyLiteral_,
-       auxPlainLiteral_, auxTypedLiteral_, auxLangLiteral_, auxWktLiteral_},
+       localTypedLiteral_, localLangLiteral_, secondaryEmptyLiteral_,
+       secondaryPlainLiteral_, secondaryTypedLiteral_, secondaryLangLiteral_,
+       secondaryWktLiteral_},
       false, true);
   // Their IRIs, and the IRIs that are encoded directly in the `Id`.
-  expectIsIriAndIsLiteral({iri_, localIri_, auxIri_, encodedIri_}, true, false);
+  expectIsIriAndIsLiteral({iri_, localIri_, secondaryIri_, encodedIri_}, true,
+                          false);
   // The values that are encoded directly in the `Id` are literals.
   expectIsIriAndIsLiteral({boolTrue_, int_, double_, date_, geoPoint_}, false,
                           true);
