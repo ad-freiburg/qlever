@@ -164,13 +164,16 @@ CPP_template(typename UnderlyingVocabulary,
       // resource, which is sufficient for an array of `char`.
       auto* mem =
           static_cast<char*>(buffer->allocate(boundOnDecompressedWordSize));
-
       // Treat the allocated storage as the decoder output buffer.
       const ql::span<char> outputBuffer{mem, boundOnDecompressedWordSize};
       const size_t numBytesWritten = compressionWrapper_.decompressInto(
           compressedWord, decoderIdx, outputBuffer, scratch);
 
-      AD_CORRECTNESS_CHECK(numBytesWritten <= boundOnDecompressedWordSize);
+      // Since `boundOnDecompressedWordSize == 0` is handled above, the input is
+      // non-empty and any valid lossless decompressor must write at least 1
+      // byte and at most the allocated upper bound.
+      AD_CORRECTNESS_CHECK(numBytesWritten > 0 &&
+                           numBytesWritten <= boundOnDecompressedWordSize);
 
       views.emplace_back(mem, numBytesWritten);
     }
