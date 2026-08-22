@@ -198,6 +198,13 @@ struct IndexBuilderConfig : CommonConfig {
   // limitations regarding the correctness of FILTER and ORDER BY.
   std::vector<std::string> prefixesForIdEncodedIris_;
 
+  // Same as `prefixesForIdEncodedIris_`, but for the wide layout of the
+  // encoding, which fits longer digit sequences (17 instead of 13 decimal
+  // digits by default), but allows only very few prefixes (4 by default) and
+  // does not encode digit sequences with leading zeros. See
+  // `EncodedIriManager` for details.
+  std::vector<std::string> widePrefixesForIdEncodedIris_;
+
   // The remaining members of this class, are only relevant if a full-text
   // index is built in addition to the RDF index. By default, no fulltext index
   // is built. The full-text index enables efficient keyword search in text
