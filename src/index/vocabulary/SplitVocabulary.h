@@ -200,7 +200,7 @@ class SplitVocabulary {
     ResultsByMarker lookupResultByMarker_{};
   };
 
-  // Merge per-marker batches into one result in input order.
+  // Merge the per-vocabulary batches into one result in input order.
   static VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
       MarkerBatchLookups markerLookups,
       const IndicesAndPositionsByMarker& markerIndicesAndPositions) {
@@ -208,19 +208,20 @@ class SplitVocabulary {
         markerIndicesAndPositions.begin(), markerIndicesAndPositions.end(),
         size_t(0),
         [](size_t sum, const auto& entry) { return sum + entry.size(); }));
-    std::vector<VocabBatchOwner> owners;
-    for (auto [marker, markerIndices] :
+    std::vector<VocabBatchOwner> resultOwners;
+    for (auto [vocabMarker, markerIndices] :
          ::ranges::views::enumerate(markerIndicesAndPositions)) {
       if (markerIndices.empty()) {
         continue;
       }
-      AD_CORRECTNESS_CHECK(markerLookups.lookupResultByMarker_[marker] !=
+      AD_CORRECTNESS_CHECK(markerLookups.lookupResultByMarker_[vocabMarker] !=
                            nullptr);
       scatterVocabBatchLookupResult(
-          std::move(markerLookups.lookupResultByMarker_[marker]),
-          markerIndices.getResultPositions(), viewsInInputOrder, owners);
+          std::move(markerLookups.lookupResultByMarker_[vocabMarker]),
+          markerIndices.getResultPositions(), viewsInInputOrder, resultOwners);
     }
-    return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
+    return keepAliveVocabBatch(std::move(resultOwners),
+                               std::move(viewsInInputOrder));
   }
 
   // Grant unit tests access to the private `lookupBatch` helpers.
@@ -314,14 +315,14 @@ class SplitVocabulary {
       if (markerIndicesAndPositionsForMarker.empty()) {
         continue;
       }
-      markerLookups.lookupResultByMarker_[marker] = std::visit(
+      markerLookups.lookupResultByMarker_[vocabMarker] = std::visit(
           [&](const auto& vocab) {
             return vocab.lookupBatch(
                 markerIndicesAndPositionsForMarker.getUnderlyingIndices());
           },
           underlying_[marker]);
       AD_CORRECTNESS_CHECK(
-          markerLookups.lookupResultByMarker_[marker]->size() ==
+          markerLookups.lookupResultByMarker_[vocabMarker]->size() ==
           markerIndicesAndPositionsForMarker.size());
     }
 
