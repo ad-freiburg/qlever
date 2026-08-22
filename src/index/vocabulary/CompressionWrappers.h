@@ -1,6 +1,7 @@
-//  Copyright 2024, University of Freiburg,
+//  Copyright 2024, 2026, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Author: Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSIONWRAPPERS_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSIONWRAPPERS_H
@@ -63,6 +64,15 @@ template <typename T>
 CPP_concept CompressionWrapper = CPP_requires_ref(CompressionWrapper_, T);
 
 namespace detail {
+
+template <typename Decoder, typename = void>
+struct HasThreeArgumentDecompressInto : std::false_type {};
+
+template <typename Decoder>
+struct HasThreeArgumentDecompressInto<
+    Decoder, std::void_t<decltype(std::declval<const Decoder&>().decompressInto(
+        std::declval<std::string_view>(), std::declval<ql::span<char>>(),
+        std::declval<std::string&>()))>> : std::true_type {};
 // A class that holds a `vector<DecoderT>` and forwards `decompress`,
 // `maxDecompressedSize`, and `decompressInto` to `decoders_[index]`. It is
 // used as a building block for types that fulfill the `CompressionWrapper`
