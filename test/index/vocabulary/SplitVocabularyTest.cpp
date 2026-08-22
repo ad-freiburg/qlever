@@ -521,6 +521,7 @@ class SplitVocabularyWithDataTest : public ::testing::Test {
 
 TwoSplitVocabulary SplitVocabularyWithDataTest::sv_;
 
+// _____________________________________________________________________________
 // Test the private lookupBatch helpers directly via FRIEND_TEST.
 TEST_F(SplitVocabularyWithDataTest,
        SplitVocabularyPartitionMarkerIndicesAndPositions) {

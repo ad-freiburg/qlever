@@ -430,26 +430,26 @@ class FsstRepeatedDecoderTest : public ::testing::Test {
   }
 };
 
+// _____________________________________________________________________________
 // Goal: the repeated-decoder variant (FSST stages applied N times) must also
 // satisfy `decompressInto` == `decompress` byte-for-byte. Method: shared
 // helper `expectRepeatedDecompressIntoMatches<N>` compresses words through N
 // cascaded stages, decodes via both interfaces, and compares all three.
-// _____________________________________________________________________________
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressOneStage) {
   expectRepeatedDecompressIntoMatches<1>(
       {"alpha", "", "beta", "gamma-gamma-gamma", ""});
 }
 
-// See above, with two cascaded FSST stages.
 // _____________________________________________________________________________
+// See above, with two cascaded FSST stages.
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressTwoStages) {
   expectRepeatedDecompressIntoMatches<2>(
       {"alpha", "", "beta", "gamma-gamma-gamma", ""});
 }
 
+// _____________________________________________________________________________
 // See above, with three cascaded FSST stages (the deepest staging used in
 // production).
-// _____________________________________________________________________________
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressThreeStages) {
   expectRepeatedDecompressIntoMatches<3>(
       {"alpha", "", "beta", "gamma-gamma-gamma", ""});

@@ -118,6 +118,7 @@ TEST(VocabularyInternalExternal, AccessOperator) {
       createVocabularyFromDisk("AccessOperator2"));
 }
 
+// _____________________________________________________________________________
 // `lookupBatch` must match `operator[]` in request order, including cache
 // hits (even `i` in the writer: stored in RAM) and misses (odd `i`: disk
 // only), plus reordered and duplicated indices.
@@ -140,14 +141,15 @@ TEST(VocabularyInternalExternal, LookupBatchMatchesAccessOperator) {
       vocab, vocab.lookupBatch(diskOnly), diskOnly);
 }
 
+// _____________________________________________________________________________
 TEST(VocabularyInternalExternal, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary("EmptyVocabulary"));
 }
 
 // _____________________________________________________________________________
+// `scanAll` delegates to the external vocabulary and must yield all words in
+// order.
 TEST(VocabularyInternalExternal, ScanAll) {
-  // `scanAll` delegates to the external vocabulary and must yield all words in
-  // order.
   const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
   auto vocab = createVocabulary("ScanAll")(words);
   EXPECT_THAT(scanAllToVector(vocab.scanAll()),

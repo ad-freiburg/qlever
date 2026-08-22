@@ -66,6 +66,7 @@ TEST(VocabularyTypes, verifyWordWriterBaseDestructorBehavesAsExpected) {
   });
 }
 
+// _____________________________________________________________________________
 // `asResult` exposes the span over the filled views, and the returned aliasing
 // shared_ptr keeps the backing buffer/views alive after the original owning
 // shared_ptr is dropped (the whole point of the aliasing shared_ptr).
@@ -84,6 +85,7 @@ TEST(VocabBatchLookupData, AsResultExposesViewsAndKeepsDataAlive) {
   EXPECT_THAT(*result, ::testing::ElementsAre("foo", "bar"));
 }
 
+// _____________________________________________________________________________
 // An empty lookup result is valid: no views, empty span.
 TEST(VocabBatchLookupData, AsResultEmpty) {
   auto data = std::make_shared<VocabBatchLookupData>();
@@ -91,17 +93,17 @@ TEST(VocabBatchLookupData, AsResultEmpty) {
   EXPECT_TRUE(result->empty());
 }
 
-// Verify that an owning string batch exposes all input words as valid views.
 // _____________________________________________________________________________
+// Verify that an owning string batch exposes all input words as valid views.
 TEST(VocabBatchLookupData, MakeStringVectorResultKeepsViewsValid) {
   auto result = makeStringVectorVocabBatchLookupResult({"alpha", "beta"});
 
   EXPECT_THAT(*result, ::testing::ElementsAre("alpha", "beta"));
 }
 
+// _____________________________________________________________________________
 // Verify that scattering preserves input order and retains the child batch
 // owner.
-// _____________________________________________________________________________
 TEST(VocabBatchLookupData, ScatterBatchResultRetainsOwner) {
   auto first = makeStringVectorVocabBatchLookupResult({"alpha", "beta"});
   auto second = makeStringVectorVocabBatchLookupResult({"gamma"});
@@ -124,9 +126,9 @@ TEST(VocabBatchLookupData, ScatterBatchResultRetainsOwner) {
   EXPECT_EQ((*result)[1].data(), gammaData);
 }
 
+// _____________________________________________________________________________
 // Verify that keeping child batches alive preserves their original string
 // storage.
-// _____________________________________________________________________________
 TEST(VocabBatchLookupData, KeepAliveVocabBatchDoesNotCopyBytes) {
   auto firstOwner = std::make_shared<StringVectorVocabBatchLookupData>();
   firstOwner->buffer() = {"alpha", "beta"};
