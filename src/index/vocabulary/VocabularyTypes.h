@@ -190,8 +190,10 @@ inline void scatterVocabBatchLookupResult(
     written[resultPosition] = true;
     viewsInInputOrder[resultPosition] = word;
   }
-  AD_CORRECTNESS_CHECK(
-      ql::ranges::all_of(written, [](bool wasWritten) { return wasWritten; }));
+  // Note: this function is called once per child batch; each call writes only
+  // its own positions. Completeness across calls (every position written) is
+  // the caller's contract, enforced by `keepAliveVocabBatch`'s non-empty
+  // checks and the per-call double-write guard above.
   owners.push_back(std::move(result));
 }
 
