@@ -5,6 +5,10 @@
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 
+#include <array>
+#include <memory>
+
+#include "backports/span.h"
 #include "util/FsstCompressor.h"
 
 TEST(FsstEncoder, firstTest) {
@@ -362,4 +366,73 @@ TEST(FsstEncoder, firstTest) {
     }
     EXPECT_THAT(s3, ::testing::ElementsAreArray(s));
   }
+
+  // Verify that `decompressInto` writes the same bytes as `decompress` when
+  // using a caller-owned buffer sized to `maxDecompressedSize`.
+  {
+    auto [buffer, compressedViews, intoDecoder] = FsstEncoder::compressAll(s);
+    for (size_t i = 0; i < s.size(); ++i) {
+      const std::string viaString = intoDecoder.decompress(compressedViews[i]);
+      std::string intoBuf(intoDecoder.maxDecompressedSize(compressedViews[i]),
+                          '\0');
+      const size_t n = intoDecoder.decompressInto(
+          compressedViews[i], ql::span<char>{intoBuf.data(), intoBuf.size()});
+      EXPECT_THAT(n, ::testing::Eq(viaString.size()));
+      EXPECT_THAT(std::string_view(intoBuf.data(), n),
+                  ::testing::Eq(viaString));
+      EXPECT_THAT(viaString, ::testing::Eq(s[i]));
+    }
+  }
+}
+
+// _____________________________________________________________________________
+template <size_t N>
+void expectRepeatedDecompressIntoMatches(
+    const std::vector<std::string>& words) {
+  std::vector<std::string_view> views;
+  views.reserve(words.size());
+  for (const auto& w : words) {
+    views.emplace_back(w);
+  }
+  std::array<FsstDecoder, N> decoders{};
+  std::shared_ptr<std::string> keepAlive;
+  std::vector<std::string_view> compressed = views;
+  for (size_t stage = 0; stage < N; ++stage) {
+    auto [buffer, nextViews, decoder] = FsstEncoder::compressAll(compressed);
+    keepAlive = std::move(buffer);
+    compressed.assign(nextViews.begin(), nextViews.end());
+    decoders[stage] = decoder;
+  }
+  FsstRepeatedDecoder<N> repeated{decoders};
+  std::string scratch;
+  for (size_t i = 0; i < words.size(); ++i) {
+    const std::string viaString = repeated.decompress(compressed[i]);
+    std::string intoBuf(repeated.maxDecompressedSize(compressed[i]), '\0');
+    const size_t n = repeated.decompressInto(
+        compressed[i], ql::span<char>{intoBuf.data(), intoBuf.size()}, scratch);
+    EXPECT_THAT(n, ::testing::Eq(viaString.size()));
+    EXPECT_THAT(std::string_view(intoBuf.data(), n), ::testing::Eq(viaString));
+    EXPECT_THAT(viaString, ::testing::Eq(words[i]));
+  }
+  if constexpr (N >= 2) {
+    EXPECT_GE(scratch.size(), repeated.maxDecompressedSize(compressed.front()));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompressOneStage) {
+  expectRepeatedDecompressIntoMatches<1>(
+      {"alpha", "beta", "gamma-gamma-gamma"});
+}
+
+// _____________________________________________________________________________
+TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompressTwoStages) {
+  expectRepeatedDecompressIntoMatches<2>(
+      {"alpha", "beta", "gamma-gamma-gamma"});
+}
+
+// _____________________________________________________________________________
+TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompressThreeStages) {
+  expectRepeatedDecompressIntoMatches<3>(
+      {"alpha", "beta", "gamma-gamma-gamma"});
 }

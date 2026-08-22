@@ -11,12 +11,12 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 
-#include <cstring>
 #include <memory_resource>
 #include <string>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/span.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/CompressionWrappers.h"
 #include "index/vocabulary/PrefixCompressor.h"
@@ -98,6 +98,9 @@ CPP_template(typename UnderlyingVocabulary,
   // words in batches) and decompress each word. `scanAll()` is expected to
   // yield `IndexAndWord` elements, so we have to apply a transformation at the
   // end.
+  // TODO<ms2144>: Decode into a caller-owned buffer via `decompressInto` /
+  // `maxDecompressedSize` as in `lookupBatch` below, instead of
+  // `decompress()` into a reused `std::string`.
   auto scanAll() const {
     return ad_utility::CachingTransformInputRange(
         underlyingVocabulary_.scanAll(),
@@ -110,7 +113,13 @@ CPP_template(typename UnderlyingVocabulary,
 
   // Batch-read the compressed words from the underlying vocabulary, then
   // decompress each word with the decoder of its block. The result order
-  // matches `indices`.
+  // matches `indices`. Allocate each word at the wrapper's
+  // `maxDecompressedSize` in the PMR arena and decode into that slot. Keep
+  // the unused tail; do not trim until allocated-vs-used waste is measured
+  // (`TODO<ms2144>`). Multi-stage FSST reuses `scratch` and grows it when a
+  // larger bound appears. `decompress()` still returns `std::string`.
+  // TODO<ms2144>: Measure arena bound-vs-used waste on Wikidata label batches
+  // before adding trim or a custom bump resource.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
@@ -119,16 +128,48 @@ CPP_template(typename UnderlyingVocabulary,
     auto buffer = std::make_unique<ql::pmr::monotonic_buffer_resource>();
     std::vector<std::string_view> views;
     views.reserve(indices.size());
+    std::string scratch;
 
     for (const auto& idxAndCompressedWord :
          ::ranges::views::zip(indices, *compressedWords)) {
       const auto& [idx, compressedWord] = idxAndCompressedWord;
-      std::string decompressed =
-          compressionWrapper_.decompress(compressedWord, getDecoderIdx(idx));
-      views.push_back(copyIntoMonotonicBuffer(*buffer, decompressed));
+      const size_t decoderIdx = getDecoderIdx(idx);
+      const size_t bound =
+          compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx);
+      if (bound == 0) {
+        views.emplace_back();
+        continue;
+      }
+      // `memory_resource::allocate` returns `void*` to storage we own for
+      // `bound` bytes. Casting to `char*` is well-defined and is the usual
+      // way to treat that storage as a byte buffer: the selected decoder
+      // writes into it, then we form a `string_view` over the used prefix.
+      // Alignment is at least `alignof(std::max_align_t)` for this resource,
+      // which is sufficient for an array of `char`.
+      auto* mem = static_cast<char*>(buffer->allocate(bound));
+      const size_t n = compressionWrapper_.decompressInto(
+          compressedWord, decoderIdx, ql::span<char>{mem, bound}, scratch);
+      AD_CORRECTNESS_CHECK(n <= bound);
+      views.emplace_back(mem, n);
     }
 
     return makePmrVocabBatchLookupResult(std::move(buffer), std::move(views));
+  }
+
+  // Compressed words only, no FSST. Used by `vocab-decode-arena-bench` to
+  // build a RAM fixture for the decode-only (layer 0) arm.
+  VocabBatchLookupResult lookupCompressedBatch(
+      ql::span<const size_t> indices) const {
+    AD_CONTRACT_CHECK(!indices.empty());
+    return underlyingVocabulary_.lookupBatch(indices);
+  }
+
+  [[nodiscard]] size_t decoderIndex(size_t idx) const {
+    return getDecoderIdx(idx);
+  }
+
+  [[nodiscard]] const CompressionWrapper& compressionWrapper() const {
+    return compressionWrapper_;
   }
 
   //____________________________________________________________________________

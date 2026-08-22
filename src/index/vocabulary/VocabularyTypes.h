@@ -148,19 +148,6 @@ inline VocabBatchLookupResult makeStringVectorVocabBatchLookupResult(
   return StringVectorVocabBatchLookupData::asResult(std::move(data));
 }
 
-// Copy `word` into the monotonic `buffer` and return a view of the copy
-// (null-terminated; the terminator is not part of the view). Use this instead
-// of a local `std::pmr::string`: short strings use SSO and would store their
-// characters inside the destroyed local object, so saved views would dangle.
-inline std::string_view copyIntoMonotonicBuffer(
-    ql::pmr::monotonic_buffer_resource& buffer, const std::string& word) {
-  auto* storage =
-      static_cast<char*>(buffer.allocate(word.size() + 1, alignof(char)));
-  std::memcpy(storage, word.data(), word.size());
-  storage[word.size()] = '\0';
-  return {storage, word.size()};
-}
-
 // Construct a PMR-backed result and expose views into its monotonic allocator.
 // `views` must all point into `buffer`, else we get UB.
 inline VocabBatchLookupResult makePmrVocabBatchLookupResult(

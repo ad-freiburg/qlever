@@ -8,10 +8,12 @@
 
 #include "VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
+#include "backports/span.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
+#include "util/Exception.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
@@ -20,6 +22,20 @@ using namespace vocabulary_test;
 using namespace ad_utility::vocabulary;
 // A stateless "compressor" that applies a trivial transformation to a string
 struct DummyDecoder {
+  static size_t maxDecompressedSize(std::string_view compressed) {
+    return compressed.size();
+  }
+
+  static size_t decompressInto(std::string_view compressed,
+                               ql::span<char> out) {
+    AD_CONTRACT_CHECK(out.size() >= compressed.size());
+    for (auto&& [dest, src] :
+         ::ranges::views::zip(out.subspan(0, compressed.size()), compressed)) {
+      dest = static_cast<char>(src - 2);
+    }
+    return compressed.size();
+  }
+
   static std::string decompress(std::string_view compressed) {
     std::string result{compressed};
     for (char& c : result) {
