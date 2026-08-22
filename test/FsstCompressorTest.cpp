@@ -369,19 +369,26 @@ TEST(FsstEncoder, firstTest) {
   }
 }
 
+// Goal: `decompressInto` (the arena-bound path used by `lookupBatch`) must
+// produce byte-for-byte the same output as the string-returning `decompress`.
+// Method: compress the words, decode each compressed word through both
+// interfaces, and compare the results against each other and the original.
 // _____________________________________________________________________________
 TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
   const std::vector<std::string> words{"alpha", "beta", "gamma"};
   auto [buffer, compressedViews, decoder] = FsstEncoder::compressAll(words);
   auto word = words.begin();
+
   for (const auto& compressed : compressedViews) {
     const std::string viaString = decoder.decompress(compressed);
     std::string output(decoder.maxDecompressedSize(compressed), '\0');
     const size_t size = decoder.decompressInto(
         compressed, ql::span<char>{output.data(), output.size()});
     const std::string_view decompressedView{output.data(), size};
+
     EXPECT_EQ(decompressedView, viaString);
     EXPECT_THAT(viaString, ::testing::Eq(*word));
+
     ++word;
   }
 }
@@ -426,18 +433,25 @@ class FsstRepeatedDecoderTest : public ::testing::Test {
   }
 };
 
+// Goal: the repeated-decoder variant (FSST stages applied N times) must also
+// satisfy `decompressInto` == `decompress` byte-for-byte. Method: shared
+// helper `expectRepeatedDecompressIntoMatches<N>` compresses words through N
+// cascaded stages, decodes via both interfaces, and compares all three.
 // _____________________________________________________________________________
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressOneStage) {
   expectRepeatedDecompressIntoMatches<1>(
       {"alpha", "beta", "gamma-gamma-gamma"});
 }
 
+// See above, with two cascaded FSST stages.
 // _____________________________________________________________________________
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressTwoStages) {
   expectRepeatedDecompressIntoMatches<2>(
       {"alpha", "beta", "gamma-gamma-gamma"});
 }
 
+// See above, with three cascaded FSST stages (the deepest staging used in
+// production).
 // _____________________________________________________________________________
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressThreeStages) {
   expectRepeatedDecompressIntoMatches<3>(
