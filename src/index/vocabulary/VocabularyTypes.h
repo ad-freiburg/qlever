@@ -182,11 +182,16 @@ inline void scatterVocabBatchLookupResult(
     std::vector<VocabBatchOwner>& owners) {
   AD_CONTRACT_CHECK(result != nullptr);
   AD_CONTRACT_CHECK(result->size() == resultPositions.size());
+  std::vector<bool> written(viewsInInputOrder.size());
   for (auto [resultPosition, word] :
        ::ranges::views::zip(resultPositions, *result)) {
     AD_CORRECTNESS_CHECK(resultPosition < viewsInInputOrder.size());
+    AD_CORRECTNESS_CHECK(!written[resultPosition]);
+    written[resultPosition] = true;
     viewsInInputOrder[resultPosition] = word;
   }
+  AD_CORRECTNESS_CHECK(
+      ql::ranges::all_of(written, [](bool wasWritten) { return wasWritten; }));
   owners.push_back(std::move(result));
 }
 

@@ -134,6 +134,7 @@ CPP_template(typename UnderlyingVocabulary,
          ::ranges::views::zip(indices, *compressedWords)) {
       const auto& [idx, compressedWord] = idxAndCompressedWord;
       const size_t decoderIdx = getDecoderIdx(idx);
+      AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
       const size_t bound =
           compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx);
       if (bound == 0) {

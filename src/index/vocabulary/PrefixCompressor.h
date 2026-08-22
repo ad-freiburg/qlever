@@ -71,7 +71,7 @@ class PrefixCompressor {
     AD_CONTRACT_CHECK(!compressedWord.empty());
     auto idx = static_cast<uint8_t>(compressedWord[0]) - MIN_COMPRESSION_PREFIX;
     const size_t rest = compressedWord.size() - 1;
-    if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
+    if (idx < NUM_COMPRESSION_PREFIXES) {
       return prefixToCode_[idx].size() + rest;
     }
     return rest;
@@ -83,10 +83,11 @@ class PrefixCompressor {
                                       ql::span<char> out) const {
     const size_t bound = maxDecompressedSize(compressedWord);
     AD_CONTRACT_CHECK(out.size() >= bound);
+    AD_CONTRACT_CHECK(!compressedWord.empty());
     auto idx = static_cast<uint8_t>(compressedWord[0]) - MIN_COMPRESSION_PREFIX;
     const std::string_view rest = compressedWord.substr(1);
     size_t n = 0;
-    if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
+    if (idx < NUM_COMPRESSION_PREFIXES) {
       const std::string& prefix = prefixToCode_[idx];
       if (!prefix.empty()) {
         std::memcpy(out.data(), prefix.data(), prefix.size());
@@ -104,7 +105,7 @@ class PrefixCompressor {
   [[nodiscard]] std::string decompress(std::string_view compressedWord) const {
     AD_CONTRACT_CHECK(!compressedWord.empty());
     auto idx = static_cast<uint8_t>(compressedWord[0]) - MIN_COMPRESSION_PREFIX;
-    if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
+    if (idx < NUM_COMPRESSION_PREFIXES) {
       return prefixToCode_[idx] + compressedWord.substr(1);
     }
     return std::string(compressedWord.substr(1));
