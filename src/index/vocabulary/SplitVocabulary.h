@@ -107,6 +107,13 @@ class SplitVocabulary {
       ValueId::numDataBits - markerBitMaskSize;
   static constexpr uint64_t vocabIndexBitMask =
       ad_utility::bitMaskForLowerBits(markerShift);
+  // Enforce the layout that `addMarker`/`getMarker`/`getVocabIndex` rely on:
+  // the marker bits sit directly above the vocab-index bits and together they
+  // exactly fill the data bits, so the `ValueId` datatype bits stay zero.
+  static_assert(markerBitMaskSize <= ValueId::numDataBits);
+  static_assert(markerShift + markerBitMaskSize == ValueId::numDataBits);
+  static_assert((markerBitMask >> markerShift) ==
+                ad_utility::bitMaskForLowerBits(markerBitMaskSize));
 
   // Instances of the functions used for implementing the specific split logic
   static constexpr SplitFunction splitFunction_{};
@@ -231,9 +238,10 @@ class SplitVocabulary {
               SplitVocabularyMergeMarkerBatchesInInputOrder);
 
  public:
-  // Check validity of vocabIndex and marker, then return a new 64 bit index
-  // that contains the marker and vocabIndex. The result is guaranteed to be
-  // zero in all ValueId datatype bits.
+  // Check validity of `vocabIndex` and `marker`, then return a new 64 bit index
+  // that contains the `marker` and the `vocabIndex`. The result is guaranteed
+  // to be zero in all `ValueId` datatype bits (enforced by the static_asserts
+  // on the bit masks above).
   static uint64_t addMarker(uint64_t vocabIndex, uint8_t marker) {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs &&
                          vocabIndex <= vocabIndexBitMask);
