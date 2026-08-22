@@ -72,6 +72,8 @@ struct DummyCompressionWrapper
   }
 };
 
+// The compressed vocabulary must actually compress: identical uncompressed
+// and on-disk sizes would mean the compression layer is a no-op.
 // _______________________________________________________
 TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
@@ -135,23 +137,34 @@ struct CompressedVocabularyF : public testing::Test {
 };
 TYPED_TEST_SUITE(CompressedVocabularyF, Compressors);
 
+// The generic vocabulary framework tests, run for every compressor: lower and
+// upper bound searches must behave identically to an uncompressed vocabulary,
+// with both the standard string comparator and the numeric-index comparator.
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, LowerUpperBoundStdLess) {
   testUpperAndLowerBoundWithStdLess(this->createCompressedVocabulary());
 }
 
+// See above: same bounds contract, but driven through the numeric comparator
+// that `ValueId`-based lookups use.
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, LowerUpperBoundNumeric) {
   testUpperAndLowerBoundWithNumericComparator(
       this->createCompressedVocabulary());
 }
 
+// Single-word access via `operator[]` must return exactly the stored word for
+// every index (and nullopt behavior stays with the underlying vocabulary).
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(this->createCompressedVocabulary());
 }
 
-// _______________________________________________________
+// `lookupBatch` must agree with the per-word `operator[]` for arbitrary index
+// combinations: same words, same order as requested (duplicates included), and
+// each returned view must alias the vocabulary's own storage. An empty index
+// list is a contract violation and must throw.
+// _____________________________________________________________________________
 TYPED_TEST(CompressedVocabularyF, LookupBatchMatchesAccessOperator) {
   const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
                                        "epsilon"};
@@ -163,11 +176,15 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchMatchesAccessOperator) {
                                ::testing::HasSubstr("!indices.empty()"));
 }
 
+// The generic framework's empty-vocabulary contract: lookups, iteration, and
+// size must all behave on a vocabulary with zero words.
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, EmptyVocabulary) {
   testEmptyVocabulary(this->createCompressedVocabulary());
 }
 
+// Serialization round trip: write the compressed vocabulary to disk with the
+// serializer, read it back, and verify every word survives identically.
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
@@ -201,6 +218,9 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   ad_utility::deleteFile(filename);
 }
 
+// Zero-copy deserialization: opening a vocabulary serialized by this same
+// process must map/reference the existing buffers instead of decompressing
+// everything anew, and lookups must still return the correct words.
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, ZeroCopyDeserialization) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
@@ -236,6 +256,8 @@ TYPED_TEST(CompressedVocabularyF, ZeroCopyDeserialization) {
 
 }  // namespace
 
+// `scanAll` must yield every word in index order, spanning multiple decoder
+// blocks (the fixture's small block size forces many blocks for 111 words).
 // _____________________________________________________________________________
 TYPED_TEST(CompressedVocabularyF, ScanAll) {
   auto createVocab = TestFixture::createCompressedVocabulary();
@@ -275,7 +297,7 @@ TYPED_TEST(CompressedVocabularyF, ScanAll) {
 //    verify content byte-for-byte, which makes corruption overwhelmingly
 //    likely but not formally guaranteed.
 TYPED_TEST(CompressedVocabularyF, LookupBatchShortWordViewsStayValid) {
-  // All words deliberately short (<= ~15 chars): every one takes the SSO
+  // All words deliberately short (<= 15 chars): every one takes the SSO
   // path in a `pmr::string`-based implementation, and none would end up in
   // the monotonic buffer that owns the result's storage.
   std::vector<std::string> words;
@@ -307,6 +329,8 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchShortWordViewsStayValid) {
   }
 }
 
+// `scanAll` on an empty vocabulary must yield an empty (but valid) range,
+// not an error or a dangling iterator.
 // _____________________________________________________________________________
 TYPED_TEST(CompressedVocabularyF, ScanAllEmptyVocabulary) {
   auto createVocab = TestFixture::createCompressedVocabulary();
