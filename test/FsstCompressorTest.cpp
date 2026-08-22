@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "backports/span.h"
-#include "backports/zip.h"
 #include "util/FsstCompressor.h"
 
 TEST(FsstEncoder, firstTest) {
@@ -373,15 +372,16 @@ TEST(FsstEncoder, firstTest) {
 TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
   const std::vector<std::string> words{"alpha", "beta", "gamma"};
   auto [buffer, compressedViews, decoder] = FsstEncoder::compressAll(words);
-  for (const auto& [word, compressed] :
-       ql::ranges::views::zip(words, compressedViews)) {
+  auto word = words.begin();
+  for (const auto& compressed : compressedViews) {
     const std::string viaString = decoder.decompress(compressed);
     std::string output(decoder.maxDecompressedSize(compressed), '\0');
     const size_t size = decoder.decompressInto(
         compressed, ql::span<char>{output.data(), output.size()});
     EXPECT_THAT(std::string_view{output.data(), size},
                 ::testing::Eq(viaString));
-    EXPECT_THAT(viaString, ::testing::Eq(word));
+    EXPECT_THAT(viaString, ::testing::Eq(*word));
+    ++word;
   }
 }
 
