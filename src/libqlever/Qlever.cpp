@@ -140,7 +140,8 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
-  index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
+  index.getImpl().setPrefixesForEncodedValues(
+      config.prefixesForIdEncodedIris_, config.widePrefixesForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(config.blankNodeIriRegexes_);
 
   // Build text index if requested (various options).
