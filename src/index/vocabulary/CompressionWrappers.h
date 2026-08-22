@@ -78,9 +78,7 @@ template <typename Decoder>
 CPP_requires(RequiresScratchDecompressInto_,
              requires(const Decoder& decoder, std::string_view compressed,
                       ql::span<char> out, std::string& scratch)(
-                 concepts::same_as<
-                     decltype(decoder.decompressInto(compressed, out, scratch)),
-                     size_t>));
+                 decoder.decompressInto(compressed, out, scratch)));
 
 template <typename Decoder>
 CPP_concept RequiresScratchDecompressInto =
