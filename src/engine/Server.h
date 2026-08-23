@@ -250,6 +250,16 @@ class Server {
       processPing(std::optional<std::string> msg,
                   const RequestT& request) const;
 
+  // Handle the `/metrics` endpoint: requires a valid access token, then
+  // serves Prometheus-formatted metrics text if enabled
+  // (`--enable-metrics`), or a 404 response otherwise. Like `processPing`
+  // above, this never needs to bypass query processing, so it returns the
+  // response directly.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      ad_utility::httpUtils::ResponseT
+      processMetrics(bool accessTokenOk, const RequestT& request) const;
+
   // Handle a `rebuild-index` command: extract the tmp-dir/previous-index-dir
   // parameters and trigger a rebuild unless one is already in progress.
   // Unlike `processVacuumDeltaTriples`/`processWriteMaterializedView` above,

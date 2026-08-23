@@ -569,6 +569,21 @@ void dispatchLog(std::string_view cmd, bool accessTokenOk) {
 }  // namespace
 
 // _____________________________________________________________________________
+CPP_template_def(typename RequestT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    ad_utility::httpUtils::ResponseT Server::processMetrics(
+        bool accessTokenOk, const RequestT& request) const {
+  using namespace ad_utility::httpUtils;
+  serverProcessHelpers::requireValidAccessToken(accessTokenOk, "metrics");
+  if (!metricsReader_) {
+    return createNotFoundResponse("Metrics not enabled (use --enable-metrics)",
+                                  request);
+  }
+  return createOkResponse(metricsReader_->getMetricsText(), request,
+                          MediaType::textPlain);
+}
+
+// _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
@@ -721,14 +736,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Prometheus metrics scrape endpoint.
   if (parsedHttpRequest.path_ == "/metrics") {
-    requireValidAccessToken("metrics");
-    if (!metricsReader_) {
-      response = createNotFoundResponse(
-          "Metrics not enabled (use --enable-metrics)", request);
-    } else {
-      response = createOkResponse(metricsReader_->getMetricsText(), request,
-                                  MediaType::textPlain);
-    }
+    response = processMetrics(accessTokenOk, request);
   }
 
   // Set description of KB index.
