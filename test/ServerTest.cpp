@@ -493,6 +493,25 @@ TEST(ServerTest, metricsEndpoint) {
 }
 
 // _____________________________________________________________________________
+TEST(ServerTest, pingEndpoint) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  // Without a `msg` parameter.
+  auto response = server.process(makeGetRequest("/ping"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("This QLever server is up and running\n"));
+
+  // With a `msg` parameter; the response is the same regardless of the
+  // message, which is only used for logging.
+  response = server.process(makeGetRequest("/ping?msg=hello"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("This QLever server is up and running\n"));
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, clearDeltaTriples) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
   auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
