@@ -1223,11 +1223,11 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
       applyVersionAndExpectThrow(
           qlever::indexFormatConverter::sourceVersion,
           ::testing::AllOf(
-              ::testing::HasSubstr(
-                  "This index is in the previous index format (PR = 1572"),
-              ::testing::HasSubstr(
-                  "The `qlever-upgrade-index` binary can rewrite it into the "
-                  "current format"))),
+              ::testing::HasSubstr("index format that was introduced on "
+                                   "2024-10-22 (PR = 1572)"),
+              ::testing::HasSubstr("You have three options"),
+              ::testing::HasSubstr("Upgrade your index with "
+                                   "`qlever-upgrade-index <basename>`"))),
       ::testing::Not(::testing::HasSubstr("The index is too old")));
 }
 

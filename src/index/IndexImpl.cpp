@@ -1415,14 +1415,23 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
         if (indexFormatVersion == sourceVersion &&
             currentVersion == targetVersion) {
           throw std::runtime_error{absl::StrCat(
-              "This index is in the previous index format (PR = ",
-              sourceVersion.prNumber_,
-              ", Date = ", sourceVersion.date_.toStringAndType().first,
-              "). The `qlever-upgrade-index` binary can rewrite it into the "
-              "current format, which is much faster than rebuilding the "
-              "index. Note that rebuilding the index is still the recommended "
-              "way, because it also profits from all improvements to the "
-              "index building since this index was built.")};
+              "This index is in an index format that was introduced on ",
+              sourceVersion.date_.toStringAndType().first,
+              " (PR = ", sourceVersion.prNumber_,
+              "). However, the index format changed on ",
+              targetVersion.date_.toStringAndType().first,
+              " (PR = ", targetVersion.prNumber_,
+              "). You have three options:\n\n"
+              "1. Use an older version of QLever; that way, you won't get the "
+              "latest features\n"
+              "2. Rebuild the index from scratch with the version of qlever "
+              "you are currently using; we recommend this if it is easy to do "
+              "for you\n"
+              "3. Upgrade your index with `qlever-upgrade-index <basename>`; "
+              "this is much faster than rebuilding the index from scratch\n\n"
+              "NOTE: We do our best to keep index format changes rare, but "
+              "sometimes they are unavoidable; we also do our best to then "
+              "keep the new format for a long time")};
         }
         AD_LOG_ERROR
             << "The index is too old for this version of QLever. "
