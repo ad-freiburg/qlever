@@ -528,7 +528,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         checkParameter("rebuild-tmp-dir", std::nullopt),
         checkParameter("rebuild-previous-index-dir", std::nullopt));
     if (config.has_value()) {
-      response = createJsonResponse(config->successResponseAsJson(), request);
+      response = createJsonResponse(
+          qlever::rebuildSuccessResponseAsJson(*config), request);
     } else {
       response = createHttpResponseFromString(
           "Another rebuild is currently in progress!",
@@ -1448,7 +1449,7 @@ Server::createMessageSender<Server::StringBodyRequest>(
     const StringBodyRequest&, std::string_view, std::string_view);
 
 // _____________________________________________________________________________
-Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
+Awaitable<qlever::IndexSwapConfig> Server::rebuildIndex(
     std::optional<std::string> rebuildTmpDir,
     std::optional<std::string> rebuildPreviousIndexDir) {
   // There is no mechanism to actually cancel the handle.
@@ -1542,7 +1543,7 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
 }
 
 // _____________________________________________________________________________
-Awaitable<std::optional<qlever::IndexRebuildConfig>>
+Awaitable<std::optional<qlever::IndexSwapConfig>>
 Server::rebuildIndexUnlessInProgress(
     std::optional<std::string> rebuildTmpDir,
     std::optional<std::string> rebuildPreviousIndexDir) {

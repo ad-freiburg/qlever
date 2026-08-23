@@ -93,6 +93,40 @@ inline ad_utility::MemorySize& blocksizeOfConvertedPermutations() {
 void convertIndexToCurrentFormat(const std::string& oldBasename,
                                  const std::string& newBasename);
 
+// The directory (inside the directory of the index) in which
+// `upgradeIndexInPlace` below stages the upgraded index, and the directory to
+// which it retires the index in the old format. The names are deliberately
+// different from the `rebuild.<datetime>.tmp` and `previous.<datetime>`
+// directories of the runtime index rebuild (see
+// `Qlever::makeIndexRebuildConfig`), which have nothing to do with an upgrade;
+// in particular, the `--rebuild-keep-previous-index-dirs` policy only
+// considers `previous.*` directories and hence never deletes a retired index
+// in the old format.
+inline constexpr std::string_view stagingDirPrefix = "index-in-new-format.";
+inline constexpr std::string_view retiredDirPrefix = "index-in-old-format.";
+
+// Upgrade the index with the given base name from the source format to the
+// target format in place, via `convertIndexToCurrentFormat` above (see there
+// for what is converted and for the errors that abort the upgrade before it
+// writes anything). "In place" works as follows:
+//
+// 1. The upgraded index is written to the staging directory
+//    `<stagingDirPrefix><current datetime>.tmp` inside the directory of the
+//    index.
+// 2. Check that the upgraded index can be loaded and that the number of
+//    triples of each of its permutations matches the configuration of the
+//    index that was upgraded.
+// 3. Only then, the index in the old format is moved to the directory
+//    `<retiredDirPrefix><datetime of the build of that index>`, the upgraded
+//    index is moved to the base name the old index lived at (so that a server
+//    start with the same base name now loads it), and the then empty staging
+//    directory is removed.
+//
+// If the upgrade fails in step 1 or 2, the original index is untouched and
+// the staging directory is left behind for inspection; it can simply be
+// deleted (a later retry stages into a fresh directory).
+void upgradeIndexInPlace(const std::string& basename);
+
 }  // namespace qlever::indexFormatConverter
 
 #endif  // QLEVER_SRC_INDEX_INDEXFORMATCONVERTER_H

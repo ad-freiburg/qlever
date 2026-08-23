@@ -30,9 +30,11 @@
 #include "global/MaterializedViewConstants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
+#include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
 #include "index/IndexMetaData.h"
+#include "index/IndexSwap.h"
 #include "index/LocalVocab.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
@@ -653,15 +655,21 @@ std::string conversionDescription() {
   return absl::StrCat(
       "Upgrade an index in the index format (", versionAsString(sourceVersion),
       ") to an index in the index format (", versionAsString(targetVersion),
-      "). The only difference between the two formats is the numbering of the "
-      "datatypes of the IDs: the datatype for the words of a secondary "
-      "vocabulary was inserted in the middle, which renumbered the datatypes "
-      "after it. The IDs of the index are therefore rewritten, and nothing "
-      "else "
-      "changes. The index that is upgraded is not modified.\n\nNote that "
-      "rebuilding the index from its input files is still the recommended way "
-      "to move to a new index format, because it also profits from all "
-      "improvements to the index building since the index was built.");
+      ") in place. The only difference between the two formats is the "
+      "numbering of the datatypes of the IDs: the datatype for the words of a "
+      "secondary vocabulary was inserted in the middle, which renumbered the "
+      "datatypes after it. The IDs of the index are therefore rewritten, and "
+      "nothing else changes.\n\nThe upgraded index is first written to the "
+      "subdirectory `",
+      stagingDirPrefix,
+      "<current datetime>.tmp` and checked. Only then, the index in the old "
+      "format is moved to the subdirectory `",
+      retiredDirPrefix,
+      "<datetime of its build>` and the upgraded index takes its "
+      "place.\n\nNote that rebuilding the index from its input files is still "
+      "the recommended way to move to a new index format, because it also "
+      "profits from all improvements to the index building since the index "
+      "was built.");
 }
 
 // _____________________________________________________________________________
@@ -742,6 +750,88 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
 
   AD_LOG_INFO << "Conversion of the index completed, the converted index is \""
               << newBasename << "\"" << std::endl;
+}
+
+namespace {
+// Check that the upgraded index with the base name `newBasename` can be
+// loaded, and that the number of triples of each of its permutations matches
+// `expectedNumTriples`, the number of triples from the configuration of the
+// index that was upgraded. The number of triples of a permutation comes from
+// the metadata of that permutation (the configuration is copied unchanged by
+// the conversion, so comparing configurations would check nothing), so a
+// conversion bug that loses or duplicates rows of a permutation is caught
+// here, before the upgraded index replaces the original one.
+void checkUpgradedIndex(const std::string& newBasename,
+                        const Index::NumNormalAndInternal& expectedNumTriples) {
+  AD_LOG_INFO << "Checking that the upgraded index can be loaded ..."
+              << std::endl;
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  // Load what the index has: the patterns and the permutations beyond `PSO`
+  // and `POS` are optional.
+  index.usePatterns() =
+      fs::exists(absl::StrCat(newBasename, PATTERNS_FILE_SUFFIX));
+  index.loadAllPermutations() =
+      fs::exists(absl::StrCat(newBasename, PERMUTATION_FILE_INFIX, ".ops"));
+  index.createFromOnDiskIndex(newBasename, false);
+
+  auto checkNumTriples = [](const Permutation& permutation, size_t expected) {
+    size_t actual = permutation.numTriples();
+    if (actual != expected) {
+      throw std::runtime_error{absl::StrCat(
+          "The ", permutation.readableName(),
+          " permutation of the upgraded index has ", actual,
+          " triples, but the index that was upgraded has ", expected,
+          " according to its configuration. This is a bug in the conversion; "
+          "the original index was not modified.")};
+    }
+  };
+  std::vector<Permutation::Enum> permutations{Permutation::Enum::PSO,
+                                              Permutation::Enum::POS};
+  if (index.loadAllPermutations()) {
+    permutations.insert(permutations.end(),
+                        {Permutation::Enum::SPO, Permutation::Enum::SOP,
+                         Permutation::Enum::OSP, Permutation::Enum::OPS});
+  }
+  for (auto p : permutations) {
+    checkNumTriples(index.getImpl().getPermutation(p),
+                    expectedNumTriples.normal);
+  }
+  // The triples with QLever-internal predicates live in a nested permutation
+  // of `PSO` and `POS` (see `IndexImpl::createFromOnDiskIndex`).
+  for (auto p : {Permutation::Enum::PSO, Permutation::Enum::POS}) {
+    checkNumTriples(index.getImpl().getPermutation(p).internalPermutation(),
+                    expectedNumTriples.internal);
+  }
+}
+}  // namespace
+
+// _____________________________________________________________________________
+void upgradeIndexInPlace(const std::string& basename) {
+  // Read the configuration of the index that is to be upgraded; this also
+  // checks that the index exists and is exactly in the source format.
+  auto configuration = readAndCheckConfiguration(basename);
+
+  // Derive the staging and retirement directories (see the header for the
+  // naming scheme and its rationale). There is no command-line option for
+  // choosing these directories, hence no hint for the (unlikely) error that
+  // the default names are all taken.
+  IndexSwapNaming naming{std::string{stagingDirPrefix},
+                         std::string{retiredDirPrefix},
+                         IndexImpl::dateOfIndexBuild(configuration, basename),
+                         /* retiredDirConflictHint_ */ ""};
+  IndexSwapConfig config =
+      makeIndexSwapConfig(basename, naming, std::nullopt, std::nullopt);
+
+  convertIndexToCurrentFormat(basename, config.newIndexSource());
+  checkUpgradedIndex(config.newIndexSource(),
+                     static_cast<Index::NumNormalAndInternal>(
+                         configuration.at("num-triples")));
+  moveIndexIntoPlace(config);
+  AD_LOG_INFO << "The upgrade was successful: the upgraded index is at \""
+              << config.newIndexTarget()
+              << "\", the index in the old format was moved to the directory \""
+              << fs::path{config.oldIndexTarget()}.parent_path().string()
+              << "\"" << std::endl;
 }
 
 }  // namespace qlever::indexFormatConverter

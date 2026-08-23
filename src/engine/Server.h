@@ -405,7 +405,7 @@ class Server {
   // directory for the old index; the full resolved configuration is returned.
   // This assumes that the access token has already been checked and no other
   // rebuild is currently in progress.
-  Awaitable<qlever::IndexRebuildConfig> rebuildIndex(
+  Awaitable<qlever::IndexSwapConfig> rebuildIndex(
       std::optional<std::string> rebuildTmpDir,
       std::optional<std::string> rebuildPreviousIndexDir);
 
@@ -414,7 +414,7 @@ class Server {
   // is held for the duration of the rebuild). This is the common
   // implementation behind the two ways of triggering a rebuild: the manual
   // `cmd=rebuild-index` HTTP request and the automatic trigger below.
-  Awaitable<std::optional<qlever::IndexRebuildConfig>>
+  Awaitable<std::optional<qlever::IndexSwapConfig>>
   rebuildIndexUnlessInProgress(
       std::optional<std::string> rebuildTmpDir,
       std::optional<std::string> rebuildPreviousIndexDir);

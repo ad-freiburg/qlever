@@ -30,6 +30,7 @@
 #include "index/IndexImpl.h"
 #include "util/BitUtils.h"
 #include "util/CancellationHandle.h"
+#include "util/FilesystemHelpers.h"
 #include "util/json.h"
 
 namespace {
@@ -376,6 +377,59 @@ TEST_F(IndexFormatConverterTest, convertedMaterializedView) {
   EXPECT_EQ(view.permutation()->metaData().totalElements(), 6);
   EXPECT_THAT(view.originalQuery(),
               ::testing::Optional(HasSubstr("<http://example.org/label>")));
+}
+
+// _____________________________________________________________________________
+// The in-place upgrade stages the upgraded index in an
+// `index-in-new-format.<datetime>.tmp` subdirectory, checks it, and only then
+// retires the index in the old format to `index-in-old-format.<datetime of
+// its build>` and moves the upgraded index to the base name of the old one.
+TEST_F(IndexFormatConverterTest, upgradeIndexInPlace) {
+  // Remember the files of the index in the old format for the retirement
+  // check below.
+  fs::path oldDirectory = fs::path{oldBasename_}.parent_path();
+  std::vector<std::string> filesBefore;
+  for (const auto& entry : fs::directory_iterator{oldDirectory}) {
+    filesBefore.push_back(entry.path().filename().string());
+  }
+
+  upgradeIndexInPlace(oldBasename_);
+
+  // The upgraded index is at the base name the old index lived at, is in the
+  // current format, and can be loaded with all of its triples. Its content is
+  // that of `convertIndexToCurrentFormat` (which the upgrade calls, and which
+  // the tests above check in detail).
+  newBasename_ = oldBasename_;
+  nlohmann::json configuration;
+  ad_utility::makeIfstream(absl::StrCat(newBasename_, CONFIGURATION_FILE)) >>
+      configuration;
+  EXPECT_EQ(configuration.at("index-format-version")
+                .get<qlever::IndexFormatVersion>(),
+            qlever::indexFormatVersion);
+  auto [index, locatedTriples] = loadConvertedIndex();
+  EXPECT_EQ(scanAllTriples(index, Permutation::SPO, locatedTriples).size(),
+            expectedTriples().size());
+
+  // The index in the old format was retired to
+  // `index-in-old-format.<datetime>` with all of its files, and the staging
+  // directory was removed again.
+  auto retiredDirs = qlever::util::directoriesWithPrefix(
+      oldDirectory, std::string{retiredDirPrefix});
+  ASSERT_EQ(retiredDirs.size(), 1u);
+  std::vector<std::string> retiredFiles;
+  for (const auto& entry : fs::directory_iterator{retiredDirs.front()}) {
+    retiredFiles.push_back(entry.path().filename().string());
+  }
+  EXPECT_THAT(retiredFiles, ::testing::UnorderedElementsAreArray(filesBefore));
+  EXPECT_TRUE(qlever::util::directoriesWithPrefix(oldDirectory,
+                                                  std::string{stagingDirPrefix})
+                  .empty());
+
+  // A second upgrade refuses, because the index already is in the current
+  // format.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      upgradeIndexInPlace(oldBasename_),
+      HasSubstr("already is in the current index format"));
 }
 
 // _____________________________________________________________________________
@@ -794,11 +848,11 @@ TEST(IndexFormatConverter, conversionDescription) {
                 HasSubstr(absl::StrCat("Date = ",
                                        version.date_.toStringAndType().first)));
   }
-  // It also states the difference between the two formats and that the index
-  // that is upgraded is not modified.
+  // It also states the difference between the two formats and how the
+  // in-place upgrade proceeds (staging directory, retirement directory).
   EXPECT_THAT(description, HasSubstr("secondary vocabulary"));
-  EXPECT_THAT(description,
-              HasSubstr("The index that is upgraded is not modified."));
+  EXPECT_THAT(description, HasSubstr("index-in-new-format."));
+  EXPECT_THAT(description, HasSubstr("index-in-old-format."));
 }
 
 // _____________________________________________________________________________
