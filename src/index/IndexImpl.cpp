@@ -1401,6 +1401,23 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
             << ", Date = " << indexFormatVersion.date_.toStringAndType().first
             << ")." << std::endl;
       } else {
+        // If the index is in exactly the format that the
+        // `qlever-upgrade-index` binary upgrades from, throw one dedicated
+        // message instead of logging the generic advice below, so that the
+        // upgrade option is not buried among the generic alternatives.
+        using namespace qlever::indexFormatConverter;
+        if (indexFormatVersion == sourceVersion &&
+            currentVersion == targetVersion) {
+          throw std::runtime_error{absl::StrCat(
+              "This index is in the previous index format (PR = ",
+              sourceVersion.prNumber_,
+              ", Date = ", sourceVersion.date_.toStringAndType().first,
+              "). The `qlever-upgrade-index` binary can rewrite it into the "
+              "current format, which is much faster than rebuilding the "
+              "index. Note that rebuilding the index is still the recommended "
+              "way, because it also profits from all improvements to the "
+              "index building since this index was built.")};
+        }
         AD_LOG_ERROR
             << "The index is too old for this version of QLever. "
                "We recommend that you rebuild the index and start the "
@@ -1410,20 +1427,6 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
             << indexFormatVersion.prNumber_
             << ", Date = " << indexFormatVersion.date_.toStringAndType().first
             << ")." << std::endl;
-        // If the index is in exactly the format that the index converter
-        // converts from, then it can be rewritten instead of being rebuilt.
-        using namespace qlever::indexFormatConverter;
-        if (indexFormatVersion == sourceVersion &&
-            currentVersion == targetVersion) {
-          AD_LOG_ERROR
-              << "As a third alternative, the `qlever-convert-index` binary "
-                 "can rewrite this index into the current index format, which "
-                 "is much faster than rebuilding it. Note that rebuilding the "
-                 "index is still the recommended way, because it also profits "
-                 "from all improvements to the index building since this "
-                 "index was built."
-              << std::endl;
-        }
       }
       throw std::runtime_error{
           "Incompatible index format, see log message for details"};
@@ -1643,8 +1646,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
-                << "\"" << std::endl;
+                << "\" "
+                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+                << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN

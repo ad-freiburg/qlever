@@ -651,14 +651,14 @@ void checkAllFilesWereHandled(const std::string& oldBasename,
 // _____________________________________________________________________________
 std::string conversionDescription() {
   return absl::StrCat(
-      "Convert an index in the index format (", versionAsString(sourceVersion),
+      "Upgrade an index in the index format (", versionAsString(sourceVersion),
       ") to an index in the index format (", versionAsString(targetVersion),
       "). The only difference between the two formats is the numbering of the "
       "datatypes of the IDs: the datatype for the words of a secondary "
       "vocabulary was inserted in the middle, which renumbered the datatypes "
       "after it. The IDs of the index are therefore rewritten, and nothing "
       "else "
-      "changes. The index that is converted is not modified.\n\nNote that "
+      "changes. The index that is upgraded is not modified.\n\nNote that "
       "rebuilding the index from its input files is still the recommended way "
       "to move to a new index format, because it also profits from all "
       "improvements to the index building since the index was built.");
@@ -692,7 +692,7 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
                     "The base names of the indexes must not be empty");
   // NOTE: This is a user-facing error and not a requirement violation, because
   // passing the same base name twice is an easy mistake to make on the command
-  // line of `qlever-convert-index`.
+  // line of `qlever-upgrade-index`.
   if (fs::path{oldBasename}.lexically_normal() ==
       fs::path{newBasename}.lexically_normal()) {
     throw std::runtime_error{

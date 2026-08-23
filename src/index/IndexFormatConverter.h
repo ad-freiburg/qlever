@@ -19,7 +19,7 @@
 
 // The conversion of an index from the previous on-disk format to the current
 // one, see `convertIndexToCurrentFormat` below. This is what the standalone
-// `qlever-convert-index` executable (see `src/IndexConverterMain.cpp`) does;
+// `qlever-upgrade-index` executable (see `src/IndexUpgraderMain.cpp`) does;
 // nothing else in QLever uses it.
 namespace qlever::indexFormatConverter {
 
@@ -42,7 +42,7 @@ inline const IndexFormatVersion targetVersion{
     3159, DateYearOrDuration{Date{2026, 8, 14}}};
 
 // Return a human-readable description of the two index formats above and of
-// their difference. This is the overview message of `qlever-convert-index`.
+// their difference. This is the overview message of `qlever-upgrade-index`.
 std::string conversionDescription();
 
 // Convert a single `Id` from the source format to the target format. As only

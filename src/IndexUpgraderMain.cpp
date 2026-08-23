@@ -7,7 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-// Convert an index in the index format `{PR = 1572, Date = 2024-10-22}` to the
+// Upgrade an index in the index format `{PR = 1572, Date = 2024-10-22}` to the
 // index format `{PR = 3159, Date = 2026-08-14}`, so that it does not have to be
 // rebuilt from its input files. See `index/IndexFormatConverter.h` for the
 // details of the conversion, in particular for the difference between the two
@@ -19,6 +19,7 @@
 #include <iostream>
 #include <string>
 
+#include "CompilationInfo.h"
 #include "global/RuntimeParameters.h"
 #include "index/IndexFormatConverter.h"
 #include "util/Forward.h"
@@ -35,23 +36,23 @@ int main(int argc, char** argv) {
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
 
-  // The overview message of the help states which index formats this converter
+  // The overview message of the help states which index formats this upgrader
   // converts between, and what the difference between them is.
   po::options_description boostOptions{
-      absl::StrCat("qlever-convert-index\n\n",
+      absl::StrCat("qlever-upgrade-index\n\n",
                    qlever::indexFormatConverter::conversionDescription(),
-                   "\n\nOptions for qlever-convert-index")};
+                   "\n\nOptions for qlever-upgrade-index")};
   auto add = [&boostOptions](auto&&... args) {
     boostOptions.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
   add("index-basename,i", po::value(&oldIndexBasename)->required(),
-      "The basename of the index that is converted, including the name of the "
+      "The basename of the index that is upgraded, including the name of the "
       "index itself, for example `index-dir/wikidata` (required). This index "
       "is "
       "not modified.");
   add("output-index-basename,o", po::value(&newIndexBasename)->required(),
-      "The basename of the converted index (required). None of the files with "
+      "The basename of the upgraded index (required). None of the files with "
       "this basename may exist yet.");
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
@@ -72,11 +73,16 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
+  AD_LOG_INFO << EMPH_ON << "QLever index upgrader "
+              << qlever::version::ProjectVersion << ", compiled on "
+              << qlever::version::DatetimeOfCompilation << " using git hash "
+              << qlever::version::GitShortHash << EMPH_OFF << std::endl;
+
   try {
     qlever::indexFormatConverter::convertIndexToCurrentFormat(oldIndexBasename,
                                                               newIndexBasename);
   } catch (const std::exception& e) {
-    AD_LOG_ERROR << "Converting the index failed with the following exception: "
+    AD_LOG_ERROR << "Upgrading the index failed with the following exception: "
                  << e.what() << std::endl;
     return EXIT_FAILURE;
   }

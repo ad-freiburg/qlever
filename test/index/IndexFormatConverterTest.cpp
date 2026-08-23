@@ -795,10 +795,10 @@ TEST(IndexFormatConverter, conversionDescription) {
                                        version.date_.toStringAndType().first)));
   }
   // It also states the difference between the two formats and that the index
-  // that is converted is not modified.
+  // that is upgraded is not modified.
   EXPECT_THAT(description, HasSubstr("secondary vocabulary"));
   EXPECT_THAT(description,
-              HasSubstr("The index that is converted is not modified."));
+              HasSubstr("The index that is upgraded is not modified."));
 }
 
 // _____________________________________________________________________________

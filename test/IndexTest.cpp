@@ -1158,10 +1158,12 @@ TEST(IndexImpl, applyConfigurationGitHash) {
 TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
   // Apply the `minimalValidConfiguration()`, but with the
   // `index-format-version` replaced by `version` (or removed, if `version` is
-  // `std::nullopt`), to a freshly created `IndexImpl`. Expect that this throws,
-  // and return the log output that was produced in the process.
+  // `std::nullopt`), to a freshly created `IndexImpl`. Expect that this throws
+  // with a message that matches `messageMatcher`, and return the log output
+  // that was produced in the process.
   auto applyVersionAndExpectThrow =
       [](std::optional<qlever::IndexFormatVersion> version,
+         const auto& messageMatcher,
          ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(loc);
         auto configuration = minimalValidConfiguration();
@@ -1173,53 +1175,60 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
         IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
         auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
         AD_EXPECT_THROW_WITH_MESSAGE(
-            indexImpl.applyConfiguration(configuration),
-            ::testing::HasSubstr(
-                "Incompatible index format, see log message for details"));
+            indexImpl.applyConfiguration(configuration), messageMatcher);
         return logStream.str();
       };
+  auto genericThrowMessage = ::testing::HasSubstr(
+      "Incompatible index format, see log message for details");
 
   // An index that was built before the index format was versioned at all.
-  EXPECT_THAT(applyVersionAndExpectThrow(std::nullopt),
+  EXPECT_THAT(applyVersionAndExpectThrow(std::nullopt, genericThrowMessage),
               ::testing::HasSubstr("This index was built before versioning was "
                                    "introduced for QLever's index format"));
 
   // An index that is newer than the QLever binary that reads it.
   EXPECT_THAT(
-      applyVersionAndExpectThrow(qlever::IndexFormatVersion{
-          4711, DateYearOrDuration{Date{9999, 12, 31}}}),
+      applyVersionAndExpectThrow(
+          qlever::IndexFormatVersion{4711,
+                                     DateYearOrDuration{Date{9999, 12, 31}}},
+          genericThrowMessage),
       ::testing::AllOf(
           ::testing::HasSubstr("The version of QLever you are using is too old "
                                "for this index"),
           ::testing::HasSubstr("PR = 4711"),
           ::testing::HasSubstr("Date = 9999-12-31"),
-          ::testing::Not(::testing::HasSubstr("qlever-convert-index"))));
+          ::testing::Not(::testing::HasSubstr("qlever-upgrade-index"))));
 
   // An index that is older than the QLever binary that reads it, but not in
-  // exactly the format that the index converter converts from. Such an index
+  // exactly the format that the index upgrader upgrades from. Such an index
   // has to be rebuilt.
   EXPECT_THAT(
       applyVersionAndExpectThrow(
-          qlever::IndexFormatVersion{42, DateYearOrDuration{Date{1900, 1, 1}}}),
+          qlever::IndexFormatVersion{42, DateYearOrDuration{Date{1900, 1, 1}}},
+          genericThrowMessage),
       ::testing::AllOf(
           ::testing::HasSubstr("The index is too old for this version of "
                                "QLever"),
           ::testing::HasSubstr("PR = 42"),
-          ::testing::Not(::testing::HasSubstr("qlever-convert-index"))));
+          ::testing::Not(::testing::HasSubstr("qlever-upgrade-index"))));
 
-  // An index in exactly the format that the `qlever-convert-index` binary
-  // converts from. Then the log additionally mentions that binary. Note that
-  // this requires the target format of the converter to be the current index
-  // format (which `convertIndexToCurrentFormat` also checks).
+  // An index in exactly the format that the `qlever-upgrade-index` binary
+  // upgrades from. Then the thrown exception is one dedicated message that
+  // mentions that binary, and the generic advice is not logged at all. Note
+  // that this requires the target format of the upgrader to be the current
+  // index format (which `convertIndexToCurrentFormat` also checks).
   ASSERT_EQ(qlever::indexFormatConverter::targetVersion,
             qlever::indexFormatVersion);
   EXPECT_THAT(
-      applyVersionAndExpectThrow(qlever::indexFormatConverter::sourceVersion),
-      ::testing::AllOf(
-          ::testing::HasSubstr("The index is too old for this version of "
-                               "QLever"),
-          ::testing::HasSubstr("the `qlever-convert-index` binary can rewrite "
-                               "this index into the current index format")));
+      applyVersionAndExpectThrow(
+          qlever::indexFormatConverter::sourceVersion,
+          ::testing::AllOf(
+              ::testing::HasSubstr(
+                  "This index is in the previous index format (PR = 1572"),
+              ::testing::HasSubstr(
+                  "The `qlever-upgrade-index` binary can rewrite it into the "
+                  "current format"))),
+      ::testing::Not(::testing::HasSubstr("The index is too old")));
 }
 
 // _____________________________________________________________________________
