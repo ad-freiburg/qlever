@@ -493,6 +493,22 @@ nlohmann::json Server::processDeleteMaterializedView(
   return json{{"materialized-view-deleted", name}};
 }
 
+// _____________________________________________________________________________
+CPP_template_def(typename RequestT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    ad_utility::httpUtils::ResponseT Server::processPing(
+        std::optional<std::string> msg, const RequestT& request) const {
+  using namespace ad_utility::httpUtils;
+  if (msg.has_value()) {
+    AD_LOG_INFO << "Alive check with message \"" << msg.value() << "\""
+                << std::endl;
+  } else {
+    AD_LOG_INFO << "Alive check without message" << std::endl;
+  }
+  return createOkResponse("This QLever server is up and running\n", request,
+                          MediaType::textPlain);
+}
+
 namespace {
 // Helpers used only by `Server::process` below, for dispatching its `cmd=`
 // URL parameter.
@@ -700,14 +716,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Ping with or without message.
   if (parsedHttpRequest.path_ == "/ping") {
-    if (auto msg = checkParameter("msg", std::nullopt)) {
-      AD_LOG_INFO << "Alive check with message \"" << msg.value() << "\""
-                  << std::endl;
-    } else {
-      AD_LOG_INFO << "Alive check without message" << std::endl;
-    }
-    response = createOkResponse("This QLever server is up and running\n",
-                                request, MediaType::textPlain);
+    response = processPing(checkParameter("msg", std::nullopt), request);
   }
 
   // Prometheus metrics scrape endpoint.

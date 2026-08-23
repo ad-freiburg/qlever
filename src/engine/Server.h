@@ -240,6 +240,16 @@ class Server {
   // `processLoadMaterializedView` above.
   json processDeleteMaterializedView(const ParamValueMap& parameters) const;
 
+  // Handle the `/ping` endpoint: log the alive check (with or without an
+  // accompanying "msg" parameter) and return a fixed confirmation response.
+  // Like `processRebuildIndex` below, this never needs to bypass query
+  // processing, so it returns the response directly.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      ad_utility::httpUtils::ResponseT
+      processPing(std::optional<std::string> msg,
+                  const RequestT& request) const;
+
   // Handle a `rebuild-index` command: extract the tmp-dir/previous-index-dir
   // parameters and trigger a rebuild unless one is already in progress.
   // Unlike `processVacuumDeltaTriples`/`processWriteMaterializedView` above,
