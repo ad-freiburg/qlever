@@ -44,6 +44,8 @@ class GroupBy : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
   Result computeResult(bool requestLaziness) override;
   std::unique_ptr<Operation> cloneImpl() const override;
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(const std::set<Variable>& variables) const override;
 
   // Getters for testing.
   const std::vector<Variable>& groupByVariables() const;
