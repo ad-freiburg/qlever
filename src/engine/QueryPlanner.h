@@ -317,13 +317,10 @@ class QueryPlanner {
       const vector<vector<QueryPlanner::SubtreePlan>>& children,
       TextLimitMap& textLimits);
 
+ protected:
   // Function for optimization query rewrites: The function returns pairs of
   // filters with the corresponding substitute subtree plan. This is currently
-  // used to translate GeoSPARQL filters to spatial join operations. Protected
-  // (rather than private) so that tests can override it (as done in
-  // `QueryPlannerWithMockFilterSubstitute`) or wrap it to observe the
-  // generated candidates.
- protected:
+  // used to translate GeoSPARQL filters to spatial join operations.
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 

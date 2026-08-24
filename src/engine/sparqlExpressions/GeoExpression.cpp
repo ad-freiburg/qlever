@@ -269,7 +269,7 @@ std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
     return std::nullopt;
   }
 
-  // Extract variables or fixed values
+  // Extract variables or fixed values.
   auto p1 = extractGeometryOperand(*geoRelExpr->children()[0]);
   if (!p1.has_value()) {
     return std::nullopt;
@@ -322,7 +322,7 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
     return std::nullopt;
   }
 
-  // Extract variables or fixed values
+  // Extract variables or fixed values.
   auto p1 = extractGeometryOperand(*de9imExpr->children()[0]);
   if (!p1.has_value()) {
     return std::nullopt;
@@ -387,7 +387,7 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
       return std::nullopt;
     }
 
-    // Extract variables or fixed values
+    // Extract variables or fixed values.
     auto p1 = extractGeometryOperand(*distExpr->children()[0]);
     if (!p1.has_value()) {
       return std::nullopt;

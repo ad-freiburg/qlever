@@ -1762,21 +1762,20 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 
   for (const auto& [i, filterExpression] :
        ::ranges::views::enumerate(filters)) {
-    // Check if the filter expression is suitable for spatial join optimization
+    // Check if the filter expression is suitable for spatial join rewriting.
     auto sjResult = rewriteFilterToSpatialJoinConfig(
         filterExpression, _qec, [this] { return generateUniqueVarName(); });
     if (!sjResult.has_value()) {
       plans.push_back({filterExpression, std::nullopt});
     } else {
-      // Construct spatial join. A side that was a fixed value in the filter
-      // already has its (one-row `VALUES`) child built; a side that is an
-      // ordinary variable is left unset and gets attached later via the
-      // normal join graph, exactly as for a variable-to-variable filter.
+      // Construct the `SpatialJoin` plan. If the filter expression contained a
+      // fixed value on one side, `childLeft_` or `childRight_` provide the
+      // fixed value as a single-row `VALUES`.
       auto plan = makeSubtreePlan<SpatialJoin>(
           _qec, std::move(sjResult.value().config_),
           std::move(sjResult.value().childLeft_),
           std::move(sjResult.value().childRight_), true);
-      // Mark that this subtree plan handles (that is, substitutes) the filter
+      // Mark that this subtree plan handles (that is, substitutes) the filter.
       plan._idsOfIncludedFilters |= 1ULL << i;
       plan.containsFilterSubstitute_ = true;
       plans.push_back({filterExpression, std::move(plan)});

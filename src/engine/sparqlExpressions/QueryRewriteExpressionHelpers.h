@@ -20,12 +20,9 @@
 
 namespace sparqlExpression {
 
-// Helper struct for `getGeoFunctionExpressionParameters`. `left_`/`right_` are
-// the two arguments of a geo relation: either a variable (resolved via the
-// query's existing bindings) or a fixed value (a literal given directly in
-// the query, to be bound to a fresh internal variable via a one-row `VALUES`
-// clause -- see `QueryRewriteUtils.cpp`). Use `TripleComponent::isVariable()`/
-// `getVariable()` to distinguish the two cases.
+// Helper struct for `getGeoFunctionExpressionParameters`. `left_` and `right_`
+// are either a variable or a fixed value (a literal given directly in the
+// expression).
 struct GeoFunctionCall {
   SpatialJoinType function_;
   TripleComponent left_;
