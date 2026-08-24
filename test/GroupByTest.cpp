@@ -3460,3 +3460,153 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_EQ(table(1, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(table(0, 1), table(1, 1));
 }
+
+// _____________________________________________________________________________
+TEST(GroupBy, makeTreeWithStrippedColumns) {
+  auto* qec = getQec();
+  std::vector<std::optional<Variable>> vars = {
+      {Variable{"?a"}, Variable{"?b"}, Variable{"?c"}, Variable{"?d"}}};
+  IdTable input{makeIdTableFromVector(
+      {{6, 1, 3, 6}, {6, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
+
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input), std::move(vars));
+
+  // Test case 1: GroupBy keeps ?a and ?b.
+  // ?b is renamed as ?sumB
+  // makeTreeWithStrippedColumns has no additional variables.
+  {
+    Alias detAlias(
+        SparqlExpressionPimpl{
+            std::make_unique<SumExpression>(
+                false, std::make_unique<VariableExpression>(Variable{"?b"})),
+            "SUM(?b)"},
+        Variable{"?sumB"});
+
+    GroupBy groupBy(qec, {Variable{"?a"}}, {detAlias}, subtree);
+
+    std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
+        groupBy.makeTreeWithStrippedColumns(std::set<Variable>{});
+    ASSERT_TRUE(resultTree.has_value());
+    ASSERT_TRUE((*resultTree) != nullptr);
+    const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
+
+    EXPECT_EQ(v2cMap.size(), 2);
+    EXPECT_TRUE(v2cMap.contains(Variable{"?a"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?b"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?c"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?d"}));
+    EXPECT_TRUE(v2cMap.contains(Variable{"?sumB"}));
+  }
+
+  // Test case 2: GroupBy keeps ?b.
+  // ?b is renamed as ?sumB
+  // makeTreeWithStrippedColumns has no additional variables.
+  {
+    Alias detAlias(
+        SparqlExpressionPimpl{
+            std::make_unique<SumExpression>(
+                false, std::make_unique<VariableExpression>(Variable{"?b"})),
+            "SUM(?b)"},
+        Variable{"?sumB"});
+
+    GroupBy groupBy(qec, {Variable{"?a"}, Variable{"?b"}}, {detAlias}, subtree);
+
+    std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
+        groupBy.makeTreeWithStrippedColumns(std::set<Variable>{});
+    ASSERT_TRUE(resultTree.has_value());
+    ASSERT_TRUE((*resultTree) != nullptr);
+    const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
+
+    EXPECT_EQ(v2cMap.size(), 3);
+    EXPECT_TRUE(v2cMap.contains(Variable{"?a"}));
+    EXPECT_TRUE(v2cMap.contains(Variable{"?b"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?c"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?d"}));
+    EXPECT_TRUE(v2cMap.contains(Variable{"?sumB"}));
+  }
+
+  // Test case 3: GroupBy keeps ?a and ?c.
+  // No Alias is available.
+  // makeTreeWithStrippedColumns has no additional variables.
+  {
+    GroupBy groupBy(qec, {Variable{"?a"}, Variable{"?c"}}, std::vector<Alias>{},
+                    subtree);
+
+    std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
+        groupBy.makeTreeWithStrippedColumns(std::set<Variable>{});
+    ASSERT_TRUE(resultTree.has_value());
+    ASSERT_TRUE((*resultTree) != nullptr);
+    const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
+
+    EXPECT_EQ(v2cMap.size(), 2);
+    EXPECT_TRUE(v2cMap.contains(Variable{"?a"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?b"}));
+    EXPECT_TRUE(v2cMap.contains(Variable{"?c"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?d"}));
+  }
+
+  // Test case 4: GroupBy keeps ?c
+  // no aliases
+  // makeTreeWithStrippedColumns has ?d and ?noValidVariable as additional
+  // variables (these additional variables should not have any effect on the
+  // result, as groupBy is already stripped in the constructor).
+  {
+    GroupBy groupBy(qec, {Variable{"?c"}}, {}, subtree);
+
+    std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
+        groupBy.makeTreeWithStrippedColumns(
+            std::set<Variable>{Variable{"?d"}, Variable{"?noValidVariable"}});
+    ASSERT_TRUE(resultTree.has_value());
+    ASSERT_TRUE((*resultTree) != nullptr);
+    const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
+
+    EXPECT_EQ(v2cMap.size(), 1);
+    EXPECT_FALSE(v2cMap.contains(Variable{"?a"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?b"}));
+    EXPECT_TRUE(v2cMap.contains(Variable{"?c"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?d"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?sumB"}));
+  }
+
+  // Test case 5: GroupBy keeps ?a, ?b, ?c.
+  // ?b is renamed as ?sumB
+  // makeTreeWithStrippedColumns has no additional variables.
+  // Do _groupByVariables and _aliases stay the same in the new Operation?
+  {
+    Alias detAlias(
+        SparqlExpressionPimpl{
+            std::make_unique<SumExpression>(
+                false, std::make_unique<VariableExpression>(Variable{"?b"})),
+            "SUM(?b)"},
+        Variable{"?sumB"});
+
+    GroupBy groupBy(qec, {Variable{"?a"}, Variable{"?c"}}, {detAlias}, subtree);
+
+    std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
+        groupBy.makeTreeWithStrippedColumns(std::set<Variable>{});
+    ASSERT_TRUE(resultTree.has_value());
+    ASSERT_TRUE((*resultTree) != nullptr);
+    const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
+
+    EXPECT_EQ(v2cMap.size(), 3);
+    EXPECT_TRUE(v2cMap.contains(Variable{"?a"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?b"}));
+    EXPECT_TRUE(v2cMap.contains(Variable{"?c"}));
+    EXPECT_FALSE(v2cMap.contains(Variable{"?d"}));
+    EXPECT_TRUE(v2cMap.contains(Variable{"?sumB"}));
+
+    auto rootOperation = (*resultTree)->getRootOperation();
+    GroupBy* groupByOperation = dynamic_cast<GroupBy*>(rootOperation.get());
+    ASSERT_TRUE(groupByOperation != nullptr);
+    std::vector<Variable> newGroupByVariables =
+        groupByOperation->groupByVariables();
+    std::vector<Alias> newAliases = groupByOperation->aliases();
+
+    EXPECT_EQ(newGroupByVariables.size(), 2);
+    EXPECT_EQ(newGroupByVariables.at(0), Variable{"?a"});
+    EXPECT_EQ(newGroupByVariables.at(1), Variable{"?c"});
+    EXPECT_EQ(newAliases.size(), 1);
+    EXPECT_EQ(newAliases.at(0), detAlias);
+  }
+}
