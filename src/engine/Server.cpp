@@ -553,6 +553,23 @@ void requireValidAccessToken(bool accessTokenOk, std::string_view actionName) {
   }
 }
 
+// Check if `paramName` is set in `parameters`. If so, verify the access
+// token (using `actionName` if given, `paramName` otherwise), log the new
+// value, and return it. Return `std::nullopt` otherwise.
+std::optional<std::string> checkSetting(
+    const ad_utility::url_parser::ParamValueMap& parameters,
+    std::string_view paramName, bool accessTokenOk,
+    std::optional<std::string_view> actionName = std::nullopt) {
+  auto value = ad_utility::url_parser::checkParameter(parameters, paramName,
+                                                      std::nullopt);
+  if (value.has_value()) {
+    requireValidAccessToken(accessTokenOk, actionName.value_or(paramName));
+    AD_LOG_INFO << "Setting \"" << paramName << "\" to: \"" << value.value()
+                << "\"" << std::endl;
+  }
+  return value;
+}
+
 // Look up metadata for `cmd` in `kCommands`, run the access-token check (if
 // required), and log it. `cmd` must name an entry in `kCommands` -- it always
 // comes from a literal used in the `process()` dispatch below.
@@ -581,6 +598,24 @@ CPP_template_def(typename RequestT)(
   }
   return createOkResponse(metricsReader_->getMetricsText(), request,
                           MediaType::textPlain);
+}
+
+// _____________________________________________________________________________
+std::optional<nlohmann::json> Server::processSetRuntimeParameters(
+    const ParamValueMap& parameters, bool accessTokenOk) const {
+  bool parameterChanged = false;
+  for (auto key : globalRuntimeParameters.rlock()->getKeys()) {
+    if (auto value = serverProcessHelpers::checkSetting(
+            parameters, key, accessTokenOk, "setting runtime parameters")) {
+      globalRuntimeParameters.wlock()->setFromString(
+          key, std::string{value.value()});
+      parameterChanged = true;
+    }
+  }
+  if (!parameterChanged) {
+    return std::nullopt;
+  }
+  return nlohmann::json(globalRuntimeParameters.rlock()->toMap());
 }
 
 // _____________________________________________________________________________
@@ -641,22 +676,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       return true;
     }
     return false;
-  };
-
-  // Check if `paramName` is set as a parameter. If so, verify the access
-  // token (using `actionName` if given, `paramName` otherwise), log the new
-  // value, and return it. Return `std::nullopt` otherwise.
-  auto checkSetting = [&checkParameter, &requireValidAccessToken](
-                          std::string_view paramName,
-                          std::optional<std::string_view> actionName =
-                              std::nullopt) {
-    auto value = checkParameter(paramName, std::nullopt);
-    if (value.has_value()) {
-      requireValidAccessToken(actionName.value_or(paramName));
-      AD_LOG_INFO << "Setting \"" << paramName << "\" to: \"" << value.value()
-                  << "\"" << std::endl;
-    }
-    return value;
   };
 
   // We call `createJsonResponse` always with the same `request` parameter.
@@ -756,24 +775,22 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   }
 
   // Set description of KB index.
-  if (auto description = checkSetting("index-description")) {
+  if (auto description =
+          checkSetting(parameters, "index-description", accessTokenOk)) {
     index.setKbName(std::string{description.value()});
     response = jsonResponse(composeIndexStats(index));
   }
 
   // Set description of text index.
-  if (auto description = checkSetting("text-description")) {
+  if (auto description =
+          checkSetting(parameters, "text-description", accessTokenOk)) {
     index.setTextName(std::string{description.value()});
     response = jsonResponse(composeIndexStats(index));
   }
 
   // Set one or several of the runtime parameters.
-  for (auto key : globalRuntimeParameters.rlock()->getKeys()) {
-    if (auto value = checkSetting(key, "setting runtime parameters")) {
-      globalRuntimeParameters.wlock()->setFromString(
-          key, std::string{value.value()});
-      response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
-    }
+  if (auto settings = processSetRuntimeParameters(parameters, accessTokenOk)) {
+    response = jsonResponse(settings.value());
   }
 
   // Store the QueryExecutionTree outside the lambda, s.t. we have access in

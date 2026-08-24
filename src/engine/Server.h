@@ -260,6 +260,14 @@ class Server {
       ad_utility::httpUtils::ResponseT
       processMetrics(bool accessTokenOk, const RequestT& request) const;
 
+  // Set every runtime parameter that's present in `parameters`, verifying the
+  // access token for each one that is. Follows the same optional-json
+  // convention as `processVacuumDeltaTriples`/`processWriteMaterializedView`
+  // above, but an empty optional here just means no parameter was given, not
+  // an error.
+  std::optional<json> processSetRuntimeParameters(
+      const ParamValueMap& parameters, bool accessTokenOk) const;
+
   // Handle a `rebuild-index` command: extract the tmp-dir/previous-index-dir
   // parameters and trigger a rebuild unless one is already in progress.
   // Unlike `processVacuumDeltaTriples`/`processWriteMaterializedView` above,
