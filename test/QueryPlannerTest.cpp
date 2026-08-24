@@ -826,8 +826,7 @@ TEST(QueryPlanner, TransitivePathBindBoth) {
       "?x <p> ?y }",
       h::transitivePath(
           left, right, 1, std::numeric_limits<size_t>::max(),
-          scan("?x", "<p>", "?y"),
-          scan("?x", "<p>", "?y"),
+          scan("?x", "<p>", "?y"), scan("?x", "<p>", "?y"),
           scan(internalVar(0), "<p>", internalVar(1), {Permutation::PSO})),
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>. <x1> <p> <x2>"));
 }
