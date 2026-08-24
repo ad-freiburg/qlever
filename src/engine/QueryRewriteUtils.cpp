@@ -12,13 +12,11 @@
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 
-using sparqlExpression::GeoOperand;
-
 namespace {
 
-// A `GeoOperand` resolved to a `Variable` (for `SpatialJoinConfiguration`)
-// together with, for a fixed value, the one-row `VALUES` tree that binds it
-// to a fresh internal variable.
+// A `TripleComponent` geo function operand resolved to a `Variable` (for
+// `SpatialJoinConfiguration`) together with, for a fixed value, the one-row
+// `VALUES` tree that binds it to a fresh internal variable.
 struct ResolvedGeoOperand {
   Variable variable_;
   std::optional<std::shared_ptr<QueryExecutionTree>> child_ = std::nullopt;
@@ -27,7 +25,7 @@ struct ResolvedGeoOperand {
 // _____________________________________________________________________________
 template <typename VarGenerator>
 ResolvedGeoOperand resolveGeoOperand(
-    const GeoOperand& operand, QueryExecutionContext* qec,
+    const TripleComponent& operand, QueryExecutionContext* qec,
     const VarGenerator& generateUniqueVarName) {
   if (operand.isVariable()) {
     return {operand.getVariable()};

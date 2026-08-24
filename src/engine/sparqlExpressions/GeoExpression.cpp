@@ -240,22 +240,22 @@ SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
 
 namespace {
 
-// Extract a `GeoOperand` (a variable or a fixed value) from an argument
+// Extract a `TripleComponent` (a variable or a fixed value) from an argument
 // expression of a geo relation or distance function. Returns `std::nullopt`
 // if `expr` is neither a variable nor one of the constant literal expression
 // types below (for example, an arbitrary non-constant function call). Note:
 // no GeoSPARQL function supported here operates on IRIs, so `IriExpression`
 // is deliberately not one of the recognized cases.
-std::optional<GeoOperand> getVariableOrFixedGeoOperand(
+std::optional<TripleComponent> getVariableOrFixedGeoOperand(
     const SparqlExpression& expr) {
   if (auto var = expr.getVariableOrNullopt(); var.has_value()) {
-    return GeoOperand{std::move(var).value()};
+    return TripleComponent{std::move(var).value()};
   }
   if (const auto* id = dynamic_cast<const IdExpression*>(&expr)) {
-    return GeoOperand{TripleComponent{id->value()}};
+    return TripleComponent{id->value()};
   }
   if (const auto* lit = dynamic_cast<const StringLiteralExpression*>(&expr)) {
-    return GeoOperand{TripleComponent{lit->value()}};
+    return TripleComponent{lit->value()};
   }
   return std::nullopt;
 }
@@ -355,7 +355,8 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr) {
   using namespace ad_utility::use_type_identity;
-  using DistArgs = std::tuple<GeoOperand, GeoOperand, UnitOfMeasurement>;
+  using DistArgs =
+      std::tuple<TripleComponent, TripleComponent, UnitOfMeasurement>;
 
   // Helper lambda to extract a unit of measurement from a SparqlExpression (IRI
   // or literal with xsd:anyURI datatype)
