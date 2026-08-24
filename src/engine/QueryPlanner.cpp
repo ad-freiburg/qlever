@@ -2304,6 +2304,12 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(opt.value()));
   }
 
+  // Test if one of `a` or `b` is a union whose children can each have the joins
+  // applied individually. This works for any number of join columns.
+  for (SubtreePlan& plan : applyJoinDistributivelyToUnion(a, b, jcs)) {
+    candidates.push_back(std::move(plan));
+  }
+
   if (jcs.size() >= 2) {
     // If there are two or more join columns use a multiColumnJoin.
     SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
@@ -2320,12 +2326,6 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   // loading the full has-predicate predicate.
   if (auto opt = createJoinWithHasPredicateScan(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
-  }
-
-  // Test if one of `a` or `b` is a union whose children can each have the joins
-  // applied individually.
-  for (SubtreePlan& plan : applyJoinDistributivelyToUnion(a, b, jcs)) {
-    candidates.push_back(std::move(plan));
   }
 
   // "NORMAL" CASE:
@@ -2445,7 +2445,7 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
 auto QueryPlanner::applyJoinDistributivelyToUnion(
     const SubtreePlan& a, const SubtreePlan& b,
     const JoinColumns& jcs) const -> std::vector<SubtreePlan> {
-  AD_CORRECTNESS_CHECK(jcs.size() == 1);
+  AD_CORRECTNESS_CHECK(!jcs.empty());
   AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
                        b.type == SubtreePlan::BASIC);
   std::vector<SubtreePlan> candidates{};
