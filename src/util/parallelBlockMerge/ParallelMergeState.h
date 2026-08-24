@@ -60,8 +60,8 @@ namespace detail {
 // and none of them has to know about the strands of the others.
 //
 // IMPORTANT: The merging itself must *not* run on any of those strands, because
-// everything that runs on a strand is serialized. A `ChunkTask` is therefore
-// posted onto `executor_` and only hops to the strand of the `sink_` for the
+// everything that runs on a strand is serialized. A `ChunkTask` therefore runs
+// on `executor_` throughout and only hops to the strand of the `sink_` for the
 // short bookkeeping of an `asyncPush`, see the note there.
 //
 // LIFETIME: There is deliberately no destructor that waits for the tasks and
@@ -208,7 +208,10 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   //
   // IMPORTANT: Every step runs on `ParallelMergeState::executor_` and never on
   // one of the strands, because merging is ordinary blocking work that may even
-  // do I/O, see the IMPORTANT note at the class comment above.
+  // do I/O, see the IMPORTANT note at the class comment above. This is achieved
+  // by binding every completion handler of this task to `executor_`; the sink
+  // then posts (and never dispatches) the handler there, see
+  // `InOrderBlockSink::completeOn`.
   class ChunkTask : public std::enable_shared_from_this<ChunkTask> {
    private:
     std::shared_ptr<ParallelMergeState> state_;
@@ -259,47 +262,34 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
       try {
         state_->sink_.asyncPush(
             chunkIndex_, std::move(block).value(),
-            [self = this->shared_from_this()](std::exception_ptr exception,
-                                              bool keepGoing) {
-              // NOTE: This handler has no executor of its own and may
-              // therefore run inline on the strand of the sink (see
-              // `InOrderBlockSink::completeOn`). It must consequently not merge
-              // anything itself, which is why the next step is posted onto
-              // `executor_` and the two other branches only initiate a further
-              // strand operation.
-              if (exception != nullptr) {
-                self->fail(std::move(exception));
-              } else if (keepGoing) {
-                self->postStep();
-              } else {
-                self->finish();
-              }
-            });
+            net::bind_executor(
+                state_->executor_,
+                [self = this->shared_from_this()](std::exception_ptr exception,
+                                                  bool keepGoing) {
+                  if (exception != nullptr) {
+                    self->fail(std::move(exception));
+                  } else if (keepGoing) {
+                    self->step();
+                  } else {
+                    self->finish();
+                  }
+                }));
       } catch (...) {
         fail(std::current_exception());
       }
     }
 
    private:
-    // Post the next `step()` onto the executor of the merge, so that the
-    // merging never runs on one of the strands, see `step()`.
-    void postStep() noexcept {
-      try {
-        net::post(state_->executor_,
-                  [self = this->shared_from_this()] { self->step(); });
-      } catch (...) {
-        fail(std::current_exception());
-      }
-    }
-
     // Forward the `exception` of this chunk to the consumer and then finish the
     // chunk.
     void fail(std::exception_ptr exception) noexcept {
       bool wasForwarded = false;
       try {
         state_->sink_.asyncPushException(
-            std::move(exception), [self = this->shared_from_this()](
-                                      std::exception_ptr) { self->finish(); });
+            std::move(exception),
+            net::bind_executor(state_->executor_,
+                               [self = this->shared_from_this()](
+                                   std::exception_ptr) { self->finish(); }));
         wasForwarded = true;
       } catch (...) {
         // `asyncPushException` allocates the handler that it posts onto the
@@ -323,7 +313,9 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
             // sentinel was really sent.
             state_->sink_.asyncFinishChunk(
                 chunkIndex_,
-                [self = this->shared_from_this()](std::exception_ptr, bool) {});
+                net::bind_executor(state_->executor_,
+                                   [self = this->shared_from_this()](
+                                       std::exception_ptr, bool) {}));
           },
           "Finishing a chunk of a `ParallelMergeState` failed.");
     }

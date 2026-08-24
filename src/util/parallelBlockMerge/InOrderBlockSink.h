@@ -16,7 +16,6 @@
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
-#include <boost/asio/dispatch.hpp>
 #include <boost/asio/experimental/channel.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
@@ -32,6 +31,7 @@
 #include "util/ExceptionHandling.h"
 #include "util/Forward.h"
 #include "util/NoCopyNoMove.h"
+#include "util/RunFunctionOnExecutor.h"
 
 // The output side of the parallel block merge (see
 // `util/parallelBlockMerge/ParallelBlockMerge.h`): the `InOrderBlockSink` that
@@ -76,18 +76,20 @@ namespace net = boost::asio;
 // of our own is required and the channels can be plain (non-concurrent)
 // channels whose internal mutex is a null mutex. Every operation therefore
 // consists of a hop onto the strand (a `net::post`), the actual work, and a hop
-// back to the executor of the caller (`completeOn`, the single place where that
-// happens). None of these operations is a coroutine; they are plain
-// `async_initiate` operations built from handlers.
+// back to the executor of the caller. None of these operations is a coroutine;
+// they are plain `async_initiate` operations built from handlers.
 // The only member that is ever read off the strand is the atomic
 // `stopRequested_`, which exists so that a producer can cheaply poll "should I
 // keep merging?" between two output blocks; it is *written* on the strand only.
 //
-// IMPORTANT: Only this short bookkeeping runs on the strand. Merging a chunk in
-// contrast is ordinary blocking CPU work that may even do I/O, and it has to
-// keep running on the general executor, because everything that runs on a
-// strand is serialized. Scheduling the merging itself on the strand would
-// silently destroy all the parallelism, see `ParallelMergeState::ChunkTask`.
+// IMPORTANT: Only this short bookkeeping ever runs on the strand, and the hop
+// back is always a `net::post` (see `completeOn` and
+// `ad_utility::runFunctionOnExecutor`), so a completion handler of this class
+// never runs while the strand is held. That guarantee matters, because
+// everything that runs on a strand is serialized. The producer of a chunk for
+// example merges a whole output block in its completion handler, which is
+// ordinary blocking CPU work that may even do I/O, and running that on the
+// strand would serialize the entire merge.
 //
 // The strand is also what makes the teardown airtight, and it is the reason why
 // `cancel()` alone suffices and `close()` is never called: the check of
@@ -206,7 +208,6 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   template <typename CompletionToken>
   auto asyncPush(size_t chunkIndex, Block block,
                  CompletionToken&& completionToken) {
-    AD_CONTRACT_CHECK(chunkIndex < numChunks_);
     return sendToChunk(chunkIndex, OptionalBlock{std::move(block)},
                        AD_FWD(completionToken));
   }
@@ -219,7 +220,6 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   // consumer left that could care about the sentinel.
   template <typename CompletionToken>
   auto asyncFinishChunk(size_t chunkIndex, CompletionToken&& completionToken) {
-    AD_CONTRACT_CHECK(chunkIndex < numChunks_);
     return sendToChunk(chunkIndex, OptionalBlock{std::nullopt},
                        AD_FWD(completionToken));
   }
@@ -230,12 +230,18 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   template <typename CompletionToken>
   auto asyncPushException(std::exception_ptr exception,
                           CompletionToken&& completionToken) {
-    return postToStrand(
+    return ad_utility::runFunctionOnExecutor(
+        strand_,
         [this, exception = std::move(exception)]() mutable {
+          // NOTE: Only the *first* exception stops the merge, and that is
+          // enough: `requestStop` has then already woken everybody who was
+          // suspended, and no channel is ever created afterwards (see
+          // `getOrCreateChannel`), so a later exception has nothing left to
+          // wake and its sweep over the channels would be redundant.
           if (exception_ == nullptr) {
             exception_ = std::move(exception);
+            requestStop();
           }
-          requestStop();
         },
         AD_FWD(completionToken));
   }
@@ -247,15 +253,21 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   // nothing.
   template <typename CompletionToken>
   auto asyncAbort(CompletionToken&& completionToken) {
-    return postToStrand([this]() { requestStop(); }, AD_FWD(completionToken));
+    return ad_utility::runFunctionOnExecutor(
+        strand_, [this]() { requestStop(); }, AD_FWD(completionToken));
   }
 
   // Complete with the next block in the global order, or with `std::nullopt` if
   // all chunks are exhausted or the merge was stopped. Rethrow a pushed
   // exception. Suspend until one of these conditions holds.
   //
-  // NOTE: Run this from a single consumer only, and never concurrently with
-  // itself.
+  // IMPORTANT: Run this from a single consumer only, and never concurrently
+  // with itself. The strand does not make this requirement go away, because it
+  // serializes the individual steps of an operation and not two whole
+  // operations: two concurrent calls would both receive from the channel of the
+  // same chunk, so the global order would be lost, and the one that gets the
+  // end-of-chunk sentinel would erase (and thereby destroy) the very channel
+  // that the other one is still waiting on.
   template <typename CompletionToken>
   auto asyncGetNextBlock(CompletionToken&& completionToken) {
     return net::async_initiate<CompletionToken,
@@ -273,47 +285,29 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
  private:
   // Invoke the `handler` with the given `args` on the `executor`, which is the
   // executor that is associated with the completion token of the operation that
-  // the `handler` belongs to. This is the single place where an operation hops
-  // back from `strand_` to the executor of its caller.
+  // the `handler` belongs to. This is where the channel-based operations of
+  // this class hop back from `strand_` to the executor of their caller.
+  //
+  // IMPORTANT: This deliberately uses `net::post` and not `net::dispatch`, so
+  // that a completion handler never runs while the strand is held, see the
+  // IMPORTANT note in the class comment above. `net::dispatch` would invoke the
+  // handler *inline* whenever the calling thread already belongs to the target
+  // executor, which is exactly the case for a producer whose handler is bound
+  // to the thread pool that also runs this strand.
   //
   // NOTE: The `args` are captured as a single `tuple`, because expanding a
   // parameter pack in the init-capture of a lambda requires C++20.
   template <typename Executor, typename Handler, typename... Args>
   static void completeOn(const Executor& executor, Handler handler,
                          Args... args) {
-    net::dispatch(executor,
-                  [handler = std::move(handler),
-                   args = std::make_tuple(std::move(args)...)]() mutable {
-                    std::apply(
-                        [&handler](auto&&... unpacked) {
-                          std::move(handler)(std::move(unpacked)...);
-                        },
-                        std::move(args));
-                  });
-  }
-
-  // Post the `function`, which does its whole work synchronously on `strand_`
-  // and must not throw, onto `strand_` and complete via the `completionToken`.
-  // This is the shared implementation of `asyncPushException` and `asyncAbort`;
-  // the completion signature is `void(std::exception_ptr)` with an always null
-  // `exception_ptr`, for uniformity with the other operations of this class.
-  //
-  // NOTE: `net::post` (and not `net::dispatch`) is what guarantees that the
-  // `function` never runs inline, not even for a caller that is already on the
-  // strand.
-  template <typename Function, typename CompletionToken>
-  auto postToStrand(Function function, CompletionToken&& completionToken) {
-    return net::async_initiate<CompletionToken, void(std::exception_ptr)>(
-        [this, function = std::move(function)](auto handler) mutable {
-          auto executor = net::get_associated_executor(handler, strand_);
-          net::post(strand_,
-                    [function = std::move(function),
-                     handler = std::move(handler), executor]() mutable {
-                      function();
-                      completeOn(executor, std::move(handler), nullptr);
-                    });
-        },
-        completionToken);
+    net::post(executor, [handler = std::move(handler),
+                         args = std::make_tuple(std::move(args)...)]() mutable {
+      std::apply(
+          [&handler](auto&&... unpacked) {
+            std::move(handler)(std::move(unpacked)...);
+          },
+          std::move(args));
+    });
   }
 
   // The common implementation of `asyncPush` and `asyncFinishChunk`: send the
@@ -324,6 +318,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   template <typename CompletionToken>
   auto sendToChunk(size_t chunkIndex, OptionalBlock optionalBlock,
                    CompletionToken&& completionToken) {
+    AD_CONTRACT_CHECK(chunkIndex < numChunks_);
     return net::async_initiate<CompletionToken, void(std::exception_ptr, bool)>(
         [this, chunkIndex,
          optionalBlock = std::move(optionalBlock)](auto handler) mutable {
