@@ -238,17 +238,15 @@ SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
   return std::make_unique<EnvelopeUpperRightExpression>(std::move(child));
 }
 
+// Helpers to extract information for `FILTER` rewriting.
 namespace {
 
 // Extract a `TripleComponent` (a variable or a fixed value) from an argument
 // expression of a geo relation or distance function. Returns `std::nullopt`
-// if `expr` is neither a variable nor one of the constant literal expression
-// types below (for example, an arbitrary non-constant function call). Note:
-// no GeoSPARQL function supported here operates on IRIs, so `IriExpression`
-// is deliberately not one of the recognized cases.
-std::optional<TripleComponent> getVariableOrFixedGeoOperand(
+// if `expr` is neither a variable nor a constant literal expression.
+std::optional<TripleComponent> extractGeometryOperand(
     const SparqlExpression& expr) {
-  if (auto var = expr.getVariableOrNullopt(); var.has_value()) {
+  if (auto var = expr.getVariableOrNullopt()) {
     return TripleComponent{std::move(var).value()};
   }
   if (const auto* id = dynamic_cast<const IdExpression*>(&expr)) {
@@ -272,11 +270,11 @@ std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
   }
 
   // Extract variables or fixed values
-  auto p1 = getVariableOrFixedGeoOperand(*geoRelExpr->children()[0]);
+  auto p1 = extractGeometryOperand(*geoRelExpr->children()[0]);
   if (!p1.has_value()) {
     return std::nullopt;
   }
-  auto p2 = getVariableOrFixedGeoOperand(*geoRelExpr->children()[1]);
+  auto p2 = extractGeometryOperand(*geoRelExpr->children()[1]);
   if (!p2.has_value()) {
     return std::nullopt;
   }
@@ -325,11 +323,11 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
   }
 
   // Extract variables or fixed values
-  auto p1 = getVariableOrFixedGeoOperand(*de9imExpr->children()[0]);
+  auto p1 = extractGeometryOperand(*de9imExpr->children()[0]);
   if (!p1.has_value()) {
     return std::nullopt;
   }
-  auto p2 = getVariableOrFixedGeoOperand(*de9imExpr->children()[1]);
+  auto p2 = extractGeometryOperand(*de9imExpr->children()[1]);
   if (!p2.has_value()) {
     return std::nullopt;
   }
@@ -390,11 +388,11 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     }
 
     // Extract variables or fixed values
-    auto p1 = getVariableOrFixedGeoOperand(*distExpr->children()[0]);
+    auto p1 = extractGeometryOperand(*distExpr->children()[0]);
     if (!p1.has_value()) {
       return std::nullopt;
     }
-    auto p2 = getVariableOrFixedGeoOperand(*distExpr->children()[1]);
+    auto p2 = extractGeometryOperand(*distExpr->children()[1]);
     if (!p2.has_value()) {
       return std::nullopt;
     }
