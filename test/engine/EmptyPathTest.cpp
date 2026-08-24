@@ -241,6 +241,32 @@ TEST(EmptyPath, existenceCheckAddsTheGraphColumn) {
 }
 
 // _____________________________________________________________________________
+TEST(EmptyPath, undefValuesAreExpandedWithTheGraphColumnOfTheChild) {
+  auto* qec = makeQec(nquads, true);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto emptyPath = makeExistenceCheck(
+      qec, Variable{"?g"},
+      makeIdTableFromVector({{getId("<a>"), getId("<g2>")},
+                             {Id::makeUndefined(), getId("<g1>")},
+                             {Id::makeUndefined(), Id::makeUndefined()}}),
+      {Variable{"?x"}, Variable{"?g"}});
+
+  // The first row is a regular existence check. The second row matches every
+  // entity of `<g1>`, and the third row (which has an UNDEF graph as well)
+  // matches every pair of entity and graph.
+  auto result = computeResult(emptyPath);
+  EXPECT_THAT(result, UnorderedElementsAreArray(makeIdTableFromVector(
+                          {{getId("<a>"), getId("<g2>")},
+                           {getId("<a>"), getId("<g1>")},
+                           {getId("<b>"), getId("<g1>")},
+                           {getId("<a>"), getId("<g1>")},
+                           {getId("<a>"), getId("<g2>")},
+                           {getId("<b>"), getId("<g1>")},
+                           {getId("<c>"), getId("<g2>")},
+                           {getId("<z>"), getId("<g2>")}})));
+}
+
+// _____________________________________________________________________________
 TEST(EmptyPath, existenceCheckChecksPairsOfValueAndGraph) {
   auto* qec = makeQec(nquads, true);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
@@ -280,6 +306,16 @@ TEST(EmptyPath, sortednessIsPreservedForSortedChildrenWithoutUndef) {
         std::vector<ColumnIndex>{1});
     EmptyPath emptyPath{qec,          Variable{"?x"},   Graphs::All(),
                         std::nullopt, std::move(child), 0};
+    EXPECT_THAT(emptyPath.getResultSortedOn(), ::testing::IsEmpty());
+  }
+  {
+    // The child is sorted on the join column, but that column might contain
+    // UNDEF values, which are expanded at the very end and hence break the
+    // sort order.
+    auto emptyPath = makeExistenceCheck(
+        qec, std::nullopt,
+        makeIdTableFromVector({{Id::makeUndefined()}, {getId("<a>")}}),
+        {Variable{"?x"}}, 0, true);
     EXPECT_THAT(emptyPath.getResultSortedOn(), ::testing::IsEmpty());
   }
 }
@@ -461,11 +497,23 @@ TEST(EmptyPath, estimatesAndMultiplicities) {
 }
 
 // _____________________________________________________________________________
-TEST(EmptyPath, theGraphColumnAlsoOriginatesFromTheKnowledgeGraph) {
+TEST(EmptyPath, theGraphColumnDoesNotOriginateFromTheKnowledgeGraph) {
   auto* qec = makeQec(nquads, true);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), Variable{"?g"}};
   EXPECT_TRUE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?x"}));
-  EXPECT_TRUE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+  // Graph names are not necessarily subjects or objects of the knowledge graph,
+  // so the graph column does not qualify (just like for `IndexScan`).
+  EXPECT_FALSE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+
+  // The same holds if the graph column is checked instead of added, because
+  // then the values are only a subset of those of the child.
+  auto withGraphChild =
+      makeExistenceCheck(qec, Variable{"?g"},
+                         makeIdTableFromVector({{getId("<a>"), getId("<g1>")}}),
+                         {Variable{"?x"}, Variable{"?g"}});
+  EXPECT_TRUE(withGraphChild.columnOriginatesFromGraphOrUndef(Variable{"?x"}));
+  EXPECT_FALSE(withGraphChild.columnOriginatesFromGraphOrUndef(Variable{"?g"}));
 }
 
 // _____________________________________________________________________________

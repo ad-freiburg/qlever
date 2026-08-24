@@ -1276,6 +1276,38 @@ TEST(CompressedRelationReader, getDistinctCol0IdsOnlySupportsFullScans) {
 }
 
 // _____________________________________________________________________________
+TEST(CompressedRelationReader, getDistinctCol0IdsChecksItsPreconditions) {
+  std::vector<RelationInput> inputs{{1, {{0, 0}}}, {2, {{0, 0}}}};
+  addGraphColumnIfNecessary(inputs);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] =
+      writeAndOpenRelations(inputs, filename, 64_B);
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(blocks)};
+  // The generator is lazy, so the checks only fire once it is consumed.
+  auto consume = [&reader, &scanSpecAndBlocks](
+                     std::optional<std::vector<Id>> idFilter,
+                     CompressedRelationReader::CancellationHandle handle) {
+    for ([[maybe_unused]] const IdTable& table : reader->getDistinctCol0Ids(
+             scanSpecAndBlocks, false, std::move(idFilter), std::move(handle),
+             emptyLocatedTriples)) {
+    }
+  };
+
+  EXPECT_THROW(consume(std::nullopt, nullptr), ad_utility::Exception);
+
+  // The `idFilter` has to be sorted. This is only checked if the expensive
+  // checks are enabled, and violating it without that check is undefined
+  // behavior, so the call is not made at all in that case.
+  if (ad_utility::areExpensiveChecksEnabled) {
+    EXPECT_THROW(consume(std::vector{V(2), V(1)},
+                         std::make_shared<ad_utility::CancellationHandle<>>()),
+                 ad_utility::Exception);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(CompressedRelationReader, getResultSizeImpl) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
   auto index = ad_utility::testing::makeTestIndex("getResultSizeImpl", "");
