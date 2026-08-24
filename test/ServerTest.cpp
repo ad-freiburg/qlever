@@ -512,6 +512,30 @@ TEST(ServerTest, pingEndpoint) {
 }
 
 // _____________________________________________________________________________
+TEST(ServerTest, setRuntimeParameters) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(false);
+
+  // Setting a runtime parameter requires a valid access token.
+  expectRequiresValidAccessToken("setting runtime parameters", [&] {
+    server.process(makeGetRequest("/?strip-columns=true"));
+  });
+  EXPECT_FALSE(globalRuntimeParameters.rlock()->stripColumns_.get());
+
+  // With a valid access token, the parameter is set and the response reports
+  // the full, updated settings map.
+  auto response =
+      server.process(makeGetRequest("/?strip-columns=true", "accessToken"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_TRUE(globalRuntimeParameters.rlock()->stripColumns_.get());
+  auto body = responseBodyAsJson(std::move(response));
+  ASSERT_TRUE(body.has_value());
+  EXPECT_THAT(body.value().at("strip-columns"), testing::Eq("true"));
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, clearDeltaTriples) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
   auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
