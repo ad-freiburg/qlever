@@ -8,6 +8,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/thread_pool.hpp>
+
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
@@ -16,6 +20,8 @@
 #include "index/ExternalSortFunctors.h"
 #include "util/ConstexprUtils.h"
 #include "util/jthread.h"
+
+namespace net = boost::asio;
 
 using ad_utility::source_location;
 using namespace ad_utility::memory_literals;
@@ -101,7 +107,7 @@ template <size_t NumStaticColumns>
 void testExternalSorterImpl(
     size_t numDynamicColumns, size_t numRows,
     ad_utility::MemorySize memoryToUse, bool mergeMultipleTimes,
-    ad_utility::parallelBlockMerge::SharedMergeScheduler scheduler = nullptr,
+    std::optional<size_t> mergeParallelism = std::nullopt,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto tr = generateLocationTrace(l);
   // NOTE: The filename has to be derived from the name of the currently running
@@ -116,8 +122,12 @@ void testExternalSorterImpl(
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns>
       writer{filename, numDynamicColumns, memoryToUse,
              ad_utility::testing::makeAllocator(), 5_kB};
-  if (scheduler != nullptr) {
-    writer.setMergeScheduler(std::move(scheduler));
+  // NOTE: The pool is only created if it is really needed, because a
+  // `parallelism` of one never touches the executor at all.
+  std::optional<net::thread_pool> pool;
+  if (mergeParallelism.has_value()) {
+    pool.emplace(mergeParallelism.value());
+    writer.setMergeExecutor(pool->get_executor(), mergeParallelism.value());
   }
 
   for (size_t i = 0; i < 2; ++i) {
@@ -173,15 +183,14 @@ void testExternalSorterImpl(
 };
 
 template <size_t NumStaticColumns>
-void testExternalSorter(
-    size_t numDynamicColumns, size_t numRows,
-    ad_utility::MemorySize memoryToUse,
-    ad_utility::parallelBlockMerge::SharedMergeScheduler scheduler = nullptr,
-    source_location l = AD_CURRENT_SOURCE_LOC()) {
-  testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
-                                           memoryToUse, true, scheduler, l);
+void testExternalSorter(size_t numDynamicColumns, size_t numRows,
+                        ad_utility::MemorySize memoryToUse,
+                        std::optional<size_t> mergeParallelism = std::nullopt,
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   testExternalSorterImpl<NumStaticColumns>(
-      numDynamicColumns, numRows, memoryToUse, false, std::move(scheduler), l);
+      numDynamicColumns, numRows, memoryToUse, true, mergeParallelism, l);
+  testExternalSorterImpl<NumStaticColumns>(
+      numDynamicColumns, numRows, memoryToUse, false, mergeParallelism, l);
 }
 
 // Test for static (`<NUM_COLS>) and dynamic (`<0>`) tables. The second
@@ -593,67 +602,72 @@ constexpr size_t NUM_ROWS_PARALLEL_MERGE = 200'000;
 constexpr size_t EXPECTED_NUM_RUNS_PARALLEL_MERGE = 13;
 constexpr size_t BLOCKSIZE_OUTPUT_PARALLEL_MERGE = 10'000;
 
-// A `MergeScheduler` that counts how many tasks were scheduled and forwards
-// them to an owned `TaskQueueMergeScheduler`. It allows to assert that the
-// genuinely parallel code path of the merge (which is the only one that
-// schedules anything at all) was really taken.
-class CountingMergeScheduler
-    : public ad_utility::parallelBlockMerge::MergeScheduler {
- private:
-  ad_utility::parallelBlockMerge::TaskQueueMergeScheduler scheduler_;
-  std::atomic<size_t> numScheduledTasks_{0};
-
- public:
-  explicit CountingMergeScheduler(size_t numThreads, std::string name)
-      : scheduler_{numThreads, std::move(name)} {}
-
-  // ___________________________________________________________________________
-  void schedule(absl::AnyInvocable<void()> task) override {
-    ++numScheduledTasks_;
-    scheduler_.schedule(std::move(task));
-  }
-
-  // ___________________________________________________________________________
-  size_t maxParallelism() const override { return scheduler_.maxParallelism(); }
-
-  // The number of tasks (= chunks of the merge) that were scheduled so far.
-  size_t numScheduledTasks() const { return numScheduledTasks_.load(); }
+// The result of `sortWithParallelism` below: the sorted table together with the
+// number of Boost.Asio handlers that the threads of the merge executor have
+// executed, and the number of those threads that ran at least one handler. The
+// latter two are the observable trace of the merge on that executor, and hence
+// the way to assert that the genuinely parallel code path (which is the only
+// one that touches the executor at all) was really taken.
+struct SortResultWithExecutorStatistics {
+  CopyableIdTable<0> table_;
+  size_t numHandlers_;
+  size_t numBusyThreads_;
 };
 
-// Sort the `input` with a `CompressedExternalIdTableSorter` that uses the given
-// `scheduler` for its merge phase, and return the sorted result.
-CopyableIdTable<0> sortWithScheduler(
-    const IdTable& input,
-    ad_utility::parallelBlockMerge::SharedMergeScheduler scheduler,
-    const std::string& filename) {
+// Sort the `input` with a `CompressedExternalIdTableSorter` whose merge phase
+// runs on an `io_context` with `numThreads` threads, and return the sorted
+// result together with the statistics of that `io_context`.
+SortResultWithExecutorStatistics sortWithParallelism(
+    const IdTable& input, size_t numThreads, const std::string& filename) {
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
-      filename, NUM_COLS, 1_MB, ad_utility::testing::makeAllocator(), 5_kB};
-  sorter.setMergeScheduler(std::move(scheduler));
-  for (const auto& row : input) {
-    sorter.push(row);
+  net::io_context ioContext;
+  // NOTE: The `work_guard` keeps the threads alive while the sorter is still
+  // being filled, i.e. while the `io_context` has no work at all yet.
+  auto workGuard = net::make_work_guard(ioContext);
+  std::atomic<size_t> numHandlers{0};
+  std::atomic<size_t> numBusyThreads{0};
+  std::vector<ad_utility::JThread> workers;
+  for (size_t i = 0; i < numThreads; ++i) {
+    workers.emplace_back([&ioContext, &numHandlers, &numBusyThreads] {
+      // NOTE: `io_context::run` returns the number of handlers that this thread
+      // has executed.
+      size_t numHandlersOfThisThread = ioContext.run();
+      numHandlers += numHandlersOfThisThread;
+      if (numHandlersOfThisThread > 0) {
+        ++numBusyThreads;
+      }
+    });
   }
-  auto blocks = sorter.getSortedBlocks<0>(BLOCKSIZE_OUTPUT_PARALLEL_MERGE);
-  return idTableFromBlockGenerator(blocks);
+
+  CopyableIdTable<0> table{NUM_COLS, ad_utility::testing::makeAllocator()};
+  {
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        filename, NUM_COLS, 1_MB, ad_utility::testing::makeAllocator(), 5_kB};
+    sorter.setMergeExecutor(ioContext.get_executor(), numThreads);
+    for (const auto& row : input) {
+      sorter.push(row);
+    }
+    auto blocks = sorter.getSortedBlocks<0>(BLOCKSIZE_OUTPUT_PARALLEL_MERGE);
+    table = idTableFromBlockGenerator(blocks);
+  }
+  workGuard.reset();
+  workers.clear();
+  return {std::move(table), numHandlers.load(), numBusyThreads.load()};
 }
 }  // namespace
 
 // _____________________________________________________________________________
-// The same assertions as in `sorterRandomInputs`, but with an
-// `InlineMergeScheduler`, which gives a deterministic single-threaded
-// reference implementation of the merge.
-TEST(CompressedExternalIdTable, sorterWithInlineScheduler) {
-  auto makeScheduler = []() {
-    return std::make_shared<
-        ad_utility::parallelBlockMerge::InlineMergeScheduler>();
-  };
-  testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB, makeScheduler());
-  testExternalSorter<NUM_COLS>(NUM_COLS, 1000, 1_MB, makeScheduler());
-  testExternalSorter<NUM_COLS>(NUM_COLS, 0, 1_MB, makeScheduler());
+// The same assertions as in `sorterRandomInputs`, but with a merge parallelism
+// of one, which gives a deterministic single-threaded reference implementation
+// of the merge.
+TEST(CompressedExternalIdTable, sorterWithSerialMerge) {
+  testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB, 1);
+  testExternalSorter<NUM_COLS>(NUM_COLS, 1000, 1_MB, 1);
+  testExternalSorter<NUM_COLS>(NUM_COLS, 0, 1_MB, 1);
 
-  testExternalSorter<0>(NUM_COLS, 10'000, 10_kB, makeScheduler());
-  testExternalSorter<0>(NUM_COLS, 1000, 1_MB, makeScheduler());
-  testExternalSorter<0>(NUM_COLS, 0, 1_MB, makeScheduler());
+  testExternalSorter<0>(NUM_COLS, 10'000, 10_kB, 1);
+  testExternalSorter<0>(NUM_COLS, 1000, 1_MB, 1);
+  testExternalSorter<0>(NUM_COLS, 0, 1_MB, 1);
 }
 
 // _____________________________________________________________________________
@@ -670,18 +684,15 @@ TEST(CompressedExternalIdTable, sorterParallelMatchesSerial) {
   IdTable input =
       createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS);
 
-  auto serial = sortWithScheduler(
-      input,
-      std::make_shared<ad_utility::parallelBlockMerge::InlineMergeScheduler>(),
-      serialFilename);
-  auto parallel = sortWithScheduler(
-      input,
-      std::make_shared<ad_utility::parallelBlockMerge::TaskQueueMergeScheduler>(
-          8, "sorterParallelMatchesSerial"),
-      parallelFilename);
+  auto serial = sortWithParallelism(input, 1, serialFilename);
+  auto parallel = sortWithParallelism(input, 8, parallelFilename);
 
-  ASSERT_EQ(serial.numRows(), input.numRows());
-  EXPECT_THAT(parallel, ::testing::ElementsAreArray(serial));
+  // A merge parallelism of one never touches the executor at all, while the
+  // parallel merge schedules a lot of work on it.
+  EXPECT_EQ(serial.numHandlers_, 0u);
+  EXPECT_GT(parallel.numHandlers_, 0u);
+  ASSERT_EQ(serial.table_.numRows(), input.numRows());
+  EXPECT_THAT(parallel.table_, ::testing::ElementsAreArray(serial.table_));
 }
 
 // _____________________________________________________________________________
@@ -700,19 +711,18 @@ TEST(CompressedExternalIdTable, sorterManyRunsParallel) {
   }
   ql::ranges::sort(expected, SortByOSP{});
 
-  auto scheduler =
-      std::make_shared<CountingMergeScheduler>(8, "sorterManyRunsParallel");
-  auto result = sortWithScheduler(input, scheduler, filename);
+  auto result = sortWithParallelism(input, 8, filename);
 
   // The input is large enough to be split into many presorted runs, so the
   // merge really has to merge more than a handful of runs.
   ASSERT_GE(EXPECTED_NUM_RUNS_PARALLEL_MERGE, 8u);
-  // Only the parallel code path of the merge schedules tasks at all, and it
-  // schedules exactly one task per chunk.
-  EXPECT_GT(scheduler->numScheduledTasks(), 1u);
-  ASSERT_EQ(result.numRows(), input.numRows());
-  EXPECT_TRUE(ql::ranges::is_sorted(result, SortByOSP{}));
-  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  // Only the parallel code path of the merge schedules anything on the
+  // executor, and it really does so on more than one of its threads.
+  EXPECT_GT(result.numHandlers_, 1u);
+  EXPECT_GT(result.numBusyThreads_, 1u);
+  ASSERT_EQ(result.table_.numRows(), input.numRows());
+  EXPECT_TRUE(ql::ranges::is_sorted(result.table_, SortByOSP{}));
+  EXPECT_THAT(result.table_, ::testing::ElementsAreArray(expected));
 }
 
 // _____________________________________________________________________________
@@ -737,9 +747,8 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
       filename, NUM_COLS, memory, ad_utility::testing::makeAllocator(),
       blocksizeCompression};
-  sorter.setMergeScheduler(
-      std::make_shared<ad_utility::parallelBlockMerge::TaskQueueMergeScheduler>(
-          8, "sorterReducedParallelismWarning"));
+  net::thread_pool pool{8};
+  sorter.setMergeExecutor(pool.get_executor(), 8);
   IdTable input = createRandomlyFilledIdTable(numRows, NUM_COLS);
   for (const auto& row : input) {
     sorter.push(row);
@@ -759,4 +768,5 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
                   "concurrently instead of the 8 chunks"));
   EXPECT_EQ(result.numRows(), numRows);
   EXPECT_TRUE(ql::ranges::is_sorted(result, SortByOSP{}));
+  pool.join();
 }

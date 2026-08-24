@@ -12,6 +12,8 @@
 
 #include <array>
 #include <atomic>
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/thread_pool.hpp>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -46,8 +48,8 @@
 //    a deliberately expensive comparison of strings. The latter is the case
 //    that matters most, because the comparator of the vocabulary merger is a
 //    full ICU collation which dominates its runtime.
-// 3. The available parallelism: a serial `InlineMergeScheduler` as the
-//    reference, and a `TaskQueueMergeScheduler` with 1, 2, 4, and 8 threads.
+// 3. The available parallelism: the serial merge as the reference, and a
+//    `boost::asio::thread_pool` with 1, 2, 4, and 8 threads.
 //
 // In an optimized build, the whole benchmark takes roughly half a minute on a
 // many-core machine (of which about a third is the generation and the sorting
@@ -69,7 +71,7 @@ constexpr size_t NUM_ELEMENTS_EXPENSIVE = 4'000'000;
 // The numbers of presorted runs for which the merge is benchmarked.
 constexpr std::array<size_t, 4> RUN_COUNTS{4, 16, 64, 256};
 
-// The numbers of threads of the `TaskQueueMergeScheduler`.
+// The numbers of threads of the thread pool that runs the merge.
 constexpr std::array<size_t, 4> THREAD_COUNTS{1, 2, 4, 8};
 
 // The number of elements in a single (virtual) input block.
@@ -182,14 +184,17 @@ size_t elementChecksum(const std::string& element) {
   return element.size() + static_cast<unsigned char>(element.front());
 }
 
-// Merge the `runs` with the given `comparator` and `scheduler`, and return the
-// accumulated checksum of all merged elements.
+// Merge the `runs` with the given `comparator` on the `executor` with the given
+// `parallelism`, and return the accumulated checksum of all merged elements. A
+// `parallelism` of one takes the serial code path and never touches the
+// `executor`.
 template <typename T, typename Comparator>
 size_t mergeAndComputeChecksum(const Runs<T>& runs, Comparator comparator,
-                               SharedMergeScheduler scheduler) {
+                               net::any_io_executor executor,
+                               size_t parallelism) {
   auto blocks = parallelBlockMergeToRange</*moveElements=*/false>(
-      Input<T>{runs.spans_, VIRTUAL_BLOCK_SIZE}, std::move(comparator),
-      MergeOptions{}, std::move(scheduler));
+      std::move(executor), Input<T>{runs.spans_, VIRTUAL_BLOCK_SIZE},
+      std::move(comparator), MergeOptions{}, parallelism);
   size_t checksum = 0;
   for (const auto& block : blocks) {
     for (const auto& element : block) {
@@ -281,31 +286,40 @@ class ParallelBlockMergeBenchmark : public BenchmarkInterface {
     }
     // NOTE: The first column is filled with the row names by the
     // infrastructure, so the measurements start at column one.
-    std::vector<std::string> columnNames{"number of runs", "serial (inline)"};
+    std::vector<std::string> columnNames{"number of runs", "serial"};
     for (size_t numThreads : THREAD_COUNTS) {
-      columnNames.push_back(absl::StrCat("task queue, ", numThreads, " thr"));
+      columnNames.push_back(absl::StrCat("pool, ", numThreads, " thr"));
     }
     auto& table = results.addTable(descriptor, rowNames, columnNames);
 
     for (size_t row = 0; row < RUN_COUNTS.size(); ++row) {
       Runs<T> runs = makeRuns(sorted, RUN_COUNTS.at(row));
       auto measure = [this, &table, &runs, &comparator, row](
-                         size_t column, SharedMergeScheduler scheduler) {
+                         size_t column, size_t parallelism) {
+        // NOTE: The pool is created (and thus its threads are started) outside
+        // of the measured function.
+        std::optional<net::thread_pool> pool;
+        net::any_io_executor executor;
+        if (parallelism > 1) {
+          pool.emplace(parallelism);
+          executor = pool->get_executor();
+        }
         table.addMeasurement(
-            row, column, [this, &runs, &comparator, &scheduler]() {
-              checksum_ += mergeAndComputeChecksum(runs, comparator, scheduler);
+            row, column, [this, &runs, &comparator, &executor, parallelism]() {
+              checksum_ += mergeAndComputeChecksum(runs, comparator, executor,
+                                                   parallelism);
             });
+        if (pool.has_value()) {
+          pool->join();
+        }
       };
-      measure(1, std::make_shared<InlineMergeScheduler>());
+      measure(1, 1);
       for (size_t i = 0; i < THREAD_COUNTS.size(); ++i) {
-        // NOTE: The scheduler is created outside of the measured function, so
-        // that the creation of its threads is not part of the measurement.
-        // NOTE: A `TaskQueueMergeScheduler` with a single thread offers no
-        // parallelism at all, so the merge falls back to the same serial code
-        // path as the `InlineMergeScheduler`. That column is therefore expected
-        // to be (almost) identical to the serial reference.
-        measure(i + 2,
-                std::make_shared<TaskQueueMergeScheduler>(THREAD_COUNTS.at(i)));
+        // NOTE: A single thread offers no parallelism at all, so the merge
+        // falls back to the same serial code path as the reference column. That
+        // column is therefore expected to be (almost) identical to that
+        // reference.
+        measure(i + 2, THREAD_COUNTS.at(i));
       }
     }
   }
@@ -328,8 +342,8 @@ AD_REGISTER_BENCHMARK(ParallelBlockMergeBenchmark);
 // before the first measurement starts.
 //
 // The following axes are covered, see the individual tables for the details:
-// the scheduler (a serial `InlineMergeScheduler` and a
-// `TaskQueueMergeScheduler` with 1 to 16 threads), the number of columns, the
+// the available parallelism (the serial merge, and a
+// `boost::asio::thread_pool` with 1 to 16 threads), the number of columns, the
 // distribution of the `Id`s (and thus the number of columns that the
 // comparator has to look at), the number of presorted runs, the size of a
 // single compressed block, and the size of a single output block.
@@ -365,7 +379,7 @@ constexpr size_t NUM_ROWS = 48'000'000;
 // compressed block is derived from this, see `blocksizeCompressionFor` below.
 constexpr size_t BLOCKS_PER_RUN = 512;
 
-// The numbers of threads of the `TaskQueueMergeScheduler`.
+// The numbers of threads of the thread pool that runs the merge.
 constexpr std::array<size_t, 5> THREAD_COUNTS_ID_TABLE{1, 2, 4, 8, 16};
 
 // The distribution of the generated `Id`s.
@@ -608,7 +622,8 @@ class FilledSorter {
     pushRows<NumCols>(*sorter_,
                       rowsPerRunFor(config.numRuns_) * config.numRuns_,
                       config.distribution_);
-    sorter_->setMergeScheduler(std::make_shared<InlineMergeScheduler>());
+    // The warm-up merge is serial, so that it needs no executor at all.
+    sorter_->setMergeExecutor(net::any_io_executor{}, 1);
     [[maybe_unused]] size_t checksum =
         mergeAndComputeChecksum<NumCols>(*sorter_, std::nullopt);
   }
@@ -664,24 +679,24 @@ class CompressedIdTableMergeBenchmark : public BenchmarkInterface {
   }
 
  private:
-  // Return the names of the columns of all tables that compare the schedulers.
+  // Return the names of the columns of all tables that compare the available
+  // parallelism.
   // NOTE: The first column is filled with the row names by the infrastructure,
   // so the measurements start at column one.
-  static std::vector<std::string> schedulerColumnNames(
+  static std::vector<std::string> parallelismColumnNames(
       std::string nameOfFirstColumn) {
-    std::vector<std::string> result{std::move(nameOfFirstColumn),
-                                    "serial (inline)"};
+    std::vector<std::string> result{std::move(nameOfFirstColumn), "serial"};
     for (size_t numThreads : compressedIdTableMerge::THREAD_COUNTS_ID_TABLE) {
-      result.push_back(absl::StrCat("task queue, ", numThreads, " thr"));
+      result.push_back(absl::StrCat("pool, ", numThreads, " thr"));
     }
     return result;
   }
 
-  // Measure one merge per scheduler into the given `row` of the `table`. The
-  // `sorter` is already filled, so that neither the pushing of the rows nor the
-  // flushing of the last run is part of a measurement.
+  // Measure one merge per degree of parallelism into the given `row` of the
+  // `table`. The `sorter` is already filled, so that neither the pushing of the
+  // rows nor the flushing of the last run is part of a measurement.
   template <typename Comparator, size_t NumCols>
-  void addSchedulerMeasurements(
+  void addParallelismMeasurements(
       ResultTable& table, size_t row,
       compressedIdTableMerge::FilledSorter<Comparator, NumCols>& filledSorter,
       const MergeConfig& mergeConfig) {
@@ -694,19 +709,28 @@ class CompressedIdTableMergeBenchmark : public BenchmarkInterface {
           false;
     };
     auto measure = [this, &table, &sorter, &mergeConfig, row](
-                       size_t column, SharedMergeScheduler scheduler) {
-      // NOTE: The scheduler is created (and thus its threads are started)
-      // outside of the measured function.
-      sorter.setMergeScheduler(std::move(scheduler));
+                       size_t column, size_t parallelism) {
+      // NOTE: The pool is created (and thus its threads are started) outside of
+      // the measured function. A `parallelism` of one merges serially and
+      // therefore needs no pool at all.
+      std::optional<net::thread_pool> pool;
+      if (parallelism > 1) {
+        pool.emplace(parallelism);
+        sorter.setMergeExecutor(pool->get_executor(), parallelism);
+      } else {
+        sorter.setMergeExecutor(net::any_io_executor{}, 1);
+      }
       table.addMeasurement(row, column, [this, &sorter, &mergeConfig]() {
         checksum_ += mergeAndComputeChecksum<NumCols>(
             sorter, mergeConfig.outputBlockSize_);
       });
+      if (pool.has_value()) {
+        pool->join();
+      }
     };
-    measure(1, std::make_shared<InlineMergeScheduler>());
+    measure(1, 1);
     for (size_t i = 0; i < THREAD_COUNTS_ID_TABLE.size(); ++i) {
-      measure(i + 2, std::make_shared<TaskQueueMergeScheduler>(
-                         THREAD_COUNTS_ID_TABLE.at(i)));
+      measure(i + 2, THREAD_COUNTS_ID_TABLE.at(i));
     }
   }
 
@@ -719,8 +743,8 @@ class CompressedIdTableMergeBenchmark : public BenchmarkInterface {
     using namespace compressedIdTableMerge;
     logConfiguration(name, NumCols, dataConfig, mergeConfig);
     FilledSorter<Comparator, NumCols> filledSorter{dataConfig};
-    addSchedulerMeasurements<Comparator, NumCols>(table, row, filledSorter,
-                                                  mergeConfig);
+    addParallelismMeasurements<Comparator, NumCols>(table, row, filledSorter,
+                                                    mergeConfig);
   }
 
   // Add the table for the number of columns and the distribution of the `Id`s.
@@ -732,7 +756,7 @@ class CompressedIdTableMergeBenchmark : public BenchmarkInterface {
     auto& table = results.addTable(
         absl::StrCat("Number of columns and distribution of the `Id`s (",
                      NUM_ROWS, " rows, 16 runs)"),
-        rowNames, schedulerColumnNames("columns, distribution"));
+        rowNames, parallelismColumnNames("columns, distribution"));
     size_t row = 0;
     for (Distribution distribution :
          {Distribution::Uniform, Distribution::Skewed}) {
@@ -770,7 +794,7 @@ class CompressedIdTableMergeBenchmark : public BenchmarkInterface {
     auto& table = results.addTable(
         absl::StrCat("Number of presorted runs (", NUM_ROWS, " rows, ",
                      NumColumnsIndexBuilding, " columns)"),
-        rowNames, schedulerColumnNames("runs, distribution"));
+        rowNames, parallelismColumnNames("runs, distribution"));
     size_t row = 0;
     for (Distribution distribution :
          {Distribution::Uniform, Distribution::Skewed}) {
@@ -796,7 +820,7 @@ class CompressedIdTableMergeBenchmark : public BenchmarkInterface {
     auto& table = results.addTable(
         absl::StrCat("Size of a single compressed block (", NUM_ROWS, " rows, ",
                      NumColumnsIndexBuilding, " columns, 16 runs, skewed)"),
-        rowNames, schedulerColumnNames("blocksize"));
+        rowNames, parallelismColumnNames("blocksize"));
     for (size_t row = 0; row < blocksizesInKilobytes.size(); ++row) {
       DataConfig config{16, Distribution::Skewed,
                         MemorySize::kilobytes(blocksizesInKilobytes.at(row))};
@@ -824,13 +848,13 @@ class CompressedIdTableMergeBenchmark : public BenchmarkInterface {
     auto& table = results.addTable(
         absl::StrCat("Size of a single output block (", NUM_ROWS, " rows, ",
                      NumCols, " columns, 16 runs, skewed)"),
-        rowNames, schedulerColumnNames("output blocksize"));
+        rowNames, parallelismColumnNames("output blocksize"));
     FilledSorter<SortByPSO, NumCols> filledSorter{dataConfig};
     for (size_t row = 0; row < mergeConfigs.size(); ++row) {
       logConfiguration(rowNames.at(row), NumCols, dataConfig,
                        mergeConfigs.at(row));
-      addSchedulerMeasurements<SortByPSO, NumCols>(table, row, filledSorter,
-                                                   mergeConfigs.at(row));
+      addParallelismMeasurements<SortByPSO, NumCols>(table, row, filledSorter,
+                                                     mergeConfigs.at(row));
     }
   }
 
@@ -907,10 +931,12 @@ class CompressedIdTableMergeBenchmark : public BenchmarkInterface {
     sorter.moveResultOnMerge() = false;
     pushRows<NumCols>(sorter, numRuns * rowsPerRun, Distribution::Skewed);
 
-    sorter.setMergeScheduler(std::make_shared<InlineMergeScheduler>());
+    sorter.setMergeExecutor(net::any_io_executor{}, 1);
     auto serialResult = mergeAndMaterialize<NumCols>(sorter);
-    sorter.setMergeScheduler(std::make_shared<TaskQueueMergeScheduler>(8));
+    net::thread_pool pool{8};
+    sorter.setMergeExecutor(pool.get_executor(), 8);
     auto parallelResult = mergeAndMaterialize<NumCols>(sorter);
+    pool.join();
     AD_CORRECTNESS_CHECK(serialResult.size() == numRuns * rowsPerRun * NumCols);
     if (serialResult != parallelResult) {
       throw std::runtime_error{

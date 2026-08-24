@@ -17,13 +17,11 @@
 #include <utility>
 #include <vector>
 
-#include "util/GTestHelpers.h"
-#include "util/jthread.h"
-#include "util/parallelBlockMerge/OutputSinkPolicy.h"
+#include "util/parallelBlockMerge/InOrderBlockSink.h"
 
-// The tests of the Boost.Asio based `AsioInOrderBlockSink` at the bottom of
-// this file require coroutines and are therefore not available in the C++17
-// backports mode.
+// The tests in this file drive the sink from coroutines and are therefore not
+// available in the C++17 backports mode. The sink itself is coroutine-free and
+// available in that mode, see `InOrderBlockSink.h`.
 #ifndef QLEVER_CPP_17
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -31,189 +29,18 @@
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <functional>
-#include <memory>
-#include <optional>
 
 #include "util/AsyncTestHelpers.h"
 #endif
 
 using namespace ad_utility::parallelBlockMerge;
 
+#ifndef QLEVER_CPP_17
 namespace {
 using Block = std::vector<int>;
 using Sink = InOrderBlockSink<Block>;
-
-// A type that does not fulfill any of the requirements of the `BlockSink`
-// concept.
-struct NotASink {};
-
-static_assert(BlockSink<Sink, Block>);
-static_assert(!BlockSink<NotASink, Block>);
-
-std::vector<Block> collect(Sink& sink) {
-  std::vector<Block> result;
-  for (auto& block : sink.blocks()) {
-    result.push_back(std::move(block));
-  }
-  return result;
-}
-}  // namespace
-
-// _____________________________________________________________________________
-TEST(OutputSinkPolicy, SingleThreaded) {
-  Sink sink{2};
-  sink.setNumChunks(2);
-  sink(0, Block{1, 2});
-  sink.finishChunk(0);
-  sink(1, Block{3});
-  sink(1, Block{4});
-  sink.finishChunk(1);
-  EXPECT_THAT(collect(sink),
-              ::testing::ElementsAre(Block{1, 2}, Block{3}, Block{4}));
-}
-
-// _____________________________________________________________________________
-TEST(OutputSinkPolicy, Empty) {
-  Sink sink;
-  sink.setNumChunks(0);
-  EXPECT_THAT(collect(sink), ::testing::IsEmpty());
-}
-
-// _____________________________________________________________________________
-TEST(OutputSinkPolicy, MultiThreadedOutOfOrder) {
-  static constexpr size_t numChunks = 8;
-  static constexpr size_t numBlocksPerChunk = 20;
-  Sink sink{3};
-  sink.setNumChunks(numChunks);
-
-  // The producers deliberately start with the *highest* chunk index, so that
-  // the consumer has to reorder them.
-  std::vector<ad_utility::JThread> producers;
-  for (size_t i = 0; i < numChunks; ++i) {
-    size_t chunkIndex = numChunks - 1 - i;
-    producers.emplace_back([&sink, chunkIndex] {
-      for (size_t j = 0; j < numBlocksPerChunk; ++j) {
-        sink(chunkIndex,
-             Block{static_cast<int>(chunkIndex), static_cast<int>(j)});
-      }
-      sink.finishChunk(chunkIndex);
-    });
-  }
-
-  auto blocks = collect(sink);
-  producers.clear();
-
-  ASSERT_EQ(blocks.size(), numChunks * numBlocksPerChunk);
-  // The blocks appear in strict chunk order, and in the order of their
-  // creation within a chunk.
-  for (size_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex) {
-    for (size_t j = 0; j < numBlocksPerChunk; ++j) {
-      const auto& block = blocks.at(chunkIndex * numBlocksPerChunk + j);
-      EXPECT_THAT(block, ::testing::ElementsAre(static_cast<int>(chunkIndex),
-                                                static_cast<int>(j)));
-    }
-  }
-}
-
-// _____________________________________________________________________________
-TEST(OutputSinkPolicy, PushExceptionSurfaces) {
-  Sink sink{2};
-  sink.setNumChunks(2);
-  sink(0, Block{1});
-  ad_utility::JThread producer{[&sink] {
-    try {
-      throw std::runtime_error{"expected error"};
-    } catch (...) {
-      sink.pushException(std::current_exception());
-    }
-  }};
-  producer.join();
-  auto blocks = sink.blocks();
-  AD_EXPECT_THROW_WITH_MESSAGE(([&blocks] {
-                                 for ([[maybe_unused]] auto& block : blocks) {
-                                 }
-                               })(),
-                               ::testing::HasSubstr("expected error"));
-}
-
-// _____________________________________________________________________________
-TEST(OutputSinkPolicy, ExceptionUnblocksProducers) {
-  // A producer that is blocked on a full buffer is unblocked by an exception
-  // that is pushed by another producer.
-  Sink sink{1};
-  sink.setNumChunks(2);
-  ad_utility::JThread blockedProducer{[&sink] {
-    for (size_t i = 0; i < 100; ++i) {
-      sink(1, Block{static_cast<int>(i)});
-    }
-  }};
-  try {
-    throw std::runtime_error{"other error"};
-  } catch (...) {
-    sink.pushException(std::current_exception());
-  }
-  // This must terminate.
-  blockedProducer.join();
-}
-
-// _____________________________________________________________________________
-TEST(OutputSinkPolicy, BackPressure) {
-  // With a buffer of a single block per chunk, the producers of the higher
-  // chunks are blocked most of the time. The test must still terminate.
-  static constexpr size_t numChunks = 4;
-  static constexpr size_t numBlocksPerChunk = 50;
-  Sink sink{1};
-  sink.setNumChunks(numChunks);
-
-  std::vector<ad_utility::JThread> producers;
-  for (size_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex) {
-    producers.emplace_back([&sink, chunkIndex] {
-      for (size_t j = 0; j < numBlocksPerChunk; ++j) {
-        sink(chunkIndex, Block{static_cast<int>(chunkIndex)});
-      }
-      sink.finishChunk(chunkIndex);
-    });
-  }
-
-  auto blocks = collect(sink);
-  producers.clear();
-  ASSERT_EQ(blocks.size(), numChunks * numBlocksPerChunk);
-  for (size_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex) {
-    for (size_t j = 0; j < numBlocksPerChunk; ++j) {
-      EXPECT_THAT(blocks.at(chunkIndex * numBlocksPerChunk + j),
-                  ::testing::ElementsAre(static_cast<int>(chunkIndex)));
-    }
-  }
-}
-
-// _____________________________________________________________________________
-TEST(OutputSinkPolicy, AbortUnblocksProducers) {
-  // A consumer that stops early must not leave a blocked producer behind. The
-  // destructor of the sink aborts, so the producer terminates.
-  std::atomic<bool> producerIsDone = false;
-  {
-    Sink sink{1};
-    sink.setNumChunks(1);
-    ad_utility::JThread producer{[&sink, &producerIsDone] {
-      for (size_t i = 0; i < 1000; ++i) {
-        sink(0, Block{static_cast<int>(i)});
-      }
-      producerIsDone = true;
-    }};
-    // Consume a single block, then abort.
-    auto blocks = sink.blocks();
-    auto it = blocks.begin();
-    ASSERT_NE(it, blocks.end());
-    sink.abort();
-    producer.join();
-  }
-  EXPECT_TRUE(producerIsDone);
-}
-
-#ifndef QLEVER_CPP_17
-namespace {
-using AsioSink = AsioInOrderBlockSink<Block>;
 // A counted latch via which a producer coroutine signals that it is done.
 // NOTE: In contrast to the channels inside the sink this one is *not* confined
 // to the sink's strand, so it has to be a concurrent channel.
@@ -223,18 +50,19 @@ using Latch =
 // Push all `blocks` to the `sink` as the chunk with the given `chunkIndex`,
 // then finish that chunk and open the `latch`. Stop early if the merge was
 // stopped, and count the blocks that were actually pushed in `numPushed`.
-net::awaitable<void> pushBlocks(AsioSink& sink, size_t chunkIndex,
+net::awaitable<void> pushBlocks(Sink& sink, size_t chunkIndex,
                                 std::vector<Block> blocks, Latch& latch,
                                 std::atomic<size_t>* numPushed = nullptr) {
   for (auto& block : blocks) {
-    if (!co_await sink.asyncPush(chunkIndex, std::move(block))) {
+    if (!co_await sink.asyncPush(chunkIndex, std::move(block),
+                                 net::use_awaitable)) {
       break;
     }
     if (numPushed != nullptr) {
       ++(*numPushed);
     }
   }
-  co_await sink.asyncFinishChunk(chunkIndex);
+  co_await sink.asyncFinishChunk(chunkIndex, net::use_awaitable);
   latch.try_send(boost::system::error_code{});
 }
 
@@ -242,20 +70,21 @@ net::awaitable<void> pushBlocks(AsioSink& sink, size_t chunkIndex,
 // `latch`. Record in `pushedBlock` that the block was pushed, such that the
 // caller can wait until this coroutine is suspended inside
 // `asyncFinishChunk`.
-net::awaitable<void> pushOneBlockAndFinish(AsioSink& sink, size_t chunkIndex,
+net::awaitable<void> pushOneBlockAndFinish(Sink& sink, size_t chunkIndex,
                                            Block block, Latch& latch,
                                            std::atomic<bool>& pushedBlock) {
-  if (co_await sink.asyncPush(chunkIndex, std::move(block))) {
+  if (co_await sink.asyncPush(chunkIndex, std::move(block),
+                              net::use_awaitable)) {
     pushedBlock.store(true);
   }
-  co_await sink.asyncFinishChunk(chunkIndex);
+  co_await sink.asyncFinishChunk(chunkIndex, net::use_awaitable);
   latch.try_send(boost::system::error_code{});
 }
 
 // Consume all the blocks of the `sink` and return them.
-net::awaitable<std::vector<Block>> collectAsync(AsioSink& sink) {
+net::awaitable<std::vector<Block>> collectAsync(Sink& sink) {
   std::vector<Block> result;
-  while (auto block = co_await sink.asyncGetNextBlock()) {
+  while (auto block = co_await sink.asyncGetNextBlock(net::use_awaitable)) {
     result.push_back(std::move(block.value()));
   }
   co_return result;
@@ -279,8 +108,8 @@ net::awaitable<void> yieldUntil(net::io_context& ioContext,
 }  // namespace
 
 // _____________________________________________________________________________
-ASYNC_TEST(AsioOutputSinkPolicy, inOrderAcrossChunks) {
-  AsioSink sink{ioContext.get_executor(), 3, 2};
+ASYNC_TEST(InOrderBlockSink, inOrderAcrossChunks) {
+  Sink sink{ioContext.get_executor(), 3, 2};
   Latch latch{ioContext.get_executor(), 3};
   // Spawn the producers in reverse order, so that the blocks of the later
   // chunks are produced first.
@@ -295,15 +124,15 @@ ASYNC_TEST(AsioOutputSinkPolicy, inOrderAcrossChunks) {
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST(AsioOutputSinkPolicy, empty) {
-  AsioSink sink{ioContext.get_executor(), 0, 2};
-  auto block = co_await sink.asyncGetNextBlock();
+ASYNC_TEST(InOrderBlockSink, empty) {
+  Sink sink{ioContext.get_executor(), 0, 2};
+  auto block = co_await sink.asyncGetNextBlock(net::use_awaitable);
   EXPECT_FALSE(block.has_value());
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST(AsioOutputSinkPolicy, chunksWithoutAnyBlock) {
-  AsioSink sink{ioContext.get_executor(), 3, 2};
+ASYNC_TEST(InOrderBlockSink, chunksWithoutAnyBlock) {
+  Sink sink{ioContext.get_executor(), 3, 2};
   Latch latch{ioContext.get_executor(), 3};
   net::co_spawn(ioContext, pushBlocks(sink, 0, {}, latch), net::detached);
   net::co_spawn(ioContext, pushBlocks(sink, 1, {{7}}, latch), net::detached);
@@ -314,17 +143,17 @@ ASYNC_TEST(AsioOutputSinkPolicy, chunksWithoutAnyBlock) {
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST(AsioOutputSinkPolicy, backPressure) {
+ASYNC_TEST(InOrderBlockSink, backPressure) {
   // With a single buffered block per chunk, the producer of the second chunk
   // cannot run ahead while the consumer still drains the first one.
-  AsioSink sink{ioContext.get_executor(), 2, 1};
+  Sink sink{ioContext.get_executor(), 2, 1};
   Latch latch{ioContext.get_executor(), 2};
   std::atomic<size_t> numPushed{0};
   net::co_spawn(ioContext,
                 pushBlocks(sink, 1, {{10}, {11}, {12}}, latch, &numPushed),
                 net::detached);
   net::co_spawn(ioContext, pushBlocks(sink, 0, {{0}}, latch), net::detached);
-  auto firstBlock = co_await sink.asyncGetNextBlock();
+  auto firstBlock = co_await sink.asyncGetNextBlock(net::use_awaitable);
   EXPECT_THAT(firstBlock, ::testing::Optional(Block{0}));
   // The producer of chunk `1` may have filled its single buffer slot, but it
   // cannot have pushed more than that, because the consumer has not consumed
@@ -337,14 +166,15 @@ ASYNC_TEST(AsioOutputSinkPolicy, backPressure) {
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST(AsioOutputSinkPolicy, pushExceptionSurfaces) {
-  AsioSink sink{ioContext.get_executor(), 2, 2};
+ASYNC_TEST(InOrderBlockSink, pushExceptionSurfaces) {
+  Sink sink{ioContext.get_executor(), 2, 2};
   co_await sink.asyncPushException(
-      std::make_exception_ptr(std::runtime_error{"kaboom"}));
+      std::make_exception_ptr(std::runtime_error{"kaboom"}),
+      net::use_awaitable);
   EXPECT_TRUE(sink.stopRequested());
   bool didThrow = false;
   try {
-    co_await sink.asyncGetNextBlock();
+    co_await sink.asyncGetNextBlock(net::use_awaitable);
   } catch (const std::runtime_error& exception) {
     didThrow = true;
     EXPECT_STREQ(exception.what(), "kaboom");
@@ -353,8 +183,8 @@ ASYNC_TEST(AsioOutputSinkPolicy, pushExceptionSurfaces) {
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST(AsioOutputSinkPolicy, exceptionUnblocksProducers) {
-  AsioSink sink{ioContext.get_executor(), 2, 1};
+ASYNC_TEST(InOrderBlockSink, exceptionUnblocksProducers) {
+  Sink sink{ioContext.get_executor(), 2, 1};
   Latch latch{ioContext.get_executor(), 2};
   std::atomic<size_t> numPushed{0};
   net::co_spawn(ioContext,
@@ -365,13 +195,14 @@ ASYNC_TEST(AsioOutputSinkPolicy, exceptionUnblocksProducers) {
   co_await yieldUntil(ioContext,
                       [&numPushed] { return numPushed.load() == 1; });
   co_await sink.asyncPushException(
-      std::make_exception_ptr(std::runtime_error{"kaboom"}));
+      std::make_exception_ptr(std::runtime_error{"kaboom"}),
+      net::use_awaitable);
   // The suspended producer has to wake up, otherwise this hangs.
   co_await waitForLatch(latch);
   EXPECT_EQ(numPushed.load(), 1u);
   bool didThrow = false;
   try {
-    co_await sink.asyncGetNextBlock();
+    co_await sink.asyncGetNextBlock(net::use_awaitable);
   } catch (const std::runtime_error& exception) {
     didThrow = true;
     EXPECT_STREQ(exception.what(), "kaboom");
@@ -380,8 +211,8 @@ ASYNC_TEST(AsioOutputSinkPolicy, exceptionUnblocksProducers) {
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST(AsioOutputSinkPolicy, abortUnblocksProducers) {
-  AsioSink sink{ioContext.get_executor(), 2, 1};
+ASYNC_TEST(InOrderBlockSink, abortUnblocksProducers) {
+  Sink sink{ioContext.get_executor(), 2, 1};
   Latch latch{ioContext.get_executor(), 2};
   std::atomic<size_t> numPushed{0};
   net::co_spawn(ioContext,
@@ -389,22 +220,22 @@ ASYNC_TEST(AsioOutputSinkPolicy, abortUnblocksProducers) {
                 net::detached);
   co_await yieldUntil(ioContext,
                       [&numPushed] { return numPushed.load() == 1; });
-  co_await sink.asyncAbort();
+  co_await sink.asyncAbort(net::use_awaitable);
   // The suspended producer has to wake up, otherwise this hangs.
   co_await waitForLatch(latch);
   EXPECT_EQ(numPushed.load(), 1u);
   // An aborted sink yields nothing anymore, not even the block that is still
   // buffered.
-  auto block = co_await sink.asyncGetNextBlock();
+  auto block = co_await sink.asyncGetNextBlock(net::use_awaitable);
   EXPECT_FALSE(block.has_value());
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST(AsioOutputSinkPolicy, abortUnblocksFinishChunk) {
+ASYNC_TEST(InOrderBlockSink, abortUnblocksFinishChunk) {
   // The end-of-chunk sentinel travels through the same bounded channel as the
   // blocks, so a producer may also be suspended inside `asyncFinishChunk`.
   // Aborting has to wake that one up, too.
-  AsioSink sink{ioContext.get_executor(), 2, 1};
+  Sink sink{ioContext.get_executor(), 2, 1};
   Latch latch{ioContext.get_executor(), 2};
   std::atomic<bool> pushedBlock{false};
   net::co_spawn(ioContext,
@@ -413,18 +244,18 @@ ASYNC_TEST(AsioOutputSinkPolicy, abortUnblocksFinishChunk) {
   // The single buffer slot of chunk `1` is taken by the block, so the producer
   // is now suspended while it sends the sentinel.
   co_await yieldUntil(ioContext, [&pushedBlock] { return pushedBlock.load(); });
-  co_await sink.asyncAbort();
+  co_await sink.asyncAbort(net::use_awaitable);
   // The suspended producer has to wake up, otherwise this hangs.
   co_await waitForLatch(latch);
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST_N(AsioOutputSinkPolicy, multiThreaded, 4) {
+ASYNC_TEST_N(InOrderBlockSink, multiThreaded, 4) {
   // The same as `inOrderAcrossChunks`, but with several threads and many more
   // blocks, so that the producers and the consumer really run concurrently.
   constexpr size_t numChunks = 8;
   constexpr size_t numBlocksPerChunk = 20;
-  AsioSink sink{ioContext.get_executor(), numChunks, 2};
+  Sink sink{ioContext.get_executor(), numChunks, 2};
   Latch latch{ioContext.get_executor(), numChunks};
   std::vector<Block> expected;
   for (size_t chunk = 0; chunk < numChunks; ++chunk) {
@@ -442,7 +273,7 @@ ASYNC_TEST_N(AsioOutputSinkPolicy, multiThreaded, 4) {
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST_N(AsioOutputSinkPolicy, abortRacesWithProducers, 4) {
+ASYNC_TEST_N(InOrderBlockSink, abortRacesWithProducers, 4) {
   // Abort while many producers are in flight on several threads. Every single
   // producer has to arrive at its `finishChunk`, no matter whether it is
   // currently suspended on a full channel, about to initiate a `push`, or about
@@ -452,7 +283,7 @@ ASYNC_TEST_N(AsioOutputSinkPolicy, abortRacesWithProducers, 4) {
   // swept over all the channels that existed at its time.
   constexpr size_t numChunks = 32;
   constexpr size_t numBlocksPerChunk = 20;
-  AsioSink sink{ioContext.get_executor(), numChunks, 1};
+  Sink sink{ioContext.get_executor(), numChunks, 1};
   Latch latch{ioContext.get_executor(), numChunks};
   for (size_t chunk = 0; chunk < numChunks; ++chunk) {
     std::vector<Block> blocks;
@@ -468,13 +299,13 @@ ASYNC_TEST_N(AsioOutputSinkPolicy, abortRacesWithProducers, 4) {
   // Consume a little, such that the producers really are in flight, and then
   // abort in the middle of everything.
   for (size_t i = 0; i < 5; ++i) {
-    co_await sink.asyncGetNextBlock();
+    co_await sink.asyncGetNextBlock(net::use_awaitable);
   }
-  co_await sink.asyncAbort();
+  co_await sink.asyncAbort(net::use_awaitable);
   EXPECT_TRUE(sink.stopRequested());
   // This hangs if a single producer was left suspended.
   co_await waitForLatch(latch, numChunks);
-  auto block = co_await sink.asyncGetNextBlock();
+  auto block = co_await sink.asyncGetNextBlock(net::use_awaitable);
   EXPECT_FALSE(block.has_value());
 }
 #endif  // QLEVER_CPP_17

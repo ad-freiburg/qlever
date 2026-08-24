@@ -499,9 +499,9 @@ addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
 addLinkAndDiscoverTestNoLibs(RunsInputPolicyTest)
 
-addLinkAndDiscoverTestNoLibs(SchedulerPolicyTest)
+addLinkAndDiscoverTestNoLibs(MergeExecutorTest)
 
-addLinkAndDiscoverTestNoLibs(OutputSinkPolicyTest)
+addLinkAndDiscoverTestNoLibs(InOrderBlockSinkTest)
 
 addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
 

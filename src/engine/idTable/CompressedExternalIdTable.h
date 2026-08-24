@@ -11,6 +11,7 @@
 #include <absl/strings/str_cat.h>
 
 #include <atomic>
+#include <boost/asio/any_io_executor.hpp>
 #include <future>
 #include <utility>
 
@@ -820,9 +821,11 @@ class CompressedExternalIdTableSorter
   // See the `moveResultOnMerge()` getter function for documentation.
   bool moveResultOnMerge_ = true;
 
-  // The scheduler that provides the parallelism of the merge phase.
-  parallelBlockMerge::SharedMergeScheduler mergeScheduler_ =
-      parallelBlockMerge::defaultMergeScheduler();
+  // The executor on which the merge phase runs, together with the number of
+  // threads that run it.
+  boost::asio::any_io_executor mergeExecutor_ =
+      parallelBlockMerge::defaultMergeExecutor();
+  size_t mergeParallelism_ = parallelBlockMerge::defaultMergeParallelism();
 
   // Set as soon as the warning about a reduced parallelism (see
   // `makeMergeOptions`) was logged, such that it is logged at most once per
@@ -859,11 +862,19 @@ class CompressedExternalIdTableSorter
   // within this class.
   using Base::push;
 
-  // Set the scheduler that provides the parallelism of the merge phase. Use
-  // this to share a thread pool with other tasks, or to pin the parallelism in
-  // tests. A `nullptr` means "merge serially in the consuming thread".
-  void setMergeScheduler(parallelBlockMerge::SharedMergeScheduler scheduler) {
-    mergeScheduler_ = std::move(scheduler);
+  // Set the executor on which the merge phase runs, together with the number of
+  // threads that run that executor. Use this to share a thread pool with other
+  // tasks, or to pin the parallelism in tests and benchmarks. A `parallelism`
+  // of one means "merge serially in the consuming thread", in which case the
+  // `executor` is never used at all.
+  //
+  // IMPORTANT: The `executor` must not be run by the thread that consumes the
+  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`.
+  void setMergeExecutor(boost::asio::any_io_executor executor,
+                        size_t parallelism) {
+    AD_CONTRACT_CHECK(parallelism > 0);
+    mergeExecutor_ = std::move(executor);
+    mergeParallelism_ = parallelism;
   }
 
   // If set to `false` then the sorted result can be extracted multiple times.
@@ -1013,8 +1024,9 @@ class CompressedExternalIdTableSorter
         blocksize.value_or(computeBlockSizeForMergePhase(numRuns));
     auto merged =
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
-            CompressedIdTableRunsInput<N>{this->writer_}, this->comparator_,
-            makeMergeOptions(numRuns, blockSizeOutput), mergeScheduler_);
+            mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
+            this->comparator_, makeMergeOptions(numRuns, blockSizeOutput),
+            mergeParallelism_);
     return ad_utility::InputRangeTypeErased{
         checkedMergeResult<N>(std::move(merged))};
   }
@@ -1030,10 +1042,10 @@ class CompressedExternalIdTableSorter
   // `computeBlockSizeForMergePhase`, which was written for the *serial* merge
   // and therefore spends the whole memory limit on very few, very large output
   // blocks. Each in-flight chunk then costs one such block, so only a handful
-  // of chunks fit into the limit and most of the threads that the scheduler
-  // offers stay idle. Measured for 48 million rows in 16 runs of 4 columns
-  // each with a memory limit of 192 MB (times are for the merge phase only,
-  // relative to the serial merge, on a machine with 32 cores):
+  // of chunks fit into the limit and most of the threads of the merge executor
+  // stay idle. Measured for 48 million rows in 16 runs of 4 columns each with a
+  // memory limit of 192 MB (times are for the merge phase only, relative to the
+  // serial merge, on a machine with 32 cores):
   //
   //   output block   chunks in flight   speedup with 16 threads
   //   1476562 rows   3                  2.9x   (the current default)
@@ -1059,9 +1071,7 @@ class CompressedExternalIdTableSorter
     const MemorySize memoryPerOutputBlock =
         MemorySize::bytes(blockSizeOutput * this->numColumns_ * sizeof(Id));
 
-    const size_t offeredParallelism =
-        mergeScheduler_ == nullptr ? 1 : mergeScheduler_->maxParallelism();
-    size_t maxInFlight = offeredParallelism;
+    size_t maxInFlight = mergeParallelism_;
     // NOTE: When the memory limit is ignored (which is the case in many unit
     // tests that deliberately use tiny limits), the memory-derived cap is
     // skipped completely, because it would always collapse the merge to a
@@ -1078,21 +1088,21 @@ class CompressedExternalIdTableSorter
       // derived from the memory limit, then `computeBlockSizeForMergePhase` has
       // already thrown "Insufficient memory for merging ..." in that case.
       const size_t numChunksThatFit =
-          bytesPerChunk == 0 ? offeredParallelism
+          bytesPerChunk == 0 ? mergeParallelism_
                              : this->memory_.getBytes() / bytesPerChunk;
       maxInFlight =
-          std::max<size_t>(1, std::min(numChunksThatFit, offeredParallelism));
+          std::max<size_t>(1, std::min(numChunksThatFit, mergeParallelism_));
     }
     options.maxInFlightChunks = maxInFlight;
     // Warn (once per sorter) if the memory limit forces us to use less
-    // parallelism than the scheduler offers.
-    if (maxInFlight < offeredParallelism &&
+    // parallelism than the merge executor offers.
+    if (maxInFlight < mergeParallelism_ &&
         !reducedParallelismWasLogged_.exchange(true)) {
       AD_LOG_WARN << "The merge phase of the external sorter can only merge "
                   << maxInFlight << " chunks concurrently instead of the "
-                  << offeredParallelism
-                  << " chunks that the scheduler offers, because of the memory "
-                     "limit of "
+                  << mergeParallelism_
+                  << " chunks that the available parallelism offers, because "
+                     "of the memory limit of "
                   << this->memory_.asString()
                   << ". Increasing the memory limit will speed up the merge."
                   << std::endl;

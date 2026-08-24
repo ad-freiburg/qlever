@@ -111,8 +111,7 @@ struct MergeOptions {
   size_t targetChunksPerThread = DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD;
 
   // Never keep more than that many chunks in flight at the same time. The value
-  // `0` means "as many as the scheduler offers", that is
-  // `MergeScheduler::maxParallelism()`.
+  // `0` means "as many as the `parallelismHint` of the merge".
   size_t maxInFlightChunks = 0;
 
   // Merge serially if the input has at most that many elements in total.

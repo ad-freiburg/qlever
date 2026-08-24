@@ -7,30 +7,9 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_OUTPUTSINKPOLICY_H
-#define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_OUTPUTSINKPOLICY_H
+#ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_INORDERBLOCKSINK_H
+#define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_INORDERBLOCKSINK_H
 
-#include <condition_variable>
-#include <cstddef>
-#include <exception>
-#include <memory>
-#include <mutex>
-#include <optional>
-#include <queue>
-#include <utility>
-#include <vector>
-
-#include "backports/concepts.h"
-#include "util/Exception.h"
-#include "util/ExceptionHandling.h"
-#include "util/Forward.h"
-#include "util/Iterators.h"
-#include "util/NoCopyNoMove.h"
-
-// The Boost.Asio based `AsioInOrderBlockSink` at the bottom of this file
-// requires C++20 (and its default completion token is `net::use_awaitable`), so
-// it is not available in the C++17 backports mode.
-#ifndef QLEVER_CPP_17
 #include <absl/container/node_hash_map.h>
 
 #include <atomic>
@@ -41,262 +20,41 @@
 #include <boost/asio/experimental/channel.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
-#include <boost/asio/use_awaitable.hpp>
 #include <boost/system/error_code.hpp>
-#endif
+#include <cstddef>
+#include <exception>
+#include <memory>
+#include <optional>
+#include <tuple>
+#include <utility>
 
-// The output policy of the parallel block merge (see
-// `util/parallelBlockMerge/ParallelBlockMerge.h`): the `BlockSink` concept, and
-// the `InOrderBlockSink` that turns the concurrently produced blocks back into
-// a single sequential range.
+#include "util/Exception.h"
+#include "util/ExceptionHandling.h"
+#include "util/Forward.h"
+#include "util/NoCopyNoMove.h"
+
+// The output side of the parallel block merge (see
+// `util/parallelBlockMerge/ParallelBlockMerge.h`): the `InOrderBlockSink` that
+// turns the concurrently produced blocks back into a single sequential range.
 namespace ad_utility::parallelBlockMerge {
-
-// The requirements of the `BlockSink` concept below, see there for the
-// documentation.
-template <typename T, typename Block>
-CPP_requires(BlockSink_, requires(T& sink, size_t numChunks, size_t chunkIndex,
-                                  Block block, std::exception_ptr exception)(
-                             sink.setNumChunks(numChunks),
-                             sink(chunkIndex, std::move(block)),
-                             sink.finishChunk(chunkIndex),
-                             sink.pushException(std::move(exception))));
-
-// The output policy of the parallel merge. The merge first announces the total
-// number of chunks via `setNumChunks`, and then, for every chunk, calls
-// `operator()` once per finished output block of that chunk and finally
-// `finishChunk` exactly once. If a worker encounters an exception, it forwards
-// it via `pushException`.
-//
-// `operator()`, `finishChunk`, and `pushException` are called concurrently from
-// all worker threads and therefore all have to be thread-safe. `setNumChunks`
-// is called exactly once, before any of the other functions.
-//
-// IMPORTANT: `finishChunk` and `pushException` must never throw and therefore
-// have to be `noexcept`. The core calls them on the paths that clean up after a
-// failed chunk, where an exception would leave the consumer waiting forever for
-// a chunk that is never finished. The concept cannot express this requirement
-// (a `noexcept` clause is not available in the C++17 emulation of the
-// concepts), so the core enforces it with a `static_assert` instead, see
-// `ParallelMergeState`. In contrast, `operator()` *may* throw; the core catches
-// such an exception and forwards it via `pushException`.
-template <typename T, typename Block>
-CPP_concept BlockSink = CPP_requires_ref(BlockSink_, T, Block);
-
-// A `BlockSink` that turns the concurrently produced blocks back into a single
-// sequential range in which the blocks of chunk `0` come first, then those of
-// chunk `1`, and so on. Within a chunk, the blocks appear in the order in which
-// they were pushed. It buffers at most `maxBufferedBlocksPerChunk` blocks per
-// chunk; a producer that exceeds this limit is blocked until the consumer has
-// caught up.
-//
-// DEADLOCK-FREEDOM: The consumer always drains the lowest chunk that has not
-// yet been fully consumed, so a producer of a *higher* chunk may well block on
-// a full buffer. This is intended back-pressure and it never deadlocks, because
-// the core dispatches the chunks in strictly increasing order of their index
-// and keeps at most `MergeScheduler::maxParallelism()` of them in flight. Hence
-// the lowest not-yet-finished chunk always owns a worker thread of its own and
-// therefore always makes progress; once it is finished, the consumer moves on
-// to the next chunk and thereby unblocks its producer, and so on.
-//
-// NOTE: The class is neither copyable nor movable, because the producers and
-// the consumer refer to it by reference.
-template <typename Block>
-class InOrderBlockSink : public ad_utility::NoCopyNoMove {
- private:
-  // The state of a single chunk.
-  struct PerChunk {
-    std::queue<Block> blocks_{};
-    bool finished_ = false;
-  };
-
-  size_t maxBufferedBlocksPerChunk_;
-  std::mutex mutex_;
-  std::condition_variable consumerCanProceed_;
-  std::condition_variable producerCanProceed_;
-  std::vector<PerChunk> chunks_;
-  size_t numChunks_ = 0;
-  // NOTE: This flag is required in addition to `numChunks_`, because the
-  // consumer may already start to pull blocks before `setNumChunks` was called,
-  // and because a merge with zero chunks is legal.
-  bool numChunksIsSet_ = false;
-  size_t nextChunkToRead_ = 0;
-  bool aborted_ = false;
-  std::exception_ptr exception_;
-
- public:
-  using value_type = Block;
-
-  // Construct from the maximal number of blocks that are buffered per chunk.
-  // The value has to be at least one.
-  explicit InOrderBlockSink(size_t maxBufferedBlocksPerChunk = 2)
-      : maxBufferedBlocksPerChunk_{maxBufferedBlocksPerChunk} {
-    AD_CONTRACT_CHECK(maxBufferedBlocksPerChunk > 0);
-  }
-
-  // Abort, so that no producer is left blocked when this sink goes away.
-  ~InOrderBlockSink() { abort(); }
-
-  // Announce the total number of chunks. Call this exactly once, and before any
-  // call to `operator()` or `finishChunk`.
-  void setNumChunks(size_t numChunks) {
-    std::unique_lock lock{mutex_};
-    AD_CONTRACT_CHECK(!numChunksIsSet_);
-    numChunks_ = numChunks;
-    numChunksIsSet_ = true;
-    chunks_ = std::vector<PerChunk>(numChunks);
-    lock.unlock();
-    consumerCanProceed_.notify_all();
-  }
-
-  // Push a finished output `block` of the chunk with the given `chunkIndex`.
-  // Block while the buffer of that chunk is full, unless the sink was aborted
-  // or an exception was pushed, in which case the `block` is silently dropped.
-  // Thread-safe.
-  void operator()(size_t chunkIndex, Block block) {
-    std::unique_lock lock{mutex_};
-    AD_CONTRACT_CHECK(numChunksIsSet_);
-    AD_CONTRACT_CHECK(chunkIndex < numChunks_);
-    auto& chunk = chunks_[chunkIndex];
-    producerCanProceed_.wait(lock, [this, &chunk] {
-      return chunk.blocks_.size() < maxBufferedBlocksPerChunk_ || aborted_ ||
-             exception_ != nullptr;
-    });
-    if (aborted_ || exception_ != nullptr) {
-      return;
-    }
-    chunk.blocks_.push(std::move(block));
-    lock.unlock();
-    consumerCanProceed_.notify_all();
-  }
-
-  // Announce that no further blocks will be pushed for the chunk with the given
-  // `chunkIndex`. Call this exactly once per chunk. Thread-safe.
-  //
-  // NOTE: This must never throw, because the core calls it also while it cleans
-  // up after a failed chunk, where an exception would leave the consumer
-  // waiting for a chunk that is never finished. See the `BlockSink` concept
-  // above.
-  void finishChunk(size_t chunkIndex) noexcept {
-    ad_utility::terminateIfThrows(
-        [this, chunkIndex] {
-          std::unique_lock lock{mutex_};
-          AD_CONTRACT_CHECK(numChunksIsSet_);
-          AD_CONTRACT_CHECK(chunkIndex < numChunks_);
-          chunks_[chunkIndex].finished_ = true;
-          lock.unlock();
-          consumerCanProceed_.notify_all();
-        },
-        "Locking or unlocking a mutex in `InOrderBlockSink::finishChunk` "
-        "failed.");
-  }
-
-  // Forward an `exception` to the consumer, which will rethrow it. Only the
-  // first pushed exception is stored, all later ones are ignored. Pushing an
-  // exception also unblocks all producers. Thread-safe.
-  void pushException(std::exception_ptr exception) noexcept {
-    ad_utility::terminateIfThrows(
-        [this, &exception] {
-          std::unique_lock lock{mutex_};
-          if (exception_ == nullptr) {
-            exception_ = std::move(exception);
-          }
-          lock.unlock();
-          consumerCanProceed_.notify_all();
-          producerCanProceed_.notify_all();
-        },
-        "Locking or unlocking a mutex in `InOrderBlockSink::pushException` "
-        "failed.");
-  }
-
-  // Abort the sink from the consuming side. All blocked producers are unblocked
-  // and all further blocks are dropped, and the consumer stops yielding blocks.
-  // This is called by the destructor, so that a consumer that stops iterating
-  // early (or that exits via an exception) never leaves a producer behind.
-  // Thread-safe.
-  void abort() noexcept {
-    ad_utility::terminateIfThrows(
-        [this] {
-          std::unique_lock lock{mutex_};
-          aborted_ = true;
-          lock.unlock();
-          consumerCanProceed_.notify_all();
-          producerCanProceed_.notify_all();
-        },
-        "Locking or unlocking a mutex in `InOrderBlockSink::abort` failed.");
-  }
-
-  // Return a lazy range that yields all blocks of chunk `0`, then all blocks of
-  // chunk `1`, and so on. Iterating over the range blocks until the next block
-  // is available. If an exception was pushed, it is rethrown from the range.
-  // Call this at most once, and only from a single (consuming) thread.
-  ad_utility::InputRangeTypeErased<Block> blocks() {
-    struct BlockRange : public ad_utility::InputRangeFromGet<Block> {
-      InOrderBlockSink* sink_;
-      explicit BlockRange(InOrderBlockSink* sink) : sink_{sink} {}
-      std::optional<Block> get() override { return sink_->popNextBlock(); }
-    };
-    return ad_utility::InputRangeTypeErased<Block>{
-        std::make_unique<BlockRange>(this)};
-  }
-
- private:
-  // Return the next block in the global order, or `std::nullopt` if all chunks
-  // are exhausted or the sink was aborted. Rethrow a pushed exception. Block
-  // until one of these conditions holds.
-  std::optional<Block> popNextBlock() {
-    std::unique_lock lock{mutex_};
-    while (true) {
-      if (exception_ != nullptr) {
-        auto exception = exception_;
-        lock.unlock();
-        std::rethrow_exception(exception);
-      }
-      if (aborted_) {
-        return std::nullopt;
-      }
-      if (numChunksIsSet_ && nextChunkToRead_ >= numChunks_) {
-        return std::nullopt;
-      }
-      if (numChunksIsSet_) {
-        auto& chunk = chunks_[nextChunkToRead_];
-        if (!chunk.blocks_.empty()) {
-          Block block = std::move(chunk.blocks_.front());
-          chunk.blocks_.pop();
-          lock.unlock();
-          producerCanProceed_.notify_all();
-          return block;
-        }
-        if (chunk.finished_) {
-          ++nextChunkToRead_;
-          continue;
-        }
-      }
-      consumerCanProceed_.wait(lock);
-    }
-  }
-};
-
-#ifndef QLEVER_CPP_17
-// ___________________________________________________________________________
-// The Boost.Asio based alternative to `InOrderBlockSink`.
-// ___________________________________________________________________________
 
 namespace net = boost::asio;
 
-// The Boost.Asio based counterpart of `InOrderBlockSink` above. It also turns
-// the concurrently produced blocks back into a single sequential range in which
-// the blocks of chunk `0` come first, then those of chunk `1`, and so on, but
-// it never blocks a thread: a producer that has to wait for the consumer to
-// catch up, as well as a consumer that has to wait for the next block, suspend
-// instead of occupying their thread.
+// Turn the concurrently produced output blocks of the merge back into a single
+// sequential range in which the blocks of chunk `0` come first, then those of
+// chunk `1`, and so on. Within a chunk, the blocks appear in the order in which
+// they were pushed. The sink never blocks a thread: a producer that has to wait
+// for the consumer to catch up, as well as a consumer that has to wait for the
+// next block, suspend instead of occupying their thread.
 //
 // Each chunk that is currently active owns a single channel with a capacity of
 // `maxBufferedBlocksPerChunk`, via which its producer sends the finished output
 // blocks to the consumer. Suspending in `async_send` on a full channel *is* the
-// back-pressure. The end of a chunk is signalled by an explicit `std::nullopt`
-// sentinel, upon which the consumer erases the state of that chunk, so that the
-// memory consumption is proportional to the number of chunks that are in flight
-// and not to the total number of chunks.
+// back-pressure that bounds the memory consumption of the merge. The end of a
+// chunk is signalled by an explicit `std::nullopt` sentinel, upon which the
+// consumer erases the state of that chunk, so that the memory consumption is
+// proportional to the number of chunks that are in flight and not to the total
+// number of chunks.
 //
 // INTERFACE: All the asynchronous operations of this class (their names all
 // start with `async`) are ordinary Boost.Asio operations that take a completion
@@ -307,6 +65,10 @@ namespace net = boost::asio;
 // `void(std::exception_ptr, T)` (or `void(std::exception_ptr)` for `T == void`)
 // with `T` as documented at the respective operation, so a token such as
 // `net::use_awaitable` rethrows on the executor of the caller.
+//
+// NOTE: The completion token is deliberately *not* defaulted, because
+// `net::use_awaitable` (the only sensible default) requires coroutines, which
+// are not available in the C++17 backports mode.
 //
 // STRAND CONFINEMENT: All the mutable state of this class (the map of channels,
 // the index of the chunk that is currently read, and the exception) as well as
@@ -325,7 +87,7 @@ namespace net = boost::asio;
 // contrast is ordinary blocking CPU work that may even do I/O, and it has to
 // keep running on the general executor, because everything that runs on a
 // strand is serialized. Scheduling the merging itself on the strand would
-// silently destroy all the parallelism, see `AsioParallelMergeState::runChunk`.
+// silently destroy all the parallelism, see `ParallelMergeState::ChunkTask`.
 //
 // The strand is also what makes the teardown airtight, and it is the reason why
 // `cancel()` alone suffices and `close()` is never called: the check of
@@ -344,11 +106,10 @@ namespace net = boost::asio;
 //
 // DEADLOCK-FREEDOM: The consumer always drains the lowest chunk that has not
 // yet been fully consumed, so the producer of a *higher* chunk may well fill
-// its channel and suspend. In contrast to `InOrderBlockSink` this is not a
-// problem even if there is only a single thread, because such a producer
-// suspends instead of blocking its thread. In particular the number of chunks
-// that are in flight does not have to be bounded by the available parallelism,
-// see `AsioParallelMergeState`.
+// its channel and suspend. That is not a problem even if there is only a single
+// thread, because such a producer suspends instead of blocking its thread. In
+// particular the number of chunks that are in flight does not have to be
+// bounded by the available parallelism, see `ParallelMergeState`.
 //
 // TODO<joka921> The following properties of this sink are still worth
 // revisiting before it is used more widely than by the parallel merge. All of
@@ -368,23 +129,23 @@ namespace net = boost::asio;
 //    elements (or 16 MB), but it makes this sink a poor fit for small payloads;
 //    such a user would have to batch, or run on the strand to begin with.
 // 4. All those hops allocate (the handler that is posted onto the strand, and
-//    the one that `AsioParallelMergeState::abort` posts), so the teardown
-//    itself can fail once memory is exhausted. The failure is then swallowed
-//    and the consumer simply sees the end of the range.
+//    the one that `ParallelMergeState::abort` posts), so the teardown itself
+//    can fail once memory is exhausted. The failure is then swallowed and the
+//    consumer simply sees the end of the range.
 // 5. Once the merge was stopped, nothing erases the entries of `chunks_`
 //    anymore, so the channels of the chunks that were still in flight, and the
 //    blocks that they still buffer, live until this sink is destroyed.
 // 6. The `node_hash_map` is redundant by now. Its stable addresses were needed
 //    when the channels were stored by value; with `shared_ptr` values a
 //    `flat_hash_map` would do.
-// 7. `AsioParallelMergeRange::get()`, the synchronous adapter of this
-//    machinery, blocks its calling thread on a `future`, so the executor has to
-//    be run by *other* threads. See the note there.
+// 7. `ParallelMergeRange::get()`, the synchronous adapter of this machinery,
+//    blocks its calling thread on a `future`, so the executor has to be run by
+//    *other* threads. See the note there.
 //
 // NOTE: The class is neither copyable nor movable, because the producers and
 // the consumer refer to it by reference.
 template <typename Block>
-class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
+class InOrderBlockSink : public ad_utility::NoCopyNoMove {
  public:
   using value_type = Block;
   // The value that travels through a channel. A `std::nullopt` is the
@@ -404,9 +165,6 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   // consumer may hold on to one across a suspension, while the consumer erases
   // the map entry of a chunk as soon as that chunk is done.
   using SharedBlockChannel = std::shared_ptr<BlockChannel>;
-  // The completion token that the asynchronous operations below use if the
-  // caller does not specify one.
-  using DefaultToken = net::use_awaitable_t<>;
 
  private:
   Strand strand_;
@@ -427,8 +185,8 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   // Construct from the `executor` from which the strand of this sink is
   // derived, the total number of chunks, and the maximal number of blocks that
   // are buffered per chunk (which has to be at least one).
-  AsioInOrderBlockSink(net::any_io_executor executor, size_t numChunks,
-                       size_t maxBufferedBlocksPerChunk = 2)
+  InOrderBlockSink(net::any_io_executor executor, size_t numChunks,
+                   size_t maxBufferedBlocksPerChunk = 2)
       : strand_{net::make_strand(std::move(executor))},
         maxBufferedBlocksPerChunk_{maxBufferedBlocksPerChunk},
         numChunks_{numChunks} {
@@ -445,9 +203,9 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   // Suspend while the channel of that chunk is full. Complete with `false` if
   // the merge was stopped, in which case the `block` is silently dropped and
   // the producer should stop producing.
-  template <typename CompletionToken = DefaultToken>
+  template <typename CompletionToken>
   auto asyncPush(size_t chunkIndex, Block block,
-                 CompletionToken&& completionToken = {}) {
+                 CompletionToken&& completionToken) {
     AD_CONTRACT_CHECK(chunkIndex < numChunks_);
     return sendToChunk(chunkIndex, OptionalBlock{std::move(block)},
                        AD_FWD(completionToken));
@@ -459,9 +217,8 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   // that chunk forever. Suspend while the channel of the chunk is full.
   // Complete with `false` if the merge was stopped, in which case there is no
   // consumer left that could care about the sentinel.
-  template <typename CompletionToken = DefaultToken>
-  auto asyncFinishChunk(size_t chunkIndex,
-                        CompletionToken&& completionToken = {}) {
+  template <typename CompletionToken>
+  auto asyncFinishChunk(size_t chunkIndex, CompletionToken&& completionToken) {
     AD_CONTRACT_CHECK(chunkIndex < numChunks_);
     return sendToChunk(chunkIndex, OptionalBlock{std::nullopt},
                        AD_FWD(completionToken));
@@ -470,9 +227,9 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   // Forward an `exception` to the consumer, which will rethrow it. Only the
   // first pushed exception is stored, all later ones are ignored. Pushing an
   // exception also stops the merge. Complete with nothing.
-  template <typename CompletionToken = DefaultToken>
+  template <typename CompletionToken>
   auto asyncPushException(std::exception_ptr exception,
-                          CompletionToken&& completionToken = {}) {
+                          CompletionToken&& completionToken) {
     return postToStrand(
         [this, exception = std::move(exception)]() mutable {
           if (exception_ == nullptr) {
@@ -488,8 +245,8 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   // blocks. Call this when the consumer stops iterating early (or exits via an
   // exception), so that no producer is left suspended forever. Complete with
   // nothing.
-  template <typename CompletionToken = DefaultToken>
-  auto asyncAbort(CompletionToken&& completionToken = {}) {
+  template <typename CompletionToken>
+  auto asyncAbort(CompletionToken&& completionToken) {
     return postToStrand([this]() { requestStop(); }, AD_FWD(completionToken));
   }
 
@@ -499,8 +256,8 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   //
   // NOTE: Run this from a single consumer only, and never concurrently with
   // itself.
-  template <typename CompletionToken = DefaultToken>
-  auto asyncGetNextBlock(CompletionToken&& completionToken = {}) {
+  template <typename CompletionToken>
+  auto asyncGetNextBlock(CompletionToken&& completionToken) {
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr, std::optional<Block>)>(
         [this](auto handler) {
@@ -518,13 +275,21 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   // executor that is associated with the completion token of the operation that
   // the `handler` belongs to. This is the single place where an operation hops
   // back from `strand_` to the executor of its caller.
+  //
+  // NOTE: The `args` are captured as a single `tuple`, because expanding a
+  // parameter pack in the init-capture of a lambda requires C++20.
   template <typename Executor, typename Handler, typename... Args>
   static void completeOn(const Executor& executor, Handler handler,
                          Args... args) {
-    net::dispatch(executor, [handler = std::move(handler),
-                             ... args = std::move(args)]() mutable {
-      std::move(handler)(std::move(args)...);
-    });
+    net::dispatch(executor,
+                  [handler = std::move(handler),
+                   args = std::make_tuple(std::move(args)...)]() mutable {
+                    std::apply(
+                        [&handler](auto&&... unpacked) {
+                          std::move(handler)(std::move(unpacked)...);
+                        },
+                        std::move(args));
+                  });
   }
 
   // Post the `function`, which does its whole work synchronously on `strand_`
@@ -680,7 +445,7 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
             chunk.second->cancel();
           }
         },
-        "Stopping an `AsioInOrderBlockSink` failed.");
+        "Stopping an `InOrderBlockSink` failed.");
   }
 
   // Return the channel of the chunk that the consumer currently reads from,
@@ -688,7 +453,7 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   // left to read because all chunks are exhausted or the merge was stopped.
   // Rethrow a pushed exception.
   //
-  // NOTE: The exception propagates out of the coroutine that runs on the strand
+  // NOTE: The exception propagates out of the handler that runs on the strand
   // and is rethrown by the completion of `asyncGetNextBlock`, so the consumer
   // sees it on its own executor.
   //
@@ -723,8 +488,7 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
     return channel;
   }
 };
-#endif  // QLEVER_CPP_17
 
 }  // namespace ad_utility::parallelBlockMerge
 
-#endif  // QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_OUTPUTSINKPOLICY_H
+#endif  // QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_INORDERBLOCKSINK_H
