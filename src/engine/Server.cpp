@@ -604,11 +604,10 @@ CPP_template_def(typename RequestT)(
 std::optional<nlohmann::json> Server::processSetRuntimeParameters(
     const ParamValueMap& parameters, bool accessTokenOk) const {
   bool parameterChanged = false;
-  for (auto key : globalRuntimeParameters.rlock()->getKeys()) {
+  for (const auto& key : globalRuntimeParameters.rlock()->getKeys()) {
     if (auto value = serverProcessHelpers::checkSetting(
             parameters, key, accessTokenOk, "setting runtime parameters")) {
-      globalRuntimeParameters.wlock()->setFromString(
-          key, std::string{value.value()});
+      globalRuntimeParameters.wlock()->setFromString(key, value.value());
       parameterChanged = true;
     }
   }
@@ -666,6 +665,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // with the same `accessTokenOk`.
   auto requireValidAccessToken = absl::bind_front(
       &serverProcessHelpers::requireValidAccessToken, accessTokenOk);
+
+  // We always want to call `serverProcessHelpers::checkSetting` with the
+  // same `parameters` and `accessTokenOk`.
+  auto checkSetting = [&parameters, accessTokenOk](std::string_view paramName) {
+    return serverProcessHelpers::checkSetting(parameters, paramName,
+                                              accessTokenOk);
+  };
 
   // Check if the current command is selected in the parameters from the
   // `parsedHttpRequest.parameters_`. If so, log this information via
@@ -775,22 +781,21 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   }
 
   // Set description of KB index.
-  if (auto description =
-          checkSetting(parameters, "index-description", accessTokenOk)) {
-    index.setKbName(std::string{description.value()});
+  if (auto description = checkSetting("index-description")) {
+    index.setKbName(description.value());
     response = jsonResponse(composeIndexStats(index));
   }
 
   // Set description of text index.
-  if (auto description =
-          checkSetting(parameters, "text-description", accessTokenOk)) {
-    index.setTextName(std::string{description.value()});
+  if (auto description = checkSetting("text-description")) {
+    index.setTextName(description.value());
     response = jsonResponse(composeIndexStats(index));
   }
 
   // Set one or several of the runtime parameters.
-  if (auto settings = processSetRuntimeParameters(parameters, accessTokenOk)) {
-    response = jsonResponse(settings.value());
+  if (auto updatedSettings =
+          processSetRuntimeParameters(parameters, accessTokenOk)) {
+    response = jsonResponse(updatedSettings.value());
   }
 
   // Store the QueryExecutionTree outside the lambda, s.t. we have access in
