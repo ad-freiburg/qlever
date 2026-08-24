@@ -129,9 +129,10 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   checkDe9imRelationCall(getDe9imRelationExpressionParameters(*nonVarRightPtr),
                          nonVarRightExp);
 
-  // An unsupported expression type (neither a variable, `IdExpression`,
-  // `StringLiteralExpression`, nor `IriExpression`) as an argument is
-  // rejected.
+  // An unsupported expression type (neither a variable, `IdExpression`, nor
+  // `StringLiteralExpression`) as an argument is rejected. This also covers
+  // `IriExpression`, since no GeoSPARQL predicate supported here operates on
+  // IRIs.
   auto unsupportedArgPtr = makeDe9imRelationExpression(
       makePowExpression(getExpr(V{"?a"}), getExpr(V{"?c"})), getExpr(V{"?b"}),
       getExpr(ad_utility::triple_component::Literal::literalWithoutQuotes(
@@ -246,19 +247,16 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfigWithFixedValue) {
 
 // _____________________________________________________________________________
 TEST(QueryRewriteUtilTest, GetGeoFunctionExpressionParametersWithFixedValue) {
-  // A fixed IRI operand (for example a named geometry resource) is resolved
-  // to a `GeoOperand`, just like a literal or `ValueId`.
+  // A fixed IRI operand is rejected: no GeoSPARQL predicate supported here
+  // operates on IRIs (only variables, `ValueId`s, and string/WKT literals).
   auto iriPtr = makeGeoRelationExpression<INTERSECTS>(
       getExpr(V{"?a"}),
       getExpr(Iri::fromIrirefWithoutBrackets("http://example.com/geom")));
-  GeoFunctionCall iriExp{INTERSECTS, V{"?a"},
-                         TripleComponent{Iri::fromIrirefWithoutBrackets(
-                             "http://example.com/geom")}};
-  checkGeoFunctionCall(getGeoFunctionExpressionParameters(*iriPtr), iriExp);
+  checkGeoFunctionCall(getGeoFunctionExpressionParameters(*iriPtr),
+                       std::nullopt);
 
-  // An unsupported expression type (neither a variable, `IdExpression`,
-  // `StringLiteralExpression`, nor `IriExpression`) as an argument is
-  // rejected.
+  // An unsupported expression type (neither a variable, `IdExpression`, nor
+  // `StringLiteralExpression`) as an argument is rejected.
   auto unsupportedArgPtr = makeGeoRelationExpression<INTERSECTS>(
       makePowExpression(getExpr(V{"?a"}), getExpr(V{"?c"})), getExpr(V{"?b"}));
   checkGeoFunctionCall(getGeoFunctionExpressionParameters(*unsupportedArgPtr),

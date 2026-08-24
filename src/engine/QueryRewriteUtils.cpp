@@ -25,16 +25,16 @@ struct ResolvedGeoOperand {
 };
 
 // _____________________________________________________________________________
+template <typename VarGenerator>
 ResolvedGeoOperand resolveGeoOperand(
     const GeoOperand& operand, QueryExecutionContext* qec,
-    const std::function<Variable()>& generateUniqueVarName) {
-  if (const auto* var = std::get_if<Variable>(&operand)) {
-    return {*var};
+    const VarGenerator& generateUniqueVarName) {
+  if (operand.isVariable()) {
+    return {operand.getVariable()};
   }
   Variable var = generateUniqueVarName();
   auto tree = ad_utility::makeExecutionTree<Values>(
-      qec,
-      parsedQuery::SparqlValues{{var}, {{std::get<TripleComponent>(operand)}}});
+      qec, parsedQuery::SparqlValues{{var}, {{operand}}});
   return {std::move(var), std::move(tree)};
 }
 
@@ -76,7 +76,7 @@ getSpatialJoinConfigForFilter(
 // _____________________________________________________________________________
 std::optional<SpatialJoinRewriteResult> rewriteFilterToSpatialJoinConfig(
     const SparqlFilter& filter, QueryExecutionContext* qec,
-    const std::function<Variable()>& generateUniqueVarName) {
+    absl::FunctionRef<Variable()> generateUniqueVarName) {
   const auto& filterBody = *filter.expression_.getPimpl();
 
   // Currently, we can only optimize GeoSPARQL filters.
@@ -88,19 +88,19 @@ std::optional<SpatialJoinRewriteResult> rewriteFilterToSpatialJoinConfig(
 
   // If neither side is a variable, there is nothing to join on. Leave this
   // (rare, degenerate) case to ordinary `FILTER` evaluation.
-  bool leftIsVar = std::holds_alternative<Variable>(call.left_);
-  bool rightIsVar = std::holds_alternative<Variable>(call.right_);
+  bool leftIsVar = call.left_.isVariable();
+  bool rightIsVar = call.right_.isVariable();
   if (!leftIsVar && !rightIsVar) {
     return std::nullopt;
   }
 
   if (leftIsVar && rightIsVar &&
-      std::get<Variable>(call.left_) == std::get<Variable>(call.right_)) {
+      call.left_.getVariable() == call.right_.getVariable()) {
     // TODO<ullingerc> As soon as we have a baseline implementation of
     // `WktGeometricRelation`, replace this `throw` by `return std::nullopt;`.
     throw std::runtime_error(
         absl::StrCat("Unsupported GeoSPARQL filter: Variable ",
-                     std::get<Variable>(call.left_).name(),
+                     call.left_.getVariable().name(),
                      " on both sides. Is this what you intended?"));
   }
 

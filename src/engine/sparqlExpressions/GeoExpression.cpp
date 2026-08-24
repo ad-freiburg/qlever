@@ -243,7 +243,9 @@ namespace {
 // Extract a `GeoOperand` (a variable or a fixed value) from an argument
 // expression of a geo relation or distance function. Returns `std::nullopt`
 // if `expr` is neither a variable nor one of the constant literal expression
-// types below (for example, an arbitrary non-constant function call).
+// types below (for example, an arbitrary non-constant function call). Note:
+// no GeoSPARQL function supported here operates on IRIs, so `IriExpression`
+// is deliberately not one of the recognized cases.
 std::optional<GeoOperand> getVariableOrFixedGeoOperand(
     const SparqlExpression& expr) {
   if (auto var = expr.getVariableOrNullopt(); var.has_value()) {
@@ -254,9 +256,6 @@ std::optional<GeoOperand> getVariableOrFixedGeoOperand(
   }
   if (const auto* lit = dynamic_cast<const StringLiteralExpression*>(&expr)) {
     return GeoOperand{TripleComponent{lit->value()}};
-  }
-  if (const auto* iri = dynamic_cast<const IriExpression*>(&expr)) {
-    return GeoOperand{TripleComponent{iri->value()}};
   }
   return std::nullopt;
 }

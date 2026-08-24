@@ -8,7 +8,6 @@
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "parser/TripleComponent.h"
-#include "rdfTypes/Variable.h"
 #include "util/UnitOfMeasurement.h"
 
 // This header declares utilities required during query planning for rewriting
@@ -22,10 +21,13 @@
 namespace sparqlExpression {
 
 // An argument of a geo relation: either a variable (resolved via the query's
-// existing bindings) or a fixed value (a literal or IRI given directly in the
-// query, to be bound to a fresh internal variable via a one-row `VALUES`
-// clause -- see `QueryRewriteUtils.cpp`).
-using GeoOperand = std::variant<Variable, TripleComponent>;
+// existing bindings) or a fixed value (a literal given directly in the query,
+// to be bound to a fresh internal variable via a one-row `VALUES` clause --
+// see `QueryRewriteUtils.cpp`). `TripleComponent` already has a `Variable`
+// alternative, so no separate wrapper type is needed; use
+// `TripleComponent::isVariable()`/`getVariable()` to distinguish the two
+// cases.
+using GeoOperand = TripleComponent;
 
 // Helper struct for `getGeoFunctionExpressionParameters`
 struct GeoFunctionCall {

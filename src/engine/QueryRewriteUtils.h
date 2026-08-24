@@ -5,7 +5,8 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H
 #define QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H
 
-#include <functional>
+#include <absl/functional/function_ref.h>
+
 #include <memory>
 
 #include "engine/SpatialJoinConfig.h"
@@ -35,6 +36,6 @@ struct SpatialJoinRewriteResult {
 // fixed value rather than a variable.
 std::optional<SpatialJoinRewriteResult> rewriteFilterToSpatialJoinConfig(
     const SparqlFilter& filter, QueryExecutionContext* qec,
-    const std::function<Variable()>& generateUniqueVarName);
+    absl::FunctionRef<Variable()> generateUniqueVarName);
 
 #endif  // QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H
