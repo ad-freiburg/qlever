@@ -20,6 +20,7 @@
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 #include "index/ScanSpecification.h"
+#include "index/TripleComponentConversions.h"
 #include "util/HashSet.h"
 
 // ____________________________________________________________________________
@@ -76,10 +77,10 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   auto treatDefaultGraphAsNamedGraph =
       getRuntimeParameter<&RuntimeParameters::treatDefaultGraphAsNamedGraph_>();
   if (!treatDefaultGraphAsNamedGraph) {
-    auto defaultGraph =
+    auto defaultGraph = toValueId(
         TripleComponent{
-            ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)}
-            .toValueId(getIndex());
+            ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)},
+        getIndex().getImpl());
     graphIds.erase(defaultGraph->getBits());
   }
 
