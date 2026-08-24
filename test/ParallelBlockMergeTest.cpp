@@ -932,7 +932,7 @@ ASYNC_TEST(AsioParallelBlockMerge, singleThreadedConsumer) {
   auto state = parallelBlockMergeAsio<false>(
       ioContext.get_executor(), SizeRuns{runs, 16}, std::less<>{}, options, 8);
   SizeVec result;
-  while (auto block = co_await state->next()) {
+  while (auto block = co_await state->asyncNext()) {
     result.insert(result.end(), block->begin(), block->end());
   }
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));

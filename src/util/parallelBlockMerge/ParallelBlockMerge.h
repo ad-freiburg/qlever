@@ -119,9 +119,9 @@ CPP_template(bool moveElements, typename Input,
 // Set up a Boost.Asio based parallel merge of the presorted runs of `input`
 // according to `comparator` and start it. All the work is scheduled on the
 // `executor`, which somebody else has to run. Return the state of the merge,
-// whose `next()` yields the merged elements as an awaitable sequence of blocks
-// in globally sorted order; see `AsioParallelMergeState` for the details and in
-// particular for its lifetime requirements.
+// whose `asyncNext()` yields the merged elements as an asynchronous sequence of
+// blocks in globally sorted order; see `AsioParallelMergeState` for the details
+// and in particular for its lifetime requirements.
 //
 // The `parallelismHint` is the number of threads that are expected to run the
 // `executor`; it is only used to derive the number of chunks and the number of

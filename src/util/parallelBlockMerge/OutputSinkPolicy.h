@@ -23,6 +23,7 @@
 #include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+#include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/NoCopyNoMove.h"
 
@@ -286,7 +287,7 @@ namespace net = boost::asio;
 // the blocks of chunk `0` come first, then those of chunk `1`, and so on, but
 // it never blocks a thread: a producer that has to wait for the consumer to
 // catch up, as well as a consumer that has to wait for the next block, suspend
-// their coroutine and thereby release their thread.
+// instead of occupying their thread.
 //
 // Each chunk that is currently active owns a single channel with a capacity of
 // `maxBufferedBlocksPerChunk`, via which its producer sends the finished output
@@ -296,15 +297,23 @@ namespace net = boost::asio;
 // memory consumption is proportional to the number of chunks that are in flight
 // and not to the total number of chunks.
 //
+// INTERFACE: All the asynchronous operations of this class (their names all
+// start with `async`) are ordinary Boost.Asio operations that take a completion
+// token, so a caller may await them, attach a callback, obtain a `std::future`,
+// or detach them, whatever fits. They may all be initiated from any thread and
+// any executor, and their completion handler runs on the executor that is
+// associated with the completion token. The completion signature is
+// `void(std::exception_ptr, T)` (or `void(std::exception_ptr)` for `T == void`)
+// with `T` as documented at the respective operation, so a token such as
+// `net::use_awaitable` rethrows on the executor of the caller.
+//
 // STRAND CONFINEMENT: All the mutable state of this class (the map of channels,
 // the index of the chunk that is currently read, and the exception) as well as
 // *every* channel operation is confined to a single `strand_`, so that no mutex
 // of our own is required and the channels can be plain (non-concurrent)
-// channels whose internal mutex is a null mutex. Every public operation
-// therefore consists of a hop onto the strand, the actual work, and a hop back
-// to the executor of the caller. The hop has to be a separate coroutine that is
-// `co_spawn`ed on the strand, because an `awaitable` is bound to a single
-// executor for its whole lifetime and can hence not be moved onto the strand.
+// channels whose internal mutex is a null mutex. Every operation therefore
+// consists of a hop onto the strand, the actual work, and a hop back to the
+// executor of the caller; `runOnStrand` is the single place where this happens.
 // The only member that is ever read off the strand is the atomic
 // `stopRequested_`, which exists so that a producer can cheaply poll "should I
 // keep merging?" between two output blocks; it is *written* on the strand only.
@@ -319,42 +328,42 @@ namespace net = boost::asio;
 // `cancel()` alone suffices and `close()` is never called: the check of
 // `stopRequested_` and the *initiation* of the channel operation happen in a
 // single strand-serialized step, with no other strand handler in between.
-// `requestStopOnStrand` sets the flag and then cancels every live channel,
-// which wakes everybody who is currently suspended; an operation that starts
-// later runs on the strand *after* that, sees the flag, and never touches a
-// channel at all, so it cannot suspend. In particular no channel is ever
-// created after the stop, so the teardown cannot miss one. Without the strand
-// neither primitive would suffice: `cancel()` is edge-triggered and does not
-// stop an operation that is initiated afterwards, `close()` does not wake an
-// operation that is already suspended, and `cancel()` after `close()` is
-// outright undefined behavior, because `cancel()` tells a suspended send from a
-// suspended receive by the internal send state that `close()` overwrites.
+// `requestStop` sets the flag and then cancels every live channel, which wakes
+// everybody who is currently suspended; an operation that starts later runs on
+// the strand *after* that, sees the flag, and never touches a channel at all,
+// so it cannot suspend. In particular no channel is ever created after the
+// stop, so the teardown cannot miss one. Without the strand neither primitive
+// would suffice: `cancel()` is edge-triggered and does not stop an operation
+// that is initiated afterwards, `close()` does not wake an operation that is
+// already suspended, and `cancel()` after `close()` is outright undefined
+// behavior, because `cancel()` tells a suspended send from a suspended receive
+// by the internal send state that `close()` overwrites.
 //
 // DEADLOCK-FREEDOM: The consumer always drains the lowest chunk that has not
 // yet been fully consumed, so the producer of a *higher* chunk may well fill
 // its channel and suspend. In contrast to `InOrderBlockSink` this is not a
 // problem even if there is only a single thread, because such a producer
-// suspends its coroutine instead of blocking its thread. In particular the
-// number of chunks that are in flight does not have to be bounded by the
-// available parallelism, see `AsioParallelMergeState`.
+// suspends instead of blocking its thread. In particular the number of chunks
+// that are in flight does not have to be bounded by the available parallelism,
+// see `AsioParallelMergeState`.
 //
 // TODO<joka921> The following properties of this sink are still worth
 // revisiting before it is used more widely than by the parallel merge. All of
 // them are benign for that use case.
 //
-// 1. `nextBlock` interprets *any* error of `async_receive` as "the merge was
-//    stopped" and asserts `stopRequested_`. If a caller ever attaches a
-//    cancellation slot to one of these operations, or cancels the surrounding
+// 1. `asyncGetNextBlock` interprets *any* error of `async_receive` as "the
+//    merge was stopped" and asserts `stopRequested_`. If a caller ever attaches
+//    a cancellation slot to one of these operations, or cancels the surrounding
 //    coroutine, that assertion fires instead of the cancellation being handled.
-// 2. `push` drops its block whenever the send reports an error, without
+// 2. `asyncPush` drops its block whenever the send reports an error, without
 //    distinguishing "was not delivered" from "was delivered". That is correct
 //    here because a channel is only ever cancelled while the merge is being
 //    torn down, but it would silently lose data if `cancel()` were used for
 //    anything else.
-// 3. Every public operation costs one coroutine frame plus two executor hops.
-//    That is negligible next to an output block of 100k elements (or 16 MB),
-//    but it makes this sink a poor fit for small payloads; such a user would
-//    have to batch, or run on the strand to begin with.
+// 3. Every operation costs one coroutine frame plus two executor hops. That is
+//    negligible next to an output block of 100k elements (or 16 MB), but it
+//    makes this sink a poor fit for small payloads; such a user would have to
+//    batch, or run on the strand to begin with.
 // 4. All those hops allocate (a coroutine frame, or the handler that
 //    `AsioParallelMergeState::abort` posts), so the teardown itself can fail
 //    once memory is exhausted. The failure is then swallowed and the consumer
@@ -392,6 +401,9 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
   // consumer may hold on to one across a suspension, while the consumer erases
   // the map entry of a chunk as soon as that chunk is done.
   using SharedBlockChannel = std::shared_ptr<BlockChannel>;
+  // The completion token that the asynchronous operations below use if the
+  // caller does not specify one.
+  using DefaultToken = net::use_awaitable_t<>;
 
  private:
   Strand strand_;
@@ -420,62 +432,167 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
     AD_CONTRACT_CHECK(maxBufferedBlocksPerChunk > 0);
   }
 
-  // Return the strand of this sink. Users that have state of their own which is
-  // only touched together with the state of this sink (as
-  // `AsioParallelMergeState` has) should reuse this strand instead of creating
-  // a second one.
-  const Strand& strand() const noexcept { return strand_; }
-
-  // Return `true` if the merge was stopped, either by `abort()` or by
-  // `pushException()`. A producer should poll this between two output blocks,
-  // so that it does not do any superfluous work. Callable from anywhere.
+  // Return `true` if the merge was stopped, either by `asyncAbort()` or by
+  // `asyncPushException()`. A producer should poll this between two output
+  // blocks, so that it does not do any superfluous work. Callable from
+  // anywhere, and the only operation of this class that is synchronous.
   bool stopRequested() const noexcept { return stopRequested_.load(); }
 
   // Push a finished output `block` of the chunk with the given `chunkIndex`.
-  // Suspend while the channel of that chunk is full. Return `false` if the
-  // merge was stopped, in which case the `block` is silently dropped and the
-  // producer should stop producing. Awaitable from any executor.
-  net::awaitable<bool> push(size_t chunkIndex, Block block) {
+  // Suspend while the channel of that chunk is full. Complete with `false` if
+  // the merge was stopped, in which case the `block` is silently dropped and
+  // the producer should stop producing.
+  template <typename CompletionToken = DefaultToken>
+  auto asyncPush(size_t chunkIndex, Block block,
+                 CompletionToken&& completionToken = {}) {
     AD_CONTRACT_CHECK(chunkIndex < numChunks_);
-    co_return co_await net::co_spawn(strand_,
-                                     pushOnStrand(chunkIndex, std::move(block)),
-                                     net::use_awaitable);
+    return runOnStrand(
+        [this, chunkIndex,
+         block = std::move(block)]() mutable -> net::awaitable<bool> {
+          co_return co_await sendToChunk(chunkIndex,
+                                         OptionalBlock{std::move(block)});
+        },
+        AD_FWD(completionToken));
   }
 
   // Announce that no further blocks will be pushed for the chunk with the given
   // `chunkIndex`, by sending the end-of-chunk sentinel. Call this exactly once
   // per chunk, and on every path, because the consumer would otherwise wait for
   // that chunk forever. Suspend while the channel of the chunk is full.
-  // Awaitable from any executor.
-  net::awaitable<void> finishChunk(size_t chunkIndex) {
+  // Complete with `false` if the merge was stopped, in which case there is no
+  // consumer left that could care about the sentinel.
+  template <typename CompletionToken = DefaultToken>
+  auto asyncFinishChunk(size_t chunkIndex,
+                        CompletionToken&& completionToken = {}) {
     AD_CONTRACT_CHECK(chunkIndex < numChunks_);
-    co_await net::co_spawn(strand_, finishChunkOnStrand(chunkIndex),
-                           net::use_awaitable);
+    return runOnStrand(
+        [this, chunkIndex]() -> net::awaitable<bool> {
+          co_return co_await sendToChunk(chunkIndex,
+                                         OptionalBlock{std::nullopt});
+        },
+        AD_FWD(completionToken));
   }
 
   // Forward an `exception` to the consumer, which will rethrow it. Only the
   // first pushed exception is stored, all later ones are ignored. Pushing an
-  // exception also stops the merge. Awaitable from any executor.
-  net::awaitable<void> pushException(std::exception_ptr exception) {
-    co_await net::co_spawn(strand_, pushExceptionOnStrand(std::move(exception)),
-                           net::use_awaitable);
+  // exception also stops the merge. Complete with nothing.
+  template <typename CompletionToken = DefaultToken>
+  auto asyncPushException(std::exception_ptr exception,
+                          CompletionToken&& completionToken = {}) {
+    return runOnStrand(
+        [this,
+         exception = std::move(exception)]() mutable -> net::awaitable<void> {
+          AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
+          if (exception_ == nullptr) {
+            exception_ = std::move(exception);
+          }
+          requestStop();
+          co_return;
+        },
+        AD_FWD(completionToken));
   }
 
   // Stop the merge from the consuming side. All suspended producers are woken
   // up and all further blocks are dropped, and the consumer stops yielding
   // blocks. Call this when the consumer stops iterating early (or exits via an
-  // exception), so that no producer is left suspended forever. Awaitable from
-  // any executor.
-  net::awaitable<void> abort() {
-    co_await net::co_spawn(strand_, abortOnStrand(), net::use_awaitable);
+  // exception), so that no producer is left suspended forever. Complete with
+  // nothing.
+  template <typename CompletionToken = DefaultToken>
+  auto asyncAbort(CompletionToken&& completionToken = {}) {
+    return runOnStrand(
+        [this]() -> net::awaitable<void> {
+          requestStop();
+          co_return;
+        },
+        AD_FWD(completionToken));
   }
 
-  // The actual teardown of `abort()`, for callers that are already on the
-  // strand and that must not (or cannot) suspend, in particular for the
-  // synchronous `AsioParallelMergeState::abort`.
+  // Complete with the next block in the global order, or with `std::nullopt` if
+  // all chunks are exhausted or the merge was stopped. Rethrow a pushed
+  // exception. Suspend until one of these conditions holds.
   //
-  // PRECONDITION: This has to be called on `strand()`.
-  void requestStopOnStrand() noexcept {
+  // NOTE: Run this from a single consumer only, and never concurrently with
+  // itself.
+  template <typename CompletionToken = DefaultToken>
+  auto asyncGetNextBlock(CompletionToken&& completionToken = {}) {
+    return runOnStrand(
+        [this]() -> net::awaitable<std::optional<Block>> {
+          AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
+          while (true) {
+            auto channel = getCurrentOutputChannel();
+            if (!channel.has_value()) {
+              co_return std::nullopt;
+            }
+            auto [errorCode, block] = co_await channel.value()->async_receive(
+                net::as_tuple(net::use_awaitable));
+            if (errorCode) {
+              // The channel was cancelled, which only happens while the merge
+              // is torn down. Continue, such that the next iteration either
+              // rethrows the pushed exception or reports the end of the range.
+              AD_CORRECTNESS_CHECK(stopRequested_.load());
+              continue;
+            }
+            if (block.has_value()) {
+              co_return std::move(block);
+            }
+            // The end-of-chunk sentinel, so move on to the next chunk. NOTE:
+            // Erasing the entry is safe even if the producer of that chunk
+            // still holds the channel, because the channels are shared.
+            chunks_.erase(nextChunkToRead_);
+            ++nextChunkToRead_;
+          }
+        },
+        AD_FWD(completionToken));
+  }
+
+ private:
+  // Run the coroutine that the `awaitableFactory` creates on `strand_` and
+  // complete via the `completionToken`. This is the single place where the hop
+  // onto the strand and the association of the completion handler with the
+  // executor of the caller happen: `co_spawn` initiates the operation, forwards
+  // the token, and invokes the resulting completion handler on the executor
+  // that is associated with that token (or on `strand_` if it has none).
+  //
+  // NOTE: The work on the strand has to be a separate coroutine that is
+  // `co_spawn`ed, because an `awaitable` is bound to a single executor for its
+  // whole lifetime and can hence not be moved onto the strand.
+  template <typename AwaitableFactory, typename CompletionToken>
+  auto runOnStrand(AwaitableFactory awaitableFactory,
+                   CompletionToken&& completionToken) {
+    return net::co_spawn(strand_, std::move(awaitableFactory),
+                         AD_FWD(completionToken));
+  }
+
+  // The common implementation of `asyncPush` and `asyncFinishChunk`: send the
+  // `optionalBlock` (an output block, or `std::nullopt` as the end-of-chunk
+  // sentinel) into the channel of the chunk with the given `chunkIndex`. Return
+  // `false` if the merge was stopped, in which case nothing was sent.
+  //
+  // PRECONDITION: This runs on `strand_`.
+  net::awaitable<bool> sendToChunk(size_t chunkIndex,
+                                   OptionalBlock optionalBlock) {
+    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
+    if (stopRequested_.load()) {
+      // A block is silently dropped, and there is no consumer left that could
+      // care about a sentinel. NOTE: Returning here (instead of creating a
+      // channel and sending into it) is what makes the teardown airtight, see
+      // the class comment above.
+      co_return false;
+    }
+    // NOTE: For the sentinel the channel is created here if the chunk did not
+    // push a single block, because the consumer still has to see that sentinel.
+    auto channel = getOrCreateChannel(chunkIndex);
+    auto [errorCode] = co_await channel->async_send(
+        boost::system::error_code{}, std::move(optionalBlock),
+        net::as_tuple(net::use_awaitable));
+    co_return !errorCode && !stopRequested_.load();
+  }
+
+  // The actual teardown of `asyncAbort()`, for callers that are already on the
+  // strand and that must not (or cannot) suspend.
+  //
+  // PRECONDITION: This runs on `strand_`.
+  void requestStop() noexcept {
     ad_utility::terminateIfThrows(
         [this] {
           AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
@@ -492,109 +609,25 @@ class AsioInOrderBlockSink : public ad_utility::NoCopyNoMove {
         "Stopping an `AsioInOrderBlockSink` failed.");
   }
 
-  // Return the next block in the global order, or `std::nullopt` if all chunks
-  // are exhausted or the merge was stopped. Rethrow a pushed exception. Suspend
-  // until one of these conditions holds. Awaitable from any executor.
+  // Return the channel of the chunk that the consumer currently reads from,
+  // creating it if it does not exist yet, or `std::nullopt` if there is nothing
+  // left to read because all chunks are exhausted or the merge was stopped.
+  // Rethrow a pushed exception.
   //
-  // NOTE: Await this from a single consuming coroutine only, and never
-  // concurrently with itself.
-  net::awaitable<std::optional<Block>> nextBlock() {
-    co_return co_await net::co_spawn(strand_, nextBlockOnStrand(),
-                                     net::use_awaitable);
-  }
-
- private:
-  // The implementation of `push`, see there.
+  // NOTE: The exception propagates out of the coroutine that runs on the strand
+  // and is rethrown by the completion of `asyncGetNextBlock`, so the consumer
+  // sees it on its own executor.
   //
   // PRECONDITION: This runs on `strand_`.
-  net::awaitable<bool> pushOnStrand(size_t chunkIndex, Block block) {
+  std::optional<SharedBlockChannel> getCurrentOutputChannel() {
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
-    if (stopRequested_.load()) {
-      co_return false;
+    if (exception_ != nullptr) {
+      std::rethrow_exception(exception_);
     }
-    auto channel = getOrCreateChannel(chunkIndex);
-    auto [errorCode] = co_await channel->async_send(
-        boost::system::error_code{}, OptionalBlock{std::move(block)},
-        net::as_tuple(net::use_awaitable));
-    co_return !errorCode && !stopRequested_.load();
-  }
-
-  // The implementation of `finishChunk`, see there.
-  //
-  // PRECONDITION: This runs on `strand_`.
-  net::awaitable<void> finishChunkOnStrand(size_t chunkIndex) {
-    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
-    if (stopRequested_.load()) {
-      // There is no consumer left that could care about the sentinel. NOTE:
-      // Returning here (instead of creating a channel and sending into it) is
-      // what makes the teardown airtight, see the class comment above.
-      co_return;
+    if (stopRequested_.load() || nextChunkToRead_ >= numChunks_) {
+      return std::nullopt;
     }
-    // NOTE: The channel is created here if the chunk did not push a single
-    // block, because the consumer still has to see the sentinel.
-    auto channel = getOrCreateChannel(chunkIndex);
-    // NOTE: The error is deliberately ignored. It means that the merge was
-    // stopped, in which case there is no consumer left that could care.
-    co_await channel->async_send(boost::system::error_code{},
-                                 OptionalBlock{std::nullopt},
-                                 net::as_tuple(net::use_awaitable));
-  }
-
-  // The implementation of `pushException`, see there.
-  //
-  // PRECONDITION: This runs on `strand_`.
-  net::awaitable<void> pushExceptionOnStrand(std::exception_ptr exception) {
-    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
-    if (exception_ == nullptr) {
-      exception_ = std::move(exception);
-    }
-    requestStopOnStrand();
-    co_return;
-  }
-
-  // The implementation of `abort`, see there.
-  //
-  // PRECONDITION: This runs on `strand_`.
-  net::awaitable<void> abortOnStrand() {
-    requestStopOnStrand();
-    co_return;
-  }
-
-  // The implementation of `nextBlock`, see there.
-  //
-  // PRECONDITION: This runs on `strand_`.
-  net::awaitable<std::optional<Block>> nextBlockOnStrand() {
-    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
-    while (true) {
-      if (exception_ != nullptr) {
-        // NOTE: This propagates out of the coroutine that runs on the strand
-        // and is rethrown by the `co_await` inside `nextBlock`, so the consumer
-        // sees it on its own executor.
-        std::rethrow_exception(exception_);
-      }
-      if (stopRequested_.load() || nextChunkToRead_ >= numChunks_) {
-        co_return std::nullopt;
-      }
-      size_t chunkIndex = nextChunkToRead_;
-      auto channel = getOrCreateChannel(chunkIndex);
-      auto [errorCode, block] =
-          co_await channel->async_receive(net::as_tuple(net::use_awaitable));
-      if (errorCode) {
-        // The channel was cancelled, which only happens while the merge is torn
-        // down. Continue, such that the next iteration either rethrows the
-        // pushed exception or reports the end of the range.
-        AD_CORRECTNESS_CHECK(stopRequested_.load());
-        continue;
-      }
-      if (block.has_value()) {
-        co_return std::move(block);
-      }
-      // The end-of-chunk sentinel, so move on to the next chunk. NOTE: Erasing
-      // the entry is safe even if the producer of that chunk still holds the
-      // channel, because the channels are shared.
-      chunks_.erase(chunkIndex);
-      ++nextChunkToRead_;
-    }
+    return getOrCreateChannel(nextChunkToRead_);
   }
 
   // Return the channel of the chunk with the given `chunkIndex`, creating it if

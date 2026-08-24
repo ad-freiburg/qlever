@@ -23,6 +23,7 @@
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+#include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/NoCopyNoMove.h"
 #include "util/parallelBlockMerge/ChunkMerger.h"
@@ -37,15 +38,18 @@
 // mode.
 #ifndef QLEVER_CPP_17
 #include <boost/asio/any_io_executor.hpp>
-#include <boost/asio/as_tuple.hpp>
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/consign.hpp>
 #include <boost/asio/detached.hpp>
-#include <boost/asio/experimental/channel.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
 #include <boost/system/error_code.hpp>
+
+#include "util/AsyncSemaphore.h"
 #endif
 
 namespace ad_utility::parallelBlockMerge {
@@ -262,30 +266,30 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
 // `AsioInOrderBlockSink`, see there.
 //
 // The number of chunks that are merged concurrently is bounded by
-// `maxInFlight`, which is enforced by `permits_`, a channel that is used as a
-// counting semaphore. This bound is a pure *memory* bound (every live chunk
-// holds one input block per run plus its heap) and, in contrast to
-// `ParallelMergeState`, no longer a correctness requirement: a value of `1` and
-// a value that far exceeds the available parallelism are both perfectly fine.
+// `maxInFlight`, which is enforced by the `semaphore_`. This bound is a pure
+// *memory* bound (every live chunk holds one input block per run plus its heap)
+// and, in contrast to `ParallelMergeState`, no longer a correctness
+// requirement: a value of `1` and a value that far exceeds the available
+// parallelism are both perfectly fine.
 //
-// STRAND CONFINEMENT: `permits_` is the only mutable state of this class, and
-// it is confined to the strand of the `sink_`, which this class deliberately
-// reuses instead of creating a second one. The bookkeeping that touches it
-// (`dispatchChunks` and `releasePermit`) therefore runs on that strand, and so
-// does the teardown in `abort()`.
+// STRAND CONFINEMENT: The dispatch loop (`dispatchNextChunk` and its
+// continuation) as well as the teardown in `abort()` run on `strand_`, which
+// this class owns. The `sink_` and the `semaphore_` each confine their own
+// state to a strand of their own, so no state is ever shared between the three
+// and none of them has to know about the strands of the others.
 //
-// IMPORTANT: The merging itself must *not* run on that strand, because
+// IMPORTANT: The merging itself must *not* run on any of those strands, because
 // everything that runs on a strand is serialized. `runChunk` is therefore
-// spawned on `executor_` and only hops to the strand for the short bookkeeping
-// of a `push`, see the note there.
+// spawned on `executor_` and only hops to the strand of the `sink_` for the
+// short bookkeeping of an `asyncPush`, see the note there.
 //
 // LIFETIME: There is deliberately no destructor that waits for the coroutines
-// that are still in flight. Instead, every coroutine holds a `shared_ptr` to
-// this object, so that this object simply outlives all of them; this is also
-// why it can only be created via `create()`. A consumer that abandons the merge
-// has to call `abort()`, so that those coroutines actually finish instead of
-// waiting for a consumer that is gone. `AsioParallelMergeRange` below does this
-// in its destructor.
+// and handlers that are still in flight. Instead, every one of them holds a
+// `shared_ptr` to this object, so that this object simply outlives all of them;
+// this is also why it can only be created via `create()`. A consumer that
+// abandons the merge has to call `abort()`, so that those coroutines actually
+// finish instead of waiting for a consumer that is gone.
+// `AsioParallelMergeRange` below does this in its destructor.
 CPP_template(bool moveElements, typename Input, typename Comparator)(
     requires BlockedRunsInput<Input>) class AsioParallelMergeState
     : public std::enable_shared_from_this<
@@ -295,14 +299,12 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   using Block = typename Input::Block;
   using Key = typename Input::Key;
   using Sink = AsioInOrderBlockSink<Block>;
-  // The counting semaphore that bounds the number of chunks that are merged
-  // concurrently. It initially holds `maxInFlight` permits; a chunk coroutine
-  // is only spawned once a permit could be taken out, and returns that permit
-  // when it is done. NOTE: A plain (non-concurrent) channel suffices, because
-  // every operation on it is performed on the strand of the `sink_`, see the
-  // STRAND CONFINEMENT note in `AsioInOrderBlockSink`.
-  using PermitChannel =
-      net::experimental::channel<void(boost::system::error_code)>;
+  // The strand to which the dispatch loop and the teardown are confined, see
+  // the STRAND CONFINEMENT note above.
+  using Strand = net::strand<net::any_io_executor>;
+  // The completion token that the asynchronous operations below use if the
+  // caller does not specify one.
+  using DefaultToken = typename Sink::DefaultToken;
 
  private:
   // A tag that makes the constructor unusable from the outside, such that a
@@ -317,10 +319,14 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   ad_utility::SharedCancellationHandle cancellationHandle_;
   Splitters<Key> splitters_;
   size_t maxInFlight_;
-  // NOTE: The order of these members matters, both of them are initialized from
-  // the members above.
+  // NOTE: The order of these members matters, all three of them are initialized
+  // from the members above.
+  Strand strand_;
   Sink sink_;
-  PermitChannel permits_;
+  // The counting semaphore that bounds the number of chunks that are merged
+  // concurrently. A chunk coroutine is only spawned once a permit could be
+  // taken out, and holds that permit until it is done.
+  ad_utility::AsyncSemaphore semaphore_;
 
  public:
   // Create the state of a merge and start dispatching its chunks. All the work
@@ -335,9 +341,9 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
         std::move(comparator), std::move(options),
         std::move(cancellationHandle), std::move(splitters), maxInFlight);
     // NOTE: The dispatching can only be started once the `shared_ptr` exists,
-    // because the coroutines keep this object alive via `shared_from_this`. It
-    // runs on the strand of the sink, see `dispatchChunks`.
-    net::co_spawn(self->sink_.strand(), self->dispatchChunks(), net::detached);
+    // because the coroutines and handlers keep this object alive via
+    // `shared_from_this`. It runs on `strand_`, see `dispatchNextChunk`.
+    net::post(self->strand_, [self] { self->dispatchNextChunk(0); });
     return self;
   }
 
@@ -354,111 +360,156 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
         cancellationHandle_{std::move(cancellationHandle)},
         splitters_{std::move(splitters)},
         maxInFlight_{maxInFlight},
+        strand_{net::make_strand(executor_)},
         sink_{executor_, splitters_.numChunks(),
               options_.bufferedBlocksPerChunk},
-        permits_{sink_.strand(), maxInFlight} {
+        semaphore_{executor_, maxInFlight} {
     AD_CORRECTNESS_CHECK(maxInFlight_ > 0);
     AD_CORRECTNESS_CHECK(maxInFlight_ <= splitters_.numChunks());
   }
 
-  // Return the executor on which all the work of this merge is scheduled.
-  const net::any_io_executor& executor() const { return executor_; }
-
-  // Return the next block in the global order, or `std::nullopt` if the merge
-  // is exhausted or was aborted. Rethrow an exception of one of the chunks.
-  // Suspend until the next block is available.
+  // Complete with the next block in the global order, or with `std::nullopt` if
+  // the merge is exhausted or was aborted. Rethrow an exception of one of the
+  // chunks. Suspend until the next block is available.
   //
-  // NOTE: Await this from a single consuming coroutine only, and never
-  // concurrently with itself.
-  net::awaitable<std::optional<Block>> next() {
-    // Keep this object alive for as long as the consumer is inside the sink.
-    auto self = this->shared_from_this();
-    co_return co_await sink_.nextBlock();
+  // NOTE: Run this from a single consumer only, and never concurrently with
+  // itself.
+  template <typename CompletionToken = DefaultToken>
+  auto asyncNext(CompletionToken&& completionToken = {}) {
+    // NOTE: This is nothing but a forwarding of the completion token to the
+    // sink, plus a `shared_ptr` that is consigned to the completion handler and
+    // hence keeps this object alive for as long as the consumer is inside the
+    // sink.
+    return sink_.asyncGetNextBlock(
+        net::consign(AD_FWD(completionToken), this->shared_from_this()));
   }
 
   // Stop the merge, so that no coroutine is left waiting for a consumer that is
-  // gone. The blocks that are still buffered are dropped and `next()` returns
-  // `std::nullopt` from now on. NOTE: This returns immediately, it does *not*
-  // wait for the coroutines that are still in flight, see the LIFETIME note
-  // above.
+  // gone. The blocks that are still buffered are dropped and `asyncNext()`
+  // yields `std::nullopt` from now on. NOTE: This returns immediately, it does
+  // *not* wait for the coroutines that are still in flight, see the LIFETIME
+  // note above.
   void abort() noexcept {
     ad_utility::terminateIfThrows(
         [this] {
           // NOTE: This function is called synchronously from
-          // `~AsioParallelMergeRange`, i.e. from a thread that typically does
-          // not run the strand, and it must not block. So it posts the actual
-          // teardown onto the strand, where it may touch the state of the
-          // `sink_` and the `permits_`. The posted handler *has* to keep this
-          // object alive, because the caller drops its `shared_ptr` right after
-          // this call and the handler would otherwise run on a destroyed
-          // object.
-          net::post(sink_.strand(), [self = this->shared_from_this()] {
-            self->sink_.requestStopOnStrand();
-            // Wake up the dispatcher if it currently waits for a free permit.
-            // It sees the stop afterwards and never waits again, so there is no
-            // need to also close the channel, see the class comment of
-            // `AsioInOrderBlockSink`.
-            self->permits_.cancel();
-          });
+          // `~AsioParallelMergeRange`, i.e. from a thread that typically runs
+          // none of the strands involved, and it must not block. Both calls
+          // below therefore only *initiate* the teardown on the respective
+          // strand and return immediately. The `shared_ptr` that is consigned
+          // to the first one is required because the caller drops its own
+          // `shared_ptr` right after this call; the `semaphore_` in contrast
+          // keeps its state alive itself.
+          sink_.asyncAbort(
+              net::consign(net::detached, this->shared_from_this()));
+          // Wake up the dispatch loop if it currently waits for a free permit.
+          // It sees the stop afterwards and never waits again, so the
+          // cancellation does not have to be sticky, see
+          // `ad_utility::AsyncSemaphore::cancel`.
+          //
+          // NOTE: The two halves of this teardown run on different strands and
+          // are hence not atomic with respect to the dispatch loop, which may
+          // therefore still dispatch a few chunks in between. That is benign:
+          // such a chunk sees the stop in its very first `stopRequested()` and
+          // returns its permit right away, so the loop runs through the
+          // remaining chunk indices and terminates.
+          semaphore_.cancel();
         },
         "Aborting an `AsioParallelMergeState` failed.");
   }
 
  private:
-  // Spawn one coroutine per chunk, in strictly increasing order of the chunk
-  // index and never more than `maxInFlight_` of them at the same time. Suspend
-  // while all permits are taken.
+  // Dispatch the chunk with the given `chunkIndex`, and recursively all the
+  // following ones: wait for a free permit of the `semaphore_`, and continue in
+  // `spawnChunkAndContinue` as soon as one was taken out. Do nothing if all
+  // chunks were dispatched or the merge was stopped.
   //
-  // NOTE: This coroutine runs on the strand of the `sink_`, because all it does
-  // is bookkeeping on `permits_` (which is confined to that strand) and
-  // spawning. The chunk coroutines themselves are deliberately spawned on
-  // `executor_` and never on the strand, see `runChunk`.
-  net::awaitable<void> dispatchChunks() {
-    auto self = this->shared_from_this();
-    AD_CORRECTNESS_CHECK(sink_.strand().running_in_this_thread());
-    std::exception_ptr dispatchException;
+  // NOTE: This deliberately uses `AsyncSemaphore::asyncAcquire` and not
+  // `ad_utility::asyncWithPermit`, because the loop has to continue as soon as
+  // the permit was *acquired* and not when the chunk is done. It therefore
+  // needs the permit as an explicit RAII handle that it can hand to the chunk.
+  //
+  // NOTE: This recursion does not accumulate stack space. Boost.Asio never
+  // invokes a completion handler from within the initiating function, so
+  // `spawnChunkAndContinue`, and with it the next iteration, always runs on a
+  // fresh stack.
+  //
+  // PRECONDITION: This runs on `strand_`, and so does its continuation.
+  void dispatchNextChunk(size_t chunkIndex) noexcept {
+    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
+    if (chunkIndex >= splitters_.numChunks() || sink_.stopRequested()) {
+      return;
+    }
+    // NOTE: The only thing that can throw here is the allocation of the
+    // completion handler, in which case the merge cannot continue at all.
     try {
-      // Hand out the initial permits. NOTE: This happens here and not in the
-      // constructor, such that *every* operation on `permits_` runs on the
-      // strand.
-      for (size_t i = 0; i < maxInFlight_; ++i) {
-        bool permitWasSent = permits_.try_send(boost::system::error_code{});
-        AD_CORRECTNESS_CHECK(permitWasSent);
-      }
-      for (size_t chunkIndex = 0; chunkIndex < splitters_.numChunks();
-           ++chunkIndex) {
-        if (sink_.stopRequested()) {
-          break;
-        }
-        auto [errorCode] =
-            co_await permits_.async_receive(net::as_tuple(net::use_awaitable));
-        if (errorCode || sink_.stopRequested()) {
-          break;
-        }
-        net::co_spawn(executor_, runChunk(chunkIndex), net::detached);
-      }
+      semaphore_.asyncAcquire(net::bind_executor(
+          strand_, [self = this->shared_from_this(), chunkIndex](
+                       const boost::system::error_code& errorCode,
+                       ad_utility::AsyncSemaphore::Permit permit) {
+            self->spawnChunkAndContinue(errorCode, std::move(permit),
+                                        chunkIndex);
+          }));
     } catch (...) {
-      // This can only happen if the frame of a chunk coroutine cannot be
-      // allocated. NOTE: The exception is only stashed here and forwarded
-      // below, because `co_await` must not appear in an exception handler.
-      dispatchException = std::current_exception();
+      forwardExceptionToConsumer(std::current_exception());
     }
-    if (dispatchException != nullptr) {
-      // Forward the exception to the consumer, which also stops the chunks that
-      // are already running.
-      try {
-        co_await sink_.pushException(std::move(dispatchException));
-      } catch (...) {
-        // Forwarding allocates a coroutine frame of its own, so the only way it
-        // can fail is that memory is exhausted, in which case the consumer sees
-        // the end of the range instead of the exception.
-      }
+  }
+
+  // The continuation of `dispatchNextChunk`: spawn the coroutine that merges
+  // the chunk with the given `chunkIndex` and immediately continue the loop
+  // with the next chunk. Stop dispatching if the wait for the permit was
+  // cancelled (`errorCode`) or the merge was stopped in the meantime.
+  //
+  // The chunks have to be dispatched in strictly increasing order of their
+  // index: a chunk holds its permit while its producer is suspended on a full
+  // channel, so if a higher chunk could start before a lower one, all permits
+  // could be held by producers of chunks that the consumer does not read yet,
+  // and the merge would deadlock.
+  //
+  // PRECONDITION: This runs on `strand_`.
+  void spawnChunkAndContinue(const boost::system::error_code& errorCode,
+                             ad_utility::AsyncSemaphore::Permit permit,
+                             size_t chunkIndex) noexcept {
+    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
+    if (errorCode || sink_.stopRequested()) {
+      return;
     }
+    // NOTE: The only thing that can throw here is the allocation of the
+    // coroutine frame of the chunk, in which case the merge cannot continue.
+    try {
+      // NOTE: The chunk is deliberately spawned on `executor_` and never on a
+      // strand, see `runChunk`. The `permit` is moved into the completion
+      // handler of that coroutine and is hence returned to the `semaphore_` as
+      // soon as the chunk is done, so that the next chunk may take its place.
+      net::co_spawn(executor_, runChunk(chunkIndex),
+                    [permit = std::move(permit)](std::exception_ptr) {});
+    } catch (...) {
+      forwardExceptionToConsumer(std::current_exception());
+      return;
+    }
+    dispatchNextChunk(chunkIndex + 1);
+  }
+
+  // Forward an `exception` that was thrown while dispatching to the consumer,
+  // which also stops the chunks that are already running.
+  //
+  // NOTE: The forwarding allocates a coroutine frame of its own, so the only
+  // way it can fail is that memory is exhausted, in which case the consumer
+  // sees the end of the range instead of the exception.
+  void forwardExceptionToConsumer(std::exception_ptr exception) noexcept {
+    ad_utility::ignoreExceptionIfThrows(
+        [this, &exception] {
+          sink_.asyncPushException(
+              std::move(exception),
+              net::consign(net::detached, this->shared_from_this()));
+        },
+        "Forwarding an exception of the chunk dispatcher to the consumer of "
+        "an `AsioParallelMergeState` failed.");
   }
 
   // Merge a single chunk and push its blocks to the sink. This never throws,
   // all exceptions are forwarded to the consumer via
-  // `AsioInOrderBlockSink::pushException`.
+  // `AsioInOrderBlockSink::asyncPushException`.
   net::awaitable<void> runChunk(size_t chunkIndex) {
     auto self = this->shared_from_this();
     std::exception_ptr chunkException;
@@ -470,16 +521,16 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
         // NOTE: Merging a single output block is ordinary blocking work that
         // may even do I/O, so a chunk occupies its thread for the duration of
         // one output block. This is exactly why this coroutine runs on
-        // `executor_` and *not* on the strand of the `sink_`: everything that
-        // runs on that strand is serialized, so merging there would silently
-        // destroy all the parallelism. Only the short bookkeeping of the
-        // `push` below hops to the strand, and that is also the only
-        // suspension point.
+        // `executor_` and *not* on a strand: everything that runs on a strand
+        // is serialized, so merging there would silently destroy all the
+        // parallelism. Only the short bookkeeping of the `asyncPush` below hops
+        // to the strand of the sink, and that is also the only suspension
+        // point.
         auto block = merger.get();
         if (!block.has_value()) {
           break;
         }
-        if (!co_await sink_.push(chunkIndex, std::move(block.value()))) {
+        if (!co_await sink_.asyncPush(chunkIndex, std::move(block.value()))) {
           break;
         }
       }
@@ -490,46 +541,22 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     }
     if (chunkException != nullptr) {
       try {
-        co_await sink_.pushException(std::move(chunkException));
+        co_await sink_.asyncPushException(std::move(chunkException));
       } catch (...) {
-        // `pushException` allocates a coroutine frame, so the only way it can
-        // fail is that memory is exhausted. Ignore that, because the
-        // `finishChunk` below has to run in any case.
+        // `asyncPushException` allocates a coroutine frame, so the only way it
+        // can fail is that memory is exhausted. Ignore that, because the
+        // `asyncFinishChunk` below has to run in any case.
       }
     }
     // NOTE: The end-of-chunk sentinel has to be sent on every path, because the
     // consumer would wait for this chunk forever otherwise.
     try {
-      co_await sink_.finishChunk(chunkIndex);
+      co_await sink_.asyncFinishChunk(chunkIndex);
     } catch (...) {
-      // `finishChunk` reports a stopped merge via its `error_code` and not via
+      // `asyncFinishChunk` reports a stopped merge via its result and not via
       // an exception, so this can only be an allocation failure, and the merge
       // is being torn down anyway.
     }
-    co_await releasePermit();
-  }
-
-  // Return the permit of a chunk that is complete, such that the next chunk may
-  // be dispatched in its place. NOTE: This is awaited from a chunk coroutine,
-  // which does not run on the strand, so it has to hop there.
-  net::awaitable<void> releasePermit() {
-    co_await net::co_spawn(sink_.strand(), releasePermitOnStrand(),
-                           net::use_awaitable);
-  }
-
-  // The implementation of `releasePermit`, see there.
-  //
-  // PRECONDITION: This runs on the strand of the `sink_`.
-  net::awaitable<void> releasePermitOnStrand() {
-    AD_CORRECTNESS_CHECK(sink_.strand().running_in_this_thread());
-    bool permitWasSent = permits_.try_send(boost::system::error_code{});
-    // At most `maxInFlight_` permits exist and the channel has exactly that
-    // capacity, so there is always a free slot. NOTE: In contrast to the
-    // previous implementation the channel is never closed (and `cancel()` does
-    // not discard the buffered permits either), so this cannot fail while the
-    // merge is torn down either.
-    AD_CORRECTNESS_CHECK(permitWasSent);
-    co_return;
   }
 };
 
@@ -565,10 +592,17 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   // instead of waiting for a consumer that is gone.
   ~AsioParallelMergeRange() override { state_->abort(); }
 
-  // ________________________________________________________________________
+  // Return the next block of the merge, or `std::nullopt` at its end.
+  //
+  // IMPORTANT: This is *synchronous and blocking*: it waits on a `future` until
+  // the next block is available and hence occupies its thread for that whole
+  // time. It therefore deadlocks if it is called from one of the threads that
+  // run the executor of the merge, because that thread is then no longer
+  // available to run the coroutines that produce the very block it waits for.
+  // In the extreme case of a single-threaded executor the *first* call already
+  // deadlocks. See also the IMPORTANT note in the class comment above.
   std::optional<Block> get() override {
-    return net::co_spawn(state_->executor(), state_->next(), net::use_future)
-        .get();
+    return state_->asyncNext(net::use_future).get();
   }
 };
 #endif  // QLEVER_CPP_17
