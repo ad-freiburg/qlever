@@ -151,6 +151,20 @@ Variable Visitor::blankNodeToInternalVariable(std::string_view blankNode) {
 }
 
 // _____________________________________________________________________________
+void Visitor::checkBlankNodeLabelIsNotReusedAcrossBasicGraphPatterns(
+    const std::string& label, const antlr4::ParserRuleContext* ctx) {
+  // If the label was already used in the current basic graph pattern, then this
+  // is a legal repetition and there is nothing to do. Otherwise it must not
+  // have been used anywhere else in the query before.
+  if (blankNodeLabelsInCurrentBasicGraphPattern_.insert(label).second &&
+      !allBlankNodeLabels_.insert(label).second) {
+    reportError(ctx, absl::StrCat("The blank node label \"", label,
+                                  "\" may not be used in more than one basic "
+                                  "graph pattern. Use a variable instead."));
+  }
+}
+
+// _____________________________________________________________________________
 std::string Visitor::getOriginalInputForContext(
     const antlr4::ParserRuleContext* context) {
   const auto& fullInput = context->getStart()->getInputStream()->toString();
@@ -404,6 +418,8 @@ void SparqlQleverVisitor::resetStateForMultipleUpdates() {
   prologueString_ = {};
   parsedQuery_ = {};
   treatBlankNodesAs_ = TreatBlankNodesAs::InternalVariables;
+  allBlankNodeLabels_.clear();
+  blankNodeLabelsInCurrentBasicGraphPattern_.clear();
 }
 
 // ____________________________________________________________________________________
@@ -1121,6 +1137,10 @@ void Visitor::selectExistsVariables(SparqlFilter& filter) const {
 GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   GraphPattern pattern;
 
+  // The triples inside a group belong to a basic graph pattern of their own,
+  // no matter which basic graph pattern was active in the enclosing scope.
+  blankNodeLabelsInCurrentBasicGraphPattern_.clear();
+
   // The following code makes sure that the variables from outside the graph
   // pattern are NOT visible inside the graph pattern, but the variables from
   // the graph pattern are visible outside the graph pattern.
@@ -1201,8 +1221,14 @@ Visitor::OperationsAndFilters Visitor::visit(
 
 Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
     Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx) {
-  return {visit(ctx->graphPatternNotTriples()),
-          visitOptional(ctx->triplesBlock())};
+  auto operationOrFilter = visit(ctx->graphPatternNotTriples());
+  // A `FILTER` is part of the surrounding basic graph pattern, everything else
+  // (`OPTIONAL`, `GRAPH`, `UNION`, `BIND`, ...) ends it, so the triples that
+  // follow belong to a new basic graph pattern.
+  if (!std::holds_alternative<SparqlFilter>(operationOrFilter)) {
+    blankNodeLabelsInCurrentBasicGraphPattern_.clear();
+  }
+  return {std::move(operationOrFilter), visitOptional(ctx->triplesBlock())};
 }
 
 // ____________________________________________________________________________________
@@ -3205,17 +3231,22 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
     return newBlankNodeOrVariable();
   } else {
     AD_CORRECTNESS_CHECK(ctx->BLANK_NODE_LABEL());
+    const std::string label = ctx->BLANK_NODE_LABEL()->getText();
     if (mode == TreatBlankNodesAs::BlankNodes) {
+      // In this mode the label denotes an actual blank node in the data that is
+      // constructed or inserted, not a variable, so the scoping rule for basic
+      // graph patterns doesn't apply here. Repeating a label is in fact the
+      // only way to refer to the same blank node twice.
+      //
       // Strip `_:` prefix from string.
       constexpr size_t length = std::string_view{"_:"}.length();
-      const std::string label =
-          ctx->BLANK_NODE_LABEL()->getText().substr(length);
       // `False` means the blank node is not automatically generated, but
       // explicitly specified in the query.
-      return BlankNode{false, label};
+      return BlankNode{false, label.substr(length)};
     } else {
       AD_CORRECTNESS_CHECK(mode == TreatBlankNodesAs::InternalVariables);
-      return blankNodeToInternalVariable(ctx->BLANK_NODE_LABEL()->getText());
+      checkBlankNodeLabelIsNotReusedAcrossBasicGraphPatterns(label, ctx);
+      return blankNodeToInternalVariable(label);
     }
   }
 }

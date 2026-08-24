@@ -1796,3 +1796,92 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
                 {{{encoded123, unencoded456, encoded789}}}))));
   }
 }
+
+// _____________________________________________________________________________
+// According to the SPARQL 1.1 standard (section 5.1.1), a blank node label
+// "can be used in only a single basic graph pattern in any query". The tests
+// below are modeled after the `syn-blabel-cross-*` syntax conformance tests
+// from the W3C SPARQL test suite.
+TEST(SparqlParser, blankNodeLabelsAreScopedToASingleBasicGraphPattern) {
+  auto expectQuery = ExpectCompleteParse<&Parser::query>{};
+  auto expectQueryFails = ExpectParseFails<&Parser::query>{};
+  auto expectUpdate = ExpectCompleteParse<&Parser::update>{};
+  auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
+  auto reusedLabel = ::testing::HasSubstr(
+      "The blank node label \"_:who\" may not be used in more than one basic "
+      "graph pattern");
+  auto bn = [](std::string_view label) {
+    return Var{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX, label)};
+  };
+
+  // A `FILTER` does not end a basic graph pattern (conformance test
+  // `syn-blabel-cross-filter`).
+  expectQuery(
+      "ASK { _:who <homepage> ?homepage FILTER(?homepage > 3) "
+      "_:who <schoolHomepage> ?schoolPage }",
+      m::AskQuery(m::GraphPattern(
+          false, {"(?homepage > 3)"},
+          m::OrderedTriples(
+              {{bn("who"), iri("<homepage>"), Var{"?homepage"}},
+               {bn("who"), iri("<schoolHomepage>"), Var{"?schoolPage"}}}))));
+
+  expectQuery("ASK { _:who <p> _:who . _:who <q> ?x }",
+              m::AskQuery(m::GraphPattern(
+                  m::OrderedTriples({{bn("who"), iri("<p>"), bn("who")},
+                                     {bn("who"), iri("<q>"), Var{"?x"}}}))));
+
+  // The conformance tests `syn-blabel-cross-{graph,optional,union}-bad`.
+  expectQueryFails(
+      "ASK { _:who <homepage> ?homepage GRAPH ?g { ?someone <made> ?homepage } "
+      "_:who <schoolHomepage> ?schoolPage }",
+      reusedLabel);
+  expectQueryFails(
+      "ASK { _:who <homepage> ?homepage OPTIONAL { ?someone <made> ?homepage } "
+      "_:who <schoolHomepage> ?schoolPage }",
+      reusedLabel);
+  expectQueryFails(
+      "ASK { _:who <homepage> ?homepage { ?someone <made> ?homepage } UNION "
+      "{ ?homepage <maker> ?someone } _:who <schoolHomepage> ?schoolPage }",
+      reusedLabel);
+
+  expectQueryFails("ASK { _:who <p> ?x MINUS { ?x <q> ?y } _:who <r> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x BIND(3 AS ?y) _:who <q> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x VALUES ?y { 3 } _:who <q> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x { ?x <q> ?y } _:who <r> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x OPTIONAL { _:who <q> ?y } }",
+                   reusedLabel);
+  expectQueryFails("ASK { { _:who <p> ?x } UNION { _:who <q> ?y } }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x FILTER EXISTS { _:who <q> ?y } }",
+                   reusedLabel);
+  expectQueryFails("SELECT * { _:who <p> ?x { SELECT * { _:who <q> ?y } } }",
+                   reusedLabel);
+
+  expectQuery("ASK { _:who <p> ?x OPTIONAL { _:someone <q> ?y } }",
+              m::AskQuery(m::GraphPattern(
+                  m::Triples({{bn("who"), iri("<p>"), Var{"?x"}}}),
+                  m::OptionalGraphPattern(
+                      m::Triples({{bn("someone"), iri("<q>"), Var{"?y"}}})))));
+
+  // Blank nodes in a CONSTRUCT template are real blank nodes, so repeating a
+  // label there is allowed and denotes the same blank node.
+  expectQuery(
+      "CONSTRUCT { _:who <p> ?x . _:who <q> ?x } WHERE { ?s <p> ?x }",
+      m::ConstructQuery(
+          {{BlankNode(false, "who"), iri("<p>"), Var{"?x"}},
+           {BlankNode(false, "who"), iri("<q>"), Var{"?x"}}},
+          m::GraphPattern(m::Triples({{Var{"?s"}, iri("<p>"), Var{"?x"}}}))));
+
+  expectUpdateFails(
+      "INSERT { <a> <b> <c> } WHERE { _:who <p> ?x OPTIONAL { _:who <q> ?y } }",
+      reusedLabel);
+  // The operations of a request with multiple updates are independent.
+  expectUpdate(
+      "INSERT { <a> <b> ?x } WHERE { _:who <p> ?x } ; "
+      "INSERT { <a> <b> ?x } WHERE { _:who <p> ?x }",
+      ::testing::SizeIs(2));
+}
