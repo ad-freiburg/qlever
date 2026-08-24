@@ -23,10 +23,9 @@ class BaselineAlgorithm : public RtreeEntryAlgorithm {
   Result run() override;
 
  private:
-  // The maximum-results constraint, only meaningful for the `BASELINE` and
-  // `S2_GEOMETRY` algorithms (the only ones supporting a `NearestNeighbors`
-  // task), so it's self-computed from `config_` here rather than in the base
-  // class.
+  // The maximum-results constraint, only meaningful for algorithms
+  // supporting a `NearestNeighbors` task (this one and `S2GeometryAlgorithm`),
+  // so it's self-computed from `config_` here rather than in the base class.
   std::optional<size_t> maxResults_ = config_.getMaxResults();
 };
 
