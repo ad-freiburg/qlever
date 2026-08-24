@@ -3089,6 +3089,63 @@ TEST(QueryPlanner, distributiveJoinInUnionIsNotAppliedIfUnionHasLimit) {
 }
 
 // _____________________________________________________________________________
+// The children of a `UNION` have to be planned *together with* the operation
+// that is joined with the `UNION`, not merely have that join pushed onto their
+// finished plans. Regression test: a child that binds one side of a
+// `TransitivePath` while being optimized in isolation can never bind the other
+// side for the join afterwards (`createJoinWithTransitivePath` refuses to bind
+// a path twice). That is what makes a query like `?c <P31>/<P279>+ ?series`
+// with a constrained `?series` walk the hierarchy from `?series` instead of
+// computing the hull for every instance.
+TEST(QueryPlanner, distributiveJoinIsPlannedTogetherWithUnionChildren) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  // A `<P279>` hierarchy with many more `<P31>` instances than classes, s.t.
+  // starting from `?series` is clearly cheaper than starting from the
+  // instances.
+  std::string turtle;
+  for (size_t i = 1; i < 20; ++i) {
+    absl::StrAppend(&turtle, "<c", i, "> <P279> <c", i - 1, "> .\n");
+  }
+  for (size_t i = 0; i < 400; ++i) {
+    absl::StrAppend(&turtle, "<i", i, "> <P31> <c", i % 20, "> .\n");
+  }
+  auto* qec = ad_utility::testing::getQec(turtle);
+  auto qp =
+      QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+  auto pq = parseQuery(
+      "SELECT * WHERE { ?series <P279> <c0> . "
+      "{ ?c <P31>/<P279>+ ?series . } UNION { ?c <P279>+ ?series . } }");
+  auto tree = qp.createExecutionTree(pq);
+
+  // Find every `TransitivePath` in the chosen plan.
+  std::vector<const TransitivePathBase*> paths;
+  auto collect = [&paths](const QueryExecutionTree& subtree,
+                          const auto& self) -> void {
+    const auto& operation = *subtree.getRootOperation();
+    if (const auto* path =
+            dynamic_cast<const TransitivePathBase*>(&operation)) {
+      paths.push_back(path);
+    }
+    for (const auto* child : operation.getChildren()) {
+      self(*child, self);
+    }
+  };
+  collect(tree, collect);
+
+  // Both branches of the `UNION` have to bind the `?series` side of their
+  // path, which is the right one. Before the children were planned together
+  // with the join, the first branch bound the left side with the `<P31>` scan
+  // and could then only join the `?series` constraint on top of the full hull.
+  ASSERT_EQ(paths.size(), 2);
+  for (const TransitivePathBase* path : paths) {
+    EXPECT_TRUE(path->getRight().isBoundVariable());
+    EXPECT_FALSE(path->getLeft().isBoundVariable());
+  }
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
   auto* qec = ad_utility::testing::getQec(
       "<a> <P279> <b> . <c> <P279> <d> . <e> <P279> <f> . <g> <P279> <h> ."
