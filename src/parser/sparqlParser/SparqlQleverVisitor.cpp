@@ -656,6 +656,13 @@ GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
   }
 
   auto expression = visitExpressionPimpl(ctx->expression());
+  // The SPARQL standard only allows aggregate functions in the SELECT, HAVING,
+  // and ORDER BY clauses (see section 11.1 of the SPARQL 1.1 standard).
+  if (expression.containsAggregate()) {
+    reportError(ctx,
+                "Aggregate functions are not allowed in a BIND clause, they "
+                "may only be used in SELECT, HAVING, and ORDER BY clauses.");
+  }
   warnOrThrowIfUnboundVariables(ctx, expression, "BIND");
   addVisibleVariable(target);
   return GraphPatternOperation{Bind{std::move(expression), std::move(target)}};

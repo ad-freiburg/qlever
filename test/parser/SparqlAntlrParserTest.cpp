@@ -453,6 +453,26 @@ TEST(SparqlParser, Bind) {
   expectBind("bInD (?age - 10 As ?s)", m::Bind(Var{"?s"}, "?age - 10"));
 }
 
+// Aggregate functions may only be used in SELECT, HAVING, and ORDER BY clauses
+// (see section 11.1 of the SPARQL 1.1 standard), in particular not in a BIND.
+TEST(SparqlParser, BindWithAggregateIsRejected) {
+  auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::True;
+  auto expectBindFails = ExpectParseFails<&Parser::bind>{{}, noChecks};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a BIND clause");
+  expectBindFails("BIND(SAMPLE(?human) AS ?a)", messageMatcher);
+  expectBindFails("BIND(COUNT(?x) AS ?a)", messageMatcher);
+  // The aggregate is nested inside another expression.
+  expectBindFails("BIND(1 + SUM(?x) AS ?a)", messageMatcher);
+  // An aggregate inside the body of an `EXISTS` has its own scope and is
+  // therefore fine.
+  auto expectBind = ExpectCompleteParse<&Parser::bind>{{}, noChecks};
+  expectBind(
+      "BIND(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } } AS ?a)",
+      m::Bind(Var{"?a"},
+              "EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } }"));
+}
+
 TEST(SparqlParser, Integer) {
   auto expectInteger = ExpectCompleteParse<&Parser::integer>{};
   auto expectIntegerFails = ExpectParseFails<&Parser::integer>();
