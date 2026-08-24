@@ -493,9 +493,9 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   // Forward an `exception` that was thrown while dispatching to the consumer,
   // which also stops the chunks that are already running.
   //
-  // NOTE: The forwarding allocates a coroutine frame of its own, so the only
-  // way it can fail is that memory is exhausted, in which case the consumer
-  // sees the end of the range instead of the exception.
+  // NOTE: The forwarding allocates a handler of its own, so the only way it can
+  // fail is that memory is exhausted, in which case the consumer sees the end
+  // of the range instead of the exception.
   void forwardExceptionToConsumer(std::exception_ptr exception) noexcept {
     ad_utility::ignoreExceptionIfThrows(
         [this, &exception] {
@@ -543,9 +543,10 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
       try {
         co_await sink_.asyncPushException(std::move(chunkException));
       } catch (...) {
-        // `asyncPushException` allocates a coroutine frame, so the only way it
-        // can fail is that memory is exhausted. Ignore that, because the
-        // `asyncFinishChunk` below has to run in any case.
+        // `asyncPushException` allocates the handler that it posts onto the
+        // strand of the sink, so the only way it can fail is that memory is
+        // exhausted. Ignore that, because the `asyncFinishChunk` below has to
+        // run in any case.
       }
     }
     // NOTE: The end-of-chunk sentinel has to be sent on every path, because the

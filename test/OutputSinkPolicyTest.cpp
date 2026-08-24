@@ -25,6 +25,7 @@
 // this file require coroutines and are therefore not available in the C++17
 // backports mode.
 #ifndef QLEVER_CPP_17
+#include <boost/asio/as_tuple.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
