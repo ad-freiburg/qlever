@@ -9,32 +9,21 @@
 
 #include <memory>
 
-#include "engine/SpatialJoinConfig.h"
 #include "parser/data/SparqlFilter.h"
+#include "rdfTypes/Variable.h"
 
 class QueryExecutionContext;
-class QueryExecutionTree;
+class SpatialJoin;
 
 // This module contains utilities for query rewriting, e.g. optimizing cartesian
 // product and filter by replacing it with an appropriate special join.
 
-// Result of `rewriteFilterToSpatialJoinConfig`. `childLeft_`/`childRight_` are
-// set for a side of `config_` that was a fixed value (not a variable) in the
-// original filter: an already-built one-row `VALUES` tree that binds the
-// fresh internal variable `config_.left_`/`right_` to that value. A
-// `std::nullopt` child means that side is an ordinary variable, which the
-// query planner still has to connect via the join graph, exactly as before.
-struct SpatialJoinRewriteResult {
-  SpatialJoinConfiguration config_;
-  std::optional<std::shared_ptr<QueryExecutionTree>> childLeft_;
-  std::optional<std::shared_ptr<QueryExecutionTree>> childRight_;
-};
-
-// Generate a spatial join configuration for a given filter, if this filter is
-// suitable for such an optimization. `generateUniqueVarName` is used to
-// obtain a fresh internal variable for each side of the filter that is a
-// fixed value rather than a variable.
-std::optional<SpatialJoinRewriteResult> rewriteFilterToSpatialJoinConfig(
+// Try to rewrite `filter` into an equivalent `SpatialJoin` operation, if
+// `filter` is a suitable GeoSPARQL filter with a variable on at least one side.
+// Returns `nullptr` if `filter` is not such a filter. A side of the filter that
+// was a fixed value is bound to a single-row `VALUES` child using an internal
+// variable from `generateUniqueVarName`.
+std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoinConfig(
     const SparqlFilter& filter, QueryExecutionContext* qec,
     absl::FunctionRef<Variable()> generateUniqueVarName);
 

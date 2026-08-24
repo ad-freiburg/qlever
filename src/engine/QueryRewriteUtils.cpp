@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "engine/QueryExecutionTree.h"
+#include "engine/SpatialJoin.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
@@ -72,7 +73,7 @@ getSpatialJoinConfigForFilter(
 }
 
 // _____________________________________________________________________________
-std::optional<SpatialJoinRewriteResult> rewriteFilterToSpatialJoinConfig(
+std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoinConfig(
     const SparqlFilter& filter, QueryExecutionContext* qec,
     absl::FunctionRef<Variable()> generateUniqueVarName) {
   const auto& filterBody = *filter.expression_.getPimpl();
@@ -80,7 +81,7 @@ std::optional<SpatialJoinRewriteResult> rewriteFilterToSpatialJoinConfig(
   // Currently, we can only optimize GeoSPARQL filters.
   auto configAndCall = getSpatialJoinConfigForFilter(filterBody);
   if (!configAndCall.has_value()) {
-    return std::nullopt;
+    return nullptr;
   }
   auto& [config, call] = configAndCall.value();
 
@@ -88,13 +89,13 @@ std::optional<SpatialJoinRewriteResult> rewriteFilterToSpatialJoinConfig(
   bool leftIsVar = call.left_.isVariable();
   bool rightIsVar = call.right_.isVariable();
   if (!leftIsVar && !rightIsVar) {
-    return std::nullopt;
+    return nullptr;
   }
 
   if (leftIsVar && rightIsVar &&
       call.left_.getVariable() == call.right_.getVariable()) {
     // TODO<ullingerc> As soon as we have a baseline implementation of
-    // `WktGeometricRelation`, replace this `throw` by `return std::nullopt;`.
+    // `WktGeometricRelation`, replace this `throw` by `return nullptr;`.
     throw std::runtime_error(
         absl::StrCat("Unsupported GeoSPARQL filter: Variable ",
                      call.left_.getVariable().name(),
@@ -104,10 +105,11 @@ std::optional<SpatialJoinRewriteResult> rewriteFilterToSpatialJoinConfig(
   auto joinType = call.function_;
   auto left = resolveGeoOperand(call.left_, qec, generateUniqueVarName);
   auto right = resolveGeoOperand(call.right_, qec, generateUniqueVarName);
-  return SpatialJoinRewriteResult{
+  return std::make_shared<SpatialJoin>(
+      qec,
       SpatialJoinConfiguration{
           std::move(config), std::move(left.variable_),
           std::move(right.variable_), std::nullopt, PayloadVariables::all(),
           SpatialJoinAlgorithm::LIBSPATIALJOIN, joinType, std::nullopt},
-      std::move(left.child_), std::move(right.child_)};
+      std::move(left.child_), std::move(right.child_), true);
 }

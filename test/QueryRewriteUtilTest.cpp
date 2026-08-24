@@ -8,6 +8,7 @@
 #include "./util/IndexTestHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
+#include "engine/SpatialJoin.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
@@ -20,7 +21,7 @@ using namespace queryRewriteUtilTestHelpers;
 // Helper wrapping `rewriteFilterToSpatialJoinConfig` with a test
 // `QueryExecutionContext` and a trivial internal-variable generator, so that
 // individual test cases can call it with just a `SparqlFilter`.
-std::optional<SpatialJoinRewriteResult> rewrite(const SparqlFilter& filter) {
+std::shared_ptr<SpatialJoin> rewrite(const SparqlFilter& filter) {
   static size_t count = 0;
   auto* qec = ad_utility::testing::getQec();
   std::function<Variable()> generateUniqueVarName = [] {
@@ -164,26 +165,26 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
                             "metricDistance>(?a, ?b) <= 10.0"}};
 
   // Convert to `SpatialJoinConfiguration`
-  auto sjResult = rewrite(filter);
-  ASSERT_TRUE(sjResult.has_value());
-  const auto& sjConf = sjResult.value().config_;
+  auto sj = rewrite(filter);
+  ASSERT_NE(sj, nullptr);
+  const auto& sjConf = sj->onlyForTestingGetConfig();
   EXPECT_EQ(sjConf.left_, V{"?a"});
   EXPECT_EQ(sjConf.right_, V{"?b"});
   EXPECT_EQ(sjConf.joinType_, WITHIN_DIST);
   std::visit([](const auto& task) { EXPECT_EQ(task.maxDist_, 10.0); },
              sjConf.task_);
   // Both sides are variables, so no child is prebuilt.
-  EXPECT_FALSE(sjResult.value().childLeft_.has_value());
-  EXPECT_FALSE(sjResult.value().childRight_.has_value());
+  EXPECT_EQ(sj->onlyForTestingGetLeftChild(), nullptr);
+  EXPECT_EQ(sj->onlyForTestingGetRightChild(), nullptr);
 
-  // Unrelated `FILTER(math:pow(?a, ?b) <= 10.0)` results in `std::nullopt`
+  // Unrelated `FILTER(math:pow(?a, ?b) <= 10.0)` results in `nullptr`
   auto [unrelExpr, unrelCall] = makeUnrelated();
   auto unrelExprSharedPtr =
       makeLessEqualSharedPtr(std::move(unrelExpr), D(10.0));
   SparqlFilter unrelFilter{SparqlExpressionPimpl{
       std::move(unrelExprSharedPtr),
       "<http://www.w3.org/2005/xpath-functions/math#pow>(?a, ?b) <= 10.0"}};
-  EXPECT_FALSE(rewrite(unrelFilter).has_value());
+  EXPECT_EQ(rewrite(unrelFilter), nullptr);
 
   // Construct `FILTER(geof:relate(?a, ?b, "T*T***T**"))`
   auto [de9imExpr, de9imCall] = makeDe9imRelation();
@@ -193,9 +194,9 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
                             "<http://www.opengis.net/def/function/geosparql/"
                             "relate>(?a, ?b, \"T*T***T**\")"}};
 
-  auto de9imSjResult = rewrite(de9imFilter);
-  ASSERT_TRUE(de9imSjResult.has_value());
-  const auto& de9imSjConf = de9imSjResult.value().config_;
+  auto de9imSj = rewrite(de9imFilter);
+  ASSERT_NE(de9imSj, nullptr);
+  const auto& de9imSjConf = de9imSj->onlyForTestingGetConfig();
   EXPECT_EQ(de9imSjConf.left_, V{"?a"});
   EXPECT_EQ(de9imSjConf.right_, V{"?b"});
   EXPECT_EQ(de9imSjConf.joinType_, DE9IM);
@@ -218,18 +219,18 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfigWithFixedValue) {
                             "<http://www.opengis.net/def/function/geosparql/"
                             "metricDistance>(?a, <fixed point>) <= 10.0"}};
 
-  auto sjResult = rewrite(filter);
-  ASSERT_TRUE(sjResult.has_value());
-  const auto& sjConf = sjResult.value().config_;
+  auto sj = rewrite(filter);
+  ASSERT_NE(sj, nullptr);
+  const auto& sjConf = sj->onlyForTestingGetConfig();
   EXPECT_EQ(sjConf.left_, V{"?a"});
   EXPECT_NE(sjConf.right_, V{"?a"});
-  EXPECT_FALSE(sjResult.value().childLeft_.has_value());
-  ASSERT_TRUE(sjResult.value().childRight_.has_value());
+  EXPECT_EQ(sj->onlyForTestingGetLeftChild(), nullptr);
+  ASSERT_NE(sj->onlyForTestingGetRightChild(), nullptr);
 
   // The prebuilt child is a one-row `VALUES` clause binding `sjConf.right_`
   // to the fixed point.
   const auto* values = dynamic_cast<const Values*>(
-      sjResult.value().childRight_.value()->getRootOperation().get());
+      sj->onlyForTestingGetRightChild()->getRootOperation().get());
   ASSERT_NE(values, nullptr);
   EXPECT_EQ(values->getResultWidth(), 1u);
 
@@ -242,7 +243,7 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfigWithFixedValue) {
       std::move(bothFixedSharedPtr),
       "<http://www.opengis.net/def/function/geosparql/"
       "metricDistance>(<fixed point>, <fixed point>) <= 10.0"}};
-  EXPECT_FALSE(rewrite(bothFixedFilter).has_value());
+  EXPECT_EQ(rewrite(bothFixedFilter), nullptr);
 }
 
 // _____________________________________________________________________________
