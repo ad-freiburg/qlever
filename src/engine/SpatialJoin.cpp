@@ -523,7 +523,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   // taken into account. Also note that here `childLeft_` not `childLeft` is
   // used, because `leftSelectedCols` and `rightSelectedCols` are applied after
   // swapping tables back in case of a `WITHIN` join.
-  std::vector<ColumnIndex> leftSelectedCols;
+  std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>> leftSelectedCols{
+      allocator().as<ColumnIndex>()};
   for (auto [var, colInfo] :
        copySortedByColumnIndex(childLeft_->getVariableColumns())) {
     leftSelectedCols.push_back(colInfo.columnIndex_);
@@ -531,7 +532,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
-  std::vector<ColumnIndex> rightSelectedCols;
+  std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>> rightSelectedCols{
+      allocator().as<ColumnIndex>()};
   for (const auto& [var, colInfo] : varsAndColInfo) {
     rightSelectedCols.push_back(colInfo.columnIndex_);
   }

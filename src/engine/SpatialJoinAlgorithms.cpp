@@ -39,6 +39,7 @@
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 #include "util/GeoConverters.h"
+#include "util/HashMap.h"
 
 using namespace BoostGeometryNamespace;
 using namespace geometryConverters;
@@ -321,7 +322,8 @@ void SpatialJoinAlgorithms::addResultTableEntry(
   // columns given in `sourceColumns`.
   auto addColumns = [&resrow, &rescol, &result](
                         const IdTableView<0>* copyFrom, size_t rowIndCopy,
-                        const std::vector<ColumnIndex>& sourceColumns) {
+                        const std::vector<ColumnIndex, qlever::Allocator<
+                            ColumnIndex>>& sourceColumns) {
     for (size_t col : sourceColumns) {
       result->at(resrow, rescol) = copyFrom->at(rowIndCopy, col);
       ++rescol;
@@ -751,7 +753,8 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     }
     auto s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
 
-    ad_utility::HashMap<size_t, double> deduplicatedSet{};
+    ad_utility::HashMapWithMemoryLimit<size_t, double> deduplicatedSet{
+        qec_->getAllocator()};
     timerS2.cont();
     auto res = s2query.FindClosestEdges(&s2target);
 
@@ -783,7 +786,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
 }
 
 // ____________________________________________________________________________
-std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
+std::vector<Box, qlever::Allocator<Box>> SpatialJoinAlgorithms::computeQueryBox(
     const Point& startPoint, double additionalDist) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
@@ -823,7 +826,8 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
   auto northPoleReached = isAPoleTouched(upperLatBound).at(0);
 
   if (southPoleReached || northPoleReached) {
-    return {Box(Point(-180.0f, lowerLatBound), Point(180.0f, upperLatBound))};
+    return {{Box(Point(-180.0f, lowerLatBound), Point(180.0f, upperLatBound))},
+            qec_->getAllocator()};
   }
 
   // compute longitude bound. For an explanation of the calculation and the
@@ -850,21 +854,23 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
         Box(Point(-180, lowerLatBound), Point(rightLonBound, upperLatBound));
     auto box2 = Box(Point(leftLonBound + 360, lowerLatBound),
                     Point(180, upperLatBound));
-    return {box1, box2};
+    return {{box1, box2}, qec_->getAllocator()};
   } else if (rightLonBound > 180) {
     auto box1 =
         Box(Point(leftLonBound, lowerLatBound), Point(180, upperLatBound));
     auto box2 = Box(Point(-180, lowerLatBound),
                     Point(rightLonBound - 360, upperLatBound));
-    return {box1, box2};
+    return {{box1, box2}, qec_->getAllocator()};
   }
   // default case, when no bound has an "overflow"
-  return {Box(Point(leftLonBound, lowerLatBound),
-              Point(rightLonBound, upperLatBound))};
+  return {{Box(Point(leftLonBound, lowerLatBound),
+               Point(rightLonBound, upperLatBound))},
+          qec_->getAllocator()};
 }
 
 // ____________________________________________________________________________
-std::vector<Box> SpatialJoinAlgorithms::computeQueryBoxForLargeDistances(
+std::vector<Box, qlever::Allocator<Box>>
+SpatialJoinAlgorithms::computeQueryBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
@@ -912,7 +918,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBoxForLargeDistances(
     boxCrosses180Longitude = true;
   }
   // compute bounding boxes using the anti bounding box from above
-  std::vector<Box> boxes;
+  std::vector<Box, qlever::Allocator<Box>> boxes{qec_->getAllocator()};
   if (!northPoleTouched) {
     // add upper bounding box(es)
     if (boxCrosses180Longitude) {
@@ -945,7 +951,8 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBoxForLargeDistances(
 
 // ____________________________________________________________________________
 bool SpatialJoinAlgorithms::isContainedInBoundingBoxes(
-    const std::vector<Box>& boundingBox, Point point) const {
+    const std::vector<Box, qlever::Allocator<Box>>& boundingBox,
+    Point point) const {
   convertToNormalCoordinates(point);
 
   return ql::ranges::any_of(boundingBox, [point](const Box& aBox) {
@@ -1032,7 +1039,7 @@ std::optional<RtreeEntry> SpatialJoinAlgorithms::getRtreeEntry(
 }
 
 // ____________________________________________________________________________
-std::vector<Box> SpatialJoinAlgorithms::getQueryBox(
+std::vector<Box, qlever::Allocator<Box>> SpatialJoinAlgorithms::getQueryBox(
     const std::optional<RtreeEntry>& entry) const {
   if (!entry.value().geoPoint_) {
     auto midpoint = calculateMidpointOfBox(entry.value().boundingBox_.value());
@@ -1117,7 +1124,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       // skipped
       continue;
     }
-    std::vector<Box> queryBox = getQueryBox(entry);
+    std::vector<Box, qlever::Allocator<Box>> queryBox = getQueryBox(entry);
 
     results.clear();
 

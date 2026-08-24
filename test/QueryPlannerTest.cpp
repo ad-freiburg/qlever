@@ -20,6 +20,7 @@
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
+#include "util/AllocatorTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
 namespace {
@@ -183,7 +184,8 @@ TEST(QueryPlanner, testBFSLeaveOut) {
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     ASSERT_EQ(3u, tg._adjLists.size());
-    ad_utility::HashSet<size_t> lo;
+    ad_utility::HashSetWithMemoryLimit<size_t> lo{
+        ad_utility::testing::makeAllocator()};
     auto out = tg.bfsLeaveOut(0, lo);
     ASSERT_EQ(3u, out.size());
     lo.insert(1);
@@ -202,7 +204,8 @@ TEST(QueryPlanner, testBFSLeaveOut) {
         parseQuery("SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}");
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-    ad_utility::HashSet<size_t> lo;
+    ad_utility::HashSetWithMemoryLimit<size_t> lo{
+        ad_utility::testing::makeAllocator()};
     auto out = tg.bfsLeaveOut(0, lo);
     ASSERT_EQ(3u, out.size());
     lo.insert(1);

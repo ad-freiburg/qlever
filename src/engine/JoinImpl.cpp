@@ -31,6 +31,7 @@
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
+#include "util/Allocator.h"
 #include "util/HashMap.h"
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -47,7 +48,9 @@ JoinImpl::JoinImpl(QueryExecutionContext* qec,
                    ColumnIndex t1JoinCol, ColumnIndex t2JoinCol,
                    bool keepJoinColumn,
                    bool allowSwappingChildrenOnlyForTesting)
-    : Operation(qec), keepJoinColumn_{keepJoinColumn} {
+    : Operation(qec),
+      multiplicities_{allocator()},
+      keepJoinColumn_{keepJoinColumn} {
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
@@ -453,7 +456,10 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
     // This declaration works, because generic lambdas are just syntactic sugar
     // for templates.
     using Table = std::decay_t<decltype(table)>;
-    ad_utility::HashMap<Id, std::vector<typename Table::row_type>> map;
+    using RowType = typename Table::row_type;
+    ad_utility::HashMapWithMemoryLimit<Id, std::vector<RowType>> map{
+        qlever::makeUnlimitedAllocator<std::pair<const Id, std::vector<RowType>>>()
+    };
     for (const auto& row : table) {
       map[row[jc]].push_back(row);
     }

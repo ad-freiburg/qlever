@@ -529,8 +529,10 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
                                    nullptr,
                                    0,
                                    0,
-                                   std::vector<ColumnIndex>{},
-                                   std::vector<ColumnIndex>{},
+                                   std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>>{
+                                       qec.value()->getAllocator()},
+                                   std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>>{
+                                       qec.value()->getAllocator()},
                                    1,
                                    spatialJoin->getMaxDist(),
                                    std::nullopt,

@@ -25,6 +25,7 @@
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
+#include "util/Allocator.h"
 #include "util/VectorWithMemoryLimit.h"
 
 namespace BoostGeometryNamespace {
@@ -127,13 +128,14 @@ class SpatialJoinAlgorithms {
   // midpoint of the bounding box of the area to any point inside the area.
   // The function getMaxDistFromMidpointToAnyPointInsideTheBox() can be used to
   // calculate it.
-  std::vector<Box> computeQueryBox(const Point& startPoint,
-                                   double additionalDist = 0) const;
+  std::vector<Box, qlever::Allocator<Box>> computeQueryBox(
+      const Point& startPoint, double additionalDist = 0) const;
 
   // This function returns true, iff the given point is contained in any of the
   // bounding boxes
-  bool isContainedInBoundingBoxes(const std::vector<Box>& boundingBox,
-                                  Point point) const;
+  bool isContainedInBoundingBoxes(
+      const std::vector<Box, qlever::Allocator<Box>>& boundingBox,
+      Point point) const;
 
   // calculates the midpoint of the given Box
   Point calculateMidpointOfBox(const Box& box) const;
@@ -256,7 +258,7 @@ class SpatialJoinAlgorithms {
   // gets used, when the usual procedure, would just result in taking a big
   // bounding box, which covers the whole planet (so for extremely large max
   // distances)
-  std::vector<Box> computeQueryBoxForLargeDistances(
+  std::vector<Box, qlever::Allocator<Box>> computeQueryBoxForLargeDistances(
       const Point& startPoint) const;
 
   // this helper function approximates a conversion of the distance between two
@@ -285,7 +287,8 @@ class SpatialJoinAlgorithms {
   // query. It returns a `std::vector` because if the box crosses the poles or
   // the -180/180 longitude line, we have to cut them into multiple boxes.
   // If there is more than one box, the boxes are disjoint.
-  std::vector<Box> getQueryBox(const std::optional<RtreeEntry>& entry) const;
+  std::vector<Box, qlever::Allocator<Box>> getQueryBox(
+      const std::optional<RtreeEntry>& entry) const;
 
   // Calls the `cancellationWrapper` which throws if the query has been
   // cancelled.
