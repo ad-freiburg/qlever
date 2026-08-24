@@ -11,6 +11,7 @@
 #define QLEVER_SRC_LIBQLEVER_NAMEDCACHEDQUERYBLOBMANAGER_H
 
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "backports/memory_resource.h"
@@ -22,6 +23,23 @@
 namespace qlever {
 
 class Qlever;
+
+// Options that control how a blob is written by
+// `NamedCachedQueryBlobManager::serialize`.
+struct BlobSerializationConfig {
+  // Regexes for vocabulary entries that are not needed in the blob. Every
+  // vocabulary entry that matches any of these regexes (via `RE2::FullMatch`,
+  // so the regex has to describe the complete entry) is omitted. Note that the
+  // regexes are matched against literals as well as IRIs; to exclude only
+  // IRIs, let the regex start with `<` and end with `>`. The remaining entries
+  // keep their original
+  // vocabulary indices, so that the `Id`s in the serialized `NamedResultCache`
+  // stay valid; the exported vocabulary therefore has holes (see
+  // `VocabularyInMemoryBinSearch`) and an `Id` that refers to an excluded entry
+  // resolves to `placeholderForMissingVocabIndex`. If this is empty, the
+  // complete vocabulary is exported in its original format.
+  std::vector<std::string> excludedEntryRegexes_;
+};
 
 // Serialize and deserialize the vocabulary and the `NamedResultCache` of a
 // `Qlever` instance to and from a single, self-contained, ZSTD-compressed blob
@@ -57,7 +75,16 @@ class NamedCachedQueryBlobManager {
   // different process, without needing access to the on-disk index). Throw if
   // the vocabulary implementation currently in use does not support zero-copy
   // serialization (see `Vocabulary::writeAsZeroCopyBlob`).
-  std::vector<char> serialize(const Qlever& qlever) const;
+  //
+  // If `config.excludedEntryRegexes_` is not empty, only those vocabulary
+  // entries that match none of the regexes are exported (see
+  // `BlobSerializationConfig` and `buildFilteredVocabulary`). The type of the
+  // exported vocabulary then is one of the `...WithHoles` types, which is
+  // recorded in the blob's metadata JSON (key `"vocabulary-type"`), so that
+  // `deserialize` picks up the correct vocabulary implementation without any
+  // change to the blob format.
+  std::vector<char> serialize(const Qlever& qlever,
+                              const BlobSerializationConfig& config = {}) const;
 
   // Load a blob previously written by `serialize`: decompress it, store it in
   // the buffer, and then replace `qlever`'s vocabulary and `NamedResultCache`

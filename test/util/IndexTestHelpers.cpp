@@ -230,8 +230,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
                                         std::nullopt};
     // randomly choose one of the vocabulary implementations
     index.getImpl().setVocabularyTypeForIndexBuilding(
-        c.vocabularyType.has_value() ? c.vocabularyType.value()
-                                     : VocabularyType::random());
+        c.vocabularyType.has_value()
+            ? c.vocabularyType.value()
+            : VocabularyType::randomForIndexBuilding());
     if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
       index.getImpl().setPrefixesForEncodedValues(
           std::move(c.encodedPrefixesWithoutAngleBrackets.value()));

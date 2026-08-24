@@ -243,6 +243,14 @@ class Vocabulary {
     return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
   }
 
+  // Return a reference to the vocabulary that actually holds the words, i.e.
+  // the vocabulary below the wrapping `UnicodeVocabulary`. The latter is
+  // bypassed because its only additional state is a comparator (see
+  // `applyToUnderlyingZeroCopyVocab` below).
+  const UnderlyingVocabulary& getUnderlyingVocabulary() const {
+    return vocabulary_.getUnderlyingVocabulary();
+  }
+
   // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the
   // vocabulary and set the type of the vocabulary according to the `type`
   // argument (see the `PolymorphicVocabulary` class for details).

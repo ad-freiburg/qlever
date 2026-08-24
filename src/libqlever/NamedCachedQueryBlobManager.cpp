@@ -14,6 +14,7 @@
 #include <string_view>
 
 #include "index/IndexImpl.h"
+#include "index/vocabulary/BuildFilteredVocabulary.h"
 #include "libqlever/Qlever.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 
@@ -59,6 +60,49 @@ decltype(auto) rethrowWithContext(std::string_view message,
     return function();
   } catch (const std::exception& e) {
     AD_THROW(absl::StrCat(message, ". Details: ", e.what()));
+  }
+}
+
+// Write the index metadata JSON and the `vocabulary` of `indexImpl` (which has
+// to be passed separately, see the NOTE below) to `serializer`, omitting all
+// vocabulary entries that match one of the `excludedEntryRegexes` (which must
+// not be empty). The metadata JSON is written with its `"vocabulary-type"` set
+// to the type of the filtered vocabulary, so that the reading side (which
+// applies the metadata JSON before loading the vocabulary) sets up the matching
+// vocabulary implementation.
+//
+// NOTE: This is a template (with the type of the vocabulary as its parameter),
+// so that the `if constexpr` below actually discards the branch that does not
+// apply. In a non-template function both branches would have to compile, which
+// the call to `buildFilteredVocabulary` does not for a vocabulary that is not a
+// `PolymorphicVocabulary`.
+template <typename VocabularyImpl>
+void writeMetadataAndFilteredVocabulary(
+    ad_utility::serialization::AlignedByteBufferWriteSerializer& serializer,
+    const IndexImpl& indexImpl, const VocabularyImpl& vocabulary,
+    const std::vector<std::string>& excludedEntryRegexes) {
+  // The filtering is implemented for the `PolymorphicVocabulary`, which is the
+  // vocabulary implementation that QLever is built with by default (see
+  // `detail::UnderlyingVocabRdfsVocabulary`).
+  if constexpr (std::is_same_v<VocabularyImpl, PolymorphicVocabulary>) {
+    auto filtered =
+        buildFilteredVocabulary(vocabulary, excludedEntryRegexes,
+                                absl::StrCat(indexImpl.getOnDiskBase(),
+                                             ".tmp-filtered-blob-vocabulary"));
+    nlohmann::json metadata = indexImpl.configurationJson();
+    metadata["vocabulary-type"] = filtered.type_;
+    serializer << metadata.dump();
+    // NOTE: This writes exactly the same format that
+    // `Vocabulary::writeAsZeroCopyBlob` writes (and that
+    // `Vocabulary::loadFromZeroCopyDeserializer` reads back), because both
+    // bypass the wrapping `UnicodeVocabulary` and use the generic
+    // serialization of the active alternative of the `PolymorphicVocabulary`.
+    serializer << filtered.vocabulary_;
+  } else {
+    AD_THROW(
+        "Excluding vocabulary entries from a blob is only supported for the "
+        "polymorphic vocabulary, but QLever was compiled with "
+        "`QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY`");
   }
 }
 }  // namespace
@@ -137,7 +181,7 @@ NamedCachedQueryBlobManager::decompressBlob(
 
 // _____________________________________________________________________________
 std::vector<char> NamedCachedQueryBlobManager::serialize(
-    const Qlever& qlever) const {
+    const Qlever& qlever, const BlobSerializationConfig& config) const {
   // First serialize everything into an uncompressed, suitably aligned buffer.
   // The alignment (guaranteed by the `AlignedByteBufferWriteSerializer`) is
   // required so that the buffer can later be deserialized zero-copy (see
@@ -150,8 +194,14 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // Serialize the index metadata JSON, so that the blob is self-contained and
   // the loading side can set up the vocabulary configuration without access to
   // the on-disk index.
-  serializer << indexImpl.configurationJson().dump();
-  indexImpl.writeVocabularyToZeroCopyBlob(serializer);
+  if (config.excludedEntryRegexes_.empty()) {
+    serializer << indexImpl.configurationJson().dump();
+    indexImpl.writeVocabularyToZeroCopyBlob(serializer);
+  } else {
+    writeMetadataAndFilteredVocabulary(serializer, indexImpl,
+                                       indexImpl.getUnderlyingVocabulary(),
+                                       config.excludedEntryRegexes_);
+  }
   qlever.namedResultCache_.writeToSerializer(serializer);
   auto uncompressed = std::move(serializer).data();
 
