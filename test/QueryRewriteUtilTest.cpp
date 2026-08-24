@@ -171,8 +171,7 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
   EXPECT_EQ(sjConf.left_, V{"?a"});
   EXPECT_EQ(sjConf.right_, V{"?b"});
   EXPECT_EQ(sjConf.joinType_, WITHIN_DIST);
-  std::visit([](const auto& task) { EXPECT_EQ(task.maxDist_, 10.0); },
-             sjConf.task_);
+  EXPECT_EQ(sj->getMaxDist(), 10.0);
   // Both sides are variables, so no child is prebuilt.
   EXPECT_EQ(sj->onlyForTestingGetLeftChild(), nullptr);
   EXPECT_EQ(sj->onlyForTestingGetRightChild(), nullptr);
