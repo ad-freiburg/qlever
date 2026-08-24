@@ -24,10 +24,9 @@ struct ResolvedGeoOperand {
 };
 
 // _____________________________________________________________________________
-template <typename VarGenerator>
 ResolvedGeoOperand resolveGeoOperand(
     const TripleComponent& operand, QueryExecutionContext* qec,
-    const VarGenerator& generateUniqueVarName) {
+    absl::FunctionRef<Variable()> generateUniqueVarName) {
   if (operand.isVariable()) {
     return {operand.getVariable()};
   }
