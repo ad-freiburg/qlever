@@ -643,6 +643,22 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     return false;
   };
 
+  // Check if `paramName` is set as a parameter. If so, verify the access
+  // token (using `actionName` if given, `paramName` otherwise), log the new
+  // value, and return it. Return `std::nullopt` otherwise.
+  auto checkSetting = [&checkParameter, &requireValidAccessToken](
+                          std::string_view paramName,
+                          std::optional<std::string_view> actionName =
+                              std::nullopt) {
+    auto value = checkParameter(paramName, std::nullopt);
+    if (value.has_value()) {
+      requireValidAccessToken(actionName.value_or(paramName));
+      AD_LOG_INFO << "Setting \"" << paramName << "\" to: \"" << value.value()
+                  << "\"" << std::endl;
+    }
+    return value;
+  };
+
   // We call `createJsonResponse` always with the same `request` parameter.
   auto jsonResponse = [&request](const json& j) {
     return createJsonResponse(j, request);
@@ -740,29 +756,20 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   }
 
   // Set description of KB index.
-  if (auto description = checkParameter("index-description", std::nullopt)) {
-    requireValidAccessToken("index-description");
-    AD_LOG_INFO << "Setting index description to: \"" << description.value()
-                << "\"" << std::endl;
+  if (auto description = checkSetting("index-description")) {
     index.setKbName(std::string{description.value()});
     response = jsonResponse(composeIndexStats(index));
   }
 
   // Set description of text index.
-  if (auto description = checkParameter("text-description", std::nullopt)) {
-    requireValidAccessToken("text-description");
-    AD_LOG_INFO << "Setting text description to: \"" << description.value()
-                << "\"" << std::endl;
+  if (auto description = checkSetting("text-description")) {
     index.setTextName(std::string{description.value()});
     response = jsonResponse(composeIndexStats(index));
   }
 
   // Set one or several of the runtime parameters.
   for (auto key : globalRuntimeParameters.rlock()->getKeys()) {
-    if (auto value = checkParameter(key, std::nullopt)) {
-      requireValidAccessToken("setting runtime parameters");
-      AD_LOG_INFO << "Setting runtime parameter \"" << key << "\""
-                  << " to value \"" << value.value() << "\"" << std::endl;
+    if (auto value = checkSetting(key, "setting runtime parameters")) {
       globalRuntimeParameters.wlock()->setFromString(
           key, std::string{value.value()});
       response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
