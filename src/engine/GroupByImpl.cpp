@@ -17,6 +17,7 @@
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
+#include "engine/GroupBy.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -347,6 +348,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
 
+// _____________________________________________________________________________
 std::string GroupByImpl::getCacheKeyImpl() const {
   const auto& varMap = getInternallyVisibleVariableColumns();
   auto varMapInput = _subtree->getVariableColumns();
@@ -379,6 +381,7 @@ std::string GroupByImpl::getCacheKeyImpl() const {
   return std::move(os).str();
 }
 
+// _____________________________________________________________________________
 std::string GroupByImpl::getDescriptor() const {
   if (_groupByVariables.empty()) {
     return "GroupBy (implicit)";
@@ -387,10 +390,12 @@ std::string GroupByImpl::getDescriptor() const {
          absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter);
 }
 
+// _____________________________________________________________________________
 size_t GroupByImpl::getResultWidth() const {
   return getInternallyVisibleVariableColumns().size();
 }
 
+// _____________________________________________________________________________
 std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
   vector<ColumnIndex> sortedOn;
@@ -401,6 +406,7 @@ std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   return sortedOn;
 }
 
+// _____________________________________________________________________________
 std::vector<ColumnIndex> GroupByImpl::computeSortColumns(
     const QueryExecutionTree* subtree) {
   vector<ColumnIndex> cols;
@@ -451,6 +457,7 @@ VariableToColumnMap GroupByImpl::computeVariableToColumnMap() const {
   return result;
 }
 
+// _____________________________________________________________________________
 float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
   // Group by should currently not be used in the optimizer, unless
   // it is part of a subquery. In that case multiplicities may only be
@@ -458,6 +465,47 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
   return 1;
 }
 
+// _____________________________________________________________________________ 
+std::optional<std::shared_ptr<QueryExecutionTree>>
+GroupByImpl::makeTreeWithStrippedColumns(
+    const std::set<Variable>& variables) const {
+
+  // Add variables and _groupByVariables to allNeededVars
+  // Keep in mind, that the variables dont have any consequences here, as the 
+  // columns have been already stripped in the constructor.
+  std::set<Variable> newVariables;
+  const std::set<Variable>* allNeededVars = &variables;
+  for (const Variable& groupByVar : _groupByVariables) {
+    if (!ad_utility::contains(variables, groupByVar)) {
+      if (allNeededVars == &variables) {
+        newVariables = variables;
+        allNeededVars = &newVariables;
+      }
+      newVariables.insert(groupByVar);
+    }
+  }
+
+  // Add aliases to allNeededVars
+  for (const auto& alias : _aliases) {
+    for (const Variable* aliasVar : alias._expression.containedVariables()) {
+      if(!ad_utility::contains(*allNeededVars, *aliasVar)){
+        if (allNeededVars == &variables) {
+          newVariables = variables;
+          allNeededVars = &newVariables;
+        }
+        newVariables.insert(*aliasVar);
+      }   
+    }
+  }
+
+  std::shared_ptr<QueryExecutionTree> subtree =
+      QueryExecutionTree::makeTreeWithStrippedColumns(_subtree, *allNeededVars);
+
+  return ad_utility::makeExecutionTree<GroupBy>(
+      getExecutionContext(), _groupByVariables, _aliases, std::move(subtree));
+}
+
+// _____________________________________________________________________________
 uint64_t GroupByImpl::getSizeEstimateBeforeLimit() {
   if (_groupByVariables.empty()) {
     return 1;
@@ -480,6 +528,7 @@ size_t GroupByImpl::getCostEstimate() {
   return _subtree->getCostEstimate();
 }
 
+// _____________________________________________________________________________
 template <size_t OUT_WIDTH>
 void GroupByImpl::processGroup(
     const Aggregate& aggregate,
