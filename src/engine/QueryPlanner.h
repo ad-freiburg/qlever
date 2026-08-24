@@ -507,6 +507,11 @@ class QueryPlanner {
     ReplaceUnfiltered,
     // Same as ReplaceUnfiltered, but do not apply filter substitutes.
     ReplaceUnfilteredNoSubstitutes,
+    // Only apply filter substitutes, but do not apply regular filters.
+    // Required by the dynamic programming approach for a connected component
+    // with fewer than 2 seeds, where a substitute is applicable. Currently
+    // needed for a `SpatialJoin` substitute with a fixed-value side.
+    SeedSubstitutesOnly,
     // Apply all filters (also the nonmatching ones) and replace the unfiltered
     // plans. This has to be called at the end of parsing a group graph pattern
     // where we have to make sure that all filters are applied.

@@ -1416,7 +1416,8 @@ void QueryPlanner::applyFiltersIfPossible(
       }
 
       const bool allowSubstitutes = mode == FilterMode::KeepUnfiltered ||
-                                    mode == FilterMode::ReplaceUnfiltered;
+                                    mode == FilterMode::ReplaceUnfiltered ||
+                                    mode == FilterMode::SeedSubstitutesOnly;
       if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
           (filterAndSubst.filter_.expression_.containedVariables().empty() ||
            ql::ranges::any_of(
@@ -1437,6 +1438,9 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
 
+      if constexpr (mode == FilterMode::SeedSubstitutesOnly) {
+        continue;
+      }
       const bool applyAll =
           mode == FilterMode::ApplyAllFiltersAndReplaceUnfiltered;
       if (applyAll ||
@@ -1556,11 +1560,10 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   size_t numSeeds = findUniqueNodeIds(dpTab.back(), false);
 
   if (numSeeds < 2) {
-    // The loop below (which starts at `k = 2`) never runs for 0 or 1 seeds,
-    // so a filter substitute that could apply to the single seed alone (for
-    // example a `SpatialJoin` with a fixed-value side, which needs no second
-    // seed to join with) would otherwise never get a chance to be applied.
-    applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
+    // Apply filter substitutes also in cases with less than two seeds
+    // (currently used for `SpatialJoin` with a fixed-value side).
+    applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(dpTab.back(),
+                                                            filters);
   }
 
   for (size_t k = 2; k <= numSeeds; ++k) {

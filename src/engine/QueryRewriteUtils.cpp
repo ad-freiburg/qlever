@@ -84,8 +84,7 @@ std::optional<SpatialJoinRewriteResult> rewriteFilterToSpatialJoinConfig(
   }
   auto& [config, call] = configAndCall.value();
 
-  // If neither side is a variable, there is nothing to join on. Leave this
-  // (rare, degenerate) case to ordinary `FILTER` evaluation.
+  // If neither side is a variable, rewriting is not possible.
   bool leftIsVar = call.left_.isVariable();
   bool rightIsVar = call.right_.isVariable();
   if (!leftIsVar && !rightIsVar) {
