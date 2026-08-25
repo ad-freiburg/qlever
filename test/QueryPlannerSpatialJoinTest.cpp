@@ -1677,6 +1677,39 @@ TEST(QueryPlanner, SpatialJoinFromFilterWithFixedValue) {
 }
 
 // _____________________________________________________________________________
+// Regression test: a fixed-value `FILTER` substitute is `forceSubstitution_`
+// and must be applied even for a connected component with a single triple
+// (`numSeeds <= 1`), which is a special case in both
+// `runGreedyPlanningOnConnectedComponent` and
+// `runDynamicProgrammingOnConnectedComponent`. This explicitly pins down the
+// greedy planner's behavior (the DP planner's is covered implicitly by
+// `SpatialJoinFromFilterWithFixedValue` via `h::expect`'s budget sweep).
+TEST(QueryPlanner, SpatialJoinFromFilterWithFixedValueGreedyPlanner) {
+  auto scan = h::IndexScanFromStrings;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  using enum SpatialJoinType::Enum;
+  Var internalVar{
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 1)};
+  std::string point =
+      "\"POINT(1 1)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  auto valuesPoint = h::ValuesClause(
+      absl::StrCat("VALUES (", internalVar.name(),
+                   ") { (G:", GeoPoint{1, 1}.toStringRepresentation(), ") }"));
+
+  h::expectGreedy(
+      absl::StrCat("PREFIX geof: "
+                   "<http://www.opengis.net/def/function/geosparql/> "
+                   "SELECT * WHERE {"
+                   "?a <p> ?b ."
+                   "FILTER(geof:sfIntersects(?b, ",
+                   point, ")) }"),
+      h::spatialJoinFilterSubstitute(-1, -1, Var{"?b"}, internalVar,
+                                     std::nullopt, PayloadVariables::all(),
+                                     algo, INTERSECTS, std::nullopt,
+                                     scan("?a", "<p>", "?b"), valuesPoint));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinFromGeofRelateFilter) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;

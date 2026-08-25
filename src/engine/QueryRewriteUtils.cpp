@@ -31,8 +31,7 @@ ResolvedGeoOperand resolveGeoOperand(
     return {operand.getVariable()};
   }
   Variable var = generateUniqueVarName();
-  auto tree = ad_utility::makeExecutionTree<Values>(
-      qec, parsedQuery::SparqlValues{{var}, {{operand}}});
+  auto tree = makeValuesForSingleValue(qec, var, operand);
   return {std::move(var), std::move(tree)};
 }
 

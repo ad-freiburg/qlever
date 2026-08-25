@@ -24,6 +24,13 @@ Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
 }
 
 // ____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
+    QueryExecutionContext* qec, Variable variable, TripleComponent value) {
+  return ad_utility::makeExecutionTree<Values>(
+      qec, parsedQuery::SparqlValues{{std::move(variable)}, {{value}}});
+}
+
+// ____________________________________________________________________________
 std::string Values::getCacheKeyImpl() const {
   return absl::StrCat("VALUES (", parsedValues_.variablesToString(), ") { ",
                       parsedValues_.valuesToString(), " }");
