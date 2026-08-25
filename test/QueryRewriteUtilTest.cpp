@@ -18,16 +18,18 @@ namespace {
 
 using namespace queryRewriteUtilTestHelpers;
 
-// Helper wrapping `rewriteFilterToSpatialJoinConfig` with a test
+using Literal = ad_utility::triple_component::Literal;
+
+// Helper wrapping `rewriteFilterToSpatialJoin` with a test
 // `QueryExecutionContext` and a trivial internal-variable generator, so that
 // individual test cases can call it with just a `SparqlFilter`.
 std::shared_ptr<SpatialJoin> rewrite(const SparqlFilter& filter) {
-  static size_t count = 0;
+  size_t count = 0;
   auto* qec = ad_utility::testing::getQec();
-  std::function<Variable()> generateUniqueVarName = [] {
+  auto generateUniqueVarName = [&count] {
     return Variable{absl::StrCat("?_test_internal_", count++)};
   };
-  return rewriteFilterToSpatialJoinConfig(filter, qec, generateUniqueVarName);
+  return rewriteFilterToSpatialJoin(filter, qec, generateUniqueVarName);
 }
 
 // _____________________________________________________________________________
@@ -93,8 +95,7 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   // Invalid DE-9IM pattern (wrong length / characters) is rejected
   auto invalidPtr = makeDe9imRelationExpression(
       getExpr(V{"?a"}), getExpr(V{"?b"}),
-      getExpr(ad_utility::triple_component::Literal::literalWithoutQuotes(
-          "invalid")));
+      getExpr(Literal::literalWithoutQuotes("invalid")));
   checkDe9imRelationCall(getDe9imRelationExpressionParameters(*invalidPtr),
                          std::nullopt);
 
@@ -108,8 +109,7 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   // A constant left argument.
   auto nonVarLeftPtr = makeDe9imRelationExpression(
       getExpr(ValueId::makeFromInt(42)), getExpr(V{"?b"}),
-      getExpr(ad_utility::triple_component::Literal::literalWithoutQuotes(
-          "T*T***T**")));
+      getExpr(Literal::literalWithoutQuotes("T*T***T**")));
   De9imRelationCall nonVarLeftExp{
       {DE9IM, TripleComponent{ValueId::makeFromInt(42)}, V{"?b"}},
       parseDe9imFilterString("T*T***T**").value()};
@@ -119,8 +119,7 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   // A constant right argument.
   auto nonVarRightPtr = makeDe9imRelationExpression(
       getExpr(V{"?a"}), getExpr(ValueId::makeFromInt(42)),
-      getExpr(ad_utility::triple_component::Literal::literalWithoutQuotes(
-          "T*T***T**")));
+      getExpr(Literal::literalWithoutQuotes("T*T***T**")));
   De9imRelationCall nonVarRightExp{
       {DE9IM, V{"?a"}, TripleComponent{ValueId::makeFromInt(42)}},
       parseDe9imFilterString("T*T***T**").value()};
@@ -133,8 +132,7 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   // IRIs.
   auto unsupportedArgPtr = makeDe9imRelationExpression(
       makePowExpression(getExpr(V{"?a"}), getExpr(V{"?c"})), getExpr(V{"?b"}),
-      getExpr(ad_utility::triple_component::Literal::literalWithoutQuotes(
-          "T*T***T**")));
+      getExpr(Literal::literalWithoutQuotes("T*T***T**")));
   checkDe9imRelationCall(
       getDe9imRelationExpressionParameters(*unsupportedArgPtr), std::nullopt);
 
@@ -143,14 +141,13 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   // already imply an intersection.
   auto disjointPatternPtr = makeDe9imRelationExpression(
       getExpr(V{"?a"}), getExpr(V{"?b"}),
-      getExpr(ad_utility::triple_component::Literal::literalWithoutQuotes(
-          "FF*FF****")));
+      getExpr(Literal::literalWithoutQuotes("FF*FF****")));
   checkDe9imRelationCall(
       getDe9imRelationExpressionParameters(*disjointPatternPtr), std::nullopt);
 }
 
 // _____________________________________________________________________________
-TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
+TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoin) {
   auto D = &ValueId::makeFromDouble;
 
   // Construct `FILTER(geof:metricDistance(?a, ?b) <= 10.0)`
@@ -201,7 +198,7 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
 }
 
 // _____________________________________________________________________________
-TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfigWithFixedValue) {
+TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinWithFixedValue) {
   auto D = &ValueId::makeFromDouble;
   auto point = ValueId::makeFromGeoPoint({1, 1});
 
