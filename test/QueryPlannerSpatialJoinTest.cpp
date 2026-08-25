@@ -1615,7 +1615,7 @@ TEST(QueryPlanner, SpatialJoinFromFilterWithFixedValue) {
           "SELECT * WHERE {"
           "?a <p> ?b ."
           "FILTER(geof:sfCrosses(?b, ",
-          line, ") . }"),
+          line, ")) }"),
       h::spatialJoinFilterSubstitute(
           -1, -1, Var{"?b"}, internalVar, std::nullopt, PayloadVariables::all(),
           algo, CROSSES, std::nullopt, scan("?a", "<p>", "?b"), valuesLine));
