@@ -75,7 +75,7 @@ class OrderBy : public Operation {
 
   size_t getResultWidth() const override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override {
     return {subtree_.get()};
   }
 

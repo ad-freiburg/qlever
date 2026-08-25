@@ -71,7 +71,7 @@ class JoinImpl : public Operation {
 
   float getMultiplicity(size_t col) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override {
     return {left_.get(), right_.get()};
   }
 

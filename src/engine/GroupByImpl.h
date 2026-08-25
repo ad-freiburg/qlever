@@ -90,7 +90,7 @@ class GroupByImpl : public Operation {
    */
   vector<ColumnIndex> computeSortColumns(const QueryExecutionTree* subtree);
 
-  vector<QueryExecutionTree*> getChildren() override {
+  vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override {
     return {_subtree.get()};
   }
 

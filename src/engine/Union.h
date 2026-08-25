@@ -64,7 +64,7 @@ class Union : public Operation {
       const IdTableView<0>& left, const IdTableView<0>& right,
       const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 

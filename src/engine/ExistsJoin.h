@@ -72,7 +72,7 @@ class ExistsJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override {
     return {left_.get(), right_.get()};
   }
 

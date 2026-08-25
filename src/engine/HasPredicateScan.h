@@ -87,7 +87,7 @@ class HasPredicateScan : public Operation {
 
   [[nodiscard]] const TripleComponent& getObject() const;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override {
     if (subtree_) {
       return {std::addressof(subtree())};
     } else {

@@ -41,7 +41,7 @@ class Load final : public Operation {
 
   ~Load() override = default;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override { return {}; }
 
   std::string getCacheKeyImpl() const override;
 

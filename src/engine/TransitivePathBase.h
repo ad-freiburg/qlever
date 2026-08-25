@@ -352,7 +352,7 @@ class TransitivePathBase : public Operation {
       size_t maxDist, Graphs activeGraphs = Graphs::All(),
       const std::optional<Variable>& graphVariable = std::nullopt);
 
-  std::vector<QueryExecutionTree*> getChildren() override;
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
