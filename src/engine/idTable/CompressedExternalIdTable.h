@@ -1089,8 +1089,9 @@ class CompressedExternalIdTableSorter
   // chunks) start to dominate. That minimum is the only free parameter of the
   // formula, and the following measurements are the reason for its value. They
   // are for 48 million rows in 16 runs of 4 columns each with a memory limit
-  // of 192 MB, merged by 16 threads on a machine with 32 cores, relative to
-  // the serial merge of the same data (which takes 3.2 seconds), see
+  // of 192 MB, merged by 16 threads on a machine with 16 cores (32 hardware
+  // threads), relative to the serial merge of the same data (which takes 3.2
+  // seconds), see
   // `benchmark/ParallelBlockMergeBenchmark.cpp`:
   //
   //   minimum    output block    chunks in flight   speedup
@@ -1104,8 +1105,32 @@ class CompressedExternalIdTableSorter
   // The optimum is a flat plateau between 90'000 and 110'000 rows (13 to 15
   // concurrent chunks), and the chosen value sits in the middle of it. Note
   // that letting *all* 16 chunks be in flight (which the minimum of 50'000
-  // does) is already measurably worse, so the merge saturates the memory
-  // bandwidth before it runs out of threads.
+  // does) is measurably worse, but not because of the memory bandwidth: both
+  // variants move the same 16 GB through the memory controllers, and the faster
+  // one utilizes the data bus by 46 %, against the 80 % that a pure streaming
+  // kernel reaches on this machine. What the 16-chunk variant runs out of is
+  // threads: with one chunk per thread, none is left to run the handlers of the
+  // sink and the compression of the output blocks that
+  // `makeBlockStorageFactory` spills, so the aggregate busy time of all cores
+  // drops by 13 %. A pool of 24 threads instead of 16 removes most of the
+  // difference (0.61 s instead of 0.72 s), so the minimum above effectively
+  // keeps a chunk slot free for that bookkeeping.
+  //
+  // TODO<joka921> The reason why the size of an output block matters this much
+  // is the spill of `makeBlockStorageFactory`: a chunk keeps only
+  // `MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK` of its output blocks in
+  // memory and compresses the rest, so with eight blocks per chunk 85 % of all
+  // output bytes are compressed, written, read back and decompressed again,
+  // which is where the merge phase spends most of its time (`libzstd` is 66 %
+  // of the profile at 16 threads, against 21 % when nothing spills). That cost
+  // is also the whole reason why the merge of uniformly distributed `Id`s
+  // scales worse than that of realistic ones: uniform output blocks compress
+  // 1.5x instead of 9x. With output blocks as large as a chunk (which this
+  // memory limit does not allow) nothing spills at all, and both distributions
+  // reach a speedup of 7.9x. So there is roughly another factor of 1.4 to be
+  // had by spilling less or by spilling more cheaply, for example by buffering
+  // more blocks per chunk or by compressing this short-lived file with a much
+  // faster compression level than the input runs.
   //
   // NOTE: Before the output blocks were spilled to disk (see
   // `makeBlockStorageFactory`), a chunk that had run ahead of the consumer
