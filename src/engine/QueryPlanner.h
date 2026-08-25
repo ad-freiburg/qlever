@@ -174,11 +174,12 @@ class QueryPlanner {
   struct FilterAndOptionalSubstitute {
     SparqlFilter filter_;
     std::optional<SubtreePlan> substitute_;
+
     // Enforce filter substitution. Replace the existing plan by the filtered
     // one instead of adding the filtered plan as a candidate.
     //
-    // NOTE: This may not be used for incomplete `SpatialJoin` operations as
-    // they will otherwise never have their second child attached.
+    // NOTE: This may not be used for a `SpatialJoin` that has no child yet, as
+    // it will otherwise never have its second child attached.
     bool forceSubstitution_ = false;
 
     bool hasSubstitute() const { return substitute_.has_value(); }
@@ -323,14 +324,13 @@ class QueryPlanner {
       const vector<vector<QueryPlanner::SubtreePlan>>& children,
       TextLimitMap& textLimits);
 
- protected:
+ private:
   // Function for optimization query rewrites: The function returns pairs of
   // filters with the corresponding substitute subtree plan. This is currently
   // used to translate GeoSPARQL filters to spatial join operations.
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
- private:
   // TODO<RobinTF> Extract to dedicated module, this has little to do with
   // actual query planning.
   // Turn a generic `PropertyPath` into a `GraphPattern` that can be used for
