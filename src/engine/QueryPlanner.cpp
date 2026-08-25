@@ -1433,16 +1433,30 @@ void QueryPlanner::applyFiltersIfPossible(
           mergeSubtreePlanIds(newPlan, newPlan, plan);
           newPlan.type = plan.type;
           newPlan.containsFilterSubstitute_ = true;
-          addedPlans.push_back(newPlan);
         }
+        // If we need to enforce substitution, replace `plan` with our first
+        // candidate. This is not done in all cases, because an incomplete
+        // `SpatialJoin` would not get a join partner if `plan` would be
+        // removed.
+        if (!substPlans.empty() && filterAndSubst.forceSubstitution_) {
+          plan = std::move(substPlans.front());
+          substPlans.erase(substPlans.begin());
+        }
+        ql::ranges::move(substPlans, std::back_inserter(addedPlans));
         continue;
       }
 
+      constexpr bool applyAll =
+          mode == FilterMode::ApplyAllFiltersAndReplaceUnfiltered;
       if constexpr (mode == FilterMode::SeedSubstitutesOnly) {
         continue;
+      } else if constexpr (!applyAll) {
+        if (filterAndSubst.forceSubstitution_) {
+          // An enforced substitute must have already been replaced by now. Do
+          // not generate a regular `FILTER` for it.
+          continue;
+        }
       }
-      const bool applyAll =
-          mode == FilterMode::ApplyAllFiltersAndReplaceUnfiltered;
       if (applyAll ||
           ql::ranges::all_of(
               filterAndSubst.filter_.expression_.containedVariables(),
@@ -1771,11 +1785,14 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     if (!sj) {
       plans.push_back({filterExpression, std::nullopt});
     } else {
+      // Subsitution of a `SpatialJoin` plan may be forced only if attaching one
+      // more child completes it.
+      bool forceSubstitution = sj->getChildren().size() == 1;
       auto plan = makeSubtreePlan(std::move(sj));
       // Mark that this subtree plan handles (that is, substitutes) the filter.
       plan._idsOfIncludedFilters |= 1ULL << i;
       plan.containsFilterSubstitute_ = true;
-      plans.push_back({filterExpression, std::move(plan)});
+      plans.push_back({filterExpression, std::move(plan), forceSubstitution});
     }
   }
   return plans;
@@ -2846,7 +2863,8 @@ void QueryPlanner::QueryGraph::setupGraph(
         // Add additional edges to the graph representing the connections
         // between variables given by joins substituting cartesian product +
         // filter.
-        for (auto& [filter, substitute] : filtersAndOptionalSubstitutes) {
+        for (auto& [filter, substitute, forceSubstitution] :
+             filtersAndOptionalSubstitutes) {
           if (!substitute.has_value()) {
             // This filter cannot be substituted: add no edges.
             continue;
