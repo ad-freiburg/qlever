@@ -261,6 +261,8 @@ TEST(Distinct, isDistinctBy) {
 }
 
 // _____________________________________________________________________________
+// TODO itsAnnaKai: Add additional test cases for the case that additional stripColumn
+// operation is added.
 TEST(Distinct, makeTreeWithStrippedColumns) {
   IdTable input{makeIdTableFromVector(
       {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
