@@ -502,3 +502,5 @@ TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
                   .isUnconstrained());
   EXPECT_TRUE(subtree->getRootOperation()->getLimitOffset().isUnconstrained());
 }
+
+// TODO itsAnnaKai: add Test for makeTreeWithStrippedColumns()

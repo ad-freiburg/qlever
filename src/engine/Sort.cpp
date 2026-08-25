@@ -13,6 +13,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/StripColumns.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExternalSortFunctors.h"
@@ -286,8 +287,8 @@ std::unique_ptr<Operation> Sort::cloneImpl() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
-
-  // Add variables and the variables corresponding to the sortColumnIndices_ to the variables that are required from the subtree.
+  // Add variables and the variables corresponding to the sortColumnIndices_ to
+  // the variables that are required from the subtree.
   std::vector<Variable> sortVars;
   VarsRequiredFromSubtree helper(variables);
   for (const auto& jcl : sortColumnIndices_) {
@@ -298,14 +299,31 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   // Collect all the varaibles that are required from the subtree.
   const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
-  auto subtree =
-      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, varsRequiredFromSubtree);
+  // Continue with the recursion and strip columns of subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      subtree_, varsRequiredFromSubtree);
+  // Find out the new column indices to update sortColumnIndices_
   std::vector<ColumnIndex> sortColumnIndices;
   for (const auto& var : sortVars) {
     sortColumnIndices.push_back(subtree->getVariableColumn(var));
   }
 
-  return ad_utility::makeExecutionTree<Sort>(getExecutionContext(),
-                                             std::move(subtree),
-                                             sortColumnIndices, explicitSort_);
+  // Create query execution tree with Sort-Operation as root operation.
+  auto treeWithSortRoot = ad_utility::makeExecutionTree<Sort>(
+      getExecutionContext(), std::move(subtree), sortColumnIndices,
+      explicitSort_);
+
+  // The variables in sortVars (resulting from sortColumnIndices_) are needed to
+  // compute Sort-Operation, but do not necessarily belong to the result
+  // requested by the parent tree.
+  // If all sortVars are requested by the parent tree, return
+  // treeWithSortRoot. If not, an additional StripColumns-Operation is added
+  // in the executionTree above the Sort-Operation.
+  if (ql::ranges::all_of(sortVars, [&variables](const auto& sortVar) {
+        return ad_utility::contains(variables, sortVar);
+      })) {
+    return treeWithSortRoot;
+  }
+  return ad_utility::makeExecutionTree<StripColumns>(
+      getExecutionContext(), std::move(treeWithSortRoot), variables);
 }
