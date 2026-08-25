@@ -290,6 +290,8 @@ addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)
 
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
+addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
+
 addLinkAndDiscoverTest(TaskQueueTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
@@ -502,6 +504,8 @@ addLinkAndDiscoverTestNoLibs(RunsInputPolicyTest)
 addLinkAndDiscoverTestNoLibs(MergeExecutorTest)
 
 addLinkAndDiscoverTestNoLibs(InOrderBlockSinkTest)
+
+addLinkAndDiscoverTestNoLibs(BlockStorageTest)
 
 addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
 

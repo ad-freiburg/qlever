@@ -17,10 +17,10 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
+#include "engine/idTable/CompressedIdTableBlocks.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
-#include "util/File.h"
+#include "util/CompressedBlockFile.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
@@ -56,31 +56,23 @@ static constexpr ad_utility::MemorySize DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE =
 // of the single tables.
 class CompressedExternalIdTableWriter {
  private:
-  // Metadata for a compressed block of bytes. A block is a contiguous part of a
-  // column of an `IdTable`.
-  struct CompressedBlockMetadata {
-    // The sizes are in Bytes.
-    size_t compressedSize_;
-    size_t uncompressedSize_;
-    size_t offsetInFile_;
-  };
+  // The file to which the `IdTable`s are written. The file is deleted together
+  // with this object, see `CompressedBlockFile`.
+  ad_utility::CompressedBlockFile file_;
 
-  // The filename and actual file to which the `IdTable` is written .
-  std::string filename_;
-  ad_utility::Synchronized<ad_utility::File, std::shared_mutex> file_{filename_,
-                                                                      "w+"};
-  // For a single column, the concatenation of the blocks for that column of all
-  // `IdTables`.
-  using ColumnMetadata = std::vector<CompressedBlockMetadata>;
+  // The number of columns that each of the stored `IdTable`s has.
+  size_t numColumns_;
 
-  // The `ColumnMetadata` of each column.
-  std::vector<ColumnMetadata> blocksPerColumn_;
-  // For each contained `IdTable` contains the index in the `ColumnMetadata`
-  // where the blocks of this table begin.
+  // The metadata of all the stored blocks, in the order in which they were
+  // written. Each entry holds one compressed byte range per column.
+  std::vector<compressedIdTable::BlockMetadata> blocks_;
+
+  // For each contained `IdTable` contains the index in `blocks_` where the
+  // blocks of this table begin.
   std::vector<size_t> startOfSingleIdTables_;
 
-  // For each block (indexed exactly like `blocksPerColumn_[0]`), the first and
-  // the last row of that block, stored as `[first_0, last_0, first_1, ...]`.
+  // For each block (indexed exactly like `blocks_`), the first and the last row
+  // of that block, stored as `[first_0, last_0, first_1, ...]`.
   // The block boundaries are identical for all columns (see `writeIdTable`), so
   // a single vector suffices. This metadata is used by the merge phase (see
   // `util/parallelBlockMerge/ParallelBlockMerge.h`) to split the runs into
@@ -113,20 +105,14 @@ class CompressedExternalIdTableWriter {
       ad_utility::AllocatorWithLimit<Id> allocator,
       ad_utility::MemorySize blockSizeUncompressed =
           DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
-      : filename_{std::move(filename)},
-        blocksPerColumn_(numCols),
+      : file_{std::move(filename)},
+        numColumns_{numCols},
         allocator_{std::move(allocator)},
         blockSizeUncompressed_(blockSizeUncompressed) {}
 
-  // Destructor. Deletes the stored file.
-  ~CompressedExternalIdTableWriter() {
-    file_.wlock()->close();
-    ad_utility::deleteFile(filename_);
-  }
-
   // Simple getters for the stored allocator and the number of columns;
   const auto& allocator() const { return allocator_; }
-  size_t numColumns() const { return blocksPerColumn_.size(); }
+  size_t numColumns() const { return numColumns_; }
   const MemorySize& blockSizeUncompressed() const {
     return blockSizeUncompressed_;
   }
@@ -142,40 +128,42 @@ class CompressedExternalIdTableWriter {
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
     size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
     AD_CONTRACT_CHECK(blockSize > 0);
-    startOfSingleIdTables_.push_back(blocksPerColumn_.at(0).size());
-    // Store the first and the last row of each block. This has to happen
-    // serially (and not inside the per-column tasks below), because each of
-    // those tasks only sees a single column. Note that an empty `table`
-    // consistently leads to zero blocks, both here and in the loop below.
+    size_t firstNewBlock = blocks_.size();
+    startOfSingleIdTables_.push_back(firstNewBlock);
+    size_t numNewBlocks = (table.numRows() + blockSize - 1) / blockSize;
+    blocks_.resize(firstNewBlock + numNewBlocks);
+    // Set up the metadata of the new blocks and store the first and the last
+    // row of each of them. This has to happen serially (and not inside the
+    // per-column tasks below), because each of those tasks only sees a single
+    // column. Note that an empty `table` consistently leads to zero blocks,
+    // both here and in the loop below.
     for (size_t lower = 0; lower < table.numRows(); lower += blockSize) {
       size_t upper = std::min(lower + blockSize, table.numRows());
+      auto& block = blocks_.at(firstNewBlock + lower / blockSize);
+      block.numRows_ = upper - lower;
+      block.columns_.resize(numColumns_);
       firstAndLastRowPerBlock_.emplace_back(table[lower]);
       firstAndLastRowPerBlock_.emplace_back(table[upper - 1]);
     }
-    // The columns are compressed and stored in parallel.
+    // The columns are compressed and stored in parallel. This is free of data
+    // races: Each task only assigns to the element for its own column of the
+    // `columns_` of the new blocks, so the tasks write to pairwise disjoint
+    // elements of vectors that are never reallocated while the tasks run (all
+    // the required elements were already created by the serial loop above).
     // TODO<joka921> Use parallelism per block instead of per column (more
     // fine-grained) but only once we have a reasonable abstraction for
     // parallelism.
     std::vector<std::future<void>> compressColumFutures;
     for (auto i : ql::views::iota(0u, numColumns())) {
-      compressColumFutures.push_back(
-          std::async(std::launch::async, [this, i, blockSize, &table]() {
-            auto& blockMetadata = blocksPerColumn_.at(i);
-            decltype(auto) column = table.getColumn(i);
+      compressColumFutures.push_back(std::async(
+          std::launch::async, [this, i, blockSize, firstNewBlock, &table]() {
             // TODO<C++23> Use `ql::views::chunkd`
-            for (size_t lower = 0; lower < column.size(); lower += blockSize) {
-              size_t upper = std::min<size_t>(lower + blockSize, column.size());
-              auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
-              auto compressed = ZstdWrapper::compress(
-                  column.data() + lower, thisBlockSizeUncompressed);
-              size_t offset = 0;
-              file_.withWriteLock(
-                  [&offset, &compressed](ad_utility::File& file) {
-                    offset = file.tell();
-                    file.write(compressed.data(), compressed.size());
-                  });
-              blockMetadata.push_back(
-                  {compressed.size(), thisBlockSizeUncompressed, offset});
+            for (size_t lower = 0; lower < table.numRows();
+                 lower += blockSize) {
+              size_t upper =
+                  std::min<size_t>(lower + blockSize, table.numRows());
+              blocks_[firstNewBlock + lower / blockSize].columns_[i] =
+                  compressedIdTable::writeColumn(file_, table, i, lower, upper);
             }
           }));
     }
@@ -189,7 +177,7 @@ class CompressedExternalIdTableWriter {
   // blocks which are `IdTables` themselves.
   template <size_t N = 0>
   std::vector<InputRangeTypeErased<IdTableStatic<N>>> getAllGenerators() {
-    file_.wlock()->flush();
+    file_.flush();
     std::vector<InputRangeTypeErased<IdTableStatic<N>>> result;
     result.reserve(startOfSingleIdTables_.size());
     for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
@@ -209,10 +197,7 @@ class CompressedExternalIdTableWriter {
 
   // The number of rows in the given block of the given `IdTable`.
   size_t numRowsInBlock(size_t idTableIdx, size_t blockIdx) const {
-    return blocksPerColumn_.at(0)
-               .at(globalBlockIdx(idTableIdx, blockIdx))
-               .uncompressedSize_ /
-           sizeof(Id);
+    return blocks_.at(globalBlockIdx(idTableIdx, blockIdx)).numRows_;
   }
 
   // The first row of the given block of the given `IdTable`.
@@ -235,7 +220,8 @@ class CompressedExternalIdTableWriter {
   template <size_t N = 0>
   IdTableStatic<N> readBlockOfIdTable(size_t idTableIdx,
                                       size_t blockIdx) const {
-    return readBlockSequential<N>(globalBlockIdx(idTableIdx, blockIdx));
+    return compressedIdTable::readBlock<N>(
+        file_, blocks_.at(globalBlockIdx(idTableIdx, blockIdx)), allocator_);
   }
 
   // Register a reader that accesses the blocks directly (via
@@ -248,7 +234,7 @@ class CompressedExternalIdTableWriter {
   void unregisterActiveReader() noexcept { --numActiveGenerators_; }
 
   // Flush the underlying file, such that all written blocks become readable.
-  void flush() { file_.wlock()->flush(); }
+  void flush() { file_.flush(); }
 
   // Clear the underlying file and completely reset the data structure s.t. it
   // can be reused.
@@ -259,28 +245,26 @@ class CompressedExternalIdTableWriter {
           "`CompressedExternalIdTableWriter` that is currently being iterated "
           "over");
     }
-    file_.wlock()->close();
-    ad_utility::deleteFile(filename_);
-    file_.wlock()->open(filename_, "w+");
-    ql::ranges::for_each(blocksPerColumn_, [](auto& block) { block.clear(); });
+    file_.clear();
+    blocks_.clear();
     startOfSingleIdTables_.clear();
     firstAndLastRowPerBlock_.clear();
   }
 
  private:
-  // The index (in `blocksPerColumn_[0]`) of the first block that does NOT
-  // belong to the `IdTable` with the given index anymore. This mirrors the
-  // logic in `makeGeneratorForIdTable`.
+  // The index (in `blocks_`) of the first block that does NOT belong to the
+  // `IdTable` with the given index anymore. This mirrors the logic in
+  // `makeGeneratorForIdTable`.
   size_t endBlockOfIdTable(size_t idTableIdx) const {
     AD_CONTRACT_CHECK(idTableIdx < startOfSingleIdTables_.size());
     return idTableIdx + 1 < startOfSingleIdTables_.size()
                ? startOfSingleIdTables_.at(idTableIdx + 1)
-               : blocksPerColumn_.at(0).size();
+               : blocks_.size();
   }
 
   // Translate the index of a block that is local to the `IdTable` with the
   // given index into the corresponding global block index (which is the index
-  // into `blocksPerColumn_[i]` and `firstAndLastRowPerBlock_`).
+  // into `blocks_` and `firstAndLastRowPerBlock_`).
   size_t globalBlockIdx(size_t idTableIdx, size_t blockIdx) const {
     size_t global = startOfSingleIdTables_.at(idTableIdx) + blockIdx;
     AD_CONTRACT_CHECK(global < endBlockOfIdTable(idTableIdx));
@@ -294,7 +278,7 @@ class CompressedExternalIdTableWriter {
     size_t firstBlock = startOfSingleIdTables_.at(index);
     size_t lastBlock{index + 1 < startOfSingleIdTables_.size()
                          ? startOfSingleIdTables_.at(index + 1)
-                         : blocksPerColumn_.at(0).size()};
+                         : blocks_.size()};
     auto readBlocks = ql::views::iota(firstBlock, lastBlock) |
                       ql::views::transform([this](auto blockIdx) {
                         return this->template readBlock<NumCols>(blockIdx);
@@ -306,68 +290,24 @@ class CompressedExternalIdTableWriter {
         bufferedAsyncView(std::move(readBlocks), 1), callback)};
   }
 
-  // Read and decompress column `columnIdx` of the block at `blockIdx` into
-  // `block`. This is the shared per-column kernel used by both `readBlock` and
-  // `readBlockSequential`. May be called concurrently for distinct `columnIdx`
-  // values on the same `block` (as done by `readBlock`).
-  // It is `const` and only takes a shared lock on the `file_`, because
-  // `File::read(void*, size_t, off_t)` is `const` and implemented via `pread`
-  // (see `util/File.h`), which means that it doesn't touch the shared file
-  // offset and can safely be called concurrently.
-  template <size_t NumCols = 0>
-  void decompressColumnIntoBlock(size_t blockIdx, size_t columnIdx,
-                                 IdTableStatic<NumCols>& block) const {
-    decltype(auto) col = block.getColumn(columnIdx);
-    const auto& metaData = blocksPerColumn_.at(columnIdx).at(blockIdx);
-    std::vector<char> compressed(metaData.compressedSize_);
-    auto numBytesRead = file_.rlock()->read(
-        compressed.data(), metaData.compressedSize_, metaData.offsetInFile_);
-    AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
-                         static_cast<size_t>(numBytesRead) ==
-                             metaData.compressedSize_);
-    auto numBytesDecompressed =
-        ZstdWrapper::decompressToBuffer(compressed.data(), compressed.size(),
-                                        col.data(), metaData.uncompressedSize_);
-    AD_CORRECTNESS_CHECK(numBytesDecompressed == metaData.uncompressedSize_);
-  }
-
-  // Allocate and size an IdTableStatic for the block at `blockIdx`.
-  template <size_t NumCols = 0>
-  IdTableStatic<NumCols> makeBlock(size_t blockIdx) const {
-    IdTableStatic<NumCols> block{numColumns(), allocator_};
-    size_t blockSize =
-        blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
-    block.resize(blockSize);
-    return block;
-  }
-
-  // Decompresses the block at the given `blockIdx`. The individual columns are
-  // decompressed concurrently.
+  // Read and decompress the block with the given global index (which is the
+  // index into `blocks_`). The individual columns are decompressed
+  // concurrently, which is safe because they are disjoint parts of the `block`,
+  // see `compressedIdTable::readColumnIntoBlock`.
   template <size_t NumCols = 0>
   IdTableStatic<NumCols> readBlock(size_t blockIdx) {
-    auto block = makeBlock<NumCols>(blockIdx);
+    const auto& metadata = blocks_.at(blockIdx);
+    auto block = compressedIdTable::makeBlock<NumCols>(metadata, allocator_);
     std::vector<std::future<void>> readColumnFutures;
     for (auto i : ql::views::iota(0u, numColumns())) {
       readColumnFutures.push_back(
-          std::async(std::launch::async, [this, i, blockIdx, &block]() {
-            this->template decompressColumnIntoBlock<NumCols>(blockIdx, i,
-                                                              block);
+          std::async(std::launch::async, [this, i, &metadata, &block]() {
+            compressedIdTable::readColumnIntoBlock<NumCols>(file_, metadata, i,
+                                                            block);
           }));
     }
     for (auto& fut : readColumnFutures) {
       fut.get();
-    }
-    return block;
-  }
-
-  // Like `readBlock`, but decompresses columns sequentially rather than in
-  // parallel. This avoids per-block thread creation, making it suitable for
-  // use inside a single persistent background thread (e.g. `runStreamAsync`).
-  template <size_t NumCols = 0>
-  IdTableStatic<NumCols> readBlockSequential(size_t blockIdx) const {
-    auto block = makeBlock<NumCols>(blockIdx);
-    for (auto i : ql::views::iota(0u, numColumns())) {
-      decompressColumnIntoBlock<NumCols>(blockIdx, i, block);
     }
     return block;
   }
@@ -380,12 +320,11 @@ class CompressedExternalIdTableWriter {
   // with the consumer.
   template <size_t N = 0>
   InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
-    file_.wlock()->flush();
-    size_t totalBlocks =
-        blocksPerColumn_.empty() ? 0 : blocksPerColumn_.at(0).size();
+    file_.flush();
     CachingTransformInputRange readBlocks{
-        ql::views::iota(size_t{0}, totalBlocks), [this](size_t blockIdx) {
-          return this->template readBlockSequential<N>(blockIdx);
+        ql::views::iota(size_t{0}, blocks_.size()), [this](size_t blockIdx) {
+          return compressedIdTable::readBlock<N>(file_, blocks_.at(blockIdx),
+                                                 allocator_);
         }};
     ++numActiveGenerators_;
     auto callback = [this]() noexcept { --numActiveGenerators_; };
