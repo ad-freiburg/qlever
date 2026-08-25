@@ -376,4 +376,13 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
       CountAvailablePredicates(qec, indexScan, 0, V{"?predicate"}, V{"?count"});
 
   runTestUnordered(patternTrick, {{p3, Int(2)}, {p2, Int(1)}, {p, Int(2)}});
+
+  // The scan of the full `ql:has-pattern` relation must have been consumed
+  // lazily by `computePatternTrickAllEntities` instead of being materialized
+  // by the generic path. The status of the child, which is only set by that
+  // special implementation, is our witness for this. Without this check the
+  // test would silently pass on the generic path, which is what happened while
+  // the condition that selects the special implementation was always false.
+  EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
+            RuntimeInformation::Status::lazilyMaterializedInProgress);
 }

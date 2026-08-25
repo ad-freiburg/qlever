@@ -116,31 +116,38 @@ Result CountAvailablePredicates::computeResult(
   AD_CORRECTNESS_CHECK(subtree_);
   // Determine whether we can perform the full scan optimization. It can be
   // applied if the `subtree_` is a single index scan of a triple
-  // `?s ql:has-pattern ?p`.
+  // `?s ql:has-pattern ?p`, in which case the scan can be consumed lazily
+  // instead of materializing one row per entity.
   // TODO<joka921> As soon as we have a lazy implementation for all index scans
   // or even all operations Then the special case for all entities can be
   // removed.
-  bool isPatternTrickForAllEntities = [&]() {
+  const IndexScan* fullPatternScan = [&]() -> const IndexScan* {
     auto indexScan =
         dynamic_cast<const IndexScan*>(subtree_->getRootOperation().get());
     if (!indexScan) {
-      return false;
+      return nullptr;
     }
     if (!indexScan->subject().isVariable() ||
         !indexScan->object().isVariable()) {
-      return false;
+      return nullptr;
     }
-
-    return indexScan->predicate() == HAS_PATTERN_PREDICATE;
+    // Note: `HAS_PATTERN_PREDICATE` is a `std::string_view`, so it has to be
+    // explicitly turned into an `Iri` before the comparison. Comparing it
+    // directly would convert it into the `std::string` alternative of the
+    // `TripleComponent` variant, which never compares equal to the `Iri`
+    // alternative that the scan holds.
+    const TripleComponent hasPattern{
+        TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE)};
+    return indexScan->predicate() == hasPattern ? indexScan : nullptr;
   }();
 
-  if (isPatternTrickForAllEntities) {
+  if (fullPatternScan != nullptr) {
     subtree_->getRootOperation()->runtimeInfo().status_ =
         RuntimeInformation::Status::lazilyMaterializedInProgress;
     signalQueryUpdate(RuntimeInformation::SendPriority::Always);
     // Compute the predicates for all entities
-    CountAvailablePredicates::computePatternTrickAllEntities(&idTable,
-                                                             patterns);
+    CountAvailablePredicates::computePatternTrickAllEntities(&idTable, patterns,
+                                                             *fullPatternScan);
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
     std::shared_ptr<const Result> subresult = subtree_->getResult();
@@ -161,18 +168,23 @@ Result CountAvailablePredicates::computeResult(
 
 // _____________________________________________________________________________
 void CountAvailablePredicates::computePatternTrickAllEntities(
-    IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns) const {
+    IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns,
+    const IndexScan& fullPatternScan) const {
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   AD_LOG_DEBUG << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
   const auto& index = getExecutionContext()->getIndex().getImpl();
+  // Note: The scan specification and the permutation are taken from the
+  // `fullPatternScan` itself. In particular the `ql:has-pattern` triples live
+  // in the *internal* permutation (see `qlever::getPermutationForTriple`), and
+  // the scan may carry a graph filter, both of which we must not hardcode here.
   auto scanSpec =
-      ScanSpecificationAsTripleComponent{
-          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
-          std::nullopt}
+      ScanSpecificationAsTripleComponent{fullPatternScan.predicate(),
+                                         std::nullopt, std::nullopt,
+                                         fullPatternScan.graphsToFilter()}
           .toScanSpecification(index);
-  const auto& perm = index.getPermutation(Permutation::Enum::PSO);
+  const auto& perm = fullPatternScan.permutation();
   const auto& locatedTriple = locatedTriplesState();
   auto fullHasPattern =
       perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),

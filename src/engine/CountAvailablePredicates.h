@@ -13,6 +13,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "util/CompactStringVector.h"
 
+class IndexScan;
+
 // This Operation takes a Result with at least one column containing ids,
 // and a column index referring to such a column. It then creates a Result
 // containing two columns, the first one filled with the ids of all predicates
@@ -99,10 +101,11 @@ class CountAvailablePredicates : public Operation {
                                   RuntimeInformation& runtimeInfo);
 
   // Special implementation for the full pattern trick.
-  // Perform a lazy scan over the full `ql:has-pattern` relation,
-  // and then count and expand the patterns.
+  // Perform a lazy scan over the full `ql:has-pattern` relation (as specified
+  // by `fullPatternScan`), and then count and expand the patterns.
   void computePatternTrickAllEntities(
-      IdTable* result, const CompactVectorOfStrings<Id>& patterns) const;
+      IdTable* result, const CompactVectorOfStrings<Id>& patterns,
+      const IndexScan& fullPatternScan) const;
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
