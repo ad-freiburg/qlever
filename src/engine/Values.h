@@ -8,9 +8,9 @@
 #define QLEVER_SRC_ENGINE_VALUES_H
 
 #include "engine/Operation.h"
-#include "engine/QueryExecutionTree.h"
 #include "parser/ParsedQuery.h"
-#include "parser/TripleComponent.h"
+
+class TripleComponent;
 
 class Values : virtual public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
