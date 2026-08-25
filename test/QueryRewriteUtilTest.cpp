@@ -80,8 +80,6 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
   checkGeoDistanceFilter(getGeoDistanceFilter(*expr6), std::nullopt, 10);
 }
 
-//______________________________________________________________________________
-
 // _____________________________________________________________________________
 TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   auto [expr1, exp1] = makeDe9imRelation();
@@ -107,8 +105,7 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   checkDe9imRelationCall(
       getDe9imRelationExpressionParameters(*variablePatternPtr), std::nullopt);
 
-  // A constant left argument is resolved to a fixed `GeoOperand`, just like
-  // for the other GeoSPARQL predicates.
+  // A constant left argument.
   auto nonVarLeftPtr = makeDe9imRelationExpression(
       getExpr(ValueId::makeFromInt(42)), getExpr(V{"?b"}),
       getExpr(ad_utility::triple_component::Literal::literalWithoutQuotes(
@@ -119,7 +116,7 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   checkDe9imRelationCall(getDe9imRelationExpressionParameters(*nonVarLeftPtr),
                          nonVarLeftExp);
 
-  // Same for a constant right argument.
+  // A constant right argument.
   auto nonVarRightPtr = makeDe9imRelationExpression(
       getExpr(V{"?a"}), getExpr(ValueId::makeFromInt(42)),
       getExpr(ad_utility::triple_component::Literal::literalWithoutQuotes(
@@ -262,8 +259,5 @@ TEST(QueryRewriteUtilTest, GetGeoFunctionExpressionParametersWithFixedValue) {
   checkGeoFunctionCall(getGeoFunctionExpressionParameters(*unsupportedArgPtr),
                        std::nullopt);
 }
-
-// TODO<ullingerc> #2140: Add tests for `getGeoFunctionExpressionParameters` +
-// `rewriteFilterToSpatialJoinConfig` for geo relation functions
 
 }  // namespace
