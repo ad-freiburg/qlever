@@ -9,7 +9,6 @@
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
 #include "global/RuntimeParameters.h"
-#include "index/IndexImpl.h"
 #include "util/ParallelExecutor.h"
 
 // _____________________________________________________________________________
@@ -116,38 +115,41 @@ Result CountAvailablePredicates::computeResult(
   AD_CORRECTNESS_CHECK(subtree_);
   // Determine whether we can perform the full scan optimization. It can be
   // applied if the `subtree_` is a single index scan of a triple
-  // `?s ql:has-pattern ?p`, in which case the scan can be consumed lazily
-  // instead of materializing one row per entity.
-  // TODO<joka921> As soon as we have a lazy implementation for all index scans
-  // or even all operations Then the special case for all entities can be
-  // removed.
-  const IndexScan* fullPatternScan = [&]() -> const IndexScan* {
+  // `?s ql:has-pattern ?p`, because that relation contains exactly one triple
+  // per entity. Its result can then be consumed lazily and the patterns can be
+  // counted directly, instead of materializing one row per entity.
+  // TODO<joka921> The remaining difference to the generic implementation below
+  // is that the latter needs a fully materialized `IdTableView`, because it has
+  // to deduplicate the subjects. As soon as `computePatternTrick` also consumes
+  // its input lazily (carrying the last subject across the chunk boundaries for
+  // the deduplication), this special case can be removed, because the
+  // deduplication is a no-op on the `ql:has-pattern` relation.
+  bool isPatternTrickForAllEntities = [&]() {
     auto indexScan =
         dynamic_cast<const IndexScan*>(subtree_->getRootOperation().get());
     if (!indexScan) {
-      return nullptr;
+      return false;
     }
     if (!indexScan->subject().isVariable() ||
         !indexScan->object().isVariable()) {
-      return nullptr;
+      return false;
     }
     // Note: `HAS_PATTERN_PREDICATE` is a `std::string_view`, so it has to be
     // explicitly turned into an `Iri` before the comparison. Comparing it
     // directly would convert it into the `std::string` alternative of the
     // `TripleComponent` variant, which never compares equal to the `Iri`
     // alternative that the scan holds.
-    const TripleComponent hasPattern{
+    TripleComponent hasPattern{
         TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE)};
-    return indexScan->predicate() == hasPattern ? indexScan : nullptr;
+    return indexScan->predicate() == hasPattern;
   }();
 
-  if (fullPatternScan != nullptr) {
-    subtree_->getRootOperation()->runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterializedInProgress;
-    signalQueryUpdate(RuntimeInformation::SendPriority::Always);
-    // Compute the predicates for all entities
-    CountAvailablePredicates::computePatternTrickAllEntities(&idTable, patterns,
-                                                             *fullPatternScan);
+  if (isPatternTrickForAllEntities) {
+    // Compute the predicates for all entities.
+    auto subresult = subtree_->getResult(true);
+    CountAvailablePredicates::computePatternTrickAllEntities(
+        &idTable, patterns, *subresult,
+        subtree_->getVariableColumn(predicateVariable_));
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
     std::shared_ptr<const Result> subresult = subtree_->getResult();
@@ -169,30 +171,27 @@ Result CountAvailablePredicates::computeResult(
 // _____________________________________________________________________________
 void CountAvailablePredicates::computePatternTrickAllEntities(
     IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns,
-    const IndexScan& fullPatternScan) const {
+    const Result& subresult, ColumnIndex patternColumn) const {
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   AD_LOG_DEBUG << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
-  const auto& index = getExecutionContext()->getIndex().getImpl();
-  // Note: The scan specification and the permutation are taken from the
-  // `fullPatternScan` itself. In particular the `ql:has-pattern` triples live
-  // in the *internal* permutation (see `qlever::getPermutationForTriple`), and
-  // the scan may carry a graph filter, both of which we must not hardcode here.
-  auto scanSpec =
-      ScanSpecificationAsTripleComponent{fullPatternScan.predicate(),
-                                         std::nullopt, std::nullopt,
-                                         fullPatternScan.graphsToFilter()}
-          .toScanSpecification(index);
-  const auto& perm = fullPatternScan.permutation();
-  const auto& locatedTriple = locatedTriplesState();
-  auto fullHasPattern =
-      perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),
-                    std::nullopt, {}, cancellationHandle_, locatedTriple);
-  for (const auto& idTable : fullHasPattern) {
-    for (const auto& patternId : idTable.getColumn(1)) {
+  // Note: In contrast to `computePatternTrick` the subjects don't have to be
+  // deduplicated, because the `ql:has-pattern` relation contains exactly one
+  // triple per entity.
+  auto countPatterns = [&patternCounts, patternColumn](const auto& idTable) {
+    for (Id patternId : idTable.getColumn(patternColumn)) {
       AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
       patternCounts[patternId.getInt()]++;
+    }
+  };
+  // The subresult is lazy unless it was already fully materialized (for
+  // example because it was read from the cache).
+  if (subresult.isFullyMaterialized()) {
+    countPatterns(subresult.idTableView());
+  } else {
+    for (const auto& pair : subresult.idTables()) {
+      countPatterns(pair.idTable_);
     }
   }
 

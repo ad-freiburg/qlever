@@ -370,6 +370,8 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
    *   ?x ?predicate ?o
    * } GROUP BY ?predicate
    */
+  // Free the cache to get a fresh `IndexScan`.
+  qec->getQueryTreeCache().clearAll();
   auto indexScan = HasPredicateScan::makePatternScan(
       qec, TripleComponent{V{"?x"}}, V{"?predicate"});
   auto patternTrick =
@@ -378,11 +380,17 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
   runTestUnordered(patternTrick, {{p3, Int(2)}, {p2, Int(1)}, {p, Int(2)}});
 
   // The scan of the full `ql:has-pattern` relation must have been consumed
-  // lazily by `computePatternTrickAllEntities` instead of being materialized
-  // by the generic path. The status of the child, which is only set by that
-  // special implementation, is our witness for this. Without this check the
-  // test would silently pass on the generic path, which is what happened while
+  // lazily by `computePatternTrickAllEntities`, instead of being fully
+  // materialized by the generic path. Without this check the test would
+  // silently pass on the generic path, which is what happened for years while
   // the condition that selects the special implementation was always false.
   EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
-            RuntimeInformation::Status::lazilyMaterializedInProgress);
+            RuntimeInformation::Status::lazilyMaterializedCompleted);
+
+  // Run again to test handling a cached `IndexScan`, which is fully
+  // materialized and thus takes the other branch of the special
+  // implementation.
+  runTestUnordered(patternTrick, {{p3, Int(2)}, {p2, Int(1)}, {p, Int(2)}});
+  EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
+            RuntimeInformation::Status::fullyMaterializedCompleted);
 }
