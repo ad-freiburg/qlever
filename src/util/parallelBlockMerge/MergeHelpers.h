@@ -80,6 +80,26 @@ class Splitters {
   const std::vector<Key>& keys() const { return splitters_; }
 };
 
+// The sizes of the chunks that the input of a merge is split into: the first
+// `firstChunkSizes_.size()` chunks get the corresponding size from that vector,
+// and all the remaining chunks get the size `remainingChunkSize_`. All the
+// sizes have to be strictly positive.
+//
+// NOTE: Smaller leading chunks reduce the latency at the start of a merge. The
+// consumer has to drain the chunks in the order of their index, so it reaches
+// the output blocks that the producers of the later chunks have already
+// buffered sooner.
+//
+// NOTE: The sizes are targets and not guarantees. They are only honored up to
+// the granularity of the input blocks, and a chunk that is supposed to start
+// after `n` elements actually starts at the key of the `n`-th element, which is
+// the same off-by-one that a uniform number of chunks has, see
+// `computeSplitters`.
+struct ChunkSizes {
+  std::vector<size_t> firstChunkSizes_;
+  size_t remainingChunkSize_;
+};
+
 namespace detail {
 
 // ___________________________________________________________________________
@@ -182,6 +202,9 @@ size_t blockSize(const Block& block) {
 // single function only so that the three steps of the computation (collect the
 // keys, accumulate their weights, walk the quantiles) can be read one at a
 // time.
+//
+// NOTE: `chunkSizes_` is set if and only if the caller has requested explicit
+// chunk sizes instead of a fixed number of equally sized chunks.
 CPP_template(typename Input, typename Comparator)(
     requires BlockedRunsInput<Input>) class SplitterComputation {
  public:
@@ -190,7 +213,8 @@ CPP_template(typename Input, typename Comparator)(
  private:
   const Input& input_;
   const Comparator& comparator_;
-  size_t numChunks_;
+  size_t numChunks_ = 0;
+  std::optional<ChunkSizes> chunkSizes_{};
   // The `lastKey` of every non-empty block together with the number of elements
   // in that block, which is the weight of that key. After
   // `sortAndAccumulateWeights` the keys are sorted and the weights are replaced
@@ -202,14 +226,25 @@ CPP_template(typename Input, typename Comparator)(
   size_t totalNumElements_ = 0;
 
  public:
-  // ________________________________________________________________________
+  // Split the input into (at most) `numChunks` equally sized chunks.
   SplitterComputation(const Input& input, const Comparator& comparator,
                       size_t numChunks)
       : input_{input}, comparator_{comparator}, numChunks_{numChunks} {}
 
+  // Split the input into chunks of the given `chunkSizes`.
+  SplitterComputation(const Input& input, const Comparator& comparator,
+                      ChunkSizes chunkSizes)
+      : input_{input},
+        comparator_{comparator},
+        chunkSizes_{std::move(chunkSizes)} {}
+
   // Run all steps of the computation and return the resulting splitters.
   Splitters<Key> compute() {
-    if (numChunks_ <= 1) {
+    // A single chunk needs no splitters at all, and in that case even the scan
+    // of the block metadata can be skipped. NOTE: For explicit chunk sizes the
+    // number of chunks is only known once the total number of elements is, so
+    // there is no such shortcut.
+    if (!chunkSizes_.has_value() && numChunks_ <= 1) {
       return Splitters<Key>{};
     }
     collectKeysAndWeights();
@@ -217,7 +252,7 @@ CPP_template(typename Input, typename Comparator)(
       return Splitters<Key>{};
     }
     sortAndAccumulateWeights();
-    return Splitters<Key>{walkQuantiles()};
+    return Splitters<Key>{walkQuantiles(computeTargets())};
   }
 
  private:
@@ -253,15 +288,59 @@ CPP_template(typename Input, typename Comparator)(
     }
   }
 
-  // Walk the target quantiles and pick the splitter keys. As the targets are
-  // increasing, a single linear scan over the (sorted) keys suffices.
-  std::vector<Key> walkQuantiles() const {
-    std::vector<Key> result;
-    size_t idx = 0;
+  // The strictly increasing numbers of elements at which a new chunk starts,
+  // one per chunk boundary. PRECONDITION: `collectKeysAndWeights` has run, so
+  // that `totalNumElements_` is known.
+  std::vector<size_t> computeTargets() const {
+    return chunkSizes_.has_value() ? targetsFromChunkSizes() : uniformTargets();
+  }
+
+  // The targets for `numChunks_` equally sized chunks.
+  std::vector<size_t> uniformTargets() const {
+    std::vector<size_t> targets;
     for (size_t i = 1; i < numChunks_; ++i) {
       // NOTE: The target is at least `1`, because a target of `0` would always
       // yield the smallest key and therefore an empty first chunk.
-      size_t target = std::max<size_t>(1, totalNumElements_ * i / numChunks_);
+      targets.push_back(
+          std::max<size_t>(1, totalNumElements_ * i / numChunks_));
+    }
+    return targets;
+  }
+
+  // The targets for explicitly given `chunkSizes_`: the `i`-th target is the
+  // total size of the first `i` chunks. Stop as soon as a target has reached
+  // the total number of elements, because all the chunks after that one would
+  // be empty. This is what makes a `remainingChunkSize_` that is smaller than
+  // the input terminate, and it also handles leading sizes that already exceed
+  // the input.
+  std::vector<size_t> targetsFromChunkSizes() const {
+    std::vector<size_t> targets;
+    size_t sizeOfPreviousChunks = 0;
+    // Return `false` if the chunk of the given `chunkSize` is the last one.
+    auto addTarget = [&sizeOfPreviousChunks, &targets, this](size_t chunkSize) {
+      sizeOfPreviousChunks += chunkSize;
+      if (sizeOfPreviousChunks >= totalNumElements_) {
+        return false;
+      }
+      targets.push_back(sizeOfPreviousChunks);
+      return true;
+    };
+    for (size_t chunkSize : chunkSizes_.value().firstChunkSizes_) {
+      if (!addTarget(chunkSize)) {
+        return targets;
+      }
+    }
+    while (addTarget(chunkSizes_.value().remainingChunkSize_)) {
+    }
+    return targets;
+  }
+
+  // Walk the target quantiles and pick the splitter keys. As the `targets` are
+  // increasing, a single linear scan over the (sorted) keys suffices.
+  std::vector<Key> walkQuantiles(const std::vector<size_t>& targets) const {
+    std::vector<Key> result;
+    size_t idx = 0;
+    for (size_t target : targets) {
       while (idx < keysAndWeights_.size() &&
              keysAndWeights_[idx].second < target) {
         ++idx;
@@ -301,6 +380,28 @@ CPP_template(typename Input,
         const Input& input, const Comparator& comparator, size_t numChunks) {
   return detail::SplitterComputation<Input, Comparator>{input, comparator,
                                                         numChunks}
+      .compute();
+}
+
+// The same as above, but with explicit `chunkSizes` (see `ChunkSizes`)
+// instead of a fixed number of equally sized chunks. Use this to make the first
+// chunks smaller than the remaining ones, which reduces the latency at the
+// start of the merge.
+//
+// NOTE: All the guarantees of the overload above still hold, in particular the
+// result may well describe fewer chunks than the `chunkSizes` ask for, and it
+// describes a single chunk if the input has at most `firstChunkSizes_.front()`
+// (respectively `remainingChunkSize_`) elements.
+CPP_template(typename Input,
+             typename Comparator)(requires BlockedRunsInput<Input>)
+    Splitters<typename Input::Key> computeSplitters(
+        const Input& input, const Comparator& comparator,
+        ChunkSizes chunkSizes) {
+  AD_CONTRACT_CHECK(chunkSizes.remainingChunkSize_ > 0);
+  AD_CONTRACT_CHECK(ql::ranges::all_of(chunkSizes.firstChunkSizes_,
+                                       [](size_t size) { return size > 0; }));
+  return detail::SplitterComputation<Input, Comparator>{input, comparator,
+                                                        std::move(chunkSizes)}
       .compute();
 }
 

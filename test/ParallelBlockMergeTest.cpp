@@ -448,6 +448,106 @@ TEST(ParallelBlockMerge, splitterEdgeCases) {
 }
 
 // _____________________________________________________________________________
+TEST(ParallelBlockMerge, splittersFromExplicitChunkSizes) {
+  // A single run with the keys `0 ... 99`, one element per block, so that the
+  // splitters can be predicted exactly.
+  SizeVec run(100);
+  ql::ranges::generate(run, [i = size_t{0}]() mutable { return i++; });
+  std::vector<SizeVec> runs{run};
+  SizeRuns input{runs, 1};
+
+  // NOTE: A splitter is the largest key that is still needed to reach a target,
+  // so a chunk that is supposed to start after `n` elements starts at the key
+  // `n - 1`. That is the same convention as for a uniform number of chunks, see
+  // `computeSplitters`, and it is why the chunk sizes below are only exact up
+  // to that single element.
+
+  // Uniform chunks of 25 elements each, so the chunks start after `25`, `50`
+  // and `75` elements.
+  {
+    auto keys =
+        computeSplitters(input, std::less<>{}, ChunkSizes{{}, 25}).keys();
+    EXPECT_THAT(keys, ::testing::ElementsAre(24u, 49u, 74u));
+  }
+  // Three small leading chunks, then chunks of 40, so the chunks start after
+  // `5`, `10`, `20` and `60` elements.
+  {
+    auto keys =
+        computeSplitters(input, std::less<>{}, ChunkSizes{{5, 5, 10}, 40})
+            .keys();
+    EXPECT_THAT(keys, ::testing::ElementsAre(4u, 9u, 19u, 59u));
+  }
+  // The leading sizes cover the whole input exactly, so no chunk is left for
+  // `remainingChunkSize_`.
+  {
+    auto keys =
+        computeSplitters(input, std::less<>{}, ChunkSizes{{50, 50}, 10}).keys();
+    EXPECT_THAT(keys, ::testing::ElementsAre(49u));
+  }
+  // The leading sizes exceed the input, so the surplus ones are dropped.
+  {
+    auto keys =
+        computeSplitters(input, std::less<>{}, ChunkSizes{{30, 500, 7}, 10})
+            .keys();
+    EXPECT_THAT(keys, ::testing::ElementsAre(29u));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, splittersFromChunkSizesEdgeCases) {
+  auto runs = makeRandomRuns(4, 50, 50);
+  SizeRuns input{runs, 7};
+
+  // A chunk that is at least as large as the whole input needs no splitters.
+  {
+    EXPECT_THAT(
+        computeSplitters(input, std::less<>{}, ChunkSizes{{}, 1000}).keys(),
+        ::testing::IsEmpty());
+    EXPECT_THAT(
+        computeSplitters(input, std::less<>{}, ChunkSizes{{1000}, 10}).keys(),
+        ::testing::IsEmpty());
+  }
+  // Zero runs, and only empty runs.
+  {
+    EXPECT_THAT(
+        computeSplitters(SizeRuns{{}, 7}, std::less<>{}, ChunkSizes{{}, 4})
+            .keys(),
+        ::testing::IsEmpty());
+    std::vector<SizeVec> emptyRuns{SizeVec{}, SizeVec{}};
+    EXPECT_THAT(computeSplitters(SizeRuns{emptyRuns, 7}, std::less<>{},
+                                 ChunkSizes{{}, 4})
+                    .keys(),
+                ::testing::IsEmpty());
+  }
+  // All keys are equal, so there is no way to split the input, no matter which
+  // chunk sizes are requested.
+  {
+    std::vector<SizeVec> equalRuns{SizeVec(100, 42u), SizeVec(100, 42u)};
+    EXPECT_THAT(computeSplitters(SizeRuns{equalRuns, 7}, std::less<>{},
+                                 ChunkSizes{{2, 2}, 2})
+                    .keys(),
+                ::testing::IsEmpty());
+  }
+  // The splitters are strictly increasing, also for very small chunks.
+  {
+    auto keys =
+        computeSplitters(input, std::less<>{}, ChunkSizes{{1, 2, 3}, 1}).keys();
+    for (size_t i = 1; i < keys.size(); ++i) {
+      EXPECT_LT(keys[i - 1], keys[i]);
+    }
+  }
+  // A size of zero is illegal, because it would describe an empty chunk.
+  {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        computeSplitters(input, std::less<>{}, ChunkSizes{{}, 0}),
+        ::testing::HasSubstr("remainingChunkSize_ > 0"));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        computeSplitters(input, std::less<>{}, ChunkSizes{{4, 0, 4}, 4}),
+        ::testing::HasSubstr("size > 0"));
+  }
+}
+
+// _____________________________________________________________________________
 TEST(ParallelBlockMerge, blockRangeForRun) {
   // Two runs with the blocks `[0, 1, 2]`, `[3, 4, 5]`, `[6, 7, 8]` and
   // `[10, 11, 12]`, plus an empty run.

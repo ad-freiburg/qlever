@@ -33,22 +33,31 @@ using MoveType =
 
 namespace ad_utility {
 
+namespace detail {
+// The type of `ad_utility::moveIf` below.
+template <bool move>
+struct MoveIf {
+  // Return `std::move(x)` if `move` is `true`, and `x` itself otherwise.
+  template <typename T>
+  constexpr decltype(auto) operator()(T& x) const {
+    if constexpr (move) {
+      return std::move(x);
+    } else {
+      return (x);
+    }
+  }
+};
+}  // namespace detail
+
 // Return `std::move(x)` if the template parameter `move` is `true`, and `x`
-// itself otherwise. Use this in generic code that is parameterized on whether
-// it may consume its input, so that a single use site like
-// `sink.push(ad_utility::moveIf<moveElements>(element))` suffices instead of an
-// explicit `if constexpr`.
+// itself otherwise. This is a function object, so that generic code can bind it
+// once (`auto moveIf = ad_utility::moveIf<moveElements>;`) and then call it
+// without repeating the template argument.
 //
 // NOTE: The constness of `x` is preserved, so `moveIf<true>` on a `const`
 // lvalue yields a `const` rvalue reference, which does not actually move.
-template <bool move, typename T>
-constexpr decltype(auto) moveIf(T& x) {
-  if constexpr (move) {
-    return std::move(x);
-  } else {
-    return (x);
-  }
-}
+template <bool move>
+constexpr detail::MoveIf<move> moveIf{};
 
 }  // namespace ad_utility
 

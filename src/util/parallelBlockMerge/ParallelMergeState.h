@@ -257,9 +257,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
         finish();
         return;
       }
-      // NOTE: The only thing that can throw here is the allocation of the
-      // completion handler, in which case the chunk cannot continue at all.
-      try {
+      executeAndHandleUnlikelyMemoryError([this, &block] {
         state_->sink_.asyncPush(
             chunkIndex_, std::move(block).value(),
             net::bind_executor(
@@ -274,12 +272,25 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
                     self->finish();
                   }
                 }));
-      } catch (...) {
-        fail(std::current_exception());
-      }
+      });
     }
 
    private:
+    // Run the `function`, whose only way of throwing is that an allocation (of
+    // a completion handler) fails, in which case this chunk cannot continue at
+    // all. Return `true` if the `function` ran through, and forward the
+    // exception to the consumer otherwise.
+    template <typename Function>
+    bool executeAndHandleUnlikelyMemoryError(Function function) noexcept {
+      try {
+        function();
+        return true;
+      } catch (...) {
+        fail(std::current_exception());
+        return false;
+      }
+    }
+
     // Forward the `exception` of this chunk to the consumer and then finish the
     // chunk.
     void fail(std::exception_ptr exception) noexcept {
@@ -342,9 +353,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     if (chunkIndex >= splitters_.numChunks() || sink_.stopRequested()) {
       return;
     }
-    // NOTE: The only thing that can throw here is the allocation of the
-    // completion handler, in which case the merge cannot continue at all.
-    try {
+    executeAndHandleUnlikelyMemoryError([this, chunkIndex] {
       semaphore_.asyncAcquire(net::bind_executor(
           strand_, [self = this->shared_from_this(), chunkIndex](
                        const boost::system::error_code& errorCode,
@@ -352,9 +361,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
             self->spawnChunkAndContinue(errorCode, std::move(permit),
                                         chunkIndex);
           }));
-    } catch (...) {
-      forwardExceptionToConsumer(std::current_exception());
-    }
+    });
   }
 
   // The continuation of `dispatchNextChunk`: post the task that merges the
@@ -376,21 +383,35 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     if (errorCode || sink_.stopRequested()) {
       return;
     }
-    // NOTE: The only thing that can throw here is an allocation (of the task or
-    // of the handler that is posted), in which case the merge cannot continue.
-    try {
-      // NOTE: The task is deliberately posted onto `executor_` and never onto a
-      // strand, see `ChunkTask`. The `permit` is owned by the task and is hence
-      // returned to the `semaphore_` as soon as the chunk is done, so that the
-      // next chunk may take its place.
-      auto task = std::make_shared<ChunkTask>(this->shared_from_this(),
-                                              chunkIndex, std::move(permit));
-      net::post(executor_, [task = std::move(task)] { task->step(); });
-    } catch (...) {
-      forwardExceptionToConsumer(std::current_exception());
+    bool wasSpawned =
+        executeAndHandleUnlikelyMemoryError([this, chunkIndex, &permit] {
+          // NOTE: The task is deliberately posted onto `executor_` and never
+          // onto a strand, see `ChunkTask`. The `permit` is owned by the task
+          // and is hence returned to the `semaphore_` as soon as the chunk is
+          // done, so that the next chunk may take its place.
+          auto task = std::make_shared<ChunkTask>(
+              this->shared_from_this(), chunkIndex, std::move(permit));
+          net::post(executor_, [task = std::move(task)] { task->step(); });
+        });
+    if (!wasSpawned) {
       return;
     }
     dispatchNextChunk(chunkIndex + 1);
+  }
+
+  // Run the `function`, whose only way of throwing is that an allocation (of a
+  // chunk task or of a completion handler) fails, in which case the merge
+  // cannot continue at all. Return `true` if the `function` ran through, and
+  // forward the exception to the consumer otherwise.
+  template <typename Function>
+  bool executeAndHandleUnlikelyMemoryError(Function function) noexcept {
+    try {
+      function();
+      return true;
+    } catch (...) {
+      forwardExceptionToConsumer(std::current_exception());
+      return false;
+    }
   }
 
   // Forward an `exception` that was thrown while dispatching to the consumer,

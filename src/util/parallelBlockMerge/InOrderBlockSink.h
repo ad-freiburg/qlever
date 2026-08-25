@@ -25,6 +25,7 @@
 #include <memory>
 #include <optional>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include "util/Exception.h"
@@ -143,6 +144,17 @@ namespace net = boost::asio;
 // 7. `ParallelMergeRange::get()`, the synchronous adapter of this machinery,
 //    blocks its calling thread on a `future`, so the executor has to be run by
 //    *other* threads. See the note there.
+// 8. The intermediate storage of the blocks is not abstracted away: `chunks_`
+//    stores them in one channel per chunk, and that channel is at the same time
+//    the buffer, the FIFO order, and the back-pressure. A `BlockStorage`
+//    interface (a `unique_ptr` to an abstract base, with a plain in-memory
+//    implementation and one that keeps compressed blocks on disk, the latter
+//    sharing its code with `CompressedExternalIdTableWriter`) would let a
+//    caller spill instead of suspending its producers. NOTE: Such an interface
+//    cannot be synchronous, because both storing and retrieving a block have to
+//    be able to suspend, so it would have to be an asynchronous operation of
+//    its own. It would also have to be templated on `Block`, while the on-disk
+//    implementation only exists for `IdTable`.
 //
 // NOTE: The class is neither copyable nor movable, because the producers and
 // the consumer refer to it by reference.
@@ -299,7 +311,12 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   // parameter pack in the init-capture of a lambda requires C++20.
   template <typename Executor, typename Handler, typename... Args>
   static void completeOn(const Executor& executor, Handler handler,
-                         Args... args) {
+                         Args&&... args) {
+    // Boost.Asio invokes a completion handler exactly once and with moved-in
+    // arguments, so every argument here has to be an rvalue. An lvalue would be
+    // copied into the `tuple` below instead of being moved.
+    static_assert((!std::is_lvalue_reference_v<Args> && ...),
+                  "The arguments of a completion handler have to be rvalues");
     net::post(executor, [handler = std::move(handler),
                          args = std::make_tuple(std::move(args)...)]() mutable {
       std::apply(
@@ -345,7 +362,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
       // care about a sentinel. NOTE: Returning here (instead of creating a
       // channel and sending into it) is what makes the teardown airtight, see
       // the class comment above.
-      completeOn(executor, std::move(handler), nullptr, false);
+      completeOn(executor, std::move(handler), std::exception_ptr{}, false);
       return;
     }
     // NOTE: For the sentinel the channel is created here if the chunk did not
@@ -357,16 +374,17 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
       completeOn(executor, std::move(handler), std::current_exception(), false);
       return;
     }
-    channel->async_send(boost::system::error_code{}, std::move(optionalBlock),
-                        [this, handler = std::move(handler), executor](
-                            boost::system::error_code errorCode) mutable {
-                          // NOTE: This runs on `strand_`, because the channel
-                          // was created with `strand_` as its executor and this
-                          // handler has no executor of its own that would
-                          // override that.
-                          completeOn(executor, std::move(handler), nullptr,
-                                     !errorCode && !stopRequested_.load());
-                        });
+    channel->async_send(
+        boost::system::error_code{}, std::move(optionalBlock),
+        [this, handler = std::move(handler),
+         executor](boost::system::error_code errorCode) mutable {
+          // NOTE: This runs on `strand_`, because the channel
+          // was created with `strand_` as its executor and this
+          // handler has no executor of its own that would
+          // override that.
+          completeOn(executor, std::move(handler), std::exception_ptr{},
+                     !errorCode && !stopRequested_.load());
+        });
   }
 
   // The body of `asyncGetNextBlock`: complete the `handler` on the `executor`
@@ -393,7 +411,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
       return;
     }
     if (!channel.has_value()) {
-      completeOn(executor, std::move(handler), nullptr,
+      completeOn(executor, std::move(handler), std::exception_ptr{},
                  std::optional<Block>{std::nullopt});
       return;
     }
@@ -410,7 +428,8 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
             return;
           }
           if (block.has_value()) {
-            completeOn(executor, std::move(handler), nullptr, std::move(block));
+            completeOn(executor, std::move(handler), std::exception_ptr{},
+                       std::move(block));
             return;
           }
           // The end-of-chunk sentinel, so move on to the next chunk. NOTE:

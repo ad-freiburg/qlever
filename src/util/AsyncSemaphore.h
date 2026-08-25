@@ -14,10 +14,8 @@
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/bind_executor.hpp>
-#include <boost/asio/dispatch.hpp>
-#include <boost/asio/experimental/channel.hpp>
+#include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/post.hpp>
-#include <boost/asio/strand.hpp>
 #include <boost/system/error_code.hpp>
 #include <cstddef>
 #include <memory>
@@ -43,37 +41,37 @@ namespace net = boost::asio;
 // function `asyncWithPermit` below, which scopes a permit to a single
 // asynchronous operation.
 //
-// STRAND CONFINEMENT: All the state is confined to a strand that this class
-// creates from the executor it is constructed with, so that a plain
-// (non-concurrent) channel suffices and no mutex is required. Every operation
-// therefore consists of a hop onto that strand, the actual work, and a hop back
-// to the executor that is associated with the completion token of the caller.
-// In particular all the operations may be initiated from any thread and any
-// executor.
+// THREAD SAFETY: The permits are held by a `concurrent_channel`, which
+// synchronizes itself internally, so every operation of this class may be
+// initiated from any thread and any executor without further synchronization
+// and without a hop onto a strand.
 //
-// NOTE: The state is held by a `shared_ptr`, so that the handlers which are
-// posted onto the strand (in particular the one that returns a permit) keep it
-// alive. A copy of an `AsyncSemaphore` therefore refers to the *same* set of
-// permits; copy it only to share it, never to obtain a second semaphore.
+// NOTE: The state is held by a `shared_ptr`, so that a `Permit` (which returns
+// itself in its destructor) may safely outlive the `AsyncSemaphore` object it
+// was obtained from. A copy of an `AsyncSemaphore` therefore refers to the
+// *same* set of permits; copy it only to share it, never to obtain a second
+// semaphore.
 class AsyncSemaphore {
  public:
-  // The strand to which all the state of this semaphore is confined.
-  using Strand = net::strand<net::any_io_executor>;
   // The channel that holds the permits: it buffers one (empty) element per
-  // permit that is currently free. NOTE: A plain (non-concurrent) channel
-  // suffices, because every operation on it is performed on the strand.
+  // permit that is currently free. NOTE: This is a *concurrent* channel, so all
+  // of its operations may be used from any thread, see the THREAD SAFETY note
+  // above.
   using PermitChannel =
-      net::experimental::channel<void(boost::system::error_code)>;
+      net::experimental::concurrent_channel<void(boost::system::error_code)>;
 
  private:
   // The shared state, see the NOTE in the class comment above.
   struct Impl {
-    Strand strand_;
+    // The executor of the channel, which is also the fallback executor for a
+    // completion handler that has none of its own.
+    net::any_io_executor executor_;
     PermitChannel permits_;
 
+    // NOTE: The declaration order of the two members matters, because the
+    // channel is constructed from the `executor_`.
     Impl(net::any_io_executor executor, size_t numPermits)
-        : strand_{net::make_strand(std::move(executor))},
-          permits_{strand_, numPermits} {}
+        : executor_{std::move(executor)}, permits_{executor_, numPermits} {}
   };
   std::shared_ptr<Impl> impl_;
 
@@ -89,21 +87,24 @@ class AsyncSemaphore {
     std::shared_ptr<Impl> impl_;
 
    public:
-    // Construct an empty handle that holds no permit.
+    // Construct an empty handle that holds no permit. This is the same state
+    // that `release()` and a moved-from handle leave behind, and it lets a
+    // caller declare a `Permit` before it owns one and fill it in later.
     Permit() = default;
 
     // Construct from the state of the semaphore that the permit belongs to. A
     // `nullptr` yields an empty handle, see `isValid`.
     explicit Permit(std::shared_ptr<Impl> impl) : impl_{std::move(impl)} {}
 
-    Permit(Permit&& other) noexcept : impl_{std::move(other.impl_)} {
-      other.impl_ = nullptr;
-    }
+    // NOTE: Moving a `shared_ptr` already empties the source, so the defaulted
+    // move constructor does the right thing. The move *assignment* in contrast
+    // has to be written by hand, because it must return the permit that it
+    // overwrites instead of just dropping it.
+    Permit(Permit&&) noexcept = default;
     Permit& operator=(Permit&& other) noexcept {
       if (this != &other) {
         release();
         impl_ = std::move(other.impl_);
-        other.impl_ = nullptr;
       }
       return *this;
     }
@@ -125,14 +126,14 @@ class AsyncSemaphore {
   };
 
   // Construct a semaphore with `numPermits` permits, all of which are initially
-  // free. The strand of this semaphore is derived from the `executor`, which
-  // somebody else has to run.
+  // free. The channel of this semaphore runs on the `executor`, which somebody
+  // else has to run.
   AsyncSemaphore(net::any_io_executor executor, size_t numPermits)
       : impl_{std::make_shared<Impl>(std::move(executor), numPermits)} {
     AD_CONTRACT_CHECK(numPermits > 0);
     // Hand out the initial permits. NOTE: This happens in the constructor,
     // which is always synchronous and which nothing else can run concurrently
-    // with, so no hop onto the strand is required here.
+    // with.
     for (size_t i = 0; i < numPermits; ++i) {
       bool permitWasSent =
           impl_->permits_.try_send(boost::system::error_code{});
@@ -140,10 +141,12 @@ class AsyncSemaphore {
     }
   }
 
-  // Return the strand to which the state of this semaphore is confined, see the
-  // STRAND CONFINEMENT note above. It is also the executor on which a
-  // completion handler runs that has no executor of its own.
-  const Strand& strand() const noexcept { return impl_->strand_; }
+  // Return the executor on which a completion handler of this semaphore runs if
+  // it has no executor of its own. This is the executor that the semaphore was
+  // constructed with.
+  const net::any_io_executor& defaultHandlerExecutor() const noexcept {
+    return impl_->executor_;
+  }
 
   // Take out a permit, suspending until one is free. The completion signature
   // is `void(boost::system::error_code, Permit)`. On success the `error_code`
@@ -153,7 +156,7 @@ class AsyncSemaphore {
   //
   // NOTE: This may be initiated from any thread and any executor. The
   // completion handler runs on the executor that is associated with the
-  // `completionToken`, or on `strand()` if the token has none.
+  // `completionToken`, or on `defaultHandlerExecutor()` if the token has none.
   template <typename CompletionToken>
   auto asyncAcquire(CompletionToken&& completionToken) {
     using Signature = void(boost::system::error_code, Permit);
@@ -161,29 +164,23 @@ class AsyncSemaphore {
       // The executor on which the completion handler has to run, see the NOTE
       // above.
       auto handlerExecutor =
-          net::get_associated_executor(handler, impl->strand_);
-      // The channel may only be touched on the strand, so hop there first. Note
-      // that the actual `async_receive` is what may suspend, and that its own
-      // completion handler is again bound to the strand, because Boost.Asio
-      // would otherwise run it on the channel's executor without dispatching it
-      // through the strand.
-      auto onStrand = [impl, handler = AD_FWD(handler),
-                       handlerExecutor]() mutable {
-        auto& permits = impl->permits_;
-        permits.async_receive(net::bind_executor(
-            impl->strand_,
-            [impl = std::move(impl), handler = std::move(handler),
-             handlerExecutor](
-                const boost::system::error_code& errorCode) mutable {
-              Permit permit{errorCode ? nullptr : std::move(impl)};
-              net::post(net::bind_executor(
-                  handlerExecutor, [handler = std::move(handler), errorCode,
-                                    permit = std::move(permit)]() mutable {
-                    std::move(handler)(errorCode, std::move(permit));
-                  }));
-            }));
-      };
-      net::dispatch(impl->strand_, std::move(onStrand));
+          net::get_associated_executor(handler, impl->executor_);
+      // IMPORTANT: The channel has to be bound to a local reference *before*
+      // the completion handler below is created, because that handler moves out
+      // of `impl` and the order in which the arguments of a call are evaluated
+      // is unspecified. The reference stays valid, because the handler keeps
+      // the `Impl` itself alive.
+      auto& permits = impl->permits_;
+      permits.async_receive(
+          [impl = std::move(impl), handler = AD_FWD(handler), handlerExecutor](
+              const boost::system::error_code& errorCode) mutable {
+            Permit permit{errorCode ? nullptr : std::move(impl)};
+            net::post(net::bind_executor(
+                handlerExecutor, [handler = std::move(handler), errorCode,
+                                  permit = std::move(permit)]() mutable {
+                  std::move(handler)(errorCode, std::move(permit));
+                }));
+          });
     };
     return net::async_initiate<CompletionToken, Signature>(std::move(initiate),
                                                            completionToken);
@@ -199,36 +196,30 @@ class AsyncSemaphore {
   // for good therefore needs a stop flag of its own and has to check it in the
   // completion handler of `asyncAcquire`.
   void cancel() noexcept {
-    ad_utility::terminateIfThrows(
-        [this] {
-          net::post(impl_->strand_,
-                    [impl = impl_] { impl->permits_.cancel(); });
-        },
-        "Cancelling an `AsyncSemaphore` failed.");
+    // NOTE: The channel is concurrent, so it can be cancelled right here from
+    // any thread, without a hop onto any executor.
+    ad_utility::terminateIfThrows([this] { impl_->permits_.cancel(); },
+                                  "Cancelling an `AsyncSemaphore` failed.");
   }
 
  private:
-  // Return the permit that is held by the `impl` (if any), by posting the
-  // corresponding send onto its strand. This never waits for that send to
-  // actually happen, so it may be called from anywhere, in particular from a
-  // destructor.
+  // Return the permit that is held by the `impl` (if any). The channel is
+  // concurrent, so this sends the permit right away and never waits, which
+  // makes it callable from anywhere, in particular from a destructor.
   static void releasePermit(std::shared_ptr<Impl> impl) noexcept {
     if (impl == nullptr) {
       return;
     }
     ad_utility::terminateIfThrows(
         [&impl] {
-          auto& strand = impl->strand_;
-          net::post(strand, [impl = std::move(impl)] {
-            bool permitWasSent =
-                impl->permits_.try_send(boost::system::error_code{});
-            // At most `numPermits` permits exist and the channel has exactly
-            // that capacity, so there is always a free slot. NOTE: The channel
-            // is never closed, and `cancel()` does not discard the buffered
-            // permits either, so this cannot fail while a user of this
-            // semaphore is being torn down either.
-            AD_CORRECTNESS_CHECK(permitWasSent);
-          });
+          bool permitWasSent =
+              impl->permits_.try_send(boost::system::error_code{});
+          // At most `numPermits` permits exist and the channel has exactly that
+          // capacity, so there is always a free slot. NOTE: The channel is
+          // never closed, and `cancel()` does not discard the buffered permits
+          // either, so this cannot fail while a user of this semaphore is being
+          // torn down either.
+          AD_CORRECTNESS_CHECK(permitWasSent);
         },
         "Returning a permit of an `AsyncSemaphore` failed.");
   }
@@ -244,9 +235,9 @@ class AsyncSemaphore {
 // `work` has to be an asynchronous operation in the Boost.Asio sense, i.e. a
 // callable that takes a completion token and completes with the signature
 // `void()`. It is initiated on the executor that is associated with the
-// `completionToken` (or on `semaphore.strand()` if the token has none), so a
-// `work` that does actual computation has to schedule that computation onto an
-// executor of its own.
+// `completionToken` (or on `semaphore.defaultHandlerExecutor()` if the token
+// has none), so a `work` that does actual computation has to schedule that
+// computation onto an executor of its own.
 //
 // NOTE: Use this whenever a permit is scoped to exactly one asynchronous
 // operation. A caller that has to continue as soon as the permit was *acquired*
@@ -258,8 +249,8 @@ auto asyncWithPermit(AsyncSemaphore semaphore, Work work,
   using Signature = void(boost::system::error_code);
   auto initiate = [semaphore = std::move(semaphore),
                    work = std::move(work)](auto&& handler) mutable {
-    auto handlerExecutor =
-        net::get_associated_executor(handler, semaphore.strand());
+    auto handlerExecutor = net::get_associated_executor(
+        handler, semaphore.defaultHandlerExecutor());
     semaphore.asyncAcquire(net::bind_executor(
         handlerExecutor, [work = std::move(work), handler = AD_FWD(handler)](
                              const boost::system::error_code& errorCode,
