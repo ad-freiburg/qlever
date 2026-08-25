@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 
+#include <absl/strings/str_cat.h>
+
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -21,6 +23,7 @@
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
 #include "util/TransparentFunctors.h"
+#include "util/TypeTraits.h"
 #include "util/Views.h"
 
 // The result type for a batch of vocabulary lookups.
@@ -137,9 +140,37 @@ struct StringVectorVocabBatchLookupData
 // single-word `operator[]` lookups one after another.
 namespace ad_utility::vocabulary {
 
+// Return the placeholder that is reported for a vocabulary index that is not
+// contained in a vocabulary with "holes" (see `VocabularyInMemoryBinSearch`).
+// This happens when such a vocabulary was created by excluding some of the
+// entries of a larger vocabulary, but an `Id` that refers to an excluded entry
+// is still looked up.
+inline std::string placeholderForMissingVocabIndex(uint64_t index) {
+  return absl::StrCat("<qlever-excluded-vocab-entry-", index, ">");
+}
+
+// Return `vocab[index]` as a `std::string`. If the `operator[]` of `vocab`
+// returns a `std::optional` (which is the case for vocabularies with holes, see
+// `VocabularyInMemoryBinSearch`) that is `std::nullopt`, return
+// `placeholderForMissingVocabIndex(index)` instead.
+template <typename Vocab>
+std::string wordAsStringOrPlaceholder(const Vocab& vocab, uint64_t index) {
+  decltype(auto) word = vocab[index];
+  if constexpr (ad_utility::similarToInstantiation<decltype(word),
+                                                   std::optional>) {
+    if (!word.has_value()) {
+      return placeholderForMissingVocabIndex(index);
+    }
+    return std::string{word.value()};
+  } else {
+    return std::string{word};
+  }
+}
+
 // Sequential fallback for `lookupBatch`: look up each index individually via
 // `vocab[idx]`, returning one `string_view` per index. Works for any vocabulary
-// whose `operator[]` yields something convertible to `std::string`.
+// whose `operator[]` yields something convertible to `std::string`, or a
+// `std::optional` thereof (see `wordAsStringOrPlaceholder`).
 template <typename Vocab>
 VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
                                              ql::span<const size_t> indices) {
@@ -151,8 +182,9 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
   // contained strings.
 
   std::vector<std::string> words = ::ranges::to<std::vector<std::string>>(
-      indices | ql::views::transform(
-                    [&vocab](size_t idx) { return std::string{vocab[idx]}; }));
+      indices | ql::views::transform([&vocab](size_t idx) {
+        return wordAsStringOrPlaceholder(vocab, idx);
+      }));
 
   auto data = std::make_shared<StringVectorVocabBatchLookupData>();
   data->buffer() = std::move(words);
