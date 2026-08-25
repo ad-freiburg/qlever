@@ -9,6 +9,8 @@
 #include "../util/OperationTestHelpers.h"
 #include "engine/Distinct.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/StripColumns.h"
+#include "engine/VariableToColumnMap.h"
 
 using ad_utility::testing::makeAllocator;
 using V = Variable;
@@ -261,8 +263,8 @@ TEST(Distinct, isDistinctBy) {
 }
 
 // _____________________________________________________________________________
-// TODO itsAnnaKai: Add additional test cases for the case that additional stripColumn
-// operation is added.
+// TODO itsAnnaKai: Add additional test cases for the case that additional
+// stripColumn operation is added.
 TEST(Distinct, makeTreeWithStrippedColumns) {
   IdTable input{makeIdTableFromVector(
       {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
@@ -276,12 +278,12 @@ TEST(Distinct, makeTreeWithStrippedColumns) {
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}});
 
   // Test case 1: Distinct keeps the original column 1 (?b).
-  // makeTreeWithStrippedColumns has no additional variables.
+  // makeTreeWithStrippedColumns has ?b as variables.
   // Therefore, only ?b should remain, now at column index 0.
   {
     Distinct distinct{qec, values, {1}};
     std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
-        distinct.makeTreeWithStrippedColumns(std::set<Variable>{});
+        distinct.makeTreeWithStrippedColumns(std::set<Variable>{V{"?b"}});
     ASSERT_TRUE(resultTree.has_value());
     ASSERT_TRUE((*resultTree) != nullptr);
     const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
@@ -289,9 +291,6 @@ TEST(Distinct, makeTreeWithStrippedColumns) {
     // check whether resultTree contains one column with name ?b
     EXPECT_EQ(v2cMap.size(), 1);
     EXPECT_TRUE(v2cMap.contains(Variable{"?b"}));
-    EXPECT_FALSE(v2cMap.contains(V{"?a"}));
-    EXPECT_FALSE(v2cMap.contains(V{"?c"}));
-    EXPECT_FALSE(v2cMap.contains(V{"?d"}));
 
     // After stripping, ?b should have index 0 instead of index 1 as before.
     ColumnIndex resultColumnIndex = v2cMap.at(Variable{"?b"}).columnIndex_;
@@ -299,23 +298,22 @@ TEST(Distinct, makeTreeWithStrippedColumns) {
   }
 
   // Test case 2: Distinct keeps the original columns 1, 3 (?b, ?d).
-  // makeTreeWithStrippedColumns has the additional variables ?a and ?d.
+  // makeTreeWithStrippedColumns has the variables ?a, ?b and ?d.
   // Therefore, ?a, ?b and ?d should remain.
   {
     Distinct distinct{qec, values, {1, 3}};
     std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
         distinct.makeTreeWithStrippedColumns(
-            std::set<Variable>{Variable{"?a"}, Variable{"?d"}});
+            std::set<Variable>{Variable{"?a"}, Variable{"?b"}, Variable{"?d"}});
     ASSERT_TRUE(resultTree.has_value());
     ASSERT_TRUE((*resultTree) != nullptr);
     const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
 
     // check whether resultTree contains three columns with name ?a, ?b and ?d
     EXPECT_EQ(v2cMap.size(), 3);
-    EXPECT_TRUE(v2cMap.contains(Variable{"?b"}));
-    EXPECT_TRUE(v2cMap.contains(V{"?a"}));
-    EXPECT_FALSE(v2cMap.contains(V{"?c"}));
-    EXPECT_TRUE(v2cMap.contains(V{"?d"}));
+    EXPECT_THAT(v2cMap, testing::UnorderedElementsAre(testing::Key(V{"?a"}),
+                                                      testing::Key(V{"?b"}),
+                                                      testing::Key(V{"?d"})));
 
     // Check the new indexes (?d should have index 2 instead of index 3 as
     // before the stripping)
@@ -328,25 +326,24 @@ TEST(Distinct, makeTreeWithStrippedColumns) {
   }
 
   // Test case 3: Distinct keeps the original column 1 (?b).
-  // makeTreeWithStrippedColumns has the additional variable ?a, ?d and the
+  // makeTreeWithStrippedColumns has the variables ?a, ?b, ?d and the
   // variable "?notIncluded", which has to be ignored by the function.
   // Therefore, only ?a, ?b and ?d should remain.
   {
     Distinct distinct{qec, values, {1}};
     std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
-        distinct.makeTreeWithStrippedColumns(std::set<Variable>{
-            Variable{"?d"}, Variable{"?notIncluded"}, Variable{"?a"}});
+        distinct.makeTreeWithStrippedColumns(
+            std::set<Variable>{Variable{"?d"}, Variable{"?notIncluded"},
+                               Variable{"?a"}, Variable{"?b"}});
     ASSERT_TRUE(resultTree.has_value());
     ASSERT_TRUE((*resultTree) != nullptr);
     const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
 
     // check whether resultTree contains three columns with name ?a, ?b and ?d
     EXPECT_EQ(v2cMap.size(), 3);
-    EXPECT_TRUE(v2cMap.contains(Variable{"?b"}));
-    EXPECT_TRUE(v2cMap.contains(V{"?a"}));
-    EXPECT_FALSE(v2cMap.contains(V{"?c"}));
-    EXPECT_TRUE(v2cMap.contains(V{"?d"}));
-    EXPECT_FALSE(v2cMap.contains(V{"?notIncluded"}));
+    EXPECT_THAT(v2cMap, testing::UnorderedElementsAre(testing::Key(V{"?a"}),
+                                                      testing::Key(V{"?b"}),
+                                                      testing::Key(V{"?d"})));
 
     // Check the new indexes (?d should have index 2 instead of index 3 as
     // before the stripping)
@@ -358,11 +355,11 @@ TEST(Distinct, makeTreeWithStrippedColumns) {
     EXPECT_EQ(resultColumnIndex, 2);
   }
 
-  // Test case 4: Distinct keeps no original columns.
-  // makeTreeWithStrippedColumns has the additional variable ?c.
+  // Test case 4: Distinct keeps the original column 1.
+  // makeTreeWithStrippedColumns has the variable ?c.
   // Therefore, only ?c should remain with index 0.
   {
-    Distinct distinct{qec, values, {}};
+    Distinct distinct{qec, values, {1}};
     std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
         distinct.makeTreeWithStrippedColumns(
             std::set<Variable>{Variable{"?c"}});
@@ -372,10 +369,7 @@ TEST(Distinct, makeTreeWithStrippedColumns) {
 
     // check whether resultTree contains three columns with name ?a, ?b and ?d
     EXPECT_EQ(v2cMap.size(), 1);
-    EXPECT_FALSE(v2cMap.contains(Variable{"?b"}));
-    EXPECT_FALSE(v2cMap.contains(V{"?a"}));
     EXPECT_TRUE(v2cMap.contains(V{"?c"}));
-    EXPECT_FALSE(v2cMap.contains(V{"?d"}));
 
     // Check the new index
     ColumnIndex resultColumnIndex = v2cMap.at(Variable{"?c"}).columnIndex_;
@@ -397,10 +391,9 @@ TEST(Distinct, makeTreeWithStrippedColumns) {
 
     // check whether resultTree contains three columns with name ?a, ?b and ?d
     EXPECT_EQ(v2cMap.size(), 3);
-    EXPECT_TRUE(v2cMap.contains(Variable{"?b"}));
-    EXPECT_TRUE(v2cMap.contains(V{"?a"}));
-    EXPECT_TRUE(v2cMap.contains(V{"?c"}));
-    EXPECT_FALSE(v2cMap.contains(V{"?d"}));
+    EXPECT_THAT(v2cMap, testing::UnorderedElementsAre(testing::Key(V{"?a"}),
+                                                      testing::Key(V{"?b"}),
+                                                      testing::Key(V{"?c"})));
 
     // Check the new index
     ColumnIndex resultColumnIndex = v2cMap.at(Variable{"?a"}).columnIndex_;
@@ -422,12 +415,14 @@ TEST(Distinct, makeTreeWithStrippedColumns) {
     ASSERT_TRUE((*resultTree) != nullptr);
     const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
 
-    // check whether resultTree contains three columns with name ?a, ?b and ?d
+    // check whether resultTree does not contain any columns.
     EXPECT_EQ(v2cMap.size(), 0);
   }
 
   // Test case 7: Check whether the new Distinct Operation has updated its
-  // keepIndices_ (but keeps same number of keepIndices_).
+  // keepIndices_ (but keeps same number of keepIndices_). And check whether
+  // additional StripColumns-Operation has been inserted above
+  // Distinct-Operation.
   {
     // Check whether original keepIndices_ contains 1 as indicated in the
     // constructor
@@ -445,8 +440,25 @@ TEST(Distinct, makeTreeWithStrippedColumns) {
     ASSERT_TRUE(resultTree.has_value());
     ASSERT_TRUE((*resultTree) != nullptr);
 
+    // Check whether a StripColumns operation has been added to the execution
+    // tree, because theere are keepIndices which are not included in the
+    // required variables of the parent tree. The only remaining variable of the
+    // StripColumns-Operation is ?d.
     auto rootOperation = (*resultTree)->getRootOperation();
-    Distinct* distinctOperation = dynamic_cast<Distinct*>(rootOperation.get());
+    StripColumns* stripColumnsOperation =
+        dynamic_cast<StripColumns*>(rootOperation.get());
+    ASSERT_TRUE(stripColumnsOperation != nullptr);
+    VariableToColumnMap strColMap =
+        stripColumnsOperation->computeVariableToColumnMap();
+    EXPECT_EQ(strColMap.size(), 1);
+    EXPECT_TRUE(strColMap.contains(V{"?d"}));
+
+    // Check whether the Distinct-Operation has updated its keepIndices_.
+    std::vector<QueryExecutionTree*> subtree =
+        stripColumnsOperation->getChildren();
+    ASSERT_TRUE(subtree.at(0) != nullptr);
+    auto distinctOp = subtree.at(0)->getRootOperation();
+    Distinct* distinctOperation = dynamic_cast<Distinct*>(distinctOp.get());
     ASSERT_TRUE(distinctOperation != nullptr);
     std::vector<ColumnIndex> newKeepIndices =
         distinctOperation->getDistinctColumns();
