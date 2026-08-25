@@ -33,6 +33,14 @@ class VocabularyInMemoryBinSearch
   using Indices = std::vector<uint64_t>;
   using IndicesView = ql::span<const uint64_t>;
 
+  // The holes of this vocabulary are deliberate: such a vocabulary is created
+  // by excluding some of the entries of a larger vocabulary, and is used in
+  // settings where looking up an excluded entry must not throw. Exporting a
+  // word that is not contained therefore yields
+  // `ad_utility::vocabulary::placeholderForMissingVocabIndex` instead of an
+  // exception (see `VocabularyTypes.h`).
+  static constexpr bool replaceOptionalByPlaceholderOnExport = true;
+
  private:
   // The actual storage. The indices are stored either as an owned vector
   // (after `open()`, or after reading from a regular, non-zero-copy

@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -149,17 +150,53 @@ inline std::string placeholderForMissingVocabIndex(uint64_t index) {
   return absl::StrCat("<qlever-excluded-vocab-entry-", index, ">");
 }
 
+namespace detail {
+// The implementation of `replaceOptionalByPlaceholderOnExport` below. The
+// primary template covers all vocabularies that don't declare the
+// corresponding member, the partial specialization those that do.
+template <typename Vocab, typename = void>
+struct ReplaceOptionalByPlaceholderOnExportImpl : std::false_type {};
+
+template <typename Vocab>
+struct ReplaceOptionalByPlaceholderOnExportImpl<
+    Vocab, std::void_t<decltype(Vocab::replaceOptionalByPlaceholderOnExport)>>
+    : std::bool_constant<Vocab::replaceOptionalByPlaceholderOnExport> {};
+}  // namespace detail
+
+// Whether the `Vocab` has opted in to reporting a word that it doesn't contain
+// (that is, its `operator[]` returns `std::nullopt`) as
+// `placeholderForMissingVocabIndex` when the words are exported, instead of
+// throwing. A vocabulary opts in by declaring
+// `static constexpr bool replaceOptionalByPlaceholderOnExport = true;`. The
+// default is `false`, because silently reporting a word that is not the one
+// that was asked for is only correct for vocabularies that are deliberately
+// created with holes (see `VocabularyInMemoryBinSearch`).
+template <typename Vocab>
+constexpr bool replaceOptionalByPlaceholderOnExport =
+    detail::ReplaceOptionalByPlaceholderOnExportImpl<Vocab>::value;
+
 // Return `vocab[index]` as a `std::string`. If the `operator[]` of `vocab`
 // returns a `std::optional` (which is the case for vocabularies with holes, see
-// `VocabularyInMemoryBinSearch`) that is `std::nullopt`, return
-// `placeholderForMissingVocabIndex(index)` instead.
+// `VocabularyInMemoryBinSearch`) that is `std::nullopt`, then return
+// `placeholderForMissingVocabIndex(index)` if the `vocab` has opted in to this
+// behavior via `replaceOptionalByPlaceholderOnExport` (see above), and throw
+// otherwise.
 template <typename Vocab>
 std::string wordAsStringOrPlaceholder(const Vocab& vocab, uint64_t index) {
   decltype(auto) word = vocab[index];
   if constexpr (ad_utility::similarToInstantiation<decltype(word),
                                                    std::optional>) {
     if (!word.has_value()) {
-      return placeholderForMissingVocabIndex(index);
+      if constexpr (replaceOptionalByPlaceholderOnExport<Vocab>) {
+        return placeholderForMissingVocabIndex(index);
+      } else {
+        AD_THROW(absl::StrCat(
+            "The index ", index,
+            " is not contained in the vocabulary. If the vocabulary is "
+            "deliberately built with such holes, then it has to declare "
+            "`static constexpr bool replaceOptionalByPlaceholderOnExport = "
+            "true;` to report a placeholder for the missing word instead."));
+      }
     }
     return std::string{word.value()};
   } else {
