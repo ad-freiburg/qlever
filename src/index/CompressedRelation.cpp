@@ -1330,7 +1330,7 @@ CompressedRelationReader::getDistinctCol0Ids(
 
   std::vector<Id> graphs;
   IdTable result = makeResultTable(addGraphColumn, idFilter, allocator_);
-  while (true) {
+  for (;;) {
     cancellationHandle->throwIfCancelled();
     auto id = smallerId(fromMetadataCursor.peek(), fromBlocksCursor.peek());
     if (!id.has_value()) {

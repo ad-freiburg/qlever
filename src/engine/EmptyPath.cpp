@@ -321,7 +321,7 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
 
   IdTable result{numIdColumns(), allocator()};
   result.reserve(chunkSize_);
-  while (true) {
+  for (;;) {
     bool hasSubject = subjects.findNextRow();
     bool hasObject = objects.findNextRow();
     if (!hasSubject && !hasObject) {
