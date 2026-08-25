@@ -1785,8 +1785,8 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     if (!sj) {
       plans.push_back({filterExpression, std::nullopt});
     } else {
-      // Subsitution of a `SpatialJoin` plan may be forced only if attaching one
-      // more child completes it.
+      // Substitution of a `SpatialJoin` plan may be forced only if attaching
+      // one more child completes it.
       bool forceSubstitution = sj->getChildren().size() == 1;
       auto plan = makeSubtreePlan(std::move(sj));
       // Mark that this subtree plan handles (that is, substitutes) the filter.
