@@ -619,6 +619,119 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Server::Awaitable<Server::CommandsResult> Server::processCommands(
+        bool accessTokenOk, const SharedIndexAndView& indexAndViews,
+        const ParamValueMap& parameters, SparqlOperation& operation,
+        const ad_utility::Timer& requestTimer, RequestT& request,
+        SendT& send) {
+  using namespace ad_utility::httpUtils;
+  using namespace responseJson;
+  using namespace serverProcessHelpers;
+
+  auto& index = indexAndViews->index_;
+
+  // We always want to call `Server::checkParameter` with the same first
+  // parameter.
+  auto checkParameter = absl::bind_front(
+      &ad_utility::url_parser::checkParameter, std::cref(parameters));
+
+  // Check if the current command is selected in the parameters from
+  // `parameters`. If so, log this information via `dispatchLog()` and return
+  // true. Return false otherwise.
+  auto commandIs = [accessTokenOk, &checkParameter](std::string_view cmd) {
+    if (checkParameter("cmd", std::string{cmd})) {
+      dispatchLog(cmd, accessTokenOk);
+      return true;
+    }
+    return false;
+  };
+
+  // We call `createJsonResponse` always with the same `request` parameter.
+  auto jsonResponse = [&request](const json& j) {
+    return createJsonResponse(j, request);
+  };
+
+  // We call `composeCacheStats()` always with the same parameters:
+  // `qlever().cache()` and `qlever().namedResultCache()`.
+  auto cacheStats = [&cache = qlever().cache(),
+                     &namedResultCache = qlever().namedResultCache()]() {
+    return composeCacheStats(cache, namedResultCache);
+  };
+
+  CommandsResult result;
+  if (commandIs("stats")) {
+    result.response_ = jsonResponse(composeIndexStats(index));
+  } else if (commandIs("cache-stats")) {
+    result.response_ = jsonResponse(cacheStats());
+  } else if (commandIs("clear-cache")) {
+    cache().clearUnpinnedOnly();
+    result.response_ = jsonResponse(cacheStats());
+  } else if (commandIs("clear-cache-complete")) {
+    cache().clearAll();
+    result.response_ = jsonResponse(cacheStats());
+  } else if (commandIs("clear-named-cache")) {
+    namedResultCache().clear();
+    result.response_ = jsonResponse(cacheStats());
+  } else if (commandIs("clear-delta-triples")) {
+    auto countAfterClear = co_await processClearDeltaTriples();
+    result.response_ = jsonResponse(json(countAfterClear));
+  } else if (commandIs("vacuum-delta-triples")) {
+    auto vacuumStats = co_await processVacuumDeltaTriples(
+        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
+    // Return of empty optional indicates that timeout has been fired in
+    // `verifyUserSubmittedQueryTimeout()`. This means that an error response
+    // has been already sent out to the client. We can stop here.
+    if (!vacuumStats.has_value()) {
+      result.stop_ = true;
+      co_return result;
+    }
+    result.response_ = jsonResponse(vacuumStats.value());
+  } else if (commandIs("get-settings")) {
+    result.response_ =
+        jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
+  } else if (commandIs("get-index-id")) {
+    result.response_ =
+        createOkResponse(index.getIndexId(), request, MediaType::textPlain);
+  } else if (commandIs("dump-active-queries")) {
+    auto activeQueries = nlohmann::json::object();
+    for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
+      activeQueries[nlohmann::json(key)] = std::move(value);
+    }
+    result.response_ = jsonResponse(activeQueries);
+  } else if (commandIs("rebuild-index")) {
+    result.response_ = co_await processRebuildIndex(parameters, request);
+  } else if (commandIs("write-materialized-view")) {
+    auto materializedViewStats = co_await processWriteMaterializedView(
+        parameters, operation, accessTokenOk, requestTimer, request, send);
+    // Return of empty optional indicates that timeout has been fired in
+    // `verifyUserSubmittedQueryTimeout()`. This means that an error response
+    // has been already sent out to the client. We can stop here.
+    if (!materializedViewStats.has_value()) {
+      result.stop_ = true;
+      co_return result;
+    }
+    result.response_ = jsonResponse(materializedViewStats.value());
+    // Prevent regular query processing by removing the query from the
+    // request.
+    operation = None{};
+  } else if (commandIs("load-materialized-view")) {
+    result.response_ =
+        jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
+    // Prevent regular query processing by removing the query from the
+    // request.
+    operation = None{};
+  } else if (commandIs("delete-materialized-view")) {
+    result.response_ = jsonResponse(processDeleteMaterializedView(parameters));
+    // Prevent regular query processing by removing the query from the
+    // request.
+    operation = None{};
+  }
+  co_return result;
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename RequestT, typename SendT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::process(RequestT& request, SendT&& send) {
   using namespace ad_utility::httpUtils;
   using namespace responseJson;
@@ -673,27 +786,9 @@ CPP_template_def(typename RequestT, typename SendT)(
             parameters, paramName, accessTokenOk);
       };
 
-  // Check if the current command is selected in the parameters from the
-  // `parsedHttpRequest.parameters_`. If so, log this information via
-  // `dispatchLog()` and return true. Return false otherwise.
-  auto commandIs = [accessTokenOk, &checkParameter](std::string_view cmd) {
-    if (checkParameter("cmd", std::string{cmd})) {
-      dispatchLog(cmd, accessTokenOk);
-      return true;
-    }
-    return false;
-  };
-
   // We call `createJsonResponse` always with the same `request` parameter.
   auto jsonResponse = [&request](const json& j) {
     return createJsonResponse(j, request);
-  };
-
-  // We call `composeCacheStats()` always with the same parameters:
-  // `qlever().cache()` and `qlever().namedResultCache()`.
-  auto cacheStats = [&cache = qlever().cache(),
-                     &namedResultCache = qlever().namedResultCache()]() {
-    return composeCacheStats(cache, namedResultCache);
   };
   std::optional<http::response<streamable_body>> response;
 
@@ -704,71 +799,13 @@ CPP_template_def(typename RequestT, typename SendT)(
   //
   // Some parameters require that "access-token" is set correctly. If not, that
   // parameter is ignored.
-  if (commandIs("stats")) {
-    response = jsonResponse(composeIndexStats(index));
-  } else if (commandIs("cache-stats")) {
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-cache")) {
-    cache().clearUnpinnedOnly();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-cache-complete")) {
-    cache().clearAll();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-named-cache")) {
-    namedResultCache().clear();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-delta-triples")) {
-    auto countAfterClear = co_await processClearDeltaTriples();
-    response = jsonResponse(json(countAfterClear));
-  } else if (commandIs("vacuum-delta-triples")) {
-    auto vacuumStats = co_await processVacuumDeltaTriples(
-        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
-    // An empty optional means that the user-submitted timeout was rejected
-    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
-    // error response to the client. We can stop here.
-    if (!vacuumStats.has_value()) {
-      co_return;
-    }
-    response = jsonResponse(vacuumStats.value());
-  } else if (commandIs("get-settings")) {
-    response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
-  } else if (commandIs("get-index-id")) {
-    response =
-        createOkResponse(index.getIndexId(), request, MediaType::textPlain);
-  } else if (commandIs("dump-active-queries")) {
-    auto json = nlohmann::json::object();
-    for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
-      json[nlohmann::json(key)] = std::move(value);
-    }
-    response = jsonResponse(json);
-  } else if (commandIs("rebuild-index")) {
-    response = co_await processRebuildIndex(parameters, request);
-  } else if (commandIs("write-materialized-view")) {
-    auto materializedViewStats = co_await processWriteMaterializedView(
-        parameters, parsedHttpRequest.operation_, accessTokenOk, requestTimer,
-        request, send);
-    // An empty optional means that the user-submitted timeout was rejected
-    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
-    // error response to the client. We can stop here.
-    if (!materializedViewStats.has_value()) {
-      co_return;
-    }
-    response = jsonResponse(materializedViewStats.value());
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
-  } else if (commandIs("load-materialized-view")) {
-    response =
-        jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
-  } else if (commandIs("delete-materialized-view")) {
-    response = jsonResponse(processDeleteMaterializedView(parameters));
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
+  auto commandsResult = co_await processCommands(
+      accessTokenOk, indexAndViews, parameters, parsedHttpRequest.operation_,
+      requestTimer, request, send);
+  if (commandsResult.stop_) {
+    co_return;
   }
+  response = std::move(commandsResult.response_);
 
   // Ping with or without message.
   if (parsedHttpRequest.path_ == "/ping") {

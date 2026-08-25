@@ -270,6 +270,32 @@ class Server {
       Awaitable<ResponseT> processRebuildIndex(const ParamValueMap& parameters,
                                                const RequestT& request);
 
+  // Result of `processCommands` below.
+  struct CommandsResult {
+    // The response produced by the matched `cmd=` URL parameter, if any.
+    std::optional<ad_utility::httpUtils::ResponseT> response_;
+    // True if an error response has already been sent directly to the client
+    // (via `verifyUserSubmittedQueryTimeout` inside
+    // `processVacuumDeltaTriples`/`processWriteMaterializedView`), in which
+    // case the caller must stop processing the request immediately.
+    bool stop_ = false;
+  };
+
+  // Handle the `cmd=<name>` URL parameter (see `serverProcessHelpers::
+  // kCommands` in `Server.cpp` for the full list). `operation` is the parsed
+  // "query"/"update"/graph-store operation of the same request, if any; for
+  // `write-materialized-view` it doubles as the view-defining query, and for
+  // that command as well as `load-materialized-view` and
+  // `delete-materialized-view`, it is reset to `None{}` on success so that
+  // `process()` doesn't also try to execute it as a regular query.
+  CPP_template(typename RequestT, typename SendT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<CommandsResult> processCommands(
+          bool accessTokenOk, const SharedIndexAndView& indexAndViews,
+          const ParamValueMap& parameters, SparqlOperation& operation,
+          const ad_utility::Timer& requestTimer, RequestT& request,
+          SendT& send);
+
   // Initialize and register server metrics which are stored in `metrics_`.
   void initializeServerMetrics(
       std::optional<ad_utility::MemorySize> memoryLimit);
