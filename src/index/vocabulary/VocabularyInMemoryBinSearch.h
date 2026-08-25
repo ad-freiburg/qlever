@@ -9,6 +9,7 @@
 #include <string_view>
 #include <variant>
 
+#include "backports/algorithm.h"
 #include "backports/span.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -36,7 +37,7 @@ class VocabularyInMemoryBinSearch
   // The actual storage. The indices are stored either as an owned vector
   // (after `open()`, or after reading from a regular, non-zero-copy
   // serializer), or as a non-owning view into externally-owned memory (after
-  // `fromZeroCopyDeserializer`), exactly as in `CompactVectorOfStrings`.
+  // `fromZeroCopyDeserializer`).
   Words words_;
   std::variant<Indices, IndicesView> indices_;
 
@@ -97,9 +98,10 @@ class VocabularyInMemoryBinSearch
   // Iterate over all words of the vocabulary in order, together with their
   // (because of the holes, not necessarily contiguous) vocabulary index.
   auto scanAll() const {
-    return ad_utility::integerRange(static_cast<uint64_t>(size())) |
-           ql::views::transform([this](uint64_t position) {
-             return IndexAndWord{indices()[position], words_[position]};
+    return ::ranges::views::zip(indices(), words_) |
+           ql::views::transform([](const auto& indexAndWord) {
+             const auto& [index, word] = indexAndWord;
+             return IndexAndWord{index, word};
            });
   }
 
@@ -139,7 +141,7 @@ class VocabularyInMemoryBinSearch
   // A vocabulary with holes cannot be written via the `WordWriterBase`
   // interface (which cannot express the explicit indices), so this function
   // always throws. Use the nested `WordWriter` above instead.
-  static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
+  [[noreturn]] static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
       const std::string& filename);
 
   // Clear the vocabulary.

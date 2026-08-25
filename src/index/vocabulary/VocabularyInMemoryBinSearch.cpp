@@ -75,7 +75,8 @@ WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<WordWriterBase> VocabularyInMemoryBinSearch::makeDiskWriterPtr(
+[[noreturn]] std::unique_ptr<WordWriterBase>
+VocabularyInMemoryBinSearch::makeDiskWriterPtr(
     [[maybe_unused]] const std::string& filename) {
   AD_THROW(
       "A vocabulary with holes cannot be built word by word, because the "

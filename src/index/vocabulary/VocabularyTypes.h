@@ -163,7 +163,7 @@ std::string wordAsStringOrPlaceholder(const Vocab& vocab, uint64_t index) {
     }
     return std::string{word.value()};
   } else {
-    return std::string{word};
+    return std::string{std::move(word)};
   }
 }
 
