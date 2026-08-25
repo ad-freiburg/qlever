@@ -10,7 +10,9 @@
 #include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionTree.h"
 #include "index/TripleComponentConversions.h"
+#include "parser/TripleComponent.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 
