@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <fstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -59,50 +60,153 @@ std::vector<char> readBytes(
   return result;
 }
 
+// The raw bytes of the file with the given `filename`, straight from disk and
+// without going through the `CompressedBlockFile`.
+std::vector<char> rawFileContents(const std::string& filename) {
+  std::ifstream stream{filename, std::ios::binary};
+  EXPECT_TRUE(stream.good());
+  return std::vector<char>{std::istreambuf_iterator<char>{stream},
+                           std::istreambuf_iterator<char>{}};
+}
+
+// The blocks that a round trip has appended: the bytes that went in, and the
+// metadata that `checkRoundTrip` has returned for them.
+struct RoundTrip {
+  std::vector<std::vector<char>> expected_;
+  std::vector<CompressedBlockFile::BlockMetadata> metadata_;
+};
+
+// Append a fixed sequence of blocks to the `file`, read them all back, and
+// check that they arrive unchanged and that the file is laid out as promised.
+// Return what was appended, so that the caller can check more.
+RoundTrip checkRoundTrip(CompressedBlockFile& file) {
+  // The sizes deliberately include an empty block, and blocks that are much
+  // larger and much smaller than each other.
+  std::vector<size_t> sizes{17, 0, 1, 100'000, 3, 0, 4096};
+  RoundTrip roundTrip;
+  for (size_t i : ql::views::iota(size_t{0}, sizes.size())) {
+    size_t numBytes = sizes.at(i);
+    roundTrip.expected_.push_back(makeBytes(numBytes, i + 1));
+    roundTrip.metadata_.push_back(
+        file.appendBlock(roundTrip.expected_.back().data(), numBytes));
+    EXPECT_EQ(roundTrip.metadata_.back().uncompressedSize_, numBytes);
+  }
+  file.flush();
+
+  // The blocks are stored one after the other, without gaps or overlaps.
+  size_t expectedOffset = 0;
+  for (const auto& block : roundTrip.metadata_) {
+    EXPECT_EQ(block.offsetInFile_, expectedOffset);
+    expectedOffset += block.compressedSize_;
+  }
+  EXPECT_EQ(ql::filesystem::file_size(file.filename()), expectedOffset);
+
+  // Read the blocks back, both in order and in reverse order, to make sure
+  // that reading doesn't depend on the shared file offset.
+  for (size_t i : ql::views::iota(size_t{0}, sizes.size())) {
+    EXPECT_EQ(readBytes(file, roundTrip.metadata_.at(i)),
+              roundTrip.expected_.at(i))
+        << "block " << i;
+  }
+  for (size_t i : ql::views::iota(size_t{0}, sizes.size())) {
+    size_t idx = sizes.size() - 1 - i;
+    EXPECT_EQ(readBytes(file, roundTrip.metadata_.at(idx)),
+              roundTrip.expected_.at(idx))
+        << "block " << idx;
+  }
+  return roundTrip;
+}
+
+// The compressions that the round trip below is run with: no compression at
+// all, the fastest ZSTD level, the default level, and a slow one.
+const std::vector<CompressedBlockFile::Compression>& compressions() {
+  static const std::vector<CompressedBlockFile::Compression> result{
+      ad_utility::NO_BLOCK_COMPRESSION, 1, ad_utility::ZSTD_DEFAULT_LEVEL, 9};
+  return result;
+}
+
 }  // namespace
 
 // _____________________________________________________________________________
 TEST(CompressedBlockFile, appendAndReadBlocks) {
   std::string filename = gtestCurrentTestName();
-  // The sizes deliberately include an empty block, and blocks that are much
-  // larger and much smaller than each other.
-  std::vector<size_t> sizes{17, 0, 1, 100'000, 3, 0, 4096};
-  std::vector<std::vector<char>> expected;
-  std::vector<CompressedBlockFile::BlockMetadata> metadata;
   {
+    // A file that is created without an explicit compression uses the default
+    // ZSTD level.
     CompressedBlockFile file{filename};
     ASSERT_EQ(file.filename(), filename);
-    for (size_t i : ql::views::iota(size_t{0}, sizes.size())) {
-      size_t numBytes = sizes.at(i);
-      expected.push_back(makeBytes(numBytes, i + 1));
-      metadata.push_back(file.appendBlock(expected.back().data(), numBytes));
-      EXPECT_EQ(metadata.back().uncompressedSize_, numBytes);
-    }
-    file.flush();
+    EXPECT_EQ(file.compression(), ad_utility::ZSTD_DEFAULT_LEVEL);
+    checkRoundTrip(file);
     ASSERT_TRUE(ql::filesystem::exists(filename));
-
-    // The blocks are stored one after the other, without gaps or overlaps.
-    size_t expectedOffset = 0;
-    for (const auto& block : metadata) {
-      EXPECT_EQ(block.offsetInFile_, expectedOffset);
-      expectedOffset += block.compressedSize_;
-    }
-    EXPECT_EQ(ql::filesystem::file_size(filename), expectedOffset);
-
-    // Read the blocks back, both in order and in reverse order, to make sure
-    // that reading doesn't depend on the shared file offset.
-    for (size_t i : ql::views::iota(size_t{0}, sizes.size())) {
-      EXPECT_EQ(readBytes(file, metadata.at(i)), expected.at(i))
-          << "block " << i;
-    }
-    for (size_t i : ql::views::iota(size_t{0}, sizes.size())) {
-      size_t idx = sizes.size() - 1 - i;
-      EXPECT_EQ(readBytes(file, metadata.at(idx)), expected.at(idx))
-          << "block " << idx;
-    }
   }
   // The destructor has deleted the file.
   EXPECT_FALSE(ql::filesystem::exists(filename));
+}
+
+// _____________________________________________________________________________
+// The very same round trip, but with each of the compressions that a caller may
+// choose, including `NO_BLOCK_COMPRESSION`.
+TEST(CompressedBlockFile, appendAndReadBlocksWithExplicitCompression) {
+  for (size_t i : ql::views::iota(size_t{0}, compressions().size())) {
+    CompressedBlockFile::Compression compression = compressions().at(i);
+    std::string filename = gtestCurrentTestName() + "." + std::to_string(i);
+    {
+      CompressedBlockFile file{filename, compression};
+      EXPECT_EQ(file.compression(), compression);
+      checkRoundTrip(file);
+    }
+    EXPECT_FALSE(ql::filesystem::exists(filename));
+  }
+}
+
+// _____________________________________________________________________________
+// A file that was created with `NO_BLOCK_COMPRESSION` stores its blocks exactly
+// as they are: the two sizes of a block are equal, and the bytes at the
+// recorded offset are byte for byte the bytes that were appended.
+TEST(CompressedBlockFile, uncompressedBlocksAreStoredVerbatim) {
+  std::string filename = gtestCurrentTestName();
+  {
+    CompressedBlockFile file{filename, ad_utility::NO_BLOCK_COMPRESSION};
+    EXPECT_EQ(file.compression(), ad_utility::NO_BLOCK_COMPRESSION);
+    RoundTrip roundTrip = checkRoundTrip(file);
+    std::vector<char> contents = rawFileContents(filename);
+    for (size_t i : ql::views::iota(size_t{0}, roundTrip.metadata_.size())) {
+      const auto& metadata = roundTrip.metadata_.at(i);
+      const std::vector<char>& expected = roundTrip.expected_.at(i);
+      EXPECT_EQ(metadata.compressedSize_, metadata.uncompressedSize_)
+          << "block " << i;
+      ASSERT_LE(metadata.offsetInFile_ + metadata.compressedSize_,
+                contents.size());
+      auto begin = contents.begin() +
+                   static_cast<std::ptrdiff_t>(metadata.offsetInFile_);
+      std::vector<char> stored{
+          begin, begin + static_cast<std::ptrdiff_t>(metadata.compressedSize_)};
+      EXPECT_EQ(stored, expected) << "block " << i;
+    }
+  }
+  EXPECT_FALSE(ql::filesystem::exists(filename));
+}
+
+// _____________________________________________________________________________
+// The compression really is the one that the caller has asked for: a
+// compressible block shrinks by a lot at any ZSTD level, it shrinks at least as
+// much at a higher level, and it does not shrink at all without compression.
+TEST(CompressedBlockFile, theRequestedCompressionIsApplied) {
+  // A block of a single repeated byte, so that every ZSTD level compresses it
+  // by a large factor.
+  std::vector<char> block(100'000, 'a');
+  auto appendedSize = [&block](CompressedBlockFile::Compression compression,
+                               const std::string& filename) {
+    CompressedBlockFile file{filename, compression};
+    return file.appendBlock(block.data(), block.size()).compressedSize_;
+  };
+  size_t uncompressed = appendedSize(ad_utility::NO_BLOCK_COMPRESSION,
+                                     gtestCurrentTestName() + ".none");
+  size_t fast = appendedSize(1, gtestCurrentTestName() + ".fast");
+  size_t slow = appendedSize(9, gtestCurrentTestName() + ".slow");
+  EXPECT_EQ(uncompressed, block.size());
+  EXPECT_LT(fast, block.size() / 2);
+  EXPECT_LE(slow, fast);
 }
 
 // _____________________________________________________________________________

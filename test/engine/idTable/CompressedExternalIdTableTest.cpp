@@ -15,6 +15,7 @@
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
@@ -785,6 +786,112 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
   EXPECT_FALSE(ql::filesystem::exists(spillFilename));
   ASSERT_EQ(table.numRows(), input.numRows());
   EXPECT_TRUE(ql::ranges::is_sorted(table, SortByOSP{}));
+}
+
+namespace {
+// The sorted result of a single merge, together with the largest size that the
+// spill file of the merge phase was observed to have while the merge ran. That
+// file is append-only, so that size is its peak, see
+// `CompressedIdTableBlockStorage`.
+struct SortResultWithSpillFileSize {
+  CopyableIdTable<0> table_;
+  size_t spillFileSize_;
+};
+
+// Sort the `input` with a merge phase that runs on eight threads and that
+// stores the output blocks it spills with the given `compression`, see
+// `CompressedExternalIdTableSorter::setMergeSpillCompression`.
+SortResultWithSpillFileSize sortWithSpillCompression(
+    const IdTable& input,
+    ad_utility::CompressedBlockFile::Compression compression,
+    const std::string& filename, const std::string& spillFilename) {
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  net::io_context ioContext;
+  // NOTE: The `work_guard` keeps the threads alive while the sorter is still
+  // being filled, i.e. while the `io_context` has no work at all yet.
+  auto workGuard = net::make_work_guard(ioContext);
+  std::vector<ad_utility::JThread> workers;
+  for (size_t i = 0; i < 8; ++i) {
+    workers.emplace_back([&ioContext] { ioContext.run(); });
+  }
+
+  // The current size of the spill file, or zero if it doesn't exist. It is
+  // created when the merge starts and deleted as soon as the merge is done, so
+  // it has to be sampled while the merge runs.
+  auto currentSpillFileSize = [&spillFilename]() {
+    ql::error_code errorCode;
+    auto size = ql::filesystem::file_size(spillFilename, errorCode);
+    return errorCode ? size_t{0} : static_cast<size_t>(size);
+  };
+
+  CopyableIdTable<0> table{NUM_COLS, ad_utility::testing::makeAllocator()};
+  size_t spillFileSize = 0;
+  {
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        filename, NUM_COLS, 1_MB, ad_utility::testing::makeAllocator(), 5_kB};
+    sorter.setMergeExecutor(ioContext.get_executor(), 8);
+    sorter.setMergeSpillCompression(compression);
+    for (const auto& row : input) {
+      sorter.push(row);
+    }
+    // Deliberately small output blocks, such that a single chunk produces
+    // several of them and therefore has to spill, see
+    // `sorterSpillsOutputBlocksToDisk`.
+    for (const auto& block : sorter.getSortedBlocks<0>(1000)) {
+      for (const auto& row : block) {
+        table.push_back(row);
+      }
+      spillFileSize = std::max(spillFileSize, currentSpillFileSize());
+    }
+  }
+  workGuard.reset();
+  workers.clear();
+  return {std::move(table), spillFileSize};
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// The compression with which the merge phase stores the output blocks that it
+// spills is a pure trade-off between CPU and bytes on disk, so it must not
+// change the result in any way. Check that, and that it really is applied.
+TEST(CompressedExternalIdTable, sorterMergeSpillCompression) {
+  std::string filename = gtestCurrentTestName() + ".dat";
+  // Each of the three sorters below is a fresh one, so each of them spills its
+  // first (and only) merge phase to this file, see
+  // `CompressedExternalIdTableSorter::makeSpillFilename`.
+  std::string spillFilename = filename + ".merge-spill.0";
+  absl::Cleanup cleanup = [&filename, &spillFilename] {
+    ad_utility::deleteFile(filename, false);
+    ad_utility::deleteFile(spillFilename, false);
+  };
+  // The columns hold few distinct values, such that the spilled blocks are
+  // highly compressible and the file sizes below differ clearly.
+  std::vector<JoinColumnAndBounds> bounds;
+  for (size_t columnIdx = 0; columnIdx < NUM_COLS; ++columnIdx) {
+    bounds.push_back(JoinColumnAndBounds{columnIdx, 0, 20});
+  }
+  IdTable input =
+      createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS, bounds);
+
+  auto uncompressed = sortWithSpillCompression(
+      input, ad_utility::NO_BLOCK_COMPRESSION, filename, spillFilename);
+  auto compressed = sortWithSpillCompression(
+      input, ad_utility::ZSTD_DEFAULT_LEVEL, filename, spillFilename);
+  auto fast = sortWithSpillCompression(input, 1, filename, spillFilename);
+
+  // Whatever the compression, the merge really did spill, and the result is
+  // exactly the sorted input.
+  ASSERT_EQ(uncompressed.table_.numRows(), input.numRows());
+  EXPECT_TRUE(ql::ranges::is_sorted(uncompressed.table_, SortByOSP{}));
+  EXPECT_THAT(compressed.table_,
+              ::testing::ElementsAreArray(uncompressed.table_));
+  EXPECT_THAT(fast.table_, ::testing::ElementsAreArray(uncompressed.table_));
+  EXPECT_GT(compressed.spillFileSize_, 0u);
+  EXPECT_GT(fast.spillFileSize_, 0u);
+
+  // The uncompressed spill file is what pays for the CPU that is saved.
+  EXPECT_GT(uncompressed.spillFileSize_, compressed.spillFileSize_);
+  EXPECT_GT(uncompressed.spillFileSize_, fast.spillFileSize_);
 }
 
 // _____________________________________________________________________________

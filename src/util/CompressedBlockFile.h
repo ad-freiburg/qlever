@@ -11,6 +11,7 @@
 #define QLEVER_SRC_UTIL_COMPRESSEDBLOCKFILE_H
 
 #include <cstddef>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <utility>
@@ -22,6 +23,10 @@
 #include "util/Synchronized.h"
 
 namespace ad_utility {
+
+// The default compression level of `ZstdWrapper::compress`, which is what a
+// `CompressedBlockFile` uses unless the caller says otherwise.
+constexpr inline int ZSTD_DEFAULT_LEVEL = 3;
 
 // A temporary file that stores an append-only sequence of independently
 // compressed blocks of bytes. A block is written via `appendBlock`, which
@@ -43,8 +48,21 @@ namespace ad_utility {
 // for temporary data.
 class CompressedBlockFile {
  public:
-  // Everything that is needed to read a single compressed block back. The
-  // sizes are in bytes.
+  // How the blocks of a file are stored: a ZSTD compression level, or
+  // `std::nullopt` (see `NO_BLOCK_COMPRESSION` below) to store the bytes as
+  // they are. Which of the two is faster depends entirely on the caller.
+  // Compressing pays off for data that has to fit on disk, or that is written
+  // once and read often. For a short-lived file whose blocks are read back
+  // almost immediately it is often a pure loss, because the compression is CPU
+  // work that competes with the actual computation, see
+  // `engine/idTable/CompressedIdTableBlockStorage.h`.
+  //
+  // NOTE: The setting applies to the whole file, so `readBlock` does not have
+  // to (and cannot) derive it from the metadata of a single block.
+  using Compression = std::optional<int>;
+
+  // Everything that is needed to read a single block back. The sizes are in
+  // bytes, and they are equal for a file that is stored uncompressed.
   struct BlockMetadata {
     size_t compressedSize_;
     size_t uncompressedSize_;
@@ -53,12 +71,15 @@ class CompressedBlockFile {
 
  private:
   std::string filename_;
+  Compression compression_;
   Synchronized<File, std::shared_mutex> file_{filename_, "w+"};
 
  public:
-  // Create the file at `filename`, overwriting it if it already exists.
-  explicit CompressedBlockFile(std::string filename)
-      : filename_{std::move(filename)} {}
+  // Create the file at `filename`, overwriting it if it already exists, and
+  // store its blocks with the given `compression`.
+  explicit CompressedBlockFile(std::string filename,
+                               Compression compression = ZSTD_DEFAULT_LEVEL)
+      : filename_{std::move(filename)}, compression_{compression} {}
 
   // Close and delete the file.
   ~CompressedBlockFile() {
@@ -69,16 +90,20 @@ class CompressedBlockFile {
   // The name of the underlying file.
   const std::string& filename() const { return filename_; }
 
-  // Compress the `numBytes` bytes at `data` and append them to the file. Return
-  // the metadata that `readBlock` needs to read them back.
+  // The compression that this file stores its blocks with.
+  Compression compression() const { return compression_; }
+
+  // Append the `numBytes` bytes at `data` to the file, compressing them unless
+  // this file was created with `NO_BLOCK_COMPRESSION`. Return the metadata that
+  // `readBlock` needs to read them back.
   BlockMetadata appendBlock(const void* data, size_t numBytes) {
-    auto compressed = ZstdWrapper::compress(data, numBytes);
-    size_t offset = 0;
-    file_.withWriteLock([&offset, &compressed](File& file) {
-      offset = static_cast<size_t>(file.tell());
-      file.write(compressed.data(), compressed.size());
-    });
-    return {compressed.size(), numBytes, offset};
+    if (!compression_.has_value()) {
+      return {numBytes, numBytes, appendBytes(data, numBytes)};
+    }
+    auto compressed =
+        ZstdWrapper::compress(data, numBytes, compression_.value());
+    return {compressed.size(), numBytes,
+            appendBytes(compressed.data(), compressed.size())};
   }
 
   // Read the block that is described by `metadata` and decompress it into
@@ -87,13 +112,16 @@ class CompressedBlockFile {
   // NOTE: Only blocks that were appended before the last call to `flush` are
   // guaranteed to be readable.
   void readBlock(const BlockMetadata& metadata, void* target) const {
+    if (!compression_.has_value()) {
+      // NOTE: An uncompressed block is read straight into the `target`, so this
+      // path needs neither an intermediate buffer nor a copy.
+      AD_CORRECTNESS_CHECK(metadata.compressedSize_ ==
+                           metadata.uncompressedSize_);
+      readBytes(metadata, target);
+      return;
+    }
     std::vector<char> compressed(metadata.compressedSize_);
-    auto numBytesRead =
-        file_.rlock()->read(compressed.data(), metadata.compressedSize_,
-                            static_cast<off_t>(metadata.offsetInFile_));
-    AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
-                         static_cast<size_t>(numBytesRead) ==
-                             metadata.compressedSize_);
+    readBytes(metadata, compressed.data());
     auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
         compressed.data(), compressed.size(), static_cast<char*>(target),
         metadata.uncompressedSize_);
@@ -112,7 +140,35 @@ class CompressedBlockFile {
     ad_utility::deleteFile(filename_);
     file->open(filename_, "w+");
   }
+
+ private:
+  // Append the `numBytes` bytes at `data` to the file and return the offset at
+  // which they were written. This takes an exclusive lock, because it uses the
+  // shared file offset.
+  size_t appendBytes(const void* data, size_t numBytes) {
+    size_t offset = 0;
+    file_.withWriteLock([&offset, data, numBytes](File& file) {
+      offset = static_cast<size_t>(file.tell());
+      file.write(data, numBytes);
+    });
+    return offset;
+  }
+
+  // Read the `compressedSize_` bytes of the block that is described by
+  // `metadata` into `target`.
+  void readBytes(const BlockMetadata& metadata, void* target) const {
+    auto numBytesRead =
+        file_.rlock()->read(target, metadata.compressedSize_,
+                            static_cast<off_t>(metadata.offsetInFile_));
+    AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
+                         static_cast<size_t>(numBytesRead) ==
+                             metadata.compressedSize_);
+  }
 };
+
+// Pass this as the compression of a `CompressedBlockFile` to store its blocks
+// uncompressed, see `CompressedBlockFile::Compression`.
+constexpr inline std::optional<int> NO_BLOCK_COMPRESSION = std::nullopt;
 
 }  // namespace ad_utility
 

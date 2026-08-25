@@ -118,30 +118,33 @@ class CompressedIdTableBlockStorage
   // if it exists and deleted when this storage is destroyed), the `allocator`
   // for the blocks that are read back, and the number of blocks that are kept
   // in memory per run before that run starts spilling. That number may be zero,
-  // in which case every block is spilled.
-  CompressedIdTableBlockStorage(Strand strand, net::any_io_executor ioExecutor,
-                                std::string filename,
-                                AllocatorWithLimit<Id> allocator,
-                                size_t maxBufferedBlocksPerRun)
+  // in which case every block is spilled. The `compression` decides how the
+  // spilled blocks are stored, see `CompressedBlockFile::Compression`; the
+  // spill file is short-lived and read back almost immediately, so a low level
+  // (or `NO_BLOCK_COMPRESSION`) is often faster than the default.
+  CompressedIdTableBlockStorage(
+      Strand strand, net::any_io_executor ioExecutor, std::string filename,
+      AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerRun,
+      CompressedBlockFile::Compression compression = ZSTD_DEFAULT_LEVEL)
       : strand_{std::move(strand)},
         ioExecutor_{std::move(ioExecutor)},
         allocator_{std::move(allocator)},
         maxBufferedBlocksPerRun_{maxBufferedBlocksPerRun},
-        file_{std::move(filename)} {}
+        file_{std::move(filename), compression} {}
 
   // The `StorageFactory` that creates such a storage, to be passed to the
   // corresponding constructor of `InOrderBlockSink`. The arguments are those of
   // the constructor above, minus the strand, which the sink supplies.
-  static StorageFactory makeStorageFactory(net::any_io_executor ioExecutor,
-                                           std::string filename,
-                                           AllocatorWithLimit<Id> allocator,
-                                           size_t maxBufferedBlocksPerRun) {
+  static StorageFactory makeStorageFactory(
+      net::any_io_executor ioExecutor, std::string filename,
+      AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerRun,
+      CompressedBlockFile::Compression compression = ZSTD_DEFAULT_LEVEL) {
     return [ioExecutor = std::move(ioExecutor), filename = std::move(filename),
-            allocator = std::move(allocator),
-            maxBufferedBlocksPerRun](const Strand& strand) mutable {
+            allocator = std::move(allocator), maxBufferedBlocksPerRun,
+            compression](const Strand& strand) mutable {
       return std::make_unique<CompressedIdTableBlockStorage>(
           strand, std::move(ioExecutor), std::move(filename),
-          std::move(allocator), maxBufferedBlocksPerRun);
+          std::move(allocator), maxBufferedBlocksPerRun, compression);
     };
   }
 

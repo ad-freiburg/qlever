@@ -58,6 +58,47 @@ constexpr inline size_t MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK = 1;
 constexpr inline size_t MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK =
     MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK + 2;
 
+// The compression that the merge phase applies to the output blocks that it
+// spills, see `CompressedExternalIdTableSorter::makeBlockStorageFactory`. In
+// contrast to the presorted runs, this file is short-lived and every block is
+// read back almost immediately, so the compression competes with the merge
+// itself for CPU. It cannot simply be turned off, though (which
+// `NO_BLOCK_COMPRESSION` would do), because the file grows to roughly 85 % of
+// everything that is merged and is written and read through the page cache, so
+// its size is paid for in memory bandwidth, and on a machine with less RAM in
+// real disk I/O. A *negative* ZSTD level (`zstd --fast=5`) wins on both counts.
+//
+// The wall time of the merge phase and the peak size of the spill file, for
+// 48M rows of 4 columns in 16 presorted runs with a memory limit of 192 MB, on
+// a 16-core Ryzen 9 7950X with an NVMe RAID and 128 GB of RAM:
+//
+//   level | realistic Ids (9x)     | uniformly random Ids (1.5x)
+//         | 16 thr   8 thr    file | 16 thr   8 thr    file
+//   ------+------------------------+----------------------------
+//       3 | 0.58 s  0.86 s   144 MB| 1.27 s  1.65 s   855 MB
+//       1 | 0.81 s  1.01 s   143 MB| 1.06 s  1.23 s   874 MB
+//      -5 | 0.48 s  0.70 s   228 MB| 0.66 s  0.83 s  1195 MB
+//    none | 0.62 s  0.69 s  1298 MB| 0.62 s  0.69 s  1286 MB
+//
+// Note that the low *positive* levels are the worst of both worlds: they cost
+// more CPU than level 3 and do not compress better. The reason is that the
+// columns of a sorted output block consist of long runs of equal `Id`s, which
+// the `ZSTD_dfast` strategy of level 3 skips over almost for free, while the
+// `ZSTD_fast` strategy of levels 1 and 2 pays its per-byte price everywhere.
+// The negative levels use `ZSTD_fast` as well, but with an acceleration that
+// makes that per-byte price small, and the runs are so long that they are
+// found anyway: at level -5 the realistic data still compresses 5.7x, and
+// `libzstd` drops from 43 % of the profile (level 3) to 34 %.
+//
+// The 1.3 GB that `NO_BLOCK_COMPRESSION` writes never reach the disk on the
+// machine above, because the file is deleted long before the page cache would
+// write it back. That is exactly what makes it a bad default: with the driver
+// confined to a 1 GB cgroup, that variant writes ~850 MB to the device and
+// slows down to 0.69 s, while level -5 still writes nothing at all and stays
+// at 0.48 s.
+constexpr inline CompressedBlockFile::Compression
+    MERGE_PHASE_SPILL_COMPRESSION = -5;
+
 // The smallest number of rows that an output block of the merge phase may have.
 // The number of chunks that are merged concurrently is chosen as large as the
 // memory limit allows, but never so large that the output blocks would fall
@@ -805,6 +846,10 @@ class CompressedExternalIdTableSorter
   // `makeSpillFilename`.
   std::atomic<size_t> numMergePhases_ = 0;
 
+  // See `setMergeSpillCompression`.
+  CompressedBlockFile::Compression mergeSpillCompression_ =
+      MERGE_PHASE_SPILL_COMPRESSION;
+
  public:
   // Constructor.
   CompressedExternalIdTableSorter(
@@ -848,6 +893,16 @@ class CompressedExternalIdTableSorter
     AD_CONTRACT_CHECK(parallelism > 0);
     mergeExecutor_ = std::move(executor);
     mergeParallelism_ = parallelism;
+  }
+
+  // Set how the merge phase stores the output blocks that it spills (see
+  // `makeBlockStorageFactory`): a ZSTD compression level, or
+  // `NO_BLOCK_COMPRESSION` to store them uncompressed. Use this to trade the
+  // CPU that the compression costs against the bytes that the spill file
+  // occupies, see `MERGE_PHASE_SPILL_COMPRESSION` for the default and the
+  // reasoning.
+  void setMergeSpillCompression(CompressedBlockFile::Compression compression) {
+    mergeSpillCompression_ = compression;
   }
 
   // If set to `false` then the sorted result can be extracted multiple times.
@@ -1017,7 +1072,7 @@ class CompressedExternalIdTableSorter
   makeBlockStorageFactory() {
     return CompressedIdTableBlockStorage<N>::makeStorageFactory(
         mergeExecutor_, makeSpillFilename(), this->writer_.allocator(),
-        MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+        MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK, mergeSpillCompression_);
   }
 
   // The name of the file that a single merge phase spills its output blocks to.
@@ -1103,7 +1158,10 @@ class CompressedExternalIdTableSorter
   //   1'000'000  843750 rows      1                 0.9x (the serial merge)
   //
   // The optimum is a flat plateau between 90'000 and 110'000 rows (13 to 15
-  // concurrent chunks), and the chosen value sits in the middle of it. Note
+  // concurrent chunks), and the chosen value sits in the middle of it. The
+  // table was measured before `MERGE_PHASE_SPILL_COMPRESSION` was lowered,
+  // which made every row of it faster (the chosen one reaches 6.6x today), but
+  // the optimum stayed where it is. Note
   // that letting *all* 16 chunks be in flight (which the minimum of 50'000
   // does) is measurably worse, but not because of the memory bandwidth: both
   // variants move the same 16 GB through the memory controllers, and the faster
@@ -1116,21 +1174,22 @@ class CompressedExternalIdTableSorter
   // difference (0.61 s instead of 0.72 s), so the minimum above effectively
   // keeps a chunk slot free for that bookkeeping.
   //
-  // TODO<joka921> The reason why the size of an output block matters this much
-  // is the spill of `makeBlockStorageFactory`: a chunk keeps only
+  // The reason why the size of an output block matters this much is the spill
+  // of `makeBlockStorageFactory`: a chunk keeps only
   // `MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK` of its output blocks in
   // memory and compresses the rest, so with eight blocks per chunk 85 % of all
-  // output bytes are compressed, written, read back and decompressed again,
-  // which is where the merge phase spends most of its time (`libzstd` is 66 %
-  // of the profile at 16 threads, against 21 % when nothing spills). That cost
-  // is also the whole reason why the merge of uniformly distributed `Id`s
-  // scales worse than that of realistic ones: uniform output blocks compress
-  // 1.5x instead of 9x. With output blocks as large as a chunk (which this
-  // memory limit does not allow) nothing spills at all, and both distributions
-  // reach a speedup of 7.9x. So there is roughly another factor of 1.4 to be
-  // had by spilling less or by spilling more cheaply, for example by buffering
-  // more blocks per chunk or by compressing this short-lived file with a much
-  // faster compression level than the input runs.
+  // output bytes are compressed, written, read back and decompressed again.
+  // Making that spill cheap is therefore worth as much as this whole formula,
+  // see `MERGE_PHASE_SPILL_COMPRESSION`. With it, realistic data is within 4 %
+  // of the merge that does not spill at all (0.47 s against 0.45 s), so there
+  // is nothing left to gain there.
+  //
+  // TODO<joka921> Uniformly distributed `Id`s are the case that is still far
+  // off: they compress much worse, so they spill 1.2 GB instead of 0.23 GB and
+  // reach 0.66 s against the same 0.47 s. Buffering more than one output block
+  // per chunk would spill less, at the price of chunk slots (see
+  // `MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK`). That trade was never measured, and
+  // it only matters for data that a real index build does not produce.
   //
   // NOTE: Before the output blocks were spilled to disk (see
   // `makeBlockStorageFactory`), a chunk that had run ahead of the consumer
