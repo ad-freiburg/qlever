@@ -101,7 +101,7 @@ auto makeIndexedValueGetter(Operand&& operand, EvaluationContext* context) {
   using OperandType = std::decay_t<Operand>;
 
   if constexpr (isVectorResult<OperandType>) {
-    AD_CONTRACT_CHECK(operand.size() == context->size());
+    AD_CORRECTNESS_CHECK(operand.size() == context->size());
 
     // TODO: The generator-based `NaryExpression` infrastructure forwards/moves
     // individual values into the value getter. Here, indexed vector elements
