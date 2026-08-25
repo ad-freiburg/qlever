@@ -726,6 +726,68 @@ TEST(CompressedExternalIdTable, sorterManyRunsParallel) {
 }
 
 // _____________________________________________________________________________
+// The merge phase spills its output blocks to a temporary file of its own, so
+// that a chunk that has run ahead of the consumer can be merged to completion
+// instead of suspending its producer, see
+// `CompressedExternalIdTableSorter::makeBlockStorageFactory`. Check that this
+// file is really written to and that it is deleted again afterwards.
+TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
+  std::string filename = gtestCurrentTestName() + ".dat";
+  // The name of the file of the first merge phase, see
+  // `CompressedExternalIdTableSorter::makeSpillFilename`.
+  std::string spillFilename = filename + ".merge-spill.0";
+  absl::Cleanup cleanup = [&filename, &spillFilename] {
+    ad_utility::deleteFile(filename, false);
+    ad_utility::deleteFile(spillFilename, false);
+  };
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  IdTable input =
+      createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS);
+
+  net::io_context ioContext;
+  // NOTE: The `work_guard` keeps the threads alive while the sorter is still
+  // being filled, i.e. while the `io_context` has no work at all yet.
+  auto workGuard = net::make_work_guard(ioContext);
+  std::vector<ad_utility::JThread> workers;
+  for (size_t i = 0; i < 8; ++i) {
+    workers.emplace_back([&ioContext] { ioContext.run(); });
+  }
+
+  CopyableIdTable<0> table{NUM_COLS, ad_utility::testing::makeAllocator()};
+  {
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        filename, NUM_COLS, 1_MB, ad_utility::testing::makeAllocator(), 5_kB};
+    sorter.setMergeExecutor(ioContext.get_executor(), 8);
+    for (const auto& row : input) {
+      sorter.push(row);
+    }
+    // Deliberately small output blocks, such that a single chunk produces
+    // several of them and therefore has to spill, because only
+    // `MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK` of them stay in memory.
+    auto blocks = sorter.getSortedBlocks<0>(1000);
+    // The storage creates its file while the merge is set up, which happens
+    // before the consumer has pulled a single block.
+    EXPECT_TRUE(ql::filesystem::exists(spillFilename));
+    // The chunks that this thread does not consume yet run ahead and spill, so
+    // the file grows although nothing is consumed here. Poll for that, because
+    // it happens on the threads of the merge executor.
+    bool wasWrittenTo = false;
+    for (size_t i = 0; i < 1000 && !wasWrittenTo; ++i) {
+      wasWrittenTo = ql::filesystem::file_size(spillFilename) > 0;
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    EXPECT_TRUE(wasWrittenTo);
+    table = idTableFromBlockGenerator(blocks);
+  }
+  workGuard.reset();
+  workers.clear();
+  // The storage deletes its file when the merge is destroyed.
+  EXPECT_FALSE(ql::filesystem::exists(spillFilename));
+  ASSERT_EQ(table.numRows(), input.numRows());
+  EXPECT_TRUE(ql::ranges::is_sorted(table, SortByOSP{}));
+}
+
+// _____________________________________________________________________________
 // If the memory limit only permits a single in-flight chunk, then the merge
 // still works, but a warning is logged.
 TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
@@ -734,13 +796,18 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
     ad_utility::deleteFile(filename, false);
   };
   // The following values are chosen such that (with 4 columns) exactly two
-  // presorted runs are created, that `computeBlockSizeForMergePhase` does not
-  // throw, and that a single in-flight chunk (2 MB of input blocks plus 0.5 MB
-  // of output block) already occupies more than half of the memory limit.
-  const auto memory = ad_utility::MemorySize::bytes(4'000'000);
+  // presorted runs are created, and such that
+  // `computeMergePhaseParameters` ends up with a single chunk in flight without
+  // throwing: the input blocks of a single chunk cost
+  // `2 * 4 * 250'000 = 2 MB`, so two concurrent chunks leave
+  // `(6 - 4) MB / (4 + 3 * 2)` per output block, which is far below
+  // `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`, whereas a single chunk still leaves
+  // `(6 - 2) MB / (4 + 3) = 571 kB`, which is above the hard floor of
+  // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows.
+  const auto memory = ad_utility::MemorySize::bytes(6'000'000);
   const auto blocksizeCompression = ad_utility::MemorySize::bytes(250'000);
-  // One run holds `4'000'000 / (4 * 8 * 2) = 62'500` rows, so the following
-  // number of rows yields exactly two complete runs and an empty last block.
+  // One run holds `6'000'000 / (4 * 8 * 2) = 93'750` rows, so the following
+  // number of rows yields two runs.
   constexpr size_t numRows = 125'000;
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;

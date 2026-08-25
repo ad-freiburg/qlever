@@ -28,7 +28,6 @@
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
 #include "util/parallelBlockMerge/BlockStorage.h"
-#include "util/parallelBlockMerge/InOrderBlockSink.h"
 
 namespace ad_utility {
 
@@ -83,8 +82,7 @@ class CompressedIdTableBlockStorage
   using StoreHandler = typename Base::StoreHandler;
   using GetHandler = typename Base::GetHandler;
   using Strand = typename Base::Strand;
-  using StorageFactory =
-      typename parallelBlockMerge::InOrderBlockSink<Block>::StorageFactory;
+  using StorageFactory = parallelBlockMerge::BlockStorageFactory<Block>;
 
  private:
   // A single value in the FIFO queue of a run: either a block that is still in

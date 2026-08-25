@@ -134,6 +134,18 @@ class BlockStorage : public NoCopyNoMove {
   virtual void cancelAll() noexcept = 0;
 };
 
+// The type of a factory that creates the `BlockStorage` of an
+// `InOrderBlockSink` for blocks of type `Block`. It is passed the strand that
+// the sink has derived from its executor, and the storage that it returns has
+// to confine itself to exactly that strand, see the CONTRACT above.
+//
+// NOTE: An empty factory is what the merge interprets as "use the default
+// storage", see `parallelBlockMergeAsync`.
+template <typename Block>
+using BlockStorageFactory =
+    absl::AnyInvocable<std::unique_ptr<BlockStorage<Block>>(
+                           const typename BlockStorage<Block>::Strand&) &&>;
+
 // The `BlockStorage` that simply keeps the blocks in memory, with a fixed
 // number of blocks that are buffered per run. A producer that has finished a
 // block while that buffer is full has to wait, so this implementation is the

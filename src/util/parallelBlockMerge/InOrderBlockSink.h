@@ -164,12 +164,8 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   // The strand to which all the state of this sink and all the operations on
   // its storage are confined, see the STRAND CONFINEMENT note above.
   using Strand = typename Storage::Strand;
-  // A factory that creates the storage of a sink. It is passed the strand that
-  // the sink has derived from its executor, and the storage that it returns has
-  // to confine itself to exactly that strand, see the CONTRACT of
-  // `BlockStorage`.
-  using StorageFactory =
-      absl::AnyInvocable<std::unique_ptr<Storage>(const Strand&) &&>;
+  // A factory that creates the storage of a sink, see `BlockStorageFactory`.
+  using StorageFactory = BlockStorageFactory<Block>;
 
  private:
   Strand strand_;

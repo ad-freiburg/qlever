@@ -17,6 +17,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
+#include "engine/idTable/CompressedIdTableBlockStorage.h"
 #include "engine/idTable/CompressedIdTableBlocks.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
@@ -44,6 +45,31 @@ using namespace ad_utility::memory_literals;
 // The default size for compressed blocks in the following classes.
 static constexpr ad_utility::MemorySize DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE =
     500_kB;
+
+// The number of finished output blocks that the merge phase of the
+// `CompressedExternalIdTableSorter` keeps in memory per chunk before it starts
+// spilling them to disk, see `CompressedIdTableBlockStorage`.
+constexpr inline size_t MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK = 1;
+
+// The number of output blocks that a single in-flight chunk of the merge phase
+// occupies at the same time: the one that it is currently merging into, the one
+// that may be on its way to the spill file, and the ones that the block storage
+// keeps in memory (see above).
+constexpr inline size_t MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK =
+    MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK + 2;
+
+// The smallest number of rows that an output block of the merge phase may have.
+// The number of chunks that are merged concurrently is chosen as large as the
+// memory limit allows, but never so large that the output blocks would fall
+// below this size, see
+// `CompressedExternalIdTableSorter::computeMergePhaseParameters`.
+constexpr inline size_t MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE = 100'000;
+
+// The hard floor for the size of an output block of the merge phase: if not
+// even a single chunk leaves room for a block of that many rows, then the merge
+// phase gives up and reports that the memory limit is insufficient. Below that
+// size the per-block overhead dominates completely.
+constexpr inline size_t MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE = 10'000;
 
 // A class that stores a sequence of `IdTable`s in a file. Each `IdTable` is
 // compressed blockwise. Typically, the blocksize is much smaller than the size
@@ -113,6 +139,9 @@ class CompressedExternalIdTableWriter {
   // Simple getters for the stored allocator and the number of columns;
   const auto& allocator() const { return allocator_; }
   size_t numColumns() const { return numColumns_; }
+  // The name of the file that the `IdTable`s are written to. Other temporary
+  // files of the same sorter derive their names from it.
+  const std::string& filename() const { return file_.filename(); }
   const MemorySize& blockSizeUncompressed() const {
     return blockSizeUncompressed_;
   }
@@ -771,6 +800,11 @@ class CompressedExternalIdTableSorter
   // sorter.
   std::atomic<bool> reducedParallelismWasLogged_ = false;
 
+  // The number of merge phases that were started so far, which is what makes
+  // the name of the spill file of a merge phase unique, see
+  // `makeSpillFilename`.
+  std::atomic<size_t> numMergePhases_ = 0;
+
  public:
   // Constructor.
   CompressedExternalIdTableSorter(
@@ -959,87 +993,74 @@ class CompressedExternalIdTableSorter
     // Merge the presorted runs (which live compressed in the `writer_`) in
     // parallel, see `util/parallelBlockMerge/ParallelBlockMerge.h`.
     const size_t numRuns = this->writer_.numIdTables();
-    const size_t blockSizeOutput =
-        blocksize.value_or(computeBlockSizeForMergePhase(numRuns));
+    const MergePhaseParameters parameters =
+        computeMergePhaseParameters(numRuns, blocksize);
     auto merged =
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
             mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
-            this->comparator_, makeMergeOptions(numRuns, blockSizeOutput),
-            mergeParallelism_);
+            this->comparator_, makeMergeOptions(parameters), mergeParallelism_,
+            /*cancellationHandle=*/nullptr, makeBlockStorageFactory<N>());
     return ad_utility::InputRangeTypeErased{
         checkedMergeResult<N>(std::move(merged))};
   }
 
-  // Compute the options of the parallel merge phase. The size of the output
-  // blocks is the `blockSizeOutput` that was computed by the caller, and the
-  // number of chunks that are merged concurrently is derived from the memory
-  // limit: a single in-flight chunk needs one decompressed input block per run
-  // plus one output block.
+  // The factory for the intermediate storage of the output blocks of the merge
+  // phase, see `parallelBlockMerge::BlockStorageFactory`. The blocks are
+  // spilled to a temporary file of their own, so that a chunk that has run far
+  // ahead of the consumer can be merged to completion instead of suspending its
+  // producer. A suspended producer would hold on to its slot among the chunks
+  // that are in flight, which is the scarce resource of the merge phase (see
+  // `computeMergePhaseParameters`). As long as the consumer keeps up, no block
+  // is ever written, see `CompressedIdTableBlockStorage`.
+  template <size_t N>
+  parallelBlockMerge::BlockStorageFactory<IdTableStatic<N>>
+  makeBlockStorageFactory() {
+    return CompressedIdTableBlockStorage<N>::makeStorageFactory(
+        mergeExecutor_, makeSpillFilename(), this->writer_.allocator(),
+        MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+  }
+
+  // The name of the file that a single merge phase spills its output blocks to.
   //
-  // TODO<joka921> The interplay of these two numbers is currently the
-  // bottleneck of the merge phase, because `blockSizeOutput` comes from
-  // `computeBlockSizeForMergePhase`, which was written for the *serial* merge
-  // and therefore spends the whole memory limit on very few, very large output
-  // blocks. Each in-flight chunk then costs one such block, so only a handful
-  // of chunks fit into the limit and most of the threads of the merge executor
-  // stay idle. Measured for 48 million rows in 16 runs of 4 columns each with a
-  // memory limit of 192 MB (times are for the merge phase only, relative to the
-  // serial merge, on a machine with 32 cores):
-  //
-  //   output block   chunks in flight   speedup with 16 threads
-  //   1476562 rows   3                  2.9x   (the current default)
-  //    750000 rows   7                  5.1x
-  //    100000 rows   30                 1.5x
-  //
-  // So the default leaves roughly a factor of two on the table, but simply
-  // dividing the output block size by the degree of parallelism overshoots:
-  // with many small blocks the per-block overhead, the synchronization in the
-  // sink, and the input blocks at the chunk boundaries (which are decompressed
-  // by both of the adjacent chunks) dominate. The optimum was at *fewer*
-  // concurrent chunks than there are threads, which suggests that the merge
-  // saturates the memory bandwidth well before it runs out of threads. Sizing
-  // the output blocks for the parallel case therefore needs its own formula
-  // (and a floor on the block size), instead of inheriting the serial one.
-  parallelBlockMerge::MergeOptions makeMergeOptions(size_t numRuns,
-                                                    size_t blockSizeOutput) {
+  // NOTE: The name has to be unique per merge phase, because the storage of a
+  // previous merge phase may still be alive when the next one starts, and it
+  // deletes the file that it holds when it is destroyed.
+  std::string makeSpillFilename() {
+    return absl::StrCat(this->writer_.filename(), ".merge-spill.",
+                        numMergePhases_.fetch_add(1));
+  }
+
+  // The two numbers that the memory limit has to be split between in the merge
+  // phase, see `computeMergePhaseParameters`.
+  struct MergePhaseParameters {
+    // The number of rows of a single output block.
+    size_t outputBlockSize_;
+    // The number of chunks that are merged concurrently.
+    size_t maxInFlightChunks_;
+  };
+
+  // Compute the options of the parallel merge phase from the parameters that
+  // `computeMergePhaseParameters` has derived.
+  parallelBlockMerge::MergeOptions makeMergeOptions(
+      const MergePhaseParameters& parameters) {
     parallelBlockMerge::MergeOptions options;
     // The number of rows is the only criterion for finishing an output block,
     // exactly as it was before the merge phase was parallelized.
-    options.outputBlockSize =
-        parallelBlockMerge::OutputBlockSize::numElements(blockSizeOutput);
-    const MemorySize memoryPerOutputBlock =
-        MemorySize::bytes(blockSizeOutput * this->numColumns_ * sizeof(Id));
-
-    size_t maxInFlight = mergeParallelism_;
-    // NOTE: When the memory limit is ignored (which is the case in many unit
-    // tests that deliberately use tiny limits), the memory-derived cap is
-    // skipped completely, because it would always collapse the merge to a
-    // single chunk and the parallel code path would never be exercised.
-    if (!EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING) {
-      const MemorySize memoryPerChunk =
-          numRuns * this->numColumns_ * this->writer_.blockSizeUncompressed() +
-          memoryPerOutputBlock;
-      const size_t bytesPerChunk = memoryPerChunk.getBytes();
-      // NOTE: If not even a single chunk fits into the memory limit, then we
-      // merge with a single chunk (which is exactly the serial merge that was
-      // used before) instead of throwing. Note that this can only happen if the
-      // caller explicitly specified a `blocksize`; if the `blockSizeOutput` was
-      // derived from the memory limit, then `computeBlockSizeForMergePhase` has
-      // already thrown "Insufficient memory for merging ..." in that case.
-      const size_t numChunksThatFit =
-          bytesPerChunk == 0 ? mergeParallelism_
-                             : this->memory_.getBytes() / bytesPerChunk;
-      maxInFlight =
-          std::max<size_t>(1, std::min(numChunksThatFit, mergeParallelism_));
-    }
-    options.maxInFlightChunks = maxInFlight;
+    options.outputBlockSize = parallelBlockMerge::OutputBlockSize::numElements(
+        parameters.outputBlockSize_);
+    options.maxInFlightChunks = parameters.maxInFlightChunks_;
+    // The block storage of the merge phase spills to disk, so this is the
+    // number of output blocks that it keeps in memory and not a back-pressure
+    // limit, see `makeBlockStorageFactory`.
+    options.bufferedBlocksPerChunk =
+        MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK;
     // Warn (once per sorter) if the memory limit forces us to use less
     // parallelism than the merge executor offers.
-    if (maxInFlight < mergeParallelism_ &&
+    if (parameters.maxInFlightChunks_ < mergeParallelism_ &&
         !reducedParallelismWasLogged_.exchange(true)) {
       AD_LOG_WARN << "The merge phase of the external sorter can only merge "
-                  << maxInFlight << " chunks concurrently instead of the "
-                  << mergeParallelism_
+                  << parameters.maxInFlightChunks_
+                  << " chunks concurrently instead of the " << mergeParallelism_
                   << " chunks that the available parallelism offers, because "
                      "of the memory limit of "
                   << this->memory_.asString()
@@ -1047,6 +1068,131 @@ class CompressedExternalIdTableSorter
                   << std::endl;
     }
     return options;
+  }
+
+  // Split the memory limit between the size of the output blocks and the number
+  // of chunks that are merged concurrently. The `blockSizeOverride`, if
+  // present, pins the former, so that only the latter is derived.
+  //
+  // The memory of the merge phase consists of two parts. Each chunk that is in
+  // flight holds one decompressed input block per run, which is by far the
+  // larger part and the reason why the number of concurrent chunks is bounded
+  // at all. On top of that come the output blocks: those in the pipeline
+  // between the merge and the caller (`numBufferedOutputBlocks_`), plus
+  // `MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK` for every chunk that is in flight.
+  //
+  // The strategy is to use as much parallelism as the memory limit allows, but
+  // never at the price of output blocks below
+  // `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows: with many small blocks the
+  // per-block overhead, the synchronization in the sink, and the input blocks
+  // at the chunk boundaries (which are decompressed by both of the adjacent
+  // chunks) start to dominate. That minimum is the only free parameter of the
+  // formula, and the following measurements are the reason for its value. They
+  // are for 48 million rows in 16 runs of 4 columns each with a memory limit
+  // of 192 MB, merged by 16 threads on a machine with 32 cores, relative to
+  // the serial merge of the same data (which takes 3.2 seconds), see
+  // `benchmark/ParallelBlockMergeBenchmark.cpp`:
+  //
+  //   minimum    output block    chunks in flight   speedup
+  //     50'000    86538 rows     16                 4.5x
+  //    100'000   101902 rows     14                 5.7x
+  //    150'000   166330 rows      9                 4.6x
+  //    250'000   291118 rows      5                 3.7x
+  //    500'000   581250 rows      2                 1.7x
+  //   1'000'000  843750 rows      1                 0.9x (the serial merge)
+  //
+  // The optimum is a flat plateau between 90'000 and 110'000 rows (13 to 15
+  // concurrent chunks), and the chosen value sits in the middle of it. Note
+  // that letting *all* 16 chunks be in flight (which the minimum of 50'000
+  // does) is already measurably worse, so the merge saturates the memory
+  // bandwidth before it runs out of threads.
+  //
+  // NOTE: Before the output blocks were spilled to disk (see
+  // `makeBlockStorageFactory`), a chunk that had run ahead of the consumer
+  // suspended while holding on to its slot, so the effective parallelism was
+  // whatever the consumer happened to allow, and the accounting also
+  // undercounted the output blocks that the sink buffered per chunk. The old
+  // formula spent almost the whole memory limit on a single output block
+  // (1476562 rows and 3 concurrent chunks here) and reached only 2.9x. Note
+  // that the new formula also makes the *serial* merge (a single chunk with
+  // 843750-row blocks) 13% faster, because its output blocks got smaller.
+  MergePhaseParameters computeMergePhaseParameters(
+      size_t numRuns, std::optional<size_t> blockSizeOverride) {
+    const size_t numColumns = this->numColumns_;
+    // One decompressed input block per run, for a single chunk.
+    const MemorySize inputMemoryPerChunk =
+        numRuns * numColumns * this->writer_.blockSizeUncompressed();
+
+    if (EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING) {
+      // For unit tests, always yield 5 rows at once, and let all the chunks
+      // that the parallelism offers be in flight. Deriving either number from
+      // the (deliberately tiny) memory limit of such a test would always
+      // collapse the merge to a single chunk, and the parallel code path would
+      // never be exercised.
+      return {blockSizeOverride.value_or(5), mergeParallelism_};
+    }
+
+    // Return the largest number of rows per output block that leaves room for
+    // `numInFlight` concurrent chunks, or `std::nullopt` if the input blocks of
+    // those chunks alone already exceed the memory limit.
+    auto largestOutputBlockSize =
+        [this, inputMemoryPerChunk,
+         numColumns](size_t numInFlight) -> std::optional<size_t> {
+      const MemorySize inputMemory = inputMemoryPerChunk * numInFlight;
+      if (inputMemory >= this->memory_) {
+        return std::nullopt;
+      }
+      const size_t numOutputBlocks =
+          static_cast<size_t>(numBufferedOutputBlocks_) +
+          MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK * numInFlight;
+      const MemorySize perBlock = std::min(
+          (this->memory_ - inputMemory) / numOutputBlocks, maxOutputBlocksize_);
+      return perBlock.getBytes() / (sizeof(Id) * numColumns);
+    };
+
+    // Return `true` if `numInFlight` concurrent chunks with output blocks of
+    // `numRows` rows each fit into the memory limit.
+    auto fits = [&largestOutputBlockSize](size_t numInFlight, size_t numRows) {
+      auto largest = largestOutputBlockSize(numInFlight);
+      return largest.has_value() && largest.value() >= numRows;
+    };
+
+    if (blockSizeOverride.has_value()) {
+      // The caller has pinned the size of the output blocks, so only the number
+      // of concurrent chunks is left to derive. NOTE: If not even a single
+      // chunk fits, then we merge with a single chunk (which is exactly the
+      // serial merge) instead of throwing, because the caller has explicitly
+      // asked for that block size.
+      const size_t numRows = blockSizeOverride.value();
+      for (size_t numInFlight = mergeParallelism_; numInFlight > 1;
+           --numInFlight) {
+        if (fits(numInFlight, numRows)) {
+          return {numRows, numInFlight};
+        }
+      }
+      return {numRows, 1};
+    }
+
+    // Use as much parallelism as the memory limit allows, but never at the
+    // price of output blocks that are too small, see above.
+    for (size_t numInFlight = mergeParallelism_; numInFlight > 1;
+         --numInFlight) {
+      auto numRows = largestOutputBlockSize(numInFlight);
+      if (numRows.has_value() &&
+          numRows.value() >= MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE) {
+        return {numRows.value(), numInFlight};
+      }
+    }
+    // Not even two chunks leave room for a reasonably sized output block, so
+    // merge with a single chunk and give it everything that is left.
+    auto numRows = largestOutputBlockSize(1);
+    if (!numRows.has_value() ||
+        numRows.value() <= MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE) {
+      throw std::runtime_error{
+          absl::StrCat("Insufficient memory for merging ", numRuns,
+                       " blocks. Please increase the memory settings")};
+    }
+    return {numRows.value(), 1};
   }
 
   // _____________________________________________________________
@@ -1061,48 +1207,6 @@ class CompressedExternalIdTableSorter
   // A function with this name is needed by the mixin base class.
   void transformBlock(IdTableStatic<NumStaticCols>& block) const {
     sortBlockInPlace(block);
-  }
-
-  // Compute the size of the blocks that are yielded in the output phase. It is
-  // computed from the total memory limit and the amount of memory required to
-  // store one decompressed block from each presorted input.
-  //
-  // NOTE: This spends the whole memory limit on a few large blocks, which was
-  // the right thing to do for the serial merge, but limits the number of
-  // chunks that the parallel merge can keep in flight. See the `TODO` at
-  // `makeMergeOptions` above for measurements.
-  size_t computeBlockSizeForMergePhase(size_t numBlocksToMerge) {
-    const size_t numColumns = this->numColumns_;
-    MemorySize requiredMemoryForInputBlocks =
-        numBlocksToMerge * numColumns * this->writer_.blockSizeUncompressed();
-    if (EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING) {
-      // For unit tests, always yield 5 outputs at once.
-      return 5;
-    } else {
-      auto throwInsufficientMemory = [numBlocksToMerge]() {
-        throw std::runtime_error{
-            absl::StrCat("Insufficient memory for merging ", numBlocksToMerge,
-                         " blocks. Please increase the memory settings")};
-      };
-      if (requiredMemoryForInputBlocks >= this->memory_) {
-        throwInsufficientMemory();
-      }
-      using namespace ad_utility::memory_literals;
-      // Don't use a too large output size.
-      auto blockSizeOutputMemory =
-          std::min((this->memory_ - requiredMemoryForInputBlocks) /
-                       numBufferedOutputBlocks_,
-                   maxOutputBlocksize_);
-
-      size_t blockSizeForOutput =
-          blockSizeOutputMemory.getBytes() / (sizeof(Id) * numColumns);
-      // If blocks are smaller than this, the performance will probably be poor
-      // because of the coroutine and vector resetting overhead.
-      if (blockSizeForOutput <= 10'000) {
-        throwInsufficientMemory();
-      }
-      return blockSizeForOutput;
-    }
   }
 };
 }  // namespace ad_utility

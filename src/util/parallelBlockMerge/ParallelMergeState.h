@@ -113,11 +113,13 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
       net::any_io_executor executor, Input input, Comparator comparator,
       MergeOptions options,
       ad_utility::SharedCancellationHandle cancellationHandle,
-      Splitters<Key> splitters, size_t maxInFlight) {
+      Splitters<Key> splitters, size_t maxInFlight,
+      BlockStorageFactory<Block> blockStorageFactory = {}) {
     auto self = std::make_shared<ParallelMergeState>(
         PrivateTag{}, std::move(executor), std::move(input),
         std::move(comparator), std::move(options),
-        std::move(cancellationHandle), std::move(splitters), maxInFlight);
+        std::move(cancellationHandle), std::move(splitters), maxInFlight,
+        std::move(blockStorageFactory));
     // NOTE: The dispatching can only be started once the `shared_ptr` exists,
     // because the tasks and handlers keep this object alive via
     // `shared_from_this`. It runs on `strand_`, see `dispatchNextChunk`.
@@ -129,7 +131,8 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   ParallelMergeState(PrivateTag, net::any_io_executor executor, Input input,
                      Comparator comparator, MergeOptions options,
                      ad_utility::SharedCancellationHandle cancellationHandle,
-                     Splitters<Key> splitters, size_t maxInFlight)
+                     Splitters<Key> splitters, size_t maxInFlight,
+                     BlockStorageFactory<Block> blockStorageFactory)
       : executor_{std::move(executor)},
         input_{std::move(input)},
         comparator_{std::move(comparator)},
@@ -138,8 +141,13 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
         splitters_{std::move(splitters)},
         maxInFlight_{maxInFlight},
         strand_{net::make_strand(executor_)},
+        // NOTE: An empty `blockStorageFactory` means "keep the blocks in
+        // memory", which is what bounds the memory consumption of the merge via
+        // back-pressure, see `InMemoryBlockStorage`.
         sink_{executor_, splitters_.numChunks(),
-              options_.bufferedBlocksPerChunk},
+              blockStorageFactory ? std::move(blockStorageFactory)
+                                  : Sink::makeInMemoryStorageFactory(
+                                        options_.bufferedBlocksPerChunk)},
         semaphore_{executor_, maxInFlight} {
     AD_CORRECTNESS_CHECK(maxInFlight_ > 0);
     AD_CORRECTNESS_CHECK(maxInFlight_ <= splitters_.numChunks());

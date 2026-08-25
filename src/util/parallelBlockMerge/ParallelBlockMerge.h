@@ -83,6 +83,13 @@ CPP_template(bool moveElements, typename Input,
 // chunks that are in flight, both of which may safely exceed the actual
 // parallelism. A value of `0` means "as many threads as the hardware offers".
 //
+// The `blockStorageFactory` decides where the finished output blocks live
+// between the producer of a chunk and the consumer, see `BlockStorage`. An
+// empty factory (the default) keeps them in memory, which means that a producer
+// whose chunk is far ahead of the consumer suspends; a factory that spills to
+// disk (see `engine/idTable/CompressedIdTableBlockStorage.h`) lets it run ahead
+// instead.
+//
 // The requirements on the `comparator` and the meaning of `moveElements` are
 // the same as for `serialBlockMergeToRange` above. In contrast to
 // `parallelBlockMergeToRange` below, this function has no serial fast path,
@@ -99,7 +106,10 @@ CPP_template(bool moveElements, typename Input,
                                              ad_utility::
                                                  SharedCancellationHandle
                                                      cancellationHandle =
-                                                         nullptr) {
+                                                         nullptr,
+                                             BlockStorageFactory<
+                                                 typename Input::Block>
+                                                 blockStorageFactory = {}) {
   using State = detail::ParallelMergeState<moveElements, Input, Comparator>;
   if (!executor) {
     executor = defaultMergeExecutor();
@@ -118,7 +128,7 @@ CPP_template(bool moveElements, typename Input,
   return State::create(std::move(executor), std::move(input),
                        std::move(comparator), std::move(options),
                        std::move(cancellationHandle), std::move(splitters),
-                       maxInFlight);
+                       maxInFlight, std::move(blockStorageFactory));
 }
 
 // The same as `parallelBlockMergeAsync` above, but return the merged blocks as
@@ -129,7 +139,8 @@ CPP_template(bool moveElements, typename Input,
 // The merge is performed serially in the calling thread (and the `executor` is
 // then never used at all) if the input is small (see
 // `MergeOptions::serialNumElementsThreshold`) or if the `parallelismHint`
-// resolves to a single thread.
+// resolves to a single thread. On that path there is no sink at all, so the
+// `blockStorageFactory` is ignored.
 //
 // IMPORTANT: Except on that serial path, the `executor` has to be run by
 // *other* threads (for example by a `boost::asio::thread_pool`), because the
@@ -144,7 +155,8 @@ CPP_template(bool moveElements, typename Input,
     InputRangeTypeErased<typename Input::Block> parallelBlockMergeToRange(
         net::any_io_executor executor, Input input, Comparator comparator,
         MergeOptions options = {}, size_t parallelismHint = 0,
-        ad_utility::SharedCancellationHandle cancellationHandle = nullptr) {
+        ad_utility::SharedCancellationHandle cancellationHandle = nullptr,
+        BlockStorageFactory<typename Input::Block> blockStorageFactory = {}) {
   using Block = typename Input::Block;
   using Range = detail::ParallelMergeRange<moveElements, Input, Comparator>;
   using Result = ad_utility::InputRangeTypeErased<Block>;
@@ -163,7 +175,8 @@ CPP_template(bool moveElements, typename Input,
   }
   return Result{std::make_unique<Range>(parallelBlockMergeAsync<moveElements>(
       std::move(executor), std::move(input), std::move(comparator),
-      std::move(options), parallelismHint, std::move(cancellationHandle)))};
+      std::move(options), parallelismHint, std::move(cancellationHandle),
+      std::move(blockStorageFactory)))};
 }
 
 }  // namespace ad_utility::parallelBlockMerge
