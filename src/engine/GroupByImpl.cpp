@@ -38,6 +38,7 @@
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
+#include "util/VarsRequiredFromSubtree.h"
 
 namespace groupBy::detail {
 
@@ -470,36 +471,25 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 GroupByImpl::makeTreeWithStrippedColumns(
     const std::set<Variable>& variables) const {
 
-  // Add variables and _groupByVariables to allNeededVars
+  // Add variables and _groupByVariables to the variables that are required from the subtree.
   // Keep in mind, that the variables dont have any consequences here, as the 
   // columns have been already stripped in the constructor.
-  std::set<Variable> newVariables;
-  const std::set<Variable>* allNeededVars = &variables;
+  VarsRequiredFromSubtree helper(variables);
   for (const Variable& groupByVar : _groupByVariables) {
-    if (!ad_utility::contains(variables, groupByVar)) {
-      if (allNeededVars == &variables) {
-        newVariables = variables;
-        allNeededVars = &newVariables;
-      }
-      newVariables.insert(groupByVar);
-    }
+    helper.add(groupByVar);
   }
 
-  // Add aliases to allNeededVars
+  // Also add aliases
   for (const auto& alias : _aliases) {
     for (const Variable* aliasVar : alias._expression.containedVariables()) {
-      if(!ad_utility::contains(*allNeededVars, *aliasVar)){
-        if (allNeededVars == &variables) {
-          newVariables = variables;
-          allNeededVars = &newVariables;
-        }
-        newVariables.insert(*aliasVar);
-      }   
+      helper.add(*aliasVar); 
     }
   }
+  // Collect all variables required from the subtree
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
   std::shared_ptr<QueryExecutionTree> subtree =
-      QueryExecutionTree::makeTreeWithStrippedColumns(_subtree, *allNeededVars);
+      QueryExecutionTree::makeTreeWithStrippedColumns(_subtree, varsRequiredFromSubtree);
 
   return ad_utility::makeExecutionTree<GroupBy>(
       getExecutionContext(), _groupByVariables, _aliases, std::move(subtree));

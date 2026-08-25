@@ -19,6 +19,7 @@
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/Random.h"
+#include "util/VarsRequiredFromSubtree.h"
 
 // Type alias for the external sorter.
 //
@@ -285,24 +286,20 @@ std::unique_ptr<Operation> Sort::cloneImpl() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
-  std::set<Variable> newVariables;
+
+  // Add variables and the variables corresponding to the sortColumnIndices_ to the variables that are required from the subtree.
   std::vector<Variable> sortVars;
-  const auto* vars = &variables;
+  VarsRequiredFromSubtree helper(variables);
   for (const auto& jcl : sortColumnIndices_) {
     const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
     sortVars.push_back(var);
-    if (!ad_utility::contains(variables, var)) {
-      if (vars == &variables) {
-        newVariables = variables;
-        vars = &newVariables;
-      }
-      newVariables.insert(var);
-    }
+    helper.add(var);
   }
+  // Collect all the varaibles that are required from the subtree.
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
-  // TODO<joka921> Code duplication including a former copy-paste bug.
   auto subtree =
-      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, *vars);
+      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, varsRequiredFromSubtree);
   std::vector<ColumnIndex> sortColumnIndices;
   for (const auto& var : sortVars) {
     sortColumnIndices.push_back(subtree->getVariableColumn(var));
