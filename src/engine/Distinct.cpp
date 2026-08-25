@@ -11,6 +11,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/VarsRequiredFromSubtree.h"
 
 using std::endl;
 using std::string;
@@ -246,24 +247,20 @@ IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Distinct::makeTreeWithStrippedColumns(
     const std::set<Variable>& variables) const {
-  std::set<Variable> newVariables;
+
+  // Add variables and the variables corresponding to the keepIndices_ to the variables that are required from the subtree.
+  VarsRequiredFromSubtree helper(variables);
   std::vector<Variable> keepVars;
-  const auto* allNeededVars = &variables;
   for (const auto& jcl : keepIndices_) {
     const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
     keepVars.push_back(var);
-    if (!ad_utility::contains(variables, var)) {
-      if (allNeededVars == &variables) {
-        newVariables = variables;
-        allNeededVars = &newVariables;
-      }
-      newVariables.insert(var);
-    }
+    helper.add(var);
   }
+  // Collect all the varaibles that are required from the subtree.
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
-  // TODO<joka921> Code duplication including a former copy-paste bug.
   auto subtree =
-      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, *allNeededVars);
+      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, varsRequiredFromSubtree);
   std::vector<ColumnIndex> distinctKeepIndices;
   for (const auto& var : keepVars) {
     distinctKeepIndices.push_back(subtree->getVariableColumn(var));
