@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "./WordsAndDocsFileLineCreator.h"
 #include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
@@ -450,6 +451,29 @@ TEST(IndexTest, emptyTextIndex) {
         qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
     EXPECT_EQ(result.size(), 0);
   }
+}
+
+// Regression test for #3191.
+TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <b> \"hello world\" . "
+      "<a> <b> \"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))\"^^<http://www."
+      "opengis.net/ont/geosparql#wktLiteral> ."};
+  config.createTextIndex = true;
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  config.scoringMetric = qlever::TextScoringMetric::TFIDF;
+  config.contentsOfWordsFileAndDocsfile =
+      std::pair{createWordsFileLineAsString("dummy", false, 1, 1),
+                createDocsFileLineAsString(1, "dummy")};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  IdTable helloResult =
+      qec->getIndex().getWordPostingsForTerm("hello", qec->getAllocator());
+  ASSERT_EQ(helloResult.size(), 1u);
+
+  IdTable polygonResult =
+      qec->getIndex().getWordPostingsForTerm("polygon", qec->getAllocator());
+  ASSERT_EQ(polygonResult.size(), 1u);
+  EXPECT_GT(polygonResult.at(0, 2).getDouble(), 0.0);
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a

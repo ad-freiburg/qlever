@@ -45,7 +45,7 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
         blockOfSmallRelations.at(blockOfSmallRelations.numRows() - 1, 0);
     writer_.compressAndWriteBlock(firstCol0, lastCol0,
                                   std::move(blockOfSmallRelations), false);
-  };
+  }
 };
 
 // Helper that handles the queue of callbacks to be called for every block
@@ -157,7 +157,7 @@ struct CompressedRelationWriter::PermutationWriter {
 
     writer1_->smallBlocksCallback_ =
         AddBlockOfSmallRelationsToSwitched{*writer2_};
-  };
+  }
 
   // Constructor for a `PermutationWriter` which writes a single permutation.
   CPP_template(bool doWritePair = WritePair)(requires(!doWritePair))
@@ -174,7 +174,7 @@ struct CompressedRelationWriter::PermutationWriter {
     // column.
     AD_CORRECTNESS_CHECK(permutation_.keys().at(3) == 3);
     AD_CORRECTNESS_CHECK(blocksize_ > 0);
-  };
+  }
 
   // Write a block of a large relation with `writer1` and also push the block
   // into the twin sorter for `writer2`.
@@ -195,7 +195,7 @@ struct CompressedRelationWriter::PermutationWriter {
     relation_.clear();
     relation_.reserve(blocksize_);
     ++numBlocksCurrentRel_;
-  };
+  }
 
   // We have encountered the last occurrence of the current relation (value for
   // column 0). Thus we need to write the remaining buffered rows and metadata.
@@ -230,7 +230,7 @@ struct CompressedRelationWriter::PermutationWriter {
     }
     relation_.clear();
     numBlocksCurrentRel_ = 0;
-  };
+  }
 
   // ___________________________________________________________________________
   void logTimers() const {

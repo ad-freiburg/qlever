@@ -6,6 +6,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/IdTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/ValueId.h"
 #include "index/TripleComponentConversions.h"
@@ -21,10 +22,6 @@ namespace {
 auto I = IntId;
 auto D = DoubleId;
 auto lit = tripleComponentLiteral;
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
 }  // namespace
 
 TEST(TripleComponent, setAndGetString) {
