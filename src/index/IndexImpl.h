@@ -290,13 +290,23 @@ class IndexImpl {
     return secondaryVocab_.get();
   }
 
-  // Set the secondary vocabulary, see above. NOTE: Tests that need an index
-  // with a secondary vocabulary should not call this directly, but set
-  // `TestIndexConfig::secondaryVocabWords` (see
+  // Set the secondary vocabulary, see above. This also attaches the comparator
+  // of the vocabulary of this index to it, which it needs for the semantic
+  // comparison of its words (see
+  // `SecondaryVocabulary::setMainVocabComparator`).
+  //
+  // NOTE: The vocabulary hence holds a pointer into `vocab_`, so it must not
+  // outlive this `IndexImpl`. This is the same lifetime assumption that
+  // `localVocabContext_` above already makes.
+  //
+  // NOTE: Tests that need an index with a secondary vocabulary should not call
+  // this directly, but set `TestIndexConfig::secondaryVocabWords` (see
   // `test/util/IndexTestHelpers.h`), such that the vocabulary is part of the
   // index right from its creation.
   void setSecondaryVocabForTesting(
-      std::shared_ptr<const SecondaryVocabulary> secondaryVocab) {
+      std::shared_ptr<SecondaryVocabulary> secondaryVocab) {
+    AD_CONTRACT_CHECK(secondaryVocab != nullptr);
+    secondaryVocab->setMainVocabComparator(vocab_.getCaseComparator());
     secondaryVocab_ = std::move(secondaryVocab);
   }
 

@@ -13,11 +13,7 @@
 // ___________________________________________________________________________
 ql::strong_ordering LocalVocabEntry::compareThreeWay(
     const LocalVocabEntry& rhs) const {
-  AD_EXPENSIVE_CHECK(
-      context_ == rhs.context_,
-      "Contexts of LocalVocabEntries have to be identical. If this is not the "
-      "case this means that stale entries associated with an old index are "
-      "falsely carried over somewhere.");
+  checkSameContext(rhs);
   // If the index has a secondary vocabulary, then first compare the positions
   // in the vocabularies, see the documentation of this function in the header
   // for why this is required. Without such a vocabulary the comparison of the
@@ -42,6 +38,15 @@ ql::strong_ordering LocalVocabEntry::compareThreeWay(
                          : ql::strong_ordering::less;
     }
   }
+  // The positions are equal (or the index has no secondary vocabulary), so the
+  // string values decide, which is exactly the semantic comparison.
+  return compareThreeWaySemantically(rhs);
+}
+
+// _____________________________________________________________________________
+ql::strong_ordering LocalVocabEntry::compareThreeWaySemantically(
+    const LocalVocabEntry& rhs) const {
+  checkSameContext(rhs);
   int i = context_->compareWords(toStringRepresentation(),
                                  rhs.toStringRepresentation());
   if (i < 0) {

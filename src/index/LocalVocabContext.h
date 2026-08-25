@@ -22,18 +22,27 @@ namespace ad_utility {
 class BlankNodeManager;
 }
 
-// The interface that a `LocalVocabEntry` requires from the index it belongs to.
-// A `LocalVocabEntry` stores a word that has to be comparable to the words in
-// the index's vocabulary, no matter whether it is contained in that vocabulary
-// or not. It therefore needs to look up where in the vocabulary the word is
-// stored, or would be stored, which is what this interface provides.
+// The interface to the vocabularies of an index that the comparison of words
+// and `Id`s requires. It serves exactly two purposes:
 //
-// NOTE: This is deliberately restricted to the operations that
-// `LocalVocabEntry` actually performs, and in particular does not expose the
-// vocabulary itself. Comparing two `Id`s calls into `LocalVocabEntry` (see
-// `global/ValueId.h`), so every library that compares `Id`s depends on
-// `LocalVocabEntry`. Keeping this interface abstract and minimal is what allows
-// those libraries to be independent of the (much larger) `index` library.
+// 1. A `LocalVocabEntry` stores a word that has to be comparable to the words
+// in the index's vocabulary, no matter whether it is contained in that
+// vocabulary or not. It therefore needs to look up where in the vocabulary the
+// word is stored, or would be stored, which is what this interface provides.
+//
+// 2. The semantic (that is, by string value) comparison of `Id`s in
+// `valueIdComparators` (see `global/ValueIdComparators.h`) has to compare the
+// words of two `Id`s, and to locate the word of an `Id` in the vocabulary of
+// the main index. See `compareIdsSemantically` and
+// `getSemanticPositionInMainVocab` below, which have no other callers.
+//
+// NOTE: This is deliberately restricted to the operations that those two
+// purposes actually require, and in particular does not expose the vocabulary
+// itself. Comparing two `Id`s calls into this interface and into
+// `LocalVocabEntry` (see `global/ValueId.h`), so every library that compares
+// `Id`s depends on both. Keeping this interface abstract and minimal is what
+// allows those libraries to be independent of the (much larger) `index`
+// library.
 //
 // The only implementation of this interface is `LocalVocabContextImpl`. There
 // must be exactly one instance of it per index, because
@@ -62,11 +71,47 @@ class LocalVocabContext {
   // Return the bounds of `word` in the vocabulary, see `VocabBounds`.
   virtual VocabBounds getPositionOfWord(std::string_view word) const = 0;
 
+  // Semantically (that is, by string value) compare the two given `Id`s, both
+  // of which have to be of one of the `ValueId::stringTypes_` (`VocabIndex`,
+  // `LocalVocabIndex`, or `SecondaryVocabIndex`). Return a value less than,
+  // equal to, or greater than zero if `a` is smaller than, equal to, or greater
+  // than `b`.
+  //
+  // NOTE: This is deliberately separate from the comparison of the `Id`s
+  // themselves (`ValueId::compareThreeWay`), which implements the order in
+  // which the index scans emit their `Id`s (the *internal* order). The two
+  // orders differ as soon as the index has a secondary vocabulary (see
+  // `index/vocabulary/SecondaryVocabulary.h`): a word of that vocabulary is
+  // positioned after *all* words of the main vocabulary in the internal order,
+  // no matter what it is, which is exactly what makes such words mergeable into
+  // a scan of the main index, but which has nothing to do with their string
+  // values.
+  //
+  // TODO<joka921> This currently looks up the word of each `Id` in the
+  // vocabularies, which is expensive. Once the secondary vocabulary stores the
+  // position of each of its words in the main vocabulary (see
+  // `index/vocabulary/SecondaryVocabulary.h`), this can compare those positions
+  // instead.
+  virtual int compareIdsSemantically(Id a, Id b) const = 0;
+
+  // Return the position at which the word of the given `Id` is, or would be,
+  // stored in the vocabulary of the main index (see `VocabBounds`). The `Id`
+  // has to be of one of the `ValueId::stringTypes_`. In contrast to
+  // `LocalVocabEntry::positionInVocab()`, this is always a position in the
+  // *main* vocabulary, also for a word that is stored in the secondary
+  // vocabulary, which is what a semantic comparison needs (see
+  // `compareIdsSemantically` above).
+  virtual VocabBounds getSemanticPositionInMainVocab(Id id) const = 0;
+
   // Return true iff this index has a secondary vocabulary at all (see
   // `index/vocabulary/SecondaryVocabulary.h`). This is the cheap check that
   // lets `LocalVocabEntry::compareThreeWay` skip the (expensive) lookup of the
   // position in the vocabulary, which is only needed if there is a secondary
-  // vocabulary.
+  // vocabulary. It is also the gate of
+  // `valueIdComparators::needsSemanticComparison`, which is the hotter of the
+  // two callers: without a secondary vocabulary the internal order of the `Id`s
+  // already is their semantic order, so none of the semantic comparisons above
+  // is needed in the first place.
   virtual bool hasSecondaryVocabulary() const = 0;
 
   // Look up `word` in the secondary vocabulary of this index (see
@@ -106,11 +151,11 @@ class LocalVocabContext {
   IdOrVocabBounds lookupWordInVocabularies(std::string_view word) const;
 
   // Return the manager for the blank nodes of this index. NOTE: This is the one
-  // function here that `LocalVocabEntry` itself does not need. It is required
-  // when a complete `LocalVocab` is deserialized (see `deserializeLocalVocab`
-  // in `util/Serializer/TripleSerializer.h`), which has only this interface at
-  // hand, so that the blank node manager would otherwise have to be threaded
-  // through the same call chains a second time.
+  // function here that serves neither of the two purposes described at the top
+  // of this file. It is required when a complete `LocalVocab` is deserialized
+  // (see `deserializeLocalVocab` in `util/Serializer/TripleSerializer.h`),
+  // which has only this interface at hand, so that the blank node manager would
+  // otherwise have to be threaded through the same call chains a second time.
   virtual ad_utility::BlankNodeManager* getBlankNodeManager() const = 0;
 };
 
