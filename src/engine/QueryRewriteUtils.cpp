@@ -71,7 +71,7 @@ getSpatialJoinConfigForFilter(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoinConfig(
+std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
     const SparqlFilter& filter, QueryExecutionContext* qec,
     absl::FunctionRef<Variable()> generateUniqueVarName) {
   const auto& filterBody = *filter.expression_.getPimpl();

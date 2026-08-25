@@ -23,7 +23,7 @@ class SpatialJoin;
 // Returns `nullptr` if `filter` is not such a filter. A side of the filter that
 // was a fixed value is bound to a single-row `VALUES` child using an internal
 // variable from `generateUniqueVarName`.
-std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoinConfig(
+std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
     const SparqlFilter& filter, QueryExecutionContext* qec,
     absl::FunctionRef<Variable()> generateUniqueVarName);
 

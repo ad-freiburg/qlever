@@ -1780,7 +1780,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
   for (const auto& [i, filterExpression] :
        ::ranges::views::enumerate(filters)) {
     // Check if the filter expression is suitable for spatial join rewriting.
-    auto sj = rewriteFilterToSpatialJoinConfig(
+    auto sj = rewriteFilterToSpatialJoin(
         filterExpression, _qec, [this] { return generateUniqueVarName(); });
     if (!sj) {
       plans.push_back({filterExpression, std::nullopt});
