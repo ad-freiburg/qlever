@@ -621,7 +621,7 @@ CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Server::Awaitable<Server::CommandsResult> Server::processCommands(
         bool accessTokenOk, const SharedIndexAndView& indexAndViews,
-        const ParamValueMap& parameters, SparqlOperation& operation,
+        const ParamValueMap& parameters, const SparqlOperation& operation,
         const ad_utility::Timer& requestTimer, RequestT& request,
         SendT& send) {
   using namespace ad_utility::httpUtils;
@@ -713,18 +713,18 @@ CPP_template_def(typename RequestT, typename SendT)(
     result.response_ = jsonResponse(materializedViewStats.value());
     // Prevent regular query processing by removing the query from the
     // request.
-    operation = None{};
+    result.consumedQueryOperation_ = true;
   } else if (commandIs("load-materialized-view")) {
     result.response_ =
         jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
     // Prevent regular query processing by removing the query from the
     // request.
-    operation = None{};
+    result.consumedQueryOperation_ = true;
   } else if (commandIs("delete-materialized-view")) {
     result.response_ = jsonResponse(processDeleteMaterializedView(parameters));
     // Prevent regular query processing by removing the query from the
     // request.
-    operation = None{};
+    result.consumedQueryOperation_ = true;
   }
   co_return result;
 }
@@ -980,7 +980,9 @@ CPP_template_def(typename RequestT, typename SendT)(
   };
 
   co_return co_await processOperation(
-      std::move(parsedHttpRequest.operation_),
+      commandsResult.consumedQueryOperation_
+          ? None{}
+          : std::move(parsedHttpRequest.operation_),
       ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
                                        visitNone},
       requestTimer, request, send, plannedQuery);

@@ -279,6 +279,15 @@ class Server {
     // `processVacuumDeltaTriples`/`processWriteMaterializedView`), in which
     // case the caller must stop processing the request immediately.
     bool stop_ = false;
+
+    // Following commands: `write-materialized-view`,
+    // `load-materialized-view` and `delete-materialized-view` already need
+    // to execute the given query request. To prevent the Server from not
+    // running the Query twice (see `server::process` the
+    // `processOperation` call) we introduce this control variable. If set
+    // to true, one of the commands ran and the operation should not run
+    // again.
+    bool consumedQueryOperation_ = false;
   };
 
   // Handle the `cmd=<name>` URL parameter (see `serverProcessHelpers::
@@ -292,7 +301,7 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<CommandsResult> processCommands(
           bool accessTokenOk, const SharedIndexAndView& indexAndViews,
-          const ParamValueMap& parameters, SparqlOperation& operation,
+          const ParamValueMap& parameters, const SparqlOperation& operation,
           const ad_utility::Timer& requestTimer, RequestT& request,
           SendT& send);
 
