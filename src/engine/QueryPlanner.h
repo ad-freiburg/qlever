@@ -174,8 +174,9 @@ class QueryPlanner {
   struct FilterAndOptionalSubstitute {
     SparqlFilter filter_;
     std::optional<SubtreePlan> substitute_;
-    // Enforce filter substitution. Do not add the filtered plan as a candidate,
-    // but replace the existing plan by the filtered one.
+    // Enforce filter substitution. Replace the existing plan by the filtered
+    // one instead of adding the filtered plan as a candidate.
+    //
     // NOTE: This may not be used for incomplete `SpatialJoin` operations as
     // they will otherwise never have their second child attached.
     bool forceSubstitution_ = false;
