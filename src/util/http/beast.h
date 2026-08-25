@@ -7,13 +7,6 @@
 
 // A convenience header that includes Boost::Asio and Boost::Beast, and defines
 // the few constants that Boost::Asio doesn't deduce automatically (see below).
-// In particular the constants for the coroutine support are NOT needed:
-// sufficiently recent Boost versions define them themselves, and the old
-// versions that we still support (down to Boost 1.71, see the `CPP17 libQLever`
-// CI workflow) don't have coroutine support at all. Note that we must not force
-// them for those old versions, because their `boost/asio/awaitable.hpp` then
-// includes the Coroutines TS header `<experimental/coroutine>`, which is
-// provided by neither libstdc++ nor recent libc++.
 
 // Without explicitly including the `<utility>` header, an error occurs when
 // compiling the `boost::asio` code included below with gcc 12. We hope and
