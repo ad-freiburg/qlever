@@ -512,6 +512,7 @@ namespace {
 // Helpers used only by `Server::process` below, for dispatching its `cmd=`
 // URL parameter.
 namespace serverProcessHelpers {
+using namespace ad_utility::url_parser;
 // Metadata for a `cmd=<name>` URL parameter handled by `Server::process`:
 // the log message and whether it requires a valid access token.
 struct CommandMeta {
@@ -557,11 +558,10 @@ void requireValidAccessToken(bool accessTokenOk, std::string_view actionName) {
 // error message on invalid access), log the `<newValue>` and return it. Return
 // `std::nullopt` if no such parameter is found.
 std::optional<std::string> checkAndLogParameterSetting(
-    const ad_utility::url_parser::ParamValueMap& parameters,
-    std::string_view paramName, bool accessTokenOk,
+    const ParamValueMap& parameters, std::string_view paramName,
+    bool accessTokenOk,
     std::optional<std::string_view> actionName = std::nullopt) {
-  auto value = ad_utility::url_parser::checkParameter(parameters, paramName,
-                                                      std::nullopt);
+  auto value = checkParameter(parameters, paramName, std::nullopt);
   if (value.has_value()) {
     requireValidAccessToken(accessTokenOk, actionName.value_or(paramName));
     AD_LOG_INFO << "Setting \"" << paramName << "\" to: \"" << value.value()
@@ -572,10 +572,8 @@ std::optional<std::string> checkAndLogParameterSetting(
 
 // Create parameter binded version of `checkParameter` with `parameters` as the
 // first binded argument.
-auto makeCheckParameter(
-    const ad_utility::url_parser::ParamValueMap& parameters) {
-  return absl::bind_front(&ad_utility::url_parser::checkParameter,
-                          std::cref(parameters));
+auto makeCheckParameter(const ParamValueMap& parameters) {
+  return absl::bind_front(&checkParameter, std::cref(parameters));
 }
 
 // Look up metadata for `cmd` in `commands`, run the access-token check (if
@@ -682,9 +680,9 @@ CPP_template_def(typename RequestT, typename SendT)(
   } else if (commandIs("vacuum-delta-triples")) {
     auto vacuumStats = co_await processVacuumDeltaTriples(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
-    // Return of empty optional indicates that timeout has been fired in
-    // `verifyUserSubmittedQueryTimeout()`. This means that an error response
-    // has been already sent out to the client. We can stop here.
+    // An empty optional means that the user-submitted timeout was rejected
+    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
+    // error response to the client. We can stop here.
     if (!vacuumStats.has_value()) {
       result.stop_ = true;
       co_return result;
@@ -707,9 +705,9 @@ CPP_template_def(typename RequestT, typename SendT)(
   } else if (commandIs("write-materialized-view")) {
     auto materializedViewStats = co_await processWriteMaterializedView(
         parameters, operation, accessTokenOk, requestTimer, request, send);
-    // Return of empty optional indicates that timeout has been fired in
-    // `verifyUserSubmittedQueryTimeout()`. This means that an error response
-    // has been already sent out to the client. We can stop here.
+    // An empty optional means that the user-submitted timeout was rejected
+    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
+    // error response to the client. We can stop here.
     if (!materializedViewStats.has_value()) {
       result.stop_ = true;
       co_return result;
