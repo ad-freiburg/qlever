@@ -63,6 +63,7 @@ class DistinctGraphs : public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
 
  protected:
+  // No column is sorted in result.
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
     return {};
   }
@@ -81,6 +82,7 @@ class DistinctGraphs : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
+  // Only one column in the result and it is always defined.
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 
   // The graph variable of queries of the form: `SELECT * { GRAPH ?g { ... }}`.
