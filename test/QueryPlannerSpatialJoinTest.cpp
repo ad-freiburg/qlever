@@ -1578,8 +1578,12 @@ TEST(QueryPlanner, SpatialJoinFromFilterWithFixedValue) {
   auto scan = h::IndexScanFromStrings;
   auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
   using enum SpatialJoinType::Enum;
+  // The filter substitutes are seeded exactly once per planning (in
+  // `fillDpTab`), and the queries below contain no other construct that
+  // generates an internal variable, so the fixed side is bound to the first
+  // internal variable.
   Var internalVar{
-      absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 1)};
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 0)};
 
   // Fixed values during `FILTER` rewriting are replaced by a single-row
   // `VALUES`. Construct matchers for this.

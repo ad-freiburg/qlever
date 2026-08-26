@@ -1799,6 +1799,18 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 }
 
 // _____________________________________________________________________________
+QueryPlanner::FiltersAndOptionalSubstitutes
+QueryPlanner::wrapFiltersWithoutSubstitutes(
+    const std::vector<SparqlFilter>& filters) {
+  FiltersAndOptionalSubstitutes plans;
+  plans.reserve(filters.size());
+  for (const auto& filter : filters) {
+    plans.push_back({filter, std::nullopt});
+  }
+  return plans;
+}
+
+// _____________________________________________________________________________
 std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, vector<SparqlFilter> filters,
     TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children,
