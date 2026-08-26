@@ -651,9 +651,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   } else if (commandIs("vacuum-delta-triples")) {
     auto vacuumStats = co_await processVacuumDeltaTriples(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
-    // Return of empty optional indicates that timeout has been fired in
-    // `verifyUserSubmittedQueryTimeout()`. This means that an error response
-    // has been already sent out to the client. We can stop here.
+    // An empty optional means that the user-submitted timeout was rejected
+    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
+    // error response to the client. We can stop here.
     if (!vacuumStats.has_value()) {
       co_return;
     }
@@ -675,9 +675,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto materializedViewStats = co_await processWriteMaterializedView(
         parameters, parsedHttpRequest.operation_, accessTokenOk, requestTimer,
         request, send);
-    // Return of empty optional indicates that timeout has been fired in
-    // `verifyUserSubmittedQueryTimeout()`. This means that an error response
-    // has been already sent out to the client. We can stop here.
+    // An empty optional means that the user-submitted timeout was rejected
+    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
+    // error response to the client. We can stop here.
     if (!materializedViewStats.has_value()) {
       co_return;
     }
