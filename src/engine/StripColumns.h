@@ -71,6 +71,7 @@ class StripColumns : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   FRIEND_TEST(Distinct, makeTreeWithStrippedColumns);
+  FRIEND_TEST(GroupBy, makeTreeWithStrippedColumns);
 };
 
 #endif  // QLEVER_SRC_ENGINE_STRIPCOLUMNS_H
