@@ -543,14 +543,68 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
       manager.writeViewToDisk("Something Out!of~the.ordinary",
                               qlv().parseAndPlanQuery(simpleWriteQuery_)),
       ::testing::HasSubstr("not a valid name for a materialized view"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk(
-          "testView2",
-          qlv().parseAndPlanQuery(
-              "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }")),
-      ::testing::HasSubstr(
-          "The query to write a materialized view returned a string not "
-          "contained in the index (local vocabulary entry)"));
+
+  // Helper that checks that writing a materialized view for `query` throws an
+  // exception whose message contains `expectedError`.
+  auto expectWriteViewToDiskError =
+      [&](std::string query, std::string expectedError,
+          ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(location);
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            manager.writeViewToDisk("invalidTestView",
+                                    qlv().parseAndPlanQuery(std::move(query))),
+            ::testing::HasSubstr(expectedError));
+      };
+
+  // `LocalVocabularyEntry` is rejected.
+  expectWriteViewToDiskError(
+      "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }",
+      "The query to write a materialized view returned a string not "
+      "contained in the index (local vocabulary entry)");
+
+  // Empty query is rejected.
+  expectWriteViewToDiskError("SELECT * { }",
+                             "needs to select at least one column");
+
+  // `LIMIT`/`OFFSET` is rejected.
+  expectWriteViewToDiskError(simpleWriteQuery_ + " LIMIT 1",
+                             "may not contain a `LIMIT` or `OFFSET` clause");
+  expectWriteViewToDiskError(simpleWriteQuery_ + " OFFSET 1",
+                             "may not contain a `LIMIT` or `OFFSET` clause");
+  expectWriteViewToDiskError(simpleWriteQuery_ + " LIMIT 5 OFFSET 10",
+                             "may not contain a `LIMIT` or `OFFSET` clause");
+
+  // An explicit `ORDER BY` clause is always rejected, because a view is
+  // always stored in the internal order of its first three columns.
+  expectWriteViewToDiskError(simpleWriteQuery_ + " ORDER BY ?p",
+                             "may not contain an `ORDER BY` clause");
+  expectWriteViewToDiskError(simpleWriteQuery_ + " ORDER BY DESC(?s)",
+                             "may not contain an `ORDER BY` clause");
+
+  // An `INTERNAL SORT BY` inconsistent with the view's SPO order is rejected.
+  expectWriteViewToDiskError(simpleWriteQuery_ + " INTERNAL SORT BY ?p",
+                             "must be a prefix of the view's columns");
+  expectWriteViewToDiskError(
+      simpleWriteQuery_ + " INTERNAL SORT BY ?doesNotExist",
+      "must be a prefix of the view's columns");
+
+  // More `INTERNAL SORT BY` keys than the view has columns.
+  expectWriteViewToDiskError(
+      "SELECT ?s ?p { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o",
+      "must be a prefix of the view's columns");
+
+  // An `INTERNAL SORT BY` that is consistent with the view's storage order
+  // (a prefix of the SELECTed columns) is allowed.
+  EXPECT_NO_THROW(manager.writeViewToDisk(
+      "testView7", qlv().parseAndPlanQuery(simpleWriteQuery_ +
+                                           " INTERNAL SORT BY ?s ?p ?o")));
+
+  // A `LIMIT` inside an explicit subquery is allowed. This is the escape
+  // hatch that the error message for a top-level `LIMIT` advertises.
+  EXPECT_NO_THROW(manager.writeViewToDisk(
+      "testView8",
+      qlv().parseAndPlanQuery(
+          "SELECT * { { SELECT * { ?s ?p ?o . BIND(1 AS ?g) } LIMIT 2 } }")));
 }
 
 // _____________________________________________________________________________
