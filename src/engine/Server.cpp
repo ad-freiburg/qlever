@@ -125,10 +125,10 @@ void Server::configureQueryEventLog(const ql::filesystem::path& path) {
 
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Server::HttpErrorResponse Server::reportHttpError(
-        std::string_view message, http::status status, const RequestT& request,
-        const MetricLabel& errorType) const {
+    requires ad_utility::httpUtils::HttpRequest<RequestT>) Server::ResponseT
+    Server::reportHttpError(std::string_view message, http::status status,
+                            const RequestT& request,
+                            const MetricLabel& errorType) const {
   using namespace ad_utility::httpUtils;
   AD_LOG_ERROR << message << std::endl;
   metrics_->httpErrors_->Add(1, {errorType});
@@ -163,7 +163,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   // block, so the actual `send` cannot happen here. Building the error
   // response, however, is synchronous and can happen right in the `catch`
   // block.
-  std::optional<HttpErrorResponse> errorResponse;
+  std::optional<ResponseT> errorResponse;
   try {
     co_await process(request, sendWithAccessControlHeaders);
   } catch (const HttpError& e) {
@@ -228,12 +228,12 @@ void Server::run() {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     net::awaitable<std::optional<Server::TimeLimit>> Server::
         verifyUserSubmittedQueryTimeout(
             std::optional<std::string_view> userTimeout, bool accessTokenOk,
-            const RequestT& request, ResponseT& send) const {
+            const RequestT& request, SendT& send) const {
   auto defaultTimeout =
       getRuntimeParameter<&RuntimeParameters::defaultQueryTimeout_>();
   // TODO<GCC12> Use the monadic operations for std::optional
@@ -382,11 +382,11 @@ Awaitable<DeltaTriplesCount> Server::processClearDeltaTriples() {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<std::optional<nlohmann::json>> Server::processVacuumDeltaTriples(
         std::optional<std::string_view> userTimeout, bool accessTokenOk,
-        const RequestT& request, ResponseT& send) {
+        const RequestT& request, SendT& send) {
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   std::optional<TimeLimit> timeLimit = co_await verifyUserSubmittedQueryTimeout(
       userTimeout, accessTokenOk, request, send);
@@ -405,14 +405,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<std::optional<nlohmann::json>> Server::
         processWriteMaterializedView(const ParamValueMap& parameters,
                                      const SparqlOperation& operation,
                                      bool accessTokenOk,
                                      const ad_utility::Timer& requestTimer,
-                                     const RequestT& request, ResponseT& send) {
+                                     const RequestT& request, SendT& send) {
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Writing");
   AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
@@ -496,8 +496,8 @@ nlohmann::json Server::processDeleteMaterializedView(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    ad_utility::httpUtils::ResponseT Server::processPing(
-        std::optional<std::string> msg, const RequestT& request) const {
+    Server::ResponseT Server::processPing(std::optional<std::string> msg,
+                                          const RequestT& request) const {
   using namespace ad_utility::httpUtils;
   if (msg.has_value()) {
     AD_LOG_INFO << "Alive check with message \"" << msg.value() << "\""
@@ -587,9 +587,8 @@ void dispatchLog(std::string_view cmd, bool accessTokenOk) {
 
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    ad_utility::httpUtils::ResponseT Server::processMetrics(
-        bool accessTokenOk, const RequestT& request) const {
+    requires ad_utility::httpUtils::HttpRequest<RequestT>) Server::ResponseT
+    Server::processMetrics(bool accessTokenOk, const RequestT& request) const {
   using namespace ad_utility::httpUtils;
   serverProcessHelpers::requireValidAccessToken(accessTokenOk, "metrics");
   if (!metricsReader_) {
@@ -618,9 +617,9 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
+    Awaitable<void> Server::process(RequestT& request, SendT&& send) {
   using namespace ad_utility::httpUtils;
   using namespace responseJson;
   using namespace serverProcessHelpers;
@@ -995,10 +994,10 @@ CPP_template_def(typename RequestT)(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::sendStreamableResponse(
-        const RequestT& request, ResponseT& send, MediaType mediaType,
+        const RequestT& request, SendT& send, MediaType mediaType,
         const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
         SharedCancellationHandle cancellationHandle) const {
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
@@ -1094,13 +1093,13 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processQuery(
         const ParamValueMap& params, ParsedQuery&& query,
         const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
-        QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
+        QueryExecutionContext& qec, const RequestT& request, SendT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
   ad_utility::metrics::ActiveCounterGuard queryGuard{
@@ -1262,13 +1261,13 @@ UpdateMetadata Server::processUpdateImpl(
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
         MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
-        const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
+        const RequestT& request, SendT&& send, TimeLimit timeLimit,
         std::optional<PlannedQuery>& plannedUpdate) {
   outerTracer->beginTrace("waitingForUpdateThread");
   ad_utility::metrics::ActiveCounterGuard updateGuard{
@@ -1386,12 +1385,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
+CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processOperation(
         SparqlOperation operation, VisitorT visitor,
         const ad_utility::Timer& requestTimer, const RequestT& request,
-        ResponseT& send, const std::optional<PlannedQuery>& plannedQuery) {
+        SendT& send, const std::optional<PlannedQuery>& plannedQuery) {
   // Copy the operation string for the error case before processing the
   // operation, because processing moves it.
   const std::string operationString = [&operation] {
@@ -1650,7 +1649,7 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<ad_utility::httpUtils::ResponseT> Server::processRebuildIndex(
+    Awaitable<Server::ResponseT> Server::processRebuildIndex(
         const ParamValueMap& parameters, const RequestT& request) {
   using namespace ad_utility::httpUtils;
   auto config = co_await rebuildIndexUnlessInProgress(

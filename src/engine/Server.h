@@ -144,7 +144,7 @@ class Server {
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
   using PlannedQuery = qlever::PlannedQuery;
-  using HttpErrorResponse = ad_utility::httpUtils::ResponseT;
+  using ResponseT = ad_utility::httpUtils::ResponseT;
   using StringBodyRequest =
       boost::beast::http::request<boost::beast::http::string_body>;
 
@@ -164,7 +164,7 @@ class Server {
       co_return;
     }
 
-    ad_utility::httpUtils::ResponseT response_;
+    ResponseT response_;
   };
 
   CPP_template(typename CancelTimeout)(
@@ -201,11 +201,11 @@ class Server {
   // the client and an empty optional is returned; the caller must stop
   // processing in that case. Otherwise the resulting vacuum stats are
   // returned.
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<std::optional<json>> processVacuumDeltaTriples(
           std::optional<std::string_view> userTimeout, bool accessTokenOk,
-          const RequestT& request, ResponseT& send);
+          const RequestT& request, SendT& send);
 
   // Handle a `write-materialized-view` command: extract the view name, query,
   // and timeout from `parameters`/`operation`, execute the query, and store
@@ -214,12 +214,12 @@ class Server {
   // response has already been sent to the client. On success, the caller is
   // responsible for resetting the request's operation to `None{}` so that
   // `process()` doesn't also try to execute it as a regular query.
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<std::optional<json>> processWriteMaterializedView(
           const ParamValueMap& parameters, const SparqlOperation& operation,
           bool accessTokenOk, const ad_utility::Timer& requestTimer,
-          const RequestT& request, ResponseT& send);
+          const RequestT& request, SendT& send);
 
   // Handle a `load-materialized-view` command: extract the view name from
   // `parameters` and load it via `indexAndViews`'s materialized views
@@ -242,11 +242,8 @@ class Server {
 
   // Handle the `/ping` endpoint: log the alive check (with or without an
   // accompanying "msg" parameter) and return a fixed confirmation response.
-  // Like `processRebuildIndex` below, this never needs to bypass query
-  // processing, so it returns the response directly.
   CPP_template(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      ad_utility::httpUtils::ResponseT
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) ResponseT
       processPing(std::optional<std::string> msg,
                   const RequestT& request) const;
 
@@ -256,8 +253,7 @@ class Server {
   // above, this never needs to bypass query processing, so it returns the
   // response directly.
   CPP_template(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      ad_utility::httpUtils::ResponseT
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) ResponseT
       processMetrics(bool accessTokenOk, const RequestT& request) const;
 
   // Set every runtime parameter that's present in `parameters`, verifying the
@@ -275,8 +271,8 @@ class Server {
   // directly instead of following the optional-json convention.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<ad_utility::httpUtils::ResponseT> processRebuildIndex(
-          const ParamValueMap& parameters, const RequestT& request);
+      Awaitable<ResponseT> processRebuildIndex(const ParamValueMap& parameters,
+                                               const RequestT& request);
 
   // Initialize and register server metrics which are stored in `metrics_`.
   void initializeServerMetrics(
@@ -285,7 +281,7 @@ class Server {
   // Log `message`, record it under `errorType` in the HTTP error metrics,
   // and build the corresponding HTTP error response for `request`.
   CPP_template(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) HttpErrorResponse
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) ResponseT
       reportHttpError(std::string_view message,
                       ad_utility::httpUtils::http::status status,
                       const RequestT& request,
@@ -328,18 +324,18 @@ class Server {
   /// \param req The HTTP request.
   /// \param send The action that sends a http:response. (see the
   ///             `HttpServer.h` for documentation).
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> process(RequestT& request, ResponseT&& send);
+      Awaitable<void> process(RequestT& request, SendT&& send);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
-  CPP_template(typename VisitorT, typename RequestT, typename ResponseT)(
+  CPP_template(typename VisitorT, typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processOperation(
           SparqlOperation operation, VisitorT visitor,
           const ad_utility::Timer& requestTimer, const RequestT& request,
-          ResponseT& send, const std::optional<PlannedQuery>& plannedQuery);
+          SendT& send, const std::optional<PlannedQuery>& plannedQuery);
 
   // Out of a list of allowed media types, choose the one that best fits the
   // given query type. Currently it just chooses the first from the list. If the
@@ -350,13 +346,13 @@ class Server {
   FRIEND_TEST(ServerTest, chooseBestFittingMediaType);
 
   // Do the actual execution of a query.
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processQuery(
           const ParamValueMap& params, ParsedQuery&& query,
           const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
+          QueryExecutionContext& qec, const RequestT& request, SendT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
   // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
@@ -366,13 +362,13 @@ class Server {
       const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
           MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
+          const RequestT& request, SendT&& send, TimeLimit timeLimit,
           std::optional<PlannedQuery>& plannedUpdate);
 
   //  Prepare the execution of an operation.
@@ -470,20 +466,19 @@ class Server {
   /// lower than the server default. Return an empty optional and send a 403
   /// Forbidden HTTP response if the change is not allowed. Return the new
   /// timeout otherwise.
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) boost::asio::
       awaitable<std::optional<Server::TimeLimit>> verifyUserSubmittedQueryTimeout(
           std::optional<std::string_view> userTimeout, bool accessTokenOk,
-          const RequestT& request, ResponseT& send) const;
+          const RequestT& request, SendT& send) const;
 
   /// Send response for the streamable media types (tsv, csv, octet-stream,
   /// turtle, sparqlJson, qleverJson).
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> sendStreamableResponse(
-          const RequestT& request, ResponseT& send,
-          ad_utility::MediaType mediaType, const PlannedQuery plannedQuery,
-          const ad_utility::Timer requestTimer,
+          const RequestT& request, SendT& send, ad_utility::MediaType mediaType,
+          const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
