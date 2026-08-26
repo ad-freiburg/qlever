@@ -570,6 +570,14 @@ std::optional<std::string> checkAndLogParameterSetting(
   return value;
 }
 
+// Create parameter binded version of `checkParameter` with `parameters` as the
+// first binded argument.
+auto makeCheckParameter(
+    const ad_utility::url_parser::ParamValueMap& parameters) {
+  return absl::bind_front(&ad_utility::url_parser::checkParameter,
+                          std::cref(parameters));
+}
+
 // Look up metadata for `cmd` in `commands`, run the access-token check (if
 // required), and log it. `cmd` must name an entry in `commands`. It always
 // comes from a literal used in the `process()` dispatch below.
@@ -622,18 +630,14 @@ CPP_template_def(typename RequestT, typename SendT)(
     Server::Awaitable<Server::CommandsResult> Server::processCommands(
         bool accessTokenOk, const SharedIndexAndView& indexAndViews,
         const ParamValueMap& parameters, const SparqlOperation& operation,
-        const ad_utility::Timer& requestTimer, RequestT& request,
-        SendT& send) {
+        const ad_utility::Timer& requestTimer, RequestT& request, SendT& send) {
   using namespace ad_utility::httpUtils;
   using namespace responseJson;
   using namespace serverProcessHelpers;
 
   auto& index = indexAndViews->index_;
 
-  // We always want to call `Server::checkParameter` with the same first
-  // parameter.
-  auto checkParameter = absl::bind_front(
-      &ad_utility::url_parser::checkParameter, std::cref(parameters));
+  auto checkParameter = makeCheckParameter(parameters);
 
   // Check if the current command is selected in the parameters from
   // `parameters`. If so, log this information via `dispatchLog()` and return
@@ -763,10 +767,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   auto parsedHttpRequest = SparqlProtocol::parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
 
-  // We always want to call `Server::checkParameter` with the same first
-  // parameter.
-  auto checkParameter = absl::bind_front(
-      &ad_utility::url_parser::checkParameter, std::cref(parameters));
+  auto checkParameter = makeCheckParameter(parameters);
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
