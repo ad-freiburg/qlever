@@ -14,6 +14,7 @@
 
 #include <array>
 #include <cstdint>
+#include <future>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -426,16 +427,14 @@ std::unique_ptr<Permutation> loadPermutation(const std::string& basename,
 // Convert a single permutation of an index and write the result to the index
 // with the base name `newBasename`. Return the metadata of the new permutation,
 // which still has to be written to disk, see `writePermutation` above.
+//
+// NOTE: The two permutations of a pair are converted concurrently (see
+// `convertPermutations` below), so this must not touch any state that is
+// shared between them. That is why the files of the old permutation are
+// recorded by the caller and not here.
 IndexMetaData convertPermutation(const Permutation& oldPermutation,
                                  const std::string& newBasename,
-                                 bool isInternal,
-                                 std::vector<fs::path>& handledFiles) {
-  std::string oldFilename =
-      absl::StrCat(oldPermutation.onDiskBase(), PERMUTATION_FILE_INFIX,
-                   oldPermutation.fileSuffix());
-  handledFiles.emplace_back(oldFilename);
-  handledFiles.emplace_back(absl::StrCat(oldFilename, META_FILE_SUFFIX));
-
+                                 bool isInternal) {
   AD_LOG_INFO << "Converting the " << oldPermutation.readableName()
               << " permutation ..." << std::endl;
   std::string newFilename =
@@ -454,8 +453,13 @@ IndexMetaData convertPermutation(const Permutation& oldPermutation,
 void convertPermutations(const std::string& oldBasename,
                          const std::string& newBasename,
                          std::vector<fs::path>& handledFiles) {
-  for (const auto& [permutationEnums, isInternal] : permutationPairs) {
-    auto [enumA, enumB] = permutationEnums;
+  for (const auto& permutationPair : permutationPairs) {
+    auto [enumA, enumB] = permutationPair.first;
+    // Whether the pair is the pair of internal permutations.
+    //
+    // NOTE: Deliberately not part of a structured binding, because it is
+    // captured by the lambda below, which is only valid in C++20.
+    bool isInternal = permutationPair.second;
     auto permutationA = loadPermutation(oldBasename, enumA, isInternal);
     auto permutationB = loadPermutation(oldBasename, enumB, isInternal);
     if (permutationA == nullptr && permutationB == nullptr) {
@@ -470,10 +474,37 @@ void convertPermutations(const std::string& oldBasename,
           Permutation::toString(enumA), " and ", Permutation::toString(enumB),
           ", so it is incomplete and cannot be converted")};
     }
-    auto newMetaA = convertPermutation(*permutationA, newBasename, isInternal,
-                                       handledFiles);
-    auto newMetaB = convertPermutation(*permutationB, newBasename, isInternal,
-                                       handledFiles);
+    // Record the files of the two old permutations (see
+    // `checkAllFilesWereHandled`). This happens here and not in
+    // `convertPermutation`, because `handledFiles` is shared between the two
+    // conversions below, which run concurrently.
+    for (const Permutation* permutation :
+         {permutationA.get(), permutationB.get()}) {
+      std::string oldFilename =
+          filenameForPermutation(oldBasename, *permutation, isInternal);
+      handledFiles.emplace_back(oldFilename);
+      handledFiles.emplace_back(absl::StrCat(oldFilename, META_FILE_SUFFIX));
+    }
+
+    // Convert the two permutations of the pair concurrently. They are
+    // independent of each other (each has its own reader, its own writer, and
+    // its own metadata), and a single conversion uses only few threads
+    // (`lazy-index-scan-num-threads` for reading and
+    // `permutation-writer-num-threads` for writing), so there are cores to
+    // spare. One of the two conversions runs on this thread, so that only one
+    // additional thread is needed.
+    //
+    // NOTE: If the conversion on this thread throws, the destructor of
+    // `futureB` waits for the other conversion to finish before the exception
+    // leaves this function. That is exactly what we want: no thread must still
+    // be writing to the incomplete index when the caller handles the error.
+    auto convert = [&newBasename, isInternal](const Permutation& permutation) {
+      return convertPermutation(permutation, newBasename, isInternal);
+    };
+    auto futureB =
+        std::async(std::launch::async, convert, std::cref(*permutationB));
+    auto newMetaA = convert(*permutationA);
+    auto newMetaB = futureB.get();
     // The multiplicities of the last column of a permutation are stored in the
     // metadata of its twin, so they have to be exchanged before the metadata is
     // written.
