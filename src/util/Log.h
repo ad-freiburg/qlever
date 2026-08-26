@@ -126,6 +126,32 @@ inline LogLevel getRuntimeLogLevel() {
   return detail::runtimeLogLevel.load(std::memory_order_relaxed);
 }
 
+// While an object of this class is alive, the runtime log level is the given
+// `level` (or the compile-time `LOGLEVEL`, if that is less verbose); the
+// previous level is restored when the object is destroyed. Use this to silence
+// a subroutine that logs more than the caller wants.
+//
+// NOTE: The runtime log level is global, so this must only be used when nothing
+// else logs concurrently, for example in a standalone tool like
+// `qlever-upgrade-index`, but never in the server.
+class ScopedLogLevel {
+ public:
+  explicit ScopedLogLevel(LogLevel::Enum level)
+      : previousLevel_{getRuntimeLogLevel()} {
+    setRuntimeLogLevel(std::min(level, LOGLEVEL));
+  }
+
+  // NOTE: This cannot throw, because `previousLevel_` was the runtime log level
+  // before and hence is at most the compile-time `LOGLEVEL`.
+  ~ScopedLogLevel() { setRuntimeLogLevel(previousLevel_); }
+
+  ScopedLogLevel(const ScopedLogLevel&) = delete;
+  ScopedLogLevel& operator=(const ScopedLogLevel&) = delete;
+
+ private:
+  LogLevel previousLevel_;
+};
+
 // A singleton that holds a pointer to a single `std::ostream`. This enables us
 // to globally redirect the `AD_LOG_...` macros to another output stream.
 struct LogstreamChoice {

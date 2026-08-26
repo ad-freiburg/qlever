@@ -31,6 +31,7 @@
 #include "util/BitUtils.h"
 #include "util/CancellationHandle.h"
 #include "util/FilesystemHelpers.h"
+#include "util/ProgressBar.h"
 #include "util/json.h"
 
 namespace {
@@ -641,13 +642,25 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
     ad_utility::makeOfstream(filename) << configuration.dump(4);
   }
 
-  // Load the converted index at `newBasename_` and return it.
-  Index loadConvertedIndex() const {
+  // Load the converted index at `newBasename_` and return it. With
+  // `allPermutations` set to `false`, the index has only the `PSO` and `POS`
+  // permutations and no patterns.
+  Index loadConvertedIndex(bool allPermutations = true) const {
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-    index.usePatterns() = true;
-    index.loadAllPermutations() = true;
+    index.usePatterns() = allPermutations;
+    index.loadAllPermutations() = allPermutations;
     index.createFromOnDiskIndex(newBasename_, false);
     return index;
+  }
+
+  // The permutations of an index that was built with all permutations resp.
+  // with only `PSO` and `POS` (`--only-pso-and-pos-permutations`).
+  static std::vector<Permutation::Enum> permutationsOfIndex(
+      bool allPermutations) {
+    if (allPermutations) {
+      return std::vector<Permutation::Enum>(Permutation::ALL);
+    }
+    return {Permutation::PSO, Permutation::POS};
   }
 
   // Build an index from the given `turtleInput` with the settings for tests
@@ -657,16 +670,22 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
   // the index that it was converted from, and return the number of blocks that
   // each permutation of the latter had (in the order of `Permutation::ALL`), so
   // that a test can check which case it actually covers.
-  std::vector<size_t> convertAndExpectTheSameContent(std::string turtleInput) {
+  std::vector<size_t> convertAndExpectTheSameContent(
+      std::string turtleInput, bool allPermutations = true) {
+    auto permutations = permutationsOfIndex(allPermutations);
     std::vector<size_t> numBlocks;
     std::vector<IdTable> expectedContent;
+    Index::NumNormalAndInternal numTriples;
     {
-      Index oldIndex = ad_utility::testing::makeTestIndex(
-          oldBasename_,
-          ad_utility::testing::TestIndexConfig{std::move(turtleInput)});
+      ad_utility::testing::TestIndexConfig config{std::move(turtleInput)};
+      config.loadAllPermutations = allPermutations;
+      config.usePatterns = allPermutations;
+      Index oldIndex =
+          ad_utility::testing::makeTestIndex(oldBasename_, std::move(config));
       auto locatedTriples =
           oldIndex.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-      for (auto permutationEnum : Permutation::ALL) {
+      numTriples = oldIndex.numTriples();
+      for (auto permutationEnum : permutations) {
         const auto& permutation =
             oldIndex.getImpl().getPermutation(permutationEnum);
         numBlocks.push_back(permutation.metaData().blockData().size());
@@ -681,13 +700,34 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
     }
     pretendThatTheIndexIsInThePreviousFormat();
 
-    convertIndexToCurrentFormat(oldBasename_, newBasename_);
+    // Convert with the log redirected, so that the progress of the conversion
+    // can be checked below.
+    std::string conversionLog;
+    {
+      auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+      convertIndexToCurrentFormat(oldBasename_, newBasename_);
+      conversionLog = logStream.str();
+    }
 
-    Index newIndex = loadConvertedIndex();
+    // The progress bar of the conversion covers exactly the permutations that
+    // the index has (each triple once per permutation, with two internal
+    // permutations in addition to the normal ones), and it ends at 100%, which
+    // says that its total is the number of triples that the conversion actually
+    // wrote. Neither the loading nor the writing of a permutation logs a
+    // message of its own, which would interrupt the bar.
+    std::string numTriplesTotal = ad_utility::withThousandSeparators(
+        permutations.size() * numTriples.normal + 2 * numTriples.internal);
+    EXPECT_THAT(conversionLog,
+                HasSubstr(absl::StrCat("Triples converted: ", numTriplesTotal,
+                                       " of ", numTriplesTotal, " (100.0%)")));
+    EXPECT_THAT(conversionLog, ::testing::Not(HasSubstr("Registered ")));
+    EXPECT_THAT(conversionLog, ::testing::Not(HasSubstr("Triples sorted")));
+
+    Index newIndex = loadConvertedIndex(allPermutations);
     auto locatedTriples =
         newIndex.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
     size_t i = 0;
-    for (auto permutationEnum : Permutation::ALL) {
+    for (auto permutationEnum : permutations) {
       EXPECT_EQ(
           scanAllColumns(newIndex.getImpl().getPermutation(permutationEnum),
                          locatedTriples),
@@ -741,6 +781,29 @@ TEST_F(MultiBlockIndexFormatConverterTest, permutationsWithManyBlocks) {
   }
   auto numBlocks = convertAndExpectTheSameContent(turtle);
   EXPECT_THAT(numBlocks, ::testing::Each(::testing::Gt(size_t{2})));
+}
+
+// _____________________________________________________________________________
+TEST_F(MultiBlockIndexFormatConverterTest, convertIndexWithOnlyPsoAndPos) {
+  // An index built with `--only-pso-and-pos-permutations` has only two of the
+  // six normal permutations and no patterns. The conversion has to skip the
+  // pairs that the index does not have, and must not write them.
+  std::string turtle;
+  for (size_t object = 0; object < 10; ++object) {
+    absl::StrAppend(&turtle,
+                    "<http://example.org/s> <http://example.org/p> "
+                    "<http://example.org/o",
+                    object, "> .\n");
+  }
+  auto numBlocks = convertAndExpectTheSameContent(turtle, false);
+  EXPECT_THAT(numBlocks, ::testing::SizeIs(2));
+  EXPECT_THAT(numBlocks, ::testing::Each(::testing::Gt(size_t{2})));
+  for (auto suffix : {".ops", ".osp", ".spo", ".sop"}) {
+    EXPECT_FALSE(
+        fs::exists(absl::StrCat(newBasename_, PERMUTATION_FILE_INFIX, suffix)))
+        << suffix;
+  }
+  EXPECT_FALSE(fs::exists(absl::StrCat(newBasename_, PATTERNS_FILE_SUFFIX)));
 }
 
 // _____________________________________________________________________________

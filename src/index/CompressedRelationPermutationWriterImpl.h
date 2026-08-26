@@ -289,7 +289,7 @@ struct CompressedRelationWriter::PermutationWriter {
   // ___________________________________________________________________________
   void increaseTripleCounter() {
     ++numTriplesProcessed_;
-    if (progressBar_.update() && showProgressBar_) {
+    if (showProgressBar_ && progressBar_.update()) {
       AD_LOG_INFO << progressBar_.getProgressString() << std::flush;
     }
   }

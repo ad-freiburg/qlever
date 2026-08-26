@@ -94,7 +94,7 @@ class Permutation {
   explicit Permutation(Enum permutation, Allocator allocator,
                        std::optional<std::string> readableName = std::nullopt);
 
-  // everything that has to be done when reading an index from disk
+  // Everything that has to be done when reading an index from disk.
   //
   // With `logRegistration` set to `false`, the "Registered ... permutation"
   // message is not logged. That is for callers that write a progress bar of

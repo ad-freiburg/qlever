@@ -446,16 +446,27 @@ void verifyConvertedPermutation(const IndexMetaData& oldMetaData,
         newBlocks.back().lastTriple_);
 }
 
+// Whether the index with the base name `basename` has the given permutation.
+// An index built with `--only-pso-and-pos-permutations` has neither `SPO` and
+// `SOP` nor `OPS` and `OSP`.
+bool hasPermutation(const std::string& basename,
+                    Permutation::Enum permutationEnum, bool isInternal) {
+  Permutation permutation{permutationEnum,
+                          ad_utility::makeUnlimitedAllocator<Id>()};
+  return fs::exists(filenameForPermutation(basename, permutation, isInternal));
+}
+
 // Load the given `permutation` of the index with the base name `basename` from
 // disk. Return `nullptr` if it does not exist.
 std::unique_ptr<Permutation> loadPermutation(const std::string& basename,
                                              Permutation::Enum permutationEnum,
                                              bool isInternal) {
-  auto permutation = std::make_unique<Permutation>(
-      permutationEnum, ad_utility::makeUnlimitedAllocator<Id>());
-  if (!fs::exists(filenameForPermutation(basename, *permutation, isInternal))) {
+  if (!hasPermutation(basename, permutationEnum, isInternal)) {
     return nullptr;
   }
+  auto permutation = std::make_unique<Permutation>(
+      permutationEnum, ad_utility::makeUnlimitedAllocator<Id>());
+
   // NOTE: The "Registered ... permutation" message that `loadFromDisk` logs by
   // default is suppressed here, because it would interrupt the progress bar of
   // `convertPermutations` below. The statistics of each permutation are in the
@@ -465,6 +476,24 @@ std::unique_ptr<Permutation> loadPermutation(const std::string& basename,
                             false, Permutation::Type::NORMAL, {},
                             /* logRegistration = */ false);
   return permutation;
+}
+
+// The number of normal and of internal permutations that the index with the
+// base name `basename` has, in the same way in which `convertPermutations`
+// below determines which permutations it converts.
+Index::NumNormalAndInternal numPermutationsOfIndex(
+    const std::string& basename) {
+  Index::NumNormalAndInternal numPermutations{};
+  for (const auto& permutationPair : permutationPairs) {
+    auto [enumA, enumB] = permutationPair.first;
+    bool isInternal = permutationPair.second;
+    for (auto permutationEnum : {enumA, enumB}) {
+      if (hasPermutation(basename, permutationEnum, isInternal)) {
+        ++(isInternal ? numPermutations.internal : numPermutations.normal);
+      }
+    }
+  }
+  return numPermutations;
 }
 
 // Convert a single permutation of an index and write the result to the index
@@ -499,18 +528,14 @@ void convertPermutations(const std::string& oldBasename,
                          const std::string& newBasename,
                          const Index::NumNormalAndInternal& numTriples,
                          std::vector<fs::path>& handledFiles) {
-  // The index always has the two normal and the two internal `PSO` and `POS`
-  // permutations, and either all six normal permutations or only these two
-  // (`--only-pso-and-pos-permutations`). Each triple is written once per
-  // permutation, which gives the total number of triples that the conversion of
-  // the permutations writes.
-  bool hasAllPermutations =
-      fs::exists(absl::StrCat(oldBasename, PERMUTATION_FILE_INFIX, ".ops"));
-  size_t numNormalPermutations = hasAllPermutations ? 6 : 2;
-  size_t numTriplesTotal =
-      numNormalPermutations * numTriples.normal + 2 * numTriples.internal;
-  AD_LOG_INFO << "Converting " << numNormalPermutations + 2 << " permutations ("
-              << numNormalPermutations << " normal and 2 internal, "
+  // Each triple is written once per permutation, which gives the total number
+  // of triples that the conversion of the permutations writes.
+  auto numPermutations = numPermutationsOfIndex(oldBasename);
+  size_t numTriplesTotal = numPermutations.normal * numTriples.normal +
+                           numPermutations.internal * numTriples.internal;
+  AD_LOG_INFO << "Converting " << numPermutations.normalAndInternal_()
+              << " permutations (" << numPermutations.normal << " normal and "
+              << numPermutations.internal << " internal, "
               << ad_utility::withThousandSeparators(numTriplesTotal)
               << " triples in total) ..." << std::endl;
   ad_utility::ConcurrentProgressBar progressBar{
@@ -542,13 +567,15 @@ void convertPermutations(const std::string& oldBasename,
     // `checkAllFilesWereHandled`). This happens here and not in
     // `convertPermutation`, because `handledFiles` is shared between the two
     // conversions below, which run concurrently.
-    for (const Permutation* permutation :
-         {permutationA.get(), permutationB.get()}) {
+    auto recordOldFiles = [&handledFiles, &oldBasename,
+                           isInternal](const Permutation& permutation) {
       std::string oldFilename =
-          filenameForPermutation(oldBasename, *permutation, isInternal);
+          filenameForPermutation(oldBasename, permutation, isInternal);
       handledFiles.emplace_back(oldFilename);
       handledFiles.emplace_back(absl::StrCat(oldFilename, META_FILE_SUFFIX));
-    }
+    };
+    recordOldFiles(*permutationA);
+    recordOldFiles(*permutationB);
 
     // Convert the two permutations of the pair concurrently. They are
     // independent of each other (each has its own reader, its own writer, and
@@ -858,30 +885,6 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
 }
 
 namespace {
-// While an object of this class is alive, the runtime log level is the given
-// `level` (or the compile-time `LOGLEVEL`, if that is less verbose); the
-// previous level is restored when the object is destroyed.
-//
-// NOTE: The runtime log level is global, which is fine for
-// `qlever-upgrade-index` because it is a standalone tool that does one thing
-// at a time, but would be wrong in a server, where other threads log
-// concurrently.
-class ScopedLogLevel {
- public:
-  explicit ScopedLogLevel(LogLevel::Enum level)
-      : previousLevel_{ad_utility::getRuntimeLogLevel()} {
-    ad_utility::setRuntimeLogLevel(std::min(level, LOGLEVEL));
-  }
-  // NOTE: This cannot throw, because `previousLevel_` was the runtime log
-  // level before and hence is at most the compile-time `LOGLEVEL`.
-  ~ScopedLogLevel() { ad_utility::setRuntimeLogLevel(previousLevel_); }
-  ScopedLogLevel(const ScopedLogLevel&) = delete;
-  ScopedLogLevel& operator=(const ScopedLogLevel&) = delete;
-
- private:
-  LogLevel previousLevel_;
-};
-
 // Check that the upgraded index with the base name `newBasename` can be
 // loaded, and that the number of triples of each of its permutations matches
 // `expectedNumTriples`, the number of triples from the configuration of the
@@ -900,7 +903,7 @@ void checkUpgradedIndex(const std::string& newBasename,
   //
   // NOTE: Declared before `index`, so that it is destroyed after it and hence
   // also covers the message that the destruction of `index` logs.
-  ScopedLogLevel scopedLogLevel{LogLevel::Enum::WARN};
+  ad_utility::ScopedLogLevel scopedLogLevel{LogLevel::Enum::WARN};
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   // Load what the index has: the patterns and the permutations beyond `PSO`
   // and `POS` are optional.
