@@ -15,6 +15,11 @@
 
 #include "engine/Operation.h"
 
+// TODO itsAnnaKai: This class should only be used for operations like Distinct, or Sort,
+// where columns have to be kept just for the operation execution, but the parent
+// tree is actually not interested in these columns -> Therefore an additional 
+// operation column Stripping has to be executed after the operation itself.
+
 // An Operation that returns the result of its only child operation when being
 // evaluated, with only a subset of the child's variables.
 class StripColumns : public Operation {
@@ -64,6 +69,10 @@ class StripColumns : public Operation {
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  FRIEND_TEST(Distinct, makeTreeWithStrippedColumns);
+  FRIEND_TEST(GroupBy, makeTreeWithStrippedColumns);
+  FRIEND_TEST(Sort, makeTreeWithStrippedColumns);
 };
 
 #endif  // QLEVER_SRC_ENGINE_STRIPCOLUMNS_H

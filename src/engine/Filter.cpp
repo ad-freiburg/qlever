@@ -15,7 +15,9 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
+#include "util/VarsRequiredFromSubtree.h"
 
 using std::endl;
 
@@ -257,3 +259,39 @@ std::unique_ptr<Operation> Filter::cloneImpl() const {
   return std::make_unique<Filter>(_executionContext, _subtree->clone(),
                                   _expression);
 }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+  Filter::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const { 
+
+  // Collect variables requested from parent-tree and variables needed for filtering
+  VarsRequiredFromSubtree helper(variables);
+  std::vector<const Variable*> variablesForFiltering = _expression.containedVariables();
+  for(auto filterVar : variablesForFiltering){
+    helper.add(*filterVar);
+  }
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
+
+  // Continue with the recursion and strip columns of subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      _subtree, varsRequiredFromSubtree);
+
+  // Create query execution tree with Filter-Operation as root operation.
+  auto treeWithFilterRoot = ad_utility::makeExecutionTree<Filter>(
+      getExecutionContext(), std::move(subtree), _expression);
+
+  // The variables needed for filtering are needed to
+  // compute Filter-Operation, but do not necessarily belong to the result
+  // requested by the parent tree.
+  // If all variables for filtering are requested by the parent tree, return
+  // treeWithFilterRoot. If not, an additional StripColumns-Operation is added
+  // in the executionTree above the Filter-Operation.
+  if (ql::ranges::all_of(variablesForFiltering, [&variables](const auto& filterVar) {
+        return ad_utility::contains(variables, *filterVar);
+      })) {
+    return treeWithFilterRoot;
+  }
+  return ad_utility::makeExecutionTree<StripColumns>(
+      getExecutionContext(), std::move(treeWithFilterRoot), variables);
+
+  }

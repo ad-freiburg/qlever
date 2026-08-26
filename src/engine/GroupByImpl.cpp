@@ -12,6 +12,7 @@
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
+#include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
@@ -37,6 +38,7 @@
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
+#include "util/VarsRequiredFromSubtree.h"
 
 namespace groupBy::detail {
 
@@ -347,6 +349,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
 
+// _____________________________________________________________________________
 std::string GroupByImpl::getCacheKeyImpl() const {
   const auto& varMap = getInternallyVisibleVariableColumns();
   auto varMapInput = _subtree->getVariableColumns();
@@ -379,6 +382,7 @@ std::string GroupByImpl::getCacheKeyImpl() const {
   return std::move(os).str();
 }
 
+// _____________________________________________________________________________
 std::string GroupByImpl::getDescriptor() const {
   if (_groupByVariables.empty()) {
     return "GroupBy (implicit)";
@@ -387,10 +391,12 @@ std::string GroupByImpl::getDescriptor() const {
          absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter);
 }
 
+// _____________________________________________________________________________
 size_t GroupByImpl::getResultWidth() const {
   return getInternallyVisibleVariableColumns().size();
 }
 
+// _____________________________________________________________________________
 std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
   vector<ColumnIndex> sortedOn;
@@ -401,6 +407,7 @@ std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   return sortedOn;
 }
 
+// _____________________________________________________________________________
 std::vector<ColumnIndex> GroupByImpl::computeSortColumns(
     const QueryExecutionTree* subtree) {
   vector<ColumnIndex> cols;
@@ -451,6 +458,7 @@ VariableToColumnMap GroupByImpl::computeVariableToColumnMap() const {
   return result;
 }
 
+// _____________________________________________________________________________
 float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
   // Group by should currently not be used in the optimizer, unless
   // it is part of a subquery. In that case multiplicities may only be
@@ -458,6 +466,74 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
   return 1;
 }
 
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+GroupByImpl::makeTreeWithStrippedColumns(
+    const std::set<Variable>& variables) const {
+  // Add variables and _groupByVariables to the variables that are required from
+  // the subtree. Keep in mind, that variables, which are not part of
+  // _groupByVariables or aliases, dont have any consequences here, as the
+  // columns have been already stripped in the constructor.
+  VarsRequiredFromSubtree helper(variables);
+  for (const Variable& groupByVar : _groupByVariables) {
+    helper.add(groupByVar);
+  }
+
+  // Also add aliases if their target is also contained in variables requested
+  // by parent-tree.
+  const std::vector<Alias>* resultingAliases = &_aliases;
+  std::vector<Alias> bufferAliases;
+
+  for (const auto& alias : _aliases) {
+    if (variables.find(alias._target) != variables.end()) {
+      for (const Variable* aliasVar : alias._expression.containedVariables()) {
+        helper.add(*aliasVar);
+      }
+    } else {
+      if (resultingAliases == &_aliases) {
+        bufferAliases = _aliases;
+        resultingAliases = &bufferAliases;
+      }
+    }
+  }
+
+  // Erase the whole alias for GroupBy-Operation if its target is not contained
+  // in variables requested by the parent-tree.
+  if (resultingAliases != &_aliases) {
+    std::erase_if(bufferAliases, [&variables](const Alias& alias) {
+      return !variables.contains(alias._target);
+    });
+  }
+
+  // Collect all variables required from the subtree
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
+
+  // Continue with the recursion and strip columns of subtree.
+  std::shared_ptr<QueryExecutionTree> subtree =
+      QueryExecutionTree::makeTreeWithStrippedColumns(_subtree,
+                                                      varsRequiredFromSubtree);
+
+  // Create query execution tree with GroupBy-Operation as root operation.
+  auto treeWithGroupByRoot = ad_utility::makeExecutionTree<GroupBy>(
+      getExecutionContext(), _groupByVariables, *resultingAliases,
+      std::move(subtree));
+
+  // The _groupByVariables are needed to compute GroupBy-Operation, but do not
+  // necessarily belong to the result requested by the parent tree. If all
+  // _groupByVariables are requested by the parent tree, return
+  // treeWithGroupByRoot. If not, an additional StripColumns-Operation is added
+  // in the executionTree above the GroupBy-Operation.
+  if (ql::ranges::all_of(_groupByVariables,
+                         [&variables](const auto& groupByVar) {
+                           return ad_utility::contains(variables, groupByVar);
+                         })) {
+    return treeWithGroupByRoot;
+  }
+  return ad_utility::makeExecutionTree<StripColumns>(
+      getExecutionContext(), std::move(treeWithGroupByRoot), variables);
+}
+
+// _____________________________________________________________________________
 uint64_t GroupByImpl::getSizeEstimateBeforeLimit() {
   if (_groupByVariables.empty()) {
     return 1;
@@ -480,6 +556,7 @@ size_t GroupByImpl::getCostEstimate() {
   return _subtree->getCostEstimate();
 }
 
+// _____________________________________________________________________________
 template <size_t OUT_WIDTH>
 void GroupByImpl::processGroup(
     const Aggregate& aggregate,
