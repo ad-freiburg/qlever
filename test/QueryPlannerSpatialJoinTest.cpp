@@ -1694,6 +1694,40 @@ TEST(QueryPlanner, SpatialJoinFromFilterWithFixedValue) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, FilterWithoutForcedSubstituteInSingleSeedComponent) {
+  auto scan = h::IndexScanFromStrings;
+  // A substitute without a fixed side has no child yet, so its substitution
+  // cannot be forced. In a component with a single seed, such a substitute
+  // could never be completed and must therefore not be applied at all; the
+  // ordinary `FILTER` has to remain. This is checked on a non-empty index:
+  // an incomplete `SpatialJoin` has a dummy cost estimate of 1, so on an
+  // empty index it would lose the plan selection by accident even if it were
+  // wrongly applied.
+  auto* qec = ad_utility::testing::getQec(
+      "<x1> <p> \"POINT(1 1)\"^^<http://www.opengis.net/ont/geosparql#"
+      "wktLiteral> . <x2> <p> \"POINT(2 2)\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral> . <x3> <p> \"POINT(3 3)\"^^<http://"
+      "www.opengis.net/ont/geosparql#wktLiteral> .");
+
+  // The second variable of the filter is not bound anywhere in the query.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfIntersects(?b, ?nowhere)) }",
+      h::Filter("geof:sfIntersects(?b, ?nowhere)", scan("?a", "<p>", "?b")),
+      qec);
+
+  // Both variables of the filter are bound by the same single triple.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfIntersects(?b, ?a)) }",
+      h::Filter("geof:sfIntersects(?b, ?a)", scan("?a", "<p>", "?b")), qec);
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinFromGeofRelateFilter) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;

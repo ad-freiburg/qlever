@@ -1415,9 +1415,16 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
 
+      // In `SeedSubstitutesOnly` mode there are no joining rounds afterwards
+      // that could complete a partial `SpatialJoin`. Therefore only enforced
+      // substitutes may be applied there, because they are complete as soon as
+      // `plan` is attached. A non-enforced substitute would stay incomplete
+      // forever and could still win the final plan selection via its dummy
+      // cost estimate.
       const bool allowSubstitutes = mode == FilterMode::KeepUnfiltered ||
                                     mode == FilterMode::ReplaceUnfiltered ||
-                                    mode == FilterMode::SeedSubstitutesOnly;
+                                    (mode == FilterMode::SeedSubstitutesOnly &&
+                                     filterAndSubst.forceSubstitution_);
       if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
           (filterAndSubst.filter_.expression_.containedVariables().empty() ||
            ql::ranges::any_of(
@@ -1696,15 +1703,23 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     const FiltersAndOptionalSubstitutes& filters,
     const TextLimitVec& textLimits, const TripleGraph& tg,
     ReplacementPlans&& replacementPlans) const {
-  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(connectedComponent,
-                                                        filters);
-  applyTextLimitsIfPossible(connectedComponent, textLimits, true);
   const size_t numSeeds =
       findUniqueNodeIds(connectedComponent, !replacementPlans.empty());
   if (numSeeds <= 1) {
-    // Only 0 or 1 nodes in the input, nothing to plan.
+    // Only 0 or 1 nodes in the input, nothing to plan. As in the dynamic
+    // programming planner, only enforced filter substitutes may be applied
+    // here: there are no joining rounds that could complete a partial
+    // `SpatialJoin`, so a non-enforced substitute would stay incomplete.
+    applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(connectedComponent,
+                                                            filters);
+    applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
+        connectedComponent, filters);
+    applyTextLimitsIfPossible(connectedComponent, textLimits, true);
     return connectedComponent;
   }
+  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(connectedComponent,
+                                                        filters);
+  applyTextLimitsIfPossible(connectedComponent, textLimits, true);
 
   // Intermediate variables that will be filled by the `greedyStep` lambda
   // below.
