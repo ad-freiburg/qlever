@@ -259,18 +259,25 @@ inline auto viewScanSimple(std::string viewName, std::string a, std::string b,
 };
 
 // _____________________________________________________________________________
+// `expectedLogMessage` must be a substring of the `AD_LOG_INFO` message that
+// `analyzeView` logs to explain why it ignored the view for pattern-based
+// rewriting. This ensures that the query is actually rejected for the reason
+// under test, rather than for some unrelated (and possibly accidental) one.
 template <typename ViewName, typename Query>
 inline void expectNotSuitableForRewrite(
     const qlever::Qlever& qlv, const MaterializedViewsManager& manager,
     const ViewName& viewName, const Query& query,
+    std::string_view expectedLogMessage,
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
   auto plan = qlv.parseAndPlanQuery(query);
   auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
   manager.writeViewToDisk(viewName, plan);
   auto view = manager.getView(viewName, qec.get());
   qpc.analyzeView(view, qec.get());
+  EXPECT_THAT(logStream.str(), ::testing::HasSubstr(expectedLogMessage));
   // `analyzeView` may still return `true` because the view got registered for
   // cache-key based rewriting, even for queries that (by design) are not
   // suitable for the pattern-based (star/chain) rewriting tested here. So
