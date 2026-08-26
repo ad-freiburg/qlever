@@ -72,6 +72,7 @@ class StripColumns : public Operation {
 
   FRIEND_TEST(Distinct, makeTreeWithStrippedColumns);
   FRIEND_TEST(GroupBy, makeTreeWithStrippedColumns);
+  FRIEND_TEST(Sort, makeTreeWithStrippedColumns);
 };
 
 #endif  // QLEVER_SRC_ENGINE_STRIPCOLUMNS_H
