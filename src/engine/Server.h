@@ -249,18 +249,14 @@ class Server {
 
   // Handle the `/metrics` endpoint: requires a valid access token, then
   // serves Prometheus-formatted metrics text if enabled
-  // (`--enable-metrics`), or a 404 response otherwise. Like `processPing`
-  // above, this never needs to bypass query processing, so it returns the
-  // response directly.
+  // (`--enable-metrics`), or a 404 response otherwise.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) ResponseT
       processMetrics(bool accessTokenOk, const RequestT& request) const;
 
   // Set every runtime parameter that's present in `parameters`, verifying the
-  // access token for each one that is. Follows the same optional-json
-  // convention as `processVacuumDeltaTriples`/`processWriteMaterializedView`
-  // above, but an empty optional here just means no parameter was given, not
-  // an error.
+  // access token for each one that is. If any runtime parameter was changed,
+  // return the representation of all runtime parameters, else `nullopt`.
   std::optional<json> processSetRuntimeParameters(
       const ParamValueMap& parameters, bool accessTokenOk) const;
 
