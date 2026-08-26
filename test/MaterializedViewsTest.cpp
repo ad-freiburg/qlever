@@ -574,8 +574,8 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
   expectWriteViewToDiskError(simpleWriteQuery_ + " LIMIT 5 OFFSET 10",
                              "may not contain a `LIMIT` or `OFFSET` clause");
 
-  // An explicit `ORDER BY` clause is always rejected, because a
-  // view is always stored sorted by `INTERNAL SORT BY`.
+  // An explicit `ORDER BY` clause is always rejected, because a view is
+  // always stored in the internal order of its first three columns.
   expectWriteViewToDiskError(simpleWriteQuery_ + " ORDER BY ?p",
                              "may not contain an `ORDER BY` clause");
   expectWriteViewToDiskError(simpleWriteQuery_ + " ORDER BY DESC(?s)",
@@ -598,6 +598,13 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
   EXPECT_NO_THROW(manager.writeViewToDisk(
       "testView7", qlv().parseAndPlanQuery(simpleWriteQuery_ +
                                            " INTERNAL SORT BY ?s ?p ?o")));
+
+  // A `LIMIT` inside an explicit subquery is allowed. This is the escape
+  // hatch that the error message for a top-level `LIMIT` advertises.
+  EXPECT_NO_THROW(manager.writeViewToDisk(
+      "testView8",
+      qlv().parseAndPlanQuery(
+          "SELECT * { { SELECT * { ?s ?p ?o . BIND(1 AS ?g) } LIMIT 2 } }")));
 }
 
 // _____________________________________________________________________________

@@ -104,7 +104,7 @@ class MaterializedViewWriter {
 
   // Called from the constructor. A view is always stored sorted by the
   // internal order of its first three columns (SPO). An `ORDER BY`, which
-  // requests the `semantic` order, is therefore never consistent with the
+  // requests the semantic order, is therefore never consistent with the
   // view's storage order and always rejected; an `INTERNAL SORT BY` that does
   // not request a prefix of the view's columns would have its requested order
   // silently discarded when writing the view and is therefore also rejected.

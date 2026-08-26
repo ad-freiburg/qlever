@@ -91,15 +91,16 @@ void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
   if (parsedQuery_._isInternalSort == IsInternalSort::False) {
     throw MaterializedViewConfigException(
         "The query to write a materialized view may not contain an `ORDER BY` "
-        "clause, because a view is always stored sorted by `INTERNAL SORT BY` "
-        "on its first three columns which would silently drop the `ORDER BY` "
-        "clause's sorting.");
+        "clause. A view is always stored in the internal order of its first "
+        "three columns, so the `ORDER BY` clause's sorting would be silently "
+        "dropped.");
   }
 
   // The user has explicitly written `INTERNAL SORT BY`. This is fine if the
   // sorting is a prefix of the view's SPO sorting.
   auto isConsistentWithViewOrder = [&]() {
-    // View sorting makes no guarantee on stable sorting.
+    // Sort keys beyond the view's columns cannot correspond to view columns,
+    // so their requested order could not be guaranteed.
     if (orderBy.size() > columnPermutation_.size()) {
       return false;
     }
