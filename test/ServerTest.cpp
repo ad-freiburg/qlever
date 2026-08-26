@@ -494,6 +494,8 @@ TEST(ServerTest, metricsEndpoint) {
 
 // _____________________________________________________________________________
 TEST(ServerTest, pingEndpoint) {
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
   auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
 
@@ -502,13 +504,19 @@ TEST(ServerTest, pingEndpoint) {
   EXPECT_THAT(response, StatusIs(http::status::ok));
   EXPECT_THAT(responseBodyToString(std::move(response.body())),
               testing::StrEq("This QLever server is up and running\n"));
+  EXPECT_THAT(logStream.str(),
+              ::testing::HasSubstr("Alive check without message"));
 
   // With a `msg` parameter; the response is the same regardless of the
   // message, which is only used for logging.
-  response = server.process(makeGetRequest("/ping?msg=hello"));
+  logStream.str("");
+  auto msg = "hello";
+  response = server.process(makeGetRequest(absl::StrCat("/ping?msg=", msg)));
   EXPECT_THAT(response, StatusIs(http::status::ok));
   EXPECT_THAT(responseBodyToString(std::move(response.body())),
               testing::StrEq("This QLever server is up and running\n"));
+  EXPECT_THAT(logStream.str(), ::testing::HasSubstr(absl::StrCat(
+                                   "Alive check with message \"", msg)));
 }
 
 // _____________________________________________________________________________
