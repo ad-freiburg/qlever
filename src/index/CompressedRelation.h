@@ -378,10 +378,15 @@ class CompressedRelationWriter {
   // The `permutation` contains the column indices indicating the permutation to
   // be built (as an array, for example `[0, 1, 2]`). The `sortedTriples` must
   // be sorted by this permutation.
+  //
+  // With `showProgressBar` set to `false`, this writes no progress bar of its
+  // own. That is for callers that write several permutations and display the
+  // progress of all of them together (see `qlever::indexFormatConverter`).
   static PermutationSingleResult createPermutation(
       WriterAndCallback writerAndCallback,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
+      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks,
+      bool showProgressBar = true);
 
  private:
   // Internal helper for `PermutationWriter<true>` (that is, in pair mode).

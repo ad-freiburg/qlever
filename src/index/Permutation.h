@@ -95,10 +95,16 @@ class Permutation {
                        std::optional<std::string> readableName = std::nullopt);
 
   // everything that has to be done when reading an index from disk
+  //
+  // With `logRegistration` set to `false`, the "Registered ... permutation"
+  // message is not logged. That is for callers that write a progress bar of
+  // their own, which such a message would interrupt (see
+  // `qlever::indexFormatConverter`).
   void loadFromDisk(
       const std::string& onDiskBase, bool loadInternalPermutation = false,
       Type permutationType = Type::NORMAL,
-      ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns = {});
+      ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns = {},
+      bool logRegistration = true);
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.

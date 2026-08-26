@@ -12,8 +12,10 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <future>
 #include <memory>
 #include <string>
@@ -50,6 +52,7 @@
 #include "util/FilesystemHelpers.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
+#include "util/ProgressBar.h"
 #include "util/json.h"
 
 namespace qlever::indexFormatConverter {
@@ -277,11 +280,43 @@ std::vector<ColumnIndex> getAdditionalColumns(size_t numColumns) {
   return additionalColumns;
 }
 
+// Return a callback for the given `progressBar`, which reports that `numSteps`
+// steps have been processed and displays an update when one is due. The
+// callback is threadsafe (see `ConcurrentProgressBar`), which matters because
+// the two permutations of a pair are converted concurrently, see
+// `convertPermutations` below.
+//
+// NOTE: The rebuild reports its progress in exactly the same way, see
+// `IndexRebuilder.cpp`.
+std::function<void(size_t)> progressCallbackFor(
+    ad_utility::ConcurrentProgressBar& progressBar) {
+  return [&progressBar](size_t numSteps) {
+    progressBar.add(numSteps);
+    if (auto update = progressBar.update()) {
+      AD_LOG_INFO << update->getProgressString() << std::flush;
+    }
+  };
+}
+
+// The batch size for a progress bar with the given `total`, chosen such that
+// about 1000 progress lines are written, that is, one line per mille of the
+// total. Each line costs a formatted string and a lock, which is nothing
+// compared to converting a per mille of an index. The lower bound keeps tiny
+// indexes (in particular, those of the unit tests) from producing a progress
+// line for almost every block.
+//
+// NOTE: The rebuild computes its batch size in the same way, but with about 50
+// lines per phase (`IndexRebuilder.cpp`).
+size_t batchSizeFor(size_t total) {
+  return std::max<size_t>(total / 1000, 100'000);
+}
+
 // Return a lazy full scan of `permutation` in which all `Id`s are converted to
-// the current index format. The returned range has to be consumed before
-// `permutation` is destroyed.
+// the current index format, reporting the number of triples of each block to
+// `progress`. The returned range has to be consumed before `permutation` is
+// destroyed.
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
-    const Permutation& permutation) {
+    const Permutation& permutation, std::function<void(size_t)> progress) {
   auto locatedTriplesState = makeEmptyLocatedTriplesState(permutation);
   auto scanSpecAndBlocks = permutation.getScanSpecAndBlocks(
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
@@ -315,11 +350,12 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
           std::move(scanWithReader.blocks_),
           [reader = std::move(scanWithReader.reader_),
            locatedTriplesState = std::move(locatedTriplesState),
-           cancellationHandle =
-               std::move(cancellationHandle)](IdTable& idTable) {
+           cancellationHandle = std::move(cancellationHandle),
+           progress = std::move(progress)](IdTable& idTable) {
             for (auto column : idTable.getColumns()) {
               ql::ranges::for_each(column, [](Id& id) { id = convertId(id); });
             }
+            progress(idTable.numRows());
             return IdTableStatic<0>{std::move(idTable)};
           }}};
 }
@@ -361,9 +397,9 @@ IndexMetaData writePermutation(
   // the order of the `Id`s, see `datatypesOfSourceFormat` above), so the
   // identity is the correct key order here.
   auto [numDistinctCol0, blockMetadata] =
-      CompressedRelationWriter::createPermutation({std::move(writer), callback},
-                                                  std::move(blocks),
-                                                  KeyOrder{0, 1, 2, 3}, {});
+      CompressedRelationWriter::createPermutation(
+          {std::move(writer), callback}, std::move(blocks),
+          KeyOrder{0, 1, 2, 3}, {}, /* showProgressBar = */ false);
   metaData.blockData() = std::move(blockMetadata);
   metaData.calculateStatistics(numDistinctCol0);
   return metaData;
@@ -420,7 +456,14 @@ std::unique_ptr<Permutation> loadPermutation(const std::string& basename,
   if (!fs::exists(filenameForPermutation(basename, *permutation, isInternal))) {
     return nullptr;
   }
-  permutation->loadFromDisk(basenameForPermutations(basename, isInternal));
+  // NOTE: The "Registered ... permutation" message that `loadFromDisk` logs by
+  // default is suppressed here, because it would interrupt the progress bar of
+  // `convertPermutations` below. The statistics of each permutation are in the
+  // log of the index build, and those of the upgraded index are logged when it
+  // is checked (see `checkUpgradedIndex`).
+  permutation->loadFromDisk(basenameForPermutations(basename, isInternal),
+                            false, Permutation::Type::NORMAL, {},
+                            /* logRegistration = */ false);
   return permutation;
 }
 
@@ -431,17 +474,17 @@ std::unique_ptr<Permutation> loadPermutation(const std::string& basename,
 // NOTE: The two permutations of a pair are converted concurrently (see
 // `convertPermutations` below), so this must not touch any state that is
 // shared between them. That is why the files of the old permutation are
-// recorded by the caller and not here.
+// recorded by the caller and not here, and why the progress is reported to a
+// threadsafe `progress` callback instead of being logged here.
 IndexMetaData convertPermutation(const Permutation& oldPermutation,
                                  const std::string& newBasename,
-                                 bool isInternal) {
-  AD_LOG_INFO << "Converting the " << oldPermutation.readableName()
-              << " permutation ..." << std::endl;
+                                 bool isInternal,
+                                 const std::function<void(size_t)>& progress) {
   std::string newFilename =
       filenameForPermutation(newBasename, oldPermutation, isInternal);
   auto newMetaData =
       writePermutation(newFilename, getNumColumns(oldPermutation),
-                       scanAndConvertIds(oldPermutation));
+                       scanAndConvertIds(oldPermutation, progress));
   newMetaData.setName(oldPermutation.metaData().getName());
   verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
                              newFilename);
@@ -449,10 +492,31 @@ IndexMetaData convertPermutation(const Permutation& oldPermutation,
 }
 
 // Convert all permutations of the index with the base name `oldBasename` and
-// write them to the index with the base name `newBasename`.
+// write them to the index with the base name `newBasename`. The `numTriples`
+// are the numbers of triples from the configuration of that index, which are
+// the total for the progress bar below.
 void convertPermutations(const std::string& oldBasename,
                          const std::string& newBasename,
+                         const Index::NumNormalAndInternal& numTriples,
                          std::vector<fs::path>& handledFiles) {
+  // The index always has the two normal and the two internal `PSO` and `POS`
+  // permutations, and either all six normal permutations or only these two
+  // (`--only-pso-and-pos-permutations`). Each triple is written once per
+  // permutation, which gives the total number of triples that the conversion of
+  // the permutations writes.
+  bool hasAllPermutations =
+      fs::exists(absl::StrCat(oldBasename, PERMUTATION_FILE_INFIX, ".ops"));
+  size_t numNormalPermutations = hasAllPermutations ? 6 : 2;
+  size_t numTriplesTotal =
+      numNormalPermutations * numTriples.normal + 2 * numTriples.internal;
+  AD_LOG_INFO << "Converting " << numNormalPermutations + 2 << " permutations ("
+              << numNormalPermutations << " normal and 2 internal, "
+              << ad_utility::withThousandSeparators(numTriplesTotal)
+              << " triples in total) ..." << std::endl;
+  ad_utility::ConcurrentProgressBar progressBar{
+      "Triples converted: ", numTriplesTotal, batchSizeFor(numTriplesTotal)};
+  auto progress = progressCallbackFor(progressBar);
+
   for (const auto& permutationPair : permutationPairs) {
     auto [enumA, enumB] = permutationPair.first;
     // Whether the pair is the pair of internal permutations.
@@ -498,8 +562,9 @@ void convertPermutations(const std::string& oldBasename,
     // `futureB` waits for the other conversion to finish before the exception
     // leaves this function. That is exactly what we want: no thread must still
     // be writing to the incomplete index when the caller handles the error.
-    auto convert = [&newBasename, isInternal](const Permutation& permutation) {
-      return convertPermutation(permutation, newBasename, isInternal);
+    auto convert = [&newBasename, isInternal,
+                    &progress](const Permutation& permutation) {
+      return convertPermutation(permutation, newBasename, isInternal, progress);
     };
     auto futureB =
         std::async(std::launch::async, convert, std::cref(*permutationB));
@@ -514,6 +579,7 @@ void convertPermutations(const std::string& oldBasename,
     writeMetaData(newMetaB, filenameForPermutation(newBasename, *permutationB,
                                                    isInternal));
   }
+  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 }
 
 // Convert the patterns of the index with the base name `oldBasename` (if it has
@@ -555,11 +621,16 @@ void convertMaterializedView(const std::string& oldBasename,
   Permutation oldPermutation{Permutation::SPO,
                              ad_utility::makeUnlimitedAllocator<Id>(), name};
   oldPermutation.loadFromDisk(oldViewBasename, false,
-                              Permutation::Type::MATERIALIZED_VIEW);
+                              Permutation::Type::MATERIALIZED_VIEW, {},
+                              /* logRegistration = */ false);
   std::string newFilename = absl::StrCat(newViewBasename, VIEW_SPO_SUFFIX);
-  auto newMetaData =
-      writePermutation(newFilename, getNumColumns(oldPermutation),
-                       scanAndConvertIds(oldPermutation));
+  size_t numTriples = oldPermutation.metaData().totalElements();
+  ad_utility::ConcurrentProgressBar progressBar{
+      "Triples converted: ", numTriples, batchSizeFor(numTriples)};
+  auto newMetaData = writePermutation(
+      newFilename, getNumColumns(oldPermutation),
+      scanAndConvertIds(oldPermutation, progressCallbackFor(progressBar)));
+  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
   newMetaData.setName(newViewBasename);
   verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
                              newFilename);
@@ -765,7 +836,10 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
   std::vector<fs::path> handledFiles{
       absl::StrCat(oldBasename, CONFIGURATION_FILE)};
 
-  convertPermutations(oldBasename, newBasename, handledFiles);
+  convertPermutations(
+      oldBasename, newBasename,
+      static_cast<Index::NumNormalAndInternal>(configuration.at("num-triples")),
+      handledFiles);
   convertPatterns(oldBasename, newBasename, handledFiles);
   copyFilesThatNeedNoConversion(oldBasename, newBasename, handledFiles);
   checkAllFilesWereHandled(oldBasename, handledFiles);
@@ -784,6 +858,30 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
 }
 
 namespace {
+// While an object of this class is alive, the runtime log level is the given
+// `level` (or the compile-time `LOGLEVEL`, if that is less verbose); the
+// previous level is restored when the object is destroyed.
+//
+// NOTE: The runtime log level is global, which is fine for
+// `qlever-upgrade-index` because it is a standalone tool that does one thing
+// at a time, but would be wrong in a server, where other threads log
+// concurrently.
+class ScopedLogLevel {
+ public:
+  explicit ScopedLogLevel(LogLevel::Enum level)
+      : previousLevel_{ad_utility::getRuntimeLogLevel()} {
+    ad_utility::setRuntimeLogLevel(std::min(level, LOGLEVEL));
+  }
+  // NOTE: This cannot throw, because `previousLevel_` was the runtime log
+  // level before and hence is at most the compile-time `LOGLEVEL`.
+  ~ScopedLogLevel() { ad_utility::setRuntimeLogLevel(previousLevel_); }
+  ScopedLogLevel(const ScopedLogLevel&) = delete;
+  ScopedLogLevel& operator=(const ScopedLogLevel&) = delete;
+
+ private:
+  LogLevel previousLevel_;
+};
+
 // Check that the upgraded index with the base name `newBasename` can be
 // loaded, and that the number of triples of each of its permutations matches
 // `expectedNumTriples`, the number of triples from the configuration of the
@@ -796,6 +894,13 @@ void checkUpgradedIndex(const std::string& newBasename,
                         const Index::NumNormalAndInternal& expectedNumTriples) {
   AD_LOG_INFO << "Checking that the upgraded index can be loaded ..."
               << std::endl;
+  // Loading an index logs the vocabulary, every permutation, and the patterns,
+  // and unloading it logs one more message. All of that is noise here, only a
+  // warning or an error of the load is of interest.
+  //
+  // NOTE: Declared before `index`, so that it is destroyed after it and hence
+  // also covers the message that the destruction of `index` logs.
+  ScopedLogLevel scopedLogLevel{LogLevel::Enum::WARN};
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   // Load what the index has: the patterns and the permutations beyond `PSO`
   // and `POS` are optional.

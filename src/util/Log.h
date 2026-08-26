@@ -121,6 +121,11 @@ inline void setRuntimeLogLevel(LogLevel level) {
   detail::runtimeLogLevel.store(level.value(), std::memory_order_relaxed);
 }
 
+// Get the runtime log level (see `setRuntimeLogLevel`).
+inline LogLevel getRuntimeLogLevel() {
+  return detail::runtimeLogLevel.load(std::memory_order_relaxed);
+}
+
 // A singleton that holds a pointer to a single `std::ostream`. This enables us
 // to globally redirect the `AD_LOG_...` macros to another output stream.
 struct LogstreamChoice {
