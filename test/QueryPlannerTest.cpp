@@ -2560,7 +2560,10 @@ TEST(QueryPlanner, DatasetClause) {
       "{ "
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
       "} }",
-      h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)));
+      h::Bind(h::GroupBy({Variable{"?p"}, Variable{internalVar(0)}}, {},
+                         h::Sort(scan("<d>", "?p", "<z2>", {}, g2,
+                                      {Variable{internalVar(0)}}, {3}))),
+              internalVar(0), Variable{"?g"}));
 
   // A complex example with graph variables.
   h::expect(
@@ -2572,7 +2575,10 @@ TEST(QueryPlanner, DatasetClause) {
       h::UnorderedJoins(
           scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
           scan("<c>", "?p", "<z>", {}, g2, varG, graphCol),
-          h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)),
+          h::Bind(h::GroupBy({Variable{"?p"}, Variable{internalVar(0)}}, {},
+                             h::Sort(scan("<d>", "?p", "<z2>", {}, g2,
+                                          {Variable{internalVar(0)}}, {3}))),
+                  internalVar(0), Variable{"?g"}),
           scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol),
           scan("<e>", "?p", "<z3>", {}, g1)));
 }

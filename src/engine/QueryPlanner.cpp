@@ -3175,13 +3175,20 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
               Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
               &arg.graphSpec_)) {
         const Variable& graphVar = graphPair->first;
-        auto graphsCand = makeSubtreePlan<DistinctGraphs>(qec_, graphVar);
-
-        for (auto& innerCand : candidates) {
-          bool isGraphVarBound =
-              planner_.activeDatasetClauses_.namedGraphs().has_value() ||
-              innerCand._qet->getVariableColumns().contains(graphVar);
-          if (!isGraphVarBound) {
+        const auto& namedGraphs = planner_.activeDatasetClauses_.namedGraphs();
+        auto graphsCand = [&namedGraphs, &graphVar, this](){
+          if(!namedGraphs.has_value()){
+            return makeSubtreePlan<DistinctGraphs>(qec_, graphVar);
+          } 
+          p::SparqlValues values;
+          values._variables.push_back(graphVar);
+          for(const auto& graph: namedGraphs.value()){
+            values._values.push_back({graph});
+          }
+          return makeSubtreePlan<Values>(qec_, std::move(values));
+        }();
+        for(auto& innerCand: candidates){
+          if(!innerCand._qet->getVariableColumns().contains(graphVar)){
             innerCand = makeSubtreePlan<CartesianProductJoin>(
                 planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
                                    graphsCand._qet, innerCand._qet});
@@ -3498,9 +3505,9 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
     parsedQuery::Subquery& arg) {
   std::optional<Variable> outerGraphVariable = planner_.activeGraphVariable_;
   absl::Cleanup resetActiveGraphs{
-      [this, originalVar = planner_.activeGraphVariable_]() mutable {
+      [this, &outerGraphVariable]() mutable {
         // Reset back to original
-        planner_.activeGraphVariable_ = std::move(originalVar);
+        planner_.activeGraphVariable_ = std::move(outerGraphVariable);
       }};
 
   ParsedQuery& subquery = arg.get();
@@ -3511,10 +3518,8 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
       !ad_utility::contains(select.getSelectedVariables(),
                             outerGraphVariable.value())) {
     planner_.activeGraphVariable_ = std::nullopt;
-    if (!planner_.activeDatasetClauses_.namedGraphs().has_value()) {
-      internalGraphVariable = planner_.generateUniqueVarName();
-      planner_.activeGraphVariable_ = internalGraphVariable;
-    }
+    internalGraphVariable = planner_.generateUniqueVarName();
+    planner_.activeGraphVariable_ = internalGraphVariable;
   }
   // TODO<joka921> We currently do not optimize across subquery borders
   // but abuse them as "optimization hints". In theory, one could even
@@ -3540,6 +3545,9 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
       plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
           {selectedVariables.begin(), selectedVariables.end()});
     }
+    // Conceptually this just "renames" the internal graph variable to the
+    // outer graph variable. Using a `Bind` for this is more expensive than
+    // necessary, but it's the best we can do for now.
     if (internalGraphVariable.has_value() &&
         plan._qet->getVariableColumns().contains(
             internalGraphVariable.value())) {
