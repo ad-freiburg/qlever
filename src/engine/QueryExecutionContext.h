@@ -97,6 +97,11 @@ using QueryResultCache = ad_utility::ConcurrentCache<
 // Forward declaration because of cyclic dependency
 class NamedResultCache;
 class MaterializedViewsManager;
+namespace materializedViewsQueryAnalysis {
+// Defined in `engine/MaterializedViewsQueryAnalysis.h`, which cannot be
+// included here because that would be a cyclic include.
+struct ViewCacheKeysWithFixedFirstColumn;
+}  // namespace materializedViewsQueryAnalysis
 
 // Execution context for queries. Holds a `std::shared_ptr` to the `Index`
 // and `MaterializedViewsManager` to ensure that they stay alive as long as
@@ -215,6 +220,19 @@ class QueryExecutionContext
   // Access the cache for explicitly named query.
   NamedResultCache& namedResultCache() { return *namedResultCache_; }
 
+  // The cache keys of the loaded materialized views whose first column is
+  // fixed to a value from the query that is currently being planned. These
+  // depend on the query, so unlike the cache keys of the views themselves they
+  // are stored here, for the lifetime of this `QueryExecutionContext`, that is
+  // for one query. `nullptr` until
+  // `MaterializedViewsManager::registerCacheKeysWithFixedFirstColumn` fills it;
+  // read by `MaterializedViewsManager::makeIndexScan`.
+  std::shared_ptr<
+      materializedViewsQueryAnalysis::ViewCacheKeysWithFixedFirstColumn>&
+  viewCacheKeysWithFixedFirstColumn() {
+    return viewCacheKeysWithFixedFirstColumn_;
+  }
+
   // Get a reference to the `MaterializedViewsManager`.
   const MaterializedViewsManager& materializedViewsManager() const {
     return *materializedViewsManager_;
@@ -313,6 +331,10 @@ class QueryExecutionContext
 
   // See the documentation for the getter with the same name above.
   bool isAnalyzingMaterializedViewQuery_ = false;
+
+  std::shared_ptr<
+      materializedViewsQueryAnalysis::ViewCacheKeysWithFixedFirstColumn>
+      viewCacheKeysWithFixedFirstColumn_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
