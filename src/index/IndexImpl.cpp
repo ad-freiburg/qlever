@@ -1421,17 +1421,16 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
               "). However, the index format changed on ",
               targetVersion.date_.toStringAndType().first,
               " (PR = ", targetVersion.prNumber_,
-              "). You have three options:\n\n"
+              "). We do our best to keep index format changes rare, but "
+              "sometimes they are unavoidable. You have three options:\n\n"
               "1. Use an older version of QLever; that way, you won't get the "
               "latest features\n"
               "2. Rebuild the index from scratch with the version of qlever "
               "you are currently using; we recommend this if it is easy to do "
               "for you\n"
               "3. Upgrade your index with `qlever-upgrade-index <basename>`; "
-              "this is much faster than rebuilding the index from scratch\n\n"
-              "NOTE: We do our best to keep index format changes rare, but "
-              "sometimes they are unavoidable; we also do our best to then "
-              "keep the new format for a long time")};
+              "this is much faster than rebuilding the index from "
+              "scratch\n")};
         }
         AD_LOG_ERROR
             << "The index is too old for this version of QLever. "
