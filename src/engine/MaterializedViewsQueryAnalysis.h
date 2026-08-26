@@ -177,10 +177,11 @@ using RewriteIgnoreReason = std::string;
 // view's defining query's single `BasicGraphPattern` for further (star/chain)
 // pattern analysis, provided the query even has a shape that pattern-based
 // rewriting could apply to: no aggregation, no top-level
-// FILTER/VALUES/DISTINCT/REDUCED/LIMIT/OFFSET that would restrict the on-disk
-// rows, and exactly one `BasicGraphPattern` with at least one triple (after
-// skipping invariant patterns like `BIND`). If `parsed` does not have such a
-// shape, a `RewriteIgnoreReason` explaining why is returned instead.
+// `FILTER`/`VALUES`/`DISTINCT`/`REDUCED`/`LIMIT`/`OFFSET` or
+// `FROM`/`FROM NAMED` that would restrict the on-disk rows, and exactly one
+// `BasicGraphPattern` with at least one triple (after skipping invariant
+// patterns like `BIND`). If `parsed` does not have such a shape, a
+// `RewriteIgnoreReason` explaining why is returned instead.
 std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed);
 

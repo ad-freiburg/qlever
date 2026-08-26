@@ -249,12 +249,13 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
 }
 
 // _____________________________________________________________________________
-// Regression test: a top-level FILTER, a trailing VALUES clause, or
-// DISTINCT/REDUCED in the view's defining query restrict which rows actually
-// end up on disk, but (unlike aggregation) do not remove any variable from
-// `variableToColumnMap()`. Without an explicit check for these, a query with
-// the same star/chain pattern could be silently rewritten to read the view
-// even though its content is only a restricted subset of the join.
+// Regression test: a top-level FILTER, a trailing VALUES clause,
+// DISTINCT/REDUCED, LIMIT/OFFSET, or FROM/FROM NAMED in the view's defining
+// query restrict which rows actually end up on disk, but (unlike aggregation)
+// do not remove any variable from `variableToColumnMap()`. Without an explicit
+// check for these, a query with the same star/chain pattern could be silently
+// rewritten to read the view even though its content is only a restricted
+// subset of the join.
 TEST(MaterializedViewsStarRewriteAggregationTest,
      restrictingModifiersNotRewritten) {
   const std::string onDiskBase = gtestCurrentTestName();
@@ -310,6 +311,16 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
       qlv, manager, "offsetChainView",
       "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o } OFFSET 1",
       "LIMIT or OFFSET clause");
+
+  // Star with FROM, chain with FROM NAMED.
+  expectNotSuitableForRewrite(
+      qlv, manager, "fromStarView",
+      "SELECT ?s ?o1 ?o2 FROM <g> { ?s <p1> ?o1 . ?s <p2> ?o2 }",
+      "FROM or FROM NAMED clause");
+  expectNotSuitableForRewrite(
+      qlv, manager, "fromNamedChainView",
+      "SELECT ?s ?m ?o FROM NAMED <g> { ?s <p1> ?m . ?m <p2> ?o }",
+      "FROM or FROM NAMED clause");
 }
 
 // _____________________________________________________________________________
