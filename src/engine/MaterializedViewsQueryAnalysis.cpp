@@ -112,17 +112,17 @@ void forEachTopLevelTriple(Query& parsed, Func func) {
   }
 }
 
-// Call `func` for the subject and the object of `triple`, if they are the
-// given `variable`. The predicate is deliberately not visited: a variable
-// predicate cannot be substituted by a `TripleComponent` (see
+// Call `func(side, isSubject)` for the subject and the object of `triple`, if
+// they are the given `variable`. The predicate is deliberately not visited: a
+// variable predicate cannot be substituted by a `TripleComponent` (see
 // `substituteFirstColumn`, which detects such an occurrence because it is
 // counted by the `VariableCounter` but not here).
-template <typename Func>
-void forEachMatchingSide(SparqlTriple& triple, const Variable& variable,
-                         Func func) {
-  for (TripleComponent* side : {&triple.s_, &triple.o_}) {
-    if (side->isVariable() && side->getVariable() == variable) {
-      func(*side);
+template <typename Triple, typename Func>
+void forEachMatchingSide(Triple& triple, const Variable& variable, Func func) {
+  for (bool isSubject : {true, false}) {
+    auto& side = isSubject ? triple.s_ : triple.o_;
+    if (side.isVariable() && side.getVariable() == variable) {
+      func(side, isSubject);
     }
   }
 }
@@ -151,12 +151,10 @@ std::vector<FirstColumnAnchor> firstColumnAnchors(const ParsedQuery& parsed,
     if (!predicate.has_value()) {
       return;
     }
-    for (bool isSubject : {true, false}) {
-      const auto& side = isSubject ? triple.s_ : triple.o_;
-      if (side.isVariable() && side.getVariable() == variable) {
-        anchors.push_back({predicate.value(), isSubject});
-      }
-    }
+    forEachMatchingSide(triple, variable,
+                        [&](const TripleComponent&, bool isSubject) {
+                          anchors.push_back({predicate.value(), isSubject});
+                        });
   });
   return anchors;
 }
@@ -792,7 +790,7 @@ bool substituteFirstColumn(ParsedQuery& parsed, const Variable& variable,
   size_t numSubstituted = 0;
   forEachTopLevelTriple(parsed, [&](SparqlTriple& triple) {
     forEachMatchingSide(triple, variable,
-                        [&](TripleComponent&) { ++numSubstituted; });
+                        [&](TripleComponent&, bool) { ++numSubstituted; });
   });
   if (numSubstituted == 0 || !totalCount.has_value() ||
       totalCount.value() != numSubstituted) {
@@ -800,8 +798,9 @@ bool substituteFirstColumn(ParsedQuery& parsed, const Variable& variable,
   }
 
   forEachTopLevelTriple(parsed, [&](SparqlTriple& triple) {
-    forEachMatchingSide(triple, variable,
-                        [&value](TripleComponent& side) { side = value; });
+    forEachMatchingSide(
+        triple, variable,
+        [&value](TripleComponent& side, bool) { side = value; });
   });
 
   // `variable` is not bound by the query anymore, so it must not be selected.
