@@ -767,7 +767,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
     const std::optional<TripleComponent>& fixedFirstColumn) const {
   // Without a fixed value, the first column is bound to a variable from
   // `varToCol` below.
-  TripleComponent s{fixedFirstColumn.value_or(TripleComponent{dummySubject()})};
+  TripleComponent s{fixedFirstColumn.value_or(dummySubject())};
   TripleComponent p{dummyPredicate()};
   TripleComponent o{dummyObject()};
   AdditionalScanColumns additionalCols;
