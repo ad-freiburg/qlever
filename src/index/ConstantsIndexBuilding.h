@@ -54,6 +54,8 @@ constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
     ".partial-vocab.words.tmp.";
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
+constexpr inline std::string_view PARTIAL_TRIPLES_INFIX =
+    ".partial-triples.tmp.";
 
 // _________________________________________________________________
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";

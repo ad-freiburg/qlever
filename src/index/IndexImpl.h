@@ -67,7 +67,11 @@ struct BuildPartialVocabulariesResult {
   // belongs to the i-th partial vocabulary. It might be slightly different
   // from the specified `batchSize` because of internally added triples.
   std::vector<size_t> numTriplesPerPartialVocab_;
-  std::unique_ptr<TripleVec> idTriples_;
+  // The ID triples of the i-th partial vocabulary, expressed in its local
+  // IDs. One file per partial vocabulary, so that the writers of the parsing
+  // phase need no coordination and the correspondence between triples and
+  // partial vocabularies is structural instead of positional.
+  std::vector<std::unique_ptr<TripleVec>> idTriples_;
 };
 
 // Data produced after parsing: vocabulary metadata and unsorted ID triples.
@@ -656,8 +660,8 @@ class IndexImpl {
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
       ItemMapArray items,
       std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-      ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr)
-      const;
+      ad_utility::Synchronized<std::vector<std::unique_ptr<TripleVec>>>*
+          partialTriplesPtr) const;
 
   // Return a Turtle parser that parses the given file. The parser will be
   // configured to either parse in parallel or not, and to either use the
@@ -669,7 +673,8 @@ class IndexImpl {
 
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
-      TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
+      std::vector<std::unique_ptr<TripleVec>>& data,
+      const std::vector<size_t>& actualLinesPerPartial,
       Func isQLeverInternalTriple);
 
   // Helper function to get the filename for a given permutation.
