@@ -248,20 +248,33 @@ Result LibspatialjoinAlgorithm::run() {
     sweeperCfg.computeDE9IM = true;
     sweeperCfg.de9imFilter = ::util::geo::DE9IMFilter(de9imFilter->data());
   }
-  sweeperCfg.writeRelCb = [&results, &resultDists, joinTypeVal](
-                              size_t t, const char* a, size_t, const char* b,
-                              size_t, const char* pred, size_t) {
-    if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+  // Pick the callback variant once here (`joinTypeVal` is fixed for the
+  // whole sweep) instead of branching on it inside the callback, which is
+  // invoked once per candidate pair and is thus hot-path code.
+  if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+    sweeperCfg.writeRelCb = [&results, &resultDists](
+                                size_t t, const char* a, size_t, const char* b,
+                                size_t, const char* pred, size_t) {
       results[t].push_back({std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
-    } else if (joinTypeVal == SpatialJoinType::DE9IM) {
-      // `libspatialjoin` only invokes this callback for pairs that already
-      // matched `sweeperCfg.de9imFilter`.
+    };
+  } else if (joinTypeVal == SpatialJoinType::DE9IM) {
+    // `libspatialjoin` only invokes this callback for pairs that already
+    // matched `sweeperCfg.de9imFilter`.
+    sweeperCfg.writeRelCb = [&results](size_t t, const char* a, size_t,
+                                       const char* b, size_t, const char*,
+                                       size_t) {
       results[t].push_back({std::atoi(a), std::atoi(b)});
-    } else if (pred[0] == static_cast<char>(joinTypeVal.value())) {
-      results[t].push_back({std::atoi(a), std::atoi(b)});
-    }
-  };
+    };
+  } else {
+    sweeperCfg.writeRelCb = [&results, joinTypeVal](
+                                size_t t, const char* a, size_t, const char* b,
+                                size_t, const char* pred, size_t) {
+      if (pred[0] == static_cast<char>(joinTypeVal.value())) {
+        results[t].push_back({std::atoi(a), std::atoi(b)});
+      }
+    };
+  }
   sweeperCfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
 
   auto basePath = ql::filesystem::path(qec_->getIndex().getOnDiskBase());
