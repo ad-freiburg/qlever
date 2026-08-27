@@ -11,6 +11,7 @@
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/HttpError.h"
@@ -373,22 +374,16 @@ TEST(ServerTest, metricsEndpoint) {
                           ad_utility::source_location l =
                               AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    auto request = makeGetRequest("/metrics");
-    if (accessToken.has_value()) {
-      request.set(http::field::authorization, "Bearer " + accessToken.value());
-    }
+    auto request = makeGetRequest("/metrics", accessToken);
     auto response = server.process(request);
 
     EXPECT_THAT(response, responseMatcher);
     EXPECT_THAT(responseBodyToString(std::move(response.body())), bodyMatcher);
   };
-  auto expectRequiresAccessToken = [&](auto& server,
-                                       ad_utility::source_location l =
-                                           AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(l);
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        expectMetrics(std::nullopt, server, testing::_, testing::_),
-        testing::HasSubstr("metrics requires a valid access token"));
+  auto expectMetricsRequiresAccessToken = [&](auto& server) {
+    expectRequiresValidAccessToken("metrics", [&] {
+      expectMetrics(std::nullopt, server, testing::_, testing::_);
+    });
   };
   auto UpdateRequest = [](std::string update) {
     return makeRequest(
@@ -418,19 +413,19 @@ TEST(ServerTest, metricsEndpoint) {
   };
   {
     auto server = makeServerWithMetrics(nullptr);
-    expectRequiresAccessToken(server);
+    expectMetricsRequiresAccessToken(server);
     expectMetrics("accessToken", server, StatusIs(http::status::not_found),
                   testing::StrEq("Metrics not enabled (use --enable-metrics)"));
   }
   {
     auto server = makeServerWithMetrics(std::make_shared<FakeMetricsReader>());
-    expectRequiresAccessToken(server);
+    expectMetricsRequiresAccessToken(server);
     expectMetrics("accessToken", server, StatusIs(http::status::ok),
                   testing::HasSubstr("fake_counter 42"));
   }
   {
     auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
-    expectRequiresAccessToken(server);
+    expectMetricsRequiresAccessToken(server);
   }
   {
     auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
@@ -495,6 +490,144 @@ TEST(ServerTest, metricsEndpoint) {
       IsZero(qleverSparqlOperationErrorsTotal, syntaxError),
       UpdateRequest("SELECT * WHERE { ?s ?p ?o } Limit 10"),
       MetricIs(qleverSparqlOperationErrorsTotal, "1", syntaxError));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, clearDeltaTriples) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  auto expectCounts = [&server](DeltaTriplesCount expected) {
+    EXPECT_THAT(server.deltaTriplesManager()
+                    .getCurrentLocatedTriplesSharedState()
+                    ->counts_,
+                testing::Optional(testing::Eq(expected)));
+  };
+
+  auto insertRequest =
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-update"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "INSERT DATA { <d> <e> <f> }");
+  EXPECT_THAT(server.process(insertRequest), StatusIs(http::status::ok));
+  expectCounts(DeltaTriplesCount{1, 0});
+
+  // The command requires a valid access token.
+  expectRequiresValidAccessToken("clear-delta-triples", [&] {
+    server.process(makeGetRequest("/?cmd=clear-delta-triples"));
+  });
+  expectCounts(DeltaTriplesCount{1, 0});
+
+  // With a valid access token, the delta triples are cleared and the response
+  // reports the (now empty) resulting counts.
+  auto response = server.process(
+      makeGetRequest("/?cmd=clear-delta-triples", "accessToken"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(responseBodyAsJson(std::move(response)),
+              testing::Optional(testing::Eq(
+                  json{{"inserted", 0}, {"deleted", 0}, {"total", 0}})));
+  expectCounts(DeltaTriplesCount{0, 0});
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, vacuumDeltaTriples) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  auto expectCounts = [&server](DeltaTriplesCount expected) {
+    EXPECT_THAT(server.deltaTriplesManager()
+                    .getCurrentLocatedTriplesSharedState()
+                    ->counts_,
+                testing::Optional(testing::Eq(expected)));
+  };
+
+  // Without this, the single block of the (tiny) test index doesn't meet the
+  // minimum size for `vacuum` to process it.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+          size_t{0});
+
+  // Insert a triple that is already in the index; this is a redundant
+  // insertion that `vacuum` should remove.
+  auto insertRequest =
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-update"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "INSERT DATA { <a> <b> <c> }");
+  EXPECT_THAT(server.process(insertRequest), StatusIs(http::status::ok));
+  expectCounts(DeltaTriplesCount{1, 0});
+
+  // The command requires a valid access token.
+  expectRequiresValidAccessToken("vacuum-delta-triples", [&] {
+    server.process(makeGetRequest("/?cmd=vacuum-delta-triples"));
+  });
+  expectCounts(DeltaTriplesCount{1, 0});
+
+  // With a valid access token, the redundant insertion is vacuumed away and
+  // the response reports the resulting stats.
+  auto response = server.process(
+      makeGetRequest("/?cmd=vacuum-delta-triples", "accessToken"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  auto body = responseBodyAsJson(std::move(response));
+  ASSERT_TRUE(body.has_value());
+  EXPECT_EQ(body.value()["external"]["insertionsRemoved"], 1);
+  expectCounts(DeltaTriplesCount{0, 0});
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, handleHttpRequest) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+  auto response = server.handleHttpRequest(makeRequest(http::verb::options));
+
+  // OPTIONS is answered directly with CORS headers, without dispatching.
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_origin,
+                                      testing::StrEq("*")));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_headers,
+                                      testing::StrEq("*")));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_methods,
+                                      testing::StrEq("GET, POST, OPTIONS")));
+
+  // A normal successful request also gets the CORS headers.
+  response = server.handleHttpRequest(makeGetRequest("/?default"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_origin,
+                                      testing::StrEq("*")));
+
+  // Valid token format, wrong value: `HttpError` -> forbidden.
+  response = server.handleHttpRequest(makeRequest(
+      http::verb::get, "/",
+      {{http::field::authorization, "Bearer correct_format_wrong_token"}}));
+  EXPECT_THAT(response, StatusIs(http::status::forbidden));
+
+  // Missing "Bearer " prefix: generic exception -> bad_request.
+  response = server.handleHttpRequest(makeRequest(
+      http::verb::get, "/",
+      {{http::field::authorization, "correct_token_wrong_format"}}));
+  EXPECT_THAT(response, StatusIs(http::status::bad_request));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, makeWebSocketSessionSupplier) {
+  Server server{4511, 1, "accessToken", getDefaultConfig()};
+  boost::asio::any_io_executor ioExecutor;
+
+  ASSERT_TRUE(server.queryHub_.expired());
+  {
+    auto handler = server.makeWebSocketSessionSupplier(ioExecutor);
+    // `handler` owns the `QueryHub` via its captured `shared_ptr`, so the
+    // `weak_ptr` member is alive as long as `handler` is.
+    EXPECT_FALSE(server.queryHub_.expired());
+
+    // Calling it again while the first handler is still alive violates the
+    // "only once" contract.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        server.makeWebSocketSessionSupplier(ioExecutor),
+        testing::HasSubstr(
+            "`queryHub_` has already been initialized; "
+            "`makeWebSocketSessionSupplier` must only be called once."));
+  }  // Here is the local variable `handler` out of scope and destroyed.
+  EXPECT_TRUE(server.queryHub_.expired());
 }
 
 // _____________________________________________________________________________
