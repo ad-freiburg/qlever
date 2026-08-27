@@ -1991,38 +1991,26 @@ INSTANTIATE_TEST_SUITE_P(
         RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
 
 // _____________________________________________________________________________
-TEST_F(MaterializedViewsChainRewriteContextTest, DegenerateChainNotRewritten) {
-  // Regression test: a "degenerate"/triangular chain in the query (the same
-  // variable is both the subject of the first triple and the object of the
-  // second, e.g. `?x <p1> ?v . ?v <p2> ?x`) must not be rewritten using a
-  // chain view, because that would require binding both the view's subject
-  // and object column to the same target variable, which previously made
-  // query planning throw instead of falling back to a regular join.
+TEST_F(MaterializedViewsChainRewriteContextTest, ChainRewriteContext) {
+  // Regression tests for query contexts where a chain view must not be used
+  // for rewriting: a degenerate/triangular chain (same variable as subject
+  // of the first and object of the second triple, e.g. `?x p1 ?v . ?v p2
+  // ?x`) previously made planning throw instead of falling back to a regular
+  // join; a `GRAPH <g> {...}` clause must not be rewritten to a view scan,
+  // since views only represent the unconstrained default graph.
   qlv().writeMaterializedView("testViewChain", std::string{simpleChain});
   qlv().loadMaterializedView("testViewChain");
 
   qpExpect(qlv(), "SELECT * { ?x <p1> ?v . ?v <p2> ?x }",
            h::MultiColumnJoin(h::IndexScanFromStrings("?x", "<p1>", "?v"),
                               h::IndexScanFromStrings("?v", "<p2>", "?x")));
-}
-
-// _____________________________________________________________________________
-TEST_F(MaterializedViewsChainRewriteContextTest,
-       ChainRewriteRespectsGraphContext) {
-  // Regression test: a materialized view usable for pattern-based rewriting
-  // always represents data from the plain, unconstrained default graph (a
-  // `FROM`/`FROM NAMED`/`GRAPH` clause in the view's defining query is
-  // already rejected). Triples inside a `GRAPH <g> {...}` clause of the query
-  // being planned must therefore not be replaced by a scan of such a view.
-  qlv().writeMaterializedView("testViewChain", std::string{simpleChain});
-  qlv().loadMaterializedView("testViewChain");
 
   // Outside of any `GRAPH` clause, the rewriting is still applied.
   auto chainView = std::bind_front(&viewScanSimple, "testViewChain");
   qpExpect(qlv(), simpleChain, chainView("?s", "?m", "?o"));
 
-  // Inside a `GRAPH <g1> {...}` clause, the triples must still be scanned
-  // normally (restricted to graph `<g1>`), not replaced by the view.
+  // Inside `GRAPH <g1> {...}`, the triples are scanned normally (restricted
+  // to graph `<g1>`), not replaced by the view.
   qpExpect(
       qlv(), "SELECT * { GRAPH <g1> { ?s <p1> ?m . ?m <p2> ?o } }",
       h::Join(
