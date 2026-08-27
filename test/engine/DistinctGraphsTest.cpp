@@ -13,9 +13,13 @@
 
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "engine/DistinctGraphs.h"
 #include "engine/VariableToColumnMap.h"
+#include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "gmock/gmock.h"
+#include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"
 
 // _____________________________________________________________________________
@@ -117,4 +121,51 @@ TEST(DistinctGraphs, computeVariableToColumnMap) {
 
   VariableToColumnMap expected{{Variable{"?g"}, makeAlwaysDefinedColumn(0)}};
   EXPECT_EQ(dg.getExternallyVisibleVariableColumns(), expected);
+}
+
+// _____________________________________________________________________________
+TEST(DistinctGraphs, computeResultExcludesDefaultGraphByDefault) {
+  auto* qec = ad_utility::testing::getQec("<a> <p1> <b> . <a> <p2> <c> .");
+  DistinctGraphs dg{qec, Variable{"?g"}};
+
+  auto result = dg.getResult();
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTableView().size(), 0u);
+}
+
+// _____________________________________________________________________________
+TEST(DistinctGraphs, computeResultReturnsDistinctGraphIds) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> <b> <g1> . <a> <p> <c> <g2> . <b> <p> <c> <g1> ."};
+  config.indexType = qlever::Filetype::NQuad;
+  auto* qec = ad_utility::testing::getQec(config);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto result = dg.getResult();
+  ASSERT_TRUE(result->isFullyMaterialized());
+
+  auto column = result->idTableView().getColumn(0);
+  EXPECT_THAT(std::vector<Id>(column.begin(), column.end()),
+              ::testing::UnorderedElementsAre(getId("<g1>"), getId("<g2>")));
+}
+
+// _____________________________________________________________________________
+TEST(DistinctGraphs,
+     computeResultIncludesDefaultGraphWhenRuntimeParameterIsSet) {
+  auto* qec = ad_utility::testing::getQec("<x> <p> <y> .");
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::treatDefaultGraphAsNamedGraph_>(true);
+
+  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto result = dg.getResult();
+  ASSERT_TRUE(result->isFullyMaterialized());
+
+  auto defaultGraphId = toValueId(
+      TripleComponent{
+          ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)},
+      qec->getIndex().getImpl());
+  auto column = result->idTableView().getColumn(0);
+  EXPECT_THAT(std::vector<Id>(column.begin(), column.end()),
+              ::testing::ElementsAre(defaultGraphId.value()));
 }
