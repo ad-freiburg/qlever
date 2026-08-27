@@ -194,6 +194,10 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
+  // NOTE: `NonNegative` instead of plain `size_t`, so that the `validate`
+  // overload for `std::optional` (in namespace `ad_utility`) is found via
+  // ADL on all supported boost versions.
+  std::optional<ad_utility::NonNegative> parseParallelism;
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 1;
 
@@ -320,7 +324,7 @@ int main(int argc, char** argv) {
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
-  add("parse-parallelism", po::value(&config.parseParallelism_),
+  add("parse-parallelism", po::value(&parseParallelism),
       "The number of threads used for parsing the input and for converting "
       "the parsed triples to IDs (the first pass of the index build). "
       "Increase on machines with many cores to speed up the parsing phase; "
@@ -385,6 +389,9 @@ int main(int argc, char** argv) {
     }
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);
+    if (parseParallelism.has_value()) {
+      config.parseParallelism_ = parseParallelism.value();
+    }
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
     config.validate();
