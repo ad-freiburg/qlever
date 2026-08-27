@@ -3013,31 +3013,17 @@ TEST(QueryPlanner, testDistributiveJoinInUnionWithMultipleJoinColumns) {
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
           true);
-  // The two `BIND`s are combined into a single operation with two columns,
-  // which the optimization previously didn't handle.
-  std::string query =
-      "SELECT * WHERE {\n"
-      "  BIND (<b> AS ?series)\n"
-      "  BIND (<d> AS ?model)\n"
-      "  { ?c <P279>+ ?series } UNION { ?c <P279>+ ?model }\n"
-      "}";
-  auto binds = h::Bind(h::Bind(h::NeutralElement(), "<b>", Variable{"?series"}),
-                       "<d>", Variable{"?model"});
-  TransitivePathSide left{std::nullopt, 0, Variable{"?c"}, 0};
-  TransitivePathSide rightSeries{std::nullopt, 1, Variable{"?series"}, 1};
-  TransitivePathSide rightModel{std::nullopt, 1, Variable{"?model"}, 1};
-  auto maxDist = std::numeric_limits<size_t>::max();
+  // Both children of the `UNION` have the variables `?s` and `?o` in common
+  // with the `?s <P31> ?o` triple, so the join has two join columns. The
+  // optimization previously only handled a single join column.
+  auto scan = h::IndexScanFromStrings("?s", "<P31>", "?o");
   h::expectWithGivenBudgets(
-      std::move(query),
-      h::Union(
-          h::transitivePath(left, rightSeries, 1, maxDist, binds,
-                            h::Sort(h::IndexScanFromStrings(
-                                "?_QLever_internal_variable_qp_0", "<P279>",
-                                "?_QLever_internal_variable_qp_1"))),
-          h::transitivePath(left, rightModel, 1, maxDist, binds,
-                            h::Sort(h::IndexScanFromStrings(
-                                "?_QLever_internal_variable_qp_2", "<P279>",
-                                "?_QLever_internal_variable_qp_3")))),
+      "SELECT * WHERE { ?s <P31> ?o . "
+      "{ ?s <P279> ?o } UNION { ?s <P280> ?o } }",
+      h::Union(h::MultiColumnJoin(
+                   scan, h::IndexScanFromStrings("?s", "<P279>", "?o")),
+               h::MultiColumnJoin(
+                   scan, h::IndexScanFromStrings("?s", "<P280>", "?o"))),
       ad_utility::testing::getQec(), {4, 16, 64'000'000});
 }
 
