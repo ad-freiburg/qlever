@@ -27,6 +27,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/RebuildIndexStrategy.h"
+#include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
@@ -531,6 +532,29 @@ class Qlever {
   void clearNamedResultCache();
   // Completely clear the `QueryResultCache` (non-named).
   void clearQueryResultCache();
+
+  // Clear the delta triples of the index snapshot that is active when this
+  // is called, and return the resulting counts. This function is threadsafe
+  // against queries and updates, but not against a concurrent index rebuild
+  // swapping out `indexAndViewsSnapshot()`'s current snapshot.
+  //
+  // NOTE: There is currently no test that exercises this directly through
+  // `Qlever`, independent of the HTTP `Server` layer (covered today only via
+  // `ServerTest.clearDeltaTriples`), because `Qlever` has no public API to
+  // populate delta triples on its own -- SPARQL updates are only executed via
+  // `Server::processUpdateImpl`. The same applies to `vacuumDeltaTriples`
+  // below (covered today only via `ServerTest.vacuumDeltaTriples`).
+  // TODO<damekt> Once `processUpdateImpl` (or equivalent) also moves to
+  // `Qlever`, add `QleverTest.cpp` tests that populate delta triples through
+  // it and call `clearDeltaTriples`/`vacuumDeltaTriples` directly on
+  // `Qlever`.
+  DeltaTriplesCount clearDeltaTriples() const;
+
+  // Remove redundant delta triples of the index snapshot that is active when
+  // this is called, and return aggregated statistics about the removal.
+  // Cancellable via `handle`. Has the same concurrent-rebuild caveat, and the
+  // same test-coverage gap (see the NOTE/TODO above), as `clearDeltaTriples`.
+  nlohmann::json vacuumDeltaTriples(SharedCancellationHandle handle) const;
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
