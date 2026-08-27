@@ -59,15 +59,20 @@ constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 
 // _________________________________________________________________
-// The degree of parallelism that is used for the index building step, where the
-// unique elements of the vocabulary are identified via hash maps. Typically, 6
-// is a good value. On systems with very few CPUs, a lower value might be
-// beneficial.
-constexpr inline size_t NUM_PARALLEL_ITEM_MAPS = 10;
+// NOTE: The number of parallel parser threads and the number of parallel
+// item maps (the hash maps that identify the unique elements of the
+// vocabulary) used to be constants here. They are now the runtime parameters
+// `parser-num-threads` and `item-map-num-threads` (see
+// `global/RuntimeParameters.h`), which can be set via the
+// `--parse-parallelism` option of the index builder.
 
-// The number of threads that are parsing in parallel, when the parallel Turtle
-// parser is used.
-constexpr inline size_t NUM_PARALLEL_PARSER_THREADS = 8;
+// The maximum number of external sorters that are alive at the same time
+// during index building. The memory limit for the index build is divided by
+// this number to obtain the memory limit for each individual sorter. When the
+// three pairs of permutations are built in parallel (in the case without
+// patterns), the caller passes a larger value, because then four sorters are
+// filled at the same time.
+constexpr inline size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // Increasing the following two constants increases the RAM usage without much
 // benefit to the performance.

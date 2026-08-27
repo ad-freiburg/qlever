@@ -58,7 +58,6 @@ using namespace ad_utility::memory_literals;
 // same time, as we directly push the triples from the first sorting to the
 // second sorting. We therefore have to adjust the amount of memory per external
 // sorter.
-static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // The name of this JSON property no longer holds up as soon as blank nodes are
 // added or removed via updates. For backwards compatibility we keep the name.
@@ -445,19 +444,37 @@ void IndexImpl::createFromFiles(
     configurationJson_["has-all-permutations"] = false;
   } else if (!usePatterns_) {
     createInternalPsoAndPosAndSetMetadata();
-    // Without patterns, we explicitly have to pass in the next sorters to all
-    // permutation creating functions.
-    auto secondSorter = makeSorter<SecondPermutation>("second");
-    createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique), secondSorter);
-    firstSorter.clearUnderlying();
-
-    auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding,
-                                secondSorter.getSortedBlocks<0>(), thirdSorter);
-    secondSorter.clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding,
-                               thirdSorter.getSortedBlocks<0>());
+    // Without patterns, the sorters of the second and third pair of
+    // permutations have already been filled during the conversion of the
+    // triples to global IDs (see `convertPartialToGlobalIds`), so the three
+    // pairs have no data dependencies on each other and are built in
+    // parallel. Note that each sorted stream contains the (still duplicated)
+    // input triples; as duplicates are identical in all columns, they are
+    // adjacent in every sort order and each stream is deduplicated
+    // independently via `uniqueBlockView`, yielding identical triples in all
+    // six permutations.
+    auto& secondSorter = *indexBuilderData.sorter_.secondPermutationSorter_;
+    auto& thirdSorter = *indexBuilderData.sorter_.thirdPermutationSorter_;
+    auto buildFirstPair = std::async(std::launch::async, [&]() {
+      createFirstPermutationPair(NumColumnsIndexBuilding,
+                                 std::move(firstSorterWithUnique));
+      firstSorter.clearUnderlying();
+    });
+    auto buildSecondPair = std::async(std::launch::async, [&]() {
+      createSecondPermutationPair(
+          NumColumnsIndexBuilding,
+          ad_utility::uniqueBlockView(secondSorter.getSortedOutput()));
+      secondSorter.clearUnderlying();
+    });
+    auto buildThirdPair = std::async(std::launch::async, [&]() {
+      createThirdPermutationPair(
+          NumColumnsIndexBuilding,
+          ad_utility::uniqueBlockView(thirdSorter.getSortedOutput()));
+      thirdSorter.clearUnderlying();
+    });
+    buildFirstPair.get();
+    buildSecondPair.get();
+    buildThirdPair.get();
     configurationJson_["has-all-permutations"] = true;
   } else {
     // Load all permutations and also load the patterns. In this case the
@@ -563,12 +580,14 @@ template <typename Mappers>
       return TransformedTripleBatch{batch->size(), std::move(idTriples)};
     };
   };
-  return std::apply(
-      [&transformPool, &resultQueue, &makeProducer](auto&... mapper) {
-        return ad_utility::runProducers(transformPool, resultQueue,
-                                        makeProducer(mapper)...);
-      },
-      mappers);
+  using Producer = decltype(makeProducer(mappers.front()));
+  std::vector<Producer> producers;
+  producers.reserve(mappers.size());
+  for (auto& mapper : mappers) {
+    producers.push_back(makeProducer(mapper));
+  }
+  return ad_utility::runProducers(transformPool, resultQueue,
+                                  std::move(producers));
 }
 
 }  // namespace
@@ -589,7 +608,18 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   // we add extra triples
   std::vector<size_t> numTriplesPerPartialVocab;
 
-  ad_utility::TaskQueue partialVocabularyWriters{3, 3};
+  // The number of mapper threads (see below) and, derived from it, the number
+  // of threads that sort and write the partial vocabularies. With the default
+  // of 10 mapper threads this yields the previous fixed value of 3 writers;
+  // for larger values (set via `--parse-parallelism`) it scales along, so
+  // that the writers do not become the bottleneck. Note that each queued
+  // writer task holds the item maps and triples of one partial vocabulary in
+  // memory, so this number also scales the memory consumption.
+  const size_t numItemMaps = std::max<size_t>(
+      1, getRuntimeParameter<&RuntimeParameters::itemMapNumThreads_>());
+  const size_t numPartialVocabWriters = std::max<size_t>(3, numItemMaps / 4);
+  ad_utility::TaskQueue partialVocabularyWriters{numPartialVocabWriters,
+                                                 numPartialVocabWriters};
 
   // Show progress and statistics for the number of triples parsed, in
   // particular, the average processing time for a batch of 10M triples (see
@@ -613,25 +643,24 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
 
   // Create the thread pools once so that they are reused across all
   // partial-vocabulary iterations. One thread parses the input into batches of
-  // triples, `NUM_PARALLEL_ITEM_MAPS` threads concurrently convert the strings
+  // triples, `numItemMaps` threads concurrently convert the strings
   // in these triples to IDs, each using its own `ItemMapManager`.
   ad_utility::TaskQueue parserPool{1, 1};
-  ad_utility::TaskQueue transformPool{NUM_PARALLEL_ITEM_MAPS,
-                                      NUM_PARALLEL_ITEM_MAPS};
+  ad_utility::TaskQueue transformPool{numItemMaps, numItemMaps};
 
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
     std::vector<std::array<Id, NumColumnsIndexBuilding>> localWriter;
 
-    std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS> itemArray;
+    std::vector<std::optional<ItemMapManager>> itemArray(numItemMaps);
 
     {
       // The parsed (but not yet mapped) batches are handed from the parser
       // thread to the mapper threads via `parsedQueue`, the converted
       // batches are handed back to this thread via `resultQueue`.
-      ParsedTripleQueue parsedQueue{NUM_PARALLEL_ITEM_MAPS};
-      ResultTripleQueue resultQueue{NUM_PARALLEL_ITEM_MAPS};
+      ParsedTripleQueue parsedQueue{numItemMaps};
+      ResultTripleQueue resultQueue{numItemMaps};
 
       // When called, returns the next batch of triples, stopping after
       // `linesPerPartial` triples. When the parser is exhausted, it sets
@@ -668,14 +697,15 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
       parser->printAndResetQueueStatistics();
     }
 
-    auto moveMap = [](std::optional<ItemMapManager>&& el) {
-      return std::move(el.value()).moveMap();
-    };
+    ItemMapArray itemMaps;
+    itemMaps.reserve(itemArray.size());
+    for (auto& el : itemArray) {
+      itemMaps.push_back(std::move(el.value()).moveMap());
+    }
     partialVocabularyWriters.push(createWritePartialVocabularyTask(
         numTriplesParsed, numTriplesPerPartialVocab.size(),
-        actualCurrentPartialSize,
-        ad_utility::transformArray(std::move(itemArray), moveMap),
-        std::move(localWriter), &idTriples));
+        actualCurrentPartialSize, std::move(itemMaps), std::move(localWriter),
+        &idTriples));
     // Save the information how many triples this partial vocabulary actually
     // deals with; we will use this later for mapping from partial to global
     // IDs.
@@ -749,18 +779,35 @@ auto IndexImpl::convertPartialToGlobalIds(
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
               << std::endl;
 
+  // When the index is built without patterns, the pairs of permutations have
+  // no data dependencies on each other, so the sorters of the second and
+  // third pair are filled right here (and not, as in the case with patterns,
+  // while creating the previous pair). The three pairs are then built in
+  // parallel, see `createFromFiles`. In this mode, four sorters are active at
+  // the same time, and the memory limit is divided accordingly.
+  const bool fillAllSorters = loadAllPermutations() && !usePatterns_;
+  const size_t numActiveSorters =
+      fillAllSorters ? 4 : NUM_EXTERNAL_SORTERS_AT_SAME_TIME;
+
   // Iterate over all partial vocabularies.
   auto resultPtr =
       [&]() -> std::unique_ptr<
                 ad_utility::CompressedExternalIdTableSorterTypeErased> {
     if (loadAllPermutations()) {
-      return makeSorterPtr<FirstPermutation>("first");
+      return makeSorterPtr<FirstPermutation>("first", numActiveSorters);
     } else {
-      return makeSorterPtr<SortByPSO>("first");
+      return makeSorterPtr<SortByPSO>("first", numActiveSorters);
     }
   }();
-  auto internalTriplesPtr =
-      makeSorterPtr<SortByPSO, NumColumnsIndexBuilding>("internalTriples");
+  FirstPermutationSorterAndInternalTriplesAsPso::SorterPtr secondSorterPtr;
+  FirstPermutationSorterAndInternalTriplesAsPso::SorterPtr thirdSorterPtr;
+  if (fillAllSorters) {
+    secondSorterPtr =
+        makeSorterPtr<SecondPermutation>("second", numActiveSorters);
+    thirdSorterPtr = makeSorterPtr<ThirdPermutation>("third", numActiveSorters);
+  }
+  auto internalTriplesPtr = makeSorterPtr<SortByPSO, NumColumnsIndexBuilding>(
+      "internalTriples", numActiveSorters);
   auto& result = *resultPtr;
   auto& internalResult = *internalTriplesPtr;
   auto triplesGenerator = data.getRows();
@@ -805,13 +852,21 @@ auto IndexImpl::convertPartialToGlobalIds(
   ad_utility::ProgressBar progressBar{numTriplesConverted,
                                       "Triples converted: "};
   auto getWriteTask = [&result, &internalResult, &numTriplesConverted,
-                       &progressBar](Buffers buffers) {
+                       &progressBar, secondSorter = secondSorterPtr.get(),
+                       thirdSorter = thirdSorterPtr.get()](Buffers buffers) {
     return [&result, &internalResult, &numTriplesConverted, &progressBar,
+            secondSorter, thirdSorter,
             triples = std::make_shared<IdTableStatic<0>>(
                 std::move(buffers.triples_).toDynamic()),
             internalTriples = std::make_shared<IdTableStatic<0>>(
                 std::move(buffers.internalTriples_).toDynamic())] {
       result.pushBlock(*triples);
+      if (secondSorter != nullptr) {
+        secondSorter->pushBlock(*triples);
+      }
+      if (thirdSorter != nullptr) {
+        thirdSorter->pushBlock(*triples);
+      }
       internalResult.pushBlock(*internalTriples);
 
       numTriplesConverted += triples->size();
@@ -912,7 +967,8 @@ auto IndexImpl::convertPartialToGlobalIds(
   lookupQueue.finish();
   writeQueue.finish();
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-  return {std::move(resultPtr), std::move(internalTriplesPtr)};
+  return {std::move(resultPtr), std::move(internalTriplesPtr),
+          std::move(secondSorterPtr), std::move(thirdSorterPtr)};
 }
 
 // _____________________________________________________________________________
@@ -1628,8 +1684,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
-                << "\"" << std::endl;
+                << "\" "
+                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+                << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
@@ -1982,6 +2039,7 @@ CPP_template_def(typename... NextSorter)(requires(
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
                             nextSorter.makePushCallback()..., countTriples,
                             determineNextAvailableInternalGraph);
+  std::lock_guard lock{configurationJsonMutex_};
   configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
@@ -2034,10 +2092,13 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     writeConfiguration();
     result = std::move(patternCreator).getTripleSorter();
   } else {
-    AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
+    // Without patterns there is either one next sorter (sequential creation
+    // of the pairs) or none (the sorters were filled directly and the pairs
+    // are built in parallel, see `createFromFiles`).
     size_t numSubjects =
         createPermutationPair(numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
                               nextSorter.makePushCallback()...);
+    std::lock_guard lock{configurationJsonMutex_};
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
     writeConfiguration();
@@ -2056,6 +2117,7 @@ CPP_template_def(typename... NextSorter)(
   size_t numObjects =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
                             nextSorter.makePushCallback()...);
+  std::lock_guard lock{configurationJsonMutex_};
   configurationJson_["num-objects"] =
       NumNormalAndInternal::fromNormal(numObjects);
   configurationJson_["has-all-permutations"] = true;
@@ -2064,7 +2126,8 @@ CPP_template_def(typename... NextSorter)(
 
 // _____________________________________________________________________________
 template <typename Comparator, size_t I, bool returnPtr>
-auto IndexImpl::makeSorterImpl(std::string_view permutationName) const {
+auto IndexImpl::makeSorterImpl(std::string_view permutationName,
+                               size_t numActiveSorters) const {
   using Sorter = ExternalSorter<Comparator, I>;
   auto apply = [](auto&&... args) {
     if constexpr (returnPtr) {
@@ -2074,21 +2137,21 @@ auto IndexImpl::makeSorterImpl(std::string_view permutationName) const {
     }
   };
   return apply(absl::StrCat(onDiskBase_, ".", permutationName, "-sorter.dat"),
-               memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
-               allocator_);
+               memoryLimitIndexBuilding() / numActiveSorters, allocator_);
 }
 
 // _____________________________________________________________________________
 template <typename Comparator, size_t I>
 ExternalSorter<Comparator, I> IndexImpl::makeSorter(
-    std::string_view permutationName) const {
-  return makeSorterImpl<Comparator, I, false>(permutationName);
+    std::string_view permutationName, size_t numActiveSorters) const {
+  return makeSorterImpl<Comparator, I, false>(permutationName,
+                                              numActiveSorters);
 }
 // _____________________________________________________________________________
 template <typename Comparator, size_t I>
 std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
-    std::string_view permutationName) const {
-  return makeSorterImpl<Comparator, I, true>(permutationName);
+    std::string_view permutationName, size_t numActiveSorters) const {
+  return makeSorterImpl<Comparator, I, true>(permutationName, numActiveSorters);
 }
 
 // _____________________________________________________________________________

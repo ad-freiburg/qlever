@@ -320,6 +320,12 @@ int main(int argc, char** argv) {
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
+  add("parse-parallelism", po::value(&config.parseParallelism_),
+      "The number of threads used for parsing the input and for converting "
+      "the parsed triples to IDs (the first pass of the index build). "
+      "Increase on machines with many cores to speed up the parsing phase; "
+      "this also increases the memory consumption. Default: 8 parser threads "
+      "and 10 converter threads.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),

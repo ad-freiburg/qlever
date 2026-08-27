@@ -33,7 +33,6 @@
 #include "util/Conversions.h"
 #include "util/HashMap.h"
 #include "util/Serializer/Serializer.h"
-#include "util/TupleHelpers.h"
 #include "util/TypeTraits.h"
 
 // An IRI or literal together with its index in the global vocabulary. This is
@@ -195,7 +194,9 @@ struct ItemMapAndBuffer {
   ItemMapAndBuffer& operator=(ItemMapAndBuffer&&) noexcept = delete;
 };
 
-using ItemMapArray = std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS>;
+// One `ItemMapAndBuffer` per mapper thread. The size is determined at
+// runtime by the `item-map-num-threads` runtime parameter.
+using ItemMapArray = std::vector<ItemMapAndBuffer>;
 
 // A hash map that assigns a unique ID for each of a set of strings. The IDs
 // are assigned in an adjacent range starting from a configurable minimum ID.
@@ -302,13 +303,14 @@ struct ProcessedTriple {
  * @return A Tuple of lambda functions (see above)
  */
 template <typename IndexPtr>
-auto getIdMapLambdas(
-    std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS>& itemMaps,
-    size_t maxNumberOfTriples, const TripleComponentComparator* comp,
-    IndexPtr* index, ItemAlloc alloc,
-    std::atomic<size_t>* numHasWordTriples = nullptr) {
+auto getIdMapLambdas(std::vector<std::optional<ItemMapManager>>& itemMaps,
+                     size_t maxNumberOfTriples,
+                     const TripleComponentComparator* comp, IndexPtr* index,
+                     ItemAlloc alloc,
+                     std::atomic<size_t>* numHasWordTriples = nullptr) {
+  const size_t numItemMaps = itemMaps.size();
   // Create one `ItemMapManager` per thread, each with its own ID range.
-  for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
+  for (size_t j = 0; j < numItemMaps; ++j) {
     itemMaps[j].emplace(j * 100 * maxNumberOfTriples, comp, alloc);
 
     // This `reserve` is for a guaranteed upper bound that stays the same during
@@ -317,8 +319,7 @@ auto getIdMapLambdas(
     // the allocation and deallocation of these hash maps (that are newly
     // created for each batch) much cheaper (see `CachingMemoryResource.h` and
     // `IndexImpl.cpp`).
-    itemMaps[j]->map_.map_.reserve(5 * maxNumberOfTriples /
-                                   NUM_PARALLEL_ITEM_MAPS);
+    itemMaps[j]->map_.map_.reserve(5 * maxNumberOfTriples / numItemMaps);
   }
   using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
   using IdTriples = absl::InlinedVector<IdTriple, 3>;
@@ -416,9 +417,15 @@ auto getIdMapLambdas(
     };
   };
 
-  // Return one of the above lambdas for each thread.
-  return ad_tuple_helpers::setupTupleFromCallable<NUM_PARALLEL_ITEM_MAPS>(
-      itemMapLamdaCreator);
+  // Return one of the above lambdas for each thread. All the lambdas have
+  // the same type, so they can be stored in a vector, which allows the number
+  // of mappers to be determined at runtime.
+  std::vector<decltype(itemMapLamdaCreator(size_t{0}))> mappers;
+  mappers.reserve(numItemMaps);
+  for (size_t j = 0; j < numItemMaps; ++j) {
+    mappers.push_back(itemMapLamdaCreator(j));
+  }
+  return mappers;
 }
 
 #endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H

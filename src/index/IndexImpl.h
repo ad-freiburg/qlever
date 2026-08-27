@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -83,6 +84,13 @@ struct FirstPermutationSorterAndInternalTriplesAsPso {
   SorterPtr firstPermutationSorter_;
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding>>
       internalTriplesPso_;
+  // When all six permutations are built without patterns, the sorters for the
+  // second and third pair of permutations are filled directly during the
+  // conversion of the triples to global IDs. The three pairs of permutations
+  // then have no data dependencies on each other and are built in parallel
+  // (see `IndexImpl::createFromFiles`). Both pointers are `nullptr` otherwise.
+  SorterPtr secondPermutationSorter_;
+  SorterPtr thirdPermutationSorter_;
 };
 // Vocabulary metadata and ID triples sorted by the first permutation.
 struct IndexBuilderDataAsFirstPermutationSorter {
@@ -833,6 +841,12 @@ class IndexImpl {
   void writeConfiguration() const;
   void readConfiguration();
 
+  // Serializes the updates to `configurationJson_` (and the subsequent calls
+  // to `writeConfiguration`) from the functions that create the pairs of
+  // permutations, which run on parallel threads when the index is built
+  // without patterns.
+  mutable std::mutex configurationJsonMutex_;
+
   // initialize the index-build-time settings for the vocabulary
   void readIndexBuilderSettingsFromFile();
 
@@ -903,17 +917,22 @@ class IndexImpl {
 
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique
-  // for each call during one index build.
+  // for each call during one index build. The memory limit of the index build
+  // is divided by `numActiveSorters`, the maximum number of sorters that are
+  // alive at the same time in the calling configuration.
   template <typename Comparator, size_t N = NumColumnsIndexBuilding>
   ExternalSorter<Comparator, N> makeSorter(
-      std::string_view permutationName) const;
+      std::string_view permutationName,
+      size_t numActiveSorters = NUM_EXTERNAL_SORTERS_AT_SAME_TIME) const;
   // Same as the same function, but return a `unique_ptr`.
   template <typename Comparator, size_t N = NumColumnsIndexBuilding>
   std::unique_ptr<ExternalSorter<Comparator, N>> makeSorterPtr(
-      std::string_view permutationName) const;
+      std::string_view permutationName,
+      size_t numActiveSorters = NUM_EXTERNAL_SORTERS_AT_SAME_TIME) const;
   // The common implementation of the above two functions.
   template <typename Comparator, size_t N, bool returnPtr>
-  auto makeSorterImpl(std::string_view permutationName) const;
+  auto makeSorterImpl(std::string_view permutationName,
+                      size_t numActiveSorters) const;
 
   // Aliases for the three functions above that should be consistently used.
   // They assert that the order of the permutations as communicated by the

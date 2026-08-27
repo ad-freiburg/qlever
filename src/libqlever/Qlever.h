@@ -204,6 +204,14 @@ struct IndexBuilderConfig : CommonConfig {
   // `EncodedIriManager` for details.
   std::vector<std::string> widePrefixesForIdEncodedIris_;
 
+  // The number of threads used for the first pass of the index build (parsing
+  // the input and converting the triples to IDs of the partial vocabularies).
+  // Sets the runtime parameters `parser-num-threads` and
+  // `item-map-num-threads` to this value; if unset, their defaults apply.
+  // Higher values speed up the parsing phase on machines with many cores, at
+  // the cost of a higher memory consumption.
+  std::optional<size_t> parseParallelism_;
+
   // The remaining members of this class, are only relevant if a full-text
   // index is built in addition to the RDF index. By default, no fulltext index
   // is built. The full-text index enables efficient keyword search in text

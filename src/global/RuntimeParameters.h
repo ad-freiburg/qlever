@@ -223,6 +223,20 @@ struct RuntimeParameters {
   // `qlever-index`doesn't expose a CLI flag to set this parameter.
   SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
 
+  // The number of threads that parse the input in parallel during index
+  // building. For a single input stream this is the number of threads of the
+  // parallel parser (if enabled). For multiple input streams it is the number
+  // of streams that are parsed concurrently. Typically set via the
+  // `--parse-parallelism` option of `qlever-index`, which sets this parameter
+  // and `item-map-num-threads` (below) to the same value.
+  SizeT parserNumThreads_{8, "parser-num-threads"};
+
+  // The number of threads that during index building convert the parsed
+  // triples to IDs of a partial vocabulary, each thread using its own hash
+  // map. Typically set via the `--parse-parallelism` option of
+  // `qlever-index`, see `parser-num-threads` above.
+  SizeT itemMapNumThreads_{10, "item-map-num-threads"};
+
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 

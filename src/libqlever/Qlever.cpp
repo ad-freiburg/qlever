@@ -122,6 +122,16 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   if (config.parserBufferSize_.has_value()) {
     index.parserBufferSize() = config.parserBufferSize_.value();
   }
+  if (config.parseParallelism_.has_value()) {
+    AD_LOG_INFO << "Using " << config.parseParallelism_.value()
+                << " threads each for parsing the input and for converting "
+                   "the parsed triples to IDs"
+                << std::endl;
+    setRuntimeParameter<&RuntimeParameters::parserNumThreads_>(
+        config.parseParallelism_.value());
+    setRuntimeParameter<&RuntimeParameters::itemMapNumThreads_>(
+        config.parseParallelism_.value());
+  }
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.

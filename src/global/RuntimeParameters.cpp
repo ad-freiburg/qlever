@@ -63,6 +63,8 @@ RuntimeParameters::RuntimeParameters() {
   add(enableMaterializedViewQueryRewrite_);
   add(serviceAllowedIriPrefixes_);
   add(permutationWriterNumThreads_);
+  add(parserNumThreads_);
+  add(itemMapNumThreads_);
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
   add(logLevel_);

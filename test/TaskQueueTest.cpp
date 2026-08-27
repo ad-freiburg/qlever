@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <future>
 #include <optional>
 #include <stdexcept>
@@ -111,6 +112,49 @@ TEST(TaskQueue, runProducersCollectsAllValuesFromAllProducers) {
   }
   EXPECT_THAT(result,
               ::testing::UnorderedElementsAre(0, 0, 1, 1, 2, 2, 3, 3, 4, 4));
+}
+
+// _____________________________________________________________________________
+TEST(TaskQueue, runProducersVectorOverloadCollectsAllValues) {
+  ad_utility::TaskQueue pool{4, 4};
+  ad_utility::data_structures::ThreadSafeQueue<size_t> queue{10};
+
+  // Same as the test above, but with a runtime-sized vector of producers.
+  std::atomic<size_t> counter1 = 0;
+  std::atomic<size_t> counter2 = 0;
+  auto makeProducer = [](std::atomic<size_t>& counter) {
+    return [&counter]() -> std::optional<size_t> {
+      size_t i = counter.fetch_add(1);
+      if (i < 5) {
+        return i;
+      }
+      return std::nullopt;
+    };
+  };
+  std::vector<decltype(makeProducer(counter1))> producers{
+      makeProducer(counter1), makeProducer(counter2)};
+
+  std::vector<size_t> result;
+  {
+    auto cleanup = ad_utility::runProducers(pool, queue, std::move(producers));
+    while (auto value = queue.pop()) {
+      result.push_back(value.value());
+    }
+  }
+  EXPECT_THAT(result,
+              ::testing::UnorderedElementsAre(0, 0, 1, 1, 2, 2, 3, 3, 4, 4));
+}
+
+// _____________________________________________________________________________
+TEST(TaskQueue, runProducersVectorOverloadEmptyFinishesQueue) {
+  ad_utility::TaskQueue pool{2, 2};
+  ad_utility::data_structures::ThreadSafeQueue<size_t> queue{5};
+
+  using Producer = std::function<std::optional<size_t>()>;
+  auto cleanup = ad_utility::runProducers(pool, queue, std::vector<Producer>{});
+  // Without producers the queue must be finished immediately, otherwise this
+  // `pop` would block forever.
+  EXPECT_FALSE(queue.pop().has_value());
 }
 
 // _____________________________________________________________________________
