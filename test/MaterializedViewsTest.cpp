@@ -1991,6 +1991,71 @@ INSTANTIATE_TEST_SUITE_P(
         RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, DegenerateChainNotRewritten) {
+  // Regression test: a "degenerate"/triangular chain in the query (the same
+  // variable is both the subject of the first triple and the object of the
+  // second, e.g. `?x <p1> ?v . ?v <p2> ?x`) must not be rewritten using a
+  // chain view, because that would require binding both the view's subject
+  // and object column to the same target variable, which previously made
+  // query planning throw instead of falling back to a regular join.
+  const std::string chainTtl = " <x> <p1> <v> . \n <v> <p2> <x> . \n";
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string viewName = "testViewDegenerateChain";
+
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, chainTtl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+
+  qlv.writeMaterializedView(viewName, std::string{simpleChain});
+  qlv.loadMaterializedView(viewName);
+
+  qpExpect(qlv, "SELECT * { ?x <p1> ?v . ?v <p2> ?x }",
+           h::MultiColumnJoin(h::IndexScanFromStrings("?x", "<p1>", "?v"),
+                              h::IndexScanFromStrings("?v", "<p2>", "?x")));
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ChainRewriteRespectsGraphContext) {
+  // Regression test: a materialized view usable for pattern-based rewriting
+  // always represents data from the plain, unconstrained default graph (a
+  // `FROM`/`FROM NAMED`/`GRAPH` clause in the view's defining query is
+  // already rejected). Triples inside a `GRAPH <g> {...}` clause of the query
+  // being planned must therefore not be replaced by a scan of such a view.
+  const std::string chainTtl =
+      " <s1> <p1> <m2> . \n"
+      " <m2> <p2> <http://example.com/> . \n";
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string viewName = "testViewChainGraphContext";
+
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, chainTtl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+
+  qlv.writeMaterializedView(viewName, std::string{simpleChain});
+  qlv.loadMaterializedView(viewName);
+
+  // Outside of any `GRAPH` clause, the rewriting is still applied.
+  auto chainView = std::bind_front(&viewScanSimple, viewName);
+  qpExpect(qlv, simpleChain, chainView("?s", "?m", "?o"));
+
+  // Inside a `GRAPH <g1> {...}` clause, the triples must still be scanned
+  // normally (restricted to graph `<g1>`), not replaced by the view.
+  qpExpect(
+      qlv, "SELECT * { GRAPH <g1> { ?s <p1> ?m . ?m <p2> ?o } }",
+      h::Join(
+          h::IndexScanFromStrings("?s", "<p1>", "?m", {},
+                                  ad_utility::HashSet<std::string>{"<g1>"}),
+          h::IndexScanFromStrings("?m", "<p2>", "?o", {},
+                                  ad_utility::HashSet<std::string>{"<g1>"})));
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
   // Regression test for #2866.
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);

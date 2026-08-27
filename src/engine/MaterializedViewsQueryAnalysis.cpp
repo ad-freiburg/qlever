@@ -110,6 +110,15 @@ void QueryPatternCache::makeScansFromChainCandidates(
         if (it == simpleChainCache_.end()) {
           continue;
         }
+        // A degenerate/triangular chain (e.g. `?x <p1> ?v . ?v <p2> ?x`) would
+        // require the view's subject and object columns to both be bound to
+        // the same target variable, which `RequestedColumns` cannot express.
+        // Skip it here and let normal join planning handle it instead.
+        if (left.s_.isVariable() &&
+            left.s_.getVariable() == right.o_.getVariable()) {
+          continue;
+        }
+
         for (const auto& chainInfo : *(it->second)) {
           // If the subject of the chain is fixed, but the subject is not the
           // first column of the view, rewriting cannot be applied.
