@@ -148,6 +148,13 @@ jobs:
       expensive-tests: true
       compiler: gcc
 
+    # NOTE: The steps below deliberately use paths relative to the workspace
+    # instead of `${{github.workspace}}`. In a container job that expression
+    # still expands to the path on the *host* (`/home/runner/work/qlever/qlever`),
+    # which does not exist inside the container, where the workspace is mounted
+    # at `/__w/qlever/qlever` (the `working-directory` key, in contrast, *is*
+    # translated by the runner, so mixing the two silently used two different
+    # directories). Relative paths are correct in both places.
     steps:
       - name: Prepare the container
         # A bare Ubuntu image has none of these: `actions/checkout` needs `git`
@@ -195,7 +202,7 @@ jobs:
       - name: Configure CMake
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
         # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=${{env.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true ${{matrix.additional-cmake-options}}
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=${{env.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true ${{matrix.additional-cmake-options}}
 
       - name: Build
         # Build your program with the given configuration
@@ -209,18 +216,18 @@ jobs:
           IGNORE_ERRORS="-i"
           fi
           set -o pipefail # the `tee` will never fail, but the `build` command might. We want to fail if the build fails.
-          cmake --build ${{github.workspace}}/build --target LibQLeverExample --config ${{env.build-type}} -- $IGNORE_ERRORS $KEEP_GOING -j $(nproc) 2>&1 | tee /tmp/build.log
+          cmake --build build --target LibQLeverExample --config ${{env.build-type}} -- $IGNORE_ERRORS $KEEP_GOING -j $(nproc) 2>&1 | tee /tmp/build.log
         id: build
 
       - name: Run gcc8 log analyzer on gcc8 builds
         if: matrix.compiler-version == 8
         run: |
-          python3 ${{ github.workspace }}/misc/gcc8_logs_analyzer.py /tmp/build.log --on-github
+          python3 misc/gcc8_logs_analyzer.py /tmp/build.log --on-github
         id: gcc8_log_analyzer
       - name: Test
         id: runTest
         if: (matrix.compiler-version == 11)
-        working-directory: ${{github.workspace}}/build/test
+        working-directory: build/test
         # Execute tests defined by the CMake configuration.
         # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} -j $(nproc) . -L QleverTest
+        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.build-type}} -j $(nproc) . -L QleverTest
