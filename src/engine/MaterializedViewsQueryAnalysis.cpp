@@ -86,8 +86,7 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
     // than a plain triple, and may additionally be restricted by `TEXTLIMIT`.
     // None of that is reflected in `coveredTriples_`/`buildPatternEdges`, so
     // such triples must not become pattern edges.
-    if (predicate.value() == CONTAINS_WORD_PREDICATE ||
-        predicate.value() == CONTAINS_ENTITY_PREDICATE) {
+    if (isFullTextPseudoPredicate(predicate.value())) {
       return std::nullopt;
     }
     // At least one endpoint must be a variable, or the edge can't connect to
@@ -297,6 +296,12 @@ std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
 }
 
 // _____________________________________________________________________________
+// The checks below all guard one invariant: the view's on-disk rows must
+// equal exactly the rows of the plain join over `triples` (no aggregation,
+// filtering, deduplication, or row subset may separate them), since
+// pattern-based rewriting substitutes the view's index scan directly for that
+// join. Any future solution modifier that could break this equivalence needs
+// a check here too.
 std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed) {
   if (parsed.isAggregatingQuery()) {

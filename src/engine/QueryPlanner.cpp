@@ -1911,8 +1911,7 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
   }
   const auto& triple = it->second->triple_;
   auto predicate = triple.getSimplePredicate();
-  return predicate == CONTAINS_ENTITY_PREDICATE ||
-         predicate == CONTAINS_WORD_PREDICATE;
+  return predicate.has_value() && isFullTextPseudoPredicate(predicate.value());
 }
 
 // _____________________________________________________________________________

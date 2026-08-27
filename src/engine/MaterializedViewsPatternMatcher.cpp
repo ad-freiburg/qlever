@@ -63,14 +63,22 @@ bool PatternMatcher::tryAssign(const TripleComponent& viewSide,
   if (it != assignment_.end()) {
     return it->second == queryNode;
   }
-  size_t col = queryNode.isVariable() ? 0 : viewCols_.at(viewVar).columnIndex_;
-  for (const auto& [otherVar, otherNode] : assignment_) {
-    if (queryNode.isVariable() && otherNode == queryNode) {
-      return false;
+  if (queryNode.isVariable()) {
+    // Injectivity: no view variable may already be bound to this same query
+    // variable.
+    for (const auto& [otherVar, otherNode] : assignment_) {
+      if (otherNode == queryNode) {
+        return false;
+      }
     }
-    if (!queryNode.isVariable() && otherNode.isVariable() &&
-        viewCols_.at(otherVar).columnIndex_ < col) {
-      return false;
+  } else {
+    // Fixed-value prefix pruning: a smaller-column view variable that is
+    // still bound to a query variable rules out fixing this (larger) column.
+    size_t col = viewCols_.at(viewVar).columnIndex_;
+    for (const auto& [otherVar, otherNode] : assignment_) {
+      if (otherNode.isVariable() && viewCols_.at(otherVar).columnIndex_ < col) {
+        return false;
+      }
     }
   }
   assignment_.emplace(viewVar, queryNode);
