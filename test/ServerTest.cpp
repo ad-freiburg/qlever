@@ -645,6 +645,14 @@ TEST(ServerTest, vacuumDeltaTriples) {
   });
   expectCounts(DeltaTriplesCount{1, 0});
 
+  // A `timeout` above the server default without a valid access token is
+  // rejected before the command runs; `process()` must stop right there
+  // (via `CommandsResult::stop_`) instead of also trying to run a query.
+  EXPECT_THAT(
+      server.process(makeGetRequest("/?cmd=vacuum-delta-triples&timeout=60s")),
+      StatusIs(http::status::forbidden));
+  expectCounts(DeltaTriplesCount{1, 0});
+
   // With a valid access token, the redundant insertion is vacuumed away and
   // the response reports the resulting stats.
   auto response = server.process(
