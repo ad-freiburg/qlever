@@ -455,6 +455,7 @@ TEST(SparqlParser, Bind) {
 
 // Aggregate functions may only be used in SELECT, HAVING, and ORDER BY clauses
 // (see section 11.1 of the SPARQL 1.1 standard), in particular not in a BIND.
+// The same test for FILTER is `FilterWithAggregateIsRejected` below.
 TEST(SparqlParser, BindWithAggregateIsRejected) {
   auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::True;
   auto expectBindFails = ExpectParseFails<&Parser::bind>{{}, noChecks};
@@ -471,6 +472,25 @@ TEST(SparqlParser, BindWithAggregateIsRejected) {
       "BIND(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } } AS ?a)",
       m::Bind(Var{"?a"},
               "EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } }"));
+}
+
+// Same as `BindWithAggregateIsRejected` above, but for FILTER. Note that the
+// correct way to filter on the value of an aggregate is a HAVING clause.
+TEST(SparqlParser, FilterWithAggregateIsRejected) {
+  auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::True;
+  auto expectFilterFails = ExpectParseFails<&Parser::filterR>{{}, noChecks};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a FILTER clause");
+  expectFilterFails("FILTER(COUNT(?x) > 1)", messageMatcher);
+  expectFilterFails("FILTER(SAMPLE(?human) = ?x)", messageMatcher);
+  // The aggregate is nested inside another expression.
+  expectFilterFails("FILTER(1 + SUM(?x) > 0)", messageMatcher);
+  // An aggregate inside the body of an `EXISTS` has its own scope and is
+  // therefore fine.
+  auto expectFilter = ExpectCompleteParse<&Parser::filterR>{{}, noChecks};
+  expectFilter("FILTER(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })",
+               m::stringMatchesFilter(
+                   "(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })"));
 }
 
 TEST(SparqlParser, Integer) {
@@ -869,6 +889,9 @@ TEST(SparqlParser, HavingCondition) {
                         m::stringMatchesFilter("(?predicate < \"<Z\")"));
   expectHavingCondition("(LANG(?x) = \"en\")",
                         m::stringMatchesFilter("(LANG(?x) = \"en\")"));
+  // In contrast to BIND and FILTER, aggregates are allowed here.
+  expectHavingCondition("(COUNT(?x) > 1)",
+                        m::stringMatchesFilter("(COUNT(?x) > 1)"));
 }
 
 TEST(SparqlParser, GroupGraphPattern) {

@@ -656,13 +656,7 @@ GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
   }
 
   auto expression = visitExpressionPimpl(ctx->expression());
-  // The SPARQL standard only allows aggregate functions in the SELECT, HAVING,
-  // and ORDER BY clauses (see section 11.1 of the SPARQL 1.1 standard).
-  if (expression.containsAggregate()) {
-    reportError(ctx,
-                "Aggregate functions are not allowed in a BIND clause, they "
-                "may only be used in SELECT, HAVING, and ORDER BY clauses.");
-  }
+  throwIfContainsAggregate(ctx, expression, "BIND");
   warnOrThrowIfUnboundVariables(ctx, expression, "BIND");
   addVisibleVariable(target);
   return GraphPatternOperation{Bind{std::move(expression), std::move(target)}};
@@ -1917,12 +1911,27 @@ void Visitor::warnOrThrowIfUnboundVariables(
 }
 
 // ____________________________________________________________________________________
+void Visitor::throwIfContainsAggregate(const antlr4::ParserRuleContext* ctx,
+                                       const SparqlExpressionPimpl& expression,
+                                       std::string_view clauseName) {
+  if (expression.containsAggregate()) {
+    reportError(
+        ctx,
+        absl::StrCat("Aggregate functions are not allowed in a ", clauseName,
+                     " clause, they may only be used in SELECT, HAVING, "
+                     "and ORDER BY clauses."));
+  }
+}
+
+// ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
   // NOTE: We cannot add a warning or throw an exception if the FILTER
   // expression contains unbound variables, because the variables of the FILTER
   // might be bound after the filter appears in the query (which is perfectly
   // legal).
-  return SparqlFilter{visitExpressionPimpl(ctx->constraint())};
+  auto expression = visitExpressionPimpl(ctx->constraint());
+  throwIfContainsAggregate(ctx, expression, "FILTER");
+  return SparqlFilter{std::move(expression)};
 }
 
 // ____________________________________________________________________________________

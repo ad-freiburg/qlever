@@ -751,6 +751,15 @@ class SparqlQleverVisitor {
                                      const SparqlExpressionPimpl& expression,
                                      std::string_view clauseName);
 
+  // Throw an exception if `expression` contains an aggregate function. The
+  // SPARQL standard only allows aggregates in the SELECT, HAVING, and ORDER BY
+  // clauses (see Section 11.1 of the SPARQL 1.1 standard). `clauseName` is the
+  // name of the clause in which the `expression` occurs; it is only used for
+  // the error message.
+  static void throwIfContainsAggregate(const antlr4::ParserRuleContext* ctx,
+                                       const SparqlExpressionPimpl& expression,
+                                       std::string_view clauseName);
+
   // Convert an instance of `Triples` to a `BasicGraphPattern` so it can be used
   // just like a WHERE clause. Most of the time this just changes the type and
   // stays semantically the same, but for blank nodes, this step converts them
