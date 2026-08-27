@@ -216,8 +216,8 @@ class MaterializedViewsStarRewriteTest
 // match any materialized view, even where the DP planner's does, so callers
 // that test cache-key-based rewriting must pass `TestBothPlanners = false`
 // to only test with the DP planner.
-template <bool TestBothPlanners = true, typename Query>
-inline void qpExpect(qlever::Qlever& qlv, const Query& query,
+template <bool TestBothPlanners = true>
+inline void qpExpect(qlever::Qlever& qlv, std::string_view query,
                      ::testing::Matcher<const QueryExecutionTree&> matcher,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
