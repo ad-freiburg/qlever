@@ -513,6 +513,7 @@ namespace {
 // URL parameter.
 namespace serverProcessHelpers {
 using namespace ad_utility::url_parser;
+using namespace ad_utility::httpUtils;
 // Metadata for a `cmd=<name>` URL parameter handled by `Server::process`:
 // the log message and whether it requires a valid access token.
 struct CommandMeta {
@@ -574,6 +575,16 @@ std::optional<std::string> checkAndLogParameterSetting(
 // first binded argument.
 auto makeCheckParameter(const ParamValueMap& parameters) {
   return absl::bind_front(&checkParameter, std::cref(parameters));
+}
+
+// Create a version of `createJsonResponse` bound to `request` as its second
+// argument.
+CPP_template(typename RequestT)(
+    requires HttpRequest<RequestT>) auto makeJsonResponse(const RequestT&
+                                                              request) {
+  return [&request](const nlohmann::json& j) {
+    return createJsonResponse(j, request);
+  };
 }
 
 // Look up metadata for `cmd` in `commands`, run the access-token check (if
@@ -648,10 +659,7 @@ CPP_template_def(typename RequestT, typename SendT)(
     return false;
   };
 
-  // We call `createJsonResponse` always with the same `request` parameter.
-  auto jsonResponse = [&request](const json& j) {
-    return createJsonResponse(j, request);
-  };
+  auto jsonResponse = makeJsonResponse(request);
 
   // We call `composeCacheStats()` always with the same parameters:
   // `qlever().cache()` and `qlever().namedResultCache()`.
@@ -713,19 +721,19 @@ CPP_template_def(typename RequestT, typename SendT)(
       co_return result;
     }
     result.response_ = jsonResponse(materializedViewStats.value());
-    // Prevent regular query processing by removing the query from the
-    // request.
+    // Flag that this command already consumed the query operation, so
+    // `process()` doesn't also try to run it as a regular query.
     result.consumedQueryOperation_ = true;
   } else if (commandIs("load-materialized-view")) {
     result.response_ =
         jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
-    // Prevent regular query processing by removing the query from the
-    // request.
+    // Flag that this command already consumed the query operation, so
+    // `process()` doesn't also try to run it as a regular query.
     result.consumedQueryOperation_ = true;
   } else if (commandIs("delete-materialized-view")) {
     result.response_ = jsonResponse(processDeleteMaterializedView(parameters));
-    // Prevent regular query processing by removing the query from the
-    // request.
+    // Flag that this command already consumed the query operation, so
+    // `process()` doesn't also try to run it as a regular query.
     result.consumedQueryOperation_ = true;
   }
   co_return result;
@@ -785,10 +793,7 @@ CPP_template_def(typename RequestT, typename SendT)(
             parameters, paramName, accessTokenOk);
       };
 
-  // We call `createJsonResponse` always with the same `request` parameter.
-  auto jsonResponse = [&request](const json& j) {
-    return createJsonResponse(j, request);
-  };
+  auto jsonResponse = makeJsonResponse(request);
   std::optional<http::response<streamable_body>> response;
 
   // Process all URL parameters known to QLever. If there is more than one,
