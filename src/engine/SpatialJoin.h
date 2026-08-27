@@ -28,9 +28,10 @@ using SpatialJoinBoundingBoxColumns =
 // that can be produced solely by walking the query execution trees and that
 // every algorithm needs. Everything else an individual algorithm needs is
 // either already available on `SpatialJoinConfiguration` (which every
-// algorithm also has as `config_`, e.g. `joinType_`/`rightCacheName_`, or
-// `maxDist_`/`maxResults_` via `SpatialJoinConfiguration::getMaxDist()`/
-// `getMaxResults()`), or - for the bounding-box prefilter columns needed only
+// algorithm also has as `config_`, e.g. `rightCacheName_`, or
+// `maxDist_`/`maxResults_`/`joinType_` via `SpatialJoinConfiguration::
+// getMaxDist()`/`getMaxResults()`/`getJoinType()`), or - for the bounding-box
+// prefilter columns needed only
 // by `LibspatialjoinAlgorithm` - passed directly to that algorithm's
 // constructor instead of being bundled in here (see
 // `SpatialJoin::computeResult()`).
@@ -123,7 +124,7 @@ class SpatialJoin : public Operation {
 
   // retrieve the currently selected spatial join type
   std::optional<SpatialJoinType> getJoinType() const {
-    return config_.joinType_;
+    return config_.getJoinType();
   }
 
   // retrieve the variables the spatial join is joining on

@@ -256,9 +256,9 @@ std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?a"},
-                                   Variable{"?b"}, std::nullopt, pv, alg,
-                                   SpatialJoinType::INTERSECTS},
+          SpatialJoinConfiguration{
+              LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?a"},
+              Variable{"?b"}, std::nullopt, pv, alg},
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -321,12 +321,18 @@ class SpatialJoinVarColParamTest
     if (addDist) {
       dist = Variable{"?distOfTheTwoObjectsAddedInternally"};
     }
+    // `maxDist_` is only meaningful (and only allowed by
+    // `LibSpatialJoinConfig`'s invariant) for `WITHIN_DIST`.
+    LibSpatialJoinConfig task{joinType,
+                              joinType == SpatialJoinType::WITHIN_DIST
+                                  ? std::optional<double>{0}
+                                  : std::nullopt,
+                              std::nullopt};
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
         ad_utility::makeExecutionTree<SpatialJoin>(
             qec,
-            SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
-                                     Variable{"?point2"}, dist, pv, alg,
-                                     joinType},
+            SpatialJoinConfiguration{task, Variable{"?point1"},
+                                     Variable{"?point2"}, dist, pv, alg},
             std::nullopt, std::nullopt);
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -692,9 +698,9 @@ TEST(SpatialJoinVarColTest, ChildResultWidth) {
   auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
       qec,
       SpatialJoinConfiguration{
-          MaxDistanceConfig{0}, Variable{"?a"}, Variable{"?c"}, std::nullopt,
-          PayloadVariables{{V{"?c"}}}, SpatialJoinAlgorithm::LIBSPATIALJOIN,
-          SpatialJoinType::INTERSECTS},
+          LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?a"},
+          Variable{"?c"}, std::nullopt, PayloadVariables{{V{"?c"}}},
+          SpatialJoinAlgorithm::LIBSPATIALJOIN},
       qet1, qet2);
 
   // Of all the 6 columns in the children (3 in `childLeft_` and 3 in
@@ -762,11 +768,11 @@ TEST(SpatialJoinVarColTest, InvisibleColumnsAndWithinSwap) {
   // Run a `SpatialJoin` with `SpatialJoinType::WITHIN`.
   auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
       qec,
-      SpatialJoinConfiguration{
-          LibSpatialJoinConfig{SpatialJoinType::WITHIN, std::nullopt,
-                               std::nullopt},
-          Variable{"?a"}, Variable{"?c"}, std::nullopt, PayloadVariables::all(),
-          SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::WITHIN},
+      SpatialJoinConfiguration{LibSpatialJoinConfig{SpatialJoinType::WITHIN,
+                                                    std::nullopt, std::nullopt},
+                               Variable{"?a"}, Variable{"?c"}, std::nullopt,
+                               PayloadVariables::all(),
+                               SpatialJoinAlgorithm::LIBSPATIALJOIN},
       qetLeft, qetRight);
   auto result = spatialJoin->getResult();
   ASSERT_TRUE(result->isFullyMaterialized());
@@ -1369,10 +1375,10 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
 
   auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
       qec,
-      SpatialJoinConfiguration{
-          MaxDistanceConfig{0}, Variable{"?a"}, Variable{"?b"}, std::nullopt,
-          PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
-          SpatialJoinType::CONTAINS},
+      SpatialJoinConfiguration{LibSpatialJoinConfig{SpatialJoinType::CONTAINS},
+                               Variable{"?a"}, Variable{"?b"}, std::nullopt,
+                               PayloadVariables::all(),
+                               SpatialJoinAlgorithm::LIBSPATIALJOIN},
       leftChild, rightChild);
   auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());
