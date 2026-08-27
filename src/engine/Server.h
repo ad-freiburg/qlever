@@ -271,7 +271,7 @@ class Server {
                                                const RequestT& request);
 
   // Result of `processCommands` below.
-  struct CommandsResult {
+  struct CommandResult {
     // The response produced by the matched `cmd=` URL parameter, if any.
     std::optional<ad_utility::httpUtils::ResponseT> response_;
     // True if an error response has already been sent directly to the client
@@ -296,7 +296,7 @@ class Server {
   // `process()` doesn't also try to execute it as a regular query.
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<CommandsResult> processCommands(
+      Awaitable<CommandResult> processCommands(
           bool accessTokenOk, const SharedIndexAndView& indexAndViews,
           const ParamValueMap& parameters, const SparqlOperation& operation,
           const ad_utility::Timer& requestTimer, RequestT& request,

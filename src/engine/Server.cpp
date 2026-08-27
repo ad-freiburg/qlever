@@ -636,7 +636,7 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Server::Awaitable<Server::CommandsResult> Server::processCommands(
+    Server::Awaitable<Server::CommandResult> Server::processCommands(
         bool accessTokenOk, const SharedIndexAndView& indexAndViews,
         const ParamValueMap& parameters, const SparqlOperation& operation,
         const ad_utility::Timer& requestTimer, RequestT& request, SendT& send) {
@@ -668,7 +668,7 @@ CPP_template_def(typename RequestT, typename SendT)(
     return composeCacheStats(cache, namedResultCache);
   };
 
-  CommandsResult result;
+  CommandResult result;
   if (commandIs("stats")) {
     result.response_ = jsonResponse(composeIndexStats(index));
   } else if (commandIs("cache-stats")) {
