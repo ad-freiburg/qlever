@@ -389,6 +389,8 @@ addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
 
 addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
+addLinkAndDiscoverTestNoLibs(NoCopyNoMoveTest)
+
 addLinkAndDiscoverTestSerial(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
