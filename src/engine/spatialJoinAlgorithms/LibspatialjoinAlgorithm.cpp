@@ -218,8 +218,8 @@ Result LibspatialjoinAlgorithm::run() {
   size_t NUM_THREADS = getNumThreads();
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
-  auto joinTypeVal =
-      config_.getJoinType().value_or(SpatialJoinType::INTERSECTS);
+  AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
+  auto joinTypeVal = config_.getJoinType().value();
   // Within should be replaced by contains on swapped tables.
   auto swapBack = joinTypeVal == SpatialJoinType::WITHIN;
   if (swapBack) {
