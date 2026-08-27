@@ -110,9 +110,8 @@ void QueryPatternCache::makeScansFromChainCandidates(
         if (it == simpleChainCache_.end()) {
           continue;
         }
-        // A degenerate chain (`?a <p1> ?b . ?b <p2> ?a`) would require the
-        // adding a filter on top of the view `IndexScan`, which is not
-        // supported.
+        // A degenerate chain (`?a <p1> ?b . ?b <p2> ?a`) would require adding a
+        // filter on top of the view's `IndexScan`, which is not supported.
         if (left.s_.isVariable() &&
             left.s_.getVariable() == right.o_.getVariable()) {
           continue;
