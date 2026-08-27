@@ -84,7 +84,11 @@ class Service : public Operation {
   bool knownEmptyResult() override { return false; }
 
   // A SERVICE clause has no children.
-  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    return std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>(
+        allocator().as<QueryExecutionTree*>());
+  }
 
   // Convert the given binding to TripleComponent.
   TripleComponent bindingToTripleComponent(

@@ -58,7 +58,11 @@ class TextIndexScanForWord : public Operation {
   // the text variable and the completed word (if it was prefixed)
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    return std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>(
+        allocator().as<QueryExecutionTree*>());
+  }
 
   void setVariableToColumnMap();
 };

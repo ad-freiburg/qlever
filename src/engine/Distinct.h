@@ -64,7 +64,7 @@ class Distinct : public Operation {
   bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
   std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override {
-    return {subtree_.get()};
+    return {{subtree_.get()}, allocator().as<QueryExecutionTree*>()};
   }
 
  protected:

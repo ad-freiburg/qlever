@@ -53,6 +53,7 @@ class CountAvailablePredicates : public Operation {
   getChildren() override {
     using R =
         std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>;
+    auto alloc = allocator().as<QueryExecutionTree*>();
     return subtree_ != nullptr ? R{subtree_.get()} : R{};
   }
 

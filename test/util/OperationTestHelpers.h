@@ -15,7 +15,11 @@
 using namespace std::chrono_literals;
 
 class StallForeverOperation : public Operation {
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+   std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    return std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>(
+        allocator().as<QueryExecutionTree*>());
+  }
   std::string getCacheKeyImpl() const override {
     return "StallForeverOperation";
   }

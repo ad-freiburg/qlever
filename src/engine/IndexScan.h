@@ -235,7 +235,11 @@ class IndexScan final : public Operation {
 
   Result computeResult(bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override { return {}; }
+   std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    return std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>(
+        allocator().as<QueryExecutionTree*>());
+  }
 
   // Compute the size estimate of the index scan, taking delta triples (from
   // the `queryExecutionContext_`) into account. The `bool` is true iff the

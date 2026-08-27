@@ -89,8 +89,9 @@ class Sort : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override {
-    return {subtree_.get()};
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    return {{subtree_.get()}, allocator().as<QueryExecutionTree*>()};
   }
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(

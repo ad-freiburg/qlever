@@ -12,8 +12,9 @@ NeutralOptional::NeutralOptional(QueryExecutionContext* qec,
     : Operation{qec}, tree_{std::move(tree)} {}
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> NeutralOptional::getChildren() {
-  return {tree_.get()};
+std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+NeutralOptional::getChildren() {
+  return {{tree_.get()}, allocator().as<QueryExecutionTree*>()};
 }
 
 // _____________________________________________________________________________
