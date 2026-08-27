@@ -172,6 +172,9 @@ inline ParseResult parseWkt(const std::string_view& wkt,
   } catch (const std::runtime_error& error) {
     AD_LOG_DEBUG << "Error parsing WKT `" << wkt << "`: " << error.what()
                  << std::endl;
+    type = WKTType::NONE;
+    projCrs = CRSType::UNSUPPORTED;
+    crsType = CRSType::UNSUPPORTED;
   }
 
   return ParseResult{std::move(parsed), type, projCrs, crsType};
@@ -590,8 +593,8 @@ struct GeometryNVisitor {
   // Visitor for `GeoPointOrWkt`.
   std::optional<ParsedWkt> operator()(const GeoPointOrWkt& geom,
                                       int64_t n) const {
-    auto [parsed, wktType, crsType, sourceCrs] = parseGeoPointOrWkt(geom);
-    return GeometryNVisitor{}(parsed, n);
+    auto parseResult = parseGeoPointOrWkt(geom);
+    return GeometryNVisitor{}(parseResult.parsedWkt_, n);
   }
 };
 

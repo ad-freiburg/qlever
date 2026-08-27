@@ -36,6 +36,9 @@ const DPoint expectedPoint{3, 4};
 constexpr std::string_view litLineString =
     "\"LINESTRING(2 2,4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view emptyLitLineString =
+    "\"LINESTRING()\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DLine expectedLine{{2, 2}, {4, 4}};
 constexpr std::string_view litPolygon =
     "\"POLYGON((2 2,4 2,4 4,2 4,2 2))\""
@@ -415,6 +418,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   auto parseRes1 = parseWkt(litPoint);
   EXPECT_THAT(parseRes1, parseResultNear(ParseResult{expectedPoint, POINT,
                                                      defaultCrs, defaultCrs}));
+  ASSERT_TRUE(parseRes1.parsedWkt_.has_value());
   auto parsed1 = parseRes1.parsedWkt_.value();
 
   auto centroid1 = centroidAsGeoPoint(parsed1);
@@ -442,6 +446,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_THAT(parseRes2,
               parseResultNear(ParseResult{expectLitShortRealWorldLine,
                                           LINESTRING, defaultCrs, defaultCrs}));
+  ASSERT_TRUE(parseRes2.parsedWkt_.has_value());
   auto parsed2 = parseRes2.parsedWkt_.value();
   EXPECT_NEAR(computeMetricLength(parsed2).length(), 446.363, 1);
   EXPECT_EQ(GeometryInfo::getMetricLength(litInvalidType), std::nullopt);
@@ -459,6 +464,12 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_THAT(parseRes4,
               parseResultNear(ParseResult{expectedPoint, POINT, defaultCrs,
                                           util::geo::CRSType::WEB_MERCATOR}));
+
+  // Test empty 'Line' that leads to 'std::runtime_error'.
+  auto parseRes5 = parseWkt(emptyLitLineString);
+  EXPECT_THAT(parseRes5, parseResultNear(ParseResult{
+                             std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED,
+                             CRSType::UNSUPPORTED}));
 }
 
 // ____________________________________________________________________________
