@@ -33,7 +33,8 @@ using VariableToTripleIndices =
     ad_utility::HashMap<Variable, std::vector<size_t>>;
 
 // Key and value types of the cache for simple chains, that is queries of the
-// form `?s <p1> ?m . ?m <p2> ?o`.
+// form `?s <p1> ?m . ?m <p2> ?o`, optionally restricted by further triples
+// with a fixed object like `?s rdf:type <SomeClass>` (see `restrictions_`).
 using ChainedPredicates = ad_utility::detail::StringPair;
 using ChainedPredicatesForLookup = ad_utility::detail::StringViewPair;
 struct ChainInfo {
@@ -41,6 +42,11 @@ struct ChainInfo {
   Variable chain_;
   Variable object_;
   ViewPtr view_;
+  // Triples of the view's query with a variable subject (one of the three
+  // chain variables above), a simple IRI predicate and a fixed object. They
+  // restrict which rows the view contains, so the view may only replace a
+  // chain in a query that contains the very same triples.
+  std::vector<SparqlTriple> restrictions_;
 };
 using SimpleChainCache =
     ad_utility::StringPairHashMap<std::shared_ptr<std::vector<ChainInfo>>>;
@@ -126,11 +132,14 @@ class QueryPatternCache {
 
  private:
   // Helper for `analyzeView`, that checks for a simple chain. It returns `true`
-  // iff a simple chain `a->b` is present.
+  // iff a simple chain `a->b` is present. The `restrictions` are the view's
+  // fixed-object triples (see `ChainInfo::restrictions_`); each of their
+  // subjects must be one of the three chain variables.
   // NOTE: This function only checks one direction, so it should also be called
   // with `a` and `b` switched if it returns `false`.
   bool analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
-                          const SparqlTriple& b);
+                          const SparqlTriple& b,
+                          const std::vector<SparqlTriple>& restrictions);
 
   // Helper for `analyzeView`, that checks for a join star of arbitrary size.
   // A star requires all triples to share the same subject variable with

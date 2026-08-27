@@ -81,6 +81,57 @@ QueryPatternCache::makeJoinReplacementIndexScans(
 }
 
 // _____________________________________________________________________________
+// Check that every restriction triple of the view's chain (e.g.
+// `?s rdf:type <SomeClass>`, see `ChainInfo::restrictions_`) has an exact
+// counterpart among the query's `triples`, with the view's chain variables
+// translated to the query's corresponding components. The indices of the
+// matched query triples are appended to `coveredTriples` (they are covered by
+// the view scan just like the two chain triples). Returns `false` if any
+// restriction has no counterpart; the view must not be used for the query
+// then, because it only contains the rows satisfying the restrictions.
+static bool chainRestrictionsCoveredByQuery(
+    const ChainInfo& chainInfo, const TripleComponent& querySubject,
+    const Variable& queryChain, const Variable& queryObject,
+    const parsedQuery::BasicGraphPattern& triples,
+    std::vector<size_t>& coveredTriples) {
+  for (const auto& restriction : chainInfo.restrictions_) {
+    // Translate the restriction's subject (one of the view's three chain
+    // variables, enforced by `analyzeSimpleChain`) to the query's side.
+    const auto& restrictionSubject = restriction.s_.getVariable();
+    TripleComponent mappedSubject =
+        restrictionSubject == chainInfo.subject_ ? querySubject
+        : restrictionSubject == chainInfo.chain_ ? TripleComponent{queryChain}
+                                                 : TripleComponent{queryObject};
+
+    auto matches = [&](const SparqlTriple& triple) {
+      return triple.s_ == mappedSubject && triple.o_ == restriction.o_ &&
+             triple.getSimplePredicate() == restriction.getSimplePredicate();
+    };
+    auto it = ql::ranges::find_if(triples._triples, matches);
+    if (it == triples._triples.end()) {
+      return false;
+    }
+    // If the chain's subject is fixed in the query, the matched restriction
+    // triple has no variables at all and thus forms its own connected
+    // component in the query planner, where a replacement plan spanning two
+    // components could not be used. Require the triple's presence (checked
+    // above), but let it be evaluated separately (a cheap existence check)
+    // instead of covering it.
+    if (mappedSubject.isVariable()) {
+      coveredTriples.push_back(std::distance(triples._triples.begin(), it));
+    }
+  }
+  // Duplicate restrictions in the view's query would match the same query
+  // triple twice; the number of covered triples determines the plan's round
+  // in the query planner's dynamic programming table, so it must be exact.
+  ql::ranges::sort(coveredTriples);
+  coveredTriples.erase(
+      std::unique(coveredTriples.begin(), coveredTriples.end()),
+      coveredTriples.end());
+  return true;
+}
+
+// _____________________________________________________________________________
 void QueryPatternCache::makeScansFromChainCandidates(
     QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
     std::vector<MaterializedViewJoinReplacement>& result,
@@ -118,12 +169,20 @@ void QueryPatternCache::makeScansFromChainCandidates(
                                                .columnIndex_ != 0) {
             continue;
           }
+          // If the view was built with restriction triples, the query must
+          // contain matching triples, which the scan then also covers.
+          std::vector<size_t> coveredTriples{tripleIdxLeft, tripleIdxRight};
+          if (!chainRestrictionsCoveredByQuery(chainInfo, left.s_, varLeft,
+                                               right.o_.getVariable(), triples,
+                                               coveredTriples)) {
+            continue;
+          }
           // We have found a materialized view for this chain. Construct an
           // `IndexScan`.
           result.push_back(
               {makeScanForSingleChain(qec, chainInfo, left.s_, varLeft,
                                       right.o_.getVariable()),
-               {tripleIdxLeft, tripleIdxRight}});
+               std::move(coveredTriples)});
         }
       }
     }
@@ -222,13 +281,13 @@ void QueryPatternCache::makeScansFromStarCandidates(
 std::shared_ptr<IndexScan> QueryPatternCache::makeScanForSingleChain(
     QueryExecutionContext* qec, ChainInfo cached, TripleComponent subject,
     std::optional<Variable> chain, Variable object) const {
-  auto& [cSubject, cChainVar, cObject, view] = cached;
+  auto& view = cached.view_;
   parsedQuery::MaterializedViewQuery::RequestedColumns cols{
-      {std::move(cSubject), std::move(subject)},
-      {std::move(cObject), std::move(object)},
+      {std::move(cached.subject_), std::move(subject)},
+      {std::move(cached.object_), std::move(object)},
   };
   if (chain.has_value()) {
-    cols.insert({std::move(cChainVar), std::move(chain.value())});
+    cols.insert({std::move(cached.chain_), std::move(chain.value())});
   }
   return view->makeIndexScan(
       qec, parsedQuery::MaterializedViewQuery{view->name(), std::move(cols)});
@@ -243,8 +302,9 @@ std::shared_ptr<IndexScan> QueryPatternCache::makeScanForStar(
 }
 
 // _____________________________________________________________________________
-bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
-                                           const SparqlTriple& b) {
+bool QueryPatternCache::analyzeSimpleChain(
+    ViewPtr view, const SparqlTriple& a, const SparqlTriple& b,
+    const std::vector<SparqlTriple>& restrictions) {
   // Check predicates.
   auto aPred = a.getSimplePredicate();
   if (!aPred.has_value()) {
@@ -284,14 +344,24 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
     return false;
   }
 
+  // Each restriction triple's subject must be one of the three chain
+  // variables, otherwise it cannot be translated to the query's variables
+  // when matching (see `chainRestrictionsCoveredByQuery`).
+  if (!ql::ranges::all_of(restrictions, [&](const SparqlTriple& restriction) {
+        const auto& s = restriction.s_.getVariable();
+        return s == aSubj || s == chainVar || s == bObj;
+      })) {
+    return false;
+  }
+
   // Insert chain to cache.
   ChainedPredicates preds{aPred.value(), bPred.value()};
   auto [it, wasNew] = simpleChainCache_.try_emplace(preds, nullptr);
   if (it->second == nullptr) {
     it->second = std::make_shared<std::vector<ChainInfo>>();
   }
-  it->second->push_back(
-      ChainInfo{std::move(aSubj), std::move(chainVar), std::move(bObj), view});
+  it->second->push_back(ChainInfo{std::move(aSubj), std::move(chainVar),
+                                  std::move(bObj), view, restrictions});
   return true;
 }
 
@@ -411,12 +481,33 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   const auto& triples = std::get<std::vector<SparqlTriple>>(triplesForRewrite);
   bool patternFound = false;
 
+  // Partition the view's triples into join triples (with a variable object)
+  // and restriction triples (with a variable subject, a simple IRI predicate
+  // and a fixed object, e.g. `?s rdf:type <SomeClass>`). Restriction triples
+  // restrict which rows end up in the view; a query can still be rewritten to
+  // scan the view if it contains the very same triples (checked at matching
+  // time by `chainRestrictionsCoveredByQuery`).
+  std::vector<SparqlTriple> joinTriples;
+  std::vector<SparqlTriple> restrictions;
+  for (const auto& triple : triples) {
+    if (triple.o_.isVariable()) {
+      joinTriples.push_back(triple);
+    } else if (triple.s_.isVariable() &&
+               triple.getSimplePredicate().has_value()) {
+      restrictions.push_back(triple);
+    }
+  }
+  // Triples with a fixed subject and a fixed object fall into neither
+  // category; such views are not supported for pattern-based rewriting.
+  const bool allTriplesPartitioned =
+      joinTriples.size() + restrictions.size() == triples.size();
+
   // TODO<ullingerc> Possibly handle chain by property path.
-  if (triples.size() == 2) {
-    const auto& a = triples.at(0);
-    const auto& b = triples.at(1);
-    patternFound =
-        analyzeSimpleChain(view, a, b) || analyzeSimpleChain(view, b, a);
+  if (allTriplesPartitioned && joinTriples.size() == 2) {
+    const auto& a = joinTriples.at(0);
+    const auto& b = joinTriples.at(1);
+    patternFound = analyzeSimpleChain(view, a, b, restrictions) ||
+                   analyzeSimpleChain(view, b, a, restrictions);
   }
 
   // Check for a join star of arbitrary size (>= 2 arms).

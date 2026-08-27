@@ -751,5 +751,6 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
   return std::make_shared<SpatialJoin>(
       _executionContext, config_,
       // Potentially unchanged child retrieved with `value_or`.
-      left.value_or(childLeft_), right.value_or(childRight_));
+      left.value_or(childLeft_), right.value_or(childRight_),
+      substitutesFilterOp_);
 }
