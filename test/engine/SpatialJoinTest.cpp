@@ -321,10 +321,7 @@ class SpatialJoinVarColParamTest
     if (addDist) {
       dist = Variable{"?distOfTheTwoObjectsAddedInternally"};
     }
-    // `joinType` only applies to the `LIBSPATIALJOIN` algorithm; other
-    // algorithms use a plain `MaxDistanceConfig`, like `SpatialQuery` does.
-    // `maxDist_` is only meaningful (and only allowed by
-    // `LibSpatialJoinConfig`'s invariant) for `WITHIN_DIST`.
+    // Generate a mock `SpatialJoinTask` for testing.
     SpatialJoinTask task = MaxDistanceConfig{0};
     if (alg == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
       task = LibSpatialJoinConfig{joinType,
