@@ -49,7 +49,7 @@ enum class LogLevel {
 #define AD_LOG_TIMING AD_LOG(LogLevel::TIMING)
 #define AD_LOG_TRACE AD_LOG(LogLevel::TRACE)
 
-#define ENABLE_TIME_DIFF 1
+// #define ENABLE_TIME_DIFF 1
 #ifdef ENABLE_TIME_DIFF
 #define AD_LOG_TIME_START(marker)                                  \
   AD_LOG(LogLevel::INFO) << "--TIMING (" << #marker << ") START--" \

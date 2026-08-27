@@ -137,12 +137,15 @@ Result TensorIndexImpl::computeTensorIndexResultFaiss() {
     if (!left.has_value()) {
       continue;
     }
+    AD_LOG_TIME_START(tensorIndexLookup);
     auto results =
         faissIndex->findNN(left.value(), params_.config_.maxResults_);
     for (const auto& nn : results) {
       addResultTableEntry(&result, params_.idTableLeft_, params_.idTableRight_,
                           i, nn.row, Id::makeFromDouble(nn.dist));
     }
+
+    AD_LOG_TIME_END(tensorIndexLookup);
   }
 
   return Result{

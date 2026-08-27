@@ -627,8 +627,11 @@ std::optional<ad_utility::TensorData> ExportQueryExecutionTrees::idToTensorData(
     default:
       break;
   }
+
+  AD_LOG_TIME_START(idToStringAndType);
   auto pair = idToStringAndType<removeQuotesAndAngleBrackets, false>(
       index, id, localVocab, std::forward<EscapeFunction>(escapeFunction));
+  AD_LOG_TIME_END(idToStringAndType);
   if (!pair.has_value()) {
     return std::nullopt;
   }
