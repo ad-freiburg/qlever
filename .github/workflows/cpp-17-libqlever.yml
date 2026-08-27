@@ -146,7 +146,17 @@ jobs:
         # for the submodules, and the composite actions below use `sudo` and
         # `add-apt-repository`. The steps run as `root`, so `sudo` isn't
         # available (and isn't needed) yet.
+        #
+        # NOTE: `DEBIAN_FRONTEND=noninteractive` is essential. The install
+        # pulls in `tzdata` as a dependency, whose configuration otherwise
+        # prompts for the time zone and hangs the job forever (only on GitHub
+        # Actions, where stdin of the step stays open; a local `docker run`
+        # with a closed stdin proceeds with the default). Configuring `tzdata`
+        # here once also keeps the later `apt-get` steps of the composite
+        # actions (which run via `sudo` and would not inherit this variable)
+        # from prompting.
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates git sudo software-properties-common wget
       - uses: actions/checkout@v7
