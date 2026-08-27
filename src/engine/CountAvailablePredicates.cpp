@@ -115,15 +115,14 @@ Result CountAvailablePredicates::computeResult(
   AD_CORRECTNESS_CHECK(subtree_);
   // Determine whether we can perform the full scan optimization. It can be
   // applied if the `subtree_` is a single index scan of a triple
-  // `?s ql:has-pattern ?p`, because that relation contains exactly one triple
-  // per entity. Its result can then be consumed lazily and the patterns can be
-  // counted directly, instead of materializing one row per entity.
-  // TODO<joka921> The remaining difference to the generic implementation below
-  // is that the latter needs a fully materialized `IdTableView`, because it has
-  // to deduplicate the subjects. As soon as `computePatternTrick` also consumes
-  // its input lazily (carrying the last subject across the chunk boundaries for
-  // the deduplication), this special case can be removed, because the
-  // deduplication is a no-op on the `ql:has-pattern` relation.
+  // `?s ql:has-pattern ?p`. This relation contains exactly one triple per
+  // entity. All subjects are therefore distinct, and the patterns can be
+  // counted directly while the scan is consumed lazily.
+  // TODO<joka921> The generic implementation below has to deduplicate the
+  // subjects. It therefore requires a fully materialized `IdTableView`. Make it
+  // consume its input lazily, carrying the last subject across the chunk
+  // boundaries. It then also handles the `ql:has-pattern` case, and this
+  // special case can be removed.
   bool isPatternTrickForAllEntities = [&]() {
     auto indexScan =
         dynamic_cast<const IndexScan*>(subtree_->getRootOperation().get());
