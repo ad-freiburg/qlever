@@ -8,6 +8,7 @@
 #define QLEVER_SRC_UTIL_SERIALIZER_SERIALIZER_H
 
 #include <array>
+#include <cstdint>
 #include <stdexcept>
 
 #include "util/Exception.h"
@@ -56,6 +57,10 @@ namespace ad_utility::serialization {
 class SerializationException : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
+
+// The position (as a byte offset) of a serializer within its underlying
+// resource.
+using SerializationPosition = uint64_t;
 
 /// Concepts for serializer types.
 class WriteSerializerTag {};

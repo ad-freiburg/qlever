@@ -32,7 +32,7 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(JoinAlgorithmBenchmark testUtil memorySize)
 
-    addAndLinkBenchmark(ParallelMergeBenchmark testUtil)
+    addAndLinkBenchmark(ParallelBlockMergeBenchmark testUtil)
 
     addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
 

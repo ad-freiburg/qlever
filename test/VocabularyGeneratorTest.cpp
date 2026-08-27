@@ -4,9 +4,11 @@
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <re2/re2.h>
 
+#include <array>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
@@ -28,6 +30,7 @@
 #include "util/Algorithm.h"
 #include "util/File.h"
 #include "util/GTestHelpers.h"
+#include "util/HashSet.h"
 
 using namespace ad_utility::vocabulary_merger;
 namespace {
@@ -269,6 +272,14 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
       absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0), unorderedWords);
   writePartialVocabularyFile(
       absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1), unorderedWords);
+  absl::Cleanup cleanup = [&basePath] {
+    for (size_t i = 0; i < 2; ++i) {
+      ad_utility::deleteFile(
+          absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, i), false);
+      ad_utility::deleteFile(
+          absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, i), false);
+    }
+  };
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       mergeVocabulary(
@@ -412,4 +423,213 @@ TEST(VocabularyGeneratorTest, createInternalMappingFirstWordDuplicates) {
   EXPECT_EQ(0u, res[99]);
   EXPECT_EQ(1u, res[3]);
   EXPECT_EQ(1u, res[55]);
+}
+
+// _____________________________________________________________________________
+// The partial vocabularies that are written by
+// `writePartialVocabularyToFile` end with a sparse splitter index, but files
+// that were written by hand (as in this test) or by an older version of QLever
+// have no such index. The merge then has to build the block metadata by a
+// sequential scan, which this test exercises.
+TEST(MergeVocabulary, mergeVocabularyWithoutSplitterIndex) {
+  std::string basePath = gtestCurrentTestName();
+  // The words of a single partial vocabulary have to be sorted; the word
+  // `"c"` deliberately appears in both of them.
+  std::array<std::string_view, 4> words0{"\"a\"", "\"c\"", "\"e\"", "\"g\""};
+  std::array<std::string_view, 3> words1{"\"b\"", "\"c\"", "\"f\""};
+  writePartialVocabularyFile(
+      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0), words0);
+  writePartialVocabularyFile(
+      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1), words1);
+  absl::Cleanup cleanup = [&basePath] {
+    for (size_t i = 0; i < 2; ++i) {
+      ad_utility::deleteFile(
+          absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, i), false);
+      ad_utility::deleteFile(
+          absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, i), false);
+    }
+  };
+
+  std::vector<std::string> vocabularyWords;
+  auto wordCallback = [&vocabularyWords](std::string_view word,
+                                         bool) -> uint64_t {
+    vocabularyWords.emplace_back(word);
+    return vocabularyWords.size() - 1;
+  };
+  mergeVocabulary(
+      basePath, 2,
+      [](std::string_view a, bool, std::string_view b, bool) {
+        return std::less{}(a, b);
+      },
+      wordCallback, 1_GB);
+
+  EXPECT_THAT(vocabularyWords,
+              ::testing::ElementsAre("\"a\"", "\"b\"", "\"c\"", "\"e\"",
+                                     "\"f\"", "\"g\""));
+  EXPECT_THAT(
+      getIdMapFromFile(absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, 0)),
+      ::testing::ElementsAreArray(std::vector<std::pair<Id, Id>>{
+          {V(0), V(0)}, {V(1), V(2)}, {V(2), V(3)}, {V(3), V(5)}}));
+  EXPECT_THAT(
+      getIdMapFromFile(absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, 1)),
+      ::testing::ElementsAreArray(std::vector<std::pair<Id, Id>>{
+          {V(0), V(1)}, {V(1), V(2)}, {V(2), V(4)}}));
+}
+
+// _____________________________________________________________________________
+// Merge many partial vocabularies with many words, such that the merge is
+// actually performed in parallel. Every third word appears twice, namely once
+// with `isExternal == false` and once with `isExternal == true`. Such a pair of
+// byte-equal words is adjacent in the merged output, but the two words are
+// *distinct* wrt the comparator, so a chunk boundary of the parallel merge may
+// well fall between them. The merge has to keep them adjacent in that case,
+// because the consumer deduplicates by comparing each word with its
+// predecessor. The test explicitly checks that this case actually occurs.
+TEST(MergeVocabulary, mergeVocabularyManyFilesAndDuplicates) {
+  std::string basePath = gtestCurrentTestName();
+  constexpr size_t numFiles = 8;
+  constexpr size_t numDistinctWords = 70'000;
+  // A tiny splitter interval, such that the merge has many blocks (and
+  // therefore many candidates for its chunk boundaries) to choose from.
+  constexpr size_t splitterInterval = 64;
+
+  TripleComponentComparator comparator;
+  auto sortPred = [&comparator](std::string_view a, bool aIsExternal,
+                                std::string_view b, bool bIsExternal) {
+    return comparator.isLessInTotalWithExternalFlag(a, aIsExternal, b,
+                                                    bIsExternal);
+  };
+
+  // The distinct words. Every word with an index that is not divisible by three
+  // is duplicated, see above.
+  std::vector<std::string> words;
+  for (size_t i = 0; i < numDistinctWords; ++i) {
+    words.push_back(
+        absl::StrCat("\"word", absl::Dec(i, absl::kZeroPad6), "\""));
+  }
+  auto isDuplicated = [](size_t i) { return i % 3 != 0; };
+
+  // Distribute the words over the files: the words that are *not* external go
+  // to the files `[0, numFiles / 2)`, the external ones to the remaining files.
+  std::array<std::vector<std::pair<std::string_view, bool>>, numFiles>
+      wordsPerFile;
+  for (size_t i = 0; i < numDistinctWords; ++i) {
+    wordsPerFile.at(i % (numFiles / 2)).emplace_back(words.at(i), false);
+    if (isDuplicated(i)) {
+      wordsPerFile.at(numFiles / 2 + i % (numFiles / 2))
+          .emplace_back(words.at(i), true);
+    }
+  }
+
+  // Write the partial vocabularies. The local ids are the positions of the
+  // words within their (sorted) file.
+  std::array<ItemVec, numFiles> elsPerFile;
+  std::vector<std::string> fileNames;
+  for (size_t file = 0; file < numFiles; ++file) {
+    auto& wordsOfFile = wordsPerFile.at(file);
+    ql::ranges::sort(wordsOfFile, [&sortPred](const auto& a, const auto& b) {
+      return sortPred(a.first, a.second, b.first, b.second);
+    });
+    auto& els = elsPerFile.at(file);
+    for (size_t i = 0; i < wordsOfFile.size(); ++i) {
+      els.emplace_back(
+          wordsOfFile.at(i).first,
+          PartialVocabIndexWithExternalFlag{i, wordsOfFile.at(i).second});
+    }
+    fileNames.push_back(
+        absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, file));
+    writePartialVocabularyToFile(els, fileNames.back(), splitterInterval);
+  }
+  absl::Cleanup cleanup = [&basePath, &fileNames] {
+    for (const auto& fileName : fileNames) {
+      ad_utility::deleteFile(fileName, false);
+    }
+    for (size_t file = 0; file < numFiles; ++file) {
+      ad_utility::deleteFile(
+          absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, file), false);
+    }
+  };
+
+  // Check that at least one of the chunk boundaries that the merge will use
+  // falls between two byte-equal words. The number of chunks is computed
+  // exactly as in `parallelBlockMergeToRange`.
+  namespace pbm = ad_utility::parallelBlockMerge;
+  auto scheduler = pbm::defaultMergeScheduler();
+  if (scheduler->maxParallelism() > 1) {
+    auto lessThan = [&sortPred](const auto& a, const auto& b) {
+      return sortPred(a.iriOrLiteral(), a.isExternal(), b.iriOrLiteral(),
+                      b.isExternal());
+    };
+    PartialVocabRunsInput input{basePath, numFiles};
+    pbm::MergeOptions defaultOptions;
+    auto splitters = pbm::computeSplitters(
+        input, lessThan,
+        scheduler->maxParallelism() * defaultOptions.targetChunksPerThread);
+    // A splitter that is a *non*-external word which is duplicated separates
+    // that word from its external twin, because the external twin is the direct
+    // predecessor of the splitter in the total order.
+    ad_utility::HashSet<std::string_view> duplicatedWords;
+    for (size_t i = 0; i < numDistinctWords; ++i) {
+      if (isDuplicated(i)) {
+        duplicatedWords.insert(words.at(i));
+      }
+    }
+    size_t numSplitDuplicates = static_cast<size_t>(
+        ql::ranges::count_if(splitters, [&duplicatedWords](const auto& key) {
+          return !key.isExternal() && duplicatedWords.contains(key.word_);
+        }));
+    EXPECT_GT(numSplitDuplicates, 0u)
+        << "None of the " << splitters.size()
+        << " chunk boundaries of the merge separates two byte-equal words, so "
+           "this test does not test what it is supposed to test";
+  }
+
+  // Merge the partial vocabularies. The memory limit is deliberately small,
+  // such that the merge has to emit many small blocks of merged words.
+  std::vector<std::pair<std::string, bool>> mergeResult;
+  auto wordCallback = [&mergeResult](std::string_view word,
+                                     bool isExternal) -> uint64_t {
+    mergeResult.emplace_back(word, isExternal);
+    return mergeResult.size() - 1;
+  };
+  auto metaData =
+      mergeVocabulary(basePath, numFiles, sortPred, wordCallback, 8_MB);
+  EXPECT_EQ(metaData.numWordsTotal(), numDistinctWords);
+
+  // The expected vocabulary: every distinct word exactly once, in sorted order,
+  // and externalized iff it appears with `isExternal == true` in one of the
+  // partial vocabularies.
+  std::vector<std::pair<std::string, bool>> expected;
+  for (size_t i = 0; i < numDistinctWords; ++i) {
+    expected.emplace_back(words.at(i), isDuplicated(i));
+  }
+  ql::ranges::sort(expected, [&sortPred](const auto& a, const auto& b) {
+    return sortPred(a.first, a.second, b.first, b.second);
+  });
+  ASSERT_EQ(mergeResult.size(), expected.size());
+  auto mismatch = ql::ranges::mismatch(mergeResult, expected);
+  EXPECT_TRUE(mismatch.in1 == mergeResult.end())
+      << "The first mismatch is at index "
+      << (mismatch.in1 - mergeResult.begin()) << ": (" << mismatch.in1->first
+      << ", " << mismatch.in1->second << ") instead of (" << mismatch.in2->first
+      << ", " << mismatch.in2->second << ")";
+
+  // The global index of a word is its position in the merged vocabulary.
+  ad_utility::HashMap<std::string_view, size_t> globalIndices;
+  for (size_t i = 0; i < expected.size(); ++i) {
+    globalIndices[expected.at(i).first] = i;
+  }
+  // Every partial vocabulary maps its local ids (which are the positions of its
+  // words within the file) to the global ids, in the order of the file.
+  for (size_t file = 0; file < numFiles; ++file) {
+    std::vector<std::pair<Id, Id>> expectedMapping;
+    const auto& els = elsPerFile.at(file);
+    for (size_t i = 0; i < els.size(); ++i) {
+      expectedMapping.emplace_back(V(i), V(globalIndices.at(els.at(i).first)));
+    }
+    auto idMap = getIdMapFromFile(
+        absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, file));
+    EXPECT_TRUE(vocabTestCompare(idMap, expectedMapping))
+        << "The id map of the partial vocabulary " << file << " is wrong";
+  }
 }

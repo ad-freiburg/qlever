@@ -493,7 +493,7 @@ addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
-addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
+addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 
