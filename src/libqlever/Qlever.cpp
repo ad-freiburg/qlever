@@ -244,6 +244,24 @@ void Qlever::clearNamedResultCache() { namedResultCache_.clear(); }
 void Qlever::clearQueryResultCache() { cache_.clearAll(); }
 
 // _____________________________________________________________________________
+DeltaTriplesCount Qlever::clearDeltaTriples() const {
+  auto snapshot = indexAndViewsSnapshot();
+  return snapshot->index_.deltaTriplesManager().modify<DeltaTriplesCount>(
+      [](auto& deltaTriples) {
+        deltaTriples.clear();
+        return deltaTriples.getCounts();
+      });
+}
+
+// _____________________________________________________________________________
+nlohmann::json Qlever::vacuumDeltaTriples(
+    SharedCancellationHandle handle) const {
+  auto snapshot = indexAndViewsSnapshot();
+  return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
+      [handle](auto& deltaTriples) { return deltaTriples.vacuum(handle); });
+}
+
+// _____________________________________________________________________________
 void Qlever::eraseResultWithName(std::string name) {
   namedResultCache_.erase(name);
 }
