@@ -248,7 +248,7 @@ Result LibspatialjoinAlgorithm::run() {
     sweeperCfg.computeDE9IM = true;
     sweeperCfg.de9imFilter = ::util::geo::DE9IMFilter(de9imFilter->data());
     spatialJoin_.value()->runtimeInfo().addDetail(
-        "de9im-filter", std::string{de9imFilter->data(), de9imFilter->size()});
+        "de9im-filter", sweeperCfg.de9imFilter.toString());
   }
   if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
     sweeperCfg.writeRelCb = [&results, &resultDists](
