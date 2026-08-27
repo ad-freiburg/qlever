@@ -37,18 +37,25 @@ TEST(EnumWithStrings, VocabularyTypeEnum) {
   EXPECT_EQ(V::OnDiskCompressed, j.get<V>());
 
   std::vector<V> all(V::all().begin(), V::all().end());
-  EXPECT_THAT(all, ::testing::ElementsAre(
-                       V::InMemoryUncompressed, V::OnDiskUncompressed,
-                       V::InMemoryCompressed, V::OnDiskCompressed,
-                       V::OnDiskCompressedGeoSplit));
+  EXPECT_THAT(
+      all,
+      ::testing::ElementsAre(
+          V::InMemoryUncompressed, V::OnDiskUncompressed, V::InMemoryCompressed,
+          V::OnDiskCompressed, V::OnDiskCompressedGeoSplit,
+          V::InMemoryUncompressedWithHoles, V::InMemoryCompressedWithHoles));
 
+  // Each of the values has to be drawn roughly equally often. NOTE: The bounds
+  // are computed from the number of values, such that adding another value does
+  // not require this test to be changed.
+  size_t numSamples = 50000;
   ad_utility::HashMap<V, size_t> h;
-  for (size_t i = 0; i < 50000; ++i) {
+  for (size_t i = 0; i < numSamples; ++i) {
     h[V::random()]++;
   }
+  size_t expectedCount = numSamples / all.size();
   for (auto v : all) {
-    EXPECT_GT(h[v], 7000);
-    EXPECT_LT(h[v], 13000);
+    EXPECT_GT(h[v], expectedCount * 4 / 5);
+    EXPECT_LT(h[v], expectedCount * 6 / 5);
   }
 
   EXPECT_THROW(V::fromString("not-a-valid-type"), std::runtime_error);

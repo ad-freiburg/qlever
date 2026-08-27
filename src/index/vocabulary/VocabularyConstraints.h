@@ -8,6 +8,7 @@
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/TypeTraits.h"
@@ -36,8 +37,10 @@ CPP_concept HasSpecialGetPositionOfWord =
 template <typename T>
 CPP_concept HasDefaultGetPositionOfWord =
     ad_utility::SameAsAny<T, VocabularyInMemory, VocabularyInternalExternal,
+                          VocabularyInMemoryBinSearch,
                           CompressedVocabulary<VocabularyInMemory>,
-                          CompressedVocabulary<VocabularyInternalExternal>>;
+                          CompressedVocabulary<VocabularyInternalExternal>,
+                          CompressedVocabulary<VocabularyInMemoryBinSearch>>;
 
 // This concept states that the given vocabulary implementation `T` might
 // provide precomputed `GeometryInfo` via a `getGeoInfo` method (for example,
@@ -60,8 +63,10 @@ CPP_concept MaybeProvidesGeometryInfo =
 template <typename T>
 CPP_concept NeverProvidesGeometryInfo =
     ad_utility::SameAsAny<T, VocabularyInMemory, VocabularyInternalExternal,
+                          VocabularyInMemoryBinSearch,
                           CompressedVocabulary<VocabularyInMemory>,
-                          CompressedVocabulary<VocabularyInternalExternal>>;
+                          CompressedVocabulary<VocabularyInternalExternal>,
+                          CompressedVocabulary<VocabularyInMemoryBinSearch>>;
 
 // A variadic version of `NeverProvidesGeometryInfo` that guarantees the
 // semantics of the named concept for all of its template parameters `Ts...`.
@@ -72,7 +77,8 @@ CPP_concept AllNeverProvideGeometryInfo =
 // A vocabulary implementation supports "zero-copy" (de)serialization if it (or,
 // recursively, its underlying vocabulary) provides a static
 // `fromZeroCopyDeserializer` factory. This currently holds for
-// `VocabularyInMemory` and for a `CompressedVocabulary` that wraps a
+// `VocabularyInMemory`, for `VocabularyInMemoryBinSearch` (the in-memory
+// vocabulary with holes), and for a `CompressedVocabulary` that wraps a
 // zero-copy-capable vocabulary, but not for the disk-backed
 // (`VocabularyInternalExternal`, `VocabularyOnDisk`) or split
 // (`SplitVocabulary`) vocabularies, which cannot be represented as a single

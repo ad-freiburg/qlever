@@ -21,6 +21,7 @@
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/Serializer/Serializer.h"
@@ -43,14 +44,23 @@ class PolymorphicVocabulary {
   // 3. Add the alias type to the `Variant` below.
   // 4. Add the corresponding line to the `resetToType` function in
   // `PolymorphicVocabulary.cpp`.
+  // 5. Add the alias type to the appropriate concepts in
+  // `VocabularyConstraints.h`.
   using InMemoryUncompressed = VocabularyInMemory;
   using OnDiskUncompressed = VocabularyInternalExternal;
   using InMemoryCompressed = CompressedVocabulary<InMemoryUncompressed>;
   using OnDiskCompressed = CompressedVocabulary<OnDiskUncompressed>;
   using OnDiskCompressedGeoSplit = SplitGeoVocabulary<OnDiskCompressed>;
+  // The vocabularies with "holes", which are only used for vocabularies that
+  // were exported from a larger vocabulary with some of the entries excluded
+  // (see `VocabularyInMemoryBinSearch` and `VocabularyType.h`).
+  using InMemoryUncompressedWithHoles = VocabularyInMemoryBinSearch;
+  using InMemoryCompressedWithHoles =
+      CompressedVocabulary<InMemoryUncompressedWithHoles>;
   using Variant =
       std::variant<InMemoryUncompressed, OnDiskUncompressed, OnDiskCompressed,
-                   InMemoryCompressed, OnDiskCompressedGeoSplit>;
+                   InMemoryCompressed, OnDiskCompressedGeoSplit,
+                   InMemoryUncompressedWithHoles, InMemoryCompressedWithHoles>;
 
   // In this variant we store the actual vocabulary.
   Variant vocab_;
