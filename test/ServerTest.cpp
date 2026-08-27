@@ -505,7 +505,7 @@ TEST(ServerTest, pingEndpoint) {
   EXPECT_THAT(responseBodyToString(std::move(response.body())),
               testing::StrEq("This QLever server is up and running\n"));
   EXPECT_THAT(logStream.str(),
-              ::testing::HasSubstr("Alive check without message"));
+              testing::HasSubstr("Alive check without message"));
 
   // With a `msg` parameter; the response is the same regardless of the
   // message, which is only used for logging.
@@ -515,7 +515,7 @@ TEST(ServerTest, pingEndpoint) {
   EXPECT_THAT(response, StatusIs(http::status::ok));
   EXPECT_THAT(responseBodyToString(std::move(response.body())),
               testing::StrEq("This QLever server is up and running\n"));
-  EXPECT_THAT(logStream.str(), ::testing::HasSubstr(absl::StrCat(
+  EXPECT_THAT(logStream.str(), testing::HasSubstr(absl::StrCat(
                                    "Alive check with message \"", msg)));
 }
 

@@ -521,7 +521,7 @@ struct CommandMeta {
   bool requiresAuth_;
 };
 
-constexpr std::array kCommands = {
+constexpr std::array commands = {
     CommandMeta{"stats", "get index statistics", false},
     CommandMeta{"cache-stats", "get cache statistics", false},
     CommandMeta{"clear-cache", "clear the cache (unpinned elements only)",
@@ -570,12 +570,12 @@ std::optional<std::string> checkSetting(
   return value;
 }
 
-// Look up metadata for `cmd` in `kCommands`, run the access-token check (if
-// required), and log it. `cmd` must name an entry in `kCommands` -- it always
+// Look up metadata for `cmd` in `commands`, run the access-token check (if
+// required), and log it. `cmd` must name an entry in `commands` -- it always
 // comes from a literal used in the `process()` dispatch below.
 void dispatchLog(std::string_view cmd, bool accessTokenOk) {
-  auto it = ql::ranges::find(kCommands, cmd, &CommandMeta::name_);
-  AD_CORRECTNESS_CHECK(it != kCommands.end());
+  auto it = ql::ranges::find(commands, cmd, &CommandMeta::name_);
+  AD_CORRECTNESS_CHECK(it != commands.end());
   if (it->requiresAuth_) {
     requireValidAccessToken(accessTokenOk, it->name_);
   }

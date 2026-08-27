@@ -247,8 +247,8 @@ class Server {
       processPing(std::optional<std::string> msg,
                   const RequestT& request) const;
 
-  // Handle the `/metrics` endpoint: requires a valid access token, then
-  // serves Prometheus-formatted metrics text if enabled
+  // Handle the `/metrics` endpoint: require a valid access token, then
+  // serve Prometheus-formatted metrics text if enabled
   // (`--enable-metrics`), or a 404 response otherwise.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) ResponseT
