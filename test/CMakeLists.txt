@@ -473,7 +473,7 @@ if (EMSCRIPTEN)
     set_source_files_properties(AsioHelpersTest.cpp PROPERTIES COMPILE_OPTIONS "-O1")
 endif ()
 
-addLinkAndDiscoverTest(AsyncSemaphoreTest)
+addLinkAndDiscoverTest(AsyncResourcePoolTest)
 
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
