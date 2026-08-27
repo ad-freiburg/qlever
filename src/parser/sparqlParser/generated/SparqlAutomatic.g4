@@ -39,11 +39,25 @@
 grammar SparqlAutomatic;
 
 query
-    : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause EOF
+    : prologue namedSubqueryDefinition* (selectQuery | constructQuery | describeQuery | askQuery) valuesClause EOF
     ;
 
 prologue
     : (baseDecl | prefixDecl)*
+    ;
+
+// A named subquery (QLever-specific language extension): `WITH %name AS {
+// <graph pattern> }` gives a name to a group graph pattern. The pattern can
+// then be used in the query via `INCLUDE %name`, but only as the entire body
+// of a subquery, whose SELECT clause makes explicit which variables of the
+// pattern become visible; see `includeClause` below.
+//
+// NOTE: The second alternative matches Blazegraph's syntax for named
+// subqueries, where the name comes after the body. It exists only so that the
+// visitor can report an informative error for it.
+namedSubqueryDefinition
+    : WITH NAMED_SUBQUERY_NAME AS groupGraphPattern
+    | WITH groupGraphPattern AS NAMED_SUBQUERY_NAME
     ;
 
 baseDecl
@@ -219,7 +233,16 @@ triplesBlock
 
 // Corresponds to GraphPatternOperation.
 graphPatternNotTriples
-    : groupOrUnionGraphPattern | optionalGraphPattern | minusGraphPattern | graphGraphPattern | serviceGraphPattern | filterR | bind | inlineData
+    : groupOrUnionGraphPattern | optionalGraphPattern | minusGraphPattern | graphGraphPattern | serviceGraphPattern | filterR | bind | inlineData | includeClause
+    ;
+
+// A reference to a named subquery (QLever-specific language extension). It is
+// only allowed as the entire body of a subquery, whose SELECT clause lists
+// (and possibly renames) the variables of the pattern that become visible,
+// for example `{ SELECT ?city (?name AS ?cityName) WHERE { INCLUDE %cities }
+// }`.
+includeClause
+    : INCLUDE NAMED_SUBQUERY_NAME
     ;
 
 optionalGraphPattern
@@ -708,6 +731,7 @@ COPY: C O P Y;
 INSERT : I N S E R T;
 DELETE : D E L E T E;
 WITH: W I T H;
+INCLUDE: I N C L U D E;
 USING: U S I N G;
 DEFAULT : D E F A U L T;
 GRAPH: G R A P H;
@@ -897,6 +921,16 @@ PN_CHARS_U
 
 VARNAME
     : ( PN_CHARS_U | DIGIT ) ( PN_CHARS_U | DIGIT | '\u00B7' | [\u0300-\u036F] | [\u203F-\u2040] )*
+    ;
+
+// The name of a named subquery, e.g. `%cities` (QLever-specific language
+// extension).
+//
+// NOTE: This rule must be defined before `PN_LOCAL` and `PERCENT`, which can
+// also match input starting with `%`, so that ties (equally long matches) are
+// resolved in favor of this rule.
+NAMED_SUBQUERY_NAME
+    : '%' VARNAME
     ;
 
 fragment
