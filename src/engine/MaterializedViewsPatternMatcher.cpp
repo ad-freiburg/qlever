@@ -144,19 +144,19 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
     }
     --stepsRemaining_;
     const auto& triple = triples_._triples.at(tripleIdx);
-    bool subjectWasNew = isNewBinding(edge.subject_);
-    if (tryAssign(edge.subject_, triple.s_)) {
-      bool objectWasNew = isNewBinding(edge.object_);
-      if (tryAssign(edge.object_, triple.o_)) {
+    bool subjectWasNew = isNewBinding(edge.s_);
+    if (tryAssign(edge.s_, triple.s_)) {
+      bool objectWasNew = isNewBinding(edge.o_);
+      if (tryAssign(edge.o_, triple.o_)) {
         coveredTriples_.push_back(tripleIdx);
 
         extendMatch(edgeIdx + 1);
 
         coveredTriples_.pop_back();
       }
-      undoAssign(edge.object_, objectWasNew);
+      undoAssign(edge.o_, objectWasNew);
     }
-    undoAssign(edge.subject_, subjectWasNew);
+    undoAssign(edge.s_, subjectWasNew);
   }
 }
 

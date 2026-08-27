@@ -16,8 +16,6 @@
 #include "parser/GraphPatternAnalysis.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
-#include "parser/TripleComponent.h"
-#include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
 
 // Forward declarations to prevent cyclic dependencies.
@@ -30,17 +28,9 @@ namespace materializedViewsQueryAnalysis {
 using ViewPtr = std::shared_ptr<const MaterializedView>;
 using graphPatternAnalysis::BasicGraphPatternsInvariantTo;
 
-// One edge of a materialized view's join pattern graph, i.e. one triple of
-// the view's defining query. `subject_`/`object_` are usually view variables;
-// either one (not both) may instead be a fixed value from the view's own
-// definition (e.g. `?x osmkey:railway "rail"`), matched by exact equality
-// since it is not a view column (see `tryAssign`). `predicate_` is always a
-// plain IRI.
-struct PatternEdge {
-  TripleComponent subject_;
-  std::string predicate_;
-  TripleComponent object_;
-};
+// An edge of a view's join pattern graph: a triple whose predicate has
+// already been resolved to a simple IRI (see `buildPatternEdges`).
+using PatternEdge = SparqlTripleBase<std::string>;
 
 // The join pattern extracted from a materialized view's defining query: its
 // triples, viewed as edges of a small labeled graph over the view's

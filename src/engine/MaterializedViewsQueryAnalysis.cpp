@@ -40,7 +40,7 @@ bool isConnected(const std::vector<PatternEdge>& edges) {
   AD_CORRECTNESS_CHECK(!edges.empty());
   ad_utility::HashMap<Variable, std::vector<size_t>> edgesByVariable;
   for (size_t i = 0; i < edges.size(); ++i) {
-    for (const auto& side : {edges[i].subject_, edges[i].object_}) {
+    for (const auto& side : {edges[i].s_, edges[i].o_}) {
       if (side.isVariable()) {
         edgesByVariable[side.getVariable()].push_back(i);
       }
@@ -52,7 +52,7 @@ bool isConnected(const std::vector<PatternEdge>& edges) {
   while (!toVisit.empty()) {
     size_t current = toVisit.back();
     toVisit.pop_back();
-    for (const auto& side : {edges[current].subject_, edges[current].object_}) {
+    for (const auto& side : {edges[current].s_, edges[current].o_}) {
       if (!side.isVariable()) {
         continue;
       }
@@ -117,7 +117,7 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
     return side.isVariable() && side.getVariable() == col0->first;
   };
   bool col0InPattern = ql::ranges::any_of(edges, [&isCol0](const auto& edge) {
-    return isCol0(edge.subject_) || isCol0(edge.object_);
+    return isCol0(edge.s_) || isCol0(edge.o_);
   });
   if (!col0InPattern) {
     return std::nullopt;
@@ -136,7 +136,7 @@ void QueryPatternCache::matchPattern(
   std::vector<const std::vector<size_t>*> candidatesByEdge;
   candidatesByEdge.reserve(pattern.edges_.size());
   for (const auto& edge : pattern.edges_) {
-    auto it = triplesByPredicate.find(edge.predicate_);
+    auto it = triplesByPredicate.find(edge.p_);
     if (it == triplesByPredicate.end()) {
       return;
     }
