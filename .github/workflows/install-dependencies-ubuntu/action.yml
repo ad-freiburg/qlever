@@ -70,8 +70,11 @@ runs:
 
     - name: Install third-party libraries
       if: inputs.install-third-party-libraries == 'true'
+      # `libssl-dev` is preinstalled on the runner images, but not in a bare
+      # `container` (where its absence fails the CMake configuration with
+      # "Could NOT find OpenSSL").
       run:  |
-        sudo apt-get install -y libicu-dev tzdata libzstd-dev libjemalloc-dev
+        sudo apt-get install -y libicu-dev tzdata libzstd-dev libjemalloc-dev libssl-dev
       shell: bash
 
     - name: Install boost from PPA
