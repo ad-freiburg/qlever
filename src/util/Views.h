@@ -95,9 +95,8 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_member constexpr auto size() const
-      -> CPP_ret(size_t)(
-          requires ql::ranges::sized_range<const UnderlyingRange>) {
+  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
+      requires ql::ranges::sized_range<const UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 
@@ -358,9 +357,8 @@ CPP_template(typename UnderlyingRange)(
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_member constexpr auto size() const
-      -> CPP_ret(size_t)(
-          requires ql::ranges::sized_range<const UnderlyingRange>) {
+  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
+      requires ql::ranges::sized_range<const UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 };
@@ -539,6 +537,25 @@ auto bufferedAsyncView(View view, uint64_t blockSize) {
 CPP_template(typename Int)(requires ql::concepts::unsigned_integral<
                            Int>) auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
+}
+
+// Convert given optional range into a range of optionals of its contents. If
+// the given range is nullopt, return an infinite range of nullopt.
+CPP_template(typename R)(requires ql::ranges::range<R>) auto rangeToOptional(
+    std::optional<R>&& range) {
+  using RangeContentType = ql::ranges::range_value_t<R>;
+  using ResultRangeType = ::ranges::any_view<std::optional<RangeContentType>>;
+
+  // Transform the range to a range of optionals of its contents
+  if (range.has_value()) {
+    return ResultRangeType(std::forward<R>(*range) |
+                           ::ranges::views::transform([](auto&& element) {
+                             return std::make_optional(std::move(element));
+                           }));
+  }
+  // Create a range containing nullopts of the same type as the ranges
+  // contents would have if they'd hold a value.
+  return ResultRangeType(::ranges::views::repeat(std::nullopt));
 }
 
 }  // namespace ad_utility

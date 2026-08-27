@@ -4,6 +4,7 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include <range/v3/range/traits.hpp>
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
@@ -262,9 +263,24 @@ class TransitivePathImpl : public TransitivePathBase {
     bool bothSidesBoundVar = lhs_.isBoundVariable() && rhs_.isBoundVariable();
     bool targetNodesAreBound = targetNodes.has_value() && bothSidesBoundVar;
 
+    // Wrapper to shorten calls to the `expandUndef` static method of
+    // `TableColumnWithVocab`.
     auto expandUndef = [&](auto pair) {
       return TableColumnWithVocab::expandUndef(pair, edges,
                                                graphVariable_.has_value());
+    };
+
+    // Allow to pass an optional object to `expandUndef`; return a `single_view`
+    // over a pair of nullopts. when it's empty.
+    auto expandUndefOrNullopt = [&](auto pair) {
+      using RangeType =
+          ::ranges::any_view<std::pair<std::optional<Id>, std::optional<Id>>>;
+      if (pair.has_value()) {
+        return RangeType{expandUndef(pair.value())};
+      } else {
+        return RangeType{
+            ::ranges::single_view{std::pair{std::nullopt, std::nullopt}}};
+      }
     };
 
     // Set the target id according to the transitive path's sides.
@@ -325,45 +341,30 @@ class TransitivePathImpl : public TransitivePathBase {
       }
     };
 
-    if (targetNodesAreBound) {
-      // Iterate over both `startNodes` and `targetNodes`.
-      for (auto&& [tableColumn, targetColumn] :
-           ::ranges::views::zip(startNodes, *targetNodes)) {
-        timer.cont();
-        LocalVocab mergedVocab = std::move(tableColumn.vocab_);
-        mergedVocab.mergeWith(edgesVocab);
-        for (const auto& [currentRow, pairs] :
-             ::ranges::views::enumerate(::ranges::views::zip(
-                 tableColumn.nodes_, targetColumn.nodes_))) {
-          const auto& [pair, targetPair] = pairs;
-          // Position-match each expanded start pair with the corresponding
-          // expanded target pair directly via `zip`, instead of scanning.
-          for (auto&& [startNode, graphId] : expandUndef(pair)) {
-            for (auto&& [targetNode, _] : expandUndef(targetPair)) {
-              if (auto node = runAndProcessGraphSearch(
-                      startNode, graphId, targetNode,
-                      static_cast<size_t>(currentRow), mergedVocab,
-                      tableColumn.payload_, targetColumn.payload_)) {
-                co_yield *node;
-                postYieldCleanup(mergedVocab);
-              }
-            }
-          }
-        }
-        timer.stop();
-      }
-    } else {
-      for (auto&& tableColumn : startNodes) {
-        timer.cont();
-        LocalVocab mergedVocab = std::move(tableColumn.vocab_);
-        mergedVocab.mergeWith(edgesVocab);
-        for (const auto& [currentRow, pair] :
-             ::ranges::views::enumerate(tableColumn.nodes_)) {
-          for (const auto& [startNode, graphId] : expandUndef(pair)) {
+    for (auto&& [startColumn, targetColumn] : ::ranges::views::zip(
+             startNodes, ad_utility::rangeToOptional(std::move(targetNodes)))) {
+      timer.cont();
+      LocalVocab mergedVocab = std::move(startColumn.vocab_);
+      mergedVocab.mergeWith(edgesVocab);
+
+      using TableNodes = std::remove_cv_t<
+          std::remove_reference_t<decltype(targetColumn->nodes_)>>;
+      auto targetRange = ad_utility::rangeToOptional(
+          targetColumn.has_value()
+              ? std::optional<TableNodes>(std::move(targetColumn->nodes_))
+              : std::optional<TableNodes>());
+
+      for (const auto& [currentRow, pairs] : ::ranges::views::enumerate(
+               ::ranges::views::zip(startColumn.nodes_, targetRange))) {
+        const auto& [startPair, targetPair] = pairs;
+        for (auto&& [startNode, graphId] : expandUndef(startPair)) {
+          for (auto&& [targetNode, _] : expandUndefOrNullopt(targetPair)) {
             if (auto node = runAndProcessGraphSearch(
-                    startNode, graphId, std::nullopt,
+                    startNode, graphId, targetNode,
                     static_cast<size_t>(currentRow), mergedVocab,
-                    tableColumn.payload_, std::nullopt)) {
+                    startColumn.payload_,
+                    targetColumn.has_value() ? targetColumn->payload_
+                                             : std::nullopt)) {
               co_yield *node;
               postYieldCleanup(mergedVocab);
             }
