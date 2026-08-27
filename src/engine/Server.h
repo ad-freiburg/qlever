@@ -291,7 +291,7 @@ class Server {
   };
 
   // Handle the `cmd=<name>` URL parameter (see `serverProcessHelpers::
-  // kCommands` in `Server.cpp` for the full list). `operation` is the parsed
+  // commands` in `Server.cpp` for the full list). `operation` is the parsed
   // "query"/"update"/graph-store operation of the same request, if any; for
   // `write-materialized-view` it doubles as the view-defining query, and for
   // that command as well as `load-materialized-view` and
