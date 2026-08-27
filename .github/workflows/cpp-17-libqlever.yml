@@ -113,6 +113,14 @@ jobs:
     # mode (which is what our users on such old platforms actually compile) is
     # covered as well.
     container: ubuntu:20.04
+    # Inside a `container`, the runner falls back to `sh` (which is `dash` on
+    # Ubuntu) as the default shell for `run` steps, instead of the `bash` that
+    # is used for jobs that run directly on the runner. Several steps below use
+    # `bash` syntax (`[[ ... ]]`, `set -o pipefail`), so request `bash`
+    # explicitly. The composite actions that this job uses do the same.
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
