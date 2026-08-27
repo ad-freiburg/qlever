@@ -1508,7 +1508,7 @@ Server::createMessageSender<Server::StringBodyRequest>(
     const StringBodyRequest&, std::string_view, std::string_view);
 
 // _____________________________________________________________________________
-Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
+Awaitable<qlever::IndexSwapConfig> Server::rebuildIndex(
     std::optional<std::string> rebuildTmpDir,
     std::optional<std::string> rebuildPreviousIndexDir) {
   // There is no mechanism to actually cancel the handle.
@@ -1617,11 +1617,12 @@ CPP_template_def(typename RequestT)(
         "Another rebuild is currently in progress!",
         http::status::too_many_requests, request, MediaType::textPlain);
   }
-  co_return createJsonResponse(config->successResponseAsJson(), request);
+  co_return createJsonResponse(qlever::rebuildSuccessResponseAsJson(*config),
+                               request);
 }
 
 // _____________________________________________________________________________
-Awaitable<std::optional<qlever::IndexRebuildConfig>>
+Awaitable<std::optional<qlever::IndexSwapConfig>>
 Server::rebuildIndexUnlessInProgress(
     std::optional<std::string> rebuildTmpDir,
     std::optional<std::string> rebuildPreviousIndexDir) {

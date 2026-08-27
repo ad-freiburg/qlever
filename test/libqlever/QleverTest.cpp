@@ -449,8 +449,8 @@ TEST(Qlever, moveRebuiltIndexIntoPlace) {
   // This exercises that the individual files are re-prefixed, not just moved.
   std::string oldIndexBackup = baseFolder + "/previous/old-index";
   std::string newBase = baseFolder + "/index";
-  qlever::IndexRebuildConfig config{setup.oldBase_, setup.rebuiltBase_,
-                                    oldIndexBackup, newBase};
+  qlever::IndexSwapConfig config{setup.oldBase_, setup.rebuiltBase_,
+                                 oldIndexBackup, newBase};
 
   // The old index carries a build log, and the rebuilt index a rebuild log;
   // both must travel with their respective index (exercising the log-moving
@@ -506,8 +506,8 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithDirectoryBasename) {
 
   std::string oldDir = baseFolder + "/previous/";
   std::string newBase = baseFolder + "/index";
-  qlever::IndexRebuildConfig config{setup.oldBase_, setup.rebuiltBase_, oldDir,
-                                    newBase};
+  qlever::IndexSwapConfig config{setup.oldBase_, setup.rebuiltBase_, oldDir,
+                                 newBase};
 
   // Complementary to `moveRebuiltIndexIntoPlace` above: here neither index has
   // a log file and the rebuilt index does not persist its updates, so this test
@@ -545,8 +545,8 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareBasename) {
   auto indexAndViews = std::make_shared<qlever::Qlever::IndexAndViews>(
       std::move(rebuilt), MaterializedViewsManager{"rebuild.tmp/index"});
 
-  qlever::IndexRebuildConfig config{"index", "rebuild.tmp/index",
-                                    "previous/index", "index"};
+  qlever::IndexSwapConfig config{"index", "rebuild.tmp/index", "previous/index",
+                                 "index"};
   qlever::Qlever::moveRebuiltIndexIntoPlace(*indexAndViews, config);
 
   // The old index (including its vocabulary, which is enumerated via the glob)
@@ -582,8 +582,7 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareNewIndexSource) {
   auto indexAndViews = std::make_shared<qlever::Qlever::IndexAndViews>(
       std::move(rebuilt), MaterializedViewsManager{"rebuilt"});
 
-  qlever::IndexRebuildConfig config{"index", "rebuilt", "previous/index",
-                                    "index"};
+  qlever::IndexSwapConfig config{"index", "rebuilt", "previous/index", "index"};
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
   qlever::Qlever::moveRebuiltIndexIntoPlace(*indexAndViews, config);
 
@@ -623,8 +622,8 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithNonRemovableBuildDirectory) {
 
   std::string oldIndexBackup = baseFolder + "/previous/index";
   std::string newBase = baseFolder + "/index";
-  qlever::IndexRebuildConfig config{setup.oldBase_, setup.rebuiltBase_,
-                                    oldIndexBackup, newBase};
+  qlever::IndexSwapConfig config{setup.oldBase_, setup.rebuiltBase_,
+                                 oldIndexBackup, newBase};
 
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
   qlever::Qlever::moveRebuiltIndexIntoPlace(*setup.indexAndViews_, config);
@@ -639,62 +638,59 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithNonRemovableBuildDirectory) {
 }
 
 // _____________________________________________________________________________
-// The `IndexRebuildConfig` constructor rejects base-name combinations that
+// The `IndexSwapConfig` constructor rejects base-name combinations that
 // would collide destructively. Because the validation lives in the constructor,
 // this needs no index on disk at all.
-TEST(Qlever, indexRebuildConfigRejectsCollidingBaseNames) {
-  using qlever::IndexRebuildConfig;
-  // The four positional arguments are: current index, rebuilt index, retired
-  // old index, new index. The common (valid) case has the new index served
-  // from the place of the current index.
+TEST(Qlever, indexSwapConfigRejectsCollidingBaseNames) {
+  using qlever::IndexSwapConfig;
+  // The four positional arguments are: current index, staged new index,
+  // retired old index, new index. The common (valid) case has the new index
+  // served from the place of the current index.
   EXPECT_NO_THROW(
-      IndexRebuildConfig("index", "tmp/index", "previous/old", "index"));
+      IndexSwapConfig("index", "tmp/index", "previous/old", "index"));
 
-  // The currently served index and the freshly rebuilt index must differ.
+  // The old index and the staged new index must differ.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "index", "previous/old", "index"),
-      ::testing::HasSubstr(
-          "currently served index and the freshly rebuilt index"));
+      IndexSwapConfig("index", "index", "previous/old", "index"),
+      ::testing::HasSubstr("old index and the staged new index"));
 
-  // The retired-old-index base name must differ from the currently served
-  // index, ...
+  // The retired-old-index base name must differ from the old index, ...
   AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "tmp/index", "index", "index"),
-      ::testing::HasSubstr("differ from the currently served index"));
+      IndexSwapConfig("index", "tmp/index", "index", "index"),
+      ::testing::HasSubstr("differ from the old index"));
 
-  // ... from the freshly rebuilt index, ...
+  // ... from the staged new index, ...
   AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "tmp/index", "tmp/index", "index"),
-      ::testing::HasSubstr("differ from the freshly rebuilt index"));
+      IndexSwapConfig("index", "tmp/index", "tmp/index", "index"),
+      ::testing::HasSubstr("differ from the staged new index"));
 
   // ... and from the new index.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "tmp/index", "shared", "shared"),
+      IndexSwapConfig("index", "tmp/index", "shared", "shared"),
       ::testing::HasSubstr("retired old index and the new index must differ"));
 
   // Collisions are detected up to lexical path normalization, so `abc/../index`
   // (which denotes `index`) collides with the currently served index `index`.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "tmp/index", "abc/../index", "index"),
-      ::testing::HasSubstr("differ from the currently served index"));
+      IndexSwapConfig("index", "tmp/index", "abc/../index", "index"),
+      ::testing::HasSubstr("differ from the old index"));
 
   // Base names that merely share a string prefix (e.g. `index` and `indexdata`)
   // do NOT collide: the `.`-delimited file-name suffixes keep the two indexes'
   // files apart, so such a configuration is valid.
-  EXPECT_NO_THROW(
-      IndexRebuildConfig("index", "tmp/index", "indexdata", "index"));
+  EXPECT_NO_THROW(IndexSwapConfig("index", "tmp/index", "indexdata", "index"));
 
   // But a base name that is another base name followed by a '.' DOES collide:
   // `index.view` sits inside the `index.view.*` glob that enumerates `index`'s
   // materialized views, so retiring the old index to `index.view` would sweep
   // up the current index's view files.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "tmp/index", "index.view", "index"),
-      ::testing::HasSubstr("differ from the currently served index"));
+      IndexSwapConfig("index", "tmp/index", "index.view", "index"),
+      ::testing::HasSubstr("differ from the old index"));
   // The same holds regardless of which of the two base names is the longer one.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "index.view", "previous/old", "newidx"),
-      ::testing::HasSubstr("currently served index and the freshly rebuilt"));
+      IndexSwapConfig("index", "index.view", "previous/old", "newidx"),
+      ::testing::HasSubstr("old index and the staged new index"));
 }
 
 // _____________________________________________________________________________
@@ -992,7 +988,7 @@ TEST(Qlever, makeIndexRebuildConfig) {
                 AllOf(StartsWith("previous."), EndsWith("/index")));
     // The success response reports the directory of the old index (which the
     // client cannot know in advance when it was defaulted), not its base name.
-    auto response = config.successResponseAsJson();
+    auto response = qlever::rebuildSuccessResponseAsJson(config);
     EXPECT_THAT(response["previous-index-dir"].get<std::string>(),
                 AllOf(StartsWith("previous."), Not(EndsWith("/index"))));
   }
@@ -1004,7 +1000,9 @@ TEST(Qlever, makeIndexRebuildConfig) {
     auto config = makeConfig("tmpForRebuild", "oldIndex");
     EXPECT_EQ(config.newIndexSource(), "tmpForRebuild/index");
     EXPECT_EQ(config.oldIndexTarget(), "oldIndex/index");
-    EXPECT_EQ(config.successResponseAsJson()["previous-index-dir"], "oldIndex");
+    EXPECT_EQ(
+        qlever::rebuildSuccessResponseAsJson(config)["previous-index-dir"],
+        "oldIndex");
   }
 
   // Directories that already exist are fine as long as they are empty.
