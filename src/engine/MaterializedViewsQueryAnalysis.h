@@ -59,6 +59,13 @@ struct StarInfo {
 struct ByCacheKeyInfo {
   ViewPtr view_;
   ad_utility::HashMap<size_t, size_t> colMapping_;
+
+  // Construct from the view and the mapping of its columns.
+  // NOTE: This constructor is explicitly declared (and not only implicitly via
+  // aggregate initialization) because parenthesized initialization of
+  // aggregates is not supported in C++17.
+  ByCacheKeyInfo(ViewPtr view, ad_utility::HashMap<size_t, size_t> colMapping)
+      : view_{std::move(view)}, colMapping_{std::move(colMapping)} {}
 };
 using ByCacheKeyInfoPtr = std::shared_ptr<const ByCacheKeyInfo>;
 
