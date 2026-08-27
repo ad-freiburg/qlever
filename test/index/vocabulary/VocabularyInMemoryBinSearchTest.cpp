@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
+#include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "util/Forward.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -228,6 +229,51 @@ TEST(VocabularyInMemoryBinSearch, positionOfIndexAndAccessOperator) {
 
   // A position that is out of range is a bug and hence throws.
   EXPECT_THROW(vocab.indexAtPosition(vocab.size()), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyInMemoryBinSearch, endIndexAndGetPositionOfWord) {
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  auto vocab =
+      createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
+
+  // The "one past the end" index is one larger than the largest contained
+  // index, and NOT `size()`.
+  ASSERT_EQ(vocab.endIndex(), indicesWithHoles.back() + 1);
+  ASSERT_NE(vocab.endIndex(), vocab.size());
+
+  using Pair = std::pair<uint64_t, uint64_t>;
+  auto getPositionOfWord = [&vocab](std::string_view word) {
+    return vocab.getPositionOfWord(word, ql::ranges::less{});
+  };
+
+  // A word that is contained yields the half-open range consisting of exactly
+  // its (non-contiguous) vocabulary index.
+  for (size_t position = 0; position < wordsWithHoles.size(); ++position) {
+    uint64_t index = indicesWithHoles.at(position);
+    EXPECT_EQ(getPositionOfWord(wordsWithHoles.at(position)),
+              (Pair{index, index + 1}))
+        << "at position " << position;
+  }
+
+  // A word that is not contained yields the empty range at the index of the
+  // first word that is greater than it.
+  EXPECT_EQ(getPositionOfWord("aaa"), (Pair{0, 0}));
+  EXPECT_EQ(getPositionOfWord("alx"), (Pair{3, 3}));
+  EXPECT_EQ(getPositionOfWord("cat"), (Pair{4, 4}));
+
+  // A word that is greater than all contained words yields the empty range at
+  // `endIndex()`. Using `size()` here would be a bug, because it is a valid
+  // index of a word that sorts BEFORE the word that is looked up.
+  EXPECT_EQ(getPositionOfWord("zzz"), (Pair{10, 10}));
+  EXPECT_GT(getPositionOfWord("zzz").first, indicesWithHoles.back());
+
+  // In an empty vocabulary, every word yields the empty range at index 0.
+  auto emptyVocab = createVocabularyWithIndices(filename, {}, {});
+  EXPECT_EQ(emptyVocab.endIndex(), 0);
+  EXPECT_EQ(emptyVocab.getPositionOfWord("alpha", ql::ranges::less{}),
+            (Pair{0, 0}));
 }
 
 // _____________________________________________________________________________

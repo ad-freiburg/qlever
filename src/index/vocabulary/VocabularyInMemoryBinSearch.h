@@ -99,6 +99,24 @@ class VocabularyInMemoryBinSearch
   // `position` must be smaller than `size()`.
   uint64_t indexAtPosition(size_t position) const;
 
+  // Return the vocabulary index one past the largest index that is contained
+  // in this vocabulary, or `0` if the vocabulary is empty. Because of the
+  // holes, this is in general much larger than `size()`.
+  uint64_t endIndex() const;
+
+  // Return the range of vocabulary indices at which `word` is stored, or the
+  // empty range at the index at which it would be stored if it is not
+  // contained. This vocabulary needs a special implementation of this function
+  // (see `HasSpecialGetPositionOfWord` in `VocabularyConstraints.h`), because
+  // the generic implementation would use `size()` as the "one past the end"
+  // index, which is wrong in the presence of holes (see `endIndex`).
+  template <typename InternalStringType, typename Comparator>
+  std::pair<uint64_t, uint64_t> getPositionOfWord(
+      const InternalStringType& word, Comparator comparator) const {
+    return ad_utility::vocabulary::getPositionOfWordInVocabWithHoles(
+        *this, word, std::move(comparator), endIndex());
+  }
+
   // Return the word with index `index`. If this index is not part of the
   // vocabulary, return `std::nullopt`.
   std::optional<std::string_view> operator[](uint64_t index) const;
