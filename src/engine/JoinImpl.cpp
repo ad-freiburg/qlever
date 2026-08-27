@@ -748,6 +748,7 @@ ad_utility::JoinColumnMapping JoinImpl::getJoinColumnMapping() const {
   return ad_utility::JoinColumnMapping{{{leftJoinCol_, rightJoinCol_}},
                                        left_->getResultWidth(),
                                        right_->getResultWidth(),
+                                       allocator().template as<ColumnIndex>(),
                                        keepJoinColumn_};
 }
 

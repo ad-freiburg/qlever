@@ -158,8 +158,9 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
 
   // Extract the join columns from both inputs to make the following code
   // easier.
-  ad_utility::JoinColumnMapping joinColumnData{joinColumns_, left.numColumns(),
-                                               right.numColumns()};
+  ad_utility::JoinColumnMapping joinColumnData{
+      joinColumns_, left.numColumns(), right.numColumns(),
+      allocator().template as<ColumnIndex>()};
   IdTableView<0> joinColumnsLeft =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
   IdTableView<0> joinColumnsRight =
