@@ -302,13 +302,25 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
       "SELECT REDUCED ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o }",
       "DISTINCT or REDUCED");
 
-  // Star with LIMIT, chain with OFFSET.
-  expectNotSuitableForRewrite(
-      qlv, manager, "limitStarView",
+  // Star with LIMIT, chain with OFFSET. Writing a view whose query has a
+  // top-level `LIMIT` or `OFFSET` is meanwhile rejected by
+  // `MaterializedViewWriter`, so such views cannot be created through
+  // `writeViewToDisk` like the cases above. Views written before that check
+  // existed can still carry one, so the analysis-side check remains and is
+  // tested directly on the parsed query.
+  auto expectIgnoredForPatternRewrite = [&](const std::string& query,
+                                            std::string_view expectedReason) {
+    auto plan = qlv.parseAndPlanQuery(query);
+    EXPECT_THAT(materializedViewsQueryAnalysis::getTriplesForPatternRewrite(
+                    plan.parsedQuery()),
+                ::testing::VariantWith<
+                    materializedViewsQueryAnalysis::RewriteIgnoreReason>(
+                    ::testing::HasSubstr(expectedReason)));
+  };
+  expectIgnoredForPatternRewrite(
       "SELECT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 } LIMIT 1",
       "LIMIT or OFFSET clause");
-  expectNotSuitableForRewrite(
-      qlv, manager, "offsetChainView",
+  expectIgnoredForPatternRewrite(
       "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o } OFFSET 1",
       "LIMIT or OFFSET clause");
 
