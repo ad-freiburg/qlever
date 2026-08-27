@@ -63,10 +63,13 @@ constexpr inline size_t MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK =
 // contrast to the presorted runs, this file is short-lived and every block is
 // read back almost immediately, so the compression competes with the merge
 // itself for CPU. It cannot simply be turned off, though (which
-// `NO_BLOCK_COMPRESSION` would do), because the file grows to roughly 85 % of
-// everything that is merged and is written and read through the page cache, so
-// its size is paid for in memory bandwidth, and on a machine with less RAM in
-// real disk I/O. A *negative* ZSTD level (`zstd --fast=5`) wins on both counts.
+// `NO_BLOCK_COMPRESSION` would do), because roughly 85 % of everything that is
+// merged is written to these files and read back again. Their peak size is
+// bounded, because each chunk has a file of its own that is deleted as soon as
+// that chunk has been consumed, but the *bytes* still go through the page cache
+// and are therefore paid for in memory bandwidth, and on a machine with less
+// RAM in real disk I/O. A *negative* ZSTD level (`zstd --fast=5`) wins on both
+// counts.
 //
 // The wall time of the merge phase and the peak size of the spill file, for
 // 48M rows of 4 columns in 16 presorted runs with a memory limit of 192 MB, on
@@ -91,11 +94,13 @@ constexpr inline size_t MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK =
 // `libzstd` drops from 43 % of the profile (level 3) to 34 %.
 //
 // The 1.3 GB that `NO_BLOCK_COMPRESSION` writes never reach the disk on the
-// machine above, because the file is deleted long before the page cache would
-// write it back. That is exactly what makes it a bad default: with the driver
+// machine above, because the files are deleted long before the page cache would
+// write them back. That is exactly what makes it a bad default: with the driver
 // confined to a 1 GB cgroup, that variant writes ~850 MB to the device and
-// slows down to 0.69 s, while level -5 still writes nothing at all and stays
-// at 0.48 s.
+// slows down to 0.69 s, while level -5 still writes nothing at all and stays at
+// 0.48 s. The file sizes in the table are the sum over the files that exist at
+// the same time, which was measured before they were reclaimed per chunk and is
+// therefore an upper bound today.
 constexpr inline CompressedBlockFile::Compression
     MERGE_PHASE_SPILL_COMPRESSION = -5;
 
@@ -842,7 +847,7 @@ class CompressedExternalIdTableSorter
   std::atomic<bool> reducedParallelismWasLogged_ = false;
 
   // The number of merge phases that were started so far, which is what makes
-  // the name of the spill file of a merge phase unique, see
+  // the names of the spill files of a merge phase unique, see
   // `makeSpillFilename`.
   std::atomic<size_t> numMergePhases_ = 0;
 
@@ -1075,11 +1080,13 @@ class CompressedExternalIdTableSorter
         MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK, mergeSpillCompression_);
   }
 
-  // The name of the file that a single merge phase spills its output blocks to.
+  // The common prefix of the names of the files that a single merge phase
+  // spills its output blocks to. Every chunk gets a file of its own below that
+  // prefix, see `CompressedIdTableBlockStorage::spillFilename`.
   //
-  // NOTE: The name has to be unique per merge phase, because the storage of a
+  // NOTE: The prefix has to be unique per merge phase, because the storage of a
   // previous merge phase may still be alive when the next one starts, and it
-  // deletes the file that it holds when it is destroyed.
+  // deletes the files that it holds.
   std::string makeSpillFilename() {
     return absl::StrCat(this->writer_.filename(), ".merge-spill.",
                         numMergePhases_.fetch_add(1));

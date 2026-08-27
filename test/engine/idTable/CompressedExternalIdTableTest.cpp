@@ -726,6 +726,58 @@ TEST(CompressedExternalIdTable, sorterManyRunsParallel) {
   EXPECT_THAT(result.table_, ::testing::ElementsAreArray(expected));
 }
 
+// The spill files of a merge phase that are currently on disk: their number and
+// their total size. Every chunk spills to a file of its own whose name starts
+// with the given `prefix`, and that file is deleted as soon as the chunk has
+// been fully consumed, see `CompressedIdTableBlockStorage::spillFilename`.
+//
+// NOTE: This tolerates a file that vanishes between being listed and being
+// measured, because the merge deletes those files while this runs.
+struct SpillFiles {
+  size_t numFiles_ = 0;
+  size_t totalSize_ = 0;
+};
+SpillFiles currentSpillFiles(const std::string& prefix) {
+  SpillFiles result;
+  ql::filesystem::path prefixAsPath{prefix};
+  auto directory = prefixAsPath.parent_path();
+  std::string base = prefixAsPath.filename().string();
+  ql::error_code errorCode;
+  for (const auto& entry : ql::filesystem::directory_iterator{
+           directory.empty() ? ql::filesystem::path{"."} : directory,
+           errorCode}) {
+    if (entry.path().filename().string().rfind(base, 0) != 0) {
+      continue;
+    }
+    auto size = ql::filesystem::file_size(entry.path(), errorCode);
+    if (!errorCode) {
+      ++result.numFiles_;
+      result.totalSize_ += static_cast<size_t>(size);
+    }
+  }
+  return result;
+}
+
+// Delete every spill file that starts with the given `prefix`, for the case
+// that a test failed before the merge could clean up after itself.
+void deleteSpillFiles(const std::string& prefix) {
+  ql::filesystem::path prefixAsPath{prefix};
+  auto directory = prefixAsPath.parent_path();
+  std::string base = prefixAsPath.filename().string();
+  ql::error_code errorCode;
+  std::vector<ql::filesystem::path> paths;
+  for (const auto& entry : ql::filesystem::directory_iterator{
+           directory.empty() ? ql::filesystem::path{"."} : directory,
+           errorCode}) {
+    if (entry.path().filename().string().rfind(base, 0) == 0) {
+      paths.push_back(entry.path());
+    }
+  }
+  for (const auto& path : paths) {
+    ql::filesystem::remove(path, errorCode);
+  }
+}
+
 // _____________________________________________________________________________
 // The merge phase spills its output blocks to a temporary file of its own, so
 // that a chunk that has run ahead of the consumer can be merged to completion
@@ -734,12 +786,12 @@ TEST(CompressedExternalIdTable, sorterManyRunsParallel) {
 // file is really written to and that it is deleted again afterwards.
 TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
   std::string filename = gtestCurrentTestName() + ".dat";
-  // The name of the file of the first merge phase, see
+  // The common prefix of the spill files of the first merge phase, see
   // `CompressedExternalIdTableSorter::makeSpillFilename`.
-  std::string spillFilename = filename + ".merge-spill.0";
-  absl::Cleanup cleanup = [&filename, &spillFilename] {
+  std::string spillPrefix = filename + ".merge-spill.0";
+  absl::Cleanup cleanup = [&filename, &spillPrefix] {
     ad_utility::deleteFile(filename, false);
-    ad_utility::deleteFile(spillFilename, false);
+    deleteSpillFiles(spillPrefix);
   };
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   IdTable input =
@@ -766,24 +818,26 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
     // several of them and therefore has to spill, because only
     // `MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK` of them stay in memory.
     auto blocks = sorter.getSortedBlocks<0>(1000);
-    // The storage creates its file while the merge is set up, which happens
-    // before the consumer has pulled a single block.
-    EXPECT_TRUE(ql::filesystem::exists(spillFilename));
-    // The chunks that this thread does not consume yet run ahead and spill, so
-    // the file grows although nothing is consumed here. Poll for that, because
-    // it happens on the threads of the merge executor.
-    bool wasWrittenTo = false;
-    for (size_t i = 0; i < 1000 && !wasWrittenTo; ++i) {
-      wasWrittenTo = ql::filesystem::file_size(spillFilename) > 0;
+    // A spill file is created with the first block that its chunk spills, so
+    // there is none before the merge has produced anything. The chunks that
+    // this thread does not consume yet run ahead and spill, so files appear
+    // although nothing is consumed here. Poll for that, because it happens on
+    // the threads of the merge executor.
+    SpillFiles spilled;
+    for (size_t i = 0; i < 1000 && spilled.totalSize_ == 0; ++i) {
+      spilled = currentSpillFiles(spillPrefix);
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    EXPECT_TRUE(wasWrittenTo);
+    EXPECT_GT(spilled.numFiles_, 0u);
+    EXPECT_GT(spilled.totalSize_, 0u);
     table = idTableFromBlockGenerator(blocks);
+    // Every chunk that was fully consumed had its file deleted, so nothing is
+    // left over even though neither the merge nor the sorter is destroyed yet.
+    EXPECT_EQ(currentSpillFiles(spillPrefix).numFiles_, 0u);
   }
   workGuard.reset();
   workers.clear();
-  // The storage deletes its file when the merge is destroyed.
-  EXPECT_FALSE(ql::filesystem::exists(spillFilename));
+  EXPECT_EQ(currentSpillFiles(spillPrefix).numFiles_, 0u);
   ASSERT_EQ(table.numRows(), input.numRows());
   EXPECT_TRUE(ql::ranges::is_sorted(table, SortByOSP{}));
 }
@@ -804,7 +858,7 @@ struct SortResultWithSpillFileSize {
 SortResultWithSpillFileSize sortWithSpillCompression(
     const IdTable& input,
     ad_utility::CompressedBlockFile::Compression compression,
-    const std::string& filename, const std::string& spillFilename) {
+    const std::string& filename, const std::string& spillPrefix) {
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   net::io_context ioContext;
   // NOTE: The `work_guard` keeps the threads alive while the sorter is still
@@ -814,15 +868,6 @@ SortResultWithSpillFileSize sortWithSpillCompression(
   for (size_t i = 0; i < 8; ++i) {
     workers.emplace_back([&ioContext] { ioContext.run(); });
   }
-
-  // The current size of the spill file, or zero if it doesn't exist. It is
-  // created when the merge starts and deleted as soon as the merge is done, so
-  // it has to be sampled while the merge runs.
-  auto currentSpillFileSize = [&spillFilename]() {
-    ql::error_code errorCode;
-    auto size = ql::filesystem::file_size(spillFilename, errorCode);
-    return errorCode ? size_t{0} : static_cast<size_t>(size);
-  };
 
   CopyableIdTable<0> table{NUM_COLS, ad_utility::testing::makeAllocator()};
   size_t spillFileSize = 0;
@@ -841,7 +886,10 @@ SortResultWithSpillFileSize sortWithSpillCompression(
       for (const auto& row : block) {
         table.push_back(row);
       }
-      spillFileSize = std::max(spillFileSize, currentSpillFileSize());
+      // The spill files exist only while their chunk is in flight, so their
+      // total size has to be sampled while the merge runs.
+      spillFileSize =
+          std::max(spillFileSize, currentSpillFiles(spillPrefix).totalSize_);
     }
   }
   workGuard.reset();
@@ -857,12 +905,12 @@ SortResultWithSpillFileSize sortWithSpillCompression(
 TEST(CompressedExternalIdTable, sorterMergeSpillCompression) {
   std::string filename = gtestCurrentTestName() + ".dat";
   // Each of the three sorters below is a fresh one, so each of them spills its
-  // first (and only) merge phase to this file, see
+  // first (and only) merge phase to files with this prefix, see
   // `CompressedExternalIdTableSorter::makeSpillFilename`.
-  std::string spillFilename = filename + ".merge-spill.0";
-  absl::Cleanup cleanup = [&filename, &spillFilename] {
+  std::string spillPrefix = filename + ".merge-spill.0";
+  absl::Cleanup cleanup = [&filename, &spillPrefix] {
     ad_utility::deleteFile(filename, false);
-    ad_utility::deleteFile(spillFilename, false);
+    deleteSpillFiles(spillPrefix);
   };
   // The columns hold few distinct values, such that the spilled blocks are
   // highly compressible and the file sizes below differ clearly.
@@ -874,10 +922,10 @@ TEST(CompressedExternalIdTable, sorterMergeSpillCompression) {
       createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS, bounds);
 
   auto uncompressed = sortWithSpillCompression(
-      input, ad_utility::NO_BLOCK_COMPRESSION, filename, spillFilename);
+      input, ad_utility::NO_BLOCK_COMPRESSION, filename, spillPrefix);
   auto compressed = sortWithSpillCompression(
-      input, ad_utility::ZSTD_DEFAULT_LEVEL, filename, spillFilename);
-  auto fast = sortWithSpillCompression(input, 1, filename, spillFilename);
+      input, ad_utility::ZSTD_DEFAULT_LEVEL, filename, spillPrefix);
+  auto fast = sortWithSpillCompression(input, 1, filename, spillPrefix);
 
   // Whatever the compression, the merge really did spill, and the result is
   // exactly the sorted input.

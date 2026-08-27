@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -432,7 +433,7 @@ TEST(CompressedIdTableBlockStorage, laterBlocksMayLandInMemory) {
   runOnStrand({&ioContext}, strand, [&] { firstProducer.storeAll(); });
   EXPECT_THAT(firstProducer.outcomes_.wasStored_,
               ::testing::ElementsAre(true, true));
-  auto sizeAfterTheSpill = ql::filesystem::file_size(storage.filename());
+  auto sizeAfterTheSpill = ql::filesystem::file_size(storage.spillFilename(0));
   EXPECT_GT(sizeAfterTheSpill, 0u);
   // Consuming the first block frees the single in-memory slot again.
   GetOutcomes gets;
@@ -444,7 +445,8 @@ TEST(CompressedIdTableBlockStorage, laterBlocksMayLandInMemory) {
   runOnStrand({&ioContext}, strand, [&] { secondProducer.storeAll(); });
   EXPECT_THAT(secondProducer.outcomes_.wasStored_,
               ::testing::ElementsAre(true, true));
-  EXPECT_EQ(ql::filesystem::file_size(storage.filename()), sizeAfterTheSpill);
+  EXPECT_EQ(ql::filesystem::file_size(storage.spillFilename(0)),
+            sizeAfterTheSpill);
   // The order across that boundary is the one in which the blocks were stored.
   runOnStrand({&ioContext}, strand, [&] { get(storage, 0, gets, true); });
   EXPECT_THAT(gets.blocks_,
@@ -477,7 +479,7 @@ TEST(CompressedIdTableBlockStorage, theProducerIsNotBlockedByALaggingConsumer) {
       producer.outcomes_.wasStored_,
       ::testing::ElementsAreArray(std::vector<bool>(numBlocks + 1, true)));
   // Only two of the blocks fit in memory, so the rest really was spilled.
-  EXPECT_GT(ql::filesystem::file_size(storage.filename()), 0u);
+  EXPECT_GT(ql::filesystem::file_size(storage.spillFilename(0)), 0u);
   GetOutcomes gets;
   runOnStrand({&ioContext}, strand, [&] { get(storage, 0, gets, true); });
   std::vector<std::vector<Row>> expected;
@@ -578,20 +580,62 @@ TEST(CompressedIdTableBlockStorage, cancelAllDoesNotAbortAnInFlightSpill) {
 
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlockStorage, theSpillFileIsCreatedAndDeleted) {
-  std::string filename = gtestCurrentTestName();
+  std::string prefix = gtestCurrentTestName();
   net::io_context ioContext;
   Strand strand = net::make_strand(ioContext.get_executor());
   {
-    // NOTE: No `absl::Cleanup` that deletes the file is required here, because
-    // deleting it is exactly the behavior of the storage that this test checks.
-    Storage<0> storage = makeStorage<0>(strand, ioContext, filename, 0);
-    EXPECT_EQ(storage.filename(), filename);
-    EXPECT_TRUE(ql::filesystem::exists(filename));
+    // NOTE: No `absl::Cleanup` that deletes the files is required here, because
+    // deleting them is exactly the behavior of the storage that this test
+    // checks.
+    Storage<0> storage = makeStorage<0>(strand, ioContext, prefix, 0);
+    EXPECT_EQ(storage.filenamePrefix(), prefix);
+    std::string fileOfRunZero = storage.spillFilename(0);
+    EXPECT_THAT(fileOfRunZero, ::testing::StartsWith(prefix));
+    // The file is created with the first block that is spilled and not before.
+    EXPECT_FALSE(ql::filesystem::exists(fileOfRunZero));
     Producer<0> producer{storage, 0, makeValues<0>(1, {{0}, {1}}, true)};
     runOnStrand({&ioContext}, strand, [&] { producer.storeAll(); });
-    EXPECT_GT(ql::filesystem::file_size(filename), 0u);
+    EXPECT_GT(ql::filesystem::file_size(fileOfRunZero), 0u);
+    // A run that never spills never creates a file at all.
+    Producer<0> emptyProducer{storage, 1, makeValues<0>(1, {}, true)};
+    runOnStrand({&ioContext}, strand, [&] { emptyProducer.storeAll(); });
+    EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(1)));
   }
-  EXPECT_FALSE(ql::filesystem::exists(filename));
+  EXPECT_FALSE(ql::filesystem::exists(prefix + ".0"));
+}
+
+// _____________________________________________________________________________
+// Every run spills to a file of its own, and `eraseRun` deletes it. The disk
+// space of this storage is therefore proportional to the runs that are in
+// flight and not to their total number, exactly like its memory.
+TEST(CompressedIdTableBlockStorage, eraseRunReclaimsTheSpillFile) {
+  std::string prefix = gtestCurrentTestName();
+  net::io_context ioContext;
+  Strand strand = net::make_strand(ioContext.get_executor());
+  // Buffer nothing, such that every block of every run is spilled.
+  Storage<0> storage = makeStorage<0>(strand, ioContext, prefix, 0);
+  absl::Cleanup cleanup = [&storage] {
+    for (size_t runIndex = 0; runIndex < 3; ++runIndex) {
+      ad_utility::deleteFile(storage.spillFilename(runIndex), false);
+    }
+  };
+  // Fill three runs, each of which then has a file of its own.
+  for (size_t runIndex = 0; runIndex < 3; ++runIndex) {
+    Producer<0> producer{storage, runIndex, makeValues<0>(1, {{0}, {1}}, true)};
+    runOnStrand({&ioContext}, strand, [&] { producer.storeAll(); });
+    EXPECT_GT(ql::filesystem::file_size(storage.spillFilename(runIndex)), 0u);
+  }
+  // Erasing a run deletes its file, and only its file.
+  runOnStrand({&ioContext}, strand, [&] { storage.eraseRun(1); });
+  EXPECT_TRUE(ql::filesystem::exists(storage.spillFilename(0)));
+  EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(1)));
+  EXPECT_TRUE(ql::filesystem::exists(storage.spillFilename(2)));
+  runOnStrand({&ioContext}, strand, [&] {
+    storage.eraseRun(0);
+    storage.eraseRun(2);
+  });
+  EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(0)));
+  EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(2)));
 }
 
 // _____________________________________________________________________________
@@ -600,13 +644,14 @@ TEST(CompressedIdTableBlockStorage, theSpillFileIsCreatedAndDeleted) {
 // `Id`s of those blocks. That is also the price of not compressing, see
 // `MERGE_PHASE_SPILL_COMPRESSION`.
 TEST(CompressedIdTableBlockStorage, theUncompressedSpillFileHasTheExactSize) {
-  std::string filename = gtestCurrentTestName();
+  std::string prefix = gtestCurrentTestName();
   net::io_context ioContext;
   Strand strand = net::make_strand(ioContext.get_executor());
   static constexpr size_t numColumns = 2;
   // Buffer nothing, such that every single block is spilled.
-  Storage<0> storage = makeStorage<0>(strand, ioContext, filename, 0,
+  Storage<0> storage = makeStorage<0>(strand, ioContext, prefix, 0,
                                       ad_utility::NO_BLOCK_COMPRESSION);
+  std::string filename = storage.spillFilename(0);
   Producer<0> producer{storage, 0,
                        makeValues<0>(numColumns, {{0, 1, 2}, {}, {3}}, true)};
   GetOutcomes gets;

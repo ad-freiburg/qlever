@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_COMPRESSEDIDTABLEBLOCKSTORAGE_H
 #define QLEVER_SRC_ENGINE_IDTABLE_COMPRESSEDIDTABLEBLOCKSTORAGE_H
 
+#include <absl/strings/str_cat.h>
+
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/post.hpp>
 #include <cstddef>
@@ -47,9 +49,15 @@ namespace net = boost::asio;
 // blocks that are still in memory and the metadata of the spilled ones in a
 // single FIFO.
 //
-// NOTE: The only bound on the spilled data is the size of the disk. The space
-// of a run is only reclaimed when the whole storage is destroyed (which deletes
-// the file), and not by `eraseRun`, because the file is append-only.
+// Each run that actually spills owns a file of its own, which is created with
+// its first spilled block and deleted again by `eraseRun`. The disk space that
+// this storage occupies is therefore proportional to the runs that are in
+// flight and not to their total number, exactly like the memory that it
+// occupies. A run that never spills never creates a file at all.
+//
+// NOTE: Once the storage was cancelled nothing calls `eraseRun` anymore (see
+// the class comment of `InOrderBlockSink`), so the files of the runs that were
+// still in flight live until the storage itself is destroyed.
 //
 // THREAD SAFETY: This class implements the CONTRACT of
 // `parallelBlockMerge::BlockStorage`: all of its member functions have to run
@@ -64,7 +72,10 @@ namespace net = boost::asio;
 // flight, because such an operation refers to it by plain pointer while its
 // blocking part runs on the `ioExecutor`. The parallel merge guarantees this,
 // because the handler of every operation transitively holds a `shared_ptr` to
-// the `ParallelMergeState` that owns the sink and thereby this storage.
+// the `ParallelMergeState` that owns the sink and thereby this storage. The
+// files are the exception: they are shared, so that an `eraseRun` cannot delete
+// a file out from under an operation that is still writing to or reading from
+// it.
 //
 // NOTE: A `getBlock` whose block has to be read back from the file is not
 // cancelled by `cancelAll`, so a consumer that aborts the merge while such a
@@ -87,8 +98,14 @@ class CompressedIdTableBlockStorage
  private:
   // A single value in the FIFO queue of a run: either a block that is still in
   // memory (where an empty `OptionalBlock` is the end-of-run sentinel), or the
-  // metadata of a block that was spilled to the file.
+  // metadata of a block that was spilled to the file of that run.
   using Entry = std::variant<OptionalBlock, compressedIdTable::BlockMetadata>;
+
+  // The file that a single run spills to. It is shared, because an operation
+  // that runs on the `ioExecutor` holds on to it while `eraseRun` may already
+  // have dropped the run, see the LIFETIME note above. The file is deleted as
+  // soon as the last of those references is gone.
+  using SharedSpillFile = std::shared_ptr<CompressedBlockFile>;
 
   // The state of a single run.
   struct Run {
@@ -99,14 +116,17 @@ class CompressedIdTableBlockStorage
     size_t numBlocksInMemory_ = 0;
     // The consumer that waits for the next value of this run, if there is one.
     GetHandler waitingConsumer_;
+    // The file of this run, created with its first spilled block and null for a
+    // run that has not spilled anything (yet).
+    SharedSpillFile spillFile_;
   };
 
   Strand strand_;
   net::any_io_executor ioExecutor_;
   AllocatorWithLimit<Id> allocator_;
   size_t maxBufferedBlocksPerRun_;
-  // NOTE: The file is deleted together with this member.
-  CompressedBlockFile file_;
+  std::string filenamePrefix_;
+  CompressedBlockFile::Compression compression_;
   HashMap<size_t, Run> runs_;
   // Set by `cancelAll`, see `InMemoryBlockStorage` for why this is checked.
   bool wasCancelled_ = false;
@@ -119,37 +139,52 @@ class CompressedIdTableBlockStorage
   // for the blocks that are read back, and the number of blocks that are kept
   // in memory per run before that run starts spilling. That number may be zero,
   // in which case every block is spilled. The `compression` decides how the
-  // spilled blocks are stored, see `CompressedBlockFile::Compression`; the
-  // spill file is short-lived and read back almost immediately, so a low level
-  // (or `NO_BLOCK_COMPRESSION`) is often faster than the default.
+  // spilled blocks are stored, see `CompressedBlockFile::Compression`; a spill
+  // file is short-lived and read back almost immediately, so a low level (or
+  // `NO_BLOCK_COMPRESSION`) is often faster than the default.
+  //
+  // NOTE: The `filenamePrefix` is not a filename but the prefix of one per run,
+  // see `spillFilename`. It has to be unique among all the storages that exist
+  // at the same time, because those files are overwritten if they exist and
+  // deleted when the run that owns them is done.
   CompressedIdTableBlockStorage(
-      Strand strand, net::any_io_executor ioExecutor, std::string filename,
-      AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerRun,
+      Strand strand, net::any_io_executor ioExecutor,
+      std::string filenamePrefix, AllocatorWithLimit<Id> allocator,
+      size_t maxBufferedBlocksPerRun,
       CompressedBlockFile::Compression compression = ZSTD_DEFAULT_LEVEL)
       : strand_{std::move(strand)},
         ioExecutor_{std::move(ioExecutor)},
         allocator_{std::move(allocator)},
         maxBufferedBlocksPerRun_{maxBufferedBlocksPerRun},
-        file_{std::move(filename), compression} {}
+        filenamePrefix_{std::move(filenamePrefix)},
+        compression_{compression} {}
 
   // The `StorageFactory` that creates such a storage, to be passed to the
   // corresponding constructor of `InOrderBlockSink`. The arguments are those of
   // the constructor above, minus the strand, which the sink supplies.
   static StorageFactory makeStorageFactory(
-      net::any_io_executor ioExecutor, std::string filename,
+      net::any_io_executor ioExecutor, std::string filenamePrefix,
       AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerRun,
       CompressedBlockFile::Compression compression = ZSTD_DEFAULT_LEVEL) {
-    return [ioExecutor = std::move(ioExecutor), filename = std::move(filename),
+    return [ioExecutor = std::move(ioExecutor),
+            filenamePrefix = std::move(filenamePrefix),
             allocator = std::move(allocator), maxBufferedBlocksPerRun,
             compression](const Strand& strand) mutable {
       return std::make_unique<CompressedIdTableBlockStorage>(
-          strand, std::move(ioExecutor), std::move(filename),
+          strand, std::move(ioExecutor), std::move(filenamePrefix),
           std::move(allocator), maxBufferedBlocksPerRun, compression);
     };
   }
 
-  // The name of the file that this storage spills to.
-  const std::string& filename() const { return file_.filename(); }
+  // The common prefix of the names of all the files of this storage.
+  const std::string& filenamePrefix() const { return filenamePrefix_; }
+
+  // The name of the file that the run with the given `runIndex` spills to. That
+  // file only exists while the run has spilled at least one block and has not
+  // been erased yet.
+  std::string spillFilename(size_t runIndex) const {
+    return absl::StrCat(filenamePrefix_, ".", runIndex);
+  }
 
   // Append the `block` to the queue of the run, spilling it if that run already
   // buffers `maxBufferedBlocksPerRun` blocks, see `BlockStorage::storeBlock`.
@@ -185,7 +220,7 @@ class CompressedIdTableBlockStorage
       serveWaitingConsumer(runIndex);
       return;
     }
-    spillBlock(runIndex, std::move(block).value(), std::move(handler));
+    spillBlock(runIndex, *run, std::move(block).value(), std::move(handler));
   }
 
   // Remove the front of the queue of the run, reading it back from the file if
@@ -203,7 +238,9 @@ class CompressedIdTableBlockStorage
     serveConsumer(*run, std::move(handler));
   }
 
-  // Drop the queue of the run, see `BlockStorage::eraseRun`.
+  // Drop the queue of the run and delete its file, see
+  // `BlockStorage::eraseRun`. This is what makes the disk space that this
+  // storage occupies proportional to the runs that are in flight.
   void eraseRun(size_t runIndex) noexcept override {
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
     // NOTE: The consumer only erases a run once it has retrieved that run's
@@ -272,7 +309,12 @@ class CompressedIdTableBlockStorage
                        GetResult{std::move(block)});
       return;
     }
+    // NOTE: A spilled entry can only exist if the run has a file, and the file
+    // is passed on as a `shared_ptr`, so a concurrent `eraseRun` cannot delete
+    // it while it is being read.
+    AD_CORRECTNESS_CHECK(run.spillFile_ != nullptr);
     readSpilledBlock(
+        run.spillFile_,
         std::get<compressedIdTable::BlockMetadata>(std::move(entry)),
         std::move(handler));
   }
@@ -291,21 +333,31 @@ class CompressedIdTableBlockStorage
     serveConsumer(run, std::move(handler));
   }
 
-  // Compress the `block` and write it to the file on `ioExecutor_`, then append
-  // its metadata to the queue of the run on `strand_`, see `finishSpill`.
+  // Compress the `block` and write it to the file of its run on `ioExecutor_`,
+  // then append its metadata to the queue of that run on `strand_`, see
+  // `finishSpill`. Create the file first if this is the run's first spill.
   //
-  // PRECONDITION: This runs on `strand_`.
-  void spillBlock(size_t runIndex, Block block, StoreHandler handler) {
-    net::post(ioExecutor_, [this, runIndex, block = std::move(block),
+  // PRECONDITION: This runs on `strand_`, and the run exists.
+  void spillBlock(size_t runIndex, Run& run, Block block,
+                  StoreHandler handler) {
+    SharedSpillFile file;
+    try {
+      file = getOrCreateSpillFile(runIndex, run);
+    } catch (...) {
+      std::move(handler)(std::current_exception(), false);
+      return;
+    }
+    net::post(ioExecutor_, [this, runIndex, file = std::move(file),
+                            block = std::move(block),
                             handler = std::move(handler)]() mutable {
       std::exception_ptr exception;
       compressedIdTable::BlockMetadata metadata;
       try {
         metadata =
-            compressedIdTable::writeBlock(file_, block, 0, block.numRows());
+            compressedIdTable::writeBlock(*file, block, 0, block.numRows());
         // The block has to become readable immediately, because its run may be
         // consumed while further blocks are still being written.
-        file_.flush();
+        file->flush();
       } catch (...) {
         exception = std::current_exception();
       }
@@ -316,6 +368,19 @@ class CompressedIdTableBlockStorage
                     std::move(handler));
       });
     });
+  }
+
+  // Return the file that the run with the given `runIndex` spills to, creating
+  // it if this is that run's first spilled block.
+  //
+  // PRECONDITION: This runs on `strand_`.
+  SharedSpillFile getOrCreateSpillFile(size_t runIndex, Run& run) {
+    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
+    if (run.spillFile_ == nullptr) {
+      run.spillFile_ = std::make_shared<CompressedBlockFile>(
+          spillFilename(runIndex), compression_);
+    }
+    return run.spillFile_;
   }
 
   // Append the `metadata` of a block that was just spilled to the queue of its
@@ -348,19 +413,22 @@ class CompressedIdTableBlockStorage
     serveWaitingConsumer(runIndex);
   }
 
-  // Read a block that was spilled back from the file on `ioExecutor_` and
-  // complete the `handler` with it on `strand_`.
+  // Read a block that was spilled back from the `file` of its run on
+  // `ioExecutor_` and complete the `handler` with it on `strand_`. The `file`
+  // is held for the duration of the read, see `SharedSpillFile`.
   //
   // PRECONDITION: This runs on `strand_`.
-  void readSpilledBlock(compressedIdTable::BlockMetadata metadata,
+  void readSpilledBlock(SharedSpillFile file,
+                        compressedIdTable::BlockMetadata metadata,
                         GetHandler handler) {
-    net::post(ioExecutor_, [this, metadata = std::move(metadata),
+    net::post(ioExecutor_, [this, file = std::move(file),
+                            metadata = std::move(metadata),
                             handler = std::move(handler)]() mutable {
       std::exception_ptr exception;
       OptionalBlock block;
       try {
         block =
-            compressedIdTable::readBlock<NumCols>(file_, metadata, allocator_);
+            compressedIdTable::readBlock<NumCols>(*file, metadata, allocator_);
       } catch (...) {
         exception = std::current_exception();
       }
