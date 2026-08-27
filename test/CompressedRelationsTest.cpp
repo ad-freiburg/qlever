@@ -1509,3 +1509,51 @@ TEST(CompressedBlockMetadata, invariantChecks) {
   blocks.front().lastTriple_ = {V(1), V(2), V(3), V(16)};
   EXPECT_TRUE(CompressedBlockMetadata::checkInvariantsForSortedBlocks(blocks));
 }
+
+namespace {
+// Write a small permutation to `filename` and return the log output that was
+// produced while doing so. If `showProgressBar` has a value, then it is
+// explicitly passed to `CompressedRelationWriter::createPermutation`,
+// otherwise the default of that argument is used.
+std::string writePermutationAndCaptureLog(const std::string& filename,
+                                          std::optional<bool> showProgressBar) {
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  auto generator = []() -> cppcoro::generator<IdTableStatic<0>> {
+    IdTableStatic<0> buffer{4, ad_utility::testing::makeAllocator()};
+    for (int64_t i = 0; i < 10; ++i) {
+      buffer.push_back(std::vector{V(0), V(i), V(i + 1), V(0)});
+    }
+    co_yield buffer;
+  };
+  auto makeWriterAndCallback = [&filename]() {
+    return CompressedRelationWriter::WriterAndCallback{
+        std::make_unique<CompressedRelationWriter>(
+            4, ad_utility::File{filename, "w"}, 16_B),
+        [](ql::span<const CompressedRelationMetadata>) {}};
+  };
+  if (showProgressBar.has_value()) {
+    CompressedRelationWriter::createPermutation(
+        makeWriterAndCallback(), ad_utility::InputRangeTypeErased{generator()},
+        qlever::KeyOrder{0, 1, 2, 3}, {}, showProgressBar.value());
+  } else {
+    CompressedRelationWriter::createPermutation(
+        makeWriterAndCallback(), ad_utility::InputRangeTypeErased{generator()},
+        qlever::KeyOrder{0, 1, 2, 3}, {});
+  }
+  return logStream.str();
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, showProgressBarCanBeDisabled) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  // By default, the progress bar is written.
+  EXPECT_THAT(writePermutationAndCaptureLog(filename, std::nullopt),
+              ::testing::HasSubstr("Triples sorted"));
+  EXPECT_THAT(writePermutationAndCaptureLog(filename, true),
+              ::testing::HasSubstr("Triples sorted"));
+  // With `showProgressBar` set to `false`, the writer stays silent.
+  EXPECT_THAT(writePermutationAndCaptureLog(filename, false),
+              ::testing::Not(::testing::HasSubstr("Triples sorted")));
+}
