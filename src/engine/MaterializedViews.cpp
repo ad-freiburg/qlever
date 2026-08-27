@@ -535,7 +535,7 @@ MaterializedViewsManager::loadViewIntoLockedState(
   // all views. Therefore query analysis is performed when loading views.
   if (state.queryPatternCache_.analyzeView(view, qec)) {
     AD_LOG_INFO << "The materialized view '" << name
-                << "' was added to the query pattern cache." << std::endl;
+                << "' was added to the query pattern cache" << std::endl;
   }
   return view;
 }

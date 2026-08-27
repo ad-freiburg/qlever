@@ -126,7 +126,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // We can't check during sort, so reset status here
   cancellationHandle_->resetWatchDogState();
   checkCancellation();
-  AD_LOG_DEBUG << "OrderBy result computation done." << endl;
+  AD_LOG_DEBUG << "OrderBy result computation done" << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 

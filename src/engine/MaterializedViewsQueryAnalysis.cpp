@@ -364,13 +364,13 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
     AD_LOG_INFO << "Materialized view '" << view->name()
                 << "' will not be added to the query pattern cache for "
                    "pattern-based (star/chain) query rewriting. Reason: "
-                << reason << "." << std::endl;
+                << reason << std::endl;
   };
 
   const auto& parsed = view->parsedQuery();
   if (!parsed.has_value()) {
     explainIgnore(
-        "The view was built without remembering the original query string.");
+        "The view was built without remembering the original query string");
     return false;
   }
 
@@ -394,7 +394,7 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
       AD_LOG_INFO << "Materialized view '" << view->name()
                   << "' has the same cache key as the already loaded view '"
                   << it->second->view_->name()
-                  << "'. Only the latter can be matched by cache key."
+                  << "'. Only the latter can be matched by cache key"
                   << std::endl;
     }
     return inserted;

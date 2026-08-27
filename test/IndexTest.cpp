@@ -679,7 +679,18 @@ TEST(IndexTest, trivialGettersAndSetters) {
 // _____________________________________________________________________________
 TEST(IndexTest, destructorLogsUnloading) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
-  // An `Index` that still owns its `IndexImpl` logs on destruction.
+  // An `Index` that was loaded from disk logs on destruction.
+  {
+    std::optional<Index> index;
+    index.emplace(makeTestIndex("destructorLogsUnloading", "<a> <b> <c> ."));
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr("Index at destructorLogsUnloading was "
+                                     "unloaded"));
+  }
+  // An `Index` that was never loaded from disk (e.g. one that was just built)
+  // stays silent on destruction.
   {
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
     std::optional<Index> index;
@@ -687,16 +698,15 @@ TEST(IndexTest, destructorLogsUnloading) {
     index->setOnDiskBase("someIndexBase");
     index.reset();
     EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr("Index at someIndexBase was unloaded"));
+                ::testing::Not(::testing::HasSubstr("was unloaded")));
   }
   // A moved-from `Index` no longer owns an `IndexImpl` and therefore stays
   // silent on destruction. We reset it while `movedInto` is still alive, so no
   // unload message may be logged at that point.
   {
-    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
     std::optional<Index> index;
-    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
-    index->setOnDiskBase("someIndexBase");
+    index.emplace(makeTestIndex("destructorLogsUnloading2", "<a> <b> <c> ."));
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
     Index movedInto{std::move(index).value()};
     index.reset();
     EXPECT_THAT(logStream.str(),

@@ -255,7 +255,7 @@ void readFreqComprList(OutputIterator iterator, size_t nofElements, off_t from,
     *iterator = transformer(codebook.at(encoded));
     ++iterator;
   });
-  AD_LOG_DEBUG << "Done reading frequency-encoded list.";
+  AD_LOG_DEBUG << "Done reading frequency-encoded list";
 }
 
 /**
@@ -316,7 +316,7 @@ void readGapComprList(OutputIterator iterator, size_t nofElements, off_t from,
     *iterator = transformer(previous);
     ++iterator;
   }
-  AD_LOG_DEBUG << "Done reading gap-encoded list.";
+  AD_LOG_DEBUG << "Done reading gap-encoded list";
 }
 
 }  // namespace textIndexReadWrite

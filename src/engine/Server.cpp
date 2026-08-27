@@ -1532,14 +1532,14 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
     AD_LOG_WARN << "A text index was loaded for the current index, but text "
                    "search will no longer work after the rebuild completes. "
                    "Restart the server using the original index to re-enable "
-                   "text search."
+                   "text search"
                 << std::endl;
   }
   if (oldManager.hasLoadedViews()) {
     AD_LOG_WARN
         << "Materialized views were loaded for the current index, but they "
            "will no longer be available after the rebuild completes. You'll "
-           "have to recompute them on the rebuilt index."
+           "have to recompute them on the rebuilt index"
         << std::endl;
   }
   // NOTE: We deliberately use the plain `runFunctionOnExecutor` and not

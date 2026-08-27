@@ -131,6 +131,10 @@ class IndexImpl {
   // If false, only PSO and POS permutations are loaded and expected.
   bool loadAllPermutations_ = true;
 
+  // True iff this index was loaded via `createFromOnDiskIndex`, as opposed to
+  // being built by `createFromFiles` or never having been populated at all.
+  bool wasLoadedFromDisk_ = false;
+
   // Pattern trick data
   bool usePatterns_ = false;
   double avgNumDistinctPredicatesPerSubject_;
@@ -577,6 +581,8 @@ class IndexImpl {
   }
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
+
+  bool wasLoadedFromDisk() const { return wasLoadedFromDisk_; }
 
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(

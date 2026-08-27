@@ -121,7 +121,7 @@ IdTable Bind::cloneSubView(const IdTableView<0>& idTable,
 Result Bind::computeResult(bool requestLaziness) {
   AD_LOG_DEBUG << "Get input to BIND operation..." << std::endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
-  AD_LOG_DEBUG << "Got input to Bind operation." << std::endl;
+  AD_LOG_DEBUG << "Got input to Bind operation" << std::endl;
 
   auto applyBind = [this](IdTable idTable, LocalVocab* localVocab) {
     return computeExpressionBind(localVocab, std::move(idTable),
@@ -156,7 +156,7 @@ Result Bind::computeResult(bool requestLaziness) {
     // new words.
     LocalVocab localVocab = subRes->getCopyOfLocalVocab();
     IdTable result = applyBind(subRes->cloneIdTable(), &localVocab);
-    AD_LOG_DEBUG << "BIND result computation done." << std::endl;
+    AD_LOG_DEBUG << "BIND result computation done" << std::endl;
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }
 

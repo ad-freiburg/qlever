@@ -144,7 +144,7 @@ Result CountAvailablePredicates::computeResult(
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
     std::shared_ptr<const Result> subresult = subtree_->getResult();
-    AD_LOG_DEBUG << "CountAvailablePredicates subresult computation done."
+    AD_LOG_DEBUG << "CountAvailablePredicates subresult computation done"
                  << std::endl;
 
     size_t width = subresult->idTableView().numColumns();
@@ -163,7 +163,7 @@ Result CountAvailablePredicates::computeResult(
 void CountAvailablePredicates::computePatternTrickAllEntities(
     IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns) const {
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
-  AD_LOG_DEBUG << "For all entities." << std::endl;
+  AD_LOG_DEBUG << "For all entities" << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
   const auto& index = getExecutionContext()->getIndex().getImpl();
@@ -255,7 +255,7 @@ void CountAvailablePredicates::computePatternTrick(
       },
       numThreads);
   AD_LOG_DEBUG << "Using " << patternCounts.size()
-               << " patterns for computing the result." << std::endl;
+               << " patterns for computing the result" << std::endl;
   // the number of predicates counted with patterns
   size_t numPredicatesSubsumedInPatterns = 0;
 

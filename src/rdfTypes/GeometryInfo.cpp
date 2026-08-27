@@ -65,7 +65,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   if (!boundingBox.has_value() || !centroid.has_value()) {
     AD_LOG_DEBUG << "The WKT string `" << wkt
                  << "` would lead to an invalid centroid or bounding box. It "
-                    "will thus be treated as an invalid WKT literal."
+                    "will thus be treated as an invalid WKT literal"
                  << std::endl;
     return std::nullopt;
   }
@@ -74,7 +74,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   try {
     area = computeMetricArea(parsed.value());
   } catch (const InvalidPolygonError&) {
-    AD_LOG_DEBUG << "Could not compute area of WKT literal `" << wkt << "`."
+    AD_LOG_DEBUG << "Could not compute area of WKT literal `" << wkt << "`"
                  << std::endl;
   }
 

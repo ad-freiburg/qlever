@@ -539,7 +539,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
       cancellationHandle->throwIfCancelled();
     }
   }
-  AD_LOG_DEBUG << "Done creating readable result.\n";
+  AD_LOG_DEBUG << "Done creating readable result\n";
 }
 
 // _____________________________________________________________________________
