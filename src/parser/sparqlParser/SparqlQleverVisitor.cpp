@@ -158,9 +158,13 @@ void Visitor::checkBlankNodeLabelIsNotReusedAcrossBasicGraphPatterns(
   // have been used anywhere else in the query before.
   if (blankNodeLabelsInCurrentBasicGraphPattern_.insert(label).second &&
       !allBlankNodeLabels_.insert(label).second) {
-    reportError(ctx, absl::StrCat("The blank node label \"", label,
-                                  "\" may not be used in more than one basic "
-                                  "graph pattern. Use a variable instead."));
+    reportError(
+        ctx,
+        absl::StrCat("The blank node label \"", label,
+                     "\" may not be used in more than one basic graph "
+                     "pattern. Consistently replace that label by a variable "
+                     "if you want the occurrences to match, or by distinct "
+                     "variables or blank node labels if not."));
   }
 }
 
