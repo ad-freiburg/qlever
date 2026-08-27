@@ -106,8 +106,7 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::checkValueExistsInGraph(
     const std::optional<Variable>& graphVariable,
     const TripleComponent& tripleComponent) {
   auto variable = makeInternalVariable("x");
-  auto valuesClause = ad_utility::makeExecutionTree<Values>(
-      qec, parsedQuery::SparqlValues{{variable}, {{tripleComponent}}});
+  auto valuesClause = makeValuesForSingleValue(qec, variable, tripleComponent);
   return ad_utility::makeExecutionTree<EmptyPath>(
       qec, std::move(variable), std::move(activeGraphs), graphVariable,
       std::move(valuesClause), 0);
