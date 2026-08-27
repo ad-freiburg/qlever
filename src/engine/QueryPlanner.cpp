@@ -43,6 +43,7 @@
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
 #include "engine/PermutationSelector.h"
+#include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
 #include "engine/Service.h"
@@ -159,11 +160,7 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   // 2. Only non-aggretating aliases without GROUP BY.
   // Note: When a GROUP BY is present, then all aliases have to be aggregating,
   // this is handled correctly in all cases.
-  bool doGroupBy = !pq._groupByVariables.empty() ||
-                   patternTrickTuple.has_value() ||
-                   ql::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
-                     return alias._expression.containsAggregate();
-                   });
+  bool doGroupBy = pq.isAggregatingQuery() || patternTrickTuple.has_value();
 
   // Set TEXTLIMIT
   textLimit_ = pq._limitOffset.textLimit_;
@@ -340,7 +337,7 @@ std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
       }
     }
     distinctPlan._qet =
-        makeExecutionTree<Distinct>(_qec, parent._qet, keepIndices);
+        QueryExecutionTree::createDistinctTree(parent._qet, keepIndices);
     added.push_back(distinctPlan);
   }
   return added;
@@ -602,7 +599,7 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
   // The `filter` rule never adds blank nodes.
   AD_CORRECTNESS_CHECK(bn.numBlocksUsed() == 0u);
   return result;
-};
+}
 
 // Helper function for `handleRepeatedVariables` below. Replace a single
 // position of the `scanTriple`, denoted by the `rewritePosition` by a new
@@ -876,7 +873,8 @@ auto QueryPlanner::seedWithScansAndText(
             "to confusing semantics. Please upgrade your query to the new "
             "syntax 'SERVICE ",
             SPATIAL_SEARCH_IRI,
-            " { ... }'. For more information, please see the QLever Wiki."));
+            " { ... }'. For more information, please see the QLever Docs "
+            "(https://docs.qlever.dev/geosparql/)."));
       }
       pushPlan(plan);
       continue;
@@ -1417,8 +1415,16 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
 
+      // In `SeedSubstitutesOnly` mode there are no joining rounds afterwards
+      // that could complete a partial `SpatialJoin`. Therefore only enforced
+      // substitutes may be applied there, because they are complete as soon as
+      // `plan` is attached. A non-enforced substitute would stay incomplete
+      // forever and could still win the final plan selection via its dummy
+      // cost estimate.
       const bool allowSubstitutes = mode == FilterMode::KeepUnfiltered ||
-                                    mode == FilterMode::ReplaceUnfiltered;
+                                    mode == FilterMode::ReplaceUnfiltered ||
+                                    (mode == FilterMode::SeedSubstitutesOnly &&
+                                     filterAndSubst.forceSubstitution_);
       if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
           (filterAndSubst.filter_.expression_.containedVariables().empty() ||
            ql::ranges::any_of(
@@ -1434,13 +1440,30 @@ void QueryPlanner::applyFiltersIfPossible(
           mergeSubtreePlanIds(newPlan, newPlan, plan);
           newPlan.type = plan.type;
           newPlan.containsFilterSubstitute_ = true;
-          addedPlans.push_back(newPlan);
         }
+        // If we need to enforce substitution, replace `plan` with our first
+        // candidate. This is not done in all cases, because an incomplete
+        // `SpatialJoin` would not get a join partner if `plan` would be
+        // removed.
+        if (!substPlans.empty() && filterAndSubst.forceSubstitution_) {
+          plan = std::move(substPlans.front());
+          substPlans.erase(substPlans.begin());
+        }
+        ql::ranges::move(substPlans, std::back_inserter(addedPlans));
         continue;
       }
 
-      const bool applyAll =
+      constexpr bool applyAll =
           mode == FilterMode::ApplyAllFiltersAndReplaceUnfiltered;
+      if constexpr (mode == FilterMode::SeedSubstitutesOnly) {
+        continue;
+      } else if constexpr (!applyAll) {
+        if (filterAndSubst.forceSubstitution_) {
+          // An enforced substitute must have already been replaced by now. Do
+          // not generate a regular `FILTER` for it.
+          continue;
+        }
+      }
       if (applyAll ||
           ql::ranges::all_of(
               filterAndSubst.filter_.expression_.containedVariables(),
@@ -1556,6 +1579,13 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   // for each index scan with different permutations.
   dpTab.push_back(std::move(connectedComponent));
   size_t numSeeds = findUniqueNodeIds(dpTab.back(), false);
+
+  if (numSeeds < 2) {
+    // Apply filter substitutes also in cases with less than two seeds
+    // (currently used for `SpatialJoin` with a fixed-value side).
+    applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(dpTab.back(),
+                                                            filters);
+  }
 
   for (size_t k = 2; k <= numSeeds; ++k) {
     AD_LOG_TRACE << "Producing plans that unite " << k << " triples."
@@ -1673,15 +1703,23 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     const FiltersAndOptionalSubstitutes& filters,
     const TextLimitVec& textLimits, const TripleGraph& tg,
     ReplacementPlans&& replacementPlans) const {
-  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(connectedComponent,
-                                                        filters);
-  applyTextLimitsIfPossible(connectedComponent, textLimits, true);
   const size_t numSeeds =
       findUniqueNodeIds(connectedComponent, !replacementPlans.empty());
   if (numSeeds <= 1) {
-    // Only 0 or 1 nodes in the input, nothing to plan.
+    // Only 0 or 1 nodes in the input, nothing to plan. As in the dynamic
+    // programming planner, only enforced filter substitutes may be applied
+    // here: there are no joining rounds that could complete a partial
+    // `SpatialJoin`, so a non-enforced substitute would stay incomplete.
+    applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(connectedComponent,
+                                                            filters);
+    applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
+        connectedComponent, filters);
+    applyTextLimitsIfPossible(connectedComponent, textLimits, true);
     return connectedComponent;
   }
+  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(connectedComponent,
+                                                        filters);
+  applyTextLimitsIfPossible(connectedComponent, textLimits, true);
 
   // Intermediate variables that will be filled by the `greedyStep` lambda
   // below.
@@ -1750,28 +1788,42 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
 
 // _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
-    const std::vector<SparqlFilter>& filters) const {
+    const std::vector<SparqlFilter>& filters) {
   FiltersAndOptionalSubstitutes plans;
   plans.reserve(filters.size());
 
   for (const auto& [i, filterExpression] :
        ::ranges::views::enumerate(filters)) {
-    // Check if the filter expression is suitable for spatial join optimization
-    auto sjConfig = rewriteFilterToSpatialJoinConfig(filterExpression);
-    if (!sjConfig.has_value()) {
+    // Check if the filter expression is suitable for spatial join rewriting.
+    auto sj = rewriteFilterToSpatialJoin(
+        filterExpression, _qec, [this] { return generateUniqueVarName(); });
+    if (!sj) {
       plans.push_back({filterExpression, std::nullopt});
     } else {
-      // Construct spatial join
-      auto plan = makeSubtreePlan<SpatialJoin>(
-          _qec, sjConfig.value(), std::nullopt, std::nullopt, true);
-      // Mark that this subtree plan handles (that is, substitutes) the filter
+      // Substitution of a `SpatialJoin` plan may be forced only if attaching
+      // one more child completes it.
+      bool forceSubstitution = sj->getChildren().size() == 1;
+      auto plan = makeSubtreePlan(std::move(sj));
+      // Mark that this subtree plan handles (that is, substitutes) the filter.
       plan._idsOfIncludedFilters |= 1ULL << i;
       plan.containsFilterSubstitute_ = true;
-      plans.push_back({filterExpression, std::move(plan)});
+      plans.push_back({filterExpression, std::move(plan), forceSubstitution});
     }
   }
   return plans;
-};
+}
+
+// _____________________________________________________________________________
+QueryPlanner::FiltersAndOptionalSubstitutes
+QueryPlanner::wrapFiltersWithoutSubstitutes(
+    const std::vector<SparqlFilter>& filters) {
+  FiltersAndOptionalSubstitutes plans;
+  plans.reserve(filters.size());
+  for (const auto& filter : filters) {
+    plans.push_back({filter, std::nullopt});
+  }
+  return plans;
+}
 
 // _____________________________________________________________________________
 std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
@@ -2204,7 +2256,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
     }
   };
   return ql::ranges::min_element(lastRow, compare) - lastRow.begin();
-};
+}
 
 // _________________________________________________________________________________
 size_t QueryPlanner::findSmallestExecutionTree(
@@ -2476,6 +2528,14 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
       return;
     }
 
+    // Don't distribute over a UNION that has a LIMIT or OFFSET attached to it.
+    // Such a LIMIT/OFFSET applies to the union of both children and can neither
+    // be pushed into the individual children nor be applied to the result of
+    // the join, so the optimization is simply not applicable here.
+    if (!unionOperation->getLimitOffset().isUnconstrained()) {
+      return;
+    }
+
     auto findJoinCandidates = [this, flipped](const SubtreePlan& plan1,
                                               const SubtreePlan& plan2,
                                               const JoinColumns& jcs) {
@@ -2643,8 +2703,7 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
   // Check if the user allows query rewriting.
   // TODO<ullingerc> Do we want to forcefully disable query rewriting if delta
   // triples are present in the current index to prevent diverging results?
-  if (!getRuntimeParameter<
-          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+  if (_qec->disableMaterializedViewRewriting()) {
     return plans;
   }
 
@@ -2853,7 +2912,8 @@ void QueryPlanner::QueryGraph::setupGraph(
         // Add additional edges to the graph representing the connections
         // between variables given by joins substituting cartesian product +
         // filter.
-        for (auto& [filter, substitute] : filtersAndOptionalSubstitutes) {
+        for (auto& [filter, substitute, forceSubstitution] :
+             filtersAndOptionalSubstitutes) {
           if (!substitute.has_value()) {
             // This filter cannot be substituted: add no edges.
             continue;
@@ -3179,7 +3239,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
   }
-};
+}
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(

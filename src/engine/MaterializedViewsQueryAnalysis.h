@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 
+#include <variant>
+
 #include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternAnalysis.h"
 #include "parser/GraphPatternOperation.h"
@@ -54,6 +56,12 @@ struct StarInfo {
   std::vector<StarArm> arms_;
 };
 
+struct ByCacheKeyInfo {
+  ViewPtr view_;
+  ad_utility::HashMap<size_t, size_t> colMapping_;
+};
+using ByCacheKeyInfoPtr = std::shared_ptr<const ByCacheKeyInfo>;
+
 // Helper class that represents a possible join replacement and indicates the
 // subset of triples it handles.
 struct MaterializedViewJoinReplacement {
@@ -79,13 +87,15 @@ class QueryPatternCache {
   // All star patterns extracted from materialized views.
   ad_utility::HashMap<ViewPtr, StarInfo> starCache_;
 
+  ad_utility::HashMap<std::string, ByCacheKeyInfoPtr> byCacheKey_;
+
   // NOTE: When a new data structure for caching is added here, the unloading
   // should also be implemented in the `removeView` method.
  public:
   // Given a materialized view, analyze the query it was created from and
   // populate the cache. This is called from
   // `MaterializedViewsManager::loadView`.
-  bool analyzeView(ViewPtr view);
+  bool analyzeView(ViewPtr view, QueryExecutionContext* qec);
 
   // Remove all pointers to a view from this `QueryPatternCache`. This is
   // required for unloading materialized views. A call to this function with a
@@ -111,6 +121,8 @@ class QueryPatternCache {
   std::shared_ptr<IndexScan> makeScanForStar(
       QueryExecutionContext* qec, ViewPtr starView,
       parsedQuery::MaterializedViewQuery::RequestedColumns columns) const;
+
+  ByCacheKeyInfoPtr lookupByCacheKey(const std::string& cacheKey) const;
 
  private:
   // Helper for `analyzeView`, that checks for a simple chain. It returns `true`
@@ -156,6 +168,22 @@ class QueryPatternCache {
 // helper.
 std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
     const ParsedQuery& parsed);
+
+// Human-readable explanation why a query is not eligible for pattern-based
+// (star/chain) rewriting, as returned by `getTriplesForPatternRewrite`.
+using RewriteIgnoreReason = std::string;
+
+// Helper for `QueryPatternCache::analyzeView` that extracts the triples of a
+// view's defining query's single `BasicGraphPattern` for further (star/chain)
+// pattern analysis, provided the query even has a shape that pattern-based
+// rewriting could apply to: no aggregation, no top-level
+// `FILTER`/`VALUES`/`DISTINCT`/`REDUCED`/`LIMIT`/`OFFSET` or
+// `FROM`/`FROM NAMED` that would restrict the on-disk rows, and exactly one
+// `BasicGraphPattern` with at least one triple (after skipping invariant
+// patterns like `BIND`). If `parsed` does not have such a shape, a
+// `RewriteIgnoreReason` explaining why is returned instead.
+std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
+getTriplesForPatternRewrite(const ParsedQuery& parsed);
 
 // Hash map for the `BIND`-to-column map.
 using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;

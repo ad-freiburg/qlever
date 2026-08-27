@@ -231,7 +231,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
                                                  scanConfig_, blockMetadata);
       return std::pair{myIndex,
                        std::optional{std::move(decompressedBlockAndMetadata)}};
-    };
+    }
 
     std::optional<IdTable> get() override {
       if (std::exchange(needsStart_, false)) {
@@ -449,7 +449,7 @@ CompressedRelationReader::lazyScan(
           locatedTriplesPerBlock_);
 
       return result;
-    };
+    }
 
     auto getPrunedBlockAndUpdateDetails(CompressedBlockMetadataIterator it) {
       auto block = getIncompleteBlock(it);
@@ -892,7 +892,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 
   // Return the result.
   return result;
-};
+}
 
 // ____________________________________________________________________________
 template <bool exactSize>
@@ -1272,7 +1272,7 @@ size_t CompressedRelationReader::getNumberOfBlockMetadataValues(
                               [](auto acc, const auto& block) {
                                 return acc + ql::ranges::size(block);
                               });
-};
+}
 
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata>
@@ -1506,15 +1506,20 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue() {
-  auto threadCount = static_cast<uint32_t>(
+ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue(
+    std::optional<size_t> numThreadsOverride) {
+  size_t requestedThreads = numThreadsOverride.value_or(
       getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
-  if (threadCount == 0) {
-    threadCount = std::thread::hardware_concurrency();
-  } else {
-    threadCount =
-        std::min<uint32_t>(threadCount, std::thread::hardware_concurrency());
-  }
+  // `hardware_concurrency` may return 0 when it cannot determine the number
+  // of hardware threads; fall back to 1, so that the queue always has a
+  // worker (with 0 workers, the tasks would never run).
+  uint32_t hardwareThreads = std::max(1u, std::thread::hardware_concurrency());
+  // Clamp in `size_t` BEFORE casting, so that a huge requested value cannot
+  // truncate to a small (or zero) thread count.
+  uint32_t threadCount = requestedThreads == 0
+                             ? hardwareThreads
+                             : static_cast<uint32_t>(std::min<size_t>(
+                                   requestedThreads, hardwareThreads));
   // Allow at least up to 4 tasks in the queue.
   uint32_t queueSize = std::max<uint32_t>(4, threadCount * 2);
   return ad_utility::TaskQueue<false>{queueSize, threadCount};
@@ -1734,7 +1739,7 @@ CPP_template(typename Range)(
   auto begin = ql::ranges::begin(blockMetadataRange);
   auto end = ql::ranges::end(blockMetadataRange);
   return begin == end || ql::ranges::next(begin) == end;
-};
+}
 
 // _____________________________________________________________________________
 CPP_template(typename Range)(

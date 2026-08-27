@@ -15,9 +15,11 @@
 #include <filesystem>
 #include <fstream>
 
+#include "./WordsAndDocsFileLineCreator.h"
 #include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
 #include "backports/StartsWithAndEndsWith.h"
@@ -449,6 +451,29 @@ TEST(IndexTest, emptyTextIndex) {
         qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
     EXPECT_EQ(result.size(), 0);
   }
+}
+
+// Regression test for #3191.
+TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <b> \"hello world\" . "
+      "<a> <b> \"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))\"^^<http://www."
+      "opengis.net/ont/geosparql#wktLiteral> ."};
+  config.createTextIndex = true;
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  config.scoringMetric = qlever::TextScoringMetric::TFIDF;
+  config.contentsOfWordsFileAndDocsfile =
+      std::pair{createWordsFileLineAsString("dummy", false, 1, 1),
+                createDocsFileLineAsString(1, "dummy")};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  IdTable helloResult =
+      qec->getIndex().getWordPostingsForTerm("hello", qec->getAllocator());
+  ASSERT_EQ(helloResult.size(), 1u);
+
+  IdTable polygonResult =
+      qec->getIndex().getWordPostingsForTerm("polygon", qec->getAllocator());
+  ASSERT_EQ(polygonResult.size(), 1u);
+  EXPECT_GT(polygonResult.at(0, 2).getDouble(), 0.0);
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
@@ -897,6 +922,26 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_EQ(uniquePredicates, 3);
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso"));
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
+
+  // Writing the same permutation with the writer-thread throttle disabled
+  // (0 means "fall back to `permutation-writer-num-threads`") must give the
+  // same result. Together with the default of 1 used by the calls above and
+  // below, this exercises the translation of the runtime parameter to the
+  // writer-thread override on both of its branches. Use a separate base name,
+  // so that the permutation that was already finalized above stays intact.
+  {
+    auto cleanupParameter = setRuntimeParameterForTest<
+        &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);
+    index.setOnDiskBase(onDiskBase + ".unthrottled");
+    auto [uniquePredicatesUnthrottled, metaUnthrottled] =
+        index.createPermutationWithoutMetadata(
+            4,
+            ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
+                tables.at(0).clone(), tables.at(1).clone()}},
+            permutation, false);
+    index.setOnDiskBase(onDiskBase);
+    EXPECT_EQ(uniquePredicatesUnthrottled, uniquePredicates);
+  }
 
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(

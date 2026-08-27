@@ -152,8 +152,7 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
 
   auto joinWithValues = [qec, &tripleComponent, &x](
                             std::shared_ptr<QueryExecutionTree> executionTree) {
-    auto valuesClause = ad_utility::makeExecutionTree<Values>(
-        qec, parsedQuery::SparqlValues{{x}, {{tripleComponent}}});
+    auto valuesClause = makeValuesForSingleValue(qec, x, tripleComponent);
     return ad_utility::makeExecutionTree<Join>(qec, std::move(executionTree),
                                                std::move(valuesClause), 0, 0);
   };

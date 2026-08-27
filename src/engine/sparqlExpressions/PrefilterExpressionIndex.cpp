@@ -1091,7 +1091,7 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
 #define INSTANTIATE_MAKE_PREFILTER(Comparison)                       \
   template std::vector<PrefilterExprVariablePair>                    \
   makePrefilterExpressionVec<Comparison>(const IdOrLocalVocabEntry&, \
-                                         const Variable&, bool, bool);
+                                         const Variable&, bool, bool)
 INSTANTIATE_MAKE_PREFILTER(CompOp::LT);
 INSTANTIATE_MAKE_PREFILTER(CompOp::LE);
 INSTANTIATE_MAKE_PREFILTER(CompOp::GE);

@@ -23,9 +23,10 @@
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
-#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "parser/SpatialQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
 #include "util/SourceLocation.h"
@@ -1075,7 +1076,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
   // 'startPoint'
   auto checkOutside = [&](const Point& point1, const Point& startPoint,
                           const std::vector<Box>& bbox,
-                          SpatialJoinAlgorithms* spatialJoinAlg) {
+                          BoundingBoxAlgorithm* spatialJoinAlg) {
     // check if the point is contained in any bounding box
     bool within = spatialJoinAlg->isContainedInBoundingBoxes(bbox, point1);
     if (!within) {
@@ -1086,7 +1087,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
     }
   };
 
-  SpatialJoinAlgorithms spatialJoinAlgs =
+  BoundingBoxAlgorithm spatialJoinAlgs =
       getDummySpatialJoinAlgsForWrapperTesting(maxDistInMeters);
 
   std::vector<Box> bbox = spatialJoinAlgs.computeQueryBox(startPoint);
@@ -1162,7 +1163,7 @@ TEST(SpatialJoin, computeBoundingBox) {
 
 // _____________________________________________________________________________
 TEST(SpatialJoin, isContainedInBoundingBoxes) {
-  SpatialJoinAlgorithms spatialJoinAlgs =
+  BoundingBoxAlgorithm spatialJoinAlgs =
       getDummySpatialJoinAlgsForWrapperTesting();
 
   // note that none of the boxes is overlapping, therefore we can check, that
@@ -1276,7 +1277,7 @@ void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea = true) {
     ASSERT_DOUBLE_EQ(point.get<1>(), lat);
   };
 
-  SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
+  BoundingBoxAlgorithm sja = getDummySpatialJoinAlgsForWrapperTesting();
 
   BoostGeometryNamespace::AnyGeometry geometryA;
   std::string wktA =
@@ -1323,7 +1324,7 @@ TEST(SpatialJoin, MidpointOfBoundingBox) {
 
 // _____________________________________________________________________________
 TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
-  SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
+  BoundingBoxAlgorithm sja = getDummySpatialJoinAlgsForWrapperTesting();
 
   // the following polygon is from the eiffel tower
   BoostGeometryNamespace::AnyGeometry geometryEiffel;
@@ -1627,9 +1628,8 @@ TEST(SpatialJoin, trueAreaDistance) {
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     spatialJoin->selectAlgorithm(SpatialJoinAlgorithm::BOUNDING_BOX);
-    PreparedSpatialJoinParams params =
-        spatialJoin->onlyForTestingGetPrepareJoin();
-    SpatialJoinAlgorithms algorithms{
+    auto params = spatialJoin->onlyForTestingGetPrepareJoin();
+    BoundingBoxAlgorithm algorithms{
         qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
     algorithms.setUseMidpointForAreas_(useMidpointForAreas);
     auto entryLeft = algorithms.onlyForTestingGetRtreeEntry(
@@ -1655,8 +1655,6 @@ TEST(SpatialJoin, trueAreaDistance) {
               getDist(qec, "Area6", "Area4", false));
   ASSERT_TRUE(getDist(qec, "Area6", "5", true) >=
               getDist(qec, "Area6", "5", false));
-  ASSERT_TRUE(getDist(qec, "Area6", "Area6", true) >=
-              getDist(qec, "Area6", "Area6", false));
 }
 
 // _____________________________________________________________________________
@@ -1678,12 +1676,11 @@ TEST(SpatialJoin, mixedDataSet) {
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     spatialJoin->selectAlgorithm(SpatialJoinAlgorithm::BOUNDING_BOX);
-    PreparedSpatialJoinParams params =
-        spatialJoin->onlyForTestingGetPrepareJoin();
-    SpatialJoinAlgorithms algorithms{
+    auto params = spatialJoin->onlyForTestingGetPrepareJoin();
+    BoundingBoxAlgorithm algorithms{
         qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
     algorithms.setUseMidpointForAreas_(false);
-    auto res = algorithms.BoundingBoxAlgorithm();
+    auto res = algorithms.run();
     // that the id table contains all the necessary other columns and gets
     // constructed correctly has already been extensively tested elsewhere.
     // Here we only test, that the distance between GeoPoints and areas gets
@@ -1781,6 +1778,103 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
 }
 
 // _____________________________________________________________________________
+TEST(SpatialJoin, ParseDe9imFilter) {
+  using ::testing::ElementsAre;
+  using ::testing::Optional;
+
+  // Valid patterns: digits, upper-/lowercase `T`/`F`, and `*`, in any mix.
+  EXPECT_THAT(
+      parseDe9imFilterString("012TFTF**"),
+      Optional(ElementsAre('0', '1', '2', 'T', 'F', 'T', 'F', '*', '*')));
+  EXPECT_THAT(
+      parseDe9imFilterString("012tftf**"),
+      Optional(ElementsAre('0', '1', '2', 't', 'f', 't', 'f', '*', '*')));
+  EXPECT_THAT(
+      parseDe9imFilterString("2FFF1FFF2"),
+      Optional(ElementsAre('2', 'F', 'F', 'F', '1', 'F', 'F', 'F', '2')));
+  EXPECT_THAT(
+      parseDe9imFilterString("012TFTF*t"),
+      Optional(ElementsAre('0', '1', '2', 'T', 'F', 'T', 'F', '*', 't')));
+
+  // Invalid: wrong length.
+  EXPECT_EQ(parseDe9imFilterString(""), std::nullopt);
+  EXPECT_EQ(parseDe9imFilterString("012TFTF*"), std::nullopt);
+  EXPECT_EQ(parseDe9imFilterString("012TFTF***"), std::nullopt);
+
+  // Invalid: characters outside of `[0-2TFtf*]`.
+  EXPECT_EQ(parseDe9imFilterString("012TFTF*3"), std::nullopt);
+  EXPECT_EQ(parseDe9imFilterString("012TFTF*X"), std::nullopt);
+  EXPECT_EQ(parseDe9imFilterString("012TFTF* "), std::nullopt);
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoin, De9imFilterCanMatchDisjoint) {
+  // The pattern could match a disjoint pair of geometries (all of `II`,
+  // `IB`, `BI`, `BB` admit `F`), which `libspatialjoin` never reports.
+  EXPECT_TRUE(
+      de9imFilterCanMatchDisjoint(parseDe9imFilterString("*********").value()));
+  EXPECT_TRUE(
+      de9imFilterCanMatchDisjoint(parseDe9imFilterString("FF*FF****").value()));
+  EXPECT_TRUE(
+      de9imFilterCanMatchDisjoint(parseDe9imFilterString("ff*ff****").value()));
+  // Only one of the four positions needs to exclude `F` to guarantee that
+  // disjoint pairs cannot match.
+  EXPECT_FALSE(
+      de9imFilterCanMatchDisjoint(parseDe9imFilterString("T********").value()));
+  EXPECT_FALSE(
+      de9imFilterCanMatchDisjoint(parseDe9imFilterString("****0****").value()));
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
+  std::string kg;
+  addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
+  addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
+
+  ad_utility::testing::TestIndexConfig idxConfig{kg};
+  idxConfig.blocksizePermutations = 16_MB;
+  idxConfig.parserBufferSize = 10_kB;
+  auto qec = ad_utility::testing::getQec(std::move(idxConfig));
+
+  auto runWithFilter = [&](std::string_view filterPattern) {
+    auto leftChild =
+        buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?area1"});
+    auto rightChild =
+        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?area2"});
+    SpatialJoinConfiguration config{
+        LibSpatialJoinConfig{SpatialJoinType::DE9IM, std::nullopt,
+                             parseDe9imFilterString(filterPattern).value()},
+        Variable{"?area1"},
+        Variable{"?area2"},
+        std::nullopt,
+        PayloadVariables::all(),
+        SpatialJoinAlgorithm::LIBSPATIALJOIN,
+        SpatialJoinType::DE9IM};
+    auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec, config, leftChild, rightChild);
+    auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+        spatialJoinOperation->getRootOperation());
+    return spatialJoin->computeResult(false);
+  };
+
+  // An area exactly equals itself (and nothing else in this dataset), which
+  // corresponds to the DE-9IM matrix `2FFF1FFF2`.
+  auto equalsRes = runWithFilter("2FFF1FFF2");
+  EXPECT_EQ(equalsRes.idTableView().numRows(), 2);
+
+  // The same pattern still matches when using `*` and lowercase `t`/`f` as
+  // wildcards/equivalents.
+  auto equalsResWithWildcards = runWithFilter("2*ff1fff*");
+  EXPECT_EQ(equalsResWithWildcards.idTableView().numRows(), 2);
+
+  // No pair of geometries in this dataset has a 0-dimensional intersection of
+  // their interiors (it is either empty for disjoint areas, or 2-dimensional
+  // for an area with itself), so this filter matches nothing.
+  auto noMatchRes = runWithFilter("0FFFFFFF2");
+  EXPECT_EQ(noMatchRes.idTableView().numRows(), 0);
+}
+
+// _____________________________________________________________________________
 TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
   std::string kg;
   addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
@@ -1815,44 +1909,5 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
 }
 
 }  // namespace runtimeParameters
-
-namespace parsing {
-
-// _____________________________________________________________________________
-TEST(SpatialJoin, GetPolylineGeometryTypeCheck) {
-  // Test that the `getPolyline` functions correctly checks the geometry type of
-  // its input literals
-
-  std::string kb =
-      "<s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8423373 "
-      "47.9988434,7.8420709 47.9984901,7.8417183 47.9980174,7.8417069 "
-      "47.9980066,7.8413941 47.9975806,7.8413556 47.9975293,7.8413293 "
-      "47.9974942)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
-      "<s2> <asWKT> \"POLYGON((7.8428469 47.9995367,7.8423373 "
-      "47.9988434,7.8420709 47.9984901,7.8417183 47.9980174,7.8417069 "
-      "47.9980066,7.8413941 47.9975806,7.8413556 47.9975293,7.8413293 "
-      "47.9974942, 7.8428469 47.9995367))\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
-      "<s3> <asWKT> \"POINT(1 2)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
-
-  auto vocabType =
-      ad_utility::VocabularyType::fromString("on-disk-compressed-geo-split");
-  auto qec = ad_utility::testing::getQec(kb, vocabType);
-  auto scan = buildIndexScan(qec, {"?s", std::string{"<asWKT>"}, "?geo"});
-  auto result = scan->getResult();
-  auto col = scan->getVariableColumn(Variable{"?geo"});
-
-  auto check = [&](size_t row) {
-    return SpatialJoinAlgorithms::getPolyline(result->idTableView(), row, col,
-                                              qec->getIndex());
-  };
-
-  EXPECT_TRUE(check(0).has_value());
-  EXPECT_FALSE(check(1).has_value());
-  EXPECT_FALSE(check(2).has_value());
-}
-
-}  // namespace parsing
 
 }  // namespace

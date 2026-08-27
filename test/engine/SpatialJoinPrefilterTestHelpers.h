@@ -24,8 +24,8 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
-#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -77,8 +77,7 @@ struct SweeperTestResult {
   // ___________________________________________________________________________
   void printResults(const ValIdToGeomName& vMap) const {
     for (const auto& [sjType, valIdLeft, valIdRight, dist] : results_) {
-      std::cout << "RESULTS: type="
-                << SpatialJoinTypeString.at(static_cast<int>(sjType))
+      std::cout << "RESULTS: type=" << sjType.toString()
                 << " left=" << vMap.at(valIdLeft)
                 << " right=" << vMap.at(valIdRight) << " dist=" << dist
                 << std::endl;
@@ -190,9 +189,8 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      SweeperResult& results,
                                      SweeperDistResult& resultDists,
                                      double withinDist) {
-  using enum SpatialJoinType;
-  sj::SweeperCfg cfg =
-      SpatialJoinAlgorithms::libspatialjoinSweeperConfig(1, 1_GB);
+  using enum SpatialJoinType::Enum;
+  sj::SweeperCfg cfg = LibspatialjoinAlgorithm::sweeperConfig(1, 1_GB);
   cfg.withinDist = withinDist;
   auto joinTypeVal = libSJConfig.joinType_;
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
@@ -202,8 +200,8 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
       results[t].push_back({WITHIN_DIST, std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
     } else {
-      results[t].push_back(
-          {static_cast<SpatialJoinType>(pred[0]), std::atoi(a), std::atoi(b)});
+      results[t].push_back({static_cast<SpatialJoinType::Enum>(pred[0]),
+                            std::atoi(a), std::atoi(b)});
     }
   };
   return cfg;
@@ -244,14 +242,17 @@ inline void runParsingAndSweeper(
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
-  // Build `SpatialJoinAlgorithms` instance from spatial join operation
+  // Build `LibspatialjoinAlgorithm` instance from spatial join operation
   auto prepared = spatialJoin->onlyForTestingGetPrepareJoin();
-  SpatialJoinAlgorithms sjAlgo{qec, prepared, config, spatialJoin};
+  auto [bbLeft, bbRight] =
+      spatialJoin->onlyForTestingGetLibspatialjoinBoundingBoxCols();
+  LibspatialjoinAlgorithm sjAlgo{qec,         prepared, config,
+                                 spatialJoin, bbLeft,   bbRight};
 
   // The regular implementation can also be tested instead of this mock version,
   // but then only limited information is available.
   if (useRegularImplementation) {
-    auto result = sjAlgo.LibspatialjoinAlgorithm();
+    auto result = sjAlgo.run();
     auto varToCol = spatialJoin->computeVariableToColumnMap();
     auto leftCol = varToCol.at(varLeft).columnIndex_;
     auto rightCol = varToCol.at(varRight).columnIndex_;
@@ -285,9 +286,9 @@ inline void runParsingAndSweeper(
   // Run first parsing step (left side)
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
         numThreadsLeft] =
-      sjAlgo.libspatialjoinParse(
-          false, {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
-          sweeper, 1, std::nullopt);
+      sjAlgo.parse(false,
+                   {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
+                   sweeper, 1, std::nullopt);
   // Due to problems in `Sweeper` when a side is empty, we don't use
   // `sweeper.setFilterBox(box);` here.
 
@@ -298,7 +299,7 @@ inline void runParsingAndSweeper(
   }
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
         numThreadsRight] =
-      sjAlgo.libspatialjoinParse(
+      sjAlgo.parse(
           true, {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt},
           sweeper, 1, prefilterBox);
 
@@ -414,7 +415,7 @@ inline void checkSweeperTestResult(
     GeoRelationWithIds key{sjType, valIdLeft, valIdRight};
     ASSERT_TRUE(expectedResultsAndDist.contains(key))
         << "Unexpected result found " << vMap.at(valIdLeft) << " "
-        << vMap.at(valIdRight) << " of type " << static_cast<size_t>(sjType);
+        << vMap.at(valIdRight) << " of type " << sjType;
     ASSERT_NEAR(expectedResultsAndDist[key], dist, 0.01);
     ++numActualResults;
   }

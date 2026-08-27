@@ -495,7 +495,7 @@ struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
       ++i;
     }
     return buffer;
-  };
+  }
 
   void start() {
     it_ = view_.begin();

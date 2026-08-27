@@ -14,10 +14,11 @@
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
-#include "engine/Result.h"
 #include "engine/VariableToColumnMap.h"
 #include "index/Index.h"
+#include "parser/data/Types.h"
 #include "util/CancellationHandle.h"
+#include "util/ConstructDeduplicationMode.h"
 #include "util/Iterators.h"
 #include "util/http/MediaTypes.h"
 
@@ -29,6 +30,15 @@ using Triples = ad_utility::sparql_types::Triples;
 using IdCache =
     ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
 using StringTriple = QueryExecutionTree::StringTriple;
+
+// Bundles the pieces shared by `evaluateTables`, `generateStringTriples`, and
+// `generateFormattedTriples`.
+struct EvaluationConfig {
+  std::reference_wrapper<const Index> index_;
+  CancellationHandle cancellationHandle_;
+  std::reference_wrapper<const QueryExecutionContext> qec_;
+  ad_utility::DeduplicationMode mode_ = ad_utility::DeduplicationMode::none();
+};
 
 // Generates triples from the CONSTRUCT query results by instantiating the
 // template triple patterns with the values from the result table produced by
@@ -45,18 +55,21 @@ class ConstructTripleGenerator {
 
   // Instantiates `templateTriples` for each row in `rowIndices` and returns a
   // lazy range of triples serialized according to `mediaType`.
+  // Duplicate triples are handled according to `config.mode_`.
   static InputRangeTypeErased<std::string> generateFormattedTriples(
-      const Triples& templateTriples, const VariableToColumnMap& variableColums,
-      const Index& index, CancellationHandle cancellationhandle,
+      const Triples& templateTriples,
+      const VariableToColumnMap& variableColumns,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-      ad_utility::MediaType mediaType);
+      ad_utility::MediaType mediaType, const EvaluationConfig& config);
 
   // Instantiates `templateTriples` for each row in `rowIndices` and returns a
   // lazy range of `StringTriple`.
+  // Duplicate triples are handled according to `config.mode_`.
   static InputRangeTypeErased<StringTriple> generateStringTriples(
-      const Triples& templateTriples, const VariableToColumnMap& variableColums,
-      const Index& index, CancellationHandle cancellationhandle,
-      InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset);
+      const Triples& templateTriples,
+      const VariableToColumnMap& variableColumns,
+      InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
+      const EvaluationConfig& config);
 
  private:
   // Returns an `IdCache` sized for `tmpl` (minimum one slot to handle
@@ -65,13 +78,13 @@ class ConstructTripleGenerator {
 
   // Lazily evaluates all `TableWithRange` values from `rowIndices`, processes
   // them in batches of `BATCH_SIZE` rows, and returns a flat range of
-  // `EvaluatedTriple`.
+  // `EvaluatedTriple`. Duplicate triples are handled according to
+  // `config.mode_`.
   static InputRangeTypeErased<EvaluatedTriple> evaluateTables(
       const Triples& templateTriples,
-      const VariableToColumnMap& variableColumns, const Index& index,
-      CancellationHandle cancellationhandle,
+      const VariableToColumnMap& variableColumns,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-      size_t rowOffset);
+      size_t rowOffset, const EvaluationConfig& config);
 
   FRIEND_TEST(MakeIdCache, emptyTemplate);
   FRIEND_TEST(MakeIdCache, singleVariable);
