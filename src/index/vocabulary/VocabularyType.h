@@ -11,6 +11,7 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPE_H
 
 #include "util/EnumWithStrings.h"
+#include "util/Random.h"
 
 namespace ad_utility {
 
@@ -69,6 +70,18 @@ class VocabularyType
     return {Enum::InMemoryUncompressed, Enum::OnDiskUncompressed,
             Enum::InMemoryCompressed, Enum::OnDiskCompressed,
             Enum::OnDiskCompressedGeoSplit};
+  }
+
+  // Return the vocabulary types that can be used to build a regular index (see
+  // `allForIndexBuilding`) as a comma-separated single string. This is the
+  // counterpart of the inherited `getListOfSupportedValues`, which also
+  // includes the "with holes" variants.
+  static std::string getListOfValuesForIndexBuilding() {
+    return absl::StrJoin(
+        allForIndexBuilding() | ql::views::transform([](Enum type) {
+          return VocabularyType{type}.toString();
+        }),
+        ", ");
   }
 
   // Return a random vocabulary type that can be used to build a regular index

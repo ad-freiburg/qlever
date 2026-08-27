@@ -26,8 +26,9 @@ class PolymorphicVocabulary;
 // `getPositionOfWord` (this includes the `PolymorphicVocabulary` which may
 // dynamically hold one of those). For a vocabulary with holes, the generic
 // implementation would use `size()` as the "one past the end" index, which
-// because of the holes is a valid index of an actual word, so such a
-// vocabulary provides its own `getPositionOfWord`.
+// because of the holes is in general much smaller than the largest index that
+// the vocabulary contains, so such a vocabulary provides its own
+// `getPositionOfWord`.
 template <typename T>
 CPP_concept HasSpecialGetPositionOfWord =
     std::is_same_v<T, PolymorphicVocabulary> ||

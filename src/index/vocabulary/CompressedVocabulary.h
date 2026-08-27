@@ -222,7 +222,10 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
   /// Open the underlying vocabulary from a file. The vocabulary must have been
-  /// created by using a `DiskWriterFromUncompressedWords`.
+  /// created by using the `WordWriter` of this class, which is a
+  /// `DiskWriterWithExplicitIndices` if the underlying vocabulary has holes
+  /// (see `VocabularyInMemoryBinSearch`) and a
+  /// `DiskWriterFromUncompressedWords` otherwise.
   void open(const std::string& filename) {
     underlyingVocabulary_.open(absl::StrCat(filename, wordsSuffix));
     ad_utility::serialization::FileReadSerializer decoderReader(
@@ -404,13 +407,15 @@ CPP_template(typename UnderlyingVocabulary,
         : underlyingWriter_{filenameWords},
           filenameDecoders_{filenameDecoders} {}
 
-    // This is a move-only type.
+    // This type can neither be copied nor moved (the user-declared destructor
+    // below suppresses the implicit move operations). It is always used
+    // directly at the place where it is created.
     DiskWriterWithExplicitIndices(const DiskWriterWithExplicitIndices&) =
         delete;
     DiskWriterWithExplicitIndices& operator=(
         const DiskWriterWithExplicitIndices&) = delete;
 
-    // Destructor, calls `finish` if that hasn't happened yet.
+    // Destructor. Call `finish` if that hasn't happened yet.
     ~DiskWriterWithExplicitIndices() {
       ad_utility::terminateIfThrows([this]() { this->finish(); },
                                     "Calling `finish` from the destructor of "
@@ -474,17 +479,16 @@ CPP_template(typename UnderlyingVocabulary,
                          DiskWriterWithExplicitIndices,
                          DiskWriterFromUncompressedWords<>>;
 
-  // Return a `unique_ptr<DiskWriter>` that can be used to create the
-  // vocabulary. For an underlying vocabulary with holes this always throws,
+  // Return a `unique_ptr<DiskWriterFromUncompressedWords>` that can be used to
+  // create the vocabulary. For an underlying vocabulary with holes this throws,
   // because such a vocabulary requires an explicit index for each word (see
   // `DiskWriterWithExplicitIndices`).
   // NOTE: The return type is the concrete writer type (and not
   // `std::unique_ptr<WordWriterBase>`), because some callers (e.g.
   // `GeoVocabulary::WordWriter`) store the result as such.
   static std::unique_ptr<DiskWriterFromUncompressedWords<>> makeDiskWriterPtr(
-      const std::string& filename) {
+      [[maybe_unused]] const std::string& filename) {
     if constexpr (detail::HasPositionOfIndex<UnderlyingVocabulary>) {
-      (void)filename;
       AD_THROW(
           "A vocabulary with holes cannot be built word by word, because the "
           "`WordWriterBase` interface cannot express the explicit indices. "

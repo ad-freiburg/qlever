@@ -368,43 +368,16 @@ TEST(CompressedVocabularyWithHoles, endIndexAndGetPositionOfWord) {
   auto indices = indicesWithHoles();
   auto vocab = createVocabularyWithHoles(filename, words, indices);
 
-  // The "one past the end" index is one larger than the largest contained
-  // index, and NOT `size()`.
-  ASSERT_EQ(vocab.endIndex(), indices.back() + 1);
-  ASSERT_NE(vocab.endIndex(), vocab.size());
-
-  using Pair = std::pair<uint64_t, uint64_t>;
-  auto getPositionOfWord = [&vocab](std::string_view word) {
-    return vocab.getPositionOfWord(word, ql::ranges::less{});
-  };
-
-  // A word that is contained yields the half-open range consisting of exactly
-  // its (non-contiguous) vocabulary index. This also has to work across the
-  // boundaries of the decoder blocks.
-  for (size_t position = 0; position < words.size(); ++position) {
-    uint64_t index = indices.at(position);
-    EXPECT_EQ(getPositionOfWord(words.at(position)), (Pair{index, index + 1}))
-        << "at position " << position;
-  }
-
-  // A word that is not contained yields the empty range at the index of the
-  // first word that is greater than it.
-  EXPECT_EQ(getPositionOfWord("aaa"), (Pair{indices.at(0), indices.at(0)}));
-  EXPECT_EQ(getPositionOfWord(absl::StrCat(words.at(0), "x")),
-            (Pair{indices.at(1), indices.at(1)}));
-
-  // A word that is greater than all contained words yields the empty range at
-  // `endIndex()`. Using `size()` here would be a bug, because it is a valid
-  // index of a word that sorts BEFORE the word that is looked up.
-  EXPECT_EQ(getPositionOfWord("zzz"),
-            (Pair{vocab.endIndex(), vocab.endIndex()}));
-  EXPECT_GT(getPositionOfWord("zzz").first, indices.back());
+  vocabulary_test::testEndIndexAndGetPositionOfWord(
+      vocab, words, indices,
+      {{"aaa", indices.at(0)},
+       {absl::StrCat(words.at(0), "x"), indices.at(1)}});
 
   // In an empty vocabulary, every word yields the empty range at index 0.
   auto emptyVocab = createVocabularyWithHoles(filename, {}, {});
   EXPECT_EQ(emptyVocab.endIndex(), 0);
   EXPECT_EQ(emptyVocab.getPositionOfWord("alpha", ql::ranges::less{}),
-            (Pair{0, 0}));
+            (std::pair<uint64_t, uint64_t>{0, 0}));
 }
 
 // _____________________________________________________________________________
