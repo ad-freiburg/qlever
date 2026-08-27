@@ -2668,7 +2668,6 @@ auto QueryPlanner::createJoinWithTransitivePath(
     if (joinCols.at(1).has_value()) {
       const auto& [secondColTransPath, secondColOther] = joinCols.at(1).value();
       AD_CONTRACT_CHECK(secondColTransPath <= 1);
-
       if (firstColTransPath == 0) {
         // Bind both columns with transitive Path on the left side.
         return makeSubtreePlan(transPathOperation->bindSides(
@@ -2685,10 +2684,9 @@ auto QueryPlanner::createJoinWithTransitivePath(
     if (firstColTransPath == 0) {
       return makeSubtreePlan(transPathOperation->bindSides(
           std::pair{otherTree, firstColOther}, std::nullopt));
-    } else {
-      return makeSubtreePlan(transPathOperation->bindSides(
-          std::nullopt, std::pair{otherTree, firstColOther}));
     }
+    return makeSubtreePlan(transPathOperation->bindSides(
+        std::nullopt, std::pair{otherTree, firstColOther}));
   }();
   mergeSubtreePlanIds(plan, a, b);
   return plan;
