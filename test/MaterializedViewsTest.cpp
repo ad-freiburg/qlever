@@ -1912,10 +1912,7 @@ constexpr std::string_view overlappingChains =
 
 // _____________________________________________________________________________
 TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
-  RewriteTestParams p = GetParam();
-  auto cleanup =
-      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
-          p.queryPlanningBudget_);
+  const std::string& writeQuery = GetParam();
 
   // Test dataset and query.
   const std::string chainTtl =
@@ -1942,7 +1939,7 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
                     h::IndexScanFromStrings("?m", "<p2>", "?o")));
 
   // Write a chain structure to the materialized view.
-  qlv.writeMaterializedView(viewName, p.writeQuery_);
+  qlv.writeMaterializedView(viewName, writeQuery);
   qlv.loadMaterializedView(viewName);
   auto chainView = std::bind_front(&viewScanSimple, viewName);
 
@@ -1980,16 +1977,11 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
 INSTANTIATE_TEST_SUITE_P(
     MaterializedViewsTest, MaterializedViewsChainRewriteTest,
     ::testing::Values(
-        // Default case.
-        RewriteTestParams{std::string{simpleChain}, 1500},
-
-        // Default query for writing the materialized view, but forced greedy
-        // planning.
-        RewriteTestParams{std::string{simpleChain}, 1},
+        std::string{simpleChain},
 
         // An additional `BIND` is ignored and the view can still be used for
         // query rewriting. Also uses a different sorting.
-        RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
+        std::string{simpleChainRenamedPlusBind}));
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {

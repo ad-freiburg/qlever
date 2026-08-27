@@ -11,7 +11,6 @@
 #include <gmock/gmock.h>
 
 #include "./MaterializedViewsTestHelpers.h"
-#include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 
 namespace {
@@ -38,12 +37,7 @@ constexpr std::string_view simpleStarJoinPredicateTwice =
 constexpr std::string_view singleTripleFromStar = "SELECT * { ?s <p1> ?o1 }";
 
 // _____________________________________________________________________________
-TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
-  RewriteTestParams p = GetParam();
-  auto cleanup =
-      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
-          p.queryPlanningBudget_);
-
+TEST_F(MaterializedViewsStarRewriteTest, starRewrite) {
   // Test dataset: subjects with predicates p1, p2, p3.
   const std::string starTtl =
       " <s1> <p1> <o1a> . \n"
@@ -68,7 +62,8 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
 
   // Write a star structure to the materialized view.
   MaterializedViewsManager manager{onDiskBase};
-  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(p.writeQuery_));
+  manager.writeViewToDisk(viewName,
+                          qlv.parseAndPlanQuery(std::string{simpleStar}));
   qlv.loadMaterializedView(viewName);
   auto starView = std::bind_front(&viewScanSimple, viewName);
 
@@ -326,16 +321,6 @@ TEST(MaterializedViewsGeneralPatternRewriteTest,
       "SELECT ?s ?o { ?s ql:contains-word \"needle\" . ?s <p2> ?o }",
       "No supported query pattern for rewriting joins was found");
 }
-
-// _____________________________________________________________________________
-INSTANTIATE_TEST_SUITE_P(MaterializedViewsTest,
-                         MaterializedViewsStarRewriteTest,
-                         ::testing::Values(
-                             // Default case.
-                             RewriteTestParams{std::string{simpleStar}, 1500},
-
-                             // Forced greedy planning.
-                             RewriteTestParams{std::string{simpleStar}, 1}));
 
 // _____________________________________________________________________________
 // Regression test for #3193: an aggregate in the view's query removes one of

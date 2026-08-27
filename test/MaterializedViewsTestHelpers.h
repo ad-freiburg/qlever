@@ -14,6 +14,7 @@
 
 #include "./QueryPlannerTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
@@ -180,18 +181,7 @@ class MaterializedViewsCacheKeyRewriteTest : public MaterializedViewsTest {
 };
 
 // _____________________________________________________________________________
-struct RewriteTestParams {
-  // Query to write the test view.
-  std::string writeQuery_;
-
-  // Enforce a query planning budget to allow testing the greedy query planner
-  // with toy examples.
-  size_t queryPlanningBudget_;
-};
-
-// _____________________________________________________________________________
-class MaterializedViewsQueryRewriteTest
-    : public ::testing::TestWithParam<RewriteTestParams> {
+class MaterializedViewsRewriteTestBase : public ::testing::Test {
  protected:
   std::stringstream log_;
   std::optional<decltype(setGlobalLoggingStreamForTesting(nullptr))>
@@ -209,31 +199,42 @@ class MaterializedViewsQueryRewriteTest
   }
 };
 
-// We make subclasses of `MaterializedViewsQueryRewriteTest` here s.t. we can
-// use different `INSTANTIATE_TEST_SUITE_P` calls for different rewriting tests.
+// Parameterized on the query used to write the test view (`qpExpect` itself
+// tests both the greedy and the DP query planner, so no budget parameter is
+// needed here).
 class MaterializedViewsChainRewriteTest
-    : public MaterializedViewsQueryRewriteTest {};
+    : public MaterializedViewsRewriteTestBase,
+      public ::testing::WithParamInterface<std::string> {};
+
+// Only one write query is tested here, so this is not parameterized.
 class MaterializedViewsStarRewriteTest
-    : public MaterializedViewsQueryRewriteTest {};
+    : public MaterializedViewsRewriteTestBase {};
 
 // _____________________________________________________________________________
-inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
-  auto& s = *os;
-  s << "write query = '" << p.writeQuery_
-    << "', budget = " << p.queryPlanningBudget_;
-}
-
-// _____________________________________________________________________________
-template <typename Query>
+// Force both the greedy and the DP query planner and check that both produce
+// `matcher`. The greedy planner may build a subtree whose cache key doesn't
+// match any materialized view, even where the DP planner's does, so callers
+// that test cache-key-based rewriting must pass `TestBothPlanners = false`
+// to only test with the DP planner.
+template <bool TestBothPlanners = true, typename Query>
 inline void qpExpect(qlever::Qlever& qlv, const Query& query,
                      ::testing::Matcher<const QueryExecutionTree&> matcher,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
-  // For query planning to produce the expected results reliably, we need to
-  // clear the cache.
-  qlv.clearQueryResultCache();
-  auto plannedQuery = qlv.parseAndPlanQuery(std::string{query});
-  EXPECT_THAT(plannedQuery.queryExecutionTree(), matcher);
+  static constexpr size_t kDpBudget = 1500;
+  auto budgets = TestBothPlanners ? std::vector<size_t>{1, kDpBudget}
+                                  : std::vector<size_t>{kDpBudget};
+  for (size_t budget : budgets) {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
+            budget);
+    // For query planning to produce the expected results reliably, we need to
+    // clear the cache.
+    qlv.clearQueryResultCache();
+    auto plannedQuery = qlv.parseAndPlanQuery(std::string{query});
+    EXPECT_THAT(plannedQuery.queryExecutionTree(), matcher)
+        << "budget = " << budget;
+  }
 };
 
 // _____________________________________________________________________________
