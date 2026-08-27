@@ -12,6 +12,7 @@
 
 #include "./MaterializedViewsTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 
 namespace {
 
@@ -444,12 +445,13 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
 }
 
 // _____________________________________________________________________________
-// Regression test: a top-level FILTER, a trailing VALUES clause, or
-// DISTINCT/REDUCED in the view's defining query restrict which rows actually
-// end up on disk, but (unlike aggregation) do not remove any variable from
-// `variableToColumnMap()`. Without an explicit check for these, a query with
-// the same star/chain pattern could be silently rewritten to read the view
-// even though its content is only a restricted subset of the join.
+// Regression test: a top-level FILTER, a trailing VALUES clause,
+// DISTINCT/REDUCED, LIMIT/OFFSET, or FROM/FROM NAMED in the view's defining
+// query restrict which rows actually end up on disk, but (unlike aggregation)
+// do not remove any variable from `variableToColumnMap()`. Without an explicit
+// check for these, a query with the same star/chain pattern could be silently
+// rewritten to read the view even though its content is only a restricted
+// subset of the join.
 TEST(MaterializedViewsStarRewriteAggregationTest,
      restrictingModifiersNotRewritten) {
   const std::string onDiskBase = gtestCurrentTestName();
@@ -496,13 +498,49 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
       "SELECT REDUCED ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o }",
       "DISTINCT or REDUCED");
 
-  // Star with LIMIT, chain with OFFSET.
-  expectNotSuitableForRewrite(
-      qlv, manager, "limitStarView",
+  // Star with LIMIT, chain with OFFSET. Writing a view whose query has a
+  // top-level `LIMIT` or `OFFSET` is meanwhile rejected by
+  // `MaterializedViewWriter`, so such views cannot be created through
+  // `writeViewToDisk` like the cases above. Views written before that check
+  // existed can still carry one, so the analysis-side check remains and is
+  // tested directly on the parsed query.
+  auto expectIgnoredForPatternRewrite = [&](const std::string& query,
+                                            std::string_view expectedReason) {
+    auto plan = qlv.parseAndPlanQuery(query);
+    EXPECT_THAT(materializedViewsQueryAnalysis::getTriplesForPatternRewrite(
+                    plan.parsedQuery()),
+                ::testing::VariantWith<
+                    materializedViewsQueryAnalysis::RewriteIgnoreReason>(
+                    ::testing::HasSubstr(expectedReason)));
+  };
+  expectIgnoredForPatternRewrite(
       "SELECT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 } LIMIT 1",
       "LIMIT or OFFSET clause");
-  expectNotSuitableForRewrite(
-      qlv, manager, "offsetChainView",
+  expectIgnoredForPatternRewrite(
       "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o } OFFSET 1",
       "LIMIT or OFFSET clause");
+
+  // Star with FROM, chain with FROM NAMED.
+  expectNotSuitableForRewrite(
+      qlv, manager, "fromStarView",
+      "SELECT ?s ?o1 ?o2 FROM <g> { ?s <p1> ?o1 . ?s <p2> ?o2 }",
+      "FROM or FROM NAMED clause");
+  expectNotSuitableForRewrite(
+      qlv, manager, "fromNamedChainView",
+      "SELECT ?s ?m ?o FROM NAMED <g> { ?s <p1> ?m . ?m <p2> ?o }",
+      "FROM or FROM NAMED clause");
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsStarRewriteAggregationTest,
+     emptyGraphPatternNotRewritten) {
+  ParsedQuery parsed;
+  parsed._rootGraphPattern._graphPatterns.emplace_back(
+      parsedQuery::BasicGraphPattern{});
+
+  auto result =
+      materializedViewsQueryAnalysis::getTriplesForPatternRewrite(parsed);
+  EXPECT_THAT(result, ::testing::VariantWith<
+                          materializedViewsQueryAnalysis::RewriteIgnoreReason>(
+                          ::testing::HasSubstr("query body is empty")));
 }

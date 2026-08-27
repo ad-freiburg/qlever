@@ -137,15 +137,18 @@ class QueryPatternCache {
 std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
     const ParsedQuery& parsed);
 
-// Human-readable explanation why a query is not eligible for pattern-based
 // rewriting, as returned by `getTriplesForPatternRewrite`.
 using RewriteIgnoreReason = std::string;
 
-// Helper for `QueryPatternCache::analyzeView`: extracts the triples of a
+// Helper for `QueryPatternCache::analyzeView` that extracts the triples of a
 // view's defining query's single `BasicGraphPattern` for further pattern
-// analysis, or returns a `RewriteIgnoreReason` if the query's shape rules
-// that out beforehand (aggregation, a top-level FILTER/VALUES/DISTINCT/
-// REDUCED/LIMIT/OFFSET, or anything but one flat `BasicGraphPattern`).
+// analysis, provided the query even has a shape that pattern-based rewriting
+// could apply to: no aggregation, no top-level
+// `FILTER`/`VALUES`/`DISTINCT`/`REDUCED`/`LIMIT`/`OFFSET` or
+// `FROM`/`FROM NAMED` that would restrict the on-disk rows, and exactly one
+// `BasicGraphPattern` with at least one triple (after skipping invariant
+// patterns like `BIND`). If `parsed` does not have such a shape, a
+// `RewriteIgnoreReason` explaining why is returned instead.
 std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed);
 

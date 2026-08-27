@@ -332,8 +332,18 @@ getTriplesForPatternRewrite(const ParsedQuery& parsed) {
   // A `LIMIT`/`OFFSET` restricts the view to an (order-dependent, arbitrary)
   // subset of the join's rows, which must not be treated as a complete source
   // for pattern-based rewriting of unrelated queries.
+  //
+  // NOTE: `isUnconstrained()` deliberately ignores a `TEXTLIMIT` clause, so a
+  // view with text-search triples and a `TEXTLIMIT` is not rejected here.
   if (!parsed._limitOffset.isUnconstrained()) {
     return "The view's query has a LIMIT or OFFSET clause";
+  }
+
+  // A `FROM` or `FROM NAMED` clause changes the dataset against which the
+  // query is evaluated (with only `FROM NAMED`, the active default graph is
+  // even empty) and thus also restricts which rows end up on disk.
+  if (!parsed.datasetClauses_.isUnconstrainedOrWithClause()) {
+    return "The view's query has a FROM or FROM NAMED clause";
   }
 
   auto graphPatternsFiltered = graphPatternInvariantFilter(parsed);
