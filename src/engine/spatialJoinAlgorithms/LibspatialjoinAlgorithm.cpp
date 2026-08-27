@@ -93,6 +93,33 @@ size_t LibspatialjoinAlgorithm::getNumThreads() {
 }
 
 // ____________________________________________________________________________
+LibspatialjoinAlgorithm::SweeperTempPath
+LibspatialjoinAlgorithm::getSweeperTempPath() const {
+  auto basePath = ql::filesystem::path(qec_->getIndex().getOnDiskBase());
+
+  std::string dir =
+      getRuntimeParameter<&RuntimeParameters::spatialJoinTmpDir_>();
+  if (dir.empty()) {
+    dir = basePath.parent_path().string();
+    // `parent_path()` returns `""` if the parent path is empty, not `"."`.
+    if (dir.empty()) {
+      dir = ".";
+    }
+  }
+
+  std::string baseName = ql::pathFilename(basePath).string();
+
+  // The prefix added before each spatialjoin file.
+  //
+  // NOTE: If `getOnDiskBase()` ends with `/` or is empty, `baseName` is empty
+  // and the spatialjoin files end up named `.spatialjoin`. We should consider
+  // disallowing empty index base names at the engine boundary.
+  std::string prefix = baseName + ".spatialjoin";
+
+  return {std::move(dir), std::move(prefix)};
+}
+
+// ____________________________________________________________________________
 sj::SweeperCfg LibspatialjoinAlgorithm::sweeperConfig(
     size_t threads, ad_utility::MemorySize totalAllowedMemory) {
   using enum SpatialJoinType::Enum;
@@ -276,23 +303,7 @@ Result LibspatialjoinAlgorithm::run() {
   }
   sweeperCfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
 
-  auto basePath = ql::filesystem::path(qec_->getIndex().getOnDiskBase());
-
-  std::string sweeperTmpPath = basePath.parent_path().string();
-
-  // `parent_path()` returns `""` if the parent path is empty, not `"."`.
-  if (sweeperTmpPath.empty()) {
-    sweeperTmpPath = ".";
-  }
-
-  std::string baseName = ql::pathFilename(basePath).string();
-
-  // The prefix added before each spatialjoin file.
-  //
-  // NOTE: If `getOnDiskBase()` ends with `/` or is empty, `baseName` is empty
-  // and the spatialjoin files end up named `.spatialjoin`. We should consider
-  // disallowing empty index base names at the engine boundary.
-  std::string sweeperPrefix = baseName + ".spatialjoin";
+  auto [sweeperTmpPath, sweeperPrefix] = getSweeperTempPath();
 
   sj::Sweeper sweeper(sweeperCfg, sweeperTmpPath, sweeperPrefix);
   ad_utility::Timer tParse{ad_utility::Timer::Started};
