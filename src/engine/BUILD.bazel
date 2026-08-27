@@ -1,0 +1,143 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `src/engine/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory, including those of `engine/idTable`, which has
+# no `CMakeLists.txt` of its own. See `//src:qlever_hdrs`.
+cc_library(
+    name = "headers",
+    hdrs = glob(["**/*.h"]),
+    strip_include_prefix = "/src",
+)
+
+qlever_cc_library(
+    name = "sortPerformanceEstimator",
+    srcs = ["SortPerformanceEstimator.cpp"],
+    deps = ["//src/index"],
+)
+
+qlever_cc_library(
+    name = "engine",
+    srcs = [
+        "Bind.cpp",
+        "CartesianProductJoin.cpp",
+        "CheckUsePatternTrick.cpp",
+        "ConstructBatchEvaluator.cpp",
+        "ConstructDeduplicator.cpp",
+        "ConstructTemplatePreprocessor.cpp",
+        "ConstructTripleGenerator.cpp",
+        "ConstructTripleInstantiator.cpp",
+        "CountAvailablePredicates.cpp",
+        "CountConnectedSubgraphs.cpp",
+        "Describe.cpp",
+        "Distinct.cpp",
+        "ExecuteUpdate.cpp",
+        "ExistsJoin.cpp",
+        "ExplicitIdTableOperation.cpp",
+        "ExportQueryExecutionTrees.cpp",
+        "ExternalValues.cpp",
+        "Filter.cpp",
+        "GraphStoreProtocol.cpp",
+        "GroupBy.cpp",
+        "GroupByHashMapOptimization.cpp",
+        "GroupByImpl.cpp",
+        "HasPredicateScan.cpp",
+        "IndexScan.cpp",
+        "Join.cpp",
+        "JoinImpl.cpp",
+        "LazyGroupBy.cpp",
+        "Load.cpp",
+        "MaterializedViews.cpp",
+        "MaterializedViewsQueryAnalysis.cpp",
+        "Minus.cpp",
+        "MultiColumnJoin.cpp",
+        "NamedResultCache.cpp",
+        "NeutralOptional.cpp",
+        "Operation.cpp",
+        "OptionalJoin.cpp",
+        "OrderBy.cpp",
+        "ParsedRequestBuilder.cpp",
+        "PathSearch.cpp",
+        "PermutationSelector.cpp",
+        "QueryExecutionContext.cpp",
+        "QueryExecutionTree.cpp",
+        "QueryPlanner.cpp",
+        "QueryPlanningCostFactors.cpp",
+        "QueryRewriteUtils.cpp",
+        "Result.cpp",
+        "RuntimeInformation.cpp",
+        "Service.cpp",
+        "Sort.cpp",
+        "SparqlProtocol.cpp",
+        "SpatialJoin.cpp",
+        "SpatialJoinAlgorithms.cpp",
+        "SpatialJoinCachedIndex.cpp",
+        "SpatialJoinParser.cpp",
+        "StringMapping.cpp",
+        "StripColumns.cpp",
+        "TextIndexScanForEntity.cpp",
+        "TextIndexScanForWord.cpp",
+        "TextLimit.cpp",
+        "TransitivePathBase.cpp",
+        "TransitivePathBinSearch.cpp",
+        "TransitivePathHashMap.cpp",
+        "Union.cpp",
+        "UpdateMetadata.cpp",
+        "Values.cpp",
+        "VariableToColumnMap.cpp",
+    ],
+    deps = [
+        ":sortPerformanceEstimator",
+        "//src/engine/sparqlExpressions",
+        "//src/global",
+        "//src/index",
+        "//src/parser",
+        "//src/util:qlever_util",
+        "//src/util/http:mediaTypes",
+        # When `--//bazel:reduced_feature_set_for_cpp17` is set, the `http`
+        # library is empty, see `//src/util/http:http`. That is the equivalent
+        # of `CMakeLists.txt` not linking it in that case: `http` requires
+        # C++20 and is only used by the `Service` and `Load` operations, which
+        # the same setting disables.
+        "//src/util/http",
+        # `Boost::program_options` is not used inside `engine` itself. The CMake
+        # build links it here so that the precompiled header of `engine`, which
+        # `qlever-server` reuses, sees the same `BOOST_PROGRAM_OPTIONS_DYN_LINK`
+        # value. Bazel has no precompiled headers, so this is only kept for
+        # symmetry with `CMakeLists.txt`.
+        "@boost.iostreams",
+        "@boost.program_options",
+        "@pbutil//:pb_util",
+        "@pbutil//:pb_util_geo",
+        "@s2geometry//:s2",
+        "@spatialjoin",
+    ],
+)
+
+qlever_cc_library(
+    name = "server",
+    srcs = ["Server.cpp"],
+    deps = [
+        ":engine",
+        ":sortPerformanceEstimator",
+        "//src/global",
+        "//src/index",
+        "//src/libqlever:qlever",
+        "//src/parser",
+        "//src/util:qlever_util",
+        "//src/util/http",
+        "//src/util/metrics",
+    ],
+)
