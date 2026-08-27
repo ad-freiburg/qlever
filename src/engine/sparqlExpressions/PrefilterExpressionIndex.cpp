@@ -555,16 +555,16 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
   auto referenceId =
       getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, localVocab);
   // Use getRangesForId (from valueIdComparators) to extract the ranges
-  // containing the relevant ValueIds.
-  // For pre-filtering with CompOp::EQ, we have to consider empty ranges.
-  // Reason: The referenceId could be contained within the bounds formed by
-  // the IDs of firstTriple_ and lastTriple_ (set false flag to keep
-  // empty ranges).
-  auto relevantIdRanges = Comparison != CompOp::EQ
-                              ? getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison)
-                              : getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison, false);
+  // containing the relevant ValueIds. Empty ranges must be kept (last
+  // argument `false`): an empty range that lies strictly between the
+  // `firstTriple_` and `lastTriple_` IDs of a block means that the block may
+  // contain matching values (`mapValueIdItPairToBlockRange` maps it to that
+  // block). This is not specific to `CompOp::EQ`. For example, if a block
+  // contains all `Int`s > 63000 followed by negative `Int`s (which are sorted
+  // after the positive ones), then the relevant range for `> 63000` is empty,
+  // but the block must still be returned.
+  auto relevantIdRanges = getRangesForId(idRange.begin(), idRange.end(),
+                                         referenceId, Comparison, false);
   return getTotalComplement
              ? detail::mapping::mapValueIdItRangesToBlockItRangesComplemented(
                    relevantIdRanges, idRange, blockRange)
