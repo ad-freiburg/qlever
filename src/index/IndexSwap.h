@@ -91,10 +91,11 @@ struct IndexSwapNaming {
 // `currentBaseName` by a staged new index: the new index is staged in the
 // directory `stagingDir` and the old index is retired to the directory
 // `retiredDir`. Both default (if `std::nullopt`) to a directory that is
-// derived from `naming` (see there). Inside these directories, and for the
-// new index after the swap, the file name of `currentBaseName` is used: the
-// new index has to end up at the base name the old index lived at, so that a
-// later start of the server loads it.
+// derived from `naming` (see there) and lies inside the directory of
+// `currentBaseName`. Inside these directories, and for the new index after
+// the swap, the file name of `currentBaseName` is used: the new index has to
+// end up at the base name the old index lived at, so that a later start of
+// the server loads it.
 //
 // The datetime in the default name of the retired directory has a granularity
 // of one second, so when swaps happen in quick succession (e.g. automatic
@@ -107,12 +108,13 @@ struct IndexSwapNaming {
 // is uniquified; an explicitly given directory that is taken remains an
 // error.
 //
-// The two directories must be relative paths (they are resolved against the
-// working directory, just like `currentBaseName`), must be empty or not exist
-// yet, and must lie inside the directory of `currentBaseName`, so that the
-// index directories are not nested ever deeper. Throws `std::runtime_error`
-// if one of these conditions is violated, and (via the `IndexSwapConfig`
-// constructor) if the resulting base names collide.
+// The two directories, when given explicitly, must be relative paths (they
+// are resolved against the working directory, just like `currentBaseName`).
+// Explicit or defaulted, they must be empty or not exist yet, and must lie
+// inside the directory of `currentBaseName`, so that the index directories
+// are not nested ever deeper. Throws `std::runtime_error` if one of these
+// conditions is violated, and (via the `IndexSwapConfig` constructor) if the
+// resulting base names collide.
 IndexSwapConfig makeIndexSwapConfig(const std::string& currentBaseName,
                                     const IndexSwapNaming& naming,
                                     std::optional<std::string> stagingDir,

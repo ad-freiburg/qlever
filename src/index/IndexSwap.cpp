@@ -109,6 +109,16 @@ IndexSwapConfig makeIndexSwapConfig(const std::string& currentBaseName,
             .string();
       };
 
+  // The default directories lie inside the directory of the current index (an
+  // explicitly given directory is resolved against the working directory
+  // instead, but has to lie inside the directory of the current index as well,
+  // see the check below).
+  auto defaultDirectory =
+      [indexDirectory =
+           fs::path{currentBaseName}.parent_path()](std::string name) {
+        return (indexDirectory / std::move(name)).string();
+      };
+
   // Uniquify the default name of the retired directory with `.1`, `.2`, ... if
   // it is already taken, see the comment on `makeIndexSwapConfig` in the header
   // for why.
@@ -129,24 +139,30 @@ IndexSwapConfig makeIndexSwapConfig(const std::string& currentBaseName,
     }
     return candidate;
   };
+  bool stagingDirWasExplicit = stagingDir.has_value();
+  bool retiredDirWasExplicit = retiredDir.has_value();
   std::string baseNameForStaging = resolveBaseName(
       std::move(stagingDir),
-      absl::StrCat(naming.stagingDirPrefix_,
-                   IndexImpl::formatIndexBuildTime(absl::Now()), ".tmp"));
-  std::string baseNameForOldIndex =
-      resolveBaseName(std::move(retiredDir),
-                      uniquify(absl::StrCat(naming.retiredDirPrefix_,
-                                            naming.retiredDirDatetime_)));
+      defaultDirectory(
+          absl::StrCat(naming.stagingDirPrefix_,
+                       IndexImpl::formatIndexBuildTime(absl::Now()), ".tmp")));
+  std::string baseNameForOldIndex = resolveBaseName(
+      std::move(retiredDir),
+      uniquify(defaultDirectory(
+          absl::StrCat(naming.retiredDirPrefix_, naming.retiredDirDatetime_))));
 
-  // Check the two base names that were derived from the arguments: they must be
-  // relative (they are resolved against the working directory, like
-  // `currentBaseName`), and their directory must be empty or not exist yet and
-  // be a subdirectory of the directory of the current index. Base names that
-  // would collide with each other or with the current index are rejected by the
-  // `IndexSwapConfig` constructor below.
-  for (const auto& baseName : {baseNameForStaging, baseNameForOldIndex}) {
+  // Check the two base names that were derived from the arguments: an
+  // explicitly given directory must be relative (it is resolved against the
+  // working directory; a default directory instead inherits the directory of
+  // `currentBaseName` and hence needs no such check), and both directories must
+  // be empty or not exist yet and be a subdirectory of the directory of the
+  // current index. Base names that would collide with each other or with the
+  // current index are rejected by the `IndexSwapConfig` constructor below.
+  for (const auto& [baseName, wasExplicit] :
+       {std::pair{baseNameForStaging, stagingDirWasExplicit},
+        std::pair{baseNameForOldIndex, retiredDirWasExplicit}}) {
     fs::path path{baseName};
-    if (!path.is_relative()) {
+    if (wasExplicit && !path.is_relative()) {
       throw std::runtime_error{absl::StrCat("The directory \"",
                                             path.parent_path().string(),
                                             "\" must be a relative path")};

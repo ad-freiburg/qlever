@@ -1073,3 +1073,49 @@ TEST(Qlever, makeIndexRebuildConfig) {
               HasSubstr("rebuild-previous-index-dir")));
   }
 }
+
+// _____________________________________________________________________________
+// The two directories that a rebuild defaults to are resolved relative to the
+// directory of the current index, not relative to the working directory. This
+// matters as soon as the index is not served from the working directory (e.g.
+// `qlever-server -i /data/wikidata/wikidata` started somewhere else): the
+// defaulted `rebuild.<datetime>.tmp` and `previous.<datetime>` have to end up
+// next to the current index, or they would be created in the working directory
+// and then immediately fail the check that they must lie inside the directory
+// of the current index. The test `makeIndexRebuildConfig` above cannot catch
+// this, because there the index is served from the bare base name `index`, for
+// which the two directories coincide.
+TEST(Qlever, makeIndexRebuildConfigWithIndexInSubdirectory) {
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
+  ql::filesystem::create_directory("indexDir");
+  Index index =
+      ad_utility::testing::makeTestIndex("indexDir/index", "<a> <b> <c> .");
+
+  // Both defaulted directories lie inside `indexDir` (and inside them, the
+  // file name of the current index is used).
+  auto config =
+      Qlever::makeIndexRebuildConfig(index, std::nullopt, std::nullopt);
+  EXPECT_EQ(config.oldIndexSource(), "indexDir/index");
+  EXPECT_EQ(config.newIndexTarget(), "indexDir/index");
+  EXPECT_THAT(config.newIndexSource(),
+              AllOf(StartsWith("indexDir/rebuild."), EndsWith(".tmp/index")));
+  EXPECT_EQ(config.oldIndexTarget(),
+            absl::StrCat("indexDir/previous.",
+                         index.getImpl().dateOfIndexBuild(), "/index"));
+
+  // An explicitly given directory is still resolved against the working
+  // directory, so it has to name the directory of the index explicitly, ...
+  EXPECT_EQ(
+      Qlever::makeIndexRebuildConfig(index, "indexDir/tmp", "indexDir/previous")
+          .newIndexSource(),
+      "indexDir/tmp/index");
+
+  // ... and is rejected if it lies outside of the directory of the current
+  // index (which is exactly what used to happen to the defaults above).
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Qlever::makeIndexRebuildConfig(index, "tmp", std::nullopt),
+      HasSubstr("not a subdirectory"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Qlever::makeIndexRebuildConfig(index, std::nullopt, "previous"),
+      HasSubstr("not a subdirectory"));
+}
