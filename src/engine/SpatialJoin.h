@@ -24,7 +24,16 @@
 using SpatialJoinBoundingBoxColumns =
     std::optional<std::pair<ColumnIndex, ColumnIndex>>;
 
-// helper struct to improve readability in prepareJoin()
+// helper struct to improve readability in prepareJoin(). Holds only the input
+// that can be produced solely by walking the query execution trees and that
+// every algorithm needs. Everything else an individual algorithm needs is
+// either already available on `SpatialJoinConfiguration` (which every
+// algorithm also has as `config_`, e.g. `joinType_`/`rightCacheName_`, or
+// `maxDist_`/`maxResults_` via `SpatialJoinConfiguration::getMaxDist()`/
+// `getMaxResults()`), or - for the bounding-box prefilter columns needed only
+// by `LibspatialjoinAlgorithm` - passed directly to that algorithm's
+// constructor instead of being bundled in here (see
+// `SpatialJoin::computeResult()`).
 struct PreparedSpatialJoinParams {
   const IdTableView<0>* const idTableLeft_;
   std::shared_ptr<const Result> resultLeft_;
@@ -35,13 +44,6 @@ struct PreparedSpatialJoinParams {
   std::vector<ColumnIndex> leftSelectedCols_;
   std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
-  std::optional<double> maxDist_;
-  std::optional<size_t> maxResults_;
-  std::optional<SpatialJoinType> joinType_;
-  std::optional<De9imFilterString> de9imFilter_;
-  std::optional<std::string> rightCacheName_;
-  SpatialJoinBoundingBoxColumns boundingBoxColsLeft_;
-  SpatialJoinBoundingBoxColumns boundingBoxColsRight_;
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -166,6 +168,11 @@ class SpatialJoin : public Operation {
     return prepareJoin();
   }
 
+  std::pair<SpatialJoinBoundingBoxColumns, SpatialJoinBoundingBoxColumns>
+  onlyForTestingGetLibspatialjoinBoundingBoxCols() const {
+    return prepareLibspatialjoinBoundingBoxCols();
+  }
+
   void checkCancellationWrapperForSpatialJoinAlgorithms() const {
     checkCancellation();
   }
@@ -197,8 +204,26 @@ class SpatialJoin : public Operation {
   // and (automatically added) the `config_.right_` variable.
   VariableToColumnMap getVarColMapPayloadVars() const;
 
-  // helper function, to initialize various required objects for both algorithms
+  // The left/right children and join variables, swapped for a `WITHIN` join
+  // (which is computed using `CONTAINS` on swapped tables, see `prepareJoin()`
+  // and `prepareLibspatialjoinBoundingBoxCols()`, the two places that need
+  // this swap).
+  struct SwappedJoinSides {
+    std::shared_ptr<QueryExecutionTree> childLeft_;
+    std::shared_ptr<QueryExecutionTree> childRight_;
+    Variable joinVarLeft_;
+    Variable joinVarRight_;
+  };
+  SwappedJoinSides getSwappedJoinSides() const;
+
+  // helper function, to initialize various required objects for all algorithms
   PreparedSpatialJoinParams prepareJoin() const;
+
+  // Column indices of precomputed bounding boxes for both sides of the join,
+  // only needed by `LibspatialjoinAlgorithm`. Computed separately from
+  // `prepareJoin()` so the other algorithms don't pay for it.
+  std::pair<SpatialJoinBoundingBoxColumns, SpatialJoinBoundingBoxColumns>
+  prepareLibspatialjoinBoundingBoxCols() const;
 
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
