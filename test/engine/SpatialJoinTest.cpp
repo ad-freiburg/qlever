@@ -321,13 +321,18 @@ class SpatialJoinVarColParamTest
     if (addDist) {
       dist = Variable{"?distOfTheTwoObjectsAddedInternally"};
     }
+    // `joinType` only applies to the `LIBSPATIALJOIN` algorithm; other
+    // algorithms use a plain `MaxDistanceConfig`, like `SpatialQuery` does.
     // `maxDist_` is only meaningful (and only allowed by
     // `LibSpatialJoinConfig`'s invariant) for `WITHIN_DIST`.
-    LibSpatialJoinConfig task{joinType,
-                              joinType == SpatialJoinType::WITHIN_DIST
-                                  ? std::optional<double>{0}
-                                  : std::nullopt,
-                              std::nullopt};
+    SpatialJoinTask task = MaxDistanceConfig{0};
+    if (alg == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+      task = LibSpatialJoinConfig{joinType,
+                                  joinType == SpatialJoinType::WITHIN_DIST
+                                      ? std::optional<double>{0}
+                                      : std::nullopt,
+                                  std::nullopt};
+    }
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
         ad_utility::makeExecutionTree<SpatialJoin>(
             qec,
