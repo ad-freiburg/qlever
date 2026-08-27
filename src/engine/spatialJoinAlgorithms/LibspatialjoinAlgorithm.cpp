@@ -135,6 +135,9 @@ sj::SweeperCfg LibspatialjoinAlgorithm::sweeperConfig(
   // result pair coming from the left side and the second one from the right
   // side (see #3068).
   cfg.forceTwoSided = true;
+  // This has to be set to a value < 0 to disable the `WITHIN_DIST`
+  // calculation in `libspatialjoin`.
+  cfg.withinDist = -1;
   cfg.writeRelCb = {};
   cfg.logCb = {};
   cfg.statsCb = {};
@@ -227,18 +230,15 @@ Result LibspatialjoinAlgorithm::run() {
   spatialJoin_.value()->runtimeInfo().addDetail("num-sweeper-threads",
                                                 NUM_THREADS);
 
-  // Set the distance for the `WITHIN_DIST` join type. This has to be set to
-  // a value < 0 to disable the `WITHIN_DIST` calculation in `libspatialjoin`.
-  double withinDist = -1;
-  if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
-    withinDist = maxDist_.value_or(0);
-    spatialJoin_.value()->runtimeInfo().addDetail("within-dist", withinDist);
-  }
-
   // Configure the sweeper.
   sj::SweeperCfg sweeperCfg =
       sweeperConfig(NUM_THREADS, qec_->getAllocator().amountMemoryLeft());
-  sweeperCfg.withinDist = withinDist;
+  if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+    AD_CORRECTNESS_CHECK(maxDist_.has_value());
+    sweeperCfg.withinDist = maxDist_.value();
+    spatialJoin_.value()->runtimeInfo().addDetail("within-dist",
+                                                  sweeperCfg.withinDist);
+  }
   // For the `DE9IM` join type, let `libspatialjoin` compute the full DE-9IM
   // matrix for every candidate pair and only report those matching the
   // user-provided filter pattern.
@@ -248,9 +248,6 @@ Result LibspatialjoinAlgorithm::run() {
     sweeperCfg.computeDE9IM = true;
     sweeperCfg.de9imFilter = ::util::geo::DE9IMFilter(de9imFilter->data());
   }
-  // Pick the callback variant once here (`joinTypeVal` is fixed for the
-  // whole sweep) instead of branching on it inside the callback, which is
-  // invoked once per candidate pair and is thus hot-path code.
   if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
     sweeperCfg.writeRelCb = [&results, &resultDists](
                                 size_t t, const char* a, size_t, const char* b,
