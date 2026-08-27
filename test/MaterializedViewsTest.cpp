@@ -1992,25 +1992,21 @@ INSTANTIATE_TEST_SUITE_P(
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsChainRewriteContextTest, ChainRewriteContext) {
-  // Regression tests for query contexts where a chain view must not be used
-  // for rewriting: a degenerate/triangular chain (same variable as subject
-  // of the first and object of the second triple, e.g. `?x p1 ?v . ?v p2
-  // ?x`) previously made planning throw instead of falling back to a regular
-  // join; a `GRAPH <g> {...}` clause must not be rewritten to a view scan,
-  // since views only represent the unconstrained default graph.
   qlv().writeMaterializedView("testViewChain", std::string{simpleChain});
   qlv().loadMaterializedView("testViewChain");
 
+  // A degenerate chain (`?a <p1> ?b . ?b <p2> ?a`) must be rejected for
+  // rewriting (thus planned normally).
   qpExpect(qlv(), "SELECT * { ?x <p1> ?v . ?v <p2> ?x }",
            h::MultiColumnJoin(h::IndexScanFromStrings("?x", "<p1>", "?v"),
                               h::IndexScanFromStrings("?v", "<p2>", "?x")));
 
-  // Outside of any `GRAPH` clause, the rewriting is still applied.
+  // Outside of any `GRAPH` clause, rewriting is applied.
   auto chainView = std::bind_front(&viewScanSimple, "testViewChain");
   qpExpect(qlv(), simpleChain, chainView("?s", "?m", "?o"));
 
-  // Inside `GRAPH <g1> {...}`, the triples are scanned normally (restricted
-  // to graph `<g1>`), not replaced by the view.
+  // Inside `GRAPH <g1> {...}`, the triples are scanned restricted to graph
+  // `<g1>` and not replaced by the view without graph constraint.
   qpExpect(
       qlv(), "SELECT * { GRAPH <g1> { ?s <p1> ?m . ?m <p2> ?o } }",
       h::Join(

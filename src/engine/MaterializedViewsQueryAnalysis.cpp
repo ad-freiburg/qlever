@@ -110,10 +110,9 @@ void QueryPatternCache::makeScansFromChainCandidates(
         if (it == simpleChainCache_.end()) {
           continue;
         }
-        // A degenerate/triangular chain (e.g. `?x <p1> ?v . ?v <p2> ?x`) would
-        // require the view's subject and object columns to both be bound to
-        // the same target variable, which `RequestedColumns` cannot express.
-        // Skip it here and let normal join planning handle it instead.
+        // A degenerate chain (`?a <p1> ?b . ?b <p2> ?a`) would require the
+        // adding a filter on top of the view `IndexScan`, which is not
+        // supported.
         if (left.s_.isVariable() &&
             left.s_.getVariable() == right.o_.getVariable()) {
           continue;

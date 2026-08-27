@@ -2685,14 +2685,11 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
     return plans;
   }
 
-  // Materialized views usable for pattern-based rewriting are always built
-  // from the plain, unconstrained default graph (a `FROM`/`FROM NAMED` or a
-  // `GRAPH` clause in the view's defining query is already rejected in
-  // `getTriplesForPatternRewrite`). Rewriting triples that are themselves
-  // inside a `GRAPH <g> {...}`/`GRAPH ?g {...}` clause or in a query with an
-  // active `FROM`/`FROM NAMED` clause to such a view would therefore ignore
-  // the actual dataset of the query being planned, so it must be skipped
-  // unless we are in that exact same unconstrained default graph context.
+  // Materialized view write queries that are allowed for pattern-based
+  // rewriting are guaranteed to use no named graph. Rewriting triples inside a
+  // `GRAPH ... { ... }` clause or in a query with an active `FROM`/`FROM NAMED`
+  // clause would therefore ignore the graph restriction and generate wrong
+  // results.
   if (activeGraphVariable_.has_value() ||
       activeDatasetClauses_.activeDefaultGraphs().has_value()) {
     return plans;
