@@ -7,9 +7,19 @@
 using std::string;
 
 // _____________________________________________________________________________
+VocabularyInMemoryBinSearch::IndicesView VocabularyInMemoryBinSearch::indices()
+    const {
+  return std::visit(
+      [](const auto& indices) -> IndicesView {
+        return {indices.data(), indices.size()};
+      },
+      indices_);
+}
+
+// _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::open(const string& fileName) {
   AD_CORRECTNESS_CHECK(
-      words_.size() == 0 && indices_.empty(),
+      words_.size() == 0 && indices().empty(),
       "Calling open on the same vocabulary twice is probably a bug");
   {
     ad_utility::serialization::FileReadSerializer file(fileName);
@@ -17,18 +27,36 @@ void VocabularyInMemoryBinSearch::open(const string& fileName) {
   }
   {
     ad_utility::serialization::FileReadSerializer idFile(fileName + ".ids");
-    idFile >> indices_;
+    idFile >> ownedIndices();
   }
+}
+
+// _____________________________________________________________________________
+std::optional<size_t> VocabularyInMemoryBinSearch::positionOfIndex(
+    uint64_t index) const {
+  auto indices = this->indices();
+  auto it = ql::ranges::lower_bound(indices, index);
+  if (it != indices.end() && *it == index) {
+    return static_cast<size_t>(it - indices.begin());
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+uint64_t VocabularyInMemoryBinSearch::indexAtPosition(size_t position) const {
+  auto indices = this->indices();
+  AD_CORRECTNESS_CHECK(position < indices.size());
+  return indices[position];
 }
 
 // _____________________________________________________________________________
 std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
     uint64_t index) const {
-  auto it = ql::ranges::lower_bound(indices_, index);
-  if (it != indices_.end() && *it == index) {
-    return words_[it - indices_.begin()];
+  auto position = positionOfIndex(index);
+  if (!position.has_value()) {
+    return std::nullopt;
   }
-  return std::nullopt;
+  return words_[position.value()];
 }
 
 // _____________________________________________________________________________
@@ -38,17 +66,28 @@ WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
     return WordAndIndex::end();
   }
   auto idx = static_cast<uint64_t>(it - words_.begin());
-  WordAndIndex result{words_[idx], indices_[idx]};
+  auto indices = this->indices();
+  WordAndIndex result{words_[idx], indices[idx]};
   if (idx > 0) {
-    result.previousIndex() = indices_[idx - 1];
+    result.previousIndex() = indices[idx - 1];
   }
   return result;
 }
 
 // _____________________________________________________________________________
+[[noreturn]] std::unique_ptr<WordWriterBase>
+VocabularyInMemoryBinSearch::makeDiskWriterPtr(
+    [[maybe_unused]] const std::string& filename) {
+  AD_THROW(
+      "A vocabulary with holes cannot be built word by word, because the "
+      "`WordWriterBase` interface cannot express the explicit indices. Such a "
+      "vocabulary can only be created by filtering an existing vocabulary.");
+}
+
+// _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::close() {
   words_.clear();
-  indices_.clear();
+  indices_.emplace<Indices>();
 }
 
 // _____________________________________________________________________________
