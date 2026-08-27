@@ -71,17 +71,20 @@ constexpr inline size_t MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK =
 // RAM in real disk I/O. A *negative* ZSTD level (`zstd --fast=5`) wins on both
 // counts.
 //
-// The wall time of the merge phase and the peak size of the spill file, for
-// 48M rows of 4 columns in 16 presorted runs with a memory limit of 192 MB, on
-// a 16-core Ryzen 9 7950X with an NVMe RAID and 128 GB of RAM:
+// The wall time of the merge phase, for 48M rows of 4 columns in 16 presorted
+// runs with a memory limit of 192 MB, on a 16-core Ryzen 9 7950X with an NVMe
+// RAID and 128 GB of RAM. NOTE: This table was measured while all the runs
+// still shared a single spill file, so its absolute numbers are the ones of
+// that scheme; it is the *ordering* of the levels that it is evidence for, see
+// below for the current numbers.
 //
-//   level | realistic Ids (9x)     | uniformly random Ids (1.5x)
-//         | 16 thr   8 thr    file | 16 thr   8 thr    file
-//   ------+------------------------+----------------------------
-//       3 | 0.58 s  0.86 s   144 MB| 1.27 s  1.65 s   855 MB
-//       1 | 0.81 s  1.01 s   143 MB| 1.06 s  1.23 s   874 MB
-//      -5 | 0.48 s  0.70 s   228 MB| 0.66 s  0.83 s  1195 MB
-//    none | 0.62 s  0.69 s  1298 MB| 0.62 s  0.69 s  1286 MB
+//   level | realistic Ids (9x) | uniformly random Ids (1.5x)
+//         | 16 thr      8 thr  | 16 thr      8 thr
+//   ------+--------------------+---------------------------
+//       3 | 0.58 s     0.86 s  | 1.27 s     1.65 s
+//       1 | 0.81 s     1.01 s  | 1.06 s     1.23 s
+//      -5 | 0.48 s     0.70 s  | 0.66 s     0.83 s
+//    none | 0.62 s     0.69 s  | 0.62 s     0.69 s
 //
 // Note that the low *positive* levels are the worst of both worlds: they cost
 // more CPU than level 3 and do not compress better. The reason is that the
@@ -93,14 +96,20 @@ constexpr inline size_t MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK =
 // found anyway: at level -5 the realistic data still compresses 5.7x, and
 // `libzstd` drops from 43 % of the profile (level 3) to 34 %.
 //
-// The 1.3 GB that `NO_BLOCK_COMPRESSION` writes never reach the disk on the
-// machine above, because the files are deleted long before the page cache would
-// write them back. That is exactly what makes it a bad default: with the driver
-// confined to a 1 GB cgroup, that variant writes ~850 MB to the device and
-// slows down to 0.69 s, while level -5 still writes nothing at all and stays at
-// 0.48 s. The file sizes in the table are the sum over the files that exist at
-// the same time, which was measured before they were reclaimed per chunk and is
-// therefore an upper bound today.
+// Since every chunk spills to a file of its own that is deleted as soon as that
+// chunk has been consumed, the choice against `NO_BLOCK_COMPRESSION` is a
+// closer call than it used to be. At 16 threads today, level -5 takes 0.48 s
+// against 0.50 s and keeps the files five times smaller (48 MB against 267 MB
+// of peak total size), which is what keeps the page cache out of the way:
+// inside a 1 GB cgroup, level -5 peaks at 588 MB of that budget and
+// `NO_BLOCK_COMPRESSION` at 788 MB, and neither writes a single byte to the
+// device anymore (before the files were reclaimed per chunk,
+// `NO_BLOCK_COMPRESSION` wrote ~1 GB there and took 0.69 s).
+//
+// So compressing is kept for the data that a real index build produces. On
+// uniformly random `Id`s, where the compression buys almost nothing,
+// `NO_BLOCK_COMPRESSION` is in fact about 8 % faster (0.55 s against 0.59 s),
+// which is a trade this default deliberately declines.
 constexpr inline CompressedBlockFile::Compression
     MERGE_PHASE_SPILL_COMPRESSION = -5;
 

@@ -53,7 +53,9 @@ namespace net = boost::asio;
 // its first spilled block and deleted again by `eraseRun`. The disk space that
 // this storage occupies is therefore proportional to the runs that are in
 // flight and not to their total number, exactly like the memory that it
-// occupies. A run that never spills never creates a file at all.
+// occupies. A run that never spills never creates a file at all. Per-run files
+// are also faster than one shared file, because appending to them no longer
+// contends for a single exclusive lock.
 //
 // NOTE: Once the storage was cancelled nothing calls `eraseRun` anymore (see
 // the class comment of `InOrderBlockSink`), so the files of the runs that were
@@ -250,7 +252,34 @@ class CompressedIdTableBlockStorage
       return;
     }
     AD_CORRECTNESS_CHECK(!iterator->second.waitingConsumer_);
+    SharedSpillFile file = std::move(iterator->second.spillFile_);
     runs_.erase(iterator);
+    if (file == nullptr) {
+      return;
+    }
+    // IMPORTANT: Closing and unlinking the file blocks, and the cost of the
+    // unlink grows with the number of page-cache pages that the file still
+    // holds (measured at roughly 78 microseconds per megabyte), so the last
+    // reference to it must not die on the strand, which nothing may block. For
+    // uniformly distributed `Id`s, whose blocks hardly compress, doing this
+    // here instead of on the `ioExecutor_` costs 14 % of the whole merge.
+    ad_utility::terminateIfThrows(
+        [this, file = std::move(file)]() mutable {
+          try {
+            net::post(ioExecutor_, [file = std::move(file)]() mutable {
+              // NOTE: A handler must not throw, and the destructor of a
+              // `CompressedBlockFile` may (it deletes the file).
+              ad_utility::terminateIfThrows(
+                  [&file] { file.reset(); },
+                  "Deleting the spill file of a run failed.");
+            });
+          } catch (...) {
+            // The `post` could not be allocated, so the file is deleted right
+            // here after all, which blocks the strand. That can only happen
+            // once memory is exhausted.
+          }
+        },
+        "Deleting the spill file of a run failed.");
   }
 
   // Complete every waiting consumer with a cancelled `GetResult`, see
