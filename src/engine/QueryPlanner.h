@@ -175,6 +175,13 @@ class QueryPlanner {
     SparqlFilter filter_;
     std::optional<SubtreePlan> substitute_;
 
+    // Enforce filter substitution. Replace the existing plan by the filtered
+    // one instead of adding the filtered plan as a candidate.
+    //
+    // NOTE: This may not be used for a `SpatialJoin` that has no child yet, as
+    // it will otherwise never have its second child attached.
+    bool forceSubstitution_ = false;
+
     bool hasSubstitute() const { return substitute_.has_value(); }
   };
 
@@ -366,7 +373,14 @@ class QueryPlanner {
   // filters with the corresponding substitute subtree plan. This is currently
   // used to translate GeoSPARQL filters to spatial join operations.
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      const std::vector<SparqlFilter>& filters) const;
+      const std::vector<SparqlFilter>& filters);
+
+  // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
+  // substitutes. This is sufficient for the filter modes that never apply
+  // substitutes and avoids constructing throwaway substitute plans (which
+  // would also consume internal variable names).
+  static FiltersAndOptionalSubstitutes wrapFiltersWithoutSubstitutes(
+      const std::vector<SparqlFilter>& filters);
 
   // TODO<RobinTF> Extract to dedicated module, this has little to do with
   // actual query planning.
@@ -550,6 +564,11 @@ class QueryPlanner {
     ReplaceUnfiltered,
     // Same as ReplaceUnfiltered, but do not apply filter substitutes.
     ReplaceUnfilteredNoSubstitutes,
+    // Only apply filter substitutes, but do not apply regular filters.
+    // Required by the dynamic programming approach for a connected component
+    // with fewer than 2 seeds, where a substitute is applicable. Currently
+    // needed for a `SpatialJoin` substitute with a fixed-value side.
+    SeedSubstitutesOnly,
     // Apply all filters (also the nonmatching ones) and replace the unfiltered
     // plans. This has to be called at the end of parsing a group graph pattern
     // where we have to make sure that all filters are applied.
@@ -695,8 +714,11 @@ class QueryPlanner {
     // create no single binding for a variable "by accident".
     ad_utility::HashSet<Variable> boundVariables_{};
 
-    // We remember the potential filter substitutions so we can avoid
-    // unnecessarily recomputing them.
+    // The filters of the `rootPattern_`, wrapped for `applyFiltersIfPossible`.
+    // No substitutes are computed here: this member is only used with
+    // `FilterMode::ApplyAllFiltersAndReplaceUnfiltered`, which never applies
+    // substitutes. The substitutes for the actual planning are seeded in
+    // `fillDpTab`.
     FiltersAndOptionalSubstitutes filtersAndSubst_;
 
     // ________________________________________________________________________
@@ -706,7 +728,7 @@ class QueryPlanner {
           rootPattern_{rootPattern},
           qec_{planner._qec},
           filtersAndSubst_{
-              planner.seedFilterSubstitutes(rootPattern->_filters)} {}
+              wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions
