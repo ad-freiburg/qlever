@@ -347,12 +347,16 @@ class TransitivePathImpl : public TransitivePathBase {
       LocalVocab mergedVocab = std::move(startColumn.vocab_);
       mergedVocab.mergeWith(edgesVocab);
 
-      using TableNodes = std::remove_cv_t<
-          std::remove_reference_t<decltype(targetColumn->nodes_)>>;
-      auto targetRange = ad_utility::rangeToOptional(
+      // Get the type of the actual nodes inside each table column and package
+      // it into an `any_view` range to ease handling cases where no target is
+      // given.
+      using TargetRangeType =
+          ::ranges::any_view<std::optional<::ranges::range_value_t<
+              decltype(std::declval<::ranges::range_value_t<Node>>().nodes_)>>>;
+      auto targetRange =
           targetColumn.has_value()
-              ? std::optional<TableNodes>(std::move(targetColumn->nodes_))
-              : std::optional<TableNodes>());
+              ? TargetRangeType(targetColumn->nodes_)
+              : TargetRangeType(::ranges::views::repeat(std::nullopt));
 
       for (const auto& [currentRow, pairs] : ::ranges::views::enumerate(
                ::ranges::views::zip(startColumn.nodes_, targetRange))) {

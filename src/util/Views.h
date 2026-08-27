@@ -95,8 +95,9 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
-      requires ql::ranges::sized_range<const UnderlyingRange>) {
+  CPP_member constexpr auto size() const
+      -> CPP_ret(size_t)(
+          requires ql::ranges::sized_range<const UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 
@@ -357,8 +358,9 @@ CPP_template(typename UnderlyingRange)(
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
-      requires ql::ranges::sized_range<const UnderlyingRange>) {
+  CPP_member constexpr auto size() const
+      -> CPP_ret(size_t)(
+          requires ql::ranges::sized_range<const UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 };
@@ -548,8 +550,8 @@ CPP_template(typename R)(requires ql::ranges::range<R>) auto rangeToOptional(
 
   // Transform the range to a range of optionals of its contents
   if (range.has_value()) {
-    return ResultRangeType(std::forward<R>(*range) |
-                           ::ranges::views::transform([](auto&& element) {
+    return ResultRangeType(range.value() |
+                           ::ranges::views::transform([](auto& element) {
                              return std::make_optional(std::move(element));
                            }));
   }
