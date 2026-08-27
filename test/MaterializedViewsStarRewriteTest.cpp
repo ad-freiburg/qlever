@@ -158,14 +158,14 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
   auto extraArm = h::IndexScanFromStrings("?s", "<p9>", "?o9");
 
   // A self-loop arm (subject == object).
-  expectSuitableForRewrite(
+  expectRewrite(
       qlv, "generalPatternView",
       "SELECT * { ?s <p1> ?s . ?s <p2> ?o1 . ?s <p3> ?o2 }",
       "SELECT * { ?s <p1> ?s . ?s <p2> ?o1 . ?s <p3> ?o2 . ?s <p9> ?o9 }",
       h::Join(generalPatternView("?s", "?o1", "?o2"), extraArm));
 
   // Two arms converging on the same object variable.
-  expectSuitableForRewrite(
+  expectRewrite(
       qlv, "generalPatternView",
       "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 . ?s <p3> ?o2 }",
       "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 . ?s <p3> ?o2 . ?s <p9> ?o9 }",
