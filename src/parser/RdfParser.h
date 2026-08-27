@@ -21,7 +21,6 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
-#include "global/RuntimeParameters.h"
 #include "global/SpecialIds.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/InputFileSpecification.h"
@@ -70,13 +69,6 @@ struct TurtleTriple {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TurtleTriple, subject_,
                                               predicate_, object_, graphIri_)
 };
-
-// The number of parser threads for the parallel and the multifile RDF
-// parsers, from the `parser-num-threads` runtime parameter (at least 1).
-inline size_t numRdfParserThreads() {
-  return std::max<size_t>(
-      1, getRuntimeParameter<&RuntimeParameters::parserNumThreads_>());
-}
 
 // A base class for all the different turtle and N-Quad parsers.
 class RdfParserBase {
@@ -735,10 +727,18 @@ class RdfParallelParser : public Parser {
   ad_utility::data_structures::ThreadSafeQueue<std::function<void()>>
       tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING};
   ad_utility::TaskQueue<true> parallelParser_{
-      QUEUE_SIZE_BEFORE_PARALLEL_PARSING, numRdfParserThreads(),
+      QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
       "parallel parser"};
   std::future<void> parseFuture_;
 };
+
+// Create a serial (single-threaded) parser for a single input file,
+// regardless of the `parseInParallel_` flag of `spec`. Used by the sharded
+// parsing of the index builder, where each worker thread parses one input
+// stream at a time with no further parallelism inside the stream.
+std::unique_ptr<RdfParserBase> makeSerialRdfParser(
+    qlever::InputFileSpecification spec, const EncodedIriManager* ev,
+    ad_utility::MemorySize bufferSize);
 
 // This class is an RDF parser that parses multiple files in parallel. Each
 // file is specified by an  `InputFileSpecification`.
@@ -780,8 +780,7 @@ class RdfMultifileParser : public RdfParserBase {
  private:
   // The buffer for the finished batches.
   ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
-      finishedBatchQueue_{
-          std::max(QUEUE_SIZE_AFTER_PARALLEL_PARSING, numRdfParserThreads())};
+      finishedBatchQueue_{10};
 
   // This queue manages its own worker threads. Each task consists of a single
   // file that is to be parsed. The parsed results are then pushed to the
@@ -790,7 +789,7 @@ class RdfMultifileParser : public RdfParserBase {
   // destroying the parser, the threads from the `parsingQueue_` are all joined
   // before the `finishedBatchQueue_` (which they are using!) is destroyed.
   ad_utility::TaskQueue<false> parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
-                                             numRdfParserThreads()};
+                                             NUM_PARALLEL_PARSER_THREADS};
 
   // A thread that feeds the file specifications to the actual parser threads.
   ad_utility::JThread feederThread_;

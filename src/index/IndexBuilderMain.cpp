@@ -325,11 +325,11 @@ int main(int argc, char** argv) {
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
   add("parse-parallelism", po::value(&parseParallelism),
-      "The number of threads used for parsing the input and for converting "
-      "the parsed triples to IDs (the first pass of the index build). "
-      "Increase on machines with many cores to speed up the parsing phase; "
-      "this also increases the memory consumption. Default: 8 parser threads "
-      "and 10 converter threads.");
+      "If set, parse the input with this many independent worker threads, "
+      "each of which parses one input stream at a time and writes its own "
+      "partial vocabularies. Recommended on machines with many cores when "
+      "there are enough input files of similar size. If not set, the default "
+      "parsing pipeline is used.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),

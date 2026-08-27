@@ -223,46 +223,6 @@ auto runProducers(ad_utility::TaskQueue<>& pool, Queue& queue,
     }
   }};
 }
-
-// Overload of `runProducers` (see above) for a runtime-sized set of producers
-// that all have the same type.
-template <typename Queue, typename Producer>
-auto runProducers(ad_utility::TaskQueue<>& pool, Queue& queue,
-                  std::vector<Producer> producers) {
-  // Without producers there is nobody to finish the queue, so finish it here.
-  if (producers.empty()) {
-    queue.finish();
-  }
-  auto numActiveProducers =
-      std::make_shared<std::atomic<size_t>>(producers.size());
-  std::vector<std::future<void>> futures;
-  futures.reserve(producers.size());
-  for (auto& producerRef : producers) {
-    futures.push_back(pool.submit(
-        [&queue, producer = std::move(producerRef), numActiveProducers]() {
-          try {
-            while (auto value = producer()) {
-              if (!queue.push(std::move(value.value()))) {
-                break;
-              }
-            }
-          } catch (...) {
-            queue.pushException(std::current_exception());
-          }
-          if (numActiveProducers->fetch_sub(1) == 1) {
-            queue.finish();
-          }
-        }));
-  }
-  return absl::Cleanup{[&queue, futures = std::move(futures)]() {
-    // Finish the queue first, so a producer task blocked on a full queue
-    // unblocks and can be joined.
-    queue.finish();
-    for (auto& future : futures) {
-      future.wait();
-    }
-  }};
-}
 }  // namespace ad_utility
 
 #endif  // QLEVER_TASKQUEUE_H

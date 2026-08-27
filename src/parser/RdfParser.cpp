@@ -1370,6 +1370,14 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
 }
 
 // _____________________________________________________________________________
+std::unique_ptr<RdfParserBase> makeSerialRdfParser(
+    qlever::InputFileSpecification spec, const EncodedIriManager* ev,
+    ad_utility::MemorySize bufferSize) {
+  spec.parseInParallel_ = false;
+  return makeSingleRdfParser<Tokenizer>(spec, ev, bufferSize);
+}
+
+// _____________________________________________________________________________
 std::optional<std::vector<TurtleTriple>> RdfParserBase::getBatch() {
   std::vector<TurtleTriple> result;
   result.reserve(100'000);

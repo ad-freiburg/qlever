@@ -116,6 +116,10 @@ class IndexImpl {
   bool onlyAsciiTurtlePrefixes_ = false;
   // Note: `std::nullopt` means `not specified by the user`.
   std::optional<bool> useParallelParser_ = std::nullopt;
+  // If > 0, the first pass of the index build uses the sharded parsing with
+  // this many worker threads instead of the default pipeline (see
+  // `buildPartialVocabulariesSharded`).
+  size_t parseParallelism_ = 0;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
@@ -521,6 +525,7 @@ class IndexImpl {
   }
 
   ad_utility::MemorySize& parserBufferSize() { return parserBufferSize_; }
+  size_t& parseParallelism() { return parseParallelism_; }
   const ad_utility::MemorySize& parserBufferSize() const {
     return parserBufferSize_;
   }
@@ -610,7 +615,7 @@ class IndexImpl {
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
-      std::shared_ptr<RdfParserBase> parser);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
 
   // Parse all triples from `parser` in batches of `linesPerPartial`, write one
   // partial vocabulary file per batch, and return the accumulated ID triples
@@ -619,9 +624,21 @@ class IndexImpl {
   BuildPartialVocabulariesResult buildPartialVocabularies(
       std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
 
+  // Alternative to `buildPartialVocabularies` (chosen via
+  // `--parse-parallelism`, see `parseParallelism_`): `numWorkers` independent
+  // worker threads, each of which takes the next input stream from `files`,
+  // parses it serially, converts the triples to IDs using its own map, and
+  // writes its own partial vocabularies. There are no shared queues between
+  // the workers, so this scales to machines with many cores, provided there
+  // are enough input streams of similar size.
+  BuildPartialVocabulariesResult buildPartialVocabulariesSharded(
+      std::vector<qlever::InputFileSpecification> files, size_t linesPerPartial,
+      size_t numWorkers);
+
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(
-      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t linesPerPartial);
 
   // Create a task that writes a partial vocabulary given by `items` to disk and
   // adds the corresponding triples in `localIds` to the provided
