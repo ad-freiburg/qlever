@@ -188,10 +188,10 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
     using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
     EXPECT_THAT(
         replacements,
-        ::testing::AllOf(::testing::SizeIs(2),
-                         ::testing::Each(AD_FIELD(
-                             MaterializedViewJoinReplacement, coveredTriples_,
-                             ::testing::UnorderedElementsAre(0u, 1u)))));
+        ::testing::AllOf(
+            ::testing::SizeIs(2),
+            ::testing::Each(AD_FIELD(MaterializedViewJoinReplacement,
+                                     coveredTriples_, ::testing::Eq(0b011u)))));
   }
 
   // One arm's object is a fixed value from the view's own definition (e.g.
@@ -215,9 +215,9 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
     auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
     using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
     EXPECT_THAT(replacements,
-                ::testing::ElementsAre(
-                    AD_FIELD(MaterializedViewJoinReplacement, coveredTriples_,
-                             ::testing::UnorderedElementsAre(0u, 1u))));
+                ::testing::ElementsAre(AD_FIELD(MaterializedViewJoinReplacement,
+                                                coveredTriples_,
+                                                ::testing::Eq(0b011u))));
   }
 
   // Two different view variables can legitimately be fixed to the *same*
@@ -242,9 +242,9 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
     auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
     using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
     EXPECT_THAT(replacements,
-                ::testing::ElementsAre(
-                    AD_FIELD(MaterializedViewJoinReplacement, coveredTriples_,
-                             ::testing::UnorderedElementsAre(0u, 1u))));
+                ::testing::ElementsAre(AD_FIELD(MaterializedViewJoinReplacement,
+                                                coveredTriples_,
+                                                ::testing::Eq(0b011u))));
   }
 
   // Disconnected pattern (no shared variable): rejected outright, since the

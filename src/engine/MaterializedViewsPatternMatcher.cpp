@@ -9,8 +9,6 @@
 
 #include "engine/MaterializedViewsPatternMatcher.h"
 
-#include <algorithm>
-
 #include "backports/algorithm.h"
 #include "engine/MaterializedViews.h"
 #include "util/Algorithm.h"
@@ -23,7 +21,7 @@ namespace {
 // fixed value from the query) is a legal prefix for a single SPO-sorted view
 // permutation: only subject, subject+predicate, or subject+predicate+object
 // (`0b001`/`0b011`/`0b111`, or `0b000`) may be fixed.
-bool isLegalFixedValuePrefix(unsigned boundColumnsMask) {
+bool isLegalFixedValuePrefix(size_t boundColumnsMask) {
   return boundColumnsMask == 0b000u || boundColumnsMask == 0b001u ||
          boundColumnsMask == 0b011u || boundColumnsMask == 0b111u;
 }
@@ -105,6 +103,21 @@ bool PatternMatcher::hasVariableBeforeFixedColumn(size_t col) const {
 }
 
 // _____________________________________________________________________________
+bool PatternMatcher::isTripleCovered(size_t tripleIdx) const {
+  return (coveredTriples_ & (uint64_t{1} << tripleIdx)) != 0;
+}
+
+// _____________________________________________________________________________
+void PatternMatcher::coverTriple(size_t tripleIdx) {
+  coveredTriples_ |= (uint64_t{1} << tripleIdx);
+}
+
+// _____________________________________________________________________________
+void PatternMatcher::uncoverTriple(size_t tripleIdx) {
+  coveredTriples_ &= ~(uint64_t{1} << tripleIdx);
+}
+
+// _____________________________________________________________________________
 bool PatternMatcher::isNewBinding(const TripleComponent& viewSide) const {
   return viewSide.isVariable() && !assignment_.contains(viewSide.getVariable());
 }
@@ -120,14 +133,14 @@ void PatternMatcher::undoAssign(const TripleComponent& viewSide, bool wasNew) {
 void PatternMatcher::emitIfLegal() {
   // Fixed query values must land on a legal column prefix; a payload column
   // (index > 2) bound to a fixed value is always illegal.
-  unsigned boundColumnsMask = 0;
+  size_t boundColumnsMask = 0;
   for (const auto& [viewVar, node] : assignment_) {
     if (!node.isVariable()) {
       size_t col = viewCols_.at(viewVar).columnIndex_;
       if (col > 2) {
         return;
       }
-      boundColumnsMask |= (1u << col);
+      boundColumnsMask |= (size_t{1} << col);
     }
   }
   if (!isLegalFixedValuePrefix(boundColumnsMask)) {
@@ -153,8 +166,7 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
   }
   const auto& edge = edges[edgeIdx];
   for (size_t tripleIdx : *candidatesByEdge_[edgeIdx]) {
-    if (std::find(coveredTriples_.begin(), coveredTriples_.end(), tripleIdx) !=
-        coveredTriples_.end()) {
+    if (isTripleCovered(tripleIdx)) {
       continue;
     }
     if (stepsRemaining_ == 0) {
@@ -167,11 +179,11 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
     if (tryAssign(edge.s_, triple.s_)) {
       bool objectWasNew = isNewBinding(edge.o_);
       if (tryAssign(edge.o_, triple.o_)) {
-        coveredTriples_.push_back(tripleIdx);
+        coverTriple(tripleIdx);
 
         extendMatch(edgeIdx + 1);
 
-        coveredTriples_.pop_back();
+        uncoverTriple(tripleIdx);
       }
       undoAssign(edge.o_, objectWasNew);
     }

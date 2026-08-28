@@ -2690,8 +2690,8 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
 
   // The `MaterializedViewsManager` provides `IndexScan` instances for all the
   // subsets of `triples` it can rewrite. The individual results do not cover
-  // all items of `triples`, instead each has a vector of triple indices it
-  // covers.
+  // all items of `triples`, instead each has a bitmask of the triple indices
+  // it covers (matching `_idsOfIncludedNodes`'s representation).
   auto scans = _qec->materializedViewsManager().makeJoinReplacementIndexScans(
       _qec, triples);
   plans.reserve(triples._triples.size());
@@ -2702,14 +2702,13 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
     auto plan = makeSubtreePlan<IndexScan>(scan);
     // This is equivalent to a join between the covered triples, so we must mark
     // all included nodes.
-    for (auto tripleIdx : coveredTriples) {
-      plan._idsOfIncludedNodes |= (1ULL << tripleIdx);
-    }
+    plan._idsOfIncludedNodes |= coveredTriples;
+    size_t numCoveredTriples = absl::popcount(coveredTriples);
     // Empty vectors of replacement plans for smaller numbers of triples.
-    for (size_t i = plans.size(); i < coveredTriples.size(); ++i) {
+    for (size_t i = plans.size(); i < numCoveredTriples; ++i) {
       plans.push_back({});
     }
-    plans.at(coveredTriples.size() - 1).push_back(std::move(plan));
+    plans.at(numCoveredTriples - 1).push_back(std::move(plan));
   }
   return plans;
 }

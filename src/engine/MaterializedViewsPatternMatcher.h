@@ -11,6 +11,7 @@
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSPATTERNMATCHER_H_
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "engine/MaterializedViewsQueryAnalysis.h"
@@ -62,8 +63,8 @@ class PatternMatcher {
   // Current candidate assignment: maps view variables to the query-side node
   // they are matched to.
   ad_utility::HashMap<Variable, TripleComponent> assignment_;
-  // Query triple indices used by the current assignment so far.
-  std::vector<size_t> coveredTriples_;
+  // Bitmask of the query triples used by the current assignment so far.
+  uint64_t coveredTriples_ = 0;
 
   // Match `viewSide` against `queryNode`. A fixed `viewSide` is a plain
   // equality check (not bound; it's not a view column). Otherwise `viewSide`
@@ -89,6 +90,13 @@ class PatternMatcher {
   // (the fixed-value prefix check `tryAssign` needs for a fixed-value side).
   bool hasVariableBeforeFixedColumn(size_t col) const;
 
+  // Whether `tripleIdx` is already used by the current assignment.
+  bool isTripleCovered(size_t tripleIdx) const;
+
+  // Marks/unmarks `tripleIdx` as used by the current assignment.
+  void coverTriple(size_t tripleIdx);
+  void uncoverTriple(size_t tripleIdx);
+
   // Whether `tryAssign(viewSide, ...)` would add a new binding (that
   // `undoAssign` then needs to remove on backtrack). Must be called before
   // `tryAssign`, which may itself insert that binding.
@@ -111,9 +119,8 @@ class PatternMatcher {
   // match is validated and turned into a replacement immediately
   // (`emitIfLegal`) instead of being collected into an intermediate list
   // first. Plain VF2-style backtracking: `undoAssign` only removes the
-  // bindings this step added, and "already used" is a linear scan of
-  // `coveredTriples_` (both O(pattern size), cheaper than hashing at this
-  // scale).
+  // bindings this step added, and `isTripleCovered` is a single bit test
+  // against the `coveredTriples_` bitmask.
   //
   // `stepsRemaining_` caps the total number of candidates tried across the
   // whole search; `result_.size() >= kMaxReplacements` (see the .cpp file)

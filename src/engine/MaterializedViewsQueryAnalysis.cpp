@@ -192,6 +192,9 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     return result;
   }
 
+  // We use a 64-bit bitmask of triple indices, like in the `QueryPlanner`.
+  AD_CORRECTNESS_CHECK(triples._triples.size() > 64);
+
   // Group query triples by predicate and collect views sharing a predicate
   // with the query.
   TriplesByPredicate triplesByPredicate;
