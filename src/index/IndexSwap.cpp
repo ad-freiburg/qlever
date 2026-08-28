@@ -1,6 +1,8 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
+// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
 // 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -125,19 +127,21 @@ IndexSwapConfig makeIndexSwapConfig(const std::string& currentBaseName,
   //
   // NOTE: The check-then-use is not atomic; this is fine because swaps of the
   // same index are serialized (rebuilds via `Server::rebuildInProgress_`).
-  auto uniquify = [&naming](const std::string& directory) {
-    std::string candidate = directory;
-    for (size_t i = 1; fs::exists(candidate); ++i) {
-      if (i > 99) {
-        throw std::runtime_error{
-            absl::StrCat("The directories \"", directory, "\" and \"",
-                         directory, ".1\" through \"", directory,
-                         ".99\" all already exist; remove some of them",
-                         naming.retiredDirConflictHint_)};
-      }
-      candidate = absl::StrCat(directory, ".", i);
+  auto uniquify = [&naming](const std::string& directory) -> std::string {
+    if (!fs::exists(directory)) {
+      return directory;
     }
-    return candidate;
+    for (size_t i = 1; i <= 99; ++i) {
+      std::string candidate = absl::StrCat(directory, ".", i);
+      if (!fs::exists(candidate)) {
+        return candidate;
+      }
+    }
+    throw std::runtime_error{
+        absl::StrCat("The directories \"", directory, "\" and \"", directory,
+                     ".1\" through \"", directory,
+                     ".99\" all already exist; remove some of them",
+                     naming.retiredDirConflictHint_)};
   };
   bool stagingDirWasExplicit = stagingDir.has_value();
   bool retiredDirWasExplicit = retiredDir.has_value();

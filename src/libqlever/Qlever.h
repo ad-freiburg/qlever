@@ -86,13 +86,6 @@ struct CommonConfig {
   bool addHasWordTriples_ = false;
 };
 
-// The JSON that is reported to the client after a successful index rebuild
-// with the given `IndexSwapConfig`: a human-readable message plus the
-// directory to which the old index was retired (the resolved value of the
-// `rebuild-previous-index-dir` command parameter, which the client does not
-// know when the default was used).
-nlohmann::json rebuildSuccessResponseAsJson(const IndexSwapConfig& config);
-
 // Additional configuration used for building an index for a given dataset.
 struct IndexBuilderConfig : CommonConfig {
   // The specification of the input files, for which the index is built. See

@@ -425,20 +425,6 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
 }
 
 // ___________________________________________________________________________
-nlohmann::json rebuildSuccessResponseAsJson(const IndexSwapConfig& config) {
-  nlohmann::json json;
-  json["message"] = "Index successfully rebuilt and swapped in";
-  // Report the directory (not the full base name): it mirrors the
-  // `rebuild-previous-index-dir` command parameter and is the one piece of
-  // information the client cannot know in advance (the default is derived from
-  // the build date of the old index). The new index is not mentioned because
-  // it is always served from the base name of the old one.
-  json["previous-index-dir"] =
-      ql::filesystem::path{config.oldIndexTarget()}.parent_path().string();
-  return json;
-}
-
-// ___________________________________________________________________________
 IndexSwapConfig Qlever::makeIndexRebuildConfig(
     const Index& index, std::optional<std::string> rebuildTmpDir,
     std::optional<std::string> rebuildPreviousIndexDir) {

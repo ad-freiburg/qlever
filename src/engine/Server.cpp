@@ -1617,7 +1617,7 @@ CPP_template_def(typename RequestT)(
         "Another rebuild is currently in progress!",
         http::status::too_many_requests, request, MediaType::textPlain);
   }
-  co_return createJsonResponse(qlever::rebuildSuccessResponseAsJson(*config),
+  co_return createJsonResponse(responseJson::composeRebuildSuccess(*config),
                                request);
 }
 
