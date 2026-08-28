@@ -10,6 +10,7 @@
 #include "index/vocabulary/CompressionWrappers.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/PrefixHeuristic.h"
+#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
 #include "util/InputRangeUtils.h"
@@ -30,21 +31,6 @@ template <typename Vocabulary, typename Iterator>
 CPP_concept IterableVocabulary =
     CPP_requires_ref(IterableVocabulary_, Vocabulary, Iterator);
 
-// A vocabulary has "holes" (see `VocabularyInMemoryBinSearch`) if and only if
-// it provides a `positionOfIndex` function that translates a vocabulary index
-// into the position (i.e. the offset into the words) at which the corresponding
-// word is stored. In this case, we use that member function to translate from
-// indices to positions. For all other vocabularies we assume that the index and
-// the physical position of the word in the vocabulary are the same.
-template <typename Vocabulary>
-CPP_requires(HasPositionOfIndex_,
-             requires(const Vocabulary& vocabulary,
-                      uint64_t index)(vocabulary.positionOfIndex(index)));
-
-template <typename Vocabulary>
-CPP_concept HasPositionOfIndex =
-    CPP_requires_ref(HasPositionOfIndex_, Vocabulary);
-
 }  // namespace detail
 
 // A vocabulary in which compression is performed using a customizable
@@ -62,6 +48,23 @@ CPP_template(typename UnderlyingVocabulary,
   // We need to store two files, one for the words and one for the codebooks.
   static constexpr std::string_view wordsSuffix = ".words";
   static constexpr std::string_view decodersSuffix = ".codebooks";
+
+  // Whether the underlying vocabulary has "holes", meaning that not every index
+  // in `[0, endIndex())` has a word associated with it. This currently is the
+  // case for exactly one vocabulary, which we therefore check explicitly. Such
+  // a vocabulary needs a special handling in several places (see the uses of
+  // this constant below), in particular the vocabulary index of a word is in
+  // general different from the position (i.e. the offset into the words) at
+  // which the word is stored, and has to be translated via `positionOfIndex`.
+  static constexpr bool underlyingHasHoles =
+      std::is_same_v<UnderlyingVocabulary, VocabularyInMemoryBinSearch>;
+
+  // As a safeguard for the future: A vocabulary with holes has to report a
+  // placeholder (and not throw) for the indices that are holes, see
+  // `operator[]` below.
+  static_assert(!underlyingHasHoles ||
+                ad_utility::vocabulary::replaceOptionalByPlaceholderOnExport<
+                    UnderlyingVocabulary>);
 
  public:
   // The vocabulary is initialized using the `open()` method, the default
@@ -153,7 +156,7 @@ CPP_template(typename UnderlyingVocabulary,
   // `VocabularyInMemoryBinSearch`) this is in general much larger than
   // `size()`, for all other vocabularies it is exactly `size()`.
   uint64_t endIndex() const {
-    if constexpr (detail::HasPositionOfIndex<UnderlyingVocabulary>) {
+    if constexpr (underlyingHasHoles) {
       return underlyingVocabulary_.endIndex();
     } else {
       return size();
@@ -241,13 +244,12 @@ CPP_template(typename UnderlyingVocabulary,
   /// the underlying vocabulary.
   // NOTE: This class is a template with the `UnderlyingVocab` defaulted to the
   // `UnderlyingVocabulary` of the enclosing class (it is never instantiated
-  // with anything else). This is necessary because its member functions are
-  // virtual and would therefore be instantiated together with the enclosing
-  // class, which doesn't compile for an underlying vocabulary with holes (see
+  // with anything else). This is necessary because its member functions don't
+  // compile for an underlying vocabulary with holes (see
   // `VocabularyInMemoryBinSearch`), the `WordWriter` of which requires an
-  // explicit index for each word. Being a template, the member functions are
-  // only instantiated when the class is actually used, which for a vocabulary
-  // with holes never happens (`DiskWriterWithExplicitIndices` is used instead).
+  // explicit index for each word. We therefore have to defer the instantiation
+  // of this class until its actual usage, which for a vocabulary with holes
+  // never happens (`DiskWriterWithExplicitIndices` is used instead).
   template <typename UnderlyingVocab = UnderlyingVocabulary>
   class DiskWriterFromUncompressedWords : public WordWriterBase {
    private:
@@ -472,11 +474,9 @@ CPP_template(typename UnderlyingVocabulary,
   };
 
   // The `WordWriter` for an underlying vocabulary with holes has to take an
-  // explicit index for each word (`HasPositionOfIndex` is exactly the marker
-  // for "the underlying vocabulary has holes").
+  // explicit index for each word.
   using WordWriter =
-      std::conditional_t<detail::HasPositionOfIndex<UnderlyingVocabulary>,
-                         DiskWriterWithExplicitIndices,
+      std::conditional_t<underlyingHasHoles, DiskWriterWithExplicitIndices,
                          DiskWriterFromUncompressedWords<>>;
 
   // Return a `unique_ptr<DiskWriterFromUncompressedWords>` that can be used to
@@ -487,8 +487,9 @@ CPP_template(typename UnderlyingVocabulary,
   // `std::unique_ptr<WordWriterBase>`), because some callers (e.g.
   // `GeoVocabulary::WordWriter`) store the result as such.
   static std::unique_ptr<DiskWriterFromUncompressedWords<>> makeDiskWriterPtr(
-      [[maybe_unused]] const std::string& filename) {
-    if constexpr (detail::HasPositionOfIndex<UnderlyingVocabulary>) {
+      const std::string& filename) {
+    if constexpr (underlyingHasHoles) {
+      (void)filename;
       AD_THROW(
           "A vocabulary with holes cannot be built word by word, because the "
           "`WordWriterBase` interface cannot express the explicit indices. "
@@ -545,7 +546,7 @@ CPP_template(typename UnderlyingVocabulary,
   // vocabulary with holes (see `VocabularyInMemoryBinSearch`) the index has to
   // be translated to a position first (see `getDecoderIdxFromPosition`).
   size_t getDecoderIdx(size_t idx) const {
-    if constexpr (detail::HasPositionOfIndex<UnderlyingVocabulary>) {
+    if constexpr (underlyingHasHoles) {
       // NOTE: If `idx` is one of the holes, then there is no word to
       // decompress at all (`operator[]` returns the placeholder without ever
       // asking for a decoder), so the value of the fallback is irrelevant.

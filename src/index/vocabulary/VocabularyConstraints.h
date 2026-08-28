@@ -29,6 +29,11 @@ class PolymorphicVocabulary;
 // because of the holes is in general much smaller than the largest index that
 // the vocabulary contains, so such a vocabulary provides its own
 // `getPositionOfWord`.
+// Note: This concept is related to, but broader than, the
+// `CompressedVocabulary::underlyingHasHoles` constant (see
+// `CompressedVocabulary.h`), which only states that the underlying vocabulary
+// of a `CompressedVocabulary` has holes. In particular, the `SplitVocabulary`
+// needs a special `getPositionOfWord` for a completely different reason.
 template <typename T>
 CPP_concept HasSpecialGetPositionOfWord =
     std::is_same_v<T, PolymorphicVocabulary> ||
