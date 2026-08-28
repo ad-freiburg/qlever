@@ -1,9 +1,16 @@
-// Copyright 2015 - 2023, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Björn Buchhold <b.buchhold@gmail.com>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// Copyright 2015 - 2025 The QLever Authors, in particular:
+//
+// 2015 - 2016 Björn Buchhold, UFR
+// 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// 2025        Brandon Harris, BMW
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+// BMW = Bayerische Motoren Werke Aktiengesellschaft (BMW)
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/Result.h"
 
