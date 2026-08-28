@@ -44,11 +44,11 @@ TEST(LogTest, StringConversions) {
 // _____________________________________________________________________________
 TEST(LogTest, SetRuntimeLogLevel) {
   // Setting to INFO requires LOGLEVEL >= INFO at compile time; skip otherwise.
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   ad_utility::ScopedLogLevel scopedLogLevel{FATAL};
   EXPECT_EQ(ad_utility::detail::runtimeLogLevel.load(), LogLevel::Enum::FATAL);
 
-  // Setting to INFO must succeed (SKIP_IF_LOGLEVEL_IS_LOWER(INFO) guards this).
+  // Setting to INFO must succeed (ENFORCE_LOG_LEVEL_OR_SKIP(INFO) guards this).
   ad_utility::setRuntimeLogLevel(LogLevel::Enum::INFO);
   EXPECT_EQ(ad_utility::detail::runtimeLogLevel.load(), LogLevel::Enum::INFO);
 }
@@ -140,10 +140,9 @@ TEST(LogTest, GetRuntimeLogLevel) {
 
 // _____________________________________________________________________________
 TEST(LogTest, ScopedLogLevelSetsAndRestoresLevel) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
-  // The outer `ScopedLogLevel` also guarantees the restoration of the log level
-  // if one of the assertions below fails and the scope is left early.
-  ad_utility::ScopedLogLevel outerLogLevel{WARN};
+  // The `ENFORCE_LOG_LEVEL_OR_SKIP` also guarantees the restoration of the log
+  // level if one of the assertions below fails and the scope is left early.
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   {
     ad_utility::ScopedLogLevel scopedLogLevel{FATAL};
     EXPECT_EQ(ad_utility::getRuntimeLogLevel(), LogLevel::Enum::FATAL);
@@ -153,8 +152,7 @@ TEST(LogTest, ScopedLogLevelSetsAndRestoresLevel) {
 
 // _____________________________________________________________________________
 TEST(LogTest, ScopedLogLevelRestoresLevelOnException) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
-  ad_utility::ScopedLogLevel outerLogLevel{WARN};
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   auto throwFromInsideTheScope = [] {
     ad_utility::ScopedLogLevel scopedLogLevel{FATAL};
     EXPECT_EQ(ad_utility::getRuntimeLogLevel(), LogLevel::Enum::FATAL);
@@ -166,8 +164,7 @@ TEST(LogTest, ScopedLogLevelRestoresLevelOnException) {
 
 // _____________________________________________________________________________
 TEST(LogTest, ScopedLogLevelIsNested) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
-  ad_utility::ScopedLogLevel outerLogLevel{WARN};
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   {
     ad_utility::ScopedLogLevel outer{ERROR};
     EXPECT_EQ(ad_utility::getRuntimeLogLevel(), LogLevel::Enum::ERROR);
@@ -203,8 +200,7 @@ TEST(LogTest, ScopedLogLevelClampsToCompileTimeLogLevel) {
 
 // _____________________________________________________________________________
 TEST(LogTest, ScopedLogLevelSuppressesLogOutput) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(ERROR);
-  ad_utility::ScopedLogLevel outerLogLevel{ERROR};
+  ENFORCE_LOG_LEVEL_OR_SKIP(ERROR);
   auto [streamCleanup, ss] = setGlobalLoggingStreamToStringStream();
   {
     ad_utility::ScopedLogLevel scopedLogLevel{FATAL};

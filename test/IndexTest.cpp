@@ -678,7 +678,7 @@ TEST(IndexTest, trivialGettersAndSetters) {
 
 // _____________________________________________________________________________
 TEST(IndexTest, destructorLogsUnloading) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   // An `Index` that still owns its `IndexImpl` logs on destruction.
   {
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
@@ -705,7 +705,7 @@ TEST(IndexTest, destructorLogsUnloading) {
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   using enum qlever::Filetype;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
