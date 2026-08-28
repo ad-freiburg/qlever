@@ -459,6 +459,11 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     const std::string& logFileName) {
   using namespace indexRebuilder;
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
+  AD_CONTRACT_CHECK(
+      !index.getVocab().getGeoCellGrid().has_value(),
+      "Rebuilding an index whose vocabulary uses a geo cell grid is not yet "
+      "supported: the rebuild's ID remapping assumes a dense vocabulary index "
+      "space, which does not hold for cell-annotated WKT literal indices");
 
   // The rebuilt index gets its own build date, namely the time when the
   // rebuild started (the statistics below are derived from the configuration

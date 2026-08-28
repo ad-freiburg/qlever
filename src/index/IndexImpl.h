@@ -196,6 +196,11 @@ class IndexImpl {
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
+  // The level of the geo cell grid for WKT literal IDs, 0 = disabled (only
+  // relevant during index building; at query time the grid is read from the
+  // geo vocabulary's `.geocells` file).
+  uint8_t geoCellGridLevelForIndexBuilding_ = 0;
+
   // Compiled regexes for IRIs that should be treated as blank nodes during
   // index building (only relevant during index building). Set (and compiled
   // from their string representation) via `setBlankNodeIriRegexes`.
@@ -352,6 +357,15 @@ class IndexImpl {
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
     vocabularyTypeForIndexBuilding_ = type;
     configurationJson_["vocabulary-type"] = type;
+  }
+
+  // Set the level of the geo cell grid used to order and annotate the IDs of
+  // WKT literals (see `GeoCellGrid`), which enables the geo cell prefilter
+  // for spatial joins. 0 (the default) disables the grid. Values > 0 require
+  // the `OnDiskCompressedGeoSplit` vocabulary type.
+  void setGeoCellGridLevelForIndexBuilding(uint8_t level) {
+    geoCellGridLevelForIndexBuilding_ = level;
+    configurationJson_["geo-cell-grid-level"] = level;
   }
 
   // __________________________________________________________________________

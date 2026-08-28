@@ -141,6 +141,10 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
+  AD_CONTRACT_CHECK(config.geoCellGridLevel_ <= 20,
+                    "The geo cell grid level must be at most 20");
+  index.getImpl().setGeoCellGridLevelForIndexBuilding(
+      static_cast<uint8_t>(config.geoCellGridLevel_));
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(config.blankNodeIriRegexes_);
 

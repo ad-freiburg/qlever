@@ -45,6 +45,12 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
   vocabulary_.close();
   vocabulary_.open(fileName);
 
+  // If an underlying `GeoVocabulary` was built with a geo cell grid (stored
+  // in its `.geocells` file), the word comparator must apply the
+  // corresponding order for WKT literals, otherwise binary searches in the
+  // geo vocabulary would be inconsistent with its on-disk order.
+  setGeoCellGrid(getGeoCellGrid());
+
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
   //

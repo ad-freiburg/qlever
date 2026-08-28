@@ -411,6 +411,20 @@ void IndexImpl::createFromFiles(
 
   readIndexBuilderSettingsFromFile();
 
+  // Configure the geo cell grid for WKT literal IDs (must happen after
+  // `setLocale` inside `readIndexBuilderSettingsFromFile`, which recreates
+  // the comparator, and before any parsing, which already sorts partial
+  // vocabularies).
+  if (geoCellGridLevelForIndexBuilding_ > 0) {
+    AD_CONTRACT_CHECK(
+        vocabularyTypeForIndexBuilding_.value() ==
+            ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit,
+        "A geo cell grid requires the vocabulary type "
+        "`on-disk-compressed-geo-split`");
+    vocab_.setGeoCellGrid(
+        ad_utility::GeoCellGrid{geoCellGridLevelForIndexBuilding_});
+  }
+
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(makeRdfParser(std::move(files)));
 
@@ -706,17 +720,25 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
+    // The merger applies the geo cell order (relevant only when a geo cell
+    // grid is configured) itself via per-word `geoSortKeyFn` values, so the
+    // string predicate is the purely lexicographic one.
     auto sortPred = [&cmp = vocab_.getCaseComparator()](
                         std::string_view a, bool aIsExternal,
                         std::string_view b, bool bIsExternal) {
-      return cmp.isLessInTotalWithExternalFlag(a, aIsExternal, b, bIsExternal);
+      return cmp.isLessInTotalWithExternalFlagLexicographic(a, aIsExternal, b,
+                                                            bIsExternal);
     };
+    auto geoSortKeyFn =
+        [&cmp = vocab_.getCaseComparator()](std::string_view word) {
+          return cmp.geoSortKey(word);
+        };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numPartialVocabs, sortPred, wordCallback,
-        memoryLimitIndexBuilding(), blankNodeIriRegexes_);
+        memoryLimitIndexBuilding(), blankNodeIriRegexes_, geoSortKeyFn);
     wordCallback.finish();
     return mergedVocabMeta;
   }();
@@ -1740,61 +1762,67 @@ absl::AnyInvocable<void()> IndexImpl::createWritePartialVocabularyTask(
   std::string partialFilename =
       absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, numFiles);
 
-  return [localIds = std::move(localIds), globalWritePtr,
-          items = std::move(items), vocab = &vocab_, partialFilename,
-          numFiles]() mutable {
-    auto vec = [&]() {
-      ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
-      return vocabMapsToVector(items);
-    }();
-    {
-      ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
-      sortVocabVector(
-          &vec,
-          [&c = vocab->getCaseComparator()](const auto& a, const auto& b) {
-            return c.isLessInTotalWithExternalFlag(
-                a.first, a.second.isExternal(), b.first, b.second.isExternal());
-          },
-          true);
-    }
-    auto mapping = [&]() {
-      ad_utility::TimeBlockAndLog l{"creating internal mapping"};
-      return createInternalMapping(vec);
-    }();
-    AD_LOG_TRACE << "Finished creating of Mapping vocabulary" << std::endl;
-    // since now adjacent duplicates also have the same Ids, it suffices to
-    // compare those
-    {
-      ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
-      vec.erase(std::unique(vec.begin(), vec.end(),
-                            [](const auto& a, const auto& b) {
-                              return a.second.id() == b.second.id();
-                            }),
-                vec.end());
-    }
-    // The writing to the external vector has to be done in order, to
-    // make the update from local to global ids work.
-
-    auto writeTriplesFuture = std::async(
-        std::launch::async,
-        [&globalWritePtr, &localIds, &mapping, &numFiles]() {
-          globalWritePtr->withWriteLockAndOrdered(
-              [&](auto& writerPtr) {
-                writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
+  return
+      [localIds = std::move(localIds), globalWritePtr, items = std::move(items),
+       vocab = &vocab_, partialFilename, numFiles]() mutable {
+        auto vec = [&]() {
+          ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
+          // Precompute the geo sort key of each word here (in parallel), so
+          // that sorting below never has to parse a WKT literal per comparison.
+          return vocabMapsToVector(
+              items, [&c = vocab->getCaseComparator()](std::string_view word) {
+                return c.geoSortKey(word);
+              });
+        }();
+        {
+          ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
+          sortVocabVector(
+              &vec,
+              [&c = vocab->getCaseComparator()](const auto& a, const auto& b) {
+                return c.isLessInTotalWithExternalFlagAndGeoSortKeys(
+                    a.word_, a.idAndFlag_.isExternal(), a.geoSortKey_, b.word_,
+                    b.idAndFlag_.isExternal(), b.geoSortKey_);
               },
-              numFiles);
-        });
-    {
-      ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
-      writePartialVocabularyToFile(vec, partialFilename);
-    }
-    AD_LOG_TRACE << "Finished writing the partial vocabulary" << std::endl;
-    vec.clear();
-    {
-      ad_utility::TimeBlockAndLog l{"writing to global file"};
-      writeTriplesFuture.get();
-    }
-  };
+              true);
+        }
+        auto mapping = [&]() {
+          ad_utility::TimeBlockAndLog l{"creating internal mapping"};
+          return createInternalMapping(vec);
+        }();
+        AD_LOG_TRACE << "Finished creating of Mapping vocabulary" << std::endl;
+        // since now adjacent duplicates also have the same Ids, it suffices to
+        // compare those
+        {
+          ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
+          vec.erase(std::unique(vec.begin(), vec.end(),
+                                [](const auto& a, const auto& b) {
+                                  return a.idAndFlag_.id() == b.idAndFlag_.id();
+                                }),
+                    vec.end());
+        }
+        // The writing to the external vector has to be done in order, to
+        // make the update from local to global ids work.
+
+        auto writeTriplesFuture = std::async(
+            std::launch::async,
+            [&globalWritePtr, &localIds, &mapping, &numFiles]() {
+              globalWritePtr->withWriteLockAndOrdered(
+                  [&](auto& writerPtr) {
+                    writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
+                  },
+                  numFiles);
+            });
+        {
+          ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
+          writePartialVocabularyToFile(vec, partialFilename);
+        }
+        AD_LOG_TRACE << "Finished writing the partial vocabulary" << std::endl;
+        vec.clear();
+        {
+          ad_utility::TimeBlockAndLog l{"writing to global file"};
+          writeTriplesFuture.get();
+        }
+      };
 }
 
 // ____________________________________________________________________________

@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -68,6 +69,13 @@ CPP_concept WordCallback =
 template <typename T>
 CPP_concept WordComparator =
     ranges::predicate<T, std::string_view, bool, std::string_view, bool>;
+
+// The type of the function that computes the geo sort key of a word (see
+// `TripleComponentComparator::geoSortKey`). When a geo cell grid is
+// configured, the vocabulary order is (geo sort key, `comparator`), where the
+// merger computes each word's key exactly once via this function. An empty
+// function means "all keys are 0", i.e. the plain lexicographic order.
+using GeoSortKeyFn = std::function<uint64_t(std::string_view)>;
 
 // The result of a call to `mergeVocabulary` (see below).
 struct VocabularyMetaData {
@@ -185,7 +193,8 @@ template <typename W, typename C>
 auto mergeVocabulary(
     const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
     ad_utility::MemorySize memoryToUse,
-    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes = {})
+    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes = {},
+    const GeoSortKeyFn& geoSortKeyFn = {})
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
 
@@ -199,6 +208,9 @@ class VocabularyMerger {
   // The result (mostly metadata) which we'll return.
   VocabularyMetaData metaData_;
   std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
+  // The geo sort key of `lastTripleComponent_` (0 when no geo cell grid is
+  // configured).
+  uint64_t lastGeoSortKey_ = 0;
   // Whether `lastTripleComponent_` is a blank node. Cached here so that
   // `isBlankNode` (which may run a set of regexes) is evaluated only once per
   // distinct word.
@@ -211,7 +223,8 @@ class VocabularyMerger {
   friend auto mergeVocabulary(
       const std::string& basename, size_t numFiles, W comparator,
       C& wordCallback, ad_utility::MemorySize memoryToUse,
-      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
+      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes,
+      const GeoSortKeyFn& geoSortKeyFn)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
   VocabularyMerger() = default;
@@ -223,18 +236,20 @@ class VocabularyMerger {
   auto mergeVocabulary(
       const std::string& basename, size_t numFiles, W comparator,
       C& wordCallback, ad_utility::MemorySize memoryToUse,
-      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
+      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes,
+      const GeoSortKeyFn& geoSortKeyFn)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
 
   // Helper `struct` for a word from a partial vocabulary.
   struct QueueWord {
     QueueWord() = default;
-    QueueWord(TripleComponentWithIndex&& v, size_t file)
-        : entry_(std::move(v)), partialFileId_(file) {}
+    QueueWord(TripleComponentWithIndex&& v, size_t file, uint64_t geoSortKey)
+        : entry_(std::move(v)), partialFileId_(file), geoSortKey_(geoSortKey) {}
     TripleComponentWithIndex entry_;  // the word, its local ID and the
                                       // information if it will be externalized
     size_t partialFileId_;  // from which partial vocabulary did this word come
+    uint64_t geoSortKey_ = 0;  // precomputed geo sort key of the word
 
     [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
     [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
@@ -274,6 +289,7 @@ class VocabularyMerger {
   void clear() {
     metaData_ = VocabularyMetaData{};
     lastTripleComponent_ = std::nullopt;
+    lastGeoSortKey_ = 0;
     lastTripleComponentIsBlankNode_ = false;
     idMaps_.clear();
   }

@@ -209,6 +209,32 @@ class Vocabulary {
   void setLocale(const std::string& language, const std::string& country,
                  bool ignorePunctuation);
 
+  // Set the geo cell grid on the word comparator and on an underlying
+  // `GeoVocabulary` (if the vocabulary is polymorphic and currently holds a
+  // vocabulary with a geo split). NOTE: Must be called after `setLocale`,
+  // which recreates the comparator.
+  void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      vocabulary_.getComparator().setGeoCellGrid(grid);
+      vocabulary_.getUnderlyingVocabulary().setGeoCellGrid(grid);
+    } else {
+      AD_CONTRACT_CHECK(!grid.has_value(),
+                        "A geo cell grid is only supported for the "
+                        "polymorphic RDF vocabulary");
+    }
+  }
+
+  // The geo cell grid of an underlying `GeoVocabulary`, if there is one and
+  // it has a grid (for an opened vocabulary this is authoritative, coming
+  // from the on-disk `.geocells` file).
+  std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      return vocabulary_.getUnderlyingVocabulary().getGeoCellGrid();
+    } else {
+      return std::nullopt;
+    }
+  }
+
   // _____________________________________________________________________
   const ComparatorType& getCaseComparator() const {
     return vocabulary_.getComparator();

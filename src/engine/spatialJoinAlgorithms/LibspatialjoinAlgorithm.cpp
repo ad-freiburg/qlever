@@ -202,7 +202,8 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 
   auto numGeomsDropped = parser.getPrefilterCounter();
   auto numGeomsParsed = idTable->size() - numGeomsDropped;
-  return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped, numThreads};
+  return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped,
+          parser.getCellPrefilterCounter(), numThreads};
 }
 
 // ____________________________________________________________________________
@@ -291,7 +292,8 @@ Result LibspatialjoinAlgorithm::run() {
   auto runParser = [&](ParseInput smaller, ParseInput larger,
                        bool smallerIsRight) {
     // Parse and add all geometries of the smaller side
-    auto [boxSmall, countSmall, droppedSmall, threadsSmall] =
+    auto [boxSmall, countSmall, droppedSmall, droppedSmallByCell,
+          threadsSmall] =
         parse(smallerIsRight, smaller, sweeper, NUM_THREADS, std::nullopt);
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     spatialJoin_.value()->runtimeInfo().addDetail(
@@ -307,9 +309,9 @@ Result LibspatialjoinAlgorithm::run() {
 
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
-    auto [boxLarge, countLarge, droppedLarge, threadsLarge] =
-        parse(!smallerIsRight, larger, sweeper, NUM_THREADS,
-              sweeper.getPaddedBoundingBox(boxSmall));
+    auto [boxLarge, countLarge, droppedLarge, droppedLargeByCell,
+          threadsLarge] = parse(!smallerIsRight, larger, sweeper, NUM_THREADS,
+                                sweeper.getPaddedBoundingBox(boxSmall));
     auto numValidGeomsTotal = sweeper.numElements();
     AD_CORRECTNESS_CHECK(numValidGeomsTotal >= numValidGeomsSmall);
     auto numValidGeomsLarge = numValidGeomsTotal - numValidGeomsSmall;
@@ -322,6 +324,8 @@ Result LibspatialjoinAlgorithm::run() {
                                                   numValidGeomsTotal);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-dropped-by-prefilter", droppedLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-dropped-by-cell-prefilter", droppedLargeByCell);
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.

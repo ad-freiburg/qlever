@@ -6,12 +6,17 @@
 
 #include <stdexcept>
 
+#include "backports/filesystem.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
+#include "util/File.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializePair.h"
+#include "util/Serializer/SerializeVector.h"
 
 using ad_utility::GeometryInfo;
 
@@ -34,6 +39,29 @@ void GeoVocabulary<V>::open(const std::string& filename) {
         ad_utility::GEOMETRY_INFO_VERSION,
         " as required by this version of QLever. Please rebuild your index."));
   }
+
+  // Read the geo cell grid and the cell runs if present. The `.geocells` file
+  // is authoritative: without it the vocabulary uses plain indices.
+  grid_ = std::nullopt;
+  cellRuns_.clear();
+  auto cellsFilename = getGeoCellsFilename(filename);
+  if (ql::filesystem::exists(cellsFilename)) {
+    ad_utility::serialization::FileReadSerializer in{cellsFilename};
+    uint64_t version = 0;
+    in >> version;
+    if (version != geoCellsVersion) {
+      throw std::runtime_error(absl::StrCat(
+          "The geo cells file ", cellsFilename, " has version ", version,
+          ", which is incompatible with version ", geoCellsVersion,
+          " as required by this version of QLever. Please rebuild your "
+          "index."));
+    }
+    uint64_t level = 0;
+    in >> level;
+    grid_ = ad_utility::GeoCellGrid{static_cast<uint8_t>(level)};
+    in >> cellRuns_;
+    AD_CORRECTNESS_CHECK(!cellRuns_.empty() || literals_.size() == 0);
+  }
 }
 
 // ____________________________________________________________________________
@@ -45,10 +73,63 @@ void GeoVocabulary<V>::close() {
 
 // ____________________________________________________________________________
 template <typename V>
-GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
-                                         const std::string& filename)
+uint64_t GeoVocabulary<V>::cellOfPosition(uint64_t position) const {
+  AD_CORRECTNESS_CHECK(!cellRuns_.empty());
+  // Find the last run that starts at or before `position`.
+  auto it = std::upper_bound(
+      cellRuns_.begin(), cellRuns_.end(), position,
+      [](uint64_t pos, const std::pair<uint64_t, uint64_t>& run) {
+        return pos < run.first;
+      });
+  AD_CORRECTNESS_CHECK(it != cellRuns_.begin());
+  return (it - 1)->second;
+}
+
+// ____________________________________________________________________________
+template <typename V>
+uint64_t GeoVocabulary<V>::toAnnotatedIndex(uint64_t position) const {
+  if (!grid_.has_value()) {
+    return position;
+  }
+  return grid_->annotateIndex(cellOfPosition(position), position);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+uint64_t GeoVocabulary<V>::endIndex() const {
+  auto numWords = size();
+  if (!grid_.has_value() || numWords == 0) {
+    return numWords;
+  }
+  // One past the largest annotated index: the cell of the last word combined
+  // with the past-the-end position.
+  return grid_->annotateIndex(cellOfPosition(numWords - 1), numWords);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+VocabBatchLookupResult GeoVocabulary<V>::lookupBatch(
+    ql::span<const size_t> indices) const {
+  if (!grid_.has_value()) {
+    return literals_.lookupBatch(indices);
+  }
+  std::vector<size_t> positions;
+  positions.reserve(indices.size());
+  for (size_t index : indices) {
+    positions.push_back(toPosition(index));
+  }
+  return literals_.lookupBatch(positions);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+GeoVocabulary<V>::WordWriter::WordWriter(
+    const V& vocabulary, const std::string& filename,
+    std::optional<ad_utility::GeoCellGrid> grid)
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
-      geoInfoFile_{getGeoInfoFilename(filename), "w"} {
+      geoInfoFile_{getGeoInfoFilename(filename), "w"},
+      geoCellsFilename_{getGeoCellsFilename(filename)},
+      grid_{grid} {
   // Initialize geo info file with header
   geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
 }
@@ -77,6 +158,31 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   }
   geoInfoFile_.write(ptr, geoInfoOffset);
 
+  if (grid_.has_value()) {
+    AD_CORRECTNESS_CHECK(index == numWords_);
+    AD_CORRECTNESS_CHECK(numWords_ < grid_->maxNumWords(),
+                         "Too many WKT literals for the configured geo cell "
+                         "grid, please rebuild with a smaller grid level");
+    // The cell assignment must be exactly that of
+    // `GeoCellGrid::cellFromWktLiteral` (which the vocabulary order is based
+    // on). When the `GeometryInfo` is valid, its bounding box is the one that
+    // `cellFromWktLiteral` would compute, so we can reuse it; otherwise we
+    // delegate to `cellFromWktLiteral`, which can still assign a regular cell
+    // in corner cases where only parts of the `GeometryInfo` computation
+    // failed.
+    uint64_t cell = info.has_value()
+                        ? grid_->cellFromBoundingBox(info->getBoundingBox())
+                        : grid_->cellFromWktLiteral(word);
+    if (cellRuns_.empty() || cellRuns_.back().second != cell) {
+      AD_CORRECTNESS_CHECK(
+          cellRuns_.empty() || cellRuns_.back().second < cell,
+          "WKT literals were not passed to the GeoVocabulary in the order of "
+          "their geo grid cells");
+      cellRuns_.emplace_back(numWords_, cell);
+    }
+    index = grid_->annotateIndex(cell, numWords_);
+  }
+  ++numWords_;
   return index;
 }
 
@@ -87,6 +193,13 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
   // try to close the file handle twice
   underlyingWordWriter_->finish();
   geoInfoFile_.close();
+
+  if (grid_.has_value()) {
+    ad_utility::serialization::FileWriteSerializer out{geoCellsFilename_};
+    out << geoCellsVersion;
+    out << uint64_t{grid_->level()};
+    out << cellRuns_;
+  }
 
   if (numInvalidGeometries_ > 0) {
     AD_LOG_WARN << "Geometry preprocessing skipped " << numInvalidGeometries_
@@ -113,13 +226,15 @@ GeoVocabulary<V>::WordWriter::~WordWriter() {
 // ____________________________________________________________________________
 template <typename V>
 std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
-  AD_CONTRACT_CHECK(index < size());
+  uint64_t position = toPosition(index);
+  AD_CONTRACT_CHECK(position < size());
   // Allocate the required number of bytes
   std::array<uint8_t, geoInfoOffset> buffer;
   void* ptr = &buffer;
 
   // Read into the buffer
-  geoInfoFile_.read(ptr, geoInfoOffset, geoInfoHeader + index * geoInfoOffset);
+  geoInfoFile_.read(ptr, geoInfoOffset,
+                    geoInfoHeader + position * geoInfoOffset);
 
   // If all bytes are zero, this record on disk represents an invalid geometry.
   // The `GeometryInfo` class makes the guarantee that it can not have an
