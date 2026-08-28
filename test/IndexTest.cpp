@@ -1127,21 +1127,9 @@ TEST(IndexImpl, dateOfIndexBuild) {
                               absl::UTCTimeZone(), &parsed, &error))
       << error;
 
-  // For indexes that were built before the build date was recorded in the
-  // configuration, `dateOfIndexBuild()` falls back to the last modification
-  // time of the configuration file, which was just written. Since the format
-  // only has second precision, we don't compare the timestamp exactly, but
-  // check that it lies within the last second + tolerance.
-  indexImpl.configurationJson_.erase(std::string{DATE_OF_INDEX_BUILD_KEY});
-  absl::Time fallbackTime;
-  std::string parseError;
-  ASSERT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT,
-                              indexImpl.dateOfIndexBuild(), absl::UTCTimeZone(),
-                              &fallbackTime, &parseError))
-      << parseError;
-  EXPECT_THAT(absl::Now() - fallbackTime,
-              ::testing::AllOf(::testing::Ge(absl::ZeroDuration()),
-                               ::testing::Lt(absl::Seconds(2))));
+  // The fallback to the modification time of the configuration file (for
+  // indexes that were built before the build date was recorded) is tested in
+  // `dateOfIndexBuildStatic` below.
 }
 
 // _____________________________________________________________________________
