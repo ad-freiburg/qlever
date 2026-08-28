@@ -806,10 +806,13 @@ TEST(IndexTest, getBlankNodeManager) {
   // uninitialized Index.
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   EXPECT_ANY_THROW(index.getBlankNodeManager());
+  // The same holds for the access via the `LocalVocabContext`.
+  EXPECT_ANY_THROW(index.getLocalVocabContext().getBlankNodeManager());
 
   // Index is initialized -> no throw
   const Index& index2 = getQec("")->getIndex();
   EXPECT_NO_THROW(index2.getBlankNodeManager());
+  EXPECT_NO_THROW(index2.getLocalVocabContext().getBlankNodeManager());
 
   // Given an Index, ensure that the BlankNodeManager's `minIndex_` is set to
   // the number of blank nodes the Index is initialized with.

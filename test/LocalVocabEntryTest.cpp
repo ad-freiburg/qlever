@@ -34,3 +34,29 @@ TEST(LocalVocabEntry, compareThreeWayRequiresMatchingContexts) {
       ::testing::HasSubstr(
           "Contexts of LocalVocabEntries have to be identical"));
 }
+
+// _____________________________________________________________________________
+TEST(LocalVocabEntry, comparisonWithPlainLiteralOrIri) {
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  Index index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
+                                                   "<a> <b> <c> .");
+  const auto& ctx = index.getLocalVocabContext();
+
+  LocalVocabEntry entry = LocalVocabEntry::fromIriref("<x>", ctx);
+  LocalVocabEntry sameEntry = LocalVocabEntry::fromIriref("<x>", ctx);
+  LocalVocabEntry otherEntry = LocalVocabEntry::fromIriref("<y>", ctx);
+  LiteralOrIri same = LiteralOrIri::iriref("<x>");
+  LiteralOrIri other = LiteralOrIri::iriref("<y>");
+
+  // Comparison against a plain `LiteralOrIri` (the base class).
+  EXPECT_TRUE(entry == same);
+  EXPECT_FALSE(entry != same);
+  EXPECT_FALSE(entry == other);
+  EXPECT_TRUE(entry != other);
+
+  // Comparison against another `LocalVocabEntry`.
+  EXPECT_TRUE(entry == sameEntry);
+  EXPECT_FALSE(entry != sameEntry);
+  EXPECT_FALSE(entry == otherEntry);
+  EXPECT_TRUE(entry != otherEntry);
+}
