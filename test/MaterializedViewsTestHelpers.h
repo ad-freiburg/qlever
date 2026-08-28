@@ -297,15 +297,14 @@ inline void expectNotSuitableForRewrite(
 // be satisfiable by cache-key-based rewriting alone, or this would pass
 // without exercising the pattern matcher; make it `viewQuery` plus at least
 // one extra triple.
-template <typename ViewName, typename ViewQuery, typename TestQuery>
 inline void expectRewrite(
-    qlever::Qlever& qlv, const ViewName& viewName, const ViewQuery& viewQuery,
-    const TestQuery& testQuery,
+    qlever::Qlever& qlv, std::string_view viewName, std::string_view viewQuery,
+    std::string_view testQuery,
     ::testing::Matcher<const QueryExecutionTree&> matcher,
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
-  qlv.writeMaterializedView(viewName, std::string{viewQuery});
-  qlv.loadMaterializedView(viewName);
+  qlv.writeMaterializedView(std::string{viewName}, std::string{viewQuery});
+  qlv.loadMaterializedView(std::string{viewName});
   qpExpect(qlv, testQuery, matcher, sourceLocation);
 };
 
