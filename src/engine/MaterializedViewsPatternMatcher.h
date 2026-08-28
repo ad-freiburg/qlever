@@ -80,6 +80,15 @@ class PatternMatcher {
   bool tryAssign(const TripleComponent& viewSide,
                  const TripleComponent& queryNode);
 
+  // Whether some already-assigned view variable is bound to `queryNode`
+  // (the injectivity check `tryAssign` needs for a query-variable side).
+  bool isAlreadyBound(const TripleComponent& queryNode) const;
+
+  // Whether some already-assigned view variable with a smaller column index
+  // than `col` is still bound to a query variable, i.e. not itself fixed
+  // (the fixed-value prefix check `tryAssign` needs for a fixed-value side).
+  bool hasSmallerVariableColumn(size_t col) const;
+
   // Whether `tryAssign(viewSide, ...)` would add a new binding (that
   // `undoAssign` then needs to remove on backtrack). Must be called before
   // `tryAssign`, which may itself insert that binding.

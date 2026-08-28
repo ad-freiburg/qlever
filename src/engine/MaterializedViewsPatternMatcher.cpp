@@ -11,7 +11,9 @@
 
 #include <algorithm>
 
+#include "backports/algorithm.h"
 #include "engine/MaterializedViews.h"
+#include "util/Algorithm.h"
 
 namespace materializedViewsQueryAnalysis {
 
@@ -59,17 +61,16 @@ bool PatternMatcher::tryAssign(const TripleComponent& viewSide,
     return queryNode == viewSide;
   }
   const Variable& viewVar = viewSide.getVariable();
-  auto it = assignment_.find(viewVar);
-  if (it != assignment_.end()) {
-    return it->second == queryNode;
+  // `viewVar` was already assigned in an earlier step of this partial match:
+  // re-matching it is only consistent if it lands on the same value again.
+  if (auto bound = ad_utility::findOptional(assignment_, viewVar)) {
+    return bound.value() == queryNode;
   }
   if (queryNode.isVariable()) {
     // Injectivity: no view variable may already be bound to this same query
     // variable.
-    for (const auto& [otherVar, otherNode] : assignment_) {
-      if (otherNode == queryNode) {
-        return false;
-      }
+    if (isAlreadyBound(queryNode)) {
+      return false;
     }
   } else {
     // A payload column (index > 2) bound to a fixed value is always illegal
@@ -80,14 +81,27 @@ bool PatternMatcher::tryAssign(const TripleComponent& viewSide,
     }
     // Fixed-value prefix pruning: a smaller-column view variable that is
     // still bound to a query variable rules out fixing this (larger) column.
-    for (const auto& [otherVar, otherNode] : assignment_) {
-      if (otherNode.isVariable() && viewCols_.at(otherVar).columnIndex_ < col) {
-        return false;
-      }
+    if (hasSmallerVariableColumn(col)) {
+      return false;
     }
   }
   assignment_.emplace(viewVar, queryNode);
   return true;
+}
+
+// _____________________________________________________________________________
+bool PatternMatcher::isAlreadyBound(const TripleComponent& queryNode) const {
+  return ql::ranges::any_of(assignment_, [&queryNode](const auto& entry) {
+    return entry.second == queryNode;
+  });
+}
+
+// _____________________________________________________________________________
+bool PatternMatcher::hasSmallerVariableColumn(size_t col) const {
+  return ql::ranges::any_of(assignment_, [this, col](const auto& entry) {
+    return entry.second.isVariable() &&
+           viewCols_.at(entry.first).columnIndex_ < col;
+  });
 }
 
 // _____________________________________________________________________________
