@@ -114,10 +114,6 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 // level when the scope is left. If the compile-time `LOGLEVEL` is less verbose
 // than `level`, the test is skipped instead: such log levels are compiled out
 // and can never become the runtime log level, so the test could never pass.
-//
-// NOTE: The runtime log level is set to exactly `level`, so a test that
-// requires `WARN` will not see the `INFO` messages that the default runtime log
-// level would let through.
 #define ENFORCE_LOG_LEVEL_OR_SKIP(level)                                     \
   if (LOGLEVEL < ad_utility::LogLevel{level}) {                              \
     GTEST_SKIP() << "This test requires a compile-time log level of at "     \
