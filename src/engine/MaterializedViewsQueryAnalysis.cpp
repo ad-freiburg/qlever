@@ -276,6 +276,14 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
   }
   auto bObj = b.o_.getVariable();
 
+  // All three variables must actually be columns of the view (e.g. this is
+  // not the case if they do not appear in the `SELECT` clause).
+  const auto& viewCols = view->variableToColumnMap();
+  if (!viewCols.contains(aSubj) || !viewCols.contains(chainVar) ||
+      !viewCols.contains(bObj)) {
+    return false;
+  }
+
   // Insert chain to cache.
   ChainedPredicates preds{aPred.value(), bPred.value()};
   auto [it, wasNew] = simpleChainCache_.try_emplace(preds, nullptr);
@@ -297,6 +305,13 @@ bool QueryPatternCache::analyzeJoinStar(
     return false;
   }
   Variable subject = triples[0].s_.getVariable();
+
+  // The subject must actually be a column of the view (e.g. this is not the
+  // case if they do not appear in the `SELECT` clause).
+  const auto& viewCols = view->variableToColumnMap();
+  if (!viewCols.contains(subject)) {
+    return false;
+  }
 
   std::vector<StarArm> arms;
   ad_utility::HashSet<std::string> predicates;
@@ -326,6 +341,10 @@ bool QueryPatternCache::analyzeJoinStar(
     }
     // Object variables must be distinct.
     if (!objects.insert(obj).second) {
+      return false;
+    }
+    // The object must actually be a column of the view.
+    if (!viewCols.contains(obj)) {
       return false;
     }
     arms.push_back({std::string{pred.value()}, obj});
@@ -363,10 +382,13 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
     if (!cacheKeyAndCol.has_value()) {
       return false;
     }
+    // NOTE: `ByCacheKeyInfo` is an aggregate, and `make_shared` initializes
+    // with parentheses, which only works for aggregates since C++20. The
+    // explicit `ByCacheKeyInfo{...}` is therefore required for C++17.
     auto [it, inserted] = byCacheKey_.insert(
         {std::move(cacheKeyAndCol.value().cacheKey_),
-         std::make_shared<ByCacheKeyInfo>(
-             view, std::move(cacheKeyAndCol.value().columnMapping_))});
+         std::make_shared<ByCacheKeyInfo>(ByCacheKeyInfo{
+             view, std::move(cacheKeyAndCol.value().columnMapping_)})});
     // If `inserted` is `false` because the entry already belongs to `view`
     // itself (its "full" and "without invariants" cache keys coincide, e.g.
     // because the view has no `BIND` to strip), this is expected and not a
@@ -384,24 +406,12 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   bool cacheKeyAdded = insert(full);
   cacheKeyAdded = insert(withoutInvariant) || cacheKeyAdded;
 
-  auto graphPatternsFiltered = graphPatternInvariantFilter(parsed.value());
-  if (graphPatternsFiltered.size() != 1) {
-    explainIgnore(
-        "The view has more than one graph pattern (even after skipping ignored "
-        "patterns)");
+  auto triplesForRewrite = getTriplesForPatternRewrite(parsed.value());
+  if (std::holds_alternative<RewriteIgnoreReason>(triplesForRewrite)) {
+    explainIgnore(std::get<RewriteIgnoreReason>(triplesForRewrite));
     return cacheKeyAdded;
   }
-  const auto& graphPattern = graphPatternsFiltered.at(0);
-  if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(graphPattern)) {
-    explainIgnore("The graph pattern is not a basic set of triples");
-    return cacheKeyAdded;
-  }
-  // TODO<ullingerc> Property path is stored as a single predicate here.
-  const auto& triples = graphPattern.getBasic()._triples;
-  if (triples.size() == 0) {
-    explainIgnore("The query body is empty");
-    return cacheKeyAdded;
-  }
+  const auto& triples = std::get<std::vector<SparqlTriple>>(triplesForRewrite);
   bool patternFound = false;
 
   // TODO<ullingerc> Possibly handle chain by property path.
@@ -453,6 +463,69 @@ std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
            return !pattern.visit(invariantCheck);
          }) |
          ::ranges::to<std::vector>();
+}
+
+// _____________________________________________________________________________
+std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
+getTriplesForPatternRewrite(const ParsedQuery& parsed) {
+  if (parsed.isAggregatingQuery()) {
+    return "The view's query aggregates (GROUP BY, either explicit or "
+           "implicit via an aggregate expression in the SELECT clause)";
+  }
+
+  // A top-level `FILTER` restricts which rows end up on disk, but (unlike the
+  // triples analyzed below) is not part of `_graphPatterns` and would
+  // otherwise go unnoticed by `graphPatternInvariantFilter`.
+  if (!parsed._rootGraphPattern._filters.empty()) {
+    return "The view's query has a top-level FILTER";
+  }
+
+  // A trailing `VALUES` clause also restricts the on-disk rows and is stored
+  // separately from `_rootGraphPattern`, so it needs an explicit check too.
+  if (parsed.postQueryValuesClause_.has_value()) {
+    return "The view's query has a trailing VALUES clause";
+  }
+
+  // `DISTINCT`/`REDUCED` change the cardinality of the result and thus of the
+  // join, which the chain/star rewriting below does not account for.
+  const auto& selectClause = parsed.selectClause();
+  if (selectClause.distinct_ || selectClause.reduced_) {
+    return "The view's query uses DISTINCT or REDUCED";
+  }
+
+  // A `LIMIT`/`OFFSET` restricts the view to an (order-dependent, arbitrary)
+  // subset of the join's rows, which must not be treated as a complete source
+  // for pattern-based rewriting of unrelated queries.
+  //
+  // NOTE: `isUnconstrained()` deliberately ignores a `TEXTLIMIT` clause, so a
+  // view with text-search triples and a `TEXTLIMIT` is not rejected here.
+  if (!parsed._limitOffset.isUnconstrained()) {
+    return "The view's query has a LIMIT or OFFSET clause";
+  }
+
+  // A `FROM` or `FROM NAMED` clause changes the dataset against which the
+  // query is evaluated (with only `FROM NAMED`, the active default graph is
+  // even empty) and thus also restricts which rows end up on disk.
+  if (!parsed.datasetClauses_.isUnconstrainedOrWithClause()) {
+    return "The view's query has a FROM or FROM NAMED clause";
+  }
+
+  auto graphPatternsFiltered = graphPatternInvariantFilter(parsed);
+  if (graphPatternsFiltered.size() != 1) {
+    return "The view has more than one graph pattern (even after skipping "
+           "ignored patterns)";
+  }
+  auto& graphPattern = graphPatternsFiltered.at(0);
+  if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(graphPattern)) {
+    return "The graph pattern is not a basic set of triples";
+  }
+  // TODO<ullingerc> Property path is stored as a single predicate here.
+  auto triples = std::move(graphPattern.getBasic()._triples);
+  if (triples.empty()) {
+    return "The query body is empty";
+  }
+
+  return triples;
 }
 
 // _____________________________________________________________________________

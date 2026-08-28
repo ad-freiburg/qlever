@@ -87,6 +87,14 @@ NARY_EXPRESSION(
     GeoRelationExpression, 2,
     FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
 
+// The actual `geof:relate` expression is currently unimplemented (see
+// `WktDe9imRelation` in `GeoSparqlHelpers.h`), it is only usable via query
+// rewriting to a `SpatialJoin`. The value getters below are thus dummies for
+// now.
+NARY_EXPRESSION(De9imRelationExpression, 3,
+                FV<ad_utility::WktDe9imRelation, GeoPointValueGetter,
+                   GeoPointValueGetter, StringValueGetter>);
+
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 NARY_EXPRESSION(BoundingCoordinateExpression, 1,
                 FV<ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
@@ -198,6 +206,14 @@ SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
 }
 
 // _____________________________________________________________________________
+SparqlExpression::Ptr makeDe9imRelationExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
+    SparqlExpression::Ptr child3) {
+  return std::make_unique<De9imRelationExpression>(
+      std::move(child1), std::move(child2), std::move(child3));
+}
+
+// _____________________________________________________________________________
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child) {
@@ -222,7 +238,25 @@ SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
   return std::make_unique<EnvelopeUpperRightExpression>(std::move(child));
 }
 
+// Helpers to extract information for `FILTER` rewriting.
 namespace {
+
+// Extract a `TripleComponent` (a variable or a fixed value) from an argument
+// expression of a geo relation or distance function. Returns `std::nullopt`
+// if `expr` is neither a variable nor a constant literal expression.
+std::optional<TripleComponent> extractGeometryOperand(
+    const SparqlExpression& expr) {
+  if (auto var = expr.getVariableOrNullopt()) {
+    return TripleComponent{std::move(var).value()};
+  }
+  if (const auto* id = dynamic_cast<const IdExpression*>(&expr)) {
+    return TripleComponent{id->value()};
+  }
+  if (const auto* lit = dynamic_cast<const StringLiteralExpression*>(&expr)) {
+    return TripleComponent{lit->value()};
+  }
+  return std::nullopt;
+}
 
 // Helper to check if `expr` is a `SparqlExpression` on the `geof:sf[Relation]`
 // function, given the templated `Relation`.
@@ -235,17 +269,18 @@ std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
     return std::nullopt;
   }
 
-  // Extract variables
-  auto p1 = geoRelExpr->children()[0]->getVariableOrNullopt();
+  // Extract variables or fixed values.
+  auto p1 = extractGeometryOperand(*geoRelExpr->children()[0]);
   if (!p1.has_value()) {
     return std::nullopt;
   }
-  auto p2 = geoRelExpr->children()[1]->getVariableOrNullopt();
+  auto p2 = extractGeometryOperand(*geoRelExpr->children()[1]);
   if (!p2.has_value()) {
     return std::nullopt;
   }
 
-  return GeoFunctionCall{Relation, p1.value(), p2.value()};
+  return GeoFunctionCall{Relation, std::move(p1).value(),
+                         std::move(p2).value()};
 }
 
 }  // namespace
@@ -279,10 +314,47 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
 }
 
 // _____________________________________________________________________________
+std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
+    const SparqlExpression& expr) {
+  // Is this `expr` a call to `geof:relate(?x, ?y, "<pattern>")`?
+  auto de9imExpr = dynamic_cast<const De9imRelationExpression*>(&expr);
+  if (de9imExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Extract variables or fixed values.
+  auto p1 = extractGeometryOperand(*de9imExpr->children()[0]);
+  if (!p1.has_value()) {
+    return std::nullopt;
+  }
+  auto p2 = extractGeometryOperand(*de9imExpr->children()[1]);
+  if (!p2.has_value()) {
+    return std::nullopt;
+  }
+
+  // Extract and validate the DE-9IM filter pattern
+  auto patternLiteral =
+      getLiteralFromLiteralExpression(de9imExpr->children()[2].get());
+  if (!patternLiteral.has_value()) {
+    return std::nullopt;
+  }
+  auto pattern = parseDe9imFilterString(
+      asStringViewUnsafe(patternLiteral.value().getContent()));
+  if (!pattern.has_value() || de9imFilterCanMatchDisjoint(pattern.value())) {
+    return std::nullopt;
+  }
+
+  return De9imRelationCall{
+      {SpatialJoinType::DE9IM, std::move(p1).value(), std::move(p2).value()},
+      pattern.value()};
+}
+
+// _____________________________________________________________________________
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr) {
   using namespace ad_utility::use_type_identity;
-  using DistArgs = std::tuple<Variable, Variable, UnitOfMeasurement>;
+  using DistArgs =
+      std::tuple<TripleComponent, TripleComponent, UnitOfMeasurement>;
 
   // Helper lambda to extract a unit of measurement from a SparqlExpression (IRI
   // or literal with xsd:anyURI datatype)
@@ -315,12 +387,12 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
       return std::nullopt;
     }
 
-    // Extract variables
-    auto p1 = distExpr->children()[0]->getVariableOrNullopt();
+    // Extract variables or fixed values.
+    auto p1 = extractGeometryOperand(*distExpr->children()[0]);
     if (!p1.has_value()) {
       return std::nullopt;
     }
-    auto p2 = distExpr->children()[1]->getVariableOrNullopt();
+    auto p2 = extractGeometryOperand(*distExpr->children()[1]);
     if (!p2.has_value()) {
       return std::nullopt;
     }
