@@ -282,8 +282,53 @@ class QueryPlanner {
   // be reported as part of the query result if desired.
   std::vector<std::string> warnings_;
 
+  // Everything that is needed to plan the children of a `Union` again, after
+  // the `Union` itself has already been created: their graph patterns, and the
+  // graph context that was active while they were planned the first time (that
+  // context changes as the planner descends into the query, so it has to be
+  // restored before replanning).
+  struct UnionChildren {
+    // Copies of the children's graph patterns. `optimize` consumes the pattern
+    // it is given: it moves out of the stored operations and appends to the
+    // pattern's `_filters`. So the copies are taken before the children are
+    // planned for the first time, and each replanning run gets a copy of its
+    // own.
+    std::array<ParsedQuery::GraphPattern, 2> patterns_;
+    // The value of `_internalVarCount` before each child was planned. Restoring
+    // it makes replanning generate the same internal variable names as the
+    // original run, instead of a fresh set for every attempt.
+    std::array<size_t, 2> internalVarCounts_;
+    ParsedQuery::DatasetClauses datasetClauses_;
+    std::optional<Variable> graphVariable_;
+    parsedQuery::GroupGraphPattern::GraphVariableBehaviour graphBehaviour_;
+  };
+  // Keyed by the `Union` operation. The key is a `shared_ptr` so that it keeps
+  // the operation alive and its address cannot be reused by an unrelated one.
+  ad_utility::HashMap<std::shared_ptr<Operation>, UnionChildren> unionChildren_;
+
+  // Memoizes `planUnionChildWithJoin`. That function is called for every pair
+  // of plans that the dynamic program considers, but its result only depends on
+  // the child pattern and on the tree that is joined into it.
+  ad_utility::HashMap<std::string, std::vector<SubtreePlan>>
+      unionChildJoinCache_;
+
+  // Optimize the `rootPattern`. If an `additionalPlan` is given, it takes part
+  // in the optimization as if it were another element of the pattern, so the
+  // result covers `rootPattern JOIN additionalPlan`. Note that this is not the
+  // same as optimizing the pattern and joining afterwards: the additional plan
+  // is visible while the pattern's own join order is chosen.
   std::vector<QueryPlanner::SubtreePlan> optimize(
-      ParsedQuery::GraphPattern* rootPattern);
+      ParsedQuery::GraphPattern* rootPattern,
+      std::optional<SubtreePlan> additionalPlan = std::nullopt);
+
+  // Plan child number `childIndex` of `unionOperation` together with `other`,
+  // using the `additionalPlan` mechanism of `optimize` above. Returns
+  // `std::nullopt` if the children of the `Union` were not registered, if a
+  // join must not be pushed into the child (see `joinMayBePushedInto`), or if
+  // replanning yields no plan at all.
+  std::optional<std::vector<SubtreePlan>> planUnionChildWithJoin(
+      const std::shared_ptr<Operation>& unionOperation, size_t childIndex,
+      const SubtreePlan& other);
 
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
@@ -390,31 +435,31 @@ class QueryPlanner {
    */
   vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
                             const vector<SubtreePlan>& b,
-                            const TripleGraph& tg) const;
+                            const TripleGraph& tg);
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // computed automatically.
   std::vector<SubtreePlan> createJoinCandidates(
       const SubtreePlan& a, const SubtreePlan& b,
-      boost::optional<const TripleGraph&> tg) const;
+      boost::optional<const TripleGraph&> tg);
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // configured by `jcs`.
   std::vector<SubtreePlan> createJoinCandidates(const SubtreePlan& a,
                                                 const SubtreePlan& b,
-                                                const JoinColumns& jcs) const;
+                                                const JoinColumns& jcs);
 
   // Same as `createJoinCandidates(SubtreePlan, SubtreePlan, JoinColumns)`, but
   // creates a cartesian product when `jcs` is empty.
   std::vector<SubtreePlan> createJoinCandidatesAllowEmpty(
-      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
 
   // Whenever a join is applied to a `Union`, add candidates that try applying
   // join to the children of the union directly, which can be more efficient if
   // one of the children has an optimized join, which can happen for
   // `TransitivePath` for example.
   std::vector<SubtreePlan> applyJoinDistributivelyToUnion(
-      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
 
   // Return a pair of join columns (the first from the transitive path
   // operation, the second from the other operation with which the result of the
@@ -494,7 +539,7 @@ class QueryPlanner {
   // Apply the passed `VALUES` clause to the current plans.
   std::vector<SubtreePlan> applyPostQueryValues(
       const parsedQuery::Values& values,
-      const std::vector<SubtreePlan>& currentPlans) const;
+      const std::vector<SubtreePlan>& currentPlans);
 
   JoinColumns connected(const SubtreePlan& a, const SubtreePlan& b,
                         boost::optional<const TripleGraph&> tg) const;
@@ -530,9 +575,8 @@ class QueryPlanner {
     ApplyAllFiltersAndReplaceUnfiltered,
   };
   template <FilterMode mode = FilterMode::KeepUnfiltered>
-  void applyFiltersIfPossible(
-      std::vector<SubtreePlan>& row,
-      const FiltersAndOptionalSubstitutes& filters) const;
+  void applyFiltersIfPossible(std::vector<SubtreePlan>& row,
+                              const FiltersAndOptionalSubstitutes& filters);
 
   // Apply text limits if possible.
   // A text limit can be applied to a plan if:
@@ -612,7 +656,7 @@ class QueryPlanner {
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
       const TextLimitVec& textLimits, const TripleGraph& tg,
-      ReplacementPlans&& replacementPlans) const;
+      ReplacementPlans&& replacementPlans);
 
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
   // algorithm that always greedily chooses the smallest result of the possible
@@ -621,7 +665,7 @@ class QueryPlanner {
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
       const TextLimitVec& textLimits, const TripleGraph& tg,
-      ReplacementPlans&& replacementPlans) const;
+      ReplacementPlans&& replacementPlans);
 
   // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
   // if the number of subgraphs is `> budget`. This is used to analyze the

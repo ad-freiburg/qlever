@@ -268,8 +268,22 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::optimize(
-    ParsedQuery::GraphPattern* rootPattern) {
+    ParsedQuery::GraphPattern* rootPattern,
+    std::optional<SubtreePlan> additionalPlan) {
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
+  if (additionalPlan.has_value()) {
+    SubtreePlan& plan = additionalPlan.value();
+    // The plan comes from an enclosing group, so its filter and text limit ids
+    // refer to that group's numbering and must not leak into this one. The
+    // caller restores the correct ids on the resulting plans.
+    plan._idsOfIncludedFilters = 0;
+    plan.idsOfIncludedTextLimits_ = 0;
+    for (const Variable& variable :
+         plan._qet->getVariableColumns() | ql::views::keys) {
+      optimizer.boundVariables_.insert(variable);
+    }
+    optimizer.candidatePlans_.push_back({std::move(plan)});
+  }
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {
       return optimizer.graphPatternOperationVisitor(arg);
@@ -394,7 +408,7 @@ std::vector<SubtreePlan> QueryPlanner::getHavingRow(
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::applyPostQueryValues(
     const parsedQuery::Values& values,
-    const std::vector<SubtreePlan>& currentPlans) const {
+    const std::vector<SubtreePlan>& currentPlans) {
   std::vector<SubtreePlan> result;
 
   auto valuesPlan = makeSubtreePlan<::Values>(_qec, values._inlineValues);
@@ -1221,7 +1235,7 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::merge(
     const vector<SubtreePlan>& a, const vector<SubtreePlan>& b,
-    const QueryPlanner::TripleGraph& tg) const {
+    const QueryPlanner::TripleGraph& tg) {
   // TODO: Add the following features:
   // If a join is supposed to happen, always check if it happens between
   // a scan with a relatively large result size
@@ -1382,8 +1396,7 @@ std::string QueryPlanner::getPruningKey(
 // _____________________________________________________________________________
 template <QueryPlanner::FilterMode mode>
 void QueryPlanner::applyFiltersIfPossible(
-    vector<SubtreePlan>& row,
-    const FiltersAndOptionalSubstitutes& filters) const {
+    vector<SubtreePlan>& row, const FiltersAndOptionalSubstitutes& filters) {
   // Apply every filter possible.
   // It is possible when,
   // 1) the filter has not already been applied
@@ -1572,7 +1585,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const FiltersAndOptionalSubstitutes& filters,
     const TextLimitVec& textLimits, const TripleGraph& tg,
-    ReplacementPlans&& replacementPlans) const {
+    ReplacementPlans&& replacementPlans) {
   std::vector<std::vector<SubtreePlan>> dpTab;
   // find the unique number of nodes in the current connected component
   // (there might be duplicates because we already have multiple candidates
@@ -1702,7 +1715,7 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const FiltersAndOptionalSubstitutes& filters,
     const TextLimitVec& textLimits, const TripleGraph& tg,
-    ReplacementPlans&& replacementPlans) const {
+    ReplacementPlans&& replacementPlans) {
   const size_t numSeeds =
       findUniqueNodeIds(connectedComponent, !replacementPlans.empty());
   if (numSeeds <= 1) {
@@ -2274,7 +2287,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
-    boost::optional<const TripleGraph&> tg) const {
+    boost::optional<const TripleGraph&> tg) {
   bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
@@ -2284,8 +2297,7 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::createJoinCandidatesAllowEmpty(
-    const SubtreePlan& ain, const SubtreePlan& bin,
-    const JoinColumns& jcs) const {
+    const SubtreePlan& ain, const SubtreePlan& bin, const JoinColumns& jcs) {
   if (jcs.empty()) {
     return std::vector{makeSubtreePlan<CartesianProductJoin>(
         _qec, std::vector{ain._qet, bin._qet})};
@@ -2295,8 +2307,7 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidatesAllowEmpty(
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
-    const SubtreePlan& ain, const SubtreePlan& bin,
-    const JoinColumns& jcs) const {
+    const SubtreePlan& ain, const SubtreePlan& bin, const JoinColumns& jcs) {
   checkCancellation();
   bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
@@ -2493,12 +2504,72 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
   newPlan._qet = std::move(newTree);
   return newPlan;
 }
+
+// A join may only be pushed into a graph pattern if all of the pattern's
+// top-level elements commute with that join. `OPTIONAL` and `MINUS` don't: they
+// would then see the rows and variables of the joined operand on their
+// left-hand side, which changes which rows they preserve or remove.
+bool joinMayBePushedInto(const ParsedQuery::GraphPattern& pattern) {
+  return ql::ranges::none_of(
+      pattern._graphPatterns, [](const parsedQuery::GraphPatternOperation& op) {
+        return std::holds_alternative<parsedQuery::Optional>(op) ||
+               std::holds_alternative<parsedQuery::Minus>(op);
+      });
+}
 }  // namespace
+
+// _____________________________________________________________________________________________________________________
+std::optional<std::vector<SubtreePlan>> QueryPlanner::planUnionChildWithJoin(
+    const std::shared_ptr<Operation>& unionOperation, size_t childIndex,
+    const SubtreePlan& other) {
+  auto it = unionChildren_.find(unionOperation);
+  if (it == unionChildren_.end()) {
+    return std::nullopt;
+  }
+  const UnionChildren& children = it->second;
+  if (!joinMayBePushedInto(children.patterns_.at(childIndex))) {
+    return std::nullopt;
+  }
+  // The child pattern is replanned for every pair of plans that the dynamic
+  // program considers, so memoize on what the result actually depends on.
+  std::string cacheKey =
+      absl::StrCat(absl::Hex{reinterpret_cast<uintptr_t>(unionOperation.get())},
+                   "#", childIndex, "#", other._qet->getCacheKey());
+  if (auto cached = unionChildJoinCache_.find(cacheKey);
+      cached != unionChildJoinCache_.end()) {
+    return cached->second;
+  }
+
+  // Restore the graph context in which the `UNION` was originally planned, the
+  // planner has long moved on to a different part of the query by now.
+  absl::Cleanup resetGraphContext{[this, datasets = activeDatasetClauses_,
+                                   variable = activeGraphVariable_,
+                                   behaviour = defaultGraphBehaviour_,
+                                   varCount = _internalVarCount]() mutable {
+    activeDatasetClauses_ = std::move(datasets);
+    activeGraphVariable_ = std::move(variable);
+    defaultGraphBehaviour_ = behaviour;
+    _internalVarCount = varCount;
+  }};
+  activeDatasetClauses_ = children.datasetClauses_;
+  activeGraphVariable_ = children.graphVariable_;
+  defaultGraphBehaviour_ = children.graphBehaviour_;
+  _internalVarCount = children.internalVarCounts_.at(childIndex);
+
+  // `optimize` consumes the pattern, so give it a copy.
+  ParsedQuery::GraphPattern pattern = children.patterns_.at(childIndex);
+  auto plans = optimize(&pattern, other);
+  if (plans.empty()) {
+    return std::nullopt;
+  }
+  unionChildJoinCache_.try_emplace(cacheKey, plans);
+  return plans;
+}
 
 // _____________________________________________________________________________________________________________________
 auto QueryPlanner::applyJoinDistributivelyToUnion(
     const SubtreePlan& a, const SubtreePlan& b,
-    const JoinColumns& jcs) const -> std::vector<SubtreePlan> {
+    const JoinColumns& jcs) -> std::vector<SubtreePlan> {
   AD_CORRECTNESS_CHECK(jcs.size() == 1);
   AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
                        b.type == SubtreePlan::BASIC);
@@ -2546,11 +2617,28 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
     auto [leftMapping, rightMapping] =
         mapColumnsInUnion(flipped, *unionOperation, jcs);
 
-    auto joinedLeft = findJoinCandidates(
-        cloneWithNewTree(thisPlan, unionOperation->leftChild()), other,
-        leftMapping);
-    auto joinedRight = findJoinCandidates(
-        cloneWithNewTree(thisPlan, unionOperation->rightChild()),
+    // Plan each child of the `UNION` again, this time with the operation it is
+    // joined with in sight. This is what makes the optimization worthwhile: the
+    // child can now pick a join order that suits the join, for example binding
+    // the other side of a `TransitivePath`. Only if that is not applicable, the
+    // join is pushed onto the finished child plan as before.
+    auto joinWithChild =
+        [&](size_t childIndex, const std::shared_ptr<QueryExecutionTree>& child,
+            const SubtreePlan& otherPlan, const JoinColumns& mapping) {
+          if (auto replanned = planUnionChildWithJoin(
+                  thisPlan._qet->getRootOperation(), childIndex, otherPlan)) {
+            return std::move(replanned).value();
+          }
+          return findJoinCandidates(cloneWithNewTree(thisPlan, child),
+                                    otherPlan, mapping);
+        };
+
+    auto joinedLeft =
+        joinWithChild(0, unionOperation->leftChild(), other, leftMapping);
+    // The right child gets a clone, s.t. the same tree doesn't occur twice
+    // within a single plan.
+    auto joinedRight = joinWithChild(
+        1, unionOperation->rightChild(),
         cloneWithNewTree(other, other._qet->clone()), rightMapping);
 
     for (const auto& leftPlan : joinedLeft) {
@@ -3459,12 +3547,28 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
   // TODO<joka921> here we could keep all the candidates, and create a
   // "sorted union" by merging as additional candidates if the inputs
   // are presorted.
+  // Note: the copies have to be taken before the children are planned, see
+  // `UnionChildren::patterns_`.
+  std::array<ParsedQuery::GraphPattern, 2> patternCopies{arg._child1,
+                                                         arg._child2};
+  size_t varCountBeforeLeft = planner_._internalVarCount;
   SubtreePlan left = optimizeSingle(&arg._child1);
+  size_t varCountBeforeRight = planner_._internalVarCount;
   SubtreePlan right = optimizeSingle(&arg._child2);
 
   // create a new subtree plan
   SubtreePlan candidate =
       makeSubtreePlan<Union>(planner_._qec, left._qet, right._qet);
+  // Remember the children (and the graph context they were planned in), s.t.
+  // `applyJoinDistributivelyToUnion` can plan them again once it knows which
+  // operation is joined with the `UNION`.
+  planner_.unionChildren_.try_emplace(
+      candidate._qet->getRootOperation(),
+      UnionChildren{std::move(patternCopies),
+                    {varCountBeforeLeft, varCountBeforeRight},
+                    planner_.activeDatasetClauses_,
+                    planner_.activeGraphVariable_,
+                    planner_.defaultGraphBehaviour_});
   visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 
