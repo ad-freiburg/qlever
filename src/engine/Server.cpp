@@ -553,10 +553,11 @@ void requireValidAccessToken(bool accessTokenOk, std::string_view actionName) {
   }
 }
 
-// Check if `paramName` is set in `parameters`. If so, verify the access
-// token (using `actionName` if given, `paramName` otherwise), log the new
-// value, and return it. Return `std::nullopt` otherwise.
-std::optional<std::string> checkSetting(
+// Check if `paramName=<newValue>` is set in `parameters`. If so, verify the
+// access token (using `actionName` if given, `paramName` otherwise for the
+// error message on invalid access), log the `<newValue>` and return it. Return
+// `std::nullopt` if no such parameter is found.
+std::optional<std::string> checkAndLogParameterSetting(
     const ad_utility::url_parser::ParamValueMap& parameters,
     std::string_view paramName, bool accessTokenOk,
     std::optional<std::string_view> actionName = std::nullopt) {
@@ -604,7 +605,7 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
     const ParamValueMap& parameters, bool accessTokenOk) const {
   bool parameterChanged = false;
   for (const auto& key : globalRuntimeParameters.rlock()->getKeys()) {
-    if (auto value = serverProcessHelpers::checkSetting(
+    if (auto value = serverProcessHelpers::checkAndLogParameterSetting(
             parameters, key, accessTokenOk, "setting runtime parameters")) {
       globalRuntimeParameters.wlock()->setFromString(key, value.value());
       parameterChanged = true;
@@ -665,12 +666,13 @@ CPP_template_def(typename RequestT, typename SendT)(
   auto requireValidAccessToken = absl::bind_front(
       &serverProcessHelpers::requireValidAccessToken, accessTokenOk);
 
-  // We always want to call `serverProcessHelpers::checkSetting` with the
-  // same `parameters` and `accessTokenOk`.
-  auto checkSetting = [&parameters, accessTokenOk](std::string_view paramName) {
-    return serverProcessHelpers::checkSetting(parameters, paramName,
-                                              accessTokenOk);
-  };
+  // We always want to call `serverProcessHelpers::checkAndLogParameterSetting`
+  // with the same `parameters` and `accessTokenOk`.
+  auto checkAndLogParameterSetting =
+      [&parameters, accessTokenOk](std::string_view paramName) {
+        return serverProcessHelpers::checkAndLogParameterSetting(
+            parameters, paramName, accessTokenOk);
+      };
 
   // Check if the current command is selected in the parameters from the
   // `parsedHttpRequest.parameters_`. If so, log this information via
@@ -780,13 +782,13 @@ CPP_template_def(typename RequestT, typename SendT)(
   }
 
   // Set description of KB index.
-  if (auto description = checkSetting("index-description")) {
+  if (auto description = checkAndLogParameterSetting("index-description")) {
     index.setKbName(description.value());
     response = jsonResponse(composeIndexStats(index));
   }
 
   // Set description of text index.
-  if (auto description = checkSetting("text-description")) {
+  if (auto description = checkAndLogParameterSetting("text-description")) {
     index.setTextName(description.value());
     response = jsonResponse(composeIndexStats(index));
   }

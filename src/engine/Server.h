@@ -248,15 +248,16 @@ class Server {
                   const RequestT& request) const;
 
   // Handle the `/metrics` endpoint: require a valid access token, then
-  // serve Prometheus-formatted metrics text if enabled
+  // return Prometheus-formatted metrics text if enabled
   // (`--enable-metrics`), or a 404 response otherwise.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) ResponseT
       processMetrics(bool accessTokenOk, const RequestT& request) const;
 
   // Set every runtime parameter that's present in `parameters`, verifying the
-  // access token for each one that is. If any runtime parameter was changed,
-  // return the representation of all runtime parameters, else `nullopt`.
+  // access token if there is at least one such runtime parameter. If any
+  // runtime parameter was changed, return the representation of all runtime
+  // parameters, else `nullopt`.
   std::optional<json> processSetRuntimeParameters(
       const ParamValueMap& parameters, bool accessTokenOk) const;
 

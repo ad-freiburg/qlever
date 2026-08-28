@@ -510,13 +510,13 @@ TEST(ServerTest, pingEndpoint) {
   // With a `msg` parameter; the response is the same regardless of the
   // message, which is only used for logging.
   logStream.str("");
-  auto msg = "hello";
-  response = server.process(makeGetRequest(absl::StrCat("/ping?msg=", msg)));
+  response =
+      server.process(makeGetRequest(absl::StrCat("/ping?msg=", "hello")));
   EXPECT_THAT(response, StatusIs(http::status::ok));
   EXPECT_THAT(responseBodyToString(std::move(response.body())),
               testing::StrEq("This QLever server is up and running\n"));
   EXPECT_THAT(logStream.str(), testing::HasSubstr(absl::StrCat(
-                                   "Alive check with message \"", msg)));
+                                   "Alive check with message \"", "hello")));
 }
 
 // _____________________________________________________________________________
@@ -567,8 +567,11 @@ TEST(ServerTest, setIndexAndTextDescription) {
   };
 
   expectDescriptionSettable("index-description", "new-kb-name", "name-index");
+  EXPECT_THAT(server.getIndex().getKbName(), testing::Eq("new-kb-name"));
+
   expectDescriptionSettable("text-description", "new-text-name",
                             "name-text-index");
+  EXPECT_THAT(server.getIndex().getTextName(), testing::Eq("new-text-name"));
 }
 
 // _____________________________________________________________________________
