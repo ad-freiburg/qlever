@@ -12,6 +12,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "engine/MaterializedViewsQueryAnalysis.h"
@@ -32,6 +33,8 @@ namespace materializedViewsQueryAnalysis {
 // of variable assignments.
 class PatternMatcher {
  public:
+  using Limits = materializedViewsQueryAnalysis::PatternMatcherLimits;
+
   // Status returned by `findReplacementPlans`.
   enum class MatchStatus {
     // The search covered every candidate assignment.
@@ -44,20 +47,25 @@ class PatternMatcher {
     Skipped,
   };
 
+  // Return value of `findReplacementPlans`: the outcome status and how much
+  // of `limits` was actually used.
+  struct MatchReport {
+    MatchStatus status_;
+    Limits used_;
+  };
+
   // Builds a `PatternMatcher` and runs it to completion.
-  static MatchStatus findReplacementPlans(
+  static MatchReport findReplacementPlans(
       const ViewPattern& pattern, const parsedQuery::BasicGraphPattern& triples,
       const TriplesByPredicate& triplesByPredicate, QueryExecutionContext* qec,
-      size_t budget, size_t maxNumReplacementPlans,
-      std::vector<MaterializedViewJoinReplacement>& result);
+      Limits limits, std::vector<MaterializedViewJoinReplacement>& result);
 
  private:
   // Private constructor used by `findReplacementPlans`.
   PatternMatcher(const ViewPattern& pattern,
                  const parsedQuery::BasicGraphPattern& triples,
                  const TriplesByPredicate& triplesByPredicate,
-                 QueryExecutionContext* qec, size_t budget,
-                 size_t maxNumReplacementPlans,
+                 QueryExecutionContext* qec, Limits limits,
                  std::vector<MaterializedViewJoinReplacement>& result);
 
   const ViewPattern& pattern_;
@@ -67,10 +75,16 @@ class PatternMatcher {
   std::vector<uint64_t> candidatesByEdge_;
   QueryExecutionContext* qec_;
   const VariableToColumnMap& viewCols_;
+
+  // The original limits. Used to compute how much was actually used.
+  Limits limits_;
+  // The remaining limits for this instance.
   size_t stepsRemaining_;
-  // Hard cap on how many replacements this search may add to `result_`.
-  size_t maxNumReplacementPlans_;
-  MatchStatus status_ = MatchStatus::Complete;
+  size_t numResultsRemaining_;
+
+  // `status_` is `nullopt` until the search is finished.
+  std::optional<MatchStatus> status_;
+
   std::vector<MaterializedViewJoinReplacement>& result_;
 
   // Current candidate assignment: maps view variables to the query-side node
@@ -132,6 +146,10 @@ class PatternMatcher {
   // results and a maximum number of assignments tried (whichever is reached
   // first).
   void extendMatch(size_t edgeIdx);
+
+  // Make the `MatchReport`: the resolved status and how much of `limits_` was
+  // actually used.
+  MatchReport makeReport() const;
 };
 
 }  // namespace materializedViewsQueryAnalysis

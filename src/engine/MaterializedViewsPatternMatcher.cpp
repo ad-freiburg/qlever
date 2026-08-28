@@ -17,33 +17,31 @@
 namespace materializedViewsQueryAnalysis {
 
 // _____________________________________________________________________________
-PatternMatcher::MatchStatus PatternMatcher::findReplacementPlans(
+PatternMatcher::MatchReport PatternMatcher::findReplacementPlans(
     const ViewPattern& pattern, const parsedQuery::BasicGraphPattern& triples,
     const TriplesByPredicate& triplesByPredicate, QueryExecutionContext* qec,
-    size_t budget, size_t maxNumReplacementPlans,
-    std::vector<MaterializedViewJoinReplacement>& result) {
+    Limits limits, std::vector<MaterializedViewJoinReplacement>& result) {
   PatternMatcher matcher{pattern, triples, triplesByPredicate,
-                         qec,     budget,  maxNumReplacementPlans,
-                         result};
+                         qec,     limits,  result};
   if (matcher.status_ != MatchStatus::Skipped) {
     // Runs the search, starting from the first pattern edge.
     matcher.extendMatch(0);
   }
-  return matcher.status_;
+  return matcher.makeReport();
 }
 
 // _____________________________________________________________________________
 PatternMatcher::PatternMatcher(
     const ViewPattern& pattern, const parsedQuery::BasicGraphPattern& triples,
     const TriplesByPredicate& triplesByPredicate, QueryExecutionContext* qec,
-    size_t budget, size_t maxNumReplacementPlans,
-    std::vector<MaterializedViewJoinReplacement>& result)
+    Limits limits, std::vector<MaterializedViewJoinReplacement>& result)
     : pattern_{pattern},
       triples_{triples},
       qec_{qec},
       viewCols_{pattern.view_->variableToColumnMap()},
-      stepsRemaining_{budget},
-      maxNumReplacementPlans_{maxNumReplacementPlans},
+      limits_{limits},
+      stepsRemaining_{limits.budget_},
+      numResultsRemaining_{limits.maxNumReplacementPlans_},
       result_{result} {
   buildCandidatesByEdge(pattern, triplesByPredicate);
 }
@@ -182,14 +180,14 @@ void PatternMatcher::emitIfLegal() {
            qec_, parsedQuery::MaterializedViewQuery{pattern_.view_->name(),
                                                     assignment_}),
        coveredTriples_});
+  --numResultsRemaining_;
 }
 
 // _____________________________________________________________________________
 void PatternMatcher::extendMatch(size_t edgeIdx) {
-  // If already `maxNumReplacementPlans_` have been found, no further plans
-  // should be generated.
-  if (result_.size() >= maxNumReplacementPlans_) {
-    if (status_ == MatchStatus::Complete) {
+  // If no result budget is left, no further plans should be generated.
+  if (numResultsRemaining_ == 0) {
+    if (!status_.has_value()) {
       status_ = MatchStatus::TruncatedByMaxReplacements;
     }
     return;
@@ -231,13 +229,20 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
 // _____________________________________________________________________________
 bool PatternMatcher::decrementAndCheckBudget() {
   if (stepsRemaining_ == 0) {
-    if (status_ == MatchStatus::Complete) {
+    if (!status_.has_value()) {
       status_ = MatchStatus::TruncatedByBudget;
     }
     return false;
   }
   --stepsRemaining_;
   return true;
+}
+
+// _____________________________________________________________________________
+PatternMatcher::MatchReport PatternMatcher::makeReport() const {
+  return {status_.value_or(MatchStatus::Complete),
+          {limits_.budget_ - stepsRemaining_,
+           limits_.maxNumReplacementPlans_ - numResultsRemaining_}};
 }
 
 }  // namespace materializedViewsQueryAnalysis
