@@ -48,9 +48,8 @@ class LocalVocabContext {
   using VocabBounds = std::pair<VocabIndex, VocabIndex>;
 
   // The result of `lookupWordInVocabularies` below: either the `Id` of a word
-  // that is contained in one of the vocabularies of the index, or the bounds of
-  // the position of a word that is contained in none of them (currently, the
-  // vocabulary of the main index is the only one).
+  // that is contained in the vocabulary of the index, or the upper and lower
+  // bound of a word that is not contained in the vocabulary.
   using IdOrVocabBounds = std::variant<Id, VocabBounds>;
 
   virtual ~LocalVocabContext();
