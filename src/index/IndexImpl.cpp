@@ -1127,10 +1127,9 @@ auto IndexImpl::convertPartialToGlobalIds(
       pushBatch();
     }
     AD_CORRECTNESS_CHECK(numRows == actualLinesPerPartial[batchIdx]);
-    // Close and delete the temporary file of this partial vocabulary.
+    // Close the table of this partial vocabulary; its destructor deletes the
+    // underlying temporary file.
     tablePtr.reset();
-    deleteTemporaryFile(
-        absl::StrCat(onDiskBase_, PARTIAL_TRIPLES_INFIX, batchIdx));
     ++batchIdx;
   }
   lookupQueue.finish();
