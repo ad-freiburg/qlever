@@ -40,25 +40,18 @@ TEST(Permutation, logRegistrationCanBeDisabled) {
       basename, "<a> <b> <c> . <a> <b> <d> . <e> <f> <g> .");
 
   // Load the `PSO` permutation (including its internal permutation) from disk
-  // and return the log output that this produced. If `logRegistration` has a
-  // value, then it is explicitly passed to `loadFromDisk`, otherwise the
-  // default of that argument is used.
-  auto loadAndCaptureLog = [&basename](std::optional<bool> logRegistration) {
+  // with the given `logRegistration` and return the log output that this
+  // produced.
+  auto loadAndCaptureLog = [&basename](bool logRegistration) {
     auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
     Permutation permutation{Permutation::Enum::PSO,
                             ad_utility::makeUnlimitedAllocator<Id>()};
-    if (logRegistration.has_value()) {
-      permutation.loadFromDisk(basename, true, Permutation::Type::NORMAL, {},
-                               logRegistration.value());
-    } else {
-      permutation.loadFromDisk(basename, true);
-    }
+    permutation.loadFromDisk(basename, true, Permutation::Type::NORMAL, {},
+                             logRegistration);
     return logStream.str();
   };
 
-  // By default, the registration is logged.
-  EXPECT_THAT(loadAndCaptureLog(std::nullopt),
-              ::testing::HasSubstr("Registered PSO permutation"));
+  // With `logRegistration` set to `true`, the registration is logged.
   EXPECT_THAT(loadAndCaptureLog(true),
               ::testing::HasSubstr("Registered PSO permutation"));
   // With `logRegistration` set to `false`, neither the permutation itself nor

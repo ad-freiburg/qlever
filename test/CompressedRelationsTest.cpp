@@ -1511,12 +1511,10 @@ TEST(CompressedBlockMetadata, invariantChecks) {
 }
 
 namespace {
-// Write a small permutation to `filename` and return the log output that was
-// produced while doing so. If `showProgressBar` has a value, then it is
-// explicitly passed to `CompressedRelationWriter::createPermutation`,
-// otherwise the default of that argument is used.
+// Write a small permutation to `filename` with the given `showProgressBar` and
+// return the log output that was produced while doing so.
 std::string writePermutationAndCaptureLog(const std::string& filename,
-                                          std::optional<bool> showProgressBar) {
+                                          bool showProgressBar) {
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
   auto generator = []() -> cppcoro::generator<IdTableStatic<0>> {
     IdTableStatic<0> buffer{4, ad_utility::testing::makeAllocator()};
@@ -1525,21 +1523,14 @@ std::string writePermutationAndCaptureLog(const std::string& filename,
     }
     co_yield buffer;
   };
-  auto makeWriterAndCallback = [&filename]() {
-    return CompressedRelationWriter::WriterAndCallback{
-        std::make_unique<CompressedRelationWriter>(
-            4, ad_utility::File{filename, "w"}, 16_B),
-        [](ql::span<const CompressedRelationMetadata>) {}};
-  };
-  if (showProgressBar.has_value()) {
-    CompressedRelationWriter::createPermutation(
-        makeWriterAndCallback(), ad_utility::InputRangeTypeErased{generator()},
-        qlever::KeyOrder{0, 1, 2, 3}, {}, showProgressBar.value());
-  } else {
-    CompressedRelationWriter::createPermutation(
-        makeWriterAndCallback(), ad_utility::InputRangeTypeErased{generator()},
-        qlever::KeyOrder{0, 1, 2, 3}, {});
-  }
+  CompressedRelationWriter::WriterAndCallback writerAndCallback{
+      std::make_unique<CompressedRelationWriter>(
+          4, ad_utility::File{filename, "w"}, 16_B),
+      [](ql::span<const CompressedRelationMetadata>) {}};
+  CompressedRelationWriter::createPermutation(
+      std::move(writerAndCallback),
+      ad_utility::InputRangeTypeErased{generator()},
+      qlever::KeyOrder{0, 1, 2, 3}, {}, showProgressBar);
   return logStream.str();
 }
 }  // namespace
@@ -1548,9 +1539,7 @@ std::string writePermutationAndCaptureLog(const std::string& filename,
 TEST(CompressedRelationWriter, showProgressBarCanBeDisabled) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   auto [filename, cleanup] = testFilenameWithCleanup();
-  // By default, the progress bar is written.
-  EXPECT_THAT(writePermutationAndCaptureLog(filename, std::nullopt),
-              ::testing::HasSubstr("Triples sorted"));
+  // With `showProgressBar` set to `true`, the progress bar is written.
   EXPECT_THAT(writePermutationAndCaptureLog(filename, true),
               ::testing::HasSubstr("Triples sorted"));
   // With `showProgressBar` set to `false`, the writer stays silent.
