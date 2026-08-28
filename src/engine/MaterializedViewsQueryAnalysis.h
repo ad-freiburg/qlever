@@ -120,11 +120,12 @@ class QueryPatternCache {
   // Search for all embeddings of `pattern` into `triples`, trying at most
   // `budget` candidate assignments, and add a `MaterializedViewJoinReplacement`
   // for each valid one (see `isLegalFixedValuePrefix`) to `result` -- capped,
-  // independently of `budget`, at a fixed maximum total across all calls that
-  // share `result` (see `kMaxReplacements` in the .cpp file).
+  // independently of `budget`, at `maxNumReplacementPlans` total across all
+  // calls that share `result`.
   void matchPattern(QueryExecutionContext* qec, const ViewPattern& pattern,
                     const parsedQuery::BasicGraphPattern& triples,
                     const TriplesByPredicate& triplesByPredicate, size_t budget,
+                    size_t maxNumReplacementPlans,
                     std::vector<MaterializedViewJoinReplacement>& result) const;
 };
 

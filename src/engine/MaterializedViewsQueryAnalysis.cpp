@@ -148,33 +148,21 @@ void QueryPatternCache::matchPattern(
     QueryExecutionContext* qec, const ViewPattern& pattern,
     const parsedQuery::BasicGraphPattern& triples,
     const TriplesByPredicate& triplesByPredicate, size_t budget,
+    size_t maxNumReplacementPlans,
     std::vector<MaterializedViewJoinReplacement>& result) const {
-  // Quick reject: every edge's predicate must appear in the query, else no
-  // embedding can exist. Also builds each edge's candidate list once.
-  std::vector<const std::vector<size_t>*> candidatesByEdge;
-  candidatesByEdge.reserve(pattern.edges_.size());
-  for (const auto& edge : pattern.edges_) {
-    auto it = triplesByPredicate.find(edge.p_);
-    if (it == triplesByPredicate.end()) {
-      return;
-    }
-    candidatesByEdge.push_back(&it->second);
-  }
-
-  // TODO<ullingerc> Make configurable.
-  constexpr size_t kMaxReplacementPlans = 100;
-
   auto status = PatternMatcher::findReplacementPlans(
-      pattern, triples, std::move(candidatesByEdge), qec, budget,
-      kMaxReplacementPlans, result);
+      pattern, triples, triplesByPredicate, qec, budget, maxNumReplacementPlans,
+      result);
   if (status != PatternMatcher::MatchStatus::Complete) {
-    AD_LOG_WARN << "Pattern matching for materialized view '"
-                << pattern.view_->name()
-                << "' exceeded the `materialized-view-pattern-match-budget` "
-                   "or the per-query replacement cap; some applicable "
-                   "rewrites using this view may have been missed for this "
-                   "query."
-                << std::endl;
+    AD_LOG_WARN
+        << "Pattern matching for materialized view '" << pattern.view_->name()
+        << "' exceeded "
+        << (status == PatternMatcher::MatchStatus::TruncatedByBudget
+                ? "the `materialized-view-pattern-match-budget`"
+                : "the `materialized-view-pattern-match-max-results` cap")
+        << "; some applicable rewrites using this view may have been missed "
+           "for this query."
+        << std::endl;
   }
 }
 
@@ -194,6 +182,8 @@ QueryPatternCache::makeJoinReplacementIndexScans(
   if (budget == 0) {
     return result;
   }
+  size_t maxNumReplacementPlans = getRuntimeParameter<
+      &RuntimeParameters::materializedViewPatternMatchMaxResults_>();
 
   // We use a 64-bit bitmask of triple indices, so more than 64 triples are not
   // supported.
@@ -222,7 +212,7 @@ QueryPatternCache::makeJoinReplacementIndexScans(
 
   for (const auto& view : candidateViews) {
     matchPattern(qec, patterns_.at(view), triples, triplesByPredicate, budget,
-                 result);
+                 maxNumReplacementPlans, result);
   }
   return result;
 }

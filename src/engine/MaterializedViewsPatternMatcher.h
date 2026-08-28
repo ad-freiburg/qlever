@@ -12,6 +12,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "engine/MaterializedViewsQueryAnalysis.h"
@@ -45,8 +46,8 @@ class PatternMatcher {
   // Builds a `PatternMatcher` and runs it to completion.
   static MatchStatus findReplacementPlans(
       const ViewPattern& pattern, const parsedQuery::BasicGraphPattern& triples,
-      std::vector<const std::vector<size_t>*> candidatesByEdge,
-      QueryExecutionContext* qec, size_t budget, size_t maxNumReplacementPlans,
+      const TriplesByPredicate& triplesByPredicate, QueryExecutionContext* qec,
+      size_t budget, size_t maxNumReplacementPlans,
       std::vector<MaterializedViewJoinReplacement>& result);
 
  private:
@@ -74,6 +75,13 @@ class PatternMatcher {
   ad_utility::HashMap<Variable, TripleComponent> assignment_;
   // Bitmask of the query triples used by the current assignment so far.
   uint64_t coveredTriples_ = 0;
+
+  // For each of the predicates in the view, the list of triple indices
+  // of triples with that predicate or `nullopt` if some predicate does
+  // not occur in `triples` at all.
+  static std::optional<std::vector<const std::vector<size_t>*>>
+  buildCandidatesByEdge(const ViewPattern& pattern,
+                        const TriplesByPredicate& triplesByPredicate);
 
   // Tries to match `viewSide` against `queryNode`. Returns `true` if the
   // assignment was made (or on equality for fixed components).

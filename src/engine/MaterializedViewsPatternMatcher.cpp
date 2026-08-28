@@ -18,10 +18,16 @@ namespace materializedViewsQueryAnalysis {
 // _____________________________________________________________________________
 PatternMatcher::MatchStatus PatternMatcher::findReplacementPlans(
     const ViewPattern& pattern, const parsedQuery::BasicGraphPattern& triples,
-    std::vector<const std::vector<size_t>*> candidatesByEdge,
-    QueryExecutionContext* qec, size_t budget, size_t maxNumReplacementPlans,
+    const TriplesByPredicate& triplesByPredicate, QueryExecutionContext* qec,
+    size_t budget, size_t maxNumReplacementPlans,
     std::vector<MaterializedViewJoinReplacement>& result) {
-  PatternMatcher matcher{pattern, triples, std::move(candidatesByEdge),
+  // Quick reject: every edge's predicate must appear in the query, else no
+  // embedding can exist.
+  auto candidatesByEdge = buildCandidatesByEdge(pattern, triplesByPredicate);
+  if (!candidatesByEdge.has_value()) {
+    return MatchStatus::Complete;
+  }
+  PatternMatcher matcher{pattern, triples, std::move(candidatesByEdge.value()),
                          qec,     budget,  maxNumReplacementPlans,
                          result};
   // Runs the search, starting from the first pattern edge.
@@ -44,6 +50,21 @@ PatternMatcher::PatternMatcher(
       maxNumReplacementPlans_{maxNumReplacementPlans},
       result_{result} {}
 
+// _____________________________________________________________________________
+std::optional<std::vector<const std::vector<size_t>*>>
+PatternMatcher::buildCandidatesByEdge(
+    const ViewPattern& pattern, const TriplesByPredicate& triplesByPredicate) {
+  std::vector<const std::vector<size_t>*> candidatesByEdge;
+  candidatesByEdge.reserve(pattern.edges_.size());
+  for (const auto& edge : pattern.edges_) {
+    auto candidates = ad_utility::findOptional(triplesByPredicate, edge.p_);
+    if (!candidates.has_value()) {
+      return std::nullopt;
+    }
+    candidatesByEdge.push_back(&candidates.value());
+  }
+  return candidatesByEdge;
+}
 // _____________________________________________________________________________
 bool PatternMatcher::tryAssignment(const TripleComponent& viewSide,
                                    const TripleComponent& queryNode) {
