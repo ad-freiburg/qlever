@@ -544,6 +544,34 @@ TEST(ServerTest, setRuntimeParameters) {
 }
 
 // _____________________________________________________________________________
+TEST(ServerTest, setIndexAndTextDescription) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  auto expectDescriptionSettable = [&server](std::string_view paramName,
+                                             std::string_view newName,
+                                             std::string_view jsonKey) {
+    auto url = absl::StrCat("/?", paramName, "=", newName);
+
+    // Setting the description requires a valid access token.
+    expectRequiresValidAccessToken(
+        paramName, [&] { server.process(makeGetRequest(url)); });
+
+    // With a valid access token, the description is set and the response
+    // reports the updated index statistics.
+    auto response = server.process(makeGetRequest(url, "accessToken"));
+    EXPECT_THAT(response, StatusIs(http::status::ok));
+    auto body = responseBodyAsJson(std::move(response));
+    ASSERT_TRUE(body.has_value());
+    EXPECT_THAT(body.value().at(jsonKey), testing::Eq(newName));
+  };
+
+  expectDescriptionSettable("index-description", "new-kb-name", "name-index");
+  expectDescriptionSettable("text-description", "new-text-name",
+                            "name-text-index");
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, clearDeltaTriples) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
   auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
