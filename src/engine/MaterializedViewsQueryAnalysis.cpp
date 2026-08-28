@@ -235,11 +235,11 @@ QueryPatternCache::makeJoinReplacementIndexScans(
   // hitting its share just means the other views get their turn.
   if (remaining.isExhausted()) {
     AD_LOG_WARN
-        << "Pattern matching for materialized views hit the "
+        << "Pattern matching for materialized views hit the `"
         << (remaining.numAssignments_ == 0
-                ? "`materialized-view-pattern-match-num-assignments`"
-                : "`materialized-view-pattern-match-num-replacement-plans` cap")
-        << "; some applicable rewrites may have been missed for this "
+                ? "materialized-view-pattern-match-num-assignments"
+                : "materialized-view-pattern-match-num-replacement-plans")
+        << "` cap; some applicable rewrites may have been missed for this "
            "query."
         << std::endl;
   }
