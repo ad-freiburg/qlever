@@ -263,6 +263,7 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
   // `GraphSearchExecutionParams.checkCancellation()` when a cancellation is
   // received will be logged.
   SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
+  ad_utility::ScopedLogLevel scopedLogLevel{DEBUG};
 
   const ad_utility::AllocatorWithLimit<Id> allocator =
       ad_utility::testing::makeAllocator();

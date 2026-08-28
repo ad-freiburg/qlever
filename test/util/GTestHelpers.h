@@ -101,31 +101,19 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 // _____________________________________________________________________________
 // Some tests require a certain log level, e.g. but not only because they
 // capture log output and make assertions about it. This macro can be used to
-// skip such tests if the runtime log level is too low.
-#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                                       \
-  if (::ad_utility::detail::runtimeLogLevel.load(std::memory_order_relaxed) <  \
-      (level)) {                                                               \
-    GTEST_SKIP() << "This test requires a runtime log level of at least "      \
-                 << ad_utility::LogLevel{level}.toString()                     \
-                 << ", but the current runtime log level is "                  \
-                 << ad_utility::LogLevel{::ad_utility::detail::runtimeLogLevel \
-                                             .load(std::memory_order_relaxed)} \
-                        .toString();                                           \
+// skip such tests if the compile-time `LOGLEVEL` is less verbose than `level`.
+// Log levels above `LOGLEVEL` are compiled out and can never become the runtime
+// log level, so such tests could never pass. Note that this says nothing about
+// the runtime log level; a test that needs a runtime log level more verbose
+// than the default has to additionally establish it via
+// `ad_utility::ScopedLogLevel`.
+#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                                     \
+  if (LOGLEVEL < ad_utility::LogLevel{level}) {                              \
+    GTEST_SKIP() << "This test requires a compile-time log level of at "     \
+                    "least "                                                 \
+                 << ad_utility::LogLevel{level}.toString() << ", but it is " \
+                 << ad_utility::LogLevel{LOGLEVEL}.toString();               \
   }
-
-// _____________________________________________________________________________
-// Set the runtime log level to `level` and return an `absl::Cleanup` that
-// restores the previous level when it goes out of scope. Use this in tests
-// that temporarily need a specific log level to avoid leaving the global
-// atomic modified after the test finishes.
-inline auto setLoglevelForTesting(LogLevel level) {
-  auto previous = ::ad_utility::detail::runtimeLogLevel.exchange(
-      level.value(), std::memory_order_relaxed);
-  return absl::Cleanup([previous] {
-    ::ad_utility::detail::runtimeLogLevel.store(previous,
-                                                std::memory_order_relaxed);
-  });
-}
 
 // _____________________________________________________________________________
 // Redirect the global logging stream to `stream` and return an `absl::Cleanup`

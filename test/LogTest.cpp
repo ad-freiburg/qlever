@@ -21,20 +21,6 @@
 #include "util/Log.h"
 #include "util/jthread.h"
 
-// Skip the current test if the compile-time `LOGLEVEL` is less verbose than
-// `level`. Log levels above `LOGLEVEL` are compiled out and can never become
-// the runtime log level, so tests that require them are meaningless. Note the
-// difference to `SKIP_IF_LOGLEVEL_IS_LOWER` from `GTestHelpers.h`, which looks
-// at the current runtime log level; the tests below explicitly change that
-// level and therefore have to look at the compile-time level.
-#define SKIP_IF_COMPILE_TIME_LOGLEVEL_IS_LOWER(level)                    \
-  if constexpr (LOGLEVEL < (level)) {                                    \
-    GTEST_SKIP() << "This test requires a compile-time log level of at " \
-                    "least "                                             \
-                 << LogLevel{level}.toString() << ", but it is "         \
-                 << LogLevel{LOGLEVEL}.toString();                       \
-  }
-
 // _____________________________________________________________________________
 TEST(LogTest, TypeName) { EXPECT_EQ(LogLevel::typeName(), "log level"); }
 
@@ -59,7 +45,7 @@ TEST(LogTest, StringConversions) {
 TEST(LogTest, SetRuntimeLogLevel) {
   // Setting to INFO requires LOGLEVEL >= INFO at compile time; skip otherwise.
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
-  auto cleanup = setLoglevelForTesting(LogLevel::Enum::FATAL);
+  ad_utility::ScopedLogLevel scopedLogLevel{FATAL};
   EXPECT_EQ(ad_utility::detail::runtimeLogLevel.load(), LogLevel::Enum::FATAL);
 
   // Setting to INFO must succeed (SKIP_IF_LOGLEVEL_IS_LOWER(INFO) guards this).
@@ -86,7 +72,7 @@ TEST(LogTest, ExceptionOnTooVerboseLevel) {
 TEST(LogTest, StreamFiltering) {
   // FATAL (0) always passes compile-time guards. ERROR (1) is suppressed at
   // runtime when the level is set to FATAL.
-  auto levelCleanup = setLoglevelForTesting(LogLevel::Enum::FATAL);
+  ad_utility::ScopedLogLevel scopedLogLevel{FATAL};
   auto [streamCleanup, ss] = setGlobalLoggingStreamToStringStream();
 
   AD_LOG_FATAL << "hello-fatal";
@@ -146,7 +132,7 @@ TEST(LogTest, ThreadSafety) {
 
 // _____________________________________________________________________________
 TEST(LogTest, GetRuntimeLogLevel) {
-  auto cleanup = setLoglevelForTesting(LogLevel::Enum::FATAL);
+  ad_utility::ScopedLogLevel scopedLogLevel{FATAL};
   EXPECT_EQ(ad_utility::getRuntimeLogLevel(), LogLevel::Enum::FATAL);
   EXPECT_EQ(ad_utility::getRuntimeLogLevel(),
             ad_utility::detail::runtimeLogLevel.load());
@@ -154,12 +140,12 @@ TEST(LogTest, GetRuntimeLogLevel) {
 
 // _____________________________________________________________________________
 TEST(LogTest, ScopedLogLevelSetsAndRestoresLevel) {
-  SKIP_IF_COMPILE_TIME_LOGLEVEL_IS_LOWER(LogLevel::Enum::WARN);
-  // The `setLoglevelForTesting` also guarantees the restoration of the log
-  // level if one of the assertions below fails and the scope is left early.
-  auto cleanup = setLoglevelForTesting(LogLevel::Enum::WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  // The outer `ScopedLogLevel` also guarantees the restoration of the log level
+  // if one of the assertions below fails and the scope is left early.
+  ad_utility::ScopedLogLevel outerLogLevel{WARN};
   {
-    ad_utility::ScopedLogLevel scopedLogLevel{LogLevel::Enum::FATAL};
+    ad_utility::ScopedLogLevel scopedLogLevel{FATAL};
     EXPECT_EQ(ad_utility::getRuntimeLogLevel(), LogLevel::Enum::FATAL);
   }
   EXPECT_EQ(ad_utility::getRuntimeLogLevel(), LogLevel::Enum::WARN);
@@ -167,10 +153,10 @@ TEST(LogTest, ScopedLogLevelSetsAndRestoresLevel) {
 
 // _____________________________________________________________________________
 TEST(LogTest, ScopedLogLevelRestoresLevelOnException) {
-  SKIP_IF_COMPILE_TIME_LOGLEVEL_IS_LOWER(LogLevel::Enum::WARN);
-  auto cleanup = setLoglevelForTesting(LogLevel::Enum::WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  ad_utility::ScopedLogLevel outerLogLevel{WARN};
   auto throwFromInsideTheScope = [] {
-    ad_utility::ScopedLogLevel scopedLogLevel{LogLevel::Enum::FATAL};
+    ad_utility::ScopedLogLevel scopedLogLevel{FATAL};
     EXPECT_EQ(ad_utility::getRuntimeLogLevel(), LogLevel::Enum::FATAL);
     throw std::runtime_error{"Thrown inside the scope."};
   };
@@ -180,13 +166,13 @@ TEST(LogTest, ScopedLogLevelRestoresLevelOnException) {
 
 // _____________________________________________________________________________
 TEST(LogTest, ScopedLogLevelIsNested) {
-  SKIP_IF_COMPILE_TIME_LOGLEVEL_IS_LOWER(LogLevel::Enum::WARN);
-  auto cleanup = setLoglevelForTesting(LogLevel::Enum::WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  ad_utility::ScopedLogLevel outerLogLevel{WARN};
   {
-    ad_utility::ScopedLogLevel outer{LogLevel::Enum::ERROR};
+    ad_utility::ScopedLogLevel outer{ERROR};
     EXPECT_EQ(ad_utility::getRuntimeLogLevel(), LogLevel::Enum::ERROR);
     {
-      ad_utility::ScopedLogLevel inner{LogLevel::Enum::FATAL};
+      ad_utility::ScopedLogLevel inner{FATAL};
       EXPECT_EQ(ad_utility::getRuntimeLogLevel(), LogLevel::Enum::FATAL);
     }
     // The inner object restores the level that the outer object has set.
@@ -204,7 +190,7 @@ TEST(LogTest, ScopedLogLevelClampsToCompileTimeLogLevel) {
   } else {
     constexpr auto tooVerbose =
         static_cast<LogLevel::Enum>(static_cast<int>(LOGLEVEL) + 1);
-    auto cleanup = setLoglevelForTesting(LogLevel::Enum::FATAL);
+    ad_utility::ScopedLogLevel outerLogLevel{FATAL};
     {
       // Requesting a more verbose level than the compile-time `LOGLEVEL` must
       // neither throw nor exceed that `LOGLEVEL`.
@@ -217,11 +203,11 @@ TEST(LogTest, ScopedLogLevelClampsToCompileTimeLogLevel) {
 
 // _____________________________________________________________________________
 TEST(LogTest, ScopedLogLevelSuppressesLogOutput) {
-  SKIP_IF_COMPILE_TIME_LOGLEVEL_IS_LOWER(LogLevel::Enum::ERROR);
-  auto levelCleanup = setLoglevelForTesting(LogLevel::Enum::ERROR);
+  SKIP_IF_LOGLEVEL_IS_LOWER(ERROR);
+  ad_utility::ScopedLogLevel outerLogLevel{ERROR};
   auto [streamCleanup, ss] = setGlobalLoggingStreamToStringStream();
   {
-    ad_utility::ScopedLogLevel scopedLogLevel{LogLevel::Enum::FATAL};
+    ad_utility::ScopedLogLevel scopedLogLevel{FATAL};
     AD_LOG_ERROR << "hello-scoped-error";
     EXPECT_THAT(ss.str(),
                 ::testing::Not(::testing::HasSubstr("hello-scoped-error")));

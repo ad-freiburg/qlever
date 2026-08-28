@@ -129,18 +129,18 @@ inline LogLevel getRuntimeLogLevel() {
 // While an object of this class is alive, the runtime log level is the given
 // `level` (or the compile-time `LOGLEVEL`, if that is less verbose); the
 // previous level is restored when the object is destroyed. Use this to silence
-// a subroutine that logs more than the caller wants.
+// a subroutine that logs more than the caller wants, or to set up a specific
+// log level in a test.
 //
 // NOTE: The runtime log level is global, so this must only be used when nothing
-// else logs concurrently, for example in a standalone command-line tool, but
-// never in the server.
-class ScopedLogLevel {
+// else logs concurrently, for example in a standalone command-line tool or in a
+// test, but never in the server.
+class [[nodiscard]] ScopedLogLevel {
  private:
-  LogLevel previousLevel_;
+  LogLevel previousLevel_ = getRuntimeLogLevel();
 
  public:
-  explicit ScopedLogLevel(LogLevel::Enum level)
-      : previousLevel_{getRuntimeLogLevel()} {
+  explicit ScopedLogLevel(LogLevel::Enum level) {
     setRuntimeLogLevel(std::min(level, LOGLEVEL));
   }
 
