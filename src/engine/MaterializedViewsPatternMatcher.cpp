@@ -16,12 +16,6 @@
 namespace materializedViewsQueryAnalysis {
 
 // _____________________________________________________________________________
-bool PatternMatcher::isLegalFixedValuePrefix(uint64_t boundColumnsMask) {
-  return boundColumnsMask == 0b000u || boundColumnsMask == 0b001u ||
-         boundColumnsMask == 0b011u || boundColumnsMask == 0b111u;
-}
-
-// _____________________________________________________________________________
 PatternMatcher::PatternMatcher(
     const ViewPattern& pattern, const parsedQuery::BasicGraphPattern& triples,
     std::vector<const std::vector<size_t>*> candidatesByEdge,
@@ -38,34 +32,44 @@ PatternMatcher::PatternMatcher(
 // _____________________________________________________________________________
 bool PatternMatcher::tryAssignment(const TripleComponent& viewSide,
                                    const TripleComponent& queryNode) {
+  // Fixed values must match exactly. Nothing to assign as the value is also
+  // fixed in the view's query.
   if (!viewSide.isVariable()) {
     return queryNode == viewSide;
   }
+
+  // If `viewVar` was already assigned, `queryNode` must match the already
+  // assigned value.
   const Variable& viewVar = viewSide.getVariable();
-  // `viewVar` was already assigned in an earlier step of this partial match:
-  // re-matching it is only consistent if it lands on the same value again.
   if (auto bound = ad_utility::findOptional(assignment_, viewVar)) {
     return bound.value() == queryNode;
   }
+
   if (queryNode.isVariable()) {
-    // Injectivity: no view variable may already be bound to this same query
-    // variable.
+    // User query contains a variable in this position: check injectivity (no
+    // view variable may already be bound to this same query variable).
     if (isAlreadyBound(queryNode)) {
       return false;
     }
   } else {
-    // A payload column (index > 2) bound to a fixed value is always illegal
-    // (see `isLegalFixedValuePrefix`), regardless of what else is assigned.
+    // User query contains a fixed value in this position. Prune invalid
+    // fixed-value configurations.
+
+    // A payload column (index > 2) bound to a fixed value is always illegal,
+    // regardless of what else is assigned.
     size_t col = viewCols_.at(viewVar).columnIndex_;
     if (col > 2) {
       return false;
     }
-    // Fixed-value prefix pruning: a smaller-column view variable that is
-    // still bound to a query variable rules out fixing this (larger) column.
+
+    // A view variable with a smaller column index that is already bound to a
+    // query variable rules out fixing a value at a larger column index.
     if (hasVariableBeforeFixedColumn(col)) {
       return false;
     }
   }
+
+  // Assignment is allowed.
   assignment_.emplace(viewVar, queryNode);
   return true;
 }
@@ -101,6 +105,12 @@ void PatternMatcher::uncoverTriple(size_t tripleIdx) {
 }
 
 // _____________________________________________________________________________
+bool PatternMatcher::isLegalFixedValuePrefix(uint64_t boundColumnsMask) {
+  return boundColumnsMask == 0b000u || boundColumnsMask == 0b001u ||
+         boundColumnsMask == 0b011u || boundColumnsMask == 0b111u;
+}
+
+// _____________________________________________________________________________
 bool PatternMatcher::isNewBinding(const TripleComponent& viewSide) const {
   return viewSide.isVariable() && !assignment_.contains(viewSide.getVariable());
 }
@@ -130,6 +140,8 @@ void PatternMatcher::emitIfLegal() {
   if (!isLegalFixedValuePrefix(boundColumnsMask)) {
     return;
   }
+
+  // Configuration is allowed. Construct `MaterializedViewJoinReplacement`.
   result_.push_back(
       {pattern_.view_->makeIndexScan(
            qec_, parsedQuery::MaterializedViewQuery{pattern_.view_->name(),
@@ -139,15 +151,20 @@ void PatternMatcher::emitIfLegal() {
 
 // _____________________________________________________________________________
 void PatternMatcher::extendMatch(size_t edgeIdx) {
-  if (result_.size() >= kMaxReplacements) {
+  // If already `numMaxReplacementPlans` have been found, no further plans
+  // should be generated.
+  if (result_.size() >= numMaxReplacementPlans) {
     truncated_ = true;
     return;
   }
+
   const auto& edges = pattern_.edges_;
+  // Base case: all edges of the view query have been matched to query triples.
   if (edgeIdx == edges.size()) {
     emitIfLegal();
     return;
   }
+
   const auto& edge = edges[edgeIdx];
   for (size_t tripleIdx : *candidatesByEdge_[edgeIdx]) {
     if (isTripleCovered(tripleIdx)) {

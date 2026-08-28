@@ -59,7 +59,7 @@ class PatternMatcher {
   // individual view's search. ponytail: fixed constant, comfortably above what
   // any realistic view/query shape needs; promote to a runtime parameter if a
   // real workload needs it tuned.
-  static constexpr size_t kMaxReplacements = 1000;
+  static constexpr size_t numMaxReplacementPlans = 100;
 
   const ViewPattern& pattern_;
   const parsedQuery::BasicGraphPattern& triples_;
