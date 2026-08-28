@@ -37,6 +37,8 @@ static constexpr std::string_view chainRewriteContextDummyTurtle = R"(
   <m2> <p2> <http://example.com/> .
   <x> <p1> <v> .
   <v> <p2> <x> .
+  <x2> <p1> <v2> .
+  <v2> <p2> <v2> .
 )";
 
 static constexpr std::string_view cacheKeyRewriteDummyTurtle = R"(

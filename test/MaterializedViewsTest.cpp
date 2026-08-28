@@ -2001,6 +2001,17 @@ TEST_F(MaterializedViewsChainRewriteContextTest, ChainRewriteContext) {
            h::MultiColumnJoin(h::IndexScanFromStrings("?x", "<p1>", "?v"),
                               h::IndexScanFromStrings("?v", "<p2>", "?x")));
 
+  // The same holds for a degenerate chain where the middle and the end are
+  // the same variable. Planning previously failed with an exception. The
+  // winning plan is not fixed here (the repeated variable is planned as an
+  // internal variable plus an equality filter, and the cache-key based
+  // rewriting may then legitimately replace the join by a scan of the view),
+  // so check that the query is planned and answered correctly instead of
+  // checking the plan.
+  EXPECT_EQ(qlv().query("SELECT ?x ?v { ?x <p1> ?v . ?v <p2> ?v }",
+                        ad_utility::MediaType::tsv),
+            "?x\t?v\n<x2>\t<v2>\n");
+
   // Outside of any `GRAPH` clause, rewriting is applied.
   auto chainView = std::bind_front(&viewScanSimple, "testViewChain");
   qpExpect(qlv(), simpleChain, chainView("?s", "?m", "?o"));
