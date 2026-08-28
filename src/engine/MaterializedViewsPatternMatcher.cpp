@@ -72,9 +72,14 @@ bool PatternMatcher::tryAssign(const TripleComponent& viewSide,
       }
     }
   } else {
+    // A payload column (index > 2) bound to a fixed value is always illegal
+    // (see `isLegalFixedValuePrefix`), regardless of what else is assigned.
+    size_t col = viewCols_.at(viewVar).columnIndex_;
+    if (col > 2) {
+      return false;
+    }
     // Fixed-value prefix pruning: a smaller-column view variable that is
     // still bound to a query variable rules out fixing this (larger) column.
-    size_t col = viewCols_.at(viewVar).columnIndex_;
     for (const auto& [otherVar, otherNode] : assignment_) {
       if (otherNode.isVariable() && viewCols_.at(otherVar).columnIndex_ < col) {
         return false;
