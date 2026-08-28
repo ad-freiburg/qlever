@@ -62,6 +62,7 @@ RuntimeParameters::RuntimeParameters() {
   add(prefilteredOptionalJoin_);
   add(enableMaterializedViewQueryRewrite_);
   add(materializedViewPatternMatchBudget_);
+  add(materializedViewPatternMatchMaxResults_);
   add(serviceAllowedIriPrefixes_);
   add(permutationWriterNumThreads_);
   add(vacuumMinimumBlockSize_);
