@@ -55,8 +55,8 @@ using TriplesByPredicate = ad_utility::HashMap<std::string_view, uint64_t>;
 // `QueryPatternCache::makeJoinReplacementIndexScans` can share a pool of each
 // across several calls.
 struct PatternMatcherLimits {
-  size_t budget_;
-  size_t maxNumReplacementPlans_;
+  size_t numAssignments_;
+  size_t numReplacementPlans_;
 
   // A fixed per-view share of `*this`, split evenly across `numViews` (must
   // be nonzero) so the limits apply per query rather than per (view, query)
@@ -66,7 +66,7 @@ struct PatternMatcherLimits {
   PatternMatcherLimits perViewShare(size_t numViews) const;
 
   bool isExhausted() const {
-    return budget_ == 0 || maxNumReplacementPlans_ == 0;
+    return numAssignments_ == 0 || numReplacementPlans_ == 0;
   }
 
   PatternMatcherLimits requestBounded(

@@ -2194,10 +2194,11 @@ TEST(MaterializedViewsManager, viewFilesOnDisk) {
 }
 
 // _____________________________________________________________________________
-// A budget too small for even one full match (a 2-edge chain needs >= 2
-// candidate attempts) finds nothing and logs a warning; the default budget
+// An assignment limit too small for even one full match (a 2-edge chain needs
+// >= 2 candidate attempts) finds nothing and logs a warning; the default limit
 // still finds the match.
-TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetIsRespected) {
+TEST(MaterializedViewsPatternMatchNumAssignmentsTest,
+     PatternMatchNumAssignmentsIsRespected) {
   const std::string onDiskBase = gtestCurrentTestName();
   materializedViewsTestHelpers::makeTestIndex(onDiskBase,
                                               " <s1> <p0> <o1> .\n");
@@ -2211,9 +2212,9 @@ TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetIsRespected) {
 
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
   manager.writeViewToDisk(
-      "budgetChain",
+      "numAssignmentsChain",
       qlv.parseAndPlanQuery("SELECT * { ?s <bp1> ?m . ?m <bp2> ?o }"));
-  auto view = manager.getView("budgetChain", qec.get());
+  auto view = manager.getView("numAssignmentsChain", qec.get());
   qpc.analyzeView(view, qec.get());
 
   auto plan = qlv.parseAndPlanQuery("SELECT * { ?s <bp1> ?m . ?m <bp2> ?o }");
@@ -2222,23 +2223,26 @@ TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetIsRespected) {
 
   {
     auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
-    auto cleanupBudget = setRuntimeParameterForTest<
-        &RuntimeParameters::materializedViewPatternMatchBudget_>(1);
+    auto cleanupNumAssignments = setRuntimeParameterForTest<
+        &RuntimeParameters::materializedViewPatternMatchNumAssignments_>(1);
     EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
     EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr("materialized-view-pattern-match-budget"));
+                ::testing::HasSubstr(
+                    "materialized-view-pattern-match-num-assignments"));
   }
   {
-    auto cleanupBudget = setRuntimeParameterForTest<
-        &RuntimeParameters::materializedViewPatternMatchBudget_>(100'000);
+    auto cleanupNumAssignments = setRuntimeParameterForTest<
+        &RuntimeParameters::materializedViewPatternMatchNumAssignments_>(
+        100'000);
     EXPECT_FALSE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
   }
 }
 
 // _____________________________________________________________________________
-// A budget of `0` deliberately disables pattern-based rewriting: no match is
-// found, and (unlike a too-small budget) no warning is logged.
-TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetZeroDisables) {
+// A limit of `0` assignments deliberately disables pattern-based rewriting: no
+// match is found, and (unlike a too-small limit) no warning is logged.
+TEST(MaterializedViewsPatternMatchNumAssignmentsTest,
+     PatternMatchNumAssignmentsZeroDisables) {
   const std::string onDiskBase = gtestCurrentTestName();
   materializedViewsTestHelpers::makeTestIndex(onDiskBase,
                                               " <s1> <p0> <o1> .\n");
@@ -2252,9 +2256,9 @@ TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetZeroDisables) {
 
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
   manager.writeViewToDisk(
-      "budgetZeroChain",
+      "numAssignmentsZeroChain",
       qlv.parseAndPlanQuery("SELECT * { ?s <bz1> ?m . ?m <bz2> ?o }"));
-  auto view = manager.getView("budgetZeroChain", qec.get());
+  auto view = manager.getView("numAssignmentsZeroChain", qec.get());
   qpc.analyzeView(view, qec.get());
 
   auto plan = qlv.parseAndPlanQuery("SELECT * { ?s <bz1> ?m . ?m <bz2> ?o }");
@@ -2262,20 +2266,22 @@ TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetZeroDisables) {
       plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
 
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
-  auto cleanupBudget = setRuntimeParameterForTest<
-      &RuntimeParameters::materializedViewPatternMatchBudget_>(0);
+  auto cleanupNumAssignments = setRuntimeParameterForTest<
+      &RuntimeParameters::materializedViewPatternMatchNumAssignments_>(0);
   EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
-  EXPECT_THAT(logStream.str(), ::testing::Not(::testing::HasSubstr(
-                                   "materialized-view-pattern-match-budget")));
+  EXPECT_THAT(logStream.str(),
+              ::testing::Not(::testing::HasSubstr(
+                  "materialized-view-pattern-match-num-assignments")));
 }
 
 // _____________________________________________________________________________
 // Regression test: a cheap-to-complete match (here, a duplicate predicate on
 // a two-edge view, matched against many triples sharing one subject and
-// predicate) can complete far more times than the pattern-match budget alone
+// predicate) can complete far more times than the assignment limit alone
 // would suggest is safe to hand to the query planner as candidate plans, so
 // the total number of replacements collected must be capped independently.
-TEST(MaterializedViewsPatternMatchBudgetTest, ReplacementCountIsCapped) {
+TEST(MaterializedViewsPatternMatchNumAssignmentsTest,
+     ReplacementCountIsCapped) {
   const std::string onDiskBase = gtestCurrentTestName();
   materializedViewsTestHelpers::makeTestIndex(onDiskBase,
                                               " <s1> <p0> <o1> .\n");

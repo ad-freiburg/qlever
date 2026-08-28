@@ -86,26 +86,25 @@ std::optional<std::vector<size_t>> connectedOrder(
 // _____________________________________________________________________________
 PatternMatcherLimits PatternMatcherLimits::perViewShare(size_t numViews) const {
   AD_CORRECTNESS_CHECK(numViews > 0);
-  constexpr size_t minBudgetPerView = 1'000;
-  constexpr size_t minAllowedResultsPerView = 5;
+  constexpr size_t minNumAssignmentsPerView = 1'000;
+  constexpr size_t minNumReplacementPlansPerView = 5;
   return {
-      std::max(minBudgetPerView, budget_ / numViews),
-      std::max(minAllowedResultsPerView, maxNumReplacementPlans_ / numViews)};
+      std::max(minNumAssignmentsPerView, numAssignments_ / numViews),
+      std::max(minNumReplacementPlansPerView, numReplacementPlans_ / numViews)};
 }
 
 // _____________________________________________________________________________
 PatternMatcherLimits PatternMatcherLimits::requestBounded(
     PatternMatcherLimits requestedAmount) const {
-  return {std::min(budget_, requestedAmount.budget_),
-          std::min(maxNumReplacementPlans_,
-                   requestedAmount.maxNumReplacementPlans_)};
+  return {std::min(numAssignments_, requestedAmount.numAssignments_),
+          std::min(numReplacementPlans_, requestedAmount.numReplacementPlans_)};
 }
 
 // _____________________________________________________________________________
 void PatternMatcherLimits::subtract(PatternMatcherLimits used) {
-  budget_ -= std::min(budget_, used.budget_);
-  maxNumReplacementPlans_ -=
-      std::min(maxNumReplacementPlans_, used.maxNumReplacementPlans_);
+  numAssignments_ -= std::min(numAssignments_, used.numAssignments_);
+  numReplacementPlans_ -=
+      std::min(numReplacementPlans_, used.numReplacementPlans_);
 }
 
 // _____________________________________________________________________________
@@ -179,14 +178,14 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     return result;
   }
 
-  // A budget of `0` disables pattern-based rewriting entirely.
-  size_t totalBudget = getRuntimeParameter<
-      &RuntimeParameters::materializedViewPatternMatchBudget_>();
-  if (totalBudget == 0) {
+  // A limit of `0` assignments disables pattern-based rewriting entirely.
+  size_t totalNumAssignments = getRuntimeParameter<
+      &RuntimeParameters::materializedViewPatternMatchNumAssignments_>();
+  if (totalNumAssignments == 0) {
     return result;
   }
-  size_t totalMaxResults = getRuntimeParameter<
-      &RuntimeParameters::materializedViewPatternMatchMaxResults_>();
+  size_t totalNumReplacementPlans = getRuntimeParameter<
+      &RuntimeParameters::materializedViewPatternMatchNumReplacementPlans_>();
 
   // We use a 64-bit bitmask of triple indices, so more than 64 triples are not
   // supported.
@@ -220,7 +219,7 @@ QueryPatternCache::makeJoinReplacementIndexScans(
 
   // Match all `candidateViews` against the query, sharing one pool of limits
   // across them.
-  PatternMatcherLimits remaining{totalBudget, totalMaxResults};
+  PatternMatcherLimits remaining{totalNumAssignments, totalNumReplacementPlans};
   const PatternMatcherLimits share =
       remaining.perViewShare(candidateViews.size());
   for (const auto& [name, view] : candidateViews) {
@@ -235,13 +234,14 @@ QueryPatternCache::makeJoinReplacementIndexScans(
   // Only the exhaustion of the shared pool is worth a warning: a single view
   // hitting its share just means the other views get their turn.
   if (remaining.isExhausted()) {
-    AD_LOG_WARN << "Pattern matching for materialized views hit the "
-                << (remaining.budget_ == 0
-                        ? "`materialized-view-pattern-match-budget`"
-                        : "`materialized-view-pattern-match-max-results` cap")
-                << "; some applicable rewrites may have been missed for this "
-                   "query."
-                << std::endl;
+    AD_LOG_WARN
+        << "Pattern matching for materialized views hit the "
+        << (remaining.numAssignments_ == 0
+                ? "`materialized-view-pattern-match-num-assignments`"
+                : "`materialized-view-pattern-match-num-replacement-plans` cap")
+        << "; some applicable rewrites may have been missed for this "
+           "query."
+        << std::endl;
   }
   return result;
 }

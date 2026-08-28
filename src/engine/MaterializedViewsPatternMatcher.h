@@ -29,8 +29,8 @@ namespace materializedViewsQueryAnalysis {
 // Searches for all mappings of a `ViewPattern` into a query's triples via
 // a backtracking subgraph isomorphism algorithm, appending a
 // `MaterializedViewJoinReplacement` for each valid complete match (up to
-// `maxNumReplacementPlans` in total). The search is capped at `budget` number
-// of variable assignments.
+// `numReplacementPlans` in total). The search is capped at `numAssignments`
+// variable assignments.
 class PatternMatcher {
  public:
   using Limits = materializedViewsQueryAnalysis::PatternMatcherLimits;
@@ -40,9 +40,9 @@ class PatternMatcher {
     // The search covered every candidate assignment.
     Complete,
     // The maximum number of assignments was reached and the search was stopped.
-    TruncatedByBudget,
+    TruncatedByNumAssignments,
     // The maximum number of results was produced and the search was stopped.
-    TruncatedByMaxReplacements,
+    TruncatedByNumReplacementPlans,
     // Not every edge's predicate appears in the query. The search was skipped.
     Skipped,
   };
@@ -79,8 +79,8 @@ class PatternMatcher {
   // The original limits. Used to compute how much was actually used.
   Limits limits_;
   // The remaining limits for this instance.
-  size_t stepsRemaining_;
-  size_t numResultsRemaining_;
+  size_t numAssignmentsRemaining_;
+  size_t numReplacementPlansRemaining_;
 
   // `status_` is `nullopt` until the search is finished.
   std::optional<MatchStatus> status_;
@@ -118,8 +118,9 @@ class PatternMatcher {
   void coverTriple(size_t tripleIdx);
   void uncoverTriple(size_t tripleIdx);
 
-  // Decrement the budget and return `false` if no budget is left.
-  bool decrementAndCheckBudget();
+  // Decrement the number of remaining assignments and return `false` if none
+  // is left.
+  bool decrementAndCheckNumAssignments();
 
   // Whether `tryAssignment` would add a new binding (that needs to be removed
   // on backtrack). Must be called before `tryAssignment`.

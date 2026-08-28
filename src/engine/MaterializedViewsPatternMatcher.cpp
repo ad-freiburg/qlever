@@ -40,8 +40,8 @@ PatternMatcher::PatternMatcher(
       qec_{qec},
       viewCols_{pattern.view_->variableToColumnMap()},
       limits_{limits},
-      stepsRemaining_{limits.budget_},
-      numResultsRemaining_{limits.maxNumReplacementPlans_},
+      numAssignmentsRemaining_{limits.numAssignments_},
+      numReplacementPlansRemaining_{limits.numReplacementPlans_},
       result_{result} {
   buildCandidatesByEdge(pattern, triplesByPredicate);
 }
@@ -180,15 +180,15 @@ void PatternMatcher::emitIfLegal() {
            qec_, parsedQuery::MaterializedViewQuery{pattern_.view_->name(),
                                                     assignment_}),
        coveredTriples_});
-  --numResultsRemaining_;
+  --numReplacementPlansRemaining_;
 }
 
 // _____________________________________________________________________________
 void PatternMatcher::extendMatch(size_t edgeIdx) {
-  // If no result budget is left, no further plans should be generated.
-  if (numResultsRemaining_ == 0) {
+  // If no replacement plans are left, no further plans should be generated.
+  if (numReplacementPlansRemaining_ == 0) {
     if (!status_.has_value()) {
-      status_ = MatchStatus::TruncatedByMaxReplacements;
+      status_ = MatchStatus::TruncatedByNumReplacementPlans;
     }
     return;
   }
@@ -207,7 +207,7 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
     if (isTripleCovered(tripleIdx)) {
       return true;
     }
-    if (!decrementAndCheckBudget()) {
+    if (!decrementAndCheckNumAssignments()) {
       return false;
     }
     const auto& triple = triples_._triples.at(tripleIdx);
@@ -227,22 +227,22 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
 }
 
 // _____________________________________________________________________________
-bool PatternMatcher::decrementAndCheckBudget() {
-  if (stepsRemaining_ == 0) {
+bool PatternMatcher::decrementAndCheckNumAssignments() {
+  if (numAssignmentsRemaining_ == 0) {
     if (!status_.has_value()) {
-      status_ = MatchStatus::TruncatedByBudget;
+      status_ = MatchStatus::TruncatedByNumAssignments;
     }
     return false;
   }
-  --stepsRemaining_;
+  --numAssignmentsRemaining_;
   return true;
 }
 
 // _____________________________________________________________________________
 PatternMatcher::MatchReport PatternMatcher::makeReport() const {
   return {status_.value_or(MatchStatus::Complete),
-          {limits_.budget_ - stepsRemaining_,
-           limits_.maxNumReplacementPlans_ - numResultsRemaining_}};
+          {limits_.numAssignments_ - numAssignmentsRemaining_,
+           limits_.numReplacementPlans_ - numReplacementPlansRemaining_}};
 }
 
 }  // namespace materializedViewsQueryAnalysis

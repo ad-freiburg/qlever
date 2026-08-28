@@ -61,8 +61,8 @@ RuntimeParameters::RuntimeParameters() {
   add(sortInMemoryThreshold_);
   add(prefilteredOptionalJoin_);
   add(enableMaterializedViewQueryRewrite_);
-  add(materializedViewPatternMatchBudget_);
-  add(materializedViewPatternMatchMaxResults_);
+  add(materializedViewPatternMatchNumAssignments_);
+  add(materializedViewPatternMatchNumReplacementPlans_);
   add(serviceAllowedIriPrefixes_);
   add(permutationWriterNumThreads_);
   add(vacuumMinimumBlockSize_);
