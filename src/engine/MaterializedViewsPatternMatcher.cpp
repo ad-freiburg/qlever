@@ -12,6 +12,7 @@
 #include "backports/algorithm.h"
 #include "engine/MaterializedViews.h"
 #include "util/Algorithm.h"
+#include "util/BitUtils.h"
 
 namespace materializedViewsQueryAnalysis {
 
@@ -21,50 +22,48 @@ PatternMatcher::MatchStatus PatternMatcher::findReplacementPlans(
     const TriplesByPredicate& triplesByPredicate, QueryExecutionContext* qec,
     size_t budget, size_t maxNumReplacementPlans,
     std::vector<MaterializedViewJoinReplacement>& result) {
-  // Quick reject: every edge's predicate must appear in the query, else no
-  // embedding can exist.
-  auto candidatesByEdge = buildCandidatesByEdge(pattern, triplesByPredicate);
-  if (!candidatesByEdge.has_value()) {
-    return MatchStatus::Complete;
-  }
-  PatternMatcher matcher{pattern, triples, std::move(candidatesByEdge.value()),
+  PatternMatcher matcher{pattern, triples, triplesByPredicate,
                          qec,     budget,  maxNumReplacementPlans,
                          result};
-  // Runs the search, starting from the first pattern edge.
-  matcher.extendMatch(0);
+  if (matcher.status_ != MatchStatus::Skipped) {
+    // Runs the search, starting from the first pattern edge.
+    matcher.extendMatch(0);
+  }
   return matcher.status_;
 }
 
 // _____________________________________________________________________________
 PatternMatcher::PatternMatcher(
     const ViewPattern& pattern, const parsedQuery::BasicGraphPattern& triples,
-    std::vector<const std::vector<size_t>*> candidatesByEdge,
-    QueryExecutionContext* qec, size_t budget, size_t maxNumReplacementPlans,
+    const TriplesByPredicate& triplesByPredicate, QueryExecutionContext* qec,
+    size_t budget, size_t maxNumReplacementPlans,
     std::vector<MaterializedViewJoinReplacement>& result)
     : pattern_{pattern},
       triples_{triples},
-      candidatesByEdge_{std::move(candidatesByEdge)},
       qec_{qec},
       viewCols_{pattern.view_->variableToColumnMap()},
       stepsRemaining_{budget},
       maxNumReplacementPlans_{maxNumReplacementPlans},
-      result_{result} {}
+      result_{result} {
+  buildCandidatesByEdge(pattern, triplesByPredicate);
+}
 
 // _____________________________________________________________________________
-std::optional<std::vector<const std::vector<size_t>*>>
-PatternMatcher::buildCandidatesByEdge(
+void PatternMatcher::buildCandidatesByEdge(
     const ViewPattern& pattern, const TriplesByPredicate& triplesByPredicate) {
-  std::vector<const std::vector<size_t>*> candidatesByEdge;
-  candidatesByEdge.reserve(pattern.edges_.size());
+  candidatesByEdge_.reserve(pattern.edges_.size());
   for (const auto& edge : pattern.edges_) {
     auto candidates = ad_utility::findOptional(triplesByPredicate, edge.p_);
     if (!candidates.has_value()) {
-      return std::nullopt;
+      // No embedding can possibly exist; leave `candidatesByEdge_` as-is,
+      // it's never read once `status_` is `Skipped`.
+      status_ = MatchStatus::Skipped;
+      return;
     }
-    candidatesByEdge.push_back(&candidates.value());
+    candidatesByEdge_.push_back(candidates.value());
   }
-  return candidatesByEdge;
 }
+
 // _____________________________________________________________________________
 bool PatternMatcher::tryAssignment(const TripleComponent& viewSide,
                                    const TripleComponent& queryNode) {
@@ -206,12 +205,12 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
   // For this edge, iterate all user query triples that have the edge's
   // predicate.
   const auto& edge = edges[edgeIdx];
-  for (size_t tripleIdx : *candidatesByEdge_[edgeIdx]) {
+  ad_utility::forEachSetBit(candidatesByEdge_[edgeIdx], [&](size_t tripleIdx) {
     if (isTripleCovered(tripleIdx)) {
-      continue;
+      return true;
     }
     if (!decrementAndCheckBudget()) {
-      return;
+      return false;
     }
     const auto& triple = triples_._triples.at(tripleIdx);
     bool subjectWasNew = isNewBinding(edge.s_);
@@ -225,7 +224,8 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
       undoAssignment(edge.o_, objectWasNew);
     }
     undoAssignment(edge.s_, subjectWasNew);
-  }
+    return true;
+  });
 }
 
 // _____________________________________________________________________________

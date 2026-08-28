@@ -5,13 +5,17 @@
 #ifndef QLEVER_BITUTILS_H
 #define QLEVER_BITUTILS_H
 
+#include <absl/numeric/bits.h>
+
 #include <cmath>
+#include <cstddef>
 #include <exception>
 
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
+
 // The return value has 1s for the lowest `numBits` bits, and 0 in all the
 // higher bits.
 constexpr inline uint64_t bitMaskForLowerBits(uint64_t numBits) {
@@ -64,6 +68,21 @@ constexpr auto unsignedTypeForNumberOfBitsImpl() {
 template <uint8_t numBits>
 using unsignedTypeForNumberOfBits =
     decltype(detail::unsignedTypeForNumberOfBitsImpl<numBits>());
+
+// Calls `fn(idx)` for each set bit index of `bits`, from lowest to highest,
+// stopping early (equivalent to `break`) if `fn` returns `false`. Runs in
+// O(popcount(bits)) time: `bits & (bits - 1)` clears the lowest set bit each
+// iteration, so unset bits are never visited.
+CPP_template(typename F)(
+    requires InvocableWithConvertibleReturnType<
+        F, bool, size_t>) inline void forEachSetBit(uint64_t bits, F&& fn) {
+  while (bits != 0) {
+    if (!fn(static_cast<size_t>(absl::countr_zero(bits)))) {
+      return;
+    }
+    bits &= bits - 1;
+  }
+}
 }  // namespace ad_utility
 
 #endif  // QLEVER_BITUTILS_H

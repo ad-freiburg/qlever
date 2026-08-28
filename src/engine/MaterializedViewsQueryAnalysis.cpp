@@ -153,7 +153,8 @@ void QueryPatternCache::matchPattern(
   auto status = PatternMatcher::findReplacementPlans(
       pattern, triples, triplesByPredicate, qec, budget, maxNumReplacementPlans,
       result);
-  if (status != PatternMatcher::MatchStatus::Complete) {
+  if (status == PatternMatcher::MatchStatus::TruncatedByBudget ||
+      status == PatternMatcher::MatchStatus::TruncatedByMaxReplacements) {
     AD_LOG_WARN
         << "Pattern matching for materialized view '" << pattern.view_->name()
         << "' exceeded "
@@ -205,7 +206,7 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     if (it == predicateInView_.end()) {
       continue;
     }
-    triplesByPredicate[iri.value()].push_back(tripleIdx);
+    triplesByPredicate[iri.value()] |= (uint64_t{1} << tripleIdx);
     ql::ranges::copy(it->second,
                      std::inserter(candidateViews, candidateViews.end()));
   }

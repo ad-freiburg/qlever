@@ -44,12 +44,8 @@ struct ViewPattern {
   ViewPtr view_;
 };
 
-// Query-side triples with a simple IRI predicate, grouped by that predicate,
-// for fast candidate lookup per pattern edge. Keyed by `string_view` into the
-// query triple's own predicate string (valid only for the lifetime of the
-// `BasicGraphPattern` it was built from).
-using TriplesByPredicate =
-    ad_utility::HashMap<std::string_view, std::vector<size_t>>;
+// Map from predicate IRI to a bitmask of the triple indices.
+using TriplesByPredicate = ad_utility::HashMap<std::string_view, uint64_t>;
 
 struct ByCacheKeyInfo {
   ViewPtr view_;

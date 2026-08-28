@@ -12,7 +12,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <vector>
 
 #include "engine/MaterializedViewsQueryAnalysis.h"
@@ -33,14 +32,16 @@ namespace materializedViewsQueryAnalysis {
 // of variable assignments.
 class PatternMatcher {
  public:
-  // Status returned by `findReplacementPlans`: whether the search covered every
-  // candidate assignment, or stopped early because of one of the two limits was
-  // reached (in which case `result` may be missing some applicable rewrites for
-  // this view).
+  // Status returned by `findReplacementPlans`.
   enum class MatchStatus {
+    // The search covered every candidate assignment.
     Complete,
+    // The maximum number of assignments was reached and the search was stopped.
     TruncatedByBudget,
+    // The maximum number of results was produced and the search was stopped.
     TruncatedByMaxReplacements,
+    // Not every edge's predicate appears in the query. The search was skipped.
+    Skipped,
   };
 
   // Builds a `PatternMatcher` and runs it to completion.
@@ -54,14 +55,16 @@ class PatternMatcher {
   // Private constructor used by `findReplacementPlans`.
   PatternMatcher(const ViewPattern& pattern,
                  const parsedQuery::BasicGraphPattern& triples,
-                 std::vector<const std::vector<size_t>*> candidatesByEdge,
+                 const TriplesByPredicate& triplesByPredicate,
                  QueryExecutionContext* qec, size_t budget,
                  size_t maxNumReplacementPlans,
                  std::vector<MaterializedViewJoinReplacement>& result);
 
   const ViewPattern& pattern_;
   const parsedQuery::BasicGraphPattern& triples_;
-  std::vector<const std::vector<size_t>*> candidatesByEdge_;
+  // Per pattern edge, a bitmask of the triple indices sharing that edge's
+  // predicate.
+  std::vector<uint64_t> candidatesByEdge_;
   QueryExecutionContext* qec_;
   const VariableToColumnMap& viewCols_;
   size_t stepsRemaining_;
@@ -76,12 +79,10 @@ class PatternMatcher {
   // Bitmask of the query triples used by the current assignment so far.
   uint64_t coveredTriples_ = 0;
 
-  // For each of the predicates in the view, the list of triple indices
-  // of triples with that predicate or `nullopt` if some predicate does
-  // not occur in `triples` at all.
-  static std::optional<std::vector<const std::vector<size_t>*>>
-  buildCandidatesByEdge(const ViewPattern& pattern,
-                        const TriplesByPredicate& triplesByPredicate);
+  // Fills `candidatesByEdge_`: for each edge, a bitmask containing the indices
+  // of triples sharing the edge's predicate.
+  void buildCandidatesByEdge(const ViewPattern& pattern,
+                             const TriplesByPredicate& triplesByPredicate);
 
   // Tries to match `viewSide` against `queryNode`. Returns `true` if the
   // assignment was made (or on equality for fixed components).
