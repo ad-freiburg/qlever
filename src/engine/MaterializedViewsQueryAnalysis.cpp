@@ -30,13 +30,23 @@ namespace materializedViewsQueryAnalysis {
 
 namespace {
 
-// Whether `edges` (the view's pattern graph) is connected, i.e. every edge is
-// reachable from `edges[0]` via a shared variable. `edges` must be non-empty.
-// Rejected here rather than left to the query planner: its DP table is built
-// per connected component of the *query's* triple graph, so a replacement
-// spanning more than one component could never be selected regardless of
-// cost. Fixed edge sides (see `PatternEdge`) don't connect anything.
-bool isConnected(const std::vector<PatternEdge>& edges) {
+// A traversal order for `edges` (the view's pattern graph) that starts at
+// `edges[0]` and visits every other edge via a shared variable with an
+// already-visited one -- or `nullopt` if `edges` is not connected this way.
+// `edges` must be non-empty. Rejected here rather than left to the query
+// planner: its DP table is built per connected component of the *query's*
+// triple graph, so a replacement spanning more than one component could
+// never be selected regardless of cost. Fixed edge sides (see `PatternEdge`)
+// don't connect anything.
+//
+// The order doubles as a good traversal order for `PatternMatcher`: since
+// every edge after the first shares a variable with one already placed
+// earlier in the order, matching edges in this order checks each one against
+// maximal already-bound context, letting illegal partial matches (e.g. two
+// smaller-column view variables see `MaterializedViewsPatternMatcher.cpp`)
+// get pruned as early as possible instead of only at a completed match.
+std::optional<std::vector<size_t>> connectedOrder(
+    const std::vector<PatternEdge>& edges) {
   AD_CORRECTNESS_CHECK(!edges.empty());
   ad_utility::HashMap<Variable, std::vector<size_t>> edgesByVariable;
   for (size_t i = 0; i < edges.size(); ++i) {
@@ -48,22 +58,26 @@ bool isConnected(const std::vector<PatternEdge>& edges) {
   }
 
   ad_utility::HashSet<size_t> reached{0};
-  std::vector<size_t> toVisit{0};
-  while (!toVisit.empty()) {
-    size_t current = toVisit.back();
-    toVisit.pop_back();
+  std::vector<size_t> order{0};
+  // `order` doubles as the BFS queue: indices not yet processed for
+  // neighbors are simply the ones not yet reached by `idx`.
+  for (size_t idx = 0; idx < order.size(); ++idx) {
+    size_t current = order[idx];
     for (const auto& side : {edges[current].s_, edges[current].o_}) {
       if (!side.isVariable()) {
         continue;
       }
       for (size_t neighbor : edgesByVariable.at(side.getVariable())) {
         if (reached.insert(neighbor).second) {
-          toVisit.push_back(neighbor);
+          order.push_back(neighbor);
         }
       }
     }
   }
-  return reached.size() == edges.size();
+  if (order.size() != edges.size()) {
+    return std::nullopt;
+  }
+  return order;
 }
 
 }  // namespace
@@ -90,7 +104,7 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
       return std::nullopt;
     }
     // At least one endpoint must be a variable, or the edge can't connect to
-    // the rest of the pattern (see `isConnected`).
+    // the rest of the pattern (see `connectedOrder`).
     if (!triple.s_.isVariable() && !triple.o_.isVariable()) {
       return std::nullopt;
     }
@@ -103,9 +117,13 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
     }
     edges.push_back({triple.s_, std::string{predicate.value()}, triple.o_});
   }
-  if (!isConnected(edges)) {
+  auto order = connectedOrder(edges);
+  if (!order.has_value()) {
     return std::nullopt;
   }
+  edges = ql::views::transform(order.value(),
+                               [&edges](size_t i) { return edges[i]; }) |
+          ::ranges::to<std::vector>();
   // The view's physical column 0 must be assigned during matching, or
   // `emitIfLegal`'s call to `makeIndexScan` throws (`throwIfScanColumnMissing`)
   // because the resulting `MaterializedViewQuery` never binds it.

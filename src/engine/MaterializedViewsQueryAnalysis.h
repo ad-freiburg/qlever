@@ -105,8 +105,9 @@ class QueryPatternCache {
   // per triple). Returns `nullopt` if a triple has a non-simple predicate, a
   // full-text pseudo-predicate (`ql:contains-word`/`ql:contains-entity`),
   // both subject and object fixed, a variable subject/object not in the
-  // view's columns, (see `isConnected`) the pattern is disconnected, or the
-  // view's physical column 0 never occurs in the pattern.
+  // view's columns, (see `connectedOrder`) the pattern is disconnected, or
+  // the view's physical column 0 never occurs in the pattern. On success, the
+  // edges are reordered by `connectedOrder` for `PatternMatcher`'s benefit.
   static std::optional<std::vector<PatternEdge>> buildPatternEdges(
       const ViewPtr& view, const std::vector<SparqlTriple>& triples);
 
