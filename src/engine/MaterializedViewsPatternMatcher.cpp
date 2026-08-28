@@ -16,10 +16,24 @@
 namespace materializedViewsQueryAnalysis {
 
 // _____________________________________________________________________________
+PatternMatcher::MatchStatus PatternMatcher::findReplacementPlans(
+    const ViewPattern& pattern, const parsedQuery::BasicGraphPattern& triples,
+    std::vector<const std::vector<size_t>*> candidatesByEdge,
+    QueryExecutionContext* qec, size_t budget, size_t maxNumReplacementPlans,
+    std::vector<MaterializedViewJoinReplacement>& result) {
+  PatternMatcher matcher{pattern, triples, std::move(candidatesByEdge),
+                         qec,     budget,  maxNumReplacementPlans,
+                         result};
+  // Runs the search, starting from the first pattern edge.
+  matcher.extendMatch(0);
+  return matcher.status_;
+}
+
+// _____________________________________________________________________________
 PatternMatcher::PatternMatcher(
     const ViewPattern& pattern, const parsedQuery::BasicGraphPattern& triples,
     std::vector<const std::vector<size_t>*> candidatesByEdge,
-    QueryExecutionContext* qec, size_t budget,
+    QueryExecutionContext* qec, size_t budget, size_t maxNumReplacementPlans,
     std::vector<MaterializedViewJoinReplacement>& result)
     : pattern_{pattern},
       triples_{triples},
@@ -27,6 +41,7 @@ PatternMatcher::PatternMatcher(
       qec_{qec},
       viewCols_{pattern.view_->variableToColumnMap()},
       stepsRemaining_{budget},
+      maxNumReplacementPlans_{maxNumReplacementPlans},
       result_{result} {}
 
 // _____________________________________________________________________________
@@ -151,20 +166,24 @@ void PatternMatcher::emitIfLegal() {
 
 // _____________________________________________________________________________
 void PatternMatcher::extendMatch(size_t edgeIdx) {
-  // If already `numMaxReplacementPlans` have been found, no further plans
+  // If already `maxNumReplacementPlans_` have been found, no further plans
   // should be generated.
-  if (result_.size() >= numMaxReplacementPlans) {
-    truncated_ = true;
+  if (result_.size() >= maxNumReplacementPlans_) {
+    if (status_ == MatchStatus::Complete) {
+      status_ = MatchStatus::TruncatedByMaxReplacements;
+    }
     return;
   }
 
   const auto& edges = pattern_.edges_;
-  // Base case: all edges of the view query have been matched to query triples.
+  // Base case: all edges have been matched to query triples.
   if (edgeIdx == edges.size()) {
     emitIfLegal();
     return;
   }
 
+  // For this edge, iterate all user query triples that have the edge's
+  // predicate.
   const auto& edge = edges[edgeIdx];
   for (size_t tripleIdx : *candidatesByEdge_[edgeIdx]) {
     if (isTripleCovered(tripleIdx)) {
@@ -179,9 +198,7 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
       bool objectWasNew = isNewBinding(edge.o_);
       if (tryAssignment(edge.o_, triple.o_)) {
         coverTriple(tripleIdx);
-
         extendMatch(edgeIdx + 1);
-
         uncoverTriple(tripleIdx);
       }
       undoAssignment(edge.o_, objectWasNew);
@@ -193,7 +210,9 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
 // _____________________________________________________________________________
 bool PatternMatcher::decrementAndCheckBudget() {
   if (stepsRemaining_ == 0) {
-    truncated_ = true;
+    if (status_ == MatchStatus::Complete) {
+      status_ = MatchStatus::TruncatedByBudget;
+    }
     return false;
   }
   --stepsRemaining_;

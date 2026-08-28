@@ -161,10 +161,13 @@ void QueryPatternCache::matchPattern(
     candidatesByEdge.push_back(&it->second);
   }
 
-  PatternMatcher matcher(pattern, triples, std::move(candidatesByEdge), qec,
-                         budget, result);
-  matcher.run();
-  if (matcher.truncated()) {
+  // TODO<ullingerc> Make configurable.
+  constexpr size_t kMaxReplacementPlans = 100;
+
+  auto status = PatternMatcher::findReplacementPlans(
+      pattern, triples, std::move(candidatesByEdge), qec, budget,
+      kMaxReplacementPlans, result);
+  if (status != PatternMatcher::MatchStatus::Complete) {
     AD_LOG_WARN << "Pattern matching for materialized view '"
                 << pattern.view_->name()
                 << "' exceeded the `materialized-view-pattern-match-budget` "
