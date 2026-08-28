@@ -81,7 +81,7 @@ bool PatternMatcher::tryAssign(const TripleComponent& viewSide,
     }
     // Fixed-value prefix pruning: a smaller-column view variable that is
     // still bound to a query variable rules out fixing this (larger) column.
-    if (hasSmallerVariableColumn(col)) {
+    if (hasVariableBeforeFixedColumn(col)) {
       return false;
     }
   }
@@ -97,7 +97,7 @@ bool PatternMatcher::isAlreadyBound(const TripleComponent& queryNode) const {
 }
 
 // _____________________________________________________________________________
-bool PatternMatcher::hasSmallerVariableColumn(size_t col) const {
+bool PatternMatcher::hasVariableBeforeFixedColumn(size_t col) const {
   return ql::ranges::any_of(assignment_, [this, col](const auto& entry) {
     return entry.second.isVariable() &&
            viewCols_.at(entry.first).columnIndex_ < col;
