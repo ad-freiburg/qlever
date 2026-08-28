@@ -270,10 +270,13 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
     if (!cacheKeyAndCol.has_value()) {
       return false;
     }
+    // NOTE: `ByCacheKeyInfo` is an aggregate, and `make_shared` initializes
+    // with parentheses, which only works for aggregates since C++20. The
+    // explicit `ByCacheKeyInfo{...}` is therefore required for C++17.
     auto [it, inserted] = byCacheKey_.insert(
         {std::move(cacheKeyAndCol.value().cacheKey_),
-         std::make_shared<ByCacheKeyInfo>(
-             view, std::move(cacheKeyAndCol.value().columnMapping_))});
+         std::make_shared<ByCacheKeyInfo>(ByCacheKeyInfo{
+             view, std::move(cacheKeyAndCol.value().columnMapping_)})});
     // If `inserted` is `false` because the entry already belongs to `view`
     // itself (its "full" and "without invariants" cache keys coincide, e.g.
     // because the view has no `BIND` to strip), this is expected and not a

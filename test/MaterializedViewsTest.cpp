@@ -1984,6 +1984,43 @@ INSTANTIATE_TEST_SUITE_P(
         std::string{simpleChainRenamedPlusBind}));
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsChainRewriteContextTest, ChainRewriteContext) {
+  qlv().writeMaterializedView("testViewChain", std::string{simpleChain});
+  qlv().loadMaterializedView("testViewChain");
+
+  // A degenerate chain (`?a <p1> ?b . ?b <p2> ?a`) must be rejected for
+  // rewriting (thus planned normally).
+  qpExpect(qlv(), "SELECT * { ?x <p1> ?v . ?v <p2> ?x }",
+           h::MultiColumnJoin(h::IndexScanFromStrings("?x", "<p1>", "?v"),
+                              h::IndexScanFromStrings("?v", "<p2>", "?x")));
+
+  // The same holds for a degenerate chain where the middle and the end are
+  // the same variable. Planning previously failed with an exception. The
+  // winning plan is not fixed here (the repeated variable is planned as an
+  // internal variable plus an equality filter, and the cache-key based
+  // rewriting may then legitimately replace the join by a scan of the view),
+  // so check that the query is planned and answered correctly instead of
+  // checking the plan.
+  EXPECT_EQ(qlv().query("SELECT ?x ?v { ?x <p1> ?v . ?v <p2> ?v }",
+                        ad_utility::MediaType::tsv),
+            "?x\t?v\n<x2>\t<v2>\n");
+
+  // Outside of any `GRAPH` clause, rewriting is applied.
+  auto chainView = std::bind_front(&viewScanSimple, "testViewChain");
+  qpExpect(qlv(), simpleChain, chainView("?s", "?m", "?o"));
+
+  // Inside `GRAPH <g1> {...}`, the triples are scanned restricted to graph
+  // `<g1>` and not replaced by the view without graph constraint.
+  qpExpect(
+      qlv(), "SELECT * { GRAPH <g1> { ?s <p1> ?m . ?m <p2> ?o } }",
+      h::Join(
+          h::IndexScanFromStrings("?s", "<p1>", "?m", {},
+                                  ad_utility::HashSet<std::string>{"<g1>"}),
+          h::IndexScanFromStrings("?m", "<p2>", "?o", {},
+                                  ad_utility::HashSet<std::string>{"<g1>"})));
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
   // Regression test for #2866.
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
