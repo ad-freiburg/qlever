@@ -52,6 +52,13 @@ class VocabularyType
             "in-memory-uncompressed-with-holes"},
            {Enum::InMemoryCompressedWithHoles,
             "in-memory-compressed-with-holes"}}};
+  // The vocabulary types that can be used to build a regular index, i.e. all
+  // types but the "with holes" variants (see above).
+  static constexpr std::array<Enum, 5> allForIndexBuilding_{
+      Enum::InMemoryUncompressed, Enum::OnDiskUncompressed,
+      Enum::InMemoryCompressed, Enum::OnDiskCompressed,
+      Enum::OnDiskCompressedGeoSplit};
+
   static const VocabularyType InMemoryUncompressed;
   static const VocabularyType OnDiskUncompressed;
   static const VocabularyType InMemoryCompressed;
@@ -64,34 +71,26 @@ class VocabularyType
 
   using EnumWithStrings::EnumWithStrings;
 
-  // Return the vocabulary types that can be used to build a regular index,
-  // i.e. all types but the "with holes" variants (see above).
-  static constexpr std::array<Enum, 5> allForIndexBuilding() {
-    return {Enum::InMemoryUncompressed, Enum::OnDiskUncompressed,
-            Enum::InMemoryCompressed, Enum::OnDiskCompressed,
-            Enum::OnDiskCompressedGeoSplit};
-  }
-
   // Return the vocabulary types that can be used to build a regular index (see
-  // `allForIndexBuilding`) as a comma-separated single string. This is the
+  // `allForIndexBuilding_`) as a comma-separated single string. This is the
   // counterpart of the inherited `getListOfSupportedValues`, which also
   // includes the "with holes" variants.
   static std::string getListOfValuesForIndexBuilding() {
     return absl::StrJoin(
-        allForIndexBuilding() | ql::views::transform([](Enum type) {
+        allForIndexBuilding_ | ql::views::transform([](Enum type) {
           return VocabularyType{type}.toString();
         }),
         ", ");
   }
 
   // Return a random vocabulary type that can be used to build a regular index
-  // (see `allForIndexBuilding`), useful for fuzz testing. This is the
+  // (see `allForIndexBuilding_`), useful for fuzz testing. This is the
   // counterpart of the inherited `random()`, which may also return one of the
   // "with holes" variants.
   static VocabularyType randomForIndexBuilding() {
     thread_local ad_utility::FastRandomIntGenerator<size_t> generator;
-    constexpr auto types = allForIndexBuilding();
-    return VocabularyType{types.at(generator() % types.size())};
+    return VocabularyType{
+        allForIndexBuilding_.at(generator() % allForIndexBuilding_.size())};
   }
 };
 

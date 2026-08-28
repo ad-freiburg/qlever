@@ -431,3 +431,28 @@ TEST(CompressedVocabularyWithHoles, makeDiskWriterPtrThrows) {
       CompressedVocabularyWithHoles::makeDiskWriterPtr(gtestCurrentTestName()),
       ::testing::HasSubstr("cannot be built word by word"));
 }
+
+// _____________________________________________________________________________
+TEST(CompressedVocabularyWithHoles, addWordAfterFinishThrows) {
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  CompressedVocabularyWithHoles::WordWriter writer{
+      absl::StrCat(filename, ".words"), absl::StrCat(filename, ".codebooks")};
+  auto words = wordsWithHoles();
+  auto indices = indicesWithHoles();
+  EXPECT_EQ(writer(words.at(0), indices.at(0)), indices.at(0));
+  writer.finish();
+
+  // Adding a word after `finish` was called is a contract violation, because
+  // the word could no longer be written to disk.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writer(words.at(1), indices.at(1)),
+      ::testing::HasSubstr("Assertion `!finishWasCalled_` failed"));
+
+  // The vocabulary that was written before the failed call is intact, and
+  // contains only the single word that was added successfully.
+  CompressedVocabularyWithHoles vocab;
+  vocab.open(filename);
+  EXPECT_EQ(vocab.size(), 1);
+  EXPECT_EQ(vocab[indices.at(0)], words.at(0));
+}

@@ -72,7 +72,7 @@ TEST(VocabularyType, vocabularyTypesWithHoles) {
 
   // The types with holes are not part of the types for index building, and
   // hence are never returned by `randomForIndexBuilding`.
-  auto typesForIndexBuilding = T::allForIndexBuilding();
+  const auto& typesForIndexBuilding = T::allForIndexBuilding_;
   EXPECT_EQ(typesForIndexBuilding.size(), 5);
   using namespace ::testing;
   EXPECT_THAT(typesForIndexBuilding,
@@ -83,4 +83,16 @@ TEST(VocabularyType, vocabularyTypesWithHoles) {
     EXPECT_THAT(typesForIndexBuilding,
                 Contains(T::randomForIndexBuilding().value()));
   }
+
+  // The list of values for index building consists of exactly the names of
+  // `allForIndexBuilding_`, joined by commas. In particular, and in contrast to
+  // the inherited `getListOfSupportedValues`, it mentions none of the types
+  // with holes.
+  auto listForIndexBuilding = T::getListOfValuesForIndexBuilding();
+  for (auto e : typesForIndexBuilding) {
+    EXPECT_THAT(listForIndexBuilding, HasSubstr(T{e}.toString()));
+  }
+  EXPECT_THAT(listForIndexBuilding, HasSubstr(", on-disk-uncompressed"));
+  EXPECT_THAT(listForIndexBuilding, Not(HasSubstr("with-holes")));
+  EXPECT_THAT(T::getListOfSupportedValues(), HasSubstr("with-holes"));
 }
