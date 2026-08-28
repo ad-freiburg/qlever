@@ -816,12 +816,17 @@ TEST(GeometryInfoTest, ProjectionVisitor) {
               utilLineNear(DLine{{222638.9816, 222684.2085},
                                  {445277.9632, 445640.1097}}));
 
-  constexpr UtilGeomProjectionVisitor<TwiceProjection> projectMock;
-  EXPECT_THAT(projectMock(DPoint{5, 5}), utilPointNear({10, 10}));
-  EXPECT_THAT(projectMock(DAnyGeometry{DPoint{5, 5}}),
-              utilAnyGeometryNear(DPoint{10, 10}));
-  EXPECT_THAT(projectMock(expectedMultiPoint),
-              utilMultiPointNear({{4, 4}, {8, 8}}));
+  EXPECT_THAT(
+      projectWebMerc(GeoPointOrWkt{std::string{litPointWGS84}}),
+      parseResultNear(ParseResult{projectWebMerc(expectedPoint), POINT,
+                                  CRSType::WEB_MERCATOR, CRSType::WGS84}));
+
+  constexpr UtilGeomProjectionVisitor projectWebMercToCRS84{
+      CRSType::WEB_MERCATOR, CRSType::CRS84};
+  EXPECT_THAT(
+      projectWebMercToCRS84(GeoPointOrWkt{std::string{litPointWebMerc}}),
+      parseResultNear(ParseResult{expectedPoint, POINT, CRSType::CRS84,
+                                  CRSType::WEB_MERCATOR}));
 }
 
 // _____________________________________________________________________________
