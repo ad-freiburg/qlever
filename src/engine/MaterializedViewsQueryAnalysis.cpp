@@ -110,6 +110,15 @@ void QueryPatternCache::makeScansFromChainCandidates(
         if (it == simpleChainCache_.end()) {
           continue;
         }
+        // A degenerate chain (`?a <p1> ?b . ?b <p2> ?a` or
+        // `?a <p1> ?b . ?b <p2> ?b`) would require adding a filter on top of
+        // the view's `IndexScan`, which is not supported.
+        if (right.s_ == right.o_ ||
+            (left.s_.isVariable() &&
+             left.s_.getVariable() == right.o_.getVariable())) {
+          continue;
+        }
+
         for (const auto& chainInfo : *(it->second)) {
           // If the subject of the chain is fixed, but the subject is not the
           // first column of the view, rewriting cannot be applied.
