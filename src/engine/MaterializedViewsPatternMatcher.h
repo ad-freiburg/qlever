@@ -51,6 +51,16 @@ class PatternMatcher {
   bool truncated() const { return truncated_; }
 
  private:
+  // Hard cap on how many replacements `makeJoinReplacementIndexScans` collects
+  // in total across every candidate view for one query: each one becomes a
+  // candidate plan the query planner must separately consider, so leaving this
+  // unbounded would let the total planning cost scale with the number of
+  // loaded views on top of the pattern-match budget already bounding each
+  // individual view's search. ponytail: fixed constant, comfortably above what
+  // any realistic view/query shape needs; promote to a runtime parameter if a
+  // real workload needs it tuned.
+  static constexpr size_t kMaxReplacements = 1000;
+
   const ViewPattern& pattern_;
   const parsedQuery::BasicGraphPattern& triples_;
   std::vector<const std::vector<size_t>*> candidatesByEdge_;
@@ -78,16 +88,17 @@ class PatternMatcher {
   // is just two independent equality filters on the view's scan, which
   // `MaterializedView::makeScanConfig` explicitly allows. Returns `false`,
   // leaving `assignment_` unmodified, on rejection.
-  bool tryAssign(const TripleComponent& viewSide,
-                 const TripleComponent& queryNode);
+  bool tryAssignment(const TripleComponent& viewSide,
+                     const TripleComponent& queryNode);
 
   // Whether some already-assigned view variable is bound to `queryNode`
-  // (the injectivity check `tryAssign` needs for a query-variable side).
+  // (the injectivity check `tryAssignment` needs for a query-variable side).
   bool isAlreadyBound(const TripleComponent& queryNode) const;
 
   // Whether some already-assigned view variable with a smaller column index
   // than `col` is still bound to a query variable, i.e. not itself fixed
-  // (the fixed-value prefix check `tryAssign` needs for a fixed-value side).
+  // (the fixed-value prefix check `tryAssignment` needs for a fixed-value
+  // side).
   bool hasVariableBeforeFixedColumn(size_t col) const;
 
   // Whether `tripleIdx` is already used by the current assignment.
@@ -97,19 +108,28 @@ class PatternMatcher {
   void coverTriple(size_t tripleIdx);
   void uncoverTriple(size_t tripleIdx);
 
-  // Whether `tryAssign(viewSide, ...)` would add a new binding (that
-  // `undoAssign` then needs to remove on backtrack). Must be called before
-  // `tryAssign`, which may itself insert that binding.
+  // Decrement the budget and return `false` if no budget is left.
+  bool decrementAndCheckBudget();
+
+  // Whether `tryAssignment(viewSide, ...)` would add a new binding (that
+  // `undoAssignment` then needs to remove on backtrack). Must be called before
+  // `tryAssignment`, which may itself insert that binding.
   bool isNewBinding(const TripleComponent& viewSide) const;
 
-  // Reverses `tryAssign(viewSide, ...)` if it added a new binding (`wasNew`,
-  // from `isNewBinding`); otherwise a no-op.
-  void undoAssign(const TripleComponent& viewSide, bool wasNew);
+  // Reverses `tryAssignment(viewSide, ...)` if it added a new binding
+  // (`wasNew`, from `isNewBinding`); otherwise a no-op.
+  void undoAssignment(const TripleComponent& viewSide, bool wasNew);
 
   // Checks the completed match in `assignment_` against
   // `isLegalFixedValuePrefix` and, if legal, builds the resulting
   // `MaterializedViewJoinReplacement` and adds it to `result_`.
   void emitIfLegal();
+
+  // Whether `boundColumnsMask` (bit `i` set iff view column `i` is bound to a
+  // fixed value from the query) is a legal prefix for a single SPO-sorted view
+  // permutation: only subject, subject+predicate, or subject+predicate+object
+  // (`0b001`/`0b011`/`0b111`, or `0b000`) may be fixed.
+  static bool isLegalFixedValuePrefix(uint64_t boundColumnsMask);
 
   // Recursively extends the current assignment (which already covers
   // `edges[0, edgeIdx)`, `edges` being `pattern_.edges_`) by matching
@@ -118,13 +138,13 @@ class PatternMatcher {
   // `matchPattern`), then recursing into the remaining edges. A completed
   // match is validated and turned into a replacement immediately
   // (`emitIfLegal`) instead of being collected into an intermediate list
-  // first. Plain VF2-style backtracking: `undoAssign` only removes the
+  // first. Plain VF2-style backtracking: `undoAssignment` only removes the
   // bindings this step added, and `isTripleCovered` is a single bit test
   // against the `coveredTriples_` bitmask.
   //
   // `stepsRemaining_` caps the total number of candidates tried across the
-  // whole search; `result_.size() >= kMaxReplacements` (see the .cpp file)
-  // separately caps the total number of matches collected, since a
+  // whole search; `result_.size() >= kMaxReplacements` separately caps the
+  // total number of matches collected, since a
   // cheap-to-complete match (e.g. a two-edge view with a repeated predicate)
   // can exhaust neither the steps nor find anything illegal, yet still
   // complete tens of thousands of times within the step budget. Either limit

@@ -186,11 +186,10 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
     auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
     // Both ways of assigning the two `<p1>` triples to the view's arms match.
     using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
-    EXPECT_THAT(
-        replacements,
-        ::testing::AllOf(
-            ::testing::SizeIs(2),
-            ::testing::Each(AD_FIELD(MaterializedViewJoinReplacement,
+    EXPECT_THAT(replacements,
+                ::testing::AllOf(::testing::SizeIs(2),
+                                 ::testing::Each(AD_FIELD(
+                                     MaterializedViewJoinReplacement,
                                      coveredTriples_, ::testing::Eq(0b011u)))));
   }
 
@@ -214,10 +213,9 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
         plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
     auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
     using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
-    EXPECT_THAT(replacements,
-                ::testing::ElementsAre(AD_FIELD(MaterializedViewJoinReplacement,
-                                                coveredTriples_,
-                                                ::testing::Eq(0b011u))));
+    EXPECT_THAT(replacements, ::testing::ElementsAre(AD_FIELD(
+                                  MaterializedViewJoinReplacement,
+                                  coveredTriples_, ::testing::Eq(0b011u))));
   }
 
   // Two different view variables can legitimately be fixed to the *same*
@@ -241,10 +239,9 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
         plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
     auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
     using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
-    EXPECT_THAT(replacements,
-                ::testing::ElementsAre(AD_FIELD(MaterializedViewJoinReplacement,
-                                                coveredTriples_,
-                                                ::testing::Eq(0b011u))));
+    EXPECT_THAT(replacements, ::testing::ElementsAre(AD_FIELD(
+                                  MaterializedViewJoinReplacement,
+                                  coveredTriples_, ::testing::Eq(0b011u))));
   }
 
   // Disconnected pattern (no shared variable): rejected outright, since the

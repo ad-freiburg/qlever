@@ -15,28 +15,11 @@
 
 namespace materializedViewsQueryAnalysis {
 
-namespace {
-
-// Whether `boundColumnsMask` (bit `i` set iff view column `i` is bound to a
-// fixed value from the query) is a legal prefix for a single SPO-sorted view
-// permutation: only subject, subject+predicate, or subject+predicate+object
-// (`0b001`/`0b011`/`0b111`, or `0b000`) may be fixed.
-bool isLegalFixedValuePrefix(size_t boundColumnsMask) {
+// _____________________________________________________________________________
+bool PatternMatcher::isLegalFixedValuePrefix(uint64_t boundColumnsMask) {
   return boundColumnsMask == 0b000u || boundColumnsMask == 0b001u ||
          boundColumnsMask == 0b011u || boundColumnsMask == 0b111u;
 }
-
-// Hard cap on how many replacements `makeJoinReplacementIndexScans` collects
-// in total across every candidate view for one query: each one becomes a
-// candidate plan the query planner must separately consider, so leaving this
-// unbounded would let the total planning cost scale with the number of
-// loaded views on top of the pattern-match budget already bounding each
-// individual view's search. ponytail: fixed constant, comfortably above what
-// any realistic view/query shape needs; promote to a runtime parameter if a
-// real workload needs it tuned.
-constexpr size_t kMaxReplacements = 1000;
-
-}  // namespace
 
 // _____________________________________________________________________________
 PatternMatcher::PatternMatcher(
@@ -53,8 +36,8 @@ PatternMatcher::PatternMatcher(
       result_{result} {}
 
 // _____________________________________________________________________________
-bool PatternMatcher::tryAssign(const TripleComponent& viewSide,
-                               const TripleComponent& queryNode) {
+bool PatternMatcher::tryAssignment(const TripleComponent& viewSide,
+                                   const TripleComponent& queryNode) {
   if (!viewSide.isVariable()) {
     return queryNode == viewSide;
   }
@@ -123,7 +106,8 @@ bool PatternMatcher::isNewBinding(const TripleComponent& viewSide) const {
 }
 
 // _____________________________________________________________________________
-void PatternMatcher::undoAssign(const TripleComponent& viewSide, bool wasNew) {
+void PatternMatcher::undoAssignment(const TripleComponent& viewSide,
+                                    bool wasNew) {
   if (wasNew) {
     assignment_.erase(viewSide.getVariable());
   }
@@ -133,14 +117,14 @@ void PatternMatcher::undoAssign(const TripleComponent& viewSide, bool wasNew) {
 void PatternMatcher::emitIfLegal() {
   // Fixed query values must land on a legal column prefix; a payload column
   // (index > 2) bound to a fixed value is always illegal.
-  size_t boundColumnsMask = 0;
+  uint64_t boundColumnsMask = 0;
   for (const auto& [viewVar, node] : assignment_) {
     if (!node.isVariable()) {
       size_t col = viewCols_.at(viewVar).columnIndex_;
       if (col > 2) {
         return;
       }
-      boundColumnsMask |= (size_t{1} << col);
+      boundColumnsMask |= (uint64_t{1} << col);
     }
   }
   if (!isLegalFixedValuePrefix(boundColumnsMask)) {
@@ -169,26 +153,34 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
     if (isTripleCovered(tripleIdx)) {
       continue;
     }
-    if (stepsRemaining_ == 0) {
-      truncated_ = true;
+    if (!decrementAndCheckBudget()) {
       return;
     }
-    --stepsRemaining_;
     const auto& triple = triples_._triples.at(tripleIdx);
     bool subjectWasNew = isNewBinding(edge.s_);
-    if (tryAssign(edge.s_, triple.s_)) {
+    if (tryAssignment(edge.s_, triple.s_)) {
       bool objectWasNew = isNewBinding(edge.o_);
-      if (tryAssign(edge.o_, triple.o_)) {
+      if (tryAssignment(edge.o_, triple.o_)) {
         coverTriple(tripleIdx);
 
         extendMatch(edgeIdx + 1);
 
         uncoverTriple(tripleIdx);
       }
-      undoAssign(edge.o_, objectWasNew);
+      undoAssignment(edge.o_, objectWasNew);
     }
-    undoAssign(edge.s_, subjectWasNew);
+    undoAssignment(edge.s_, subjectWasNew);
   }
+}
+
+// _____________________________________________________________________________
+bool PatternMatcher::decrementAndCheckBudget() {
+  if (stepsRemaining_ == 0) {
+    truncated_ = true;
+    return false;
+  }
+  --stepsRemaining_;
+  return true;
 }
 
 }  // namespace materializedViewsQueryAnalysis
