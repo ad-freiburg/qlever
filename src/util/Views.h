@@ -550,12 +550,12 @@ CPP_template(typename R)(requires ql::ranges::range<R>) auto rangeToOptional(
 
   // Transform the range to a range of optionals of its contents
   if (range.has_value()) {
-    return ResultRangeType(range.value() |
+    return ResultRangeType(std::move(range.value()) |
                            ::ranges::views::transform([](auto& element) {
                              return std::make_optional(std::move(element));
                            }));
   }
-  // Create a range containing nullopts of the same type as the ranges
+  // Create a range containing nullopts of the same "type" as the ranges
   // contents would have if they'd hold a value.
   return ResultRangeType(::ranges::views::repeat(std::nullopt));
 }
