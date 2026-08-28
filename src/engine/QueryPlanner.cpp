@@ -3127,6 +3127,32 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
 }
 
 // ____________________________________________________________
+void QueryPlanner::GraphPatternPlanner::bindGraphVariableIfUnbound(
+    const Variable& graphVar, std::vector<SubtreePlan>& candidates) {
+  const auto& namedGraphs = planner_.activeDatasetClauses_.namedGraphs();
+  auto graphsCand = [&namedGraphs, &graphVar, this](){
+    if(!namedGraphs.has_value()){
+      return makeSubtreePlan<DistinctGraphs>(qec_, graphVar);
+    }
+    p::SparqlValues values;
+    values._variables.push_back(graphVar);
+    for(const auto& graph: namedGraphs.value()){
+      values._values.push_back({graph});
+    }
+    return makeSubtreePlan<Values>(qec_, std::move(values));
+  }();
+  for(auto& innerCand: candidates){
+    if(!innerCand._qet->getVariableColumns().contains(graphVar)){
+      innerCand = makeSubtreePlan<CartesianProductJoin>(
+          planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
+                             graphsCand._qet, innerCand._qet});
+    }
+    // TODO<metetolga> queries of the form SELECT * { GRAPH ?g { VALUES ?g
+    // { <doesnotexist> } } } are not correctly handled.
+  }
+}
+
+// ____________________________________________________________
 template <typename Arg>
 void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using T = std::decay_t<Arg>;
@@ -3174,28 +3200,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       if (const auto* graphPair = std::get_if<std::pair<
               Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
               &arg.graphSpec_)) {
-        const Variable& graphVar = graphPair->first;
-        const auto& namedGraphs = planner_.activeDatasetClauses_.namedGraphs();
-        auto graphsCand = [&namedGraphs, &graphVar, this](){
-          if(!namedGraphs.has_value()){
-            return makeSubtreePlan<DistinctGraphs>(qec_, graphVar);
-          } 
-          p::SparqlValues values;
-          values._variables.push_back(graphVar);
-          for(const auto& graph: namedGraphs.value()){
-            values._values.push_back({graph});
-          }
-          return makeSubtreePlan<Values>(qec_, std::move(values));
-        }();
-        for(auto& innerCand: candidates){
-          if(!innerCand._qet->getVariableColumns().contains(graphVar)){
-            innerCand = makeSubtreePlan<CartesianProductJoin>(
-                planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
-                                   graphsCand._qet, innerCand._qet});
-          }
-          // TODO<metetolga> queries of the form SELECT * { GRAPH ?g { VALUES ?g
-          // { <doesnotexist> } } } are not correctly handled.
-        }
+        bindGraphVariableIfUnbound(graphPair->first, candidates);
       }
     }
 
@@ -3513,11 +3518,9 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   ParsedQuery& subquery = arg.get();
   const auto& select = subquery.selectClause();
   std::optional<Variable> internalGraphVariable;
-  // Disable for subqueries that do not select the graph variable
   if (outerGraphVariable.has_value() && !select.isAsterisk() &&
       !ad_utility::contains(select.getSelectedVariables(),
                             outerGraphVariable.value())) {
-    planner_.activeGraphVariable_ = std::nullopt;
     internalGraphVariable = planner_.generateUniqueVarName();
     planner_.activeGraphVariable_ = internalGraphVariable;
   }
