@@ -47,6 +47,34 @@ struct ViewPattern {
 // Map from predicate IRI to a bitmask of the triple indices.
 using TriplesByPredicate = ad_utility::HashMap<std::string_view, uint64_t>;
 
+// The two limits that bound one call to `PatternMatcher::findReplacementPlans`
+// (aliased there as `PatternMatcher::Limits`; defined here at namespace scope
+// instead of nested in `PatternMatcher` to avoid a circular include between
+// this header and `MaterializedViewsPatternMatcher.h`). Also used to report
+// how much of each limit a call actually used, so
+// `QueryPatternCache::makeJoinReplacementIndexScans` can share a pool of each
+// across several calls.
+struct PatternMatcherLimits {
+  size_t budget_;
+  size_t maxNumReplacementPlans_;
+
+  // A fixed per-view share of `*this`, split evenly across `numViews` (must
+  // be nonzero) so the limits apply per query rather than per (view, query)
+  // pair -- otherwise a query matching N views would do up to N times the
+  // configured work. Never below a floor (so a search isn't spread so thin
+  // across many candidates that it can never find anything).
+  PatternMatcherLimits perViewShare(size_t numViews) const;
+
+  bool isExhausted() const {
+    return budget_ == 0 || maxNumReplacementPlans_ == 0;
+  }
+
+  PatternMatcherLimits requestBounded(
+      PatternMatcherLimits requestedAmount) const;
+
+  void subtract(PatternMatcherLimits used);
+};
+
 struct ByCacheKeyInfo {
   ViewPtr view_;
   ad_utility::HashMap<size_t, size_t> colMapping_;
@@ -112,17 +140,6 @@ class QueryPatternCache {
   // edges are reordered by `connectedOrder` for `PatternMatcher`'s benefit.
   static std::optional<std::vector<PatternEdge>> buildPatternEdges(
       const ViewPtr& view, const std::vector<SparqlTriple>& triples);
-
-  // Search for all embeddings of `pattern` into `triples`, trying at most
-  // `budget` candidate assignments, and add a `MaterializedViewJoinReplacement`
-  // for each valid one (see `isLegalFixedValuePrefix`) to `result` -- capped,
-  // independently of `budget`, at `maxNumReplacementPlans` total across all
-  // calls that share `result`.
-  void matchPattern(QueryExecutionContext* qec, const ViewPattern& pattern,
-                    const parsedQuery::BasicGraphPattern& triples,
-                    const TriplesByPredicate& triplesByPredicate, size_t budget,
-                    size_t maxNumReplacementPlans,
-                    std::vector<MaterializedViewJoinReplacement>& result) const;
 };
 
 // Helper that filters the graph patterns of a parsed query using

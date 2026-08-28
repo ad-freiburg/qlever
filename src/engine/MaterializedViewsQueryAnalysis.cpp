@@ -10,6 +10,7 @@
 #include "engine/MaterializedViewsQueryAnalysis.h"
 
 #include <algorithm>
+#include <map>
 #include <optional>
 #include <variant>
 
@@ -83,6 +84,31 @@ std::optional<std::vector<size_t>> connectedOrder(
 }  // namespace
 
 // _____________________________________________________________________________
+PatternMatcherLimits PatternMatcherLimits::perViewShare(size_t numViews) const {
+  AD_CORRECTNESS_CHECK(numViews > 0);
+  constexpr size_t minBudgetPerView = 1'000;
+  constexpr size_t minAllowedResultsPerView = 5;
+  return {
+      std::max(minBudgetPerView, budget_ / numViews),
+      std::max(minAllowedResultsPerView, maxNumReplacementPlans_ / numViews)};
+}
+
+// _____________________________________________________________________________
+PatternMatcherLimits PatternMatcherLimits::requestBounded(
+    PatternMatcherLimits requestedAmount) const {
+  return {std::min(budget_, requestedAmount.budget_),
+          std::min(maxNumReplacementPlans_,
+                   requestedAmount.maxNumReplacementPlans_)};
+}
+
+// _____________________________________________________________________________
+void PatternMatcherLimits::subtract(PatternMatcherLimits used) {
+  budget_ -= std::min(budget_, used.budget_);
+  maxNumReplacementPlans_ -=
+      std::min(maxNumReplacementPlans_, used.maxNumReplacementPlans_);
+}
+
+// _____________________________________________________________________________
 std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
     const ViewPtr& view, const std::vector<SparqlTriple>& triples) {
   const auto& viewCols = view->variableToColumnMap();
@@ -144,30 +170,6 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
 }
 
 // _____________________________________________________________________________
-void QueryPatternCache::matchPattern(
-    QueryExecutionContext* qec, const ViewPattern& pattern,
-    const parsedQuery::BasicGraphPattern& triples,
-    const TriplesByPredicate& triplesByPredicate, size_t budget,
-    size_t maxNumReplacementPlans,
-    std::vector<MaterializedViewJoinReplacement>& result) const {
-  auto status = PatternMatcher::findReplacementPlans(
-      pattern, triples, triplesByPredicate, qec, budget, maxNumReplacementPlans,
-      result);
-  if (status == PatternMatcher::MatchStatus::TruncatedByBudget ||
-      status == PatternMatcher::MatchStatus::TruncatedByMaxReplacements) {
-    AD_LOG_WARN
-        << "Pattern matching for materialized view '" << pattern.view_->name()
-        << "' exceeded "
-        << (status == PatternMatcher::MatchStatus::TruncatedByBudget
-                ? "the `materialized-view-pattern-match-budget`"
-                : "the `materialized-view-pattern-match-max-results` cap")
-        << "; some applicable rewrites using this view may have been missed "
-           "for this query."
-        << std::endl;
-  }
-}
-
-// _____________________________________________________________________________
 std::vector<MaterializedViewJoinReplacement>
 QueryPatternCache::makeJoinReplacementIndexScans(
     QueryExecutionContext* qec,
@@ -178,12 +180,12 @@ QueryPatternCache::makeJoinReplacementIndexScans(
   }
 
   // A budget of `0` disables pattern-based rewriting entirely.
-  size_t budget = getRuntimeParameter<
+  size_t totalBudget = getRuntimeParameter<
       &RuntimeParameters::materializedViewPatternMatchBudget_>();
-  if (budget == 0) {
+  if (totalBudget == 0) {
     return result;
   }
-  size_t maxNumReplacementPlans = getRuntimeParameter<
+  size_t totalMaxResults = getRuntimeParameter<
       &RuntimeParameters::materializedViewPatternMatchMaxResults_>();
 
   // We use a 64-bit bitmask of triple indices, so more than 64 triples are not
@@ -192,28 +194,54 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     return result;
   }
 
-  // Group query triples by predicate and collect views sharing a predicate
-  // with the query.
+  // Group query triples by predicate and collect the views sharing a
+  // predicate with the query, keyed by name so that the sharing of the limits
+  // pool below is deterministic (a hash set of `shared_ptr`s is not).
   TriplesByPredicate triplesByPredicate;
-  ad_utility::HashSet<ViewPtr> candidateViews;
+  std::map<std::string_view, ViewPtr> candidateViews;
   for (const auto& [tripleIdx, triple] :
        ::ranges::views::enumerate(triples._triples)) {
     auto iri = triple.getSimplePredicate();
     if (!iri.has_value()) {
       continue;
     }
-    auto it = predicateInView_.find(iri.value());
-    if (it == predicateInView_.end()) {
+    auto views = ad_utility::findOptional(predicateInView_, iri.value());
+    if (!views.has_value()) {
       continue;
     }
     triplesByPredicate[iri.value()] |= (uint64_t{1} << tripleIdx);
-    ql::ranges::copy(it->second,
-                     std::inserter(candidateViews, candidateViews.end()));
+    for (const auto& view : views.value()) {
+      candidateViews.emplace(view->name(), view);
+    }
+  }
+  if (candidateViews.empty()) {
+    return result;
   }
 
-  for (const auto& view : candidateViews) {
-    matchPattern(qec, patterns_.at(view), triples, triplesByPredicate, budget,
-                 maxNumReplacementPlans, result);
+  // Match all `candidateViews` against the query, sharing one pool of limits
+  // across them.
+  PatternMatcherLimits remaining{totalBudget, totalMaxResults};
+  const PatternMatcherLimits share =
+      remaining.perViewShare(candidateViews.size());
+  for (const auto& [name, view] : candidateViews) {
+    if (remaining.isExhausted()) {
+      break;
+    }
+    remaining.subtract(PatternMatcher::findReplacementPlans(
+                           patterns_.at(view), triples, triplesByPredicate, qec,
+                           remaining.requestBounded(share), result)
+                           .used_);
+  }
+  // Only the exhaustion of the shared pool is worth a warning: a single view
+  // hitting its share just means the other views get their turn.
+  if (remaining.isExhausted()) {
+    AD_LOG_WARN << "Pattern matching for materialized views hit the "
+                << (remaining.budget_ == 0
+                        ? "`materialized-view-pattern-match-budget`"
+                        : "`materialized-view-pattern-match-max-results` cap")
+                << "; some applicable rewrites may have been missed for this "
+                   "query."
+                << std::endl;
   }
   return result;
 }
