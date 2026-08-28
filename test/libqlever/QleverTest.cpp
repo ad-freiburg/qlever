@@ -19,6 +19,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/UpdateMetadata.h"
 #include "global/FileSuffixConstants.h"
+#include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "libqlever/Qlever.h"
@@ -979,6 +980,70 @@ TEST(LibQlever, applyUpdate) {
   // The query result cache is invalidated as a side effect of `applyUpdate`.
   EXPECT_EQ(engine.cache().numPinnedEntries(), 0U);
   EXPECT_EQ(engine.cache().numNonPinnedEntries(), 0U);
+}
+
+namespace {
+// Parse and plan `update` and apply it to `engine` via `Qlever::applyUpdate`,
+// returning the metadata. For why the update has to be parsed separately and
+// for the thread-safety caveat of taking the snapshot only here, see the
+// comments in `LibQlever.applyUpdate` above.
+UpdateMetadata applyUpdateToEngine(Qlever& engine, const std::string& update) {
+  ad_utility::BlankNodeManager bnm;
+  auto parsedUpdates = SparqlParser::parseUpdate(
+      &bnm, ad_utility::testing::encodedIriManager(), update);
+  AD_CORRECTNESS_CHECK(parsedUpdates.size() == 1);
+  auto plannedUpdate =
+      engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto snapshot = engine.indexAndViewsSnapshot();
+  return snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(
+      [&](DeltaTriples& deltaTriples) {
+        return engine.applyUpdate(plannedUpdate, handle, deltaTriples);
+      });
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Direct counterpart to `ServerTest.clearDeltaTriples`: populate the delta
+// triples via `applyUpdate` and clear them directly through `Qlever`,
+// independent of the HTTP `Server` layer.
+TEST(LibQlever, clearDeltaTriples) {
+  auto config = buildTestIndex("<s> <p> <o> .");
+  config.persistUpdates_ = false;
+  Qlever engine{config};
+
+  auto metadata = applyUpdateToEngine(engine, "INSERT DATA { <a> <b> <c> }");
+  EXPECT_THAT(metadata.countAfter_, Optional(Eq(DeltaTriplesCount{1, 0})));
+
+  EXPECT_THAT(engine.clearDeltaTriples(), Eq(DeltaTriplesCount{0, 0}));
+}
+
+// _____________________________________________________________________________
+// Direct counterpart to `ServerTest.vacuumDeltaTriples`: insert a triple that
+// is already in the index (a redundant insertion that `vacuum` removes) and
+// vacuum directly through `Qlever`, independent of the HTTP `Server` layer.
+TEST(LibQlever, vacuumDeltaTriples) {
+  auto config = buildTestIndex("<a> <b> <c> .");
+  config.persistUpdates_ = false;
+  Qlever engine{config};
+
+  // Without this, the single block of the (tiny) test index doesn't meet the
+  // minimum size for `vacuum` to process it.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+          size_t{0});
+
+  auto metadata = applyUpdateToEngine(engine, "INSERT DATA { <a> <b> <c> }");
+  EXPECT_THAT(metadata.countAfter_, Optional(Eq(DeltaTriplesCount{1, 0})));
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto stats = engine.vacuumDeltaTriples(handle);
+  EXPECT_EQ(stats["external"]["insertionsRemoved"], 1);
+  EXPECT_THAT(engine.indexAndViewsSnapshot()
+                  ->index_.deltaTriplesManager()
+                  .getCurrentLocatedTriplesSharedState()
+                  ->counts_,
+              Optional(Eq(DeltaTriplesCount{0, 0})));
 }
 
 // _____________________________________________________________________________
