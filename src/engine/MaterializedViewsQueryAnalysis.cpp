@@ -31,21 +31,14 @@ namespace materializedViewsQueryAnalysis {
 
 namespace {
 
-// A traversal order for `edges` (the view's pattern graph) that starts at
-// `edges[0]` and visits every other edge via a shared variable with an
-// already-visited one -- or `nullopt` if `edges` is not connected this way.
-// `edges` must be non-empty. Rejected here rather than left to the query
-// planner: its DP table is built per connected component of the *query's*
-// triple graph, so a replacement spanning more than one component could
-// never be selected regardless of cost. Fixed edge sides (see `PatternEdge`)
-// don't connect anything.
-//
-// The order doubles as a good traversal order for `PatternMatcher`: since
-// every edge after the first shares a variable with one already placed
-// earlier in the order, matching edges in this order checks each one against
-// maximal already-bound context, letting illegal partial matches (e.g. two
-// smaller-column view variables see `MaterializedViewsPatternMatcher.cpp`)
-// get pruned as early as possible instead of only at a completed match.
+// A traversal order for the non-empty pattern graph `edges` that starts at
+// `edges[0]` and reaches every other edge via a shared variable with an
+// already-visited one, or `nullopt` if `edges` is not connected this way.
+// Disconnected patterns are rejected because the query planner's DP table is
+// built per connected component, so such a replacement could never be
+// selected. The order is also the traversal order of `PatternMatcher`: every
+// edge is matched against maximal already-bound context, which prunes illegal
+// partial matches as early as possible.
 std::optional<std::vector<size_t>> connectedOrder(
     const std::vector<PatternEdge>& edges) {
   AD_CORRECTNESS_CHECK(!edges.empty());
@@ -119,12 +112,9 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
     if (!predicate.has_value()) {
       return std::nullopt;
     }
-    // Full-text pseudo-predicates are rewritten by `QueryPlanner` into
-    // special text operations (one planner node per word for
-    // `ql:contains-word`, deferred handling for `ql:contains-entity`) rather
-    // than a plain triple, and may additionally be restricted by `TEXTLIMIT`.
-    // None of that is reflected in `coveredTriples_`/`buildPatternEdges`, so
-    // such triples must not become pattern edges.
+    // Full-text pseudo-predicates don't become plain triples, but special text
+    // operations in the `QueryPlanner`, which `coveredTriples_` cannot
+    // represent.
     if (isFullTextPseudoPredicate(predicate.value())) {
       return std::nullopt;
     }
@@ -149,9 +139,8 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
   edges = ql::views::transform(order.value(),
                                [&edges](size_t i) { return edges[i]; }) |
           ::ranges::to<std::vector>();
-  // The view's physical column 0 must be assigned during matching, or
-  // `emitIfLegal`'s call to `makeIndexScan` throws (`throwIfScanColumnMissing`)
-  // because the resulting `MaterializedViewQuery` never binds it.
+  // The view's physical column 0 must be assigned during matching, else
+  // `makeIndexScan` throws (`throwIfScanColumnMissing`).
   auto col0 = ql::ranges::find_if(viewCols, [](const auto& varAndCol) {
     return varAndCol.second.columnIndex_ == 0;
   });
@@ -193,8 +182,8 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     return result;
   }
 
-  // Group query triples by predicate and collect the views sharing a
-  // predicate with the query, keyed by name so that the sharing of the limits
+  // Group the query triples by predicate and collect the views sharing a
+  // predicate with the query. Keyed by name, so that the sharing of the limits
   // pool below is deterministic (a hash set of `shared_ptr`s is not).
   TriplesByPredicate triplesByPredicate;
   std::map<std::string_view, ViewPtr> candidateViews;
@@ -232,7 +221,7 @@ QueryPatternCache::makeJoinReplacementIndexScans(
                            .used_);
   }
   // Only the exhaustion of the shared pool is worth a warning: a single view
-  // hitting its share just means the other views get their turn.
+  // hitting its share only means the other views get their turn.
   if (remaining.isExhausted()) {
     AD_LOG_WARN
         << "Pattern matching for materialized views hit the `"
@@ -345,12 +334,10 @@ std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
 }
 
 // _____________________________________________________________________________
-// The checks below all guard one invariant: the view's on-disk rows must
-// equal exactly the rows of the plain join over `triples` (no aggregation,
-// filtering, deduplication, or row subset may separate them), since
-// pattern-based rewriting substitutes the view's index scan directly for that
-// join. Any future solution modifier that could break this equivalence needs
-// a check here too.
+// The checks below all guard one invariant: the view's on-disk rows must be
+// exactly the rows of the plain join over `triples`, because pattern-based
+// rewriting substitutes the view's index scan directly for that join. Any
+// future solution modifier breaking this equivalence needs a check here too.
 std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed) {
   if (parsed.isAggregatingQuery()) {

@@ -35,10 +35,9 @@ using graphPatternAnalysis::BasicGraphPatternsInvariantTo;
 // already been resolved to a simple IRI (see `buildPatternEdges`).
 using PatternEdge = SparqlTripleBase<std::string>;
 
-// The join pattern extracted from a materialized view's defining query: its
-// triples, viewed as edges of a small labeled graph over the view's
-// variables. Query rewriting looks for a subgraph isomorphism from this graph
-// into (a subset of) the triples of the user's query.
+// The join pattern of a view: its triples, viewed as edges of a small labeled
+// graph over the view's variables. Rewriting looks for a subgraph isomorphism
+// from this graph into the triples of the user's query.
 struct ViewPattern {
   std::vector<PatternEdge> edges_;
   ViewPtr view_;
@@ -47,22 +46,17 @@ struct ViewPattern {
 // Map from predicate IRI to a bitmask of the triple indices.
 using TriplesByPredicate = ad_utility::HashMap<std::string_view, uint64_t>;
 
-// The two limits that bound one call to `PatternMatcher::findReplacementPlans`
-// (aliased there as `PatternMatcher::Limits`; defined here at namespace scope
-// instead of nested in `PatternMatcher` to avoid a circular include between
-// this header and `MaterializedViewsPatternMatcher.h`). Also used to report
-// how much of each limit a call actually used, so
-// `QueryPatternCache::makeJoinReplacementIndexScans` can share a pool of each
-// across several calls.
+// The limits bounding one call to `PatternMatcher::findReplacementPlans`
+// (aliased there as `PatternMatcher::Limits`; here at namespace scope to avoid
+// a circular include). Also used to report how much a call actually used, so
+// that several calls can share one pool.
 struct PatternMatcherLimits {
   size_t numAssignments_;
   size_t numReplacementPlans_;
 
-  // A fixed per-view share of `*this`, split evenly across `numViews` (must
-  // be nonzero) so the limits apply per query rather than per (view, query)
-  // pair -- otherwise a query matching N views would do up to N times the
-  // configured work. Never below a floor (so a search isn't spread so thin
-  // across many candidates that it can never find anything).
+  // A fixed share of `*this` per view, split evenly across `numViews` (must be
+  // nonzero), so that the limits apply per query and not per (view, query)
+  // pair. Never below a floor, so that a share stays usable for many views.
   PatternMatcherLimits perViewShare(size_t numViews) const;
 
   bool isExhausted() const {
@@ -85,8 +79,7 @@ using ByCacheKeyInfoPtr = std::shared_ptr<const ByCacheKeyInfo>;
 // subset of triples it handles.
 struct MaterializedViewJoinReplacement {
   std::shared_ptr<IndexScan> indexScan_;
-  // Bitmask of covered query triple indices (bit `i` set iff triple `i` is
-  // covered), matching the representation of
+  // Bitmask of covered query triple indices, like
   // `QueryPlanner::SubtreePlan::_idsOfIncludedNodes`.
   uint64_t coveredTriples_;
 
@@ -103,8 +96,7 @@ class QueryPatternCache {
   // that share no predicate with the query.
   ad_utility::HashMap<std::string, std::vector<ViewPtr>> predicateInView_;
 
-  // All patterns extracted from materialized views, one entry per view that
-  // has at least one pattern-eligible edge.
+  // All patterns extracted from materialized views.
   ad_utility::HashMap<ViewPtr, ViewPattern> patterns_;
 
   ad_utility::HashMap<std::string, ByCacheKeyInfoPtr> byCacheKey_;
@@ -132,12 +124,9 @@ class QueryPatternCache {
 
  private:
   // Helper for `analyzeView`: build the view's pattern graph (one `PatternEdge`
-  // per triple). Returns `nullopt` if a triple has a non-simple predicate, a
-  // full-text pseudo-predicate (`ql:contains-word`/`ql:contains-entity`),
-  // both subject and object fixed, a variable subject/object not in the
-  // view's columns, (see `connectedOrder`) the pattern is disconnected, or
-  // the view's physical column 0 never occurs in the pattern. On success, the
-  // edges are reordered by `connectedOrder` for `PatternMatcher`'s benefit.
+  // per triple), reordered by `connectedOrder` for `PatternMatcher`'s benefit.
+  // Returns `nullopt` if the view is not eligible; the individual reasons are
+  // documented at the corresponding checks.
   static std::optional<std::vector<PatternEdge>> buildPatternEdges(
       const ViewPtr& view, const std::vector<SparqlTriple>& triples);
 };
@@ -148,18 +137,15 @@ class QueryPatternCache {
 std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
     const ParsedQuery& parsed);
 
+// Human-readable explanation why a query is not eligible for pattern-based
 // rewriting, as returned by `getTriplesForPatternRewrite`.
 using RewriteIgnoreReason = std::string;
 
 // Helper for `QueryPatternCache::analyzeView` that extracts the triples of a
 // view's defining query's single `BasicGraphPattern` for further pattern
-// analysis, provided the query even has a shape that pattern-based rewriting
-// could apply to: no aggregation, no top-level
-// `FILTER`/`VALUES`/`DISTINCT`/`REDUCED`/`LIMIT`/`OFFSET` or
-// `FROM`/`FROM NAMED` that would restrict the on-disk rows, and exactly one
-// `BasicGraphPattern` with at least one triple (after skipping invariant
-// patterns like `BIND`). If `parsed` does not have such a shape, a
-// `RewriteIgnoreReason` explaining why is returned instead.
+// analysis, provided the query has a shape that pattern-based rewriting can
+// apply to (see the checks in the implementation). Otherwise a
+// `RewriteIgnoreReason` explaining why is returned.
 std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed);
 

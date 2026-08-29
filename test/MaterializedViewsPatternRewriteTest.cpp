@@ -8,14 +8,11 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 // Tests for pattern-based query rewriting with materialized views: the
-// subgraph-isomorphism matcher in `MaterializedViewsPatternMatcher` and the
-// replacement plans it hands to the `QueryPlanner`. There are no dedicated
-// star or chain rewrites; the star- and chain-shaped patterns below are just
-// the shapes the general matcher is exercised with. Rewriting a query by the
-// cache key of its whole plan is a separate mechanism, tested in
-// `MaterializedViewsCacheKeyRewriteTest.cpp`. The views themselves, and the
-// substitution of a view column for a `BIND` in the query, live in
-// `MaterializedViewsTest.cpp`.
+// subgraph-isomorphism matcher in `MaterializedViewsPatternMatcher`. The star
+// and chain shapes below are only examples for the general matcher, not
+// special cases in the code. Rewriting by the cache key of a whole plan is
+// tested in `MaterializedViewsCacheKeyRewriteTest.cpp`, the views themselves
+// in `MaterializedViewsTest.cpp`.
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/functional/bind_front.h>
@@ -130,9 +127,8 @@ TEST_F(MaterializedViewsPatternRewriteTest, starRewrite) {
                                 "joins was found");
   };
 
-  // Disconnected (fixed subject shares no variable with the other arm); see
-  // `MaterializedViewsPatternRewriteTest` for the fixed-object case,
-  // which shares `?s` and so *is* suitable for rewriting.
+  // Disconnected: the fixed subject shares no variable with the other arm.
+  // A fixed object still shares `?s`, see `generalPatternRewrite`.
   noStarRewrite("SELECT * { <s1> <p1> ?o1 . ?s <p2> ?o2 }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . <s1> <p2> ?o2 }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 } ");
@@ -141,11 +137,9 @@ TEST_F(MaterializedViewsPatternRewriteTest, starRewrite) {
 }
 
 // _____________________________________________________________________________
-// Pattern shapes beyond "star" and "chain" that the general subgraph-matcher
-// (see `MaterializedViewsQueryAnalysis`) supports. Uses a populated dataset so
-// the planner's cost estimate favors the view scan. Each test query is the
-// view's pattern plus an extra `<p9>` arm, not the exact view-defining query,
-// so it can't be satisfied by cache-key matching alone.
+// Pattern shapes beyond star and chain. Each test query is the view's pattern
+// plus an extra `<p9>` arm, so that it cannot be satisfied by cache-key
+// matching alone.
 TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
   const std::string onDiskBase = gtestCurrentTestName();
   const std::string generalPatternTtl =
@@ -184,10 +178,8 @@ TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
       h::Join(generalPatternView("?s", "?o1", "?o2"), extraArm));
 
   // Two arms with the same predicate. Checked directly against
-  // `QueryPatternCache`, not through the planner: self-joining a predicate
-  // materializes a cross product, so the planner correctly prefers a plain
-  // join over the view for any real data -- only the matcher is under test
-  // here.
+  // `QueryPatternCache`, because the planner correctly prefers a plain join
+  // here (self-joining a predicate materializes a cross product).
   {
     auto plan = qlv.parseAndPlanQuery(
         "SELECT * { ?s <p1> ?o1 . ?s <p1> ?o2 . ?s <p9> ?o9 }");
@@ -210,12 +202,10 @@ TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
                                      coveredTriples_, ::testing::Eq(0b011u)))));
   }
 
-  // One arm's object is a fixed value from the view's own definition (e.g.
-  // `?x osmkey:railway "rail" ; geo:hasGeometry ?g`, a type/tag filter). Not
-  // disqualifying like a fixed value in the *query* (`simpleStarFixedObject`
-  // above): the view is already filtered to it, so it matches a query asking
-  // for that same value. Checked directly against `QueryPatternCache`, since
-  // the fixed arm has no column for `viewScan`'s e2e helper to name.
+  // One arm's object is fixed in the view's own definition (e.g. a tag filter
+  // `?x osmkey:railway "rail"`). This is allowed: the view is already
+  // filtered to that value, so it matches a query asking for the same value.
+  // Checked directly, since the fixed arm has no column for `viewScan`.
   {
     auto plan = qlv.parseAndPlanQuery(
         "SELECT * { ?s <p2> <gp2a> . ?s <p3> ?o2 . ?s <p9> ?o9 }");
@@ -235,13 +225,10 @@ TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
                                   coveredTriples_, ::testing::Eq(0b011u))));
   }
 
-  // Two different view variables can legitimately be fixed to the *same*
-  // query value: `<gp2s> <p1> <gp2s>` fixes both the chain's `?a` and `?b` to
-  // `<gp2s>`. This must not be rejected as an injectivity violation the way
-  // two different query *variables* landing on the same view variable would
-  // be -- `MaterializedView::makeScanConfig` explicitly allows the same
-  // fixed value on more than one column. Checked directly against
-  // `QueryPatternCache`, like the two cases above.
+  // Two view variables may be fixed to the same query value: `<gp2s> <p1>
+  // <gp2s>` fixes both `?a` and `?b`. Unlike two query variables on one view
+  // variable, this is no injectivity violation (`makeScanConfig` allows the
+  // same fixed value on several columns). Checked directly, as above.
   {
     auto plan = qlv.parseAndPlanQuery(
         "SELECT * { <gp2s> <p1> <gp2s> . <gp2s> <p2> ?c . <gp2s> <p9> ?o9 }");
@@ -268,15 +255,11 @@ TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
       "SELECT * { ?s1 <p1> ?o1 . ?s2 <p2> ?o2 }",
       "No supported query pattern for rewriting joins was found");
 
-  // A `BIND` that is filtered out as invariant (see
-  // `graphPatternInvariantFilter`) can still occupy the view's physical
-  // column 0 (the first variable in the `SELECT` clause becomes column 0),
-  // in which case matching the remaining triples never assigns that column.
-  // `emitIfLegal` must not reach `MaterializedView::makeIndexScan`, which
-  // throws when column 0 is unassigned, for such a view. Checked directly
-  // against `QueryPatternCache` like the cases above, since the view's own
-  // query has more than one graph pattern (the triples and the `BIND`),
-  // which `expectNotSuitableForRewrite` does not support.
+  // A `BIND` that is filtered out as invariant can still occupy the view's
+  // column 0, which matching the remaining triples then never assigns. Such a
+  // view must be rejected, else `makeIndexScan` throws. Checked directly,
+  // because the view's query has two graph patterns, which
+  // `expectNotSuitableForRewrite` does not support.
   {
     auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
     auto plan = qlv.parseAndPlanQuery(
@@ -301,12 +284,9 @@ TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
 }
 
 // _____________________________________________________________________________
-// `QueryPlanner` expands a `ql:contains-word` triple into one planner node
-// per word (and defers `ql:contains-entity` handling), so a view pattern edge
-// built directly from such a triple would report the wrong/incomplete set of
-// covered planner nodes in `coveredTriples_`. These pseudo-predicates must
-// therefore be rejected as pattern edges outright rather than treated like a
-// plain IRI predicate.
+// `QueryPlanner` expands `ql:contains-word` into one planner node per word
+// (and defers `ql:contains-entity`), which `coveredTriples_` cannot represent.
+// Such pseudo-predicates must therefore be rejected as pattern edges.
 TEST_F(MaterializedViewsPatternRewriteTest,
        fullTextPseudoPredicateNotRewritten) {
   const std::string onDiskBase = gtestCurrentTestName();
@@ -337,11 +317,9 @@ TEST_F(MaterializedViewsPatternRewriteTest,
 }
 
 // _____________________________________________________________________________
-// Regression test for #3193: an aggregate in the view's query removes one of
-// the pattern's variables from the view's columns (`?o1`/`?m` only occur inside
-// `COUNT(...)`), so neither the star nor the chain must be registered for
-// pattern-based rewriting. Covers both explicit (`GROUP BY`) and implicit
-// (aggregate in `SELECT` without a `GROUP BY` clause) aggregation.
+// Regression test for #3193: an aggregate removes a pattern variable from the
+// view's columns, so the view must not be registered for rewriting. Covers
+// explicit (`GROUP BY`) and implicit (aggregate in `SELECT`) aggregation.
 TEST(MaterializedViewsPatternRewriteRejectionTest,
      aggregatingPatternsNotRewritten) {
   const std::string onDiskBase = gtestCurrentTestName();
@@ -444,13 +422,10 @@ TEST(MaterializedViewsPatternRewriteRejectionTest,
 }
 
 // _____________________________________________________________________________
-// Regression test: a top-level FILTER, a trailing VALUES clause,
-// DISTINCT/REDUCED, LIMIT/OFFSET, or FROM/FROM NAMED in the view's defining
-// query restrict which rows actually end up on disk, but (unlike aggregation)
-// do not remove any variable from `variableToColumnMap()`. Without an explicit
-// check for these, a query with the same star/chain pattern could be silently
-// rewritten to read the view even though its content is only a restricted
-// subset of the join.
+// Regression test: FILTER, VALUES, DISTINCT/REDUCED, LIMIT/OFFSET and FROM
+// restrict the rows written to disk, but (unlike aggregation) leave
+// `variableToColumnMap()` intact. Without an explicit check, the view would be
+// used for a query needing the full join.
 TEST(MaterializedViewsPatternRewriteRejectionTest,
      restrictingModifiersNotRewritten) {
   const std::string onDiskBase = gtestCurrentTestName();
@@ -497,12 +472,9 @@ TEST(MaterializedViewsPatternRewriteRejectionTest,
       "SELECT REDUCED ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o }",
       "DISTINCT or REDUCED");
 
-  // Star with LIMIT, chain with OFFSET. Writing a view whose query has a
-  // top-level `LIMIT` or `OFFSET` is meanwhile rejected by
-  // `MaterializedViewWriter`, so such views cannot be created through
-  // `writeViewToDisk` like the cases above. Views written before that check
-  // existed can still carry one, so the analysis-side check remains and is
-  // tested directly on the parsed query.
+  // Star with LIMIT, chain with OFFSET. `MaterializedViewWriter` meanwhile
+  // rejects these, but older views on disk can still have them, so the
+  // analysis-side check remains and is tested on the parsed query directly.
   auto expectIgnoredForPatternRewrite = [&](const std::string& query,
                                             std::string_view expectedReason) {
     auto plan = qlv.parseAndPlanQuery(query);
@@ -671,9 +643,8 @@ TEST_F(MaterializedViewsPatternRewriteContextTest,
 }
 
 // _____________________________________________________________________________
-// An assignment limit too small for even one full match (a 2-edge chain needs
-// >= 2 candidate attempts) finds nothing and logs a warning; the default limit
-// still finds the match.
+// An assignment limit too small for one full match (a 2-edge chain needs >= 2
+// attempts) finds nothing and warns; the default limit finds the match.
 TEST(MaterializedViewsPatternMatchLimitsTest,
      PatternMatchNumAssignmentsIsRespected) {
   const std::string onDiskBase = gtestCurrentTestName();
@@ -752,11 +723,9 @@ TEST(MaterializedViewsPatternMatchLimitsTest,
 }
 
 // _____________________________________________________________________________
-// Regression test: a cheap-to-complete match (here, a duplicate predicate on
-// a two-edge view, matched against many triples sharing one subject and
-// predicate) can complete far more times than the assignment limit alone
-// would suggest is safe to hand to the query planner as candidate plans, so
-// the total number of replacements collected must be capped independently.
+// Regression test: a cheap-to-complete match can complete far more often than
+// the assignment limit suggests, so the number of replacement plans handed to
+// the query planner needs an independent cap.
 TEST(MaterializedViewsPatternMatchLimitsTest, ReplacementCountIsCapped) {
   const std::string onDiskBase = gtestCurrentTestName();
   materializedViewsTestHelpers::makeTestIndex(onDiskBase,
@@ -776,10 +745,9 @@ TEST(MaterializedViewsPatternMatchLimitsTest, ReplacementCountIsCapped) {
   auto view = manager.getView("capView", qec.get());
   qpc.analyzeView(view, qec.get());
 
-  // 40 triples sharing one subject and predicate: assigning two distinct
-  // ones to the view's two (structurally interchangeable) arms yields
-  // 40*39 = 1560 matches, comfortably over the replacement cap. Parsed
-  // directly (bypassing the query planner) to sidestep its 64-triple limit.
+  // 40 triples sharing subject and predicate: assigning two of them to the
+  // view's two interchangeable arms yields 40*39 = 1560 matches, well over the
+  // cap. Parsed directly, to sidestep the planner's 64-triple limit.
   std::string hostQuery = "SELECT * { ";
   for (int i = 0; i < 40; ++i) {
     hostQuery += absl::StrCat("<s> <cp1> <o", i, "> . ");
