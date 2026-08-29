@@ -130,15 +130,17 @@ class PatternMatcher {
   // otherwise.
   void undoAssignment(const TripleComponent& viewSide, bool wasNew);
 
-  // Checks a complete match against `isLegalFixedValuePrefix` and, if legal,
+  // Checks a complete match against `hasLegalFixedValuePrefix` and, if legal,
   // builds the resulting `MaterializedViewJoinReplacement` and adds it to
   // `result_`.
   void emitIfLegal();
 
-  // Whether `boundColumnsMask` represents a configuration allowed when scanning
-  // materialized views: only subject, subject + predicate, or
-  // subject + predicate + object may be fixed.
-  static bool isLegalFixedValuePrefix(uint64_t boundColumnsMask);
+  // Whether the view columns that the current assignment binds to a fixed
+  // value form a configuration allowed when scanning materialized views: only
+  // subject, subject + predicate, or subject + predicate + object may be
+  // fixed. A payload column (index > 2) bound to a fixed value is always
+  // illegal.
+  bool hasLegalFixedValuePrefix() const;
 
   // Recursively extends the current assignment by matching the edges from the
   // view query against each of the user query's triples with the same

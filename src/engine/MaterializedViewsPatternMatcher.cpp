@@ -138,7 +138,17 @@ void PatternMatcher::uncoverTriple(size_t tripleIdx) {
 }
 
 // _____________________________________________________________________________
-bool PatternMatcher::isLegalFixedValuePrefix(uint64_t boundColumnsMask) {
+bool PatternMatcher::hasLegalFixedValuePrefix() const {
+  uint64_t boundColumnsMask = 0;
+  for (const auto& [viewVar, node] : assignment_) {
+    if (!node.isVariable()) {
+      size_t col = viewCols_.at(viewVar).columnIndex_;
+      if (col > 2) {
+        return false;
+      }
+      boundColumnsMask |= (uint64_t{1} << col);
+    }
+  }
   return boundColumnsMask == 0b000u || boundColumnsMask == 0b001u ||
          boundColumnsMask == 0b011u || boundColumnsMask == 0b111u;
 }
@@ -158,19 +168,7 @@ void PatternMatcher::undoAssignment(const TripleComponent& viewSide,
 
 // _____________________________________________________________________________
 void PatternMatcher::emitIfLegal() {
-  // Fixed query values must land on a legal column prefix; a payload column
-  // (index > 2) bound to a fixed value is always illegal.
-  uint64_t boundColumnsMask = 0;
-  for (const auto& [viewVar, node] : assignment_) {
-    if (!node.isVariable()) {
-      size_t col = viewCols_.at(viewVar).columnIndex_;
-      if (col > 2) {
-        return;
-      }
-      boundColumnsMask |= (uint64_t{1} << col);
-    }
-  }
-  if (!isLegalFixedValuePrefix(boundColumnsMask)) {
+  if (!hasLegalFixedValuePrefix()) {
     return;
   }
 
