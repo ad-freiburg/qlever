@@ -87,7 +87,7 @@ std::optional<std::vector<size_t>> connectedOrder(
 PatternMatcherLimits PatternMatcherLimits::perViewShare(size_t numViews) const {
   AD_CORRECTNESS_CHECK(numViews > 0);
   constexpr size_t minNumAssignmentsPerView = 1'000;
-  constexpr size_t minNumReplacementPlansPerView = 5;
+  constexpr size_t minNumReplacementPlansPerView = 15;
   return {
       std::max(minNumAssignmentsPerView, numAssignments_ / numViews),
       std::max(minNumReplacementPlansPerView, numReplacementPlans_ / numViews)};

@@ -213,7 +213,7 @@ struct RuntimeParameters {
   // When matching materialized views using pattern-based query rewriting, the
   // maximum number of replacement plans collected.
   SizeT materializedViewPatternMatchNumReplacementPlans_{
-      100, "materialized-view-pattern-match-num-replacement-plans"};
+      500, "materialized-view-pattern-match-num-replacement-plans"};
 
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
   // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
