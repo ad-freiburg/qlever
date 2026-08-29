@@ -76,7 +76,7 @@ std::optional<GeoCellGridScheme> geoCellGridSchemeFromString(
 // `coveringCellRanges` reports for their query rectangle; that includes the
 // scheme's "no information" cell(s) (the sentinel cell of the flat schemes,
 // the root cell(s) of the hierarchical schemes), so pruning stays
-// conservative for geometries that fit no regular cell and for unparseable
+// conservative for geometries that fit no regular cell and for unparsable
 // literals.
 //
 // The cell number occupies `numCellBits()` bits: 2L+1 for the single-grid

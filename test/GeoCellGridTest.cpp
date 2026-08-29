@@ -64,7 +64,7 @@ TEST(GeoCellGrid, cellFromBoundingBoxAndWktLiteral) {
   // A geometry whose bounding box crosses a cell border gets the sentinel.
   EXPECT_EQ(grid.cellFromWktLiteral(wkt("LINESTRING(-10 10, 20 20)")),
             grid.sentinelCell());
-  // Unparseable literals also get the sentinel.
+  // Unparsable literals also get the sentinel.
   EXPECT_EQ(grid.cellFromWktLiteral(wkt("NOTAGEOMETRY(1 2)")),
             grid.sentinelCell());
 }

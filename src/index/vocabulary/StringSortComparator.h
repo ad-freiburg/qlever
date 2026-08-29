@@ -309,7 +309,7 @@ class TripleComponentComparatorImpl {
   // The most significant part of a word's position in the vocabulary order
   // when a geo cell grid is configured: 0 for every word that is not a WKT
   // literal, otherwise a value that is larger than 0 and ordered by the grid
-  // cell of the literal (unparseable and cell-border-crossing literals get the
+  // cell of the literal (unparsable and cell-border-crossing literals get the
   // grid's sentinel cell). Computing this for a WKT literal requires parsing
   // it, so performance-critical loops should compute it once per word and use
   // `isLessInTotalWithExternalFlagAndGeoSortKeys` below. Without a configured
