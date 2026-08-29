@@ -8,6 +8,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "parser/TripleComponent.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "util/UnitOfMeasurement.h"
 
 // This header declares utilities required during query planning for rewriting
@@ -38,6 +39,13 @@ struct GeoFunctionCall {
 // and are therefore invisible elsewhere.
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr);
+
+// The geographic bounding rectangle of a constant geometry operand of a geo
+// function call (see `GeoFunctionCall`): a `GeoPoint` `ValueId` yields a
+// point rectangle, a WKT literal the bounding box of its parsed geometry.
+// Returns `std::nullopt` for variables and non-geometry values.
+std::optional<ad_utility::GeoRectangle> geoRectangleOfConstantGeometry(
+    const TripleComponent& operand);
 
 // Helper struct for `getGeoDistanceExpressionParameters`
 struct GeoDistanceCall : public GeoFunctionCall {

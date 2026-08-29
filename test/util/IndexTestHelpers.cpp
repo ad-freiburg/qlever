@@ -232,6 +232,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.getImpl().setVocabularyTypeForIndexBuilding(
         c.vocabularyType.has_value() ? c.vocabularyType.value()
                                      : VocabularyType::random());
+    index.getImpl().setGeoCellGridLevelForIndexBuilding(c.geoCellGridLevel);
     if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
       index.getImpl().setPrefixesForEncodedValues(
           std::move(c.encodedPrefixesWithoutAngleBrackets.value()));

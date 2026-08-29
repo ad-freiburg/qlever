@@ -194,6 +194,16 @@ class SpatialJoin : public Operation {
   std::optional<std::shared_ptr<SpatialJoin>> cloneWithBoundingBoxColumns()
       const;
 
+  // If this spatial join is a within-distance join whose one side is a single
+  // fixed geometry (a one-row `VALUES`, as constructed by the rewriting of
+  // filters like `geof:metricDistance(<constant>, ?wkt) <= <dist>`), push a
+  // `GeoRectangleExpression` block prefilter for the padded query rectangle
+  // into the other side. Returns `std::nullopt` if not applicable or if the
+  // other side could not apply the prefilter (e.g. it is not an index scan
+  // sorted by the geometry variable).
+  std::optional<std::shared_ptr<SpatialJoin>> cloneWithGeoBlockPrefilter()
+      const;
+
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 

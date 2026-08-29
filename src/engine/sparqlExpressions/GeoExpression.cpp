@@ -429,6 +429,27 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
   return GeoDistanceCall{{SpatialJoinType::WITHIN_DIST, v1, v2}, unit};
 }
 
+// _____________________________________________________________________________
+std::optional<ad_utility::GeoRectangle> geoRectangleOfConstantGeometry(
+    const TripleComponent& operand) {
+  if (operand.isId() && operand.getId().getDatatype() == Datatype::GeoPoint) {
+    auto point = operand.getId().getGeoPoint();
+    return ad_utility::GeoRectangle{point.getLng(), point.getLat(),
+                                    point.getLng(), point.getLat()};
+  }
+  if (operand.isLiteral()) {
+    auto boundingBox = ad_utility::GeometryInfo::getBoundingBox(
+        operand.getLiteral().toStringRepresentation());
+    if (boundingBox.has_value()) {
+      auto lowerLeft = boundingBox.value().lowerLeft();
+      auto upperRight = boundingBox.value().upperRight();
+      return ad_utility::GeoRectangle{lowerLeft.getLng(), lowerLeft.getLat(),
+                                      upperRight.getLng(), upperRight.getLat()};
+    }
+  }
+  return std::nullopt;
+}
+
 }  // namespace sparqlExpression
 
 // Explicit instantiations for the different geometric relations to avoid linker

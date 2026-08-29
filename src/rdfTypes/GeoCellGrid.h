@@ -17,6 +17,24 @@
 
 namespace ad_utility {
 
+// A geographic rectangle in plain degrees. In contrast to `BoundingBox` it
+// is a simple aggregate without invariants, suitable for query rectangles
+// that may cover the whole world.
+struct GeoRectangle {
+  double minLng_;
+  double minLat_;
+  double maxLng_;
+  double maxLat_;
+  bool operator==(const GeoRectangle&) const = default;
+};
+
+// Grow `rectangle` on all sides by at least `distanceMeters` (measured on the
+// earth's surface) and clamp it to the valid coordinate ranges. The result is
+// conservative: every point within `distanceMeters` of the input rectangle is
+// contained in the result. Near the poles and across the antimeridian the
+// longitude range degrades to [-180, 180].
+GeoRectangle padGeoRectangle(GeoRectangle rectangle, double distanceMeters);
+
 // A flat grid over the earth's surface in geographic coordinates, used to
 // encode a coarse spatial key ("grid cell") into the vocabulary indices of WKT
 // literals. A grid of `level` L subdivides the longitude range [-180, 180] and

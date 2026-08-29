@@ -31,10 +31,13 @@
 #include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/Values.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/spatialJoinAlgorithms/BaselineAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
@@ -123,6 +126,16 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
           &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
     if (auto sjWithBoundingBoxes = sj->cloneWithBoundingBoxColumns()) {
       sj = sjWithBoundingBoxes.value();
+    }
+  }
+
+  // If the `SpatialJoin` stems from a distance filter with a fixed geometry,
+  // push a block prefilter for the padded query rectangle into the other
+  // side (see `cloneWithGeoBlockPrefilter`).
+  if (sj->isConstructed() &&
+      getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
+    if (auto sjWithPrefilter = sj->cloneWithGeoBlockPrefilter()) {
+      sj = sjWithPrefilter.value();
     }
   }
 
@@ -752,4 +765,77 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
       _executionContext, config_,
       // Potentially unchanged child retrieved with `value_or`.
       left.value_or(childLeft_), right.value_or(childRight_));
+}
+
+// ____________________________________________________________________________
+std::optional<std::shared_ptr<SpatialJoin>>
+SpatialJoin::cloneWithGeoBlockPrefilter() const {
+  AD_CONTRACT_CHECK(isConstructed());
+  if (config_.algo_ != SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    return std::nullopt;
+  }
+  const auto* libConfig = std::get_if<LibSpatialJoinConfig>(&config_.task_);
+  if (libConfig == nullptr ||
+      libConfig->joinType_ != SpatialJoinType::WITHIN_DIST ||
+      !libConfig->maxDist_.has_value()) {
+    return std::nullopt;
+  }
+
+  // Check whether `child` is a single-row `VALUES` that binds exactly the
+  // join variable `var` to a fixed value, and return that value.
+  auto getConstantGeometry =
+      [](const std::shared_ptr<QueryExecutionTree>& child,
+         const Variable& var) -> std::optional<TripleComponent> {
+    const auto* values =
+        dynamic_cast<const Values*>(child->getRootOperation().get());
+    if (values == nullptr) {
+      return std::nullopt;
+    }
+    const auto& parsed = values->parsedValues();
+    if (parsed._variables != std::vector<Variable>{var} ||
+        parsed._values.size() != 1 || parsed._values.at(0).size() != 1) {
+      return std::nullopt;
+    }
+    return parsed._values.at(0).at(0);
+  };
+
+  std::optional<TripleComponent> constant;
+  std::shared_ptr<QueryExecutionTree> geometrySide;
+  Variable geometryVariable = config_.right_;
+  bool constantIsLeft = true;
+  if ((constant = getConstantGeometry(childLeft_, config_.left_)).has_value()) {
+    geometrySide = childRight_;
+    geometryVariable = config_.right_;
+  } else if ((constant = getConstantGeometry(childRight_, config_.right_))
+                 .has_value()) {
+    geometrySide = childLeft_;
+    geometryVariable = config_.left_;
+    constantIsLeft = false;
+  } else {
+    return std::nullopt;
+  }
+
+  auto rectangle =
+      sparqlExpression::geoRectangleOfConstantGeometry(constant.value());
+  if (!rectangle.has_value()) {
+    return std::nullopt;
+  }
+
+  std::vector<PrefilterVariablePair> prefilterPairs;
+  prefilterPairs.emplace_back(
+      std::make_unique<prefilterExpressions::GeoRectangleExpression>(
+          ad_utility::padGeoRectangle(rectangle.value(),
+                                      libConfig->maxDist_.value())),
+      geometryVariable);
+  auto newGeometrySide =
+      geometrySide->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+          std::move(prefilterPairs));
+  if (!newGeometrySide.has_value()) {
+    return std::nullopt;
+  }
+  return std::make_shared<SpatialJoin>(
+      getExecutionContext(), config_,
+      constantIsLeft ? childLeft_ : newGeometrySide.value(),
+      constantIsLeft ? newGeometrySide.value() : childRight_,
+      substitutesFilterOp_);
 }

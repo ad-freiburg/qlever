@@ -452,6 +452,41 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
   const SparqlExpression* child0 = children_.at(0).get();
   const SparqlExpression* child1 = children_.at(1).get();
 
+  // Special case: a spatial distance filter with a fixed geometry, e.g.
+  // `geof:metricDistance("POINT(...)"^^geo:wktLiteral, ?wkt) <= 1000`. Blocks
+  // whose geometries certainly lie outside the padded query rectangle can be
+  // pruned via the `GeoRectangleExpression` (which exploits the geo cell grid
+  // bits of WKT literal IDs and the latitude order of `GeoPoint` IDs). The
+  // `isNegated` argument can be ignored: under negation the
+  // `GeoRectangleExpression`'s conservative `logicalComplement` keeps all
+  // blocks (see also the comment at the `InExpression` below).
+  if constexpr (comp == valueIdComparators::Comparison::LE) {
+    if (auto geoFilter = getGeoDistanceFilter(*this); geoFilter.has_value()) {
+      const auto& [call, maxDistMeters] = geoFilter.value();
+      const TripleComponent* constantOperand = nullptr;
+      std::optional<Variable> variable = std::nullopt;
+      if (call.left_.isVariable() && !call.right_.isVariable()) {
+        variable = call.left_.getVariable();
+        constantOperand = &call.right_;
+      } else if (call.right_.isVariable() && !call.left_.isVariable()) {
+        variable = call.right_.getVariable();
+        constantOperand = &call.left_;
+      }
+      if (variable.has_value()) {
+        auto rectangle = geoRectangleOfConstantGeometry(*constantOperand);
+        if (rectangle.has_value()) {
+          std::vector<PrefilterExprVariablePair> geoVec;
+          geoVec.emplace_back(
+              std::make_unique<prefilterExpressions::GeoRectangleExpression>(
+                  ad_utility::padGeoRectangle(rectangle.value(),
+                                              maxDistMeters)),
+              variable.value());
+          return geoVec;
+        }
+      }
+    }
+  }
+
   const auto tryGetPrefilterExprVariablePairVec =
       [&context](const SparqlExpression* child0, const SparqlExpression* child1,
                  bool reversed) -> std::vector<PrefilterExprVariablePair> {

@@ -537,6 +537,8 @@ addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
 
 addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
 
+addLinkAndDiscoverTest(GeoRectanglePrefilterTest engine)
+
 addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 
 addLinkAndDiscoverTest(HttpErrorTest engine)

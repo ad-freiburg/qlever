@@ -24,6 +24,12 @@ class Values : virtual public Operation {
   SparqlValues& parsedValues() { return parsedValues_; }
 
  public:
+  // Const access to the parsed values (e.g. for the spatial join's geo block
+  // prefilter, which inspects a single-row `VALUES` with a fixed geometry).
+  const SparqlValues& parsedValues() const { return parsedValues_; }
+
+ protected:
+ public:
   // Create operation from parsed values. This calls `sanitizeValues`.
   // and values.
   Values(QueryExecutionContext* qec, SparqlValues parsedValues);

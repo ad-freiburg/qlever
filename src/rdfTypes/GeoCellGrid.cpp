@@ -11,6 +11,35 @@
 namespace ad_utility {
 
 // ____________________________________________________________________________
+GeoRectangle padGeoRectangle(GeoRectangle rectangle, double distanceMeters) {
+  AD_CONTRACT_CHECK(distanceMeters >= 0);
+  // One degree of latitude is at least 110'567 m everywhere, so dividing by
+  // 110'000 overestimates the padding.
+  double dLat = distanceMeters / 110'000.0;
+  double minLat = std::max(rectangle.minLat_ - dLat, -90.0);
+  double maxLat = std::min(rectangle.maxLat_ + dLat, 90.0);
+  // One degree of longitude at latitude x is at least 110'000 m * cos(x), so
+  // using the largest latitude of the padded band overestimates the padding.
+  double maxAbsLat = std::max(std::abs(minLat), std::abs(maxLat));
+  double minLng = -180.0;
+  double maxLng = 180.0;
+  if (maxAbsLat < 89.0) {
+    constexpr double pi = 3.14159265358979323846;
+    double dLng =
+        distanceMeters / (110'000.0 * std::cos(maxAbsLat * pi / 180.0));
+    minLng = rectangle.minLng_ - dLng;
+    maxLng = rectangle.maxLng_ + dLng;
+    if (minLng < -180.0 || maxLng > 180.0) {
+      // The padded rectangle wraps around the antimeridian, which the grid
+      // cannot represent; degrade to the full longitude range.
+      minLng = -180.0;
+      maxLng = 180.0;
+    }
+  }
+  return {minLng, minLat, maxLng, maxLat};
+}
+
+// ____________________________________________________________________________
 GeoCellGrid::GeoCellGrid(uint8_t level) : level_{level} {
   AD_CONTRACT_CHECK(level >= 1 && numCellBits() + 1 <= ValueId::numDataBits,
                     "Invalid level for a geo cell grid");
