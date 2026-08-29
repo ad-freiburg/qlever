@@ -338,9 +338,9 @@ TEST(LibQlever, disableCaching) {
 }
 
 // _____________________________________________________________________________
-// The runtime parameter `memory-max-size` mirrors and controls the memory
+// The runtime parameter `memory-for-queries` mirrors and controls the memory
 // limit of the engine's allocator.
-TEST(LibQlever, memoryMaxSizeRuntimeParameter) {
+TEST(LibQlever, memoryForQueriesRuntimeParameter) {
   using namespace ad_utility::memory_literals;
   EngineConfig ec = buildTestIndex("<s> <p> <o>.");
   ec.memoryLimit_ = 50_MB;
@@ -349,16 +349,17 @@ TEST(LibQlever, memoryMaxSizeRuntimeParameter) {
   // that no later test can fire the update action into a destroyed instance.
   absl::Cleanup cleanup = [] {
     auto runtimeParameters = globalRuntimeParameters.wlock();
-    runtimeParameters->memoryMaxSize_.clearOnUpdateAction();
-    runtimeParameters->memoryMaxSize_.set(DEFAULT_MEM_FOR_QUERIES);
+    runtimeParameters->memoryForQueries_.clearOnUpdateAction();
+    runtimeParameters->memoryForQueries_.set(DEFAULT_MEM_FOR_QUERIES);
   };
 
   // Constructing the engine has synced the parameter to the configured limit.
-  EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryMaxSize_>(), 50_MB);
+  EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
+            50_MB);
   EXPECT_EQ(engine.allocator().memoryLimit(), 50_MB);
 
   // Increasing the limit always works.
-  setRuntimeParameter<&RuntimeParameters::memoryMaxSize_>(100_MB);
+  setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(100_MB);
   EXPECT_EQ(engine.allocator().memoryLimit(), 100_MB);
 
   // Decreasing works as long as the freed part is currently unused, i.e. not
@@ -366,14 +367,15 @@ TEST(LibQlever, memoryMaxSizeRuntimeParameter) {
   // allocated).
   Id* chunk = engine.allocator().allocate(4'000'000);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      setRuntimeParameter<&RuntimeParameters::memoryMaxSize_>(20_MB),
+      setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(20_MB),
       HasSubstr("Cannot reduce the memory limit"));
   // The rejected decrease left both the parameter and the limit unchanged.
-  EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryMaxSize_>(), 100_MB);
+  EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
+            100_MB);
   EXPECT_EQ(engine.allocator().memoryLimit(), 100_MB);
 
   engine.allocator().deallocate(chunk, 4'000'000);
-  setRuntimeParameter<&RuntimeParameters::memoryMaxSize_>(20_MB);
+  setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(20_MB);
   EXPECT_EQ(engine.allocator().memoryLimit(), 20_MB);
 }
 

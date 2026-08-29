@@ -68,7 +68,7 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
         cache_.setMaxSizeSingleEntry(newValue);
       });
 
-  // Keep the runtime parameter `memory-max-size` in sync with the memory
+  // Keep the runtime parameter `memory-for-queries` in sync with the memory
   // limit of the allocator: first mirror the limit the allocator was
   // constructed with (clearing any update action left behind by a previous
   // instance, so that setting the value cannot fire into a destroyed
@@ -77,9 +77,9 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   // is a no-op here because the values are already in sync.
   {
     auto runtimeParameters = globalRuntimeParameters.wlock();
-    runtimeParameters->memoryMaxSize_.clearOnUpdateAction();
-    runtimeParameters->memoryMaxSize_.set(allocator_.memoryLimit());
-    runtimeParameters->memoryMaxSize_.setOnUpdateAction(
+    runtimeParameters->memoryForQueries_.clearOnUpdateAction();
+    runtimeParameters->memoryForQueries_.set(allocator_.memoryLimit());
+    runtimeParameters->memoryForQueries_.setOnUpdateAction(
         [this](ad_utility::MemorySize newValue) {
           allocator_.setMemoryLimit(newValue);
         });
