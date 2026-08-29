@@ -27,6 +27,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/RebuildIndexStrategy.h"
+#include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
@@ -37,6 +38,7 @@
 #include "util/Allocator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
+#include "util/TimeTracer.h"
 #include "util/TransparentFunctors.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
@@ -524,6 +526,31 @@ class Qlever {
                     ad_utility::MediaType mediaType =
                         ad_utility::MediaType::sparqlJson) const;
 
+  // Execute `plannedUpdate` (a `PlannedQuery` for which
+  // `ParsedQuery::hasUpdateClause()` holds) against `deltaTriples`, and
+  // return metadata about the update (timing, number of triples changed,
+  // etc.). Also clear the query and named-result caches, because all cache
+  // entries have been invalidated by the update anyway (the located-triples
+  // snapshot is part of the cache key).
+  //
+  // `deltaTriples` must be obtained from the same `Index` that
+  // `plannedUpdate` was planned against (i.e. `plannedUpdate.getIndex()`),
+  // via `Index::deltaTriplesManager().modify(...)`, which also gives the
+  // caller the required exclusive access to it.
+  //
+  // NOTE: This is currently a low-level API, used internally by `Server`,
+  // which already has to obtain the `DeltaTriples` this way to plan the
+  // update against the correct `QueryExecutionContext` in the first place.
+  // A higher-level API that parses and executes an update in one call
+  // (without the caller having to manage the `DeltaTriples` reference itself)
+  // will be added in the future.
+  UpdateMetadata applyUpdate(
+      const PlannedQuery& plannedUpdate,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      DeltaTriples& deltaTriples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
+
   // Plan, parse, and execute the given `query` and pin the result to the cache
   // with the given options (name and possibly request for building a geometry
   // index). This result can then be reused in a query as follows: `SERVICE
@@ -540,6 +567,22 @@ class Qlever {
   void clearNamedResultCache();
   // Completely clear the `QueryResultCache` (non-named).
   void clearQueryResultCache();
+
+  // Clear the delta triples of the index snapshot that is active when this
+  // is called, and return the resulting counts. This function is threadsafe
+  // against queries and updates, but not against a concurrent index rebuild
+  // swapping out `indexAndViewsSnapshot()`'s current snapshot. Since delta
+  // triples can be populated directly through `Qlever` via `applyUpdate`
+  // (see above), this is tested independently of the HTTP `Server` layer in
+  // `LibQlever.clearDeltaTriples`.
+  DeltaTriplesCount clearDeltaTriples() const;
+
+  // Remove redundant delta triples of the index snapshot that is active when
+  // this is called, and return aggregated statistics about the removal.
+  // Cancellable via `handle`. Has the same concurrent-rebuild caveat as
+  // `clearDeltaTriples`, and is likewise tested directly in
+  // `LibQlever.vacuumDeltaTriples`.
+  nlohmann::json vacuumDeltaTriples(SharedCancellationHandle handle) const;
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
