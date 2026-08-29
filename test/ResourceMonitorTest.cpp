@@ -204,13 +204,14 @@ TEST(ResourceMonitor, IoStallSecondsFromPressureReadsSomeAndRejectsGarbage) {
 TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
   // Every reading has a different value, so a value that ends up in the wrong
   // column is visible in the expected row below.
-  constexpr rm::Sample base{.elapsedSeconds_ = 1.0,
-                            .timestampMs_ = 1000,
-                            .rssBytes_ = 2048u,
-                            .cpuPercent_ = 50.0,
-                            .bytesReadPerSecond_ = 8192.0,
-                            .bytesWrittenPerSecond_ = 4096.0,
-                            .ioStallPercent_ = 25.0};
+  rm::Sample base{};
+  base.elapsedSeconds_ = 1.0;
+  base.timestampMs_ = 1000;
+  base.rssBytes_ = 2048u;
+  base.cpuPercent_ = 50.0;
+  base.bytesReadPerSecond_ = 8192.0;
+  base.bytesWrittenPerSecond_ = 4096.0;
+  base.ioStallPercent_ = 25.0;
   EXPECT_EQ(rm::formatTsvRow(base),
             "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\n");
 
@@ -576,7 +577,7 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   readers.diskIoReader_ = [numBytesWritten =
                                uint64_t{0}]() mutable -> rm::DiskIoBytes {
     numBytesWritten += 1'000'000;
-    return {.numBytesRead_ = 8192, .numBytesWritten_ = numBytesWritten};
+    return {8192, numBytesWritten};
   };
   readers.ioStallReader_ = []() -> std::optional<double> { return 2.0; };
 

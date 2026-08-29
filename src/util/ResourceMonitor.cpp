@@ -123,8 +123,7 @@ DiskIoBytes currentDiskIoBytes() {
                       reinterpret_cast<rusage_info_t*>(&info)) != 0) {
     return {};
   }
-  return DiskIoBytes{.numBytesRead_ = info.ri_diskio_bytesread,
-                     .numBytesWritten_ = info.ri_diskio_byteswritten};
+  return DiskIoBytes{info.ri_diskio_bytesread, info.ri_diskio_byteswritten};
 #elif defined(__linux__)
   std::ifstream procIo{"/proc/self/io"};
   return diskIoBytesFromProcIo(procIo);
@@ -393,16 +392,17 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     if (ioStallPercent.has_value()) {
       ioStallPercent = std::clamp(ioStallPercent.value(), 0.0, 100.0);
     }
-    stream_ << resource_monitor::formatTsvRow(
-        {.elapsedSeconds_ = elapsed,
-         .timestampMs_ = epochMillis(std::chrono::system_clock::now()),
-         .rssBytes_ = readers_.rssReader_(),
-         .cpuPercent_ =
-             toPercent(cpuTracker.update(readers_.cpuReader_(), elapsed)),
-         .bytesReadPerSecond_ = bytesReadTracker.update(numBytesRead, elapsed),
-         .bytesWrittenPerSecond_ =
-             bytesWrittenTracker.update(numBytesWritten, elapsed),
-         .ioStallPercent_ = ioStallPercent});
+    resource_monitor::Sample sample{};
+    sample.elapsedSeconds_ = elapsed;
+    sample.timestampMs_ = epochMillis(std::chrono::system_clock::now());
+    sample.rssBytes_ = readers_.rssReader_();
+    sample.cpuPercent_ =
+        toPercent(cpuTracker.update(readers_.cpuReader_(), elapsed));
+    sample.bytesReadPerSecond_ = bytesReadTracker.update(numBytesRead, elapsed);
+    sample.bytesWrittenPerSecond_ =
+        bytesWrittenTracker.update(numBytesWritten, elapsed);
+    sample.ioStallPercent_ = ioStallPercent;
+    stream_ << resource_monitor::formatTsvRow(sample);
     stream_.flush();
     if (stream_.fail()) {
       AD_LOG_WARN << "ResourceMonitor: writing to the output file failed; "
