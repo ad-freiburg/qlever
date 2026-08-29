@@ -2692,6 +2692,16 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
     return plans;
   }
 
+  // Materialized view write queries that are allowed for pattern-based
+  // rewriting are guaranteed to use no named graph. Rewriting triples inside a
+  // `GRAPH ... { ... }` clause or in a query with an active `FROM`/`FROM NAMED`
+  // clause would therefore ignore the graph restriction and generate wrong
+  // results.
+  if (activeGraphVariable_.has_value() ||
+      activeDatasetClauses_.activeDefaultGraphs().has_value()) {
+    return plans;
+  }
+
   // The `MaterializedViewsManager` provides `IndexScan` instances for all the
   // subsets of `triples` it can rewrite. The individual results do not cover
   // all items of `triples`, instead each has a vector of triple indices it

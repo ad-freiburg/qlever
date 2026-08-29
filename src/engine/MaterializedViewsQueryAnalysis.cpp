@@ -161,6 +161,15 @@ void QueryPatternCache::makeScansFromChainCandidates(
         if (it == simpleChainCache_.end()) {
           continue;
         }
+        // A degenerate chain (`?a <p1> ?b . ?b <p2> ?a` or
+        // `?a <p1> ?b . ?b <p2> ?b`) would require adding a filter on top of
+        // the view's `IndexScan`, which is not supported.
+        if (right.s_ == right.o_ ||
+            (left.s_.isVariable() &&
+             left.s_.getVariable() == right.o_.getVariable())) {
+          continue;
+        }
+
         for (const auto& chainInfo : *(it->second)) {
           // If the subject of the chain is fixed, but the subject is not the
           // first column of the view, rewriting cannot be applied.
@@ -452,10 +461,13 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
     if (!cacheKeyAndCol.has_value()) {
       return false;
     }
+    // NOTE: `ByCacheKeyInfo` is an aggregate, and `make_shared` initializes
+    // with parentheses, which only works for aggregates since C++20. The
+    // explicit `ByCacheKeyInfo{...}` is therefore required for C++17.
     auto [it, inserted] = byCacheKey_.insert(
         {std::move(cacheKeyAndCol.value().cacheKey_),
-         std::make_shared<ByCacheKeyInfo>(
-             view, std::move(cacheKeyAndCol.value().columnMapping_))});
+         std::make_shared<ByCacheKeyInfo>(ByCacheKeyInfo{
+             view, std::move(cacheKeyAndCol.value().columnMapping_)})});
     // If `inserted` is `false` because the entry already belongs to `view`
     // itself (its "full" and "without invariants" cache keys coincide, e.g.
     // because the view has no `BIND` to strip), this is expected and not a
