@@ -16,6 +16,7 @@
 #include <thread>
 
 #include "backports/filesystem.h"
+#include "engine/IndexScan.h"
 #include "engine/SpatialJoinParser.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
@@ -318,14 +319,44 @@ Result LibspatialjoinAlgorithm::run() {
 
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-parser-threads-larger-side", threadsLarge);
-    spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-parsed",
-                                                  countSmall + countLarge);
+
+    // Report the geometry funnel of the larger side: how many geometries
+    // survive each pruning stage. The "before block prefilter" value is only
+    // exactly known when the larger side is a (possibly view-backed) index
+    // scan whose blocks were pruned; otherwise it equals the delivered row
+    // count.
+    uint64_t numGeomsAfterBlockPrefilter = larger.idTable_->size();
+    uint64_t numGeomsBeforeBlockPrefilter = numGeomsAfterBlockPrefilter;
+    {
+      auto children = spatialJoin_.value()->getChildren();
+      // The larger side: `smallerIsRight` refers to the (possibly swapped)
+      // sides, whereas `getChildren` reflects the original order; compare the
+      // actual `IdTable` sizes instead.
+      for (auto* child : children) {
+        const auto* scan =
+            dynamic_cast<const IndexScan*>(child->getRootOperation().get());
+        if (scan != nullptr &&
+            scan->numBlockRowsBeforePrefilter().has_value() &&
+            child->getRootOperation()->getResultWidth() ==
+                larger.idTable_->numColumns()) {
+          numGeomsBeforeBlockPrefilter =
+              std::max(numGeomsBeforeBlockPrefilter,
+                       scan->numBlockRowsBeforePrefilter().value());
+        }
+      }
+    }
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-before-block-prefilter", numGeomsBeforeBlockPrefilter);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-after-block-prefilter", numGeomsAfterBlockPrefilter);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-after-cell-prefilter",
+        numGeomsAfterBlockPrefilter - droppedLargeByCell);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-after-bbox-prefilter",
+        numGeomsAfterBlockPrefilter - droppedLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-valid-geoms-parsed",
                                                   numValidGeomsTotal);
-    spatialJoin_.value()->runtimeInfo().addDetail(
-        "num-geoms-dropped-by-prefilter", droppedLarge);
-    spatialJoin_.value()->runtimeInfo().addDetail(
-        "num-geoms-dropped-by-cell-prefilter", droppedLargeByCell);
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.

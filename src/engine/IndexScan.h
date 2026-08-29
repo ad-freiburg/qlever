@@ -31,6 +31,11 @@ class IndexScan final : public Operation {
   Graphs graphsToFilter_;
   ScanSpecAndBlocks scanSpecAndBlocks_;
   bool scanSpecAndBlocksIsPrefiltered_;
+  // If this scan is a prefiltered copy (see
+  // `makeCopyWithPrefilteredScanSpecAndBlocks`), the total number of rows of
+  // the blocks of the original, unprefiltered scan. Used for runtime
+  // statistics (e.g. the geo prefilter funnel of the spatial join).
+  std::optional<uint64_t> numBlockRowsBeforePrefilter_ = std::nullopt;
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
@@ -258,6 +263,13 @@ class IndexScan final : public Operation {
   // its cache key (which is that of the unfiltered scan). Thus, this method
   // returns `false` if prefiltered `BlockMetadataRanges` are contained.
   bool resultDoesMatchCacheKey() const override;
+
+ public:
+  // See `numBlockRowsBeforePrefilter_` above; `nullopt` if this scan was not
+  // prefiltered.
+  const std::optional<uint64_t>& numBlockRowsBeforePrefilter() const {
+    return numBlockRowsBeforePrefilter_;
+  }
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

@@ -1387,8 +1387,12 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   // sweeper; none of the values of `?b` (two invalid literals and one point
   // that is not contained in `?a`) contribute a valid geometry.
   auto details = spatialJoin->runtimeInfo().details_;
-  EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
-                             HasKeyMatching("num-geoms-parsed", Eq(3))));
+  // Of the three values of `?b` (the larger side), the point outside `?a`'s
+  // box is dropped by the prefilter; the two invalid literals survive it (they
+  // are never prefiltered) but fail to parse.
+  EXPECT_THAT(details,
+              AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
+                    HasKeyMatching("num-geoms-after-bbox-prefilter", Eq(2))));
 }
 
 }  // namespace invalidGeometries
