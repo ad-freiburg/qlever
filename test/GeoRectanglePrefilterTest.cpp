@@ -47,11 +47,14 @@ std::string geoTurtleInput() {
 
 // A `QueryExecutionContext` for an index over `geoTurtleInput` with the
 // geo-split vocabulary and a level-2 geo cell grid.
-QueryExecutionContext* geoQec(uint8_t gridLevel = 2) {
+QueryExecutionContext* geoQec(uint8_t gridLevel = 2,
+                              ad_utility::GeoCellGridScheme scheme =
+                                  ad_utility::GeoCellGridScheme::Flat) {
   ad_utility::testing::TestIndexConfig config{geoTurtleInput()};
   config.vocabularyType = ad_utility::VocabularyType{
       ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
   config.geoCellGridLevel = gridLevel;
+  config.geoCellGridScheme = scheme;
   config.parserBufferSize = 1000_B;
   return ad_utility::testing::getQec(std::move(config));
 }
@@ -273,9 +276,14 @@ TEST(GeoRectanglePrefilter, getPrefilterExpressionFromDistanceFilter) {
 }
 
 // The `SpatialJoin` pushes the prefilter into an index scan that is sorted by
-// the geometry variable, and only into such a scan.
-TEST(GeoRectanglePrefilter, spatialJoinPushesBlockPrefilter) {
-  auto* qec = geoQec();
+// the geometry variable, and only into such a scan. Parameterized over the
+// four grid schemes: the pruning machinery is scheme-agnostic and the
+// results must be identical for all of them.
+class GeoRectanglePrefilterSchemeTest
+    : public ::testing::TestWithParam<ad_utility::GeoCellGridScheme> {};
+
+TEST_P(GeoRectanglePrefilterSchemeTest, spatialJoinPushesBlockPrefilter) {
+  auto* qec = geoQec(2, GetParam());
   auto point = TripleComponent{Id::makeFromGeoPoint(GeoPoint{10.0, 10.5})};
   Variable pointVar{"?point"};
   Variable wktVar{"?wkt"};
@@ -326,5 +334,17 @@ TEST(GeoRectanglePrefilter, spatialJoinPushesBlockPrefilter) {
   auto resultPso = sjPso->computeResultOnlyForTesting();
   EXPECT_EQ(resultPso.idTableView().numRows(), 3u);
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    GeoRectanglePrefilter, GeoRectanglePrefilterSchemeTest,
+    ::testing::Values(ad_utility::GeoCellGridScheme::Flat,
+                      ad_utility::GeoCellGridScheme::Flat4Shifts,
+                      ad_utility::GeoCellGridScheme::Hierarchical,
+                      ad_utility::GeoCellGridScheme::Hierarchical3Shifts),
+    [](const auto& info) {
+      std::string name{ad_utility::toString(info.param)};
+      std::replace(name.begin(), name.end(), '-', '_');
+      return name;
+    });
 
 }  // namespace

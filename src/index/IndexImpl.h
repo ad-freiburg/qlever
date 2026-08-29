@@ -201,6 +201,11 @@ class IndexImpl {
   // geo vocabulary's `.geocells` file).
   uint8_t geoCellGridLevelForIndexBuilding_ = 0;
 
+  // The cell assignment scheme of the geo cell grid (only relevant during
+  // index building and if the level above is > 0).
+  ad_utility::GeoCellGridScheme geoCellGridSchemeForIndexBuilding_ =
+      ad_utility::GeoCellGridScheme::Flat;
+
   // Compiled regexes for IRIs that should be treated as blank nodes during
   // index building (only relevant during index building). Set (and compiled
   // from their string representation) via `setBlankNodeIriRegexes`.
@@ -366,6 +371,15 @@ class IndexImpl {
   void setGeoCellGridLevelForIndexBuilding(uint8_t level) {
     geoCellGridLevelForIndexBuilding_ = level;
     configurationJson_["geo-cell-grid-level"] = level;
+  }
+
+  // Set the cell assignment scheme of the geo cell grid (see
+  // `GeoCellGridScheme`). Only relevant if the grid level is > 0.
+  void setGeoCellGridSchemeForIndexBuilding(
+      ad_utility::GeoCellGridScheme scheme) {
+    geoCellGridSchemeForIndexBuilding_ = scheme;
+    configurationJson_["geo-cell-grid-scheme"] =
+        std::string{ad_utility::toString(scheme)};
   }
 
   // __________________________________________________________________________

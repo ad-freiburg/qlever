@@ -281,6 +281,12 @@ int main(int argc, char** argv) {
       "encoded into its ID, which enables the geo cell prefilter for spatial "
       "joins. 0 (the default) disables this; values > 0 require "
       "`--vocabulary-type on-disk-compressed-geo-split`.");
+  add("geo-cell-grid-scheme", po::value(&config.geoCellGridScheme_),
+      "The cell assignment scheme of the geo cell grid: `flat` (default), "
+      "`flat-4-shifts` (four half-shifted flat grids), `hierarchical` "
+      "(quadtree with S2-style cell IDs), or `hierarchical-3-shifts` (three "
+      "third-shifted quadtrees). Only relevant with a geo cell grid level "
+      "> 0.");
 
   add("encode-as-id",
       po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),

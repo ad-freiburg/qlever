@@ -49,16 +49,26 @@ void GeoVocabulary<V>::open(const std::string& filename) {
     ad_utility::serialization::FileReadSerializer in{cellsFilename};
     uint64_t version = 0;
     in >> version;
-    if (version != geoCellsVersion) {
+    if (version != 1 && version != geoCellsVersion) {
       throw std::runtime_error(absl::StrCat(
           "The geo cells file ", cellsFilename, " has version ", version,
           ", which is incompatible with version ", geoCellsVersion,
           " as required by this version of QLever. Please rebuild your "
           "index."));
     }
+    // Version 1 files have no scheme field and are implicitly `Flat`.
+    uint64_t scheme = 0;
+    if (version >= 2) {
+      in >> scheme;
+      AD_CORRECTNESS_CHECK(
+          scheme <= static_cast<uint64_t>(
+                        ad_utility::GeoCellGridScheme::Hierarchical3Shifts));
+    }
     uint64_t level = 0;
     in >> level;
-    grid_ = ad_utility::GeoCellGrid{static_cast<uint8_t>(level)};
+    grid_ = ad_utility::GeoCellGrid{
+        static_cast<uint8_t>(level),
+        static_cast<ad_utility::GeoCellGridScheme>(scheme)};
     in >> cellRuns_;
     AD_CORRECTNESS_CHECK(!cellRuns_.empty() || literals_.size() == 0);
   }
@@ -197,6 +207,7 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
   if (grid_.has_value()) {
     ad_utility::serialization::FileWriteSerializer out{geoCellsFilename_};
     out << geoCellsVersion;
+    out << static_cast<uint64_t>(grid_->scheme());
     out << uint64_t{grid_->level()};
     out << cellRuns_;
   }

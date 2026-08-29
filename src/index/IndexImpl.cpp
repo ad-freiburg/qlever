@@ -421,8 +421,8 @@ void IndexImpl::createFromFiles(
             ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit,
         "A geo cell grid requires the vocabulary type "
         "`on-disk-compressed-geo-split`");
-    vocab_.setGeoCellGrid(
-        ad_utility::GeoCellGrid{geoCellGridLevelForIndexBuilding_});
+    vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
+        geoCellGridLevelForIndexBuilding_, geoCellGridSchemeForIndexBuilding_});
   }
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =

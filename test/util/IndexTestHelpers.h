@@ -77,6 +77,9 @@ struct TestIndexConfig {
   // Level of the geo cell grid for WKT literal IDs (requires the geo-split
   // vocabulary type), see `GeoCellGrid`. 0 = no grid.
   uint8_t geoCellGridLevel = 0;
+  // Cell assignment scheme of the geo cell grid.
+  ad_utility::GeoCellGridScheme geoCellGridScheme =
+      ad_utility::GeoCellGridScheme::Flat;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
   // If true, add `ql:has-word` triples for each word in each literal during
@@ -93,20 +96,21 @@ struct TestIndexConfig {
   // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
-    return H::combine(std::move(h), c.turtleInput, c.loadAllPermutations,
-                      c.usePatterns, c.usePrefixCompression,
-                      c.blocksizePermutations, c.createTextIndex,
-                      c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-                      c.parserBufferSize, c.scoringMetric, c.bAndKParam,
-                      c.indexType, c.encodedPrefixesWithoutAngleBrackets,
-                      c.addHasWordTriples, c.geoCellGridLevel);
+    return H::combine(
+        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
+        c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
+        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
+        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
+        c.encodedPrefixesWithoutAngleBrackets, c.addHasWordTriples,
+        c.geoCellGridLevel, c.geoCellGridScheme);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, blocksizePermutations, createTextIndex,
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
       scoringMetric, bAndKParam, indexType, vocabularyType,
-      encodedPrefixesWithoutAngleBrackets, addHasWordTriples, geoCellGridLevel)
+      encodedPrefixesWithoutAngleBrackets, addHasWordTriples, geoCellGridLevel,
+      geoCellGridScheme)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

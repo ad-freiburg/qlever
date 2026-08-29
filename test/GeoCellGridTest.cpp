@@ -4,6 +4,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <random>
+
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/StringSortComparator.h"
@@ -13,6 +15,7 @@
 namespace {
 
 using ad_utility::GeoCellGrid;
+using ad_utility::GeoCellGridScheme;
 using ad_utility::GeoCellIdPrefilter;
 
 // Build a full WKT literal (with quotes and datatype suffix) from the given
@@ -309,6 +312,196 @@ TEST(GeoVocabulary, cellAnnotatedIndicesThroughSplitVocabulary) {
   auto [loM, hiM] = vocab.getPositionOfWord(wktMissing, comparator);
   EXPECT_EQ(loM, hiM);
   EXPECT_GT(loM, SGV::addMarker(grid.annotateIndex(12, 1), 1));
+}
+
+TEST(GeoCellGrid, schemeStringConversion) {
+  using enum GeoCellGridScheme;
+  for (auto scheme : {Flat, Flat4Shifts, Hierarchical, Hierarchical3Shifts}) {
+    auto parsed =
+        ad_utility::geoCellGridSchemeFromString(ad_utility::toString(scheme));
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_EQ(parsed.value(), scheme);
+  }
+  EXPECT_FALSE(ad_utility::geoCellGridSchemeFromString("nope").has_value());
+}
+
+TEST(GeoCellGrid, cellBitsPerScheme) {
+  using enum GeoCellGridScheme;
+  EXPECT_EQ(GeoCellGrid(10, Flat).numCellBits(), 21u);
+  EXPECT_EQ(GeoCellGrid(10, Flat4Shifts).numCellBits(), 23u);
+  EXPECT_EQ(GeoCellGrid(10, Hierarchical).numCellBits(), 21u);
+  EXPECT_EQ(GeoCellGrid(10, Hierarchical3Shifts).numCellBits(), 23u);
+  // The hierarchical schemes have no separate sentinel; the root of the
+  // first copy takes its role.
+  EXPECT_EQ(GeoCellGrid(10, Hierarchical).sentinelCell(), uint64_t{1} << 20);
+  EXPECT_EQ(GeoCellGrid(10, Flat).sentinelCell(), (uint64_t{1} << 21) - 1);
+}
+
+// Every cell number must fit into `numCellBits()` bits.
+TEST(GeoCellGrid, cellNumbersFitTheField) {
+  using enum GeoCellGridScheme;
+  std::mt19937_64 gen{42};
+  std::uniform_real_distribution<double> lngDist{-180.0, 180.0};
+  std::uniform_real_distribution<double> latDist{-90.0, 90.0};
+  std::uniform_real_distribution<double> sizeDist{0.0, 5.0};
+  for (auto scheme : {Flat, Flat4Shifts, Hierarchical, Hierarchical3Shifts}) {
+    GeoCellGrid grid{6, scheme};
+    for (int i = 0; i < 2000; ++i) {
+      double lng = lngDist(gen);
+      double lat = latDist(gen);
+      double w = sizeDist(gen);
+      double h = sizeDist(gen);
+      ad_utility::BoundingBox box{GeoPoint{std::clamp(lat, -90.0, 90.0),
+                                           std::clamp(lng, -180.0, 180.0)},
+                                  GeoPoint{std::clamp(lat + h, -90.0, 90.0),
+                                           std::clamp(lng + w, -180.0, 180.0)}};
+      auto cell = grid.cellFromBoundingBox(box);
+      EXPECT_LT(cell, uint64_t{1} << grid.numCellBits());
+    }
+  }
+}
+
+// The central conservativeness property for all four schemes: if a
+// geometry's bounding box intersects a query rectangle, then the geometry's
+// cell is contained in the covering cell ranges of the rectangle.
+TEST(GeoCellGrid, coverIsConservativeForAllSchemes) {
+  using enum GeoCellGridScheme;
+  std::mt19937_64 gen{4711};
+  std::uniform_real_distribution<double> lngDist{-180.0, 179.0};
+  std::uniform_real_distribution<double> latDist{-90.0, 89.0};
+  std::uniform_real_distribution<double> geomSize{0.0, 8.0};
+  std::uniform_real_distribution<double> querySize{0.01, 30.0};
+
+  auto contains = [](const GeoCellGrid::CellRanges& ranges,
+                     GeoCellGrid::Cell cell) {
+    for (const auto& [first, last] : ranges) {
+      if (cell >= first && cell <= last) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  for (auto scheme : {Flat, Flat4Shifts, Hierarchical, Hierarchical3Shifts}) {
+    GeoCellGrid grid{5, scheme};
+    size_t numChecked = 0;
+    for (int q = 0; q < 60; ++q) {
+      double qLng = lngDist(gen);
+      double qLat = latDist(gen);
+      double qLng2 = std::min(qLng + querySize(gen), 180.0);
+      double qLat2 = std::min(qLat + querySize(gen), 90.0);
+      auto ranges = grid.coveringCellRanges(qLng, qLat, qLng2, qLat2);
+      // The ranges must be ascending and non-overlapping.
+      for (size_t i = 1; i < ranges.size(); ++i) {
+        EXPECT_GT(ranges[i].first, ranges[i - 1].second + 1);
+      }
+      for (int g = 0; g < 300; ++g) {
+        double lng = lngDist(gen);
+        double lat = latDist(gen);
+        double lng2 = std::min(lng + geomSize(gen), 180.0);
+        double lat2 = std::min(lat + geomSize(gen), 90.0);
+        bool intersects =
+            lng <= qLng2 && lng2 >= qLng && lat <= qLat2 && lat2 >= qLat;
+        if (!intersects) {
+          continue;
+        }
+        ad_utility::BoundingBox box{GeoPoint{lat, lng}, GeoPoint{lat2, lng2}};
+        auto cell = grid.cellFromBoundingBox(box);
+        EXPECT_TRUE(contains(ranges, cell))
+            << ad_utility::toString(scheme) << " geometry [" << lng << ", "
+            << lat << ", " << lng2 << ", " << lat2 << "] query [" << qLng
+            << ", " << qLat << ", " << qLng2 << ", " << qLat2 << "] cell "
+            << cell;
+        ++numChecked;
+      }
+    }
+    // Make sure the test actually exercised intersecting pairs.
+    EXPECT_GT(numChecked, 50u) << ad_utility::toString(scheme);
+  }
+}
+
+// Scheme-specific guarantees about which geometries avoid the "no
+// information" cell.
+TEST(GeoCellGrid, shiftedSchemesBoundTheSentinelPopulation) {
+  using enum GeoCellGridScheme;
+  std::mt19937_64 gen{815};
+  std::uniform_real_distribution<double> lngDist{-170.0, 160.0};
+  std::uniform_real_distribution<double> latDist{-80.0, 70.0};
+
+  // Flat-4-shifts: every geometry of at most half a cell in both dimensions
+  // fits a regular cell of one of the four copies.
+  {
+    GeoCellGrid grid{5, Flat4Shifts};
+    double cellLng = 360.0 / 32.0;
+    double cellLat = 180.0 / 32.0;
+    for (int i = 0; i < 3000; ++i) {
+      double lng = lngDist(gen);
+      double lat = latDist(gen);
+      ad_utility::BoundingBox box{
+          GeoPoint{lat, lng},
+          GeoPoint{lat + 0.49 * cellLat, lng + 0.49 * cellLng}};
+      EXPECT_NE(grid.cellFromBoundingBox(box), grid.sentinelCell());
+    }
+  }
+
+  // Hierarchical-3-shifts: every geometry is stored at a cell of side at
+  // most ~6 times its own extent (Chan's guarantee; we allow a factor of 8
+  // for the quantization at the borders), so nothing escalates towards the
+  // root by more than a constant number of levels.
+  {
+    uint8_t level = 8;
+    GeoCellGrid grid{level, Hierarchical3Shifts};
+    for (int i = 0; i < 3000; ++i) {
+      double lng = lngDist(gen);
+      double lat = latDist(gen);
+      // Extent: 1/64 of the domain, i.e. natural level 6 of 8.
+      double w = 360.0 / 64.0;
+      double h = 180.0 / 64.0;
+      ad_utility::BoundingBox box{GeoPoint{lat, lng},
+                                  GeoPoint{lat + h, lng + w}};
+      auto cell = grid.cellFromBoundingBox(box);
+      // Depth below the leaves is encoded in the trailing zeros of the cell
+      // number; the stored cell has side length 2^depthBelow leaves.
+      uint64_t cellWithoutShift =
+          cell & ((uint64_t{1} << (2 * uint64_t{level} + 1)) - 1);
+      uint64_t depthBelow = 0;
+      while (((cellWithoutShift >> depthBelow) & 1) == 0) {
+        ++depthBelow;
+      }
+      AD_CORRECTNESS_CHECK(depthBelow % 2 == 0);
+      depthBelow /= 2;
+      // Natural level 6 -> stored level >= 3 (cell side <= 8x extent).
+      EXPECT_LE(depthBelow, uint64_t{5})
+          << "geometry at [" << lng << ", " << lat << "]";
+    }
+  }
+}
+
+// The S2-style encoding of the hierarchical scheme: parents sort within the
+// range of their subtree, and the subtree ranges of siblings are disjoint.
+TEST(GeoCellGrid, hierarchicalEncoding) {
+  GeoCellGrid grid{3, GeoCellGridScheme::Hierarchical};
+  // The root is the middle of the ID space of 2 * 3 + 1 = 7 bits.
+  EXPECT_EQ(grid.sentinelCell(), 64u);
+  // A point geometry gets a leaf cell (odd cell number).
+  ad_utility::BoundingBox point{GeoPoint{10.0, 10.0}, GeoPoint{10.0, 10.0}};
+  auto leaf = grid.cellFromBoundingBox(point);
+  EXPECT_EQ(leaf & 1, 1u);
+  // A geometry spanning the whole world gets the root.
+  ad_utility::BoundingBox world{GeoPoint{-90.0, -180.0}, GeoPoint{90.0, 180.0}};
+  EXPECT_EQ(grid.cellFromBoundingBox(world), grid.sentinelCell());
+  // The cover of a tiny rectangle consists of one leaf (or few leaves) plus
+  // all their ancestors, root included.
+  auto ranges = grid.coveringCellRanges(10.0, 10.0, 10.1, 10.1);
+  bool containsRoot = false;
+  bool containsLeaf = false;
+  for (auto [first, last] : ranges) {
+    containsRoot |=
+        (grid.sentinelCell() >= first && grid.sentinelCell() <= last);
+    containsLeaf |= (leaf >= first && leaf <= last);
+  }
+  EXPECT_TRUE(containsRoot);
+  EXPECT_TRUE(containsLeaf);
 }
 
 }  // namespace

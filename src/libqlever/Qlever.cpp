@@ -145,6 +145,15 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
                     "The geo cell grid level must be at most 20");
   index.getImpl().setGeoCellGridLevelForIndexBuilding(
       static_cast<uint8_t>(config.geoCellGridLevel_));
+  auto geoCellGridScheme =
+      ad_utility::geoCellGridSchemeFromString(config.geoCellGridScheme_);
+  AD_CONTRACT_CHECK(geoCellGridScheme.has_value(),
+                    "Invalid geo cell grid scheme \"",
+                    config.geoCellGridScheme_,
+                    "\"; supported: flat, flat-4-shifts, hierarchical, "
+                    "hierarchical-3-shifts");
+  index.getImpl().setGeoCellGridSchemeForIndexBuilding(
+      geoCellGridScheme.value());
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(config.blankNodeIriRegexes_);
 

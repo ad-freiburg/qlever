@@ -72,8 +72,9 @@ class GeoVocabulary {
   // Filename suffix for the geo cell grid file
   static constexpr std::string_view geoCellsSuffix = ".geocells";
 
-  // Version of the `.geocells` file format.
-  static constexpr uint64_t geoCellsVersion = 1;
+  // Version of the `.geocells` file format. Version 1 had no scheme field
+  // (implicitly `GeoCellGridScheme::Flat`) and is still readable.
+  static constexpr uint64_t geoCellsVersion = 2;
 
   // Offset per index inside the geometry information file
   static constexpr size_t geoInfoOffset = sizeof(GeometryInfo);
