@@ -84,7 +84,10 @@ class RuntimeInformation {
 
   /// A key-value map of various other information that might be different for
   /// different types of operations.
-  nlohmann::json details_;
+  // NOTE: `ordered_json` preserves the insertion order of the keys, so that
+  // operations can present their details in a meaningful order (e.g. the
+  // geometry funnel of the spatial join) instead of alphabetically.
+  nlohmann::ordered_json details_;
 
   // Default constructor.
   RuntimeInformation() = default;

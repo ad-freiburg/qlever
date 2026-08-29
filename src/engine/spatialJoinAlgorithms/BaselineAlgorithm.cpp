@@ -19,10 +19,11 @@ Result BaselineAlgorithm::run() {
 #else
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              numRowsBeforeBlockPrefilterLeft,
-              numRowsBeforeBlockPrefilterRight] = params_;
+              numRowsBeforeBlockPrefilterLeft, numRowsBeforeBlockPrefilterRight,
+              timeBlockPrefilter] = params_;
   (void)numRowsBeforeBlockPrefilterLeft;
   (void)numRowsBeforeBlockPrefilterRight;
+  (void)timeBlockPrefilter;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to

@@ -565,7 +565,8 @@ std::pair<std::shared_ptr<QueryExecutionTree>,
 SpatialJoin::applyRuntimeGeoBlockPrefilter(
     std::shared_ptr<QueryExecutionTree> childLeft,
     std::shared_ptr<QueryExecutionTree> childRight, const Variable& varLeft,
-    const Variable& varRight) const {
+    const Variable& varRight,
+    std::chrono::milliseconds& timeBlockPrefilter) const {
   // Only for libspatialjoin joins (whose semantics are box-intersection
   // based, like the existing per-row prefilter), and only if prefiltering is
   // enabled.
@@ -596,6 +597,7 @@ SpatialJoin::applyRuntimeGeoBlockPrefilter(
     if (smallTable.size() > maxSmallSideRows) {
       return std::nullopt;
     }
+    ad_utility::Timer timer{ad_utility::Timer::Started};
     auto rectangle = boundingRectangleOfColumn(
         smallTable, smallChild->getVariableColumn(smallVar),
         getExecutionContext()->getIndex());
@@ -607,8 +609,11 @@ SpatialJoin::applyRuntimeGeoBlockPrefilter(
         std::make_unique<prefilterExpressions::GeoRectangleExpression>(
             ad_utility::padGeoRectangle(rectangle.value(), padding)),
         bigVar);
-    return bigChild->getUpdatedQueryExecutionTreeWithPrefilterApplied(
-        std::move(pairs));
+    auto prefiltered =
+        bigChild->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+            std::move(pairs));
+    timeBlockPrefilter = timer.msecs();
+    return prefiltered;
   };
 
   bool leftIsSmaller =
@@ -639,8 +644,9 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Prune the blocks of one side's scan using the bounding rectangle of the
   // other (smaller) side, which is only known at execution time.
+  std::chrono::milliseconds timeBlockPrefilter{0};
   std::tie(childLeft, childRight) = applyRuntimeGeoBlockPrefilter(
-      childLeft, childRight, joinVarLeft, joinVarRight);
+      childLeft, childRight, joinVarLeft, joinVarRight, timeBlockPrefilter);
 
   // If a side is a block-prefiltered scan, remember the unprefiltered row
   // total for the runtime statistics.
@@ -690,7 +696,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    std::move(rightSelectedCols),
                                    numColumns,
                                    numRowsBeforePrefilter(childLeft),
-                                   numRowsBeforePrefilter(childRight)};
+                                   numRowsBeforePrefilter(childRight),
+                                   timeBlockPrefilter};
 }
 
 // ____________________________________________________________________________

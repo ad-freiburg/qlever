@@ -50,6 +50,11 @@ struct PreparedSpatialJoinParams {
   // runtime details.
   std::optional<uint64_t> numRowsBeforeBlockPrefilterLeft_ = std::nullopt;
   std::optional<uint64_t> numRowsBeforeBlockPrefilterRight_ = std::nullopt;
+  // Time spent by the runtime geo block prefilter of `prepareJoin`
+  // (computing the small side's rectangle and pruning the blocks), without
+  // the materialization of the small side (which is needed anyway and
+  // reported by the child operation).
+  std::chrono::milliseconds timeBlockPrefilter_ = std::chrono::milliseconds{0};
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -219,10 +224,11 @@ class SpatialJoin : public Operation {
   // is not an index scan sorted by its geometry variable.
   std::pair<std::shared_ptr<QueryExecutionTree>,
             std::shared_ptr<QueryExecutionTree>>
-  applyRuntimeGeoBlockPrefilter(std::shared_ptr<QueryExecutionTree> childLeft,
-                                std::shared_ptr<QueryExecutionTree> childRight,
-                                const Variable& varLeft,
-                                const Variable& varRight) const;
+  applyRuntimeGeoBlockPrefilter(
+      std::shared_ptr<QueryExecutionTree> childLeft,
+      std::shared_ptr<QueryExecutionTree> childRight, const Variable& varLeft,
+      const Variable& varRight,
+      std::chrono::milliseconds& timeBlockPrefilter) const;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
