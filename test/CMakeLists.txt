@@ -554,7 +554,7 @@ else ()
     addLinkAndDiscoverTest(MaterializedViewsTest qlever engine)
 endif ()
 
-addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine)
+addLinkAndDiscoverTest(MaterializedViewsPatternRewriteTest qlever engine)
 
 addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 

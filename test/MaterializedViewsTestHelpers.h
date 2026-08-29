@@ -33,7 +33,7 @@ static constexpr std::string_view dummyTurtle = R"(
   <s2> <p3> <http://example.com/> .
 )";
 
-static constexpr std::string_view chainRewriteContextDummyTurtle = R"(
+static constexpr std::string_view patternRewriteContextDummyTurtle = R"(
   <s1> <p1> <m2> .
   <m2> <p2> <http://example.com/> .
   <x> <p1> <v> .
@@ -190,10 +190,11 @@ class MaterializedViewsCacheKeyRewriteTest : public MaterializedViewsTest {
 };
 
 // _____________________________________________________________________________
-class MaterializedViewsChainRewriteContextTest : public MaterializedViewsTest {
+class MaterializedViewsPatternRewriteContextTest
+    : public MaterializedViewsTest {
  protected:
   std::string getDummyTurtle() const override {
-    return std::string{chainRewriteContextDummyTurtle};
+    return std::string{patternRewriteContextDummyTurtle};
   }
 };
 
@@ -216,15 +217,16 @@ class MaterializedViewsRewriteTestBase : public ::testing::Test {
   }
 };
 
-// Parameterized on the query used to write the test view (`qpExpect` itself
-// tests both the greedy and the DP query planner, so no budget parameter is
-// needed here).
-class MaterializedViewsChainRewriteTest
+// Pattern-based rewriting, parameterized on the query used to write the test
+// view (`qpExpect` itself tests both the greedy and the DP query planner, so
+// no budget parameter is needed here).
+class MaterializedViewsPatternRewriteTestP
     : public MaterializedViewsRewriteTestBase,
       public ::testing::WithParamInterface<std::string> {};
 
-// Only one write query is tested here, so this is not parameterized.
-class MaterializedViewsStarRewriteTest
+// Pattern-based rewriting where only one write query is tested, so this is
+// not parameterized.
+class MaterializedViewsPatternRewriteTest
     : public MaterializedViewsRewriteTestBase {};
 
 // _____________________________________________________________________________

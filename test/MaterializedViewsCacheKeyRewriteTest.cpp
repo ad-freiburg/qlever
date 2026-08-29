@@ -7,6 +7,10 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+// Tests for rewriting a query by the cache key of its whole plan, as opposed
+// to the pattern-based rewriting of a subset of its triples, which is tested
+// in `MaterializedViewsPatternRewriteTest.cpp`.
+
 #include <absl/functional/bind_front.h>
 #include <gmock/gmock.h>
 
