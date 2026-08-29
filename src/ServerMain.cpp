@@ -85,12 +85,12 @@ int main(int argc, char** argv) {
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
   add("memory-max-size,m",
-      po::value<ad_utility::MemorySize>()
-          ->default_value(DEFAULT_MEM_FOR_QUERIES)
-          ->notifier([&config](auto v) { config.memoryLimit_ = v; }),
+      optionFactory.getProgramOption<&RuntimeParameters::memoryMaxSize_>(),
       "Limit on the total amount of memory that can be used for "
       "query processing and caching. If exceeded, query will return with "
-      "an error, but the engine will not crash.");
+      "an error, but the engine will not crash. Can be changed at runtime "
+      "via the runtime parameter of the same name, where a decrease is "
+      "only possible if the freed part is currently unused.");
   add("cache-max-size,c",
       optionFactory.getProgramOption<&RuntimeParameters::cacheMaxSize_>(),
       "Maximum memory size for all cache entries (pinned and "
@@ -319,6 +319,12 @@ int main(int argc, char** argv) {
     AD_LOG_INFO << "Runtime parameter set from the command line: " << assignment
                 << std::endl;
   }
+
+  // The memory limit is bound to the runtime parameter `memory-max-size`
+  // (settable via `-m` and `--set-runtime-parameter` alike), from which the
+  // engine constructs its allocator.
+  config.memoryLimit_ =
+      getRuntimeParameter<&RuntimeParameters::memoryMaxSize_>();
 
   // Read the proxy for outgoing requests (`SERVICE` and `LOAD`) from the
   // environment. We do this eagerly so that a malformed proxy URL fails the

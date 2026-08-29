@@ -24,6 +24,7 @@ RuntimeParameters::RuntimeParameters() {
 
   add(stripColumns_);
   add(sortEstimateCancellationFactor_);
+  add(memoryMaxSize_);
   add(cacheMaxNumEntries_);
   add(cacheMaxSize_);
   add(cacheMaxSizeSingleEntry_);

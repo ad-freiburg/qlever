@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <optional>
 
+#include "global/Constants.h"
 #include "util/Log.h"
 #include "util/Parameters.h"
 
@@ -50,6 +51,13 @@ struct RuntimeParameters {
   Double sortEstimateCancellationFactor_{3.0,
                                          "sort-estimate-cancellation-factor"};
   SizeT cacheMaxNumEntries_{1000, "cache-max-num-entries"};
+
+  // The total amount of memory that may be used for query processing and
+  // caching (the `--memory-max-size` option of `qlever-server`). Increasing
+  // it at runtime always succeeds. Decreasing it requires the freed part to
+  // be currently unused, otherwise the change is rejected.
+  MemorySizeParameter memoryMaxSize_{DEFAULT_MEM_FOR_QUERIES,
+                                     "memory-max-size"};
 
   MemorySizeParameter cacheMaxSize_{ad_utility::MemorySize::gigabytes(30),
                                     "cache-max-size"};

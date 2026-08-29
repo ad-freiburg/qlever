@@ -68,6 +68,23 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
         cache_.setMaxSizeSingleEntry(newValue);
       });
 
+  // Keep the runtime parameter `memory-max-size` in sync with the memory
+  // limit of the allocator: first mirror the limit the allocator was
+  // constructed with (clearing any update action left behind by a previous
+  // instance, so that setting the value cannot fire into a destroyed
+  // instance), then register the action that applies later changes of the
+  // parameter to the allocator. Registering triggers the action once, which
+  // is a no-op here because the values are already in sync.
+  {
+    auto runtimeParameters = globalRuntimeParameters.wlock();
+    runtimeParameters->memoryMaxSize_.clearOnUpdateAction();
+    runtimeParameters->memoryMaxSize_.set(allocator_.memoryLimit());
+    runtimeParameters->memoryMaxSize_.setOnUpdateAction(
+        [this](ad_utility::MemorySize newValue) {
+          allocator_.setMemoryLimit(newValue);
+        });
+  }
+
   // If `skipLoading` is set, we do not touch the on-disk index at all; the
   // instance is expected to be populated later from a blob (see
   // `deserializeVocabAndNamedCacheFromCompressedBlob`).
