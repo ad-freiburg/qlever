@@ -210,8 +210,9 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 // ____________________________________________________________________________
 Result LibspatialjoinAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
-      params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              numRowsBeforeBlockPrefilterLeft,
+              numRowsBeforeBlockPrefilterRight] = params_;
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
@@ -326,25 +327,11 @@ Result LibspatialjoinAlgorithm::run() {
     // scan whose blocks were pruned; otherwise it equals the delivered row
     // count.
     uint64_t numGeomsAfterBlockPrefilter = larger.idTable_->size();
-    uint64_t numGeomsBeforeBlockPrefilter = numGeomsAfterBlockPrefilter;
-    {
-      auto children = spatialJoin_.value()->getChildren();
-      // The larger side: `smallerIsRight` refers to the (possibly swapped)
-      // sides, whereas `getChildren` reflects the original order; compare the
-      // actual `IdTable` sizes instead.
-      for (auto* child : children) {
-        const auto* scan =
-            dynamic_cast<const IndexScan*>(child->getRootOperation().get());
-        if (scan != nullptr &&
-            scan->numBlockRowsBeforePrefilter().has_value() &&
-            child->getRootOperation()->getResultWidth() ==
-                larger.idTable_->numColumns()) {
-          numGeomsBeforeBlockPrefilter =
-              std::max(numGeomsBeforeBlockPrefilter,
-                       scan->numBlockRowsBeforePrefilter().value());
-        }
-      }
-    }
+    // The larger side is the left one iff the smaller side is the right one.
+    uint64_t numGeomsBeforeBlockPrefilter =
+        (smallerIsRight ? numRowsBeforeBlockPrefilterLeft
+                        : numRowsBeforeBlockPrefilterRight)
+            .value_or(numGeomsAfterBlockPrefilter);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-before-block-prefilter", numGeomsBeforeBlockPrefilter);
     spatialJoin_.value()->runtimeInfo().addDetail(

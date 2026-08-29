@@ -42,7 +42,18 @@ std::string geoTurtleInput() {
       wktTriple("<cell0b>", "LINESTRING(-102 -50, -103 -50)"),
       wktTriple("<spanning>", "LINESTRING(-10 10, 20 20)"),
       "<pointNear> <hasGeom> \"POINT(10.5 10.01)\"", wktDatatype, " . \n",
-      "<pointFar> <hasGeom> \"POINT(-100.5 -50.01)\"", wktDatatype, " . \n");
+      "<pointFar> <hasGeom> \"POINT(-100.5 -50.01)\"", wktDatatype, " . \n",
+      [] {
+        // A batch of far-away geometries, so that (in every scheme) there
+        // are whole blocks that a covering query near (10, 10) can prune.
+        std::string result;
+        for (int i = 0; i < 16; ++i) {
+          result += absl::StrCat("<far", i, "> <hasGeom> \"LINESTRING(",
+                                 -170 + i, " -60, ", -169.5 + i, " -60)\"",
+                                 wktDatatype, " . \n");
+        }
+        return result;
+      }());
 }
 
 // A `QueryExecutionContext` for an index over `geoTurtleInput` with the
@@ -333,6 +344,59 @@ TEST_P(GeoRectanglePrefilterSchemeTest, spatialJoinPushesBlockPrefilter) {
   EXPECT_EQ(result.idTableView().numRows(), 3u);
   auto resultPso = sjPso->computeResultOnlyForTesting();
   EXPECT_EQ(resultPso.idTableView().numRows(), 3u);
+}
+
+// The runtime block prefilter: with a non-constant (here: two-row) small
+// side, plan-time prefiltering is impossible, but `prepareJoin` prunes the
+// scan's blocks using the bounding rectangle of the materialized small side.
+TEST_P(GeoRectanglePrefilterSchemeTest, runtimeBlockPrefilter) {
+  auto* qec = geoQec(2, GetParam());
+  Variable pointVar{"?point"};
+  Variable wktVar{"?wkt"};
+  parsedQuery::SparqlValues values;
+  values._variables = {pointVar};
+  values._values.push_back(
+      {TripleComponent{Id::makeFromGeoPoint(GeoPoint{10.0, 10.5})}});
+  values._values.push_back(
+      {TripleComponent{Id::makeFromGeoPoint(GeoPoint{10.05, 10.6})}});
+  auto valuesTree = ad_utility::makeExecutionTree<Values>(qec, values);
+
+  SparqlTripleSimple triple{
+      TripleComponent{Variable{"?s"}},
+      TripleComponent{TripleComponent::Iri::fromIriref("<hasGeom>")},
+      TripleComponent{wktVar}};
+  auto scanTree =
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
+
+  SpatialJoinConfiguration config{
+      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 200'000.0,
+                           std::nullopt},
+      pointVar,
+      wktVar,
+      std::nullopt,
+      PayloadVariables::all(),
+      SpatialJoinAlgorithm::LIBSPATIALJOIN,
+      SpatialJoinType::WITHIN_DIST,
+      std::nullopt};
+  auto sj = std::make_shared<SpatialJoin>(qec, config, std::nullopt,
+                                          std::nullopt, true);
+  sj = sj->addChild(valuesTree, pointVar);
+  sj = sj->addChild(scanTree, wktVar);
+
+  // The plan-time prefilter must NOT have fired (two rows, no constant).
+  EXPECT_TRUE(sj->getChildren().at(1)->getRootOperation()->canResultBeCached());
+
+  // Both query points are within 200 km of the two cell-10 linestrings and
+  // the nearby point geometry: 2 x 3 = 6 result rows.
+  auto result = sj->computeResultOnlyForTesting();
+  EXPECT_EQ(result.idTableView().numRows(), 6u);
+
+  // The runtime block prefilter fired: fewer rows were read than the scan
+  // holds in total.
+  const auto& details = sj->runtimeInfo().details_;
+  ASSERT_TRUE(details.contains("num-geoms-before-block-prefilter"));
+  EXPECT_GT(details.at("num-geoms-before-block-prefilter").get<int64_t>(),
+            details.at("num-geoms-after-block-prefilter").get<int64_t>());
 }
 
 INSTANTIATE_TEST_SUITE_P(

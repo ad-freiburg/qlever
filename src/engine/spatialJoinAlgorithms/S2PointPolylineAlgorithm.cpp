@@ -25,8 +25,11 @@ using namespace geometryConverters;
 // ____________________________________________________________________________
 Result S2PointPolylineAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
-      params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              numRowsBeforeBlockPrefilterLeft,
+              numRowsBeforeBlockPrefilterRight] = params_;
+  (void)numRowsBeforeBlockPrefilterLeft;
+  (void)numRowsBeforeBlockPrefilterRight;
   IdTable result{numColumns, qec_->getAllocator()};
 
   AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());

@@ -44,6 +44,12 @@ struct PreparedSpatialJoinParams {
   std::vector<ColumnIndex> leftSelectedCols_;
   std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
+  // If a side was produced by a block-prefiltered index scan (at planning
+  // time or by the runtime geo block prefilter of `prepareJoin`), the row
+  // total of the unprefiltered blocks; used for the geometry funnel in the
+  // runtime details.
+  std::optional<uint64_t> numRowsBeforeBlockPrefilterLeft_ = std::nullopt;
+  std::optional<uint64_t> numRowsBeforeBlockPrefilterRight_ = std::nullopt;
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -203,6 +209,20 @@ class SpatialJoin : public Operation {
   // sorted by the geometry variable).
   std::optional<std::shared_ptr<SpatialJoin>> cloneWithGeoBlockPrefilter()
       const;
+
+  // Runtime counterpart of `cloneWithGeoBlockPrefilter` for joins whose
+  // sides are only known at execution time: materialize the (estimated)
+  // smaller side, compute the padded bounding rectangle of its geometries
+  // from the precomputed geometry info, and prune the blocks of the other
+  // side's index scan before it is read. Returns the (possibly replaced)
+  // children. Conservative and result-preserving; a no-op if the other side
+  // is not an index scan sorted by its geometry variable.
+  std::pair<std::shared_ptr<QueryExecutionTree>,
+            std::shared_ptr<QueryExecutionTree>>
+  applyRuntimeGeoBlockPrefilter(std::shared_ptr<QueryExecutionTree> childLeft,
+                                std::shared_ptr<QueryExecutionTree> childRight,
+                                const Variable& varLeft,
+                                const Variable& varRight) const;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
