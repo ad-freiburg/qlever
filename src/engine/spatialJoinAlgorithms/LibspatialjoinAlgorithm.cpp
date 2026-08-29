@@ -286,6 +286,8 @@ Result LibspatialjoinAlgorithm::run() {
   // smaller one. Compute the bounding box of the smaller table (appropriately
   // inflated for `WITHIN_DIST` joins) and only add those geometries from the
   // larger table that intersect this bounding box.
+  size_t numParserThreadsSmaller = 0;
+  size_t numParserThreadsLarger = 0;
   auto runParser = [&](ParseInput smaller, ParseInput larger,
                        bool smallerIsRight) {
     // Report the geometry funnel of the larger side in the chronological
@@ -333,12 +335,10 @@ Result LibspatialjoinAlgorithm::run() {
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-after-bbox-prefilter",
         numGeomsAfterBlockPrefilter - droppedLarge);
-    spatialJoin_.value()->runtimeInfo().addDetail(
-        "num-parser-threads-smaller-side", threadsSmall);
-    spatialJoin_.value()->runtimeInfo().addDetail(
-        "num-parser-threads-larger-side", threadsLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-valid-geoms-parsed",
                                                   numValidGeomsTotal);
+    numParserThreadsSmaller = threadsSmall;
+    numParserThreadsLarger = threadsLarge;
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
@@ -353,14 +353,8 @@ Result LibspatialjoinAlgorithm::run() {
           ? runParser(leftTableAndCol, rightTableAndCol, false)
           : runParser(rightTableAndCol, leftTableAndCol, true);
 
-  spatialJoin_.value()->runtimeInfo().addDetail("num-sweeper-threads",
-                                                NUM_THREADS);
-  if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
-    spatialJoin_.value()->runtimeInfo().addDetail("within-dist", withinDist);
-  }
-
-  // The four time details come last, in the chronological order of the steps
-  // they time.
+  // The four time details come after the geometry funnel, in the
+  // chronological order of the steps they time.
   spatialJoin_.value()->runtimeInfo().addDetail("time-for-prefiltering-blocks",
                                                 timeBlockPrefilter.count());
 
@@ -399,6 +393,17 @@ Result LibspatialjoinAlgorithm::run() {
   }
   spatialJoin_.value()->runtimeInfo().addDetail(
       "time-for-collecting-results-from-threads", tCollect.msecs().count());
+
+  // The configuration details (thread counts, distance) come last.
+  spatialJoin_.value()->runtimeInfo().addDetail("num-sweeper-threads",
+                                                NUM_THREADS);
+  if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+    spatialJoin_.value()->runtimeInfo().addDetail("within-dist", withinDist);
+  }
+  spatialJoin_.value()->runtimeInfo().addDetail(
+      "num-parser-threads-smaller-side", numParserThreadsSmaller);
+  spatialJoin_.value()->runtimeInfo().addDetail(
+      "num-parser-threads-larger-side", numParserThreadsLarger);
 
   // Return the result.
   return Result(std::move(result), std::vector<ColumnIndex>{},

@@ -359,14 +359,17 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   std::tie(indexScan->sizeEstimateIsExact_, indexScan->sizeEstimate_) =
       indexScan->computeSizeEstimate();
   // Remember the row total of the unprefiltered blocks for runtime
-  // statistics.
+  // statistics. If this scan is itself already a prefiltered copy (e.g. a
+  // plan-time prefiltered scan that is prefiltered again at runtime), keep
+  // the row total of the original, completely unprefiltered scan.
   uint64_t numRowsBefore = 0;
   for (const auto& blockRange : scanSpecAndBlocks_.blockMetadata_) {
     for (const auto& block : blockRange) {
       numRowsBefore += block.numRows_;
     }
   }
-  indexScan->numBlockRowsBeforePrefilter_ = numRowsBefore;
+  indexScan->numBlockRowsBeforePrefilter_ =
+      numBlockRowsBeforePrefilter_.value_or(numRowsBefore);
   return copy;
 }
 
