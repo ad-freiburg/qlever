@@ -1389,6 +1389,44 @@ TEST(RdfParserTest, multifileParser) {
 }
 
 // _____________________________________________________________________________
+// The `ascii-prefixes-only` setting selects the relaxed `TokenizerCtre` for all
+// input files of the `RdfMultifileParser`. We detect which tokenizer was
+// actually used via a prefixed name with an escape sequence, which the standard
+// compliant `Tokenizer` handles, but the relaxed parsing mode does not. NOTE:
+// This is a property of `pnameLnRelaxed` (which bypasses the token regexes),
+// not of the CTRE regexes themselves. If the relaxed mode ever learns to handle
+// escape sequences (see the TODO in the `prefixedName` test above), this test
+// has to be adapted together with that one.
+TEST(RdfParserTest, multifileParserSelectsTokenizer) {
+  std::string filename = gtestCurrentTestName() + ".ttl";
+  ad_utility::makeOfstream(filename)
+      << R"(@prefix wd: <www.wikidata.org/> . wd:esc\,aped <y> <z> .)";
+  absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
+
+  auto parse = [&filename](bool useRelaxedParsing) {
+    std::vector<qlever::InputFileSpecification> specs;
+    specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt, false);
+    RdfMultifileParser parser{
+        ad_utility::InputRangeTypeErased{std::move(specs)}, encodedIriManager(),
+        DEFAULT_PARSER_BUFFER_SIZE, useRelaxedParsing};
+    std::vector<TurtleTriple> result;
+    while (auto batch = parser.getBatch()) {
+      ql::ranges::copy(batch.value(), std::back_inserter(result));
+    }
+    return result;
+  };
+
+  // The standard-compliant tokenizer unescapes the `\,` correctly.
+  EXPECT_THAT(parse(false),
+              ::testing::ElementsAre(TurtleTriple{
+                  iri("<www.wikidata.org/esc,aped>"), iri("<y>"), iri("<z>"),
+                  qlever::specialIds().at(DEFAULT_GRAPH_IRI)}));
+
+  // The relaxed tokenizer does not support escape sequences in prefixed names.
+  EXPECT_ANY_THROW(parse(true));
+}
+
+// _____________________________________________________________________________
 
 TEST(RdfParserTest, specialPredicateA) {
   auto runCommonTests = [](const auto& checker) {

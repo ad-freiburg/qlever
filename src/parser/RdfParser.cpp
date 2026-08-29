@@ -1392,8 +1392,11 @@ void RdfMultifileParser::parseFileAndPushBatches(
     const qlever::InputFileSpecification& file,
     ad_utility::MemorySize bufferSize) {
   try {
-    auto parser =
-        makeSingleRdfParser<Tokenizer>(file, &encodedIriManager(), bufferSize);
+    auto parser = useRelaxedParsing_
+                      ? makeSingleRdfParser<TokenizerCtre>(
+                            file, &encodedIriManager(), bufferSize)
+                      : makeSingleRdfParser<Tokenizer>(
+                            file, &encodedIriManager(), bufferSize);
     while (auto batch = parser->getBatch()) {
       bool active = finishedBatchQueue_.push(std::move(batch.value()));
       if (!active) {
@@ -1410,8 +1413,8 @@ void RdfMultifileParser::parseFileAndPushBatches(
 RdfMultifileParser::RdfMultifileParser(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     const EncodedIriManager* encodedIriManager,
-    ad_utility::MemorySize bufferSize)
-    : RdfParserBase(encodedIriManager) {
+    ad_utility::MemorySize bufferSize, bool useRelaxedParsing)
+    : RdfParserBase(encodedIriManager), useRelaxedParsing_{useRelaxedParsing} {
   // Feed all the input files to the `parsingQueue_`.
   auto makeParsers = [files = std::move(files), bufferSize, this]() mutable {
     for (auto& file : files) {
