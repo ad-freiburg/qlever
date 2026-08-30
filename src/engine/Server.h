@@ -18,7 +18,6 @@
 #include <vector>
 
 #include "backports/filesystem.h"
-#include "engine/ExecuteUpdate.h"
 #include "engine/HttpApiHelpers.h"
 #include "engine/KeepPreviousIndexDirs.h"
 #include "engine/MaterializedViews.h"
@@ -394,15 +393,6 @@ class Server {
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
           const RequestT& request, std::string_view operation,
           std::string_view clientIp = {});
-  // Execute an update operation. The function must have exclusive access to the
-  // DeltaTriples object.
-  UpdateMetadata processUpdateImpl(
-      const PlannedQuery& plannedUpdate,
-      ad_utility::SharedCancellationHandle cancellationHandle,
-      DeltaTriples& deltaTriples,
-      ad_utility::timer::TimeTracer& tracer =
-          ad_utility::timer::DEFAULT_TIME_TRACER);
-
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
   CPP_template(typename Function, typename T = std::invoke_result_t<Function>)(

@@ -14,6 +14,7 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
+#include "engine/ExecuteUpdate.h"
 #include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
