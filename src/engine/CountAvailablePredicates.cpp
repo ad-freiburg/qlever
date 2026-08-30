@@ -174,14 +174,24 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   AD_LOG_DEBUG << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
-  ad_utility::HashMap<size_t, size_t> patternCounts;
+  // The pattern indices are dense, so the counts are kept in a vector, which
+  // is much faster than a hash map for the hundreds of millions of rows of a
+  // large knowledge graph. The last slot counts the entities without a
+  // pattern (`Pattern::NoPattern`).
+  std::vector<size_t> patternCounts(patterns.size() + 1, 0);
   // Note: In contrast to `computePatternTrick` the subjects don't have to be
   // deduplicated, because the `ql:has-pattern` relation contains exactly one
   // triple per entity.
-  auto countPatterns = [&patternCounts, patternColumn](const auto& idTable) {
+  auto countPatterns = [&patternCounts, &patterns,
+                        patternColumn](const auto& idTable) {
     for (Id patternId : idTable.getColumn(patternColumn)) {
       AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
-      patternCounts[patternId.getInt()]++;
+      size_t patternIdx = patternId.getInt();
+      if (patternIdx >= patterns.size()) {
+        AD_CONTRACT_CHECK(patternIdx == Pattern::NoPattern);
+        patternIdx = patterns.size();
+      }
+      patternCounts[patternIdx]++;
     }
   };
   // The subresult is lazy unless it was already fully materialized (for
@@ -194,10 +204,12 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
     }
   }
 
-  AD_LOG_DEBUG << "Using " << patternCounts.size()
-               << " patterns for computing the result" << std::endl;
-  for (const auto& [patternIdx, count] : patternCounts) {
-    AD_CORRECTNESS_CHECK(patternIdx < patterns.size());
+  // Entities without a pattern contribute no predicates.
+  for (size_t patternIdx = 0; patternIdx < patterns.size(); ++patternIdx) {
+    size_t count = patternCounts[patternIdx];
+    if (count == 0) {
+      continue;
+    }
     for (const auto& predicate : patterns[patternIdx]) {
       predicateCounts[predicate] += count;
     }
