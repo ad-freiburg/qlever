@@ -1,6 +1,11 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2018 The QLever Authors, in particular:
+//
+// 2018 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H

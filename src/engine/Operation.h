@@ -1,7 +1,12 @@
-// Copyright 2015 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>    [2015 - 2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2018 - 2024]
+// Copyright 2015 - 2024 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2018 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_OPERATION_H
 #define QLEVER_SRC_ENGINE_OPERATION_H

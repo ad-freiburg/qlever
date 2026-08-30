@@ -1,7 +1,12 @@
-//  Copyright 2024 - 2025, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2024 - 2025 The QLever Authors, in particular:
+//
+// 2024 - 2025 Jonathan Zeller <github@Jonathan24680>, UFR
+// 2024 - 2025 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>

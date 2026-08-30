@@ -1,8 +1,12 @@
-// Copyright 2019, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2019      Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
-//   2022-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2019 - 2025 The QLever Authors, in particular:
+//
+// 2019 Florian Kramer <florian.kramer@neptun.uni-freiburg.de>, UFR
+// 2022 - 2025 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H
 #define QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H
