@@ -632,8 +632,33 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   // Prune the blocks of one side's scan using the bounding rectangle of the
   // other (smaller) side, which is only known at execution time.
   std::chrono::milliseconds timeBlockPrefilter{0};
+  auto originalLeft = childLeft;
+  auto originalRight = childRight;
   std::tie(childLeft, childRight) = applyRuntimeGeoBlockPrefilter(
       childLeft, childRight, joinVarLeft, joinVarRight, timeBlockPrefilter);
+
+  // If a side was replaced by a tree with prefiltered blocks, wire the
+  // replacement's runtime information into the tree in place of the
+  // original's, which would otherwise be shown as "not yet started" although
+  // the replacement does the actual work.
+  auto relinkRuntimeInfo =
+      [this](const std::shared_ptr<QueryExecutionTree>& original,
+             const std::shared_ptr<QueryExecutionTree>& replacement) {
+        if (original == replacement) {
+          return;
+        }
+        auto originalRti =
+            original->getRootOperation()->getRuntimeInfoPointer();
+        auto* replacementOp = replacement->getRootOperation().get();
+        replacementOp->createRuntimeInfoFromEstimates(rootRuntimeInfo());
+        for (auto& childRti : runtimeInfo().children_) {
+          if (childRti == originalRti) {
+            childRti = replacementOp->getRuntimeInfoPointer();
+          }
+        }
+      };
+  relinkRuntimeInfo(originalLeft, childLeft);
+  relinkRuntimeInfo(originalRight, childRight);
 
   // If a side contains a block-prefiltered scan (the prefilter may have been
   // forwarded through sorts and joins), remember the unprefiltered row total

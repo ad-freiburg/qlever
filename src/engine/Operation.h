@@ -303,6 +303,13 @@ class Operation {
     return _runtimeInfo;
   }
 
+  // The root of the runtime information tree this operation belongs to.
+  // Needed when an operation replaces a child tree at execution time and has
+  // to wire the replacement's runtime information into the tree.
+  std::shared_ptr<const RuntimeInformation> rootRuntimeInfo() const {
+    return _rootRuntimeInfo;
+  }
+
   RuntimeInformationWholeQuery& getRuntimeInfoWholeQuery() {
     return _runtimeInfoWholeQuery;
   }

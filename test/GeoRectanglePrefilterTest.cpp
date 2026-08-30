@@ -457,6 +457,8 @@ TEST_P(GeoRectanglePrefilterSchemeTest,
   sj = sj->addChild(valuesTree, pointVar);
   sj = sj->addChild(joinTree, wktVar);
 
+  sj->createRuntimeInfoFromEstimates(sj->getRuntimeInfoPointer());
+
   // Each subject has exactly one geometry, so the join is 1:1 and the result
   // is the same as with the bare scan: 2 x 3 = 6 rows.
   auto result = sj->computeResultOnlyForTesting();
@@ -468,6 +470,13 @@ TEST_P(GeoRectanglePrefilterSchemeTest,
   ASSERT_TRUE(details.contains("num-geoms-before-block-prefilter"));
   EXPECT_GT(details.at("num-geoms-before-block-prefilter").get<int64_t>(),
             details.at("num-geoms-after-block-prefilter").get<int64_t>());
+
+  // The runtime information shows the actually executed (prefiltered)
+  // replacement of the join side, not the "not yet started" original.
+  for (const auto& childRti : sj->runtimeInfo().children_) {
+    EXPECT_NE(childRti->status_, RuntimeInformation::Status::notStarted)
+        << childRti->descriptor_;
+  }
 }
 
 // With a type restriction on both geometry sides, the planner prefers the
