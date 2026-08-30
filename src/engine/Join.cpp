@@ -61,6 +61,13 @@ std::vector<QueryExecutionTree*> Join::getChildren() {
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Join::getUpdatedQueryExecutionTreeWithPrefilterApplied(
+    const std::vector<PrefilterVariablePair>& prefilters) const {
+  return impl_->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilters);
+}
+
+// _____________________________________________________________________________
 bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
   return impl_->columnOriginatesFromGraphOrUndef(variable);
 }
