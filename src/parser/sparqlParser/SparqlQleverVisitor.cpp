@@ -1628,14 +1628,25 @@ auto Visitor::visitInFreshQueryContext(Ctx* ctx)
         decltype(std::declval<SparqlQleverVisitor&>().visit(ctx))> {
   auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
   auto variablesBackup = std::exchange(visibleVariables_, {});
+  // The visited group starts a basic graph pattern of its own, but the basic
+  // graph pattern of the outer query continues afterwards (an `EXISTS` is part
+  // of a `FILTER`, which does not end it), so its blank node labels must be
+  // restored as well.
+  auto blankNodeLabelsBackup =
+      std::exchange(blankNodeLabelsInCurrentBasicGraphPattern_, {});
   // The restoring assignments are moves and cannot throw, so the cleanup
   // is safe also during stack unwinding.
   static_assert(std::is_nothrow_move_assignable_v<ParsedQuery>);
   static_assert(std::is_nothrow_move_assignable_v<std::vector<Variable>>);
-  absl::Cleanup restoreBackups{[this, &queryBackup, &variablesBackup]() {
-    parsedQuery_ = std::move(queryBackup);
-    visibleVariables_ = std::move(variablesBackup);
-  }};
+  static_assert(std::is_nothrow_move_assignable_v<
+                decltype(blankNodeLabelsInCurrentBasicGraphPattern_)>);
+  absl::Cleanup restoreBackups{
+      [this, &queryBackup, &variablesBackup, &blankNodeLabelsBackup]() {
+        parsedQuery_ = std::move(queryBackup);
+        visibleVariables_ = std::move(variablesBackup);
+        blankNodeLabelsInCurrentBasicGraphPattern_ =
+            std::move(blankNodeLabelsBackup);
+      }};
   auto result = visit(ctx);
   // NOTE: The following moves happen before `restoreBackups` runs, which then
   // assigns the backups over the moved-from members.

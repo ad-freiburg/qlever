@@ -1825,6 +1825,14 @@ TEST(SparqlParser, blankNodeLabelsAreScopedToASingleBasicGraphPattern) {
               {{bn("who"), iri("<homepage>"), Var{"?homepage"}},
                {bn("who"), iri("<schoolHomepage>"), Var{"?schoolPage"}}}))));
 
+  // Also not when the `FILTER` contains an `EXISTS`, whose argument is parsed
+  // in a fresh context.
+  expectQuery("ASK { _:who <p> ?x FILTER EXISTS { ?y <q> ?z } _:who <r> ?w }",
+              m::AskQuery(m::GraphPattern(
+                  false, {"EXISTS { ?y <q> ?z }"},
+                  m::OrderedTriples({{bn("who"), iri("<p>"), Var{"?x"}},
+                                     {bn("who"), iri("<r>"), Var{"?w"}}}))));
+
   expectQuery("ASK { _:who <p> _:who . _:who <q> ?x }",
               m::AskQuery(m::GraphPattern(
                   m::OrderedTriples({{bn("who"), iri("<p>"), bn("who")},

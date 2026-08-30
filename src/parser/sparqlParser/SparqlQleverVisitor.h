@@ -649,12 +649,12 @@ class SparqlQleverVisitor {
     std::vector<Variable> visibleVariables_;
   };
 
-  // Visit the given context with a fresh (initially empty) `parsedQuery_` and
-  // `visibleVariables_` and restore the previous state afterwards, also when
-  // an exception is thrown. This is used for the parts of a query that are
-  // parsed in a clean environment, without access to the variables of the
-  // outer query, namely the argument of `EXISTS` and the definition of a
-  // named subquery.
+  // Visit the given context with a fresh (initially empty) `parsedQuery_`,
+  // `visibleVariables_`, and `blankNodeLabelsInCurrentBasicGraphPattern_` and
+  // restore the previous state afterwards, also when an exception is thrown.
+  // This is used for the parts of a query that are parsed in a clean
+  // environment, without access to the variables of the outer query, namely the
+  // argument of `EXISTS` and the definition of a named subquery.
   template <typename Ctx>
   auto visitInFreshQueryContext(Ctx* ctx)
       -> FreshQueryContextResult<
