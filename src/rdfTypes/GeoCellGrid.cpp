@@ -9,9 +9,9 @@
 
 #include "rdfTypes/GeoCellGrid.h"
 
-#include <algorithm>
 #include <cmath>
 
+#include "backports/algorithm.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -50,9 +50,11 @@ GeoCellGrid::Cell GeoCellGrid::sentinelCell() const {
 
 // ____________________________________________________________________________
 uint64_t GeoCellGrid::gridCoordinate(double normalized) const {
-  double raw = std::floor(normalized * numCellsPerDimension());
-  return static_cast<uint64_t>(
-      std::clamp(raw, 0.0, static_cast<double>(numCellsPerDimension() - 1)));
+  // The number of cells per dimension is at most 2^31, so the conversion to
+  // `double` (exact up to 2^53) is lossless.
+  double numCells = static_cast<double>(numCellsPerDimension());
+  double raw = std::floor(normalized * numCells);
+  return static_cast<uint64_t>(std::clamp(raw, 0.0, numCells - 1.0));
 }
 
 // ____________________________________________________________________________
@@ -138,7 +140,7 @@ GeoCellGrid::CellRanges GeoCellGrid::coveringCellRanges(double minLng,
   }
   // Sort and merge into ascending, non-overlapping ranges (adjacent ranges
   // are merged as well).
-  std::sort(ranges.begin(), ranges.end());
+  ql::ranges::sort(ranges);
   CellRanges merged;
   for (const auto& range : ranges) {
     if (!merged.empty() && range.first <= merged.back().second + 1) {
