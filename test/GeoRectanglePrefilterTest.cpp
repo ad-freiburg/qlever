@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "./util/IndexTestHelpers.h"
+#include "QueryPlannerTestHelpers.h"
 #include "QueryRewriteUtilTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -43,6 +44,10 @@ std::string geoTurtleInput() {
       wktTriple("<cell0b>", "LINESTRING(-102 -50, -103 -50)"),
       wktTriple("<spanning>", "LINESTRING(-10 10, 20 20)"),
       "<pointNear> <hasGeom> \"POINT(10.5 10.01)\"", wktDatatype, " . \n",
+      "<cell10a> <hasType> <T> . \n"
+      "<cell10b> <hasType> <T> . \n"
+      "<spanning> <hasType> <T> . \n"
+      "<pointNear> <hasType> <P> . \n",
       "<pointFar> <hasGeom> \"POINT(-100.5 -50.01)\"", wktDatatype, " . \n",
       [] {
         // A batch of far-away geometries, so that (in every scheme) there
@@ -456,6 +461,50 @@ TEST_P(GeoRectanglePrefilterSchemeTest,
 
   // The block prefilter was forwarded through the `Sort` and the `Join` down
   // to the scan of `?wkt`: fewer rows were read than the scan holds in total.
+  const auto& details = sj->runtimeInfo().details_;
+  ASSERT_TRUE(details.contains("num-geoms-before-block-prefilter"));
+  EXPECT_GT(details.at("num-geoms-before-block-prefilter").get<int64_t>(),
+            details.at("num-geoms-after-block-prefilter").get<int64_t>());
+}
+
+// With a type restriction on both geometry sides, the planner prefers the
+// plan whose geometry scan is sorted by the geometry variable (reachable for
+// the runtime block prefilter through the sort and join above the scan),
+// although the plan without the extra sort looks cheaper. End-to-end check:
+// the funnel of the executed spatial join shows pruned blocks.
+TEST_P(GeoRectanglePrefilterSchemeTest, plannerPrefersPrefilterablePlan) {
+  auto* qec = geoQec(2, GetParam());
+  auto qet = queryPlannerTestHelpers::parseAndPlan(R"(
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    SELECT * WHERE {
+      ?a <hasType> <P> . ?a <hasGeom> ?g1 .
+      ?b <hasType> <T> . ?b <hasGeom> ?g2 .
+      FILTER (geof:metricDistance(?g1, ?g2) <= 200000)
+    })",
+                                                   qec);
+
+  // Find the spatial join in the plan.
+  std::function<const SpatialJoin*(const QueryExecutionTree&)> findSj =
+      [&findSj](const QueryExecutionTree& tree) -> const SpatialJoin* {
+    if (const auto* sj =
+            dynamic_cast<const SpatialJoin*>(tree.getRootOperation().get())) {
+      return sj;
+    }
+    for (const auto* child :
+         std::as_const(*tree.getRootOperation()).getChildren()) {
+      if (const auto* sj = findSj(*child)) {
+        return sj;
+      }
+    }
+    return nullptr;
+  };
+  const auto* sj = findSj(qet);
+  ASSERT_NE(sj, nullptr);
+
+  // Execute and check that the runtime block prefilter pruned the scan of
+  // the larger side through the join with the type restriction.
+  auto result = qet.getRootOperation()->getResult();
+  ASSERT_NE(result, nullptr);
   const auto& details = sj->runtimeInfo().details_;
   ASSERT_TRUE(details.contains("num-geoms-before-block-prefilter"));
   EXPECT_GT(details.at("num-geoms-before-block-prefilter").get<int64_t>(),

@@ -867,6 +867,7 @@ auto QueryPlanner::seedWithScansAndText(
       auto plan = makeSubtreePlan<SpatialJoin>(
           _qec, config.toSpatialJoinConfiguration(), std::nullopt,
           std::nullopt);
+      registerSpatialJoinForPrefilterPreference(*plan._qet->getRootOperation());
       if (ql::starts_with(input, NEAREST_NEIGHBORS)) {
         plan._qet->getRootOperation()->addWarning(absl::StrCat(
             "The special predicate <nearest-neighbors:...> is deprecated due "
@@ -1366,6 +1367,16 @@ std::string QueryPlanner::getPruningKey(
     }
   }
 
+  // For the geometry variables of the query's spatial joins, plans that
+  // contain a scan prunable by the runtime block prefilter are kept alongside
+  // the cheapest plan with the same result order (see
+  // `hasPrefilterableGeoScan`).
+  for (const auto& variable : spatialJoinPrefilterVariables_) {
+    if (hasPrefilterableGeoScan(*plan._qet, variable)) {
+      os << " geoPrefilter: " << variable.name();
+    }
+  }
+
   os << ' ' << plan._idsOfIncludedNodes;
   os << " f: ";
   os << ' ' << plan._idsOfIncludedFilters;
@@ -1800,6 +1811,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     if (!sj) {
       plans.push_back({filterExpression, std::nullopt});
     } else {
+      registerSpatialJoinForPrefilterPreference(*sj);
       // Substitution of a `SpatialJoin` plan may be forced only if attaching
       // one more child completes it.
       bool forceSubstitution = sj->getChildren().size() == 1;
@@ -2242,11 +2254,77 @@ void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
 }
 
 // _________________________________________________________________________________
+void QueryPlanner::registerSpatialJoinForPrefilterPreference(
+    const Operation& spatialJoin) {
+  const auto& sj = dynamic_cast<const SpatialJoin&>(spatialJoin);
+  auto [left, right] = sj.getSpatialJoinVariables();
+  spatialJoinPrefilterVariables_.insert(std::move(left));
+  spatialJoinPrefilterVariables_.insert(std::move(right));
+}
+
+// _________________________________________________________________________________
+bool QueryPlanner::hasPrefilterableGeoScan(const QueryExecutionTree& tree,
+                                           const Variable& variable) {
+  const Operation* op = tree.getRootOperation().get();
+  if (const auto* scan = dynamic_cast<const IndexScan*>(op)) {
+    auto sortedVariable =
+        scan->getSortedVariableAndMetadataColumnIndexForPrefiltering();
+    return sortedVariable.has_value() &&
+           sortedVariable.value().first == variable;
+  }
+  if (dynamic_cast<const Sort*>(op) != nullptr ||
+      dynamic_cast<const Join*>(op) != nullptr) {
+    return ql::ranges::any_of(
+        std::as_const(*op).getChildren(), [&variable](const auto* child) {
+          return hasPrefilterableGeoScan(*child, variable);
+        });
+  }
+  return false;
+}
+
+// _________________________________________________________________________________
+size_t QueryPlanner::numPrefilterableSpatialJoinSides(const SubtreePlan& plan) {
+  auto* sj = dynamic_cast<SpatialJoin*>(plan._qet->getRootOperation().get());
+  if (sj == nullptr || !sj->isConstructed()) {
+    return 0;
+  }
+  auto [leftVariable, rightVariable] = sj->getSpatialJoinVariables();
+  auto children = sj->getChildren();
+  AD_CORRECTNESS_CHECK(children.size() == 2);
+  // The runtime block prefilter prunes the side with the larger size
+  // estimate, using the bounding rectangle of the (materialized) smaller
+  // side. Prefilterability of the smaller side is therefore worthless, and
+  // preferring it would force an unnecessary scan and sort of all geometries
+  // into that side.
+  bool leftIsLarger =
+      children.at(0)->getSizeEstimate() >= children.at(1)->getSizeEstimate();
+  return static_cast<size_t>(
+      hasPrefilterableGeoScan(*children.at(leftIsLarger ? 0 : 1),
+                              leftIsLarger ? leftVariable : rightVariable));
+}
+
+// _________________________________________________________________________________
 size_t QueryPlanner::findCheapestExecutionTree(
     const std::vector<SubtreePlan>& lastRow) const {
   AD_CONTRACT_CHECK(!lastRow.empty());
   checkCancellation();
-  auto compare = [this](const auto& a, const auto& b) {
+  // A complete spatial join whose sides can be pruned by its runtime block
+  // prefilter is preferred over any cheaper-looking plan with the same
+  // result: the cost estimates cannot account for the pruning, and in the
+  // worst case (no pruning) the preferred plan only pays an extra sort of
+  // rows that the spatial join has to parse anyway.
+  bool anyPrefilterable = !spatialJoinPrefilterVariables_.empty() &&
+                          ql::ranges::any_of(lastRow, [](const auto& plan) {
+                            return numPrefilterableSpatialJoinSides(plan) > 0;
+                          });
+  auto compare = [this, anyPrefilterable](const auto& a, const auto& b) {
+    if (anyPrefilterable) {
+      auto aSides = numPrefilterableSpatialJoinSides(a),
+           bSides = numPrefilterableSpatialJoinSides(b);
+      if (aSides != bSides) {
+        return aSides > bSides;
+      }
+    }
     auto aCost = a.getCostEstimate(), bCost = b.getCostEstimate();
     if (aCost == bCost && isInTestMode()) {
       // Make the tiebreaking deterministic for the unit tests.
@@ -3401,6 +3479,7 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       }
       auto spatialJoin =
           std::make_shared<SpatialJoin>(qec_, config, std::nullopt, right);
+      planner_.registerSpatialJoinForPrefilterPreference(*spatialJoin);
       auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
       candidatesOut.push_back(std::move(plan));
     };

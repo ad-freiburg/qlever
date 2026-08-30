@@ -753,6 +753,31 @@ class QueryPlanner {
       const std::vector<SubtreePlan>& lastRow) const;
   static size_t findSmallestExecutionTree(
       const std::vector<SubtreePlan>& lastRow);
+
+  // The geometry variables of the query's `SpatialJoin`s (empty for queries
+  // without spatial joins). Collected when spatial join plans are created,
+  // BEFORE the dynamic programming over the triples runs.
+  std::set<Variable> spatialJoinPrefilterVariables_;
+
+  // Remember the geometry variables of `spatialJoin` in
+  // `spatialJoinPrefilterVariables_`.
+  void registerSpatialJoinForPrefilterPreference(const Operation& spatialJoin);
+
+  // Return true iff `tree` contains an index scan whose first sort column is
+  // `variable`, with only prefilter-forwarding operations (`Sort`, `Join`)
+  // between the root and that scan, so that the runtime block prefilter of a
+  // spatial join on `variable` can prune the scan's blocks (see
+  // `SpatialJoin::applyRuntimeGeoBlockPrefilter`). For each variable in
+  // `spatialJoinPrefilterVariables_`, this is an additional pruning dimension
+  // (like the result order): the cheapest such plan is kept alongside the
+  // cheapest plan overall, and `findCheapestExecutionTree` prefers complete
+  // spatial joins with such children.
+  static bool hasPrefilterableGeoScan(const QueryExecutionTree& tree,
+                                      const Variable& variable);
+
+  // The number of children of a complete `SpatialJoin` at the root of `plan`
+  // for which `hasPrefilterableGeoScan` holds (0 for all other plans).
+  static size_t numPrefilterableSpatialJoinSides(const SubtreePlan& plan);
   static size_t findUniqueNodeIds(
       const std::vector<SubtreePlan>& connectedComponent,
       bool allowReplacementPlans = false);
