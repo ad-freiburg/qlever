@@ -60,16 +60,17 @@ struct LibSpatialJoinConfig {
   explicit LibSpatialJoinConfig(SpatialJoinType joinType)
       : LibSpatialJoinConfig(joinType, std::nullopt, std::nullopt) {}
 
-  // The constructor checks that `maxDist_` and `de9imFilter_` are only set
-  // together with their respective matching `joinType_`, because these
-  // fields are not independent of each other.
+  // The constructor checks that `maxDist_` is set if and only if the join
+  // type is `WITHIN_DIST`, and that `de9imFilter_` is set if and only if the
+  // join type is `DE9IM`, because these fields are not independent of each
+  // other.
   LibSpatialJoinConfig(SpatialJoinType joinType, std::optional<double> maxDist,
                        std::optional<De9imFilterString> de9imFilter)
       : joinType_{joinType}, maxDist_{maxDist}, de9imFilter_{de9imFilter} {
-    AD_CORRECTNESS_CHECK(!maxDist_.has_value() ||
-                         joinType_ == SpatialJoinType::WITHIN_DIST);
-    AD_CORRECTNESS_CHECK(!de9imFilter_.has_value() ||
-                         joinType_ == SpatialJoinType::DE9IM);
+    AD_CORRECTNESS_CHECK(maxDist_.has_value() ==
+                         (joinType_ == SpatialJoinType::WITHIN_DIST));
+    AD_CORRECTNESS_CHECK(de9imFilter_.has_value() ==
+                         (joinType_ == SpatialJoinType::DE9IM));
   }
 };
 
