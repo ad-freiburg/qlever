@@ -44,11 +44,8 @@
 
 namespace {
 
-// Check if `path` is built only from `SEQUENCE`/`INVERSE` modifiers over
-// plain IRIs, i.e. it is equivalent to a chain of simple triples (with
-// direction flips for the inverted parts) and does not need actual property
-// path evaluation (as opposed to `ALTERNATIVE`, `NEGATED`, or a repetition
-// via `MinMaxPath`).
+// True if `path` is built only from `SEQUENCE`/`INVERSE` over plain IRIs,
+// i.e. equivalent to a chain of simple triples.
 bool isSimpleSequenceOrInversePath(const PropertyPath& path) {
   return path.handlePath<bool>(
       [](const ad_utility::triple_component::Iri&) { return true; },
@@ -105,10 +102,9 @@ void MaterializedViewWriter::throwIfLimitOffset() const {
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::warnAboutPatternRewriteObstacles() {
-  // Query planning has already rewritten `parsedQuery_` in place by the time
-  // this constructor runs, so re-parse the original query text to get an
-  // unmodified pattern to analyze (same reason as in
-  // `MaterializedView::MaterializedView`).
+  // Query planning has already rewritten `parsedQuery_` in place, so
+  // re-parse the original text (as `MaterializedView::MaterializedView`
+  // does) to analyze it unmodified.
   EncodedIriManager encodedIriManager;
   auto reparsed = SparqlParser::parseQuery(&encodedIriManager,
                                            parsedQuery_._originalString, {});
@@ -118,10 +114,8 @@ void MaterializedViewWriter::warnAboutPatternRewriteObstacles() {
     parsedQuery_.addWarning(std::move(warning));
   };
 
-  // Blank nodes and the `[ ... ]` shorthand are parsed into unnamed internal
-  // variables (see `QLEVER_INTERNAL_VARIABLE_PREFIX` and
-  // `QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX`), which can never be selected
-  // as a column of the view and therefore block query-pattern rewriting.
+  // Blank nodes and `[ ... ]` become unnamed internal variables, which can
+  // never be selected as a view column.
   parsedQuery::VariableCounter variableCounter;
   variableCounter(reparsed._rootGraphPattern);
   bool hasBlankNodeOrShorthand =
@@ -136,10 +130,8 @@ void MaterializedViewWriter::warnAboutPatternRewriteObstacles() {
         "selected variable instead for query rewriting to work.");
   }
 
-  // Pattern-based (star/chain) query rewriting only ever looks at the
-  // top-level triples of the view's query (see `getTriplesForPatternRewrite`),
-  // so it suffices to check those for a property path that is only built from
-  // `/` and/or `^` and could equivalently be written as simple triples.
+  // Pattern-based rewriting (see `getTriplesForPatternRewrite`) only looks at
+  // the top-level triples, so checking those suffices.
   bool hasSimplePropertyPath = ql::ranges::any_of(
       reparsed._rootGraphPattern._graphPatterns,
       [](const parsedQuery::GraphPatternOperation& op) {
@@ -149,9 +141,8 @@ void MaterializedViewWriter::warnAboutPatternRewriteObstacles() {
         return ql::ranges::any_of(
             std::get<parsedQuery::BasicGraphPattern>(op)._triples,
             [](const SparqlTriple& triple) {
-              // `getSimplePredicate()` already returns a value for a plain
-              // IRI predicate (no `/`/`^` involved), so excluding those here
-              // leaves only genuine, `/`/`^`-only property paths.
+              // Exclude plain IRI predicates, for which `getSimplePredicate()`
+              // returns a value.
               return std::holds_alternative<PropertyPath>(triple.p_) &&
                      !triple.getSimplePredicate().has_value() &&
                      isSimpleSequenceOrInversePath(

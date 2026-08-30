@@ -117,18 +117,10 @@ class MaterializedViewWriter {
   // subquery.
   void throwIfLimitOffset() const;
 
-  // Called from the constructor. Adds a warning (logged via `AD_LOG_WARN` and
-  // stored in `parsedQuery_.warnings()`, so `writeViewToDisk` can return it to
-  // the caller) for each of the following constructs that would prevent the
-  // pattern-based (star/chain) query rewriting described in
-  // `MaterializedViewsQueryAnalysis` from applying to this view, even though
-  // fixing it is easy for the user: blank nodes or the `[ ... ]` shorthand
-  // (both become unnamed, unselectable internal variables), and a property
-  // path built only from `/` and/or `^` over plain IRIs (equivalent to a chain
-  // of simple triples). Re-parses `parsedQuery_._originalString` because query
-  // planning has already rewritten `parsedQuery_` itself by the time the
-  // constructor runs (see `MaterializedView::MaterializedView` for the same
-  // reason to re-parse).
+  // Called from the constructor. Warns (via `AD_LOG_WARN` and
+  // `parsedQuery_.warnings()`) if the query uses blank nodes/`[ ... ]` or a
+  // `/`/`^`-only property path, both of which block pattern-based query
+  // rewriting even though avoiding them is easy.
   void warnAboutPatternRewriteObstacles();
 
   // Get the base filename for the view's permutation and metadata files. This
@@ -499,10 +491,8 @@ class MaterializedViewsManager {
   // permutation if the query result is not correctly sorted already. The
   // `plannedQuery` is executed with the normal query memory limit.
   //
-  // Returns the warnings collected while validating the query (currently:
-  // blank nodes/`[ ... ]` and simple `/`/`^`-only property paths that block
-  // pattern-based query rewriting), so that the caller can surface them to
-  // the user.
+  // Returns warnings about constructs in the query that block pattern-based
+  // rewriting (blank nodes/`[ ... ]`, simple `/`/`^`-only property paths).
   std::vector<std::string> writeViewToDisk(
       std::string name, const qlever::PlannedQuery& plannedQuery,
       ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
