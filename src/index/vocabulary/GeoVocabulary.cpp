@@ -92,11 +92,8 @@ template <typename V>
 uint64_t GeoVocabulary<V>::cellOfPosition(uint64_t position) const {
   AD_CORRECTNESS_CHECK(!cellRuns_.empty());
   // Find the last run that starts at or before `position`.
-  auto it = std::upper_bound(
-      cellRuns_.begin(), cellRuns_.end(), position,
-      [](uint64_t pos, const std::pair<uint64_t, uint64_t>& run) {
-        return pos < run.first;
-      });
+  auto it = ql::ranges::upper_bound(cellRuns_, position, {},
+                                    &std::pair<uint64_t, uint64_t>::first);
   AD_CORRECTNESS_CHECK(it != cellRuns_.begin());
   return (it - 1)->second;
 }

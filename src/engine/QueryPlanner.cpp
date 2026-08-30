@@ -2323,8 +2323,8 @@ size_t QueryPlanner::findCheapestExecutionTree(
                           });
   auto compare = [this, anyPrefilterable](const auto& a, const auto& b) {
     if (anyPrefilterable) {
-      auto aSides = numPrefilterableSpatialJoinSides(a),
-           bSides = numPrefilterableSpatialJoinSides(b);
+      auto aSides = numPrefilterableSpatialJoinSides(a);
+      auto bSides = numPrefilterableSpatialJoinSides(b);
       if (aSides != bSides) {
         return aSides > bSides;
       }

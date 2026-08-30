@@ -339,7 +339,6 @@ class IndexScan final : public Operation {
     };
   }
 
- public:
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;

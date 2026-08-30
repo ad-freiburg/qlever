@@ -40,7 +40,8 @@ struct GeoRectangle {
 // conservative: every point within `distanceMeters` of the input rectangle is
 // contained in the result. Near the poles and across the antimeridian the
 // longitude range degrades to [-180, 180].
-GeoRectangle padGeoRectangle(GeoRectangle rectangle, double distanceMeters);
+GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
+                             double distanceMeters);
 
 // The four cell assignment schemes of the `GeoCellGrid` below. All schemes
 // use square-ish base grids of 2^level x 2^level cells:

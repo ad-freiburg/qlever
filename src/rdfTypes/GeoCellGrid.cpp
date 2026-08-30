@@ -11,15 +11,16 @@
 
 #include <absl/numeric/bits.h>
 
-#include <algorithm>
 #include <cmath>
 
+#include "backports/algorithm.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
 
 // ____________________________________________________________________________
-GeoRectangle padGeoRectangle(GeoRectangle rectangle, double distanceMeters) {
+GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
+                             double distanceMeters) {
   AD_CONTRACT_CHECK(distanceMeters >= 0);
   // One degree of latitude is at least 110'567 m everywhere, so dividing by
   // 110'000 overestimates the padding.
@@ -32,9 +33,8 @@ GeoRectangle padGeoRectangle(GeoRectangle rectangle, double distanceMeters) {
   double minLng = -180.0;
   double maxLng = 180.0;
   if (maxAbsLat < 89.0) {
-    constexpr double pi = 3.14159265358979323846;
     double dLng =
-        distanceMeters / (110'000.0 * std::cos(maxAbsLat * pi / 180.0));
+        distanceMeters / (110'000.0 * std::cos(maxAbsLat * M_PI / 180.0));
     minLng = rectangle.minLng_ - dLng;
     maxLng = rectangle.maxLng_ + dLng;
     if (minLng < -180.0 || maxLng > 180.0) {
@@ -49,14 +49,15 @@ GeoRectangle padGeoRectangle(GeoRectangle rectangle, double distanceMeters) {
 
 // ____________________________________________________________________________
 std::string_view toString(GeoCellGridScheme scheme) {
+  using enum GeoCellGridScheme;
   switch (scheme) {
-    case GeoCellGridScheme::Flat:
+    case Flat:
       return "flat";
-    case GeoCellGridScheme::Flat4Shifts:
+    case Flat4Shifts:
       return "flat-4-shifts";
-    case GeoCellGridScheme::Hierarchical:
+    case Hierarchical:
       return "hierarchical";
-    case GeoCellGridScheme::Hierarchical3Shifts:
+    case Hierarchical3Shifts:
       return "hierarchical-3-shifts";
   }
   AD_FAIL();
@@ -65,9 +66,8 @@ std::string_view toString(GeoCellGridScheme scheme) {
 // ____________________________________________________________________________
 std::optional<GeoCellGridScheme> geoCellGridSchemeFromString(
     std::string_view name) {
-  for (auto scheme : {GeoCellGridScheme::Flat, GeoCellGridScheme::Flat4Shifts,
-                      GeoCellGridScheme::Hierarchical,
-                      GeoCellGridScheme::Hierarchical3Shifts}) {
+  using enum GeoCellGridScheme;
+  for (auto scheme : {Flat, Flat4Shifts, Hierarchical, Hierarchical3Shifts}) {
     if (name == toString(scheme)) {
       return scheme;
     }
@@ -84,13 +84,14 @@ GeoCellGrid::GeoCellGrid(uint8_t level, GeoCellGridScheme scheme)
 
 // ____________________________________________________________________________
 uint64_t GeoCellGrid::numShifts() const {
+  using enum GeoCellGridScheme;
   switch (scheme_) {
-    case GeoCellGridScheme::Flat:
-    case GeoCellGridScheme::Hierarchical:
+    case Flat:
+    case Hierarchical:
       return 1;
-    case GeoCellGridScheme::Flat4Shifts:
+    case Flat4Shifts:
       return 4;
-    case GeoCellGridScheme::Hierarchical3Shifts:
+    case Hierarchical3Shifts:
       return 3;
   }
   AD_FAIL();
@@ -107,9 +108,11 @@ GeoCellGrid::Cell GeoCellGrid::sentinelCell() const {
 
 // ____________________________________________________________________________
 uint64_t GeoCellGrid::gridCoordinate(double normalized) const {
-  double raw = std::floor(normalized * numCellsPerDimension());
-  return static_cast<uint64_t>(
-      std::clamp(raw, 0.0, static_cast<double>(numCellsPerDimension() - 1)));
+  // The number of cells per dimension is at most 2^31, so the conversion to
+  // `double` (exact up to 2^53) is lossless.
+  double numCells = static_cast<double>(numCellsPerDimension());
+  double raw = std::floor(normalized * numCells);
+  return static_cast<uint64_t>(std::clamp(raw, 0.0, numCells - 1.0));
 }
 
 namespace {
@@ -167,11 +170,10 @@ GeoCellGrid::Cell GeoCellGrid::flat4ShiftsCell(double u1, double v1, double u2,
   // with a set bit. The shifted grid coordinate: subtract half a cell before
   // flooring, clamp at the edges (the border cells of a shifted copy are
   // 1.5 cells wide, which is fine for conservative containment).
-  auto coordinate = [this](double normalized, bool shifted) {
-    double raw =
-        std::floor(normalized * numCellsPerDimension() - (shifted ? 0.5 : 0.0));
-    return static_cast<uint64_t>(
-        std::clamp(raw, 0.0, static_cast<double>(numCellsPerDimension() - 1)));
+  auto coordinate = [numCells = static_cast<double>(numCellsPerDimension())](
+                        double normalized, bool shifted) {
+    double raw = std::floor(normalized * numCells - (shifted ? 0.5 : 0.0));
+    return static_cast<uint64_t>(std::clamp(raw, 0.0, numCells - 1.0));
   };
   // Try the four copies in a hash-dependent order and take the first one
   // whose cell contains the box: this spreads small geometries (which fit
@@ -270,14 +272,15 @@ GeoCellGrid::Cell GeoCellGrid::cellFromBoundingBox(
   double u2 = (ur.getLng() + 180.0) / 360.0;
   double v1 = (ll.getLat() + 90.0) / 180.0;
   double v2 = (ur.getLat() + 90.0) / 180.0;
+  using enum GeoCellGridScheme;
   switch (scheme_) {
-    case GeoCellGridScheme::Flat:
+    case Flat:
       return flatCell(u1, v1, u2, v2);
-    case GeoCellGridScheme::Flat4Shifts:
+    case Flat4Shifts:
       return flat4ShiftsCell(u1, v1, u2, v2, mixHash(llBits ^ (urBits << 1)));
-    case GeoCellGridScheme::Hierarchical:
+    case Hierarchical:
       return hierarchicalCell(u1, v1, u2, v2);
-    case GeoCellGridScheme::Hierarchical3Shifts:
+    case Hierarchical3Shifts:
       return hierarchical3ShiftsCell(u1, v1, u2, v2);
   }
   AD_FAIL();
@@ -308,11 +311,10 @@ void GeoCellGrid::flatCover(double u1, double v1, double u2, double v2,
 // ____________________________________________________________________________
 void GeoCellGrid::flat4ShiftsCover(double u1, double v1, double u2, double v2,
                                    CellRanges& ranges) const {
-  auto coordinate = [this](double normalized, bool shifted) {
-    double raw =
-        std::floor(normalized * numCellsPerDimension() - (shifted ? 0.5 : 0.0));
-    return static_cast<uint64_t>(
-        std::clamp(raw, 0.0, static_cast<double>(numCellsPerDimension() - 1)));
+  auto coordinate = [numCells = static_cast<double>(numCellsPerDimension())](
+                        double normalized, bool shifted) {
+    double raw = std::floor(normalized * numCells - (shifted ? 0.5 : 0.0));
+    return static_cast<uint64_t>(std::clamp(raw, 0.0, numCells - 1.0));
   };
   for (uint64_t s = 0; s < 4; ++s) {
     bool sx = (s & 1) != 0;
@@ -414,27 +416,28 @@ GeoCellGrid::CellRanges GeoCellGrid::coveringCellRanges(double minLng,
   double v1 = (minLat + 90.0) / 180.0;
   double v2 = (maxLat + 90.0) / 180.0;
   CellRanges ranges;
+  using enum GeoCellGridScheme;
   switch (scheme_) {
-    case GeoCellGridScheme::Flat:
+    case Flat:
       flatCover(u1, v1, u2, v2, ranges);
       ranges.emplace_back(sentinelCell(), sentinelCell());
       break;
-    case GeoCellGridScheme::Flat4Shifts:
+    case Flat4Shifts:
       flat4ShiftsCover(u1, v1, u2, v2, ranges);
       ranges.emplace_back(sentinelCell(), sentinelCell());
       break;
-    case GeoCellGridScheme::Hierarchical:
+    case Hierarchical:
       // The roots (which take the sentinel's role) are always part of the
       // cover, because they intersect every rectangle.
       hierarchicalCover(u1, v1, u2, v2, 0, ranges);
       break;
-    case GeoCellGridScheme::Hierarchical3Shifts:
+    case Hierarchical3Shifts:
       hierarchical3ShiftsCover(u1, v1, u2, v2, ranges);
       break;
   }
   // Sort and merge into ascending, non-overlapping ranges (adjacent ranges
   // are merged as well).
-  std::sort(ranges.begin(), ranges.end());
+  ql::ranges::sort(ranges);
   CellRanges merged;
   for (const auto& range : ranges) {
     if (!merged.empty() && range.first <= merged.back().second + 1) {
@@ -464,11 +467,8 @@ bool GeoCellIdPrefilter::canBeSkipped(uint64_t vocabIndexBits) const {
   }
   // Find the first keep-range that ends after the index; the index is kept
   // iff that range also starts at or before it.
-  auto it = std::upper_bound(
-      keepRanges_.begin(), keepRanges_.end(), vocabIndexBits,
-      [](uint64_t bits, const std::pair<uint64_t, uint64_t>& range) {
-        return bits < range.second;
-      });
+  auto it = ql::ranges::upper_bound(keepRanges_, vocabIndexBits, {},
+                                    &std::pair<uint64_t, uint64_t>::second);
   return it == keepRanges_.end() || vocabIndexBits < it->first;
 }
 

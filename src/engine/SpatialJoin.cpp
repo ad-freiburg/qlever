@@ -664,25 +664,24 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   // forwarded through sorts and joins), remember the unprefiltered row total
   // of that scan for the runtime statistics.
   auto numRowsBeforePrefilter =
-      [](const std::shared_ptr<QueryExecutionTree>& child)
-      -> std::optional<uint64_t> {
-    auto impl = [](const QueryExecutionTree& tree,
-                   const auto& self) -> std::optional<uint64_t> {
-      const auto* scan =
-          dynamic_cast<const IndexScan*>(tree.getRootOperation().get());
-      if (scan != nullptr) {
-        return scan->numBlockRowsBeforePrefilter();
-      }
-      const auto& op = std::as_const(*tree.getRootOperation());
-      for (const QueryExecutionTree* subtree : op.getChildren()) {
-        if (auto result = self(*subtree, self)) {
-          return result;
-        }
-      }
-      return std::nullopt;
-    };
-    return impl(*child, impl);
-  };
+      [](const std::shared_ptr<QueryExecutionTree>& child) {
+        auto impl = [](const QueryExecutionTree& tree,
+                       const auto& self) -> std::optional<uint64_t> {
+          const auto* scan =
+              dynamic_cast<const IndexScan*>(tree.getRootOperation().get());
+          if (scan != nullptr) {
+            return scan->numBlockRowsBeforePrefilter();
+          }
+          const auto& op = std::as_const(*tree.getRootOperation());
+          for (const QueryExecutionTree* subtree : op.getChildren()) {
+            if (auto result = self(*subtree, self)) {
+              return result;
+            }
+          }
+          return std::nullopt;
+        };
+        return impl(*child, impl);
+      };
 
   // Input tables.
   auto [idTableLeft, resultLeft] = getIdTable(childLeft);

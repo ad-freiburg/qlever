@@ -851,10 +851,10 @@ BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
   relevantRanges.reserve(keepIntervals.size());
   for (const auto& [lower, upper] : keepIntervals) {
     relevantRanges.emplace_back(
-        std::lower_bound(idRange.begin(), idRange.end(), lower,
-                         &valueIdComparators::compareByBits),
-        std::upper_bound(idRange.begin(), idRange.end(), upper,
-                         &valueIdComparators::compareByBits));
+        ql::ranges::lower_bound(idRange, lower,
+                                &valueIdComparators::compareByBits),
+        ql::ranges::upper_bound(idRange, upper,
+                                &valueIdComparators::compareByBits));
   }
   return detail::mapping::mapValueIdItRangesToBlockItRanges(
       relevantRanges, idRange, blockRange);
