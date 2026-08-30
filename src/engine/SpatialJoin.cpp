@@ -165,15 +165,7 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
 
 // ____________________________________________________________________________
 std::optional<De9imFilterString> SpatialJoin::getDe9imFilter() const {
-  auto visitor = [](const auto& config) -> std::optional<De9imFilterString> {
-    using T = std::decay_t<decltype(config)>;
-    if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
-      return config.de9imFilter_;
-    } else {
-      return std::nullopt;
-    }
-  };
-  return std::visit(visitor, config_.task_);
+  return config_.getDe9imFilter();
 }
 
 // ____________________________________________________________________________
@@ -497,8 +489,7 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
 // ____________________________________________________________________________
 SpatialJoin::SwappedJoinSides SpatialJoin::getSwappedJoinSides() const {
   // Swap sides for within spatial join type computed using contains
-  auto swapSides = config_.joinType_.has_value() &&
-                   config_.joinType_.value() == SpatialJoinType::WITHIN;
+  auto swapSides = config_.getJoinType() == SpatialJoinType::WITHIN;
   return swapSides ? SwappedJoinSides{childRight_, childLeft_, config_.right_,
                                       config_.left_}
                    : SwappedJoinSides{childLeft_, childRight_, config_.left_,

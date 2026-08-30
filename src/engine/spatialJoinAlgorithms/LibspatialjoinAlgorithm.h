@@ -15,6 +15,8 @@
 #include <spatialjoin/Sweeper.h>
 #include <util/geo/Geo.h>
 
+#include <string>
+
 #include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 #include "index/Index.h"
 #include "util/MemorySize/MemorySize.h"
@@ -97,6 +99,18 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
       const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox);
 
  private:
+  // Directory and filename prefix for the temporary files written by the
+  // `libspatialjoin` sweeper during `run()`.
+  struct SweeperTempPath {
+    std::string dir_;
+    std::string prefix_;
+  };
+
+  // Determine `SweeperTempPath` for the index of `qec_`. The directory
+  // defaults to the parent directory of the index's on-disk base path, but
+  // can be overridden via the `spatial-join-tmp-dir` runtime parameter.
+  SweeperTempPath getSweeperTempPath() const;
+
   // Maximum area of bounding box in square coordinates for prefiltering
   // libspatialjoin input by bounding box. If exceeded, prefiltering is
   // disabled. See `parse`.

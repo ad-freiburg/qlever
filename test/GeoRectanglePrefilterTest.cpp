@@ -328,7 +328,6 @@ TEST_P(GeoRectanglePrefilterSchemeTest, spatialJoinPushesBlockPrefilter) {
       std::nullopt,
       PayloadVariables::all(),
       SpatialJoinAlgorithm::LIBSPATIALJOIN,
-      SpatialJoinType::WITHIN_DIST,
       std::nullopt};
 
   auto makeJoin = [&](Permutation::Enum permutation) {
@@ -388,7 +387,6 @@ TEST_P(GeoRectanglePrefilterSchemeTest, runtimeBlockPrefilter) {
       std::nullopt,
       PayloadVariables::all(),
       SpatialJoinAlgorithm::LIBSPATIALJOIN,
-      SpatialJoinType::WITHIN_DIST,
       std::nullopt};
   auto sj = std::make_shared<SpatialJoin>(qec, config, std::nullopt,
                                           std::nullopt, true);
@@ -453,7 +451,6 @@ TEST_P(GeoRectanglePrefilterSchemeTest,
       std::nullopt,
       PayloadVariables::all(),
       SpatialJoinAlgorithm::LIBSPATIALJOIN,
-      SpatialJoinType::WITHIN_DIST,
       std::nullopt};
   auto sj = std::make_shared<SpatialJoin>(qec, config, std::nullopt,
                                           std::nullopt, true);
