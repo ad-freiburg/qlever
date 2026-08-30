@@ -7,6 +7,7 @@
 #include "./util/IndexTestHelpers.h"
 #include "QueryRewriteUtilTestHelpers.h"
 #include "engine/IndexScan.h"
+#include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/Values.h"
@@ -393,6 +394,68 @@ TEST_P(GeoRectanglePrefilterSchemeTest, runtimeBlockPrefilter) {
 
   // The runtime block prefilter fired: fewer rows were read than the scan
   // holds in total.
+  const auto& details = sj->runtimeInfo().details_;
+  ASSERT_TRUE(details.contains("num-geoms-before-block-prefilter"));
+  EXPECT_GT(details.at("num-geoms-before-block-prefilter").get<int64_t>(),
+            details.at("num-geoms-after-block-prefilter").get<int64_t>());
+}
+
+// The runtime block prefilter reaches a scan whose blocks it can prune even
+// when the scan is wrapped in a `Sort` and a `Join` (as happens for a side
+// with a type restriction): the prefilter is forwarded through both.
+TEST_P(GeoRectanglePrefilterSchemeTest,
+       runtimeBlockPrefilterThroughSortAndJoin) {
+  auto* qec = geoQec(2, GetParam());
+  Variable pointVar{"?point"};
+  Variable wktVar{"?wkt"};
+  parsedQuery::SparqlValues values;
+  values._variables = {pointVar};
+  values._values.push_back(
+      {TripleComponent{Id::makeFromGeoPoint(GeoPoint{10.0, 10.5})}});
+  values._values.push_back(
+      {TripleComponent{Id::makeFromGeoPoint(GeoPoint{10.05, 10.6})}});
+  auto valuesTree = ad_utility::makeExecutionTree<Values>(qec, values);
+
+  // A `Join` on `?s` of the geometry scan (sorted by `?wkt`, so the `Join`
+  // wraps it in a `Sort` on `?s`) with a second scan of the same predicate.
+  SparqlTripleSimple tripleA{
+      TripleComponent{Variable{"?s"}},
+      TripleComponent{TripleComponent::Iri::fromIriref("<hasGeom>")},
+      TripleComponent{wktVar}};
+  auto scanA =
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, tripleA);
+  SparqlTripleSimple tripleB{
+      TripleComponent{Variable{"?s"}},
+      TripleComponent{TripleComponent::Iri::fromIriref("<hasGeom>")},
+      TripleComponent{Variable{"?wkt2"}}};
+  auto scanB =
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, tripleB);
+  auto joinTree = ad_utility::makeExecutionTree<Join>(
+      qec, scanA, scanB, scanA->getVariableColumn(Variable{"?s"}),
+      scanB->getVariableColumn(Variable{"?s"}));
+
+  SpatialJoinConfiguration config{
+      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 200'000.0,
+                           std::nullopt},
+      pointVar,
+      wktVar,
+      std::nullopt,
+      PayloadVariables::all(),
+      SpatialJoinAlgorithm::LIBSPATIALJOIN,
+      SpatialJoinType::WITHIN_DIST,
+      std::nullopt};
+  auto sj = std::make_shared<SpatialJoin>(qec, config, std::nullopt,
+                                          std::nullopt, true);
+  sj = sj->addChild(valuesTree, pointVar);
+  sj = sj->addChild(joinTree, wktVar);
+
+  // Each subject has exactly one geometry, so the join is 1:1 and the result
+  // is the same as with the bare scan: 2 x 3 = 6 rows.
+  auto result = sj->computeResultOnlyForTesting();
+  EXPECT_EQ(result.idTableView().numRows(), 6u);
+
+  // The block prefilter was forwarded through the `Sort` and the `Join` down
+  // to the scan of `?wkt`: fewer rows were read than the scan holds in total.
   const auto& details = sj->runtimeInfo().details_;
   ASSERT_TRUE(details.contains("num-geoms-before-block-prefilter"));
   EXPECT_GT(details.at("num-geoms-before-block-prefilter").get<int64_t>(),

@@ -104,6 +104,25 @@ string JoinImpl::getCacheKeyImpl() const {
 string JoinImpl::getDescriptor() const { return "Join on " + joinVar_.name(); }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+JoinImpl::getUpdatedQueryExecutionTreeWithPrefilterApplied(
+    const std::vector<PrefilterVariablePair>& prefilters) const {
+  // Try to apply the prefilters on both children (each child only applies
+  // the pairs whose variable it binds).
+  auto updatedLeft = left_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      clonePrefilters(prefilters));
+  auto updatedRight = right_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      clonePrefilters(prefilters));
+  if (!updatedLeft.has_value() && !updatedRight.has_value()) {
+    return std::nullopt;
+  }
+  return ad_utility::makeExecutionTree<Join>(
+      getExecutionContext(), updatedLeft.value_or(left_),
+      updatedRight.value_or(right_), leftJoinCol_, rightJoinCol_,
+      keepJoinColumn_);
+}
+
+// _____________________________________________________________________________
 Result JoinImpl::computeResult(bool requestLaziness) {
   AD_LOG_DEBUG << "Getting sub-results for join result computation..." << endl;
   if (left_->knownEmptyResult() || right_->knownEmptyResult()) {
