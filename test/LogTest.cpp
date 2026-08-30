@@ -285,6 +285,28 @@ TYPED_TEST(LogTestTyped, ArgumentsOfSuppressedMessage) {
 }
 
 // _____________________________________________________________________________
+// An argument of a suppressed message may itself log (or take other locks),
+// because the global log mutex is not held while the arguments of a suppressed
+// message are evaluated. Without this guarantee, the branchless logger would
+// deadlock here.
+TYPED_TEST(LogTestTyped, ArgumentsOfSuppressedMessageMayLog) {
+  auto levelCleanup = setLoglevelForTesting(LogLevel::Enum::FATAL);
+  auto [streamCleanup, ss] = setGlobalLoggingStreamToStringStream();
+
+  auto loggingArgument = [] {
+    AD_LOG_FATAL << "from-inside";
+    return "outer";
+  };
+  TypeParam{}(LogLevel::Enum::ERROR, "value: ", loggingArgument);
+  EXPECT_THAT(ss.str(), ::testing::Not(::testing::HasSubstr("outer")));
+  if constexpr (TypeParam::evaluatesArgumentsOfSuppressedMessage_) {
+    EXPECT_THAT(ss.str(), ::testing::HasSubstr("FATAL: from-inside"));
+  } else {
+    EXPECT_THAT(ss.str(), ::testing::IsEmpty());
+  }
+}
+
+// _____________________________________________________________________________
 // Messages that start with a stream manipulator are logged correctly, and are
 // suppressed if their level doesn't pass the runtime log level.
 TYPED_TEST(LogTestTyped, Manipulators) {

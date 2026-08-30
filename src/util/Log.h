@@ -110,7 +110,8 @@ namespace ad_utility {
 
 namespace detail {
 // Global mutex to ensure log messages from different threads are not
-// interleaved (acquired via the comma-operator trick in the AD_LOG macro).
+// interleaved (acquired via the comma-operator trick in the `AD_LOG_BRANCHING`
+// macro and by the `LogStreamProxy` of the branchless logger).
 inline std::mutex logMutex;
 
 static constexpr LogLevel::Enum defaultLogLevel =
@@ -203,7 +204,7 @@ class Log {
   // the `detail::logMutex` while calling this and while writing the message
   // itself, see the `AD_LOG_BRANCHING` macro and the `LogStreamProxy` class.
   static std::ostream& getLog(LogLevel::Enum level) {
-    // use the singleton logging stream as target.
+    // Use the singleton logging stream as target.
     return LogstreamChoice::get().getStream()
            << getTimeStamp() << " - " << LogLevel{level}.toString() << ": ";
   }
@@ -223,38 +224,41 @@ class Log {
 };
 
 // The stream-like object that is returned by the branchless logger (see the
-// `AD_LOG_BRANCHLESS` macro). It holds the global log mutex and a reference to
-// the stream that the message is written to. As it is returned by value, the
-// temporary lives until the end of the full expression, so the mutex is held
-// for the complete `<<` chain, exactly as for the branching logger. Note that
-// the mutex is also held for suppressed messages, so (as for a message that is
-// actually logged with the branching logger) the arguments of a log message
-// must not log anything themselves.
+// `AD_LOG_BRANCHLESS` macro). It holds a reference to the stream that the
+// message is written to and, if the message is actually logged, the global log
+// mutex. As it is returned by value, the temporary lives until the end of the
+// full expression, so the mutex is held for the complete `<<` chain, exactly as
+// for the branching logger. For a suppressed message, the mutex is not acquired
+// (also exactly as for the branching logger), so the arguments of a suppressed
+// message may safely log or take other locks, even though they are evaluated.
 class LogStreamProxy {
  private:
-  detail::LogLock lock_{detail::logMutex};
-  std::ostream& stream_;
+  std::unique_lock<std::mutex> lock_;
+  std::ostream* stream_ = &detail::nullStream();
 
  public:
-  // Acquire the global log mutex and write the prefix of the message with the
-  // given `level`. Note: `lock_` is declared before `stream_`, so the mutex is
-  // acquired before `Log::getLog` writes the prefix.
-  explicit LogStreamProxy(LogLevel::Enum level)
-      : stream_{detail::logLevelIsEnabled(level) ? Log::getLog(level)
-                                                 : detail::nullStream()} {}
+  // If a message with the given `level` has to be logged, acquire the global
+  // log mutex and write the prefix of the message. Otherwise, the message is
+  // written to the null stream, which discards it.
+  explicit LogStreamProxy(LogLevel::Enum level) {
+    if (detail::logLevelIsEnabled(level)) {
+      lock_ = std::unique_lock{detail::logMutex};
+      stream_ = &Log::getLog(level);
+    }
+  }
 
   // Write `arg` to the underlying stream. The result is the stream itself, so
   // that the remaining arguments of the `<<` chain bypass this proxy.
   template <typename T>
   friend std::ostream& operator<<(const LogStreamProxy& proxy, T&& arg) {
-    return proxy.stream_ << AD_FWD(arg);
+    return *proxy.stream_ << AD_FWD(arg);
   }
 
   // Overload for stream manipulators like `std::endl`, for which the template
   // argument of the overload above cannot be deduced.
   friend std::ostream& operator<<(const LogStreamProxy& proxy,
                                   std::ostream& (*manipulator)(std::ostream&)) {
-    return proxy.stream_ << manipulator;
+    return *proxy.stream_ << manipulator;
   }
 };
 
