@@ -19,9 +19,11 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
+#include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
+#include "engine/UpdateMetadata.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "index/IndexImpl.h"
@@ -34,7 +36,6 @@
 #include "util/FilesystemHelpers.h"
 #include "util/Log.h"
 #include "util/TimeTracer.h"
-#include "util/http/UrlParser.h"
 
 namespace qlever {
 
@@ -214,6 +215,34 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
 
 #endif
   return result;
+}
+
+// _____________________________________________________________________________
+UpdateMetadata Qlever::applyUpdate(
+    const PlannedQuery& plannedUpdate,
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
+  const auto& qet = plannedUpdate.queryExecutionTree();
+  AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
+  AD_CORRECTNESS_CHECK(&plannedUpdate.getIndex().getImpl() ==
+                       &deltaTriples.getIndex());
+
+  DeltaTriplesCount countBefore = deltaTriples.getCounts();
+  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
+      plannedUpdate.getIndex(), plannedUpdate.parsedQuery(), qet, deltaTriples,
+      cancellationHandle, tracer);
+  updateMetadata.countBefore_ = countBefore;
+  updateMetadata.countAfter_ = deltaTriples.getCounts();
+
+  tracer.beginTrace("clearCache");
+  // Clear the cache, because all cache entries have been invalidated by
+  // the update anyway (The index of the located triples snapshot is
+  // part of the cache key).
+  cache_.clearAll();
+  namedResultCache_.clear();
+  tracer.endTrace("clearCache");
+
+  return updateMetadata;
 }
 
 // _____________________________________________________________________________
