@@ -25,15 +25,14 @@
 
 namespace ad_utility {
 
-// The cell assignment scheme of the `GeoCellGrid` below. Currently there is
-// only one scheme:
-// - `Flat`: a single flat grid of 2^level x 2^level cells. Geometries whose
-//   bounding box crosses a cell border get the sentinel cell.
-// The enum is the extension point for further schemes (for example several
-// grid copies shifted against each other, or hierarchical grids): a new
-// scheme only adds an enum value and private methods to the `GeoCellGrid`,
-// because all consumers work with plain cell numbers of `numCellBits()` bits
-// and with the cell ranges that `coveringCellRanges` reports.
+// The cell assignment scheme of the `GeoCellGrid` below. There is currently
+// only one scheme: `Flat`, a single grid of 2^level x 2^level cells, where
+// each geometry that fits inside a single cell gets that cell and every
+// other geometry gets the sentinel cell. A further scheme (for example,
+// several grid copies shifted against each other, or a hierarchical grid)
+// only adds an enum value and private methods to the `GeoCellGrid`, because
+// all its public methods work with plain cell numbers of `numCellBits()`
+// bits.
 enum class GeoCellGridScheme : uint8_t {
   Flat = 0,
 };
@@ -54,12 +53,15 @@ std::optional<GeoCellGridScheme> geoCellGridSchemeFromString(
 // [-180, 180] and the latitude range [-90, 90] into 2^L intervals each; the
 // cell assignment on top of it is determined by the `GeoCellGridScheme`.
 //
-// A WKT literal is assigned one cell number (a pure function of the literal
-// string). Consumers that prune by cells must always keep the ranges that
-// `coveringCellRanges` reports for their query rectangle; that includes the
-// scheme's "no information" cell(s) (for the flat scheme the sentinel cell),
-// so pruning stays conservative for geometries that fit no regular cell and
-// for unparsable literals.
+// Each WKT literal has exactly one cell, computed by `cellFromWktLiteral`
+// from the WKT string alone. The method `coveringCellRanges` guarantees: if
+// the bounding box of a geometry intersects a given rectangle, then the cell
+// of that geometry is contained in one of the ranges computed for that
+// rectangle. Code that only wants the geometries in the rectangle can
+// therefore safely skip every WKT literal whose cell lies outside all of the
+// ranges. In particular, the ranges always contain the sentinel cell, so
+// that geometries that span several cells and literals that cannot be
+// parsed are never skipped.
 class GeoCellGrid {
  public:
   // Cell numbers and cell-annotated vocabulary indices.
@@ -93,9 +95,11 @@ class GeoCellGrid {
   // Number of grid columns (= rows).
   uint64_t numCellsPerDimension() const { return uint64_t{1} << level_; }
 
-  // Number of bits occupied by a cell number. NOTE: This can depend on the
-  // scheme (a scheme with several grid copies needs extra bits to select the
-  // copy), so consumers must never hard-code the bit count.
+  // Number of bits occupied by a cell number.
+  //
+  // NOTE: This can depend on the scheme (a scheme with several grid copies
+  // needs extra bits to select the copy), so the bit count must never be
+  // hard-coded elsewhere.
   uint64_t numCellBits() const { return 2 * uint64_t{level_} + 1; }
 
   // The cell number for "no information": for the flat scheme the reserved
@@ -118,10 +122,11 @@ class GeoCellGrid {
   Cell cellFromPoint(double lng, double lat) const;
 
   // The cell for the given bounding box: the smallest cell that contains it
-  // entirely, or `sentinelCell()` if no regular cell contains it. NOTE: The
-  // corners are normalized through the `GeoPoint` bit encoding, so that the
-  // result is identical for a freshly parsed bounding box and for one that
-  // took a round trip through the precomputed `GeometryInfo`.
+  // entirely, or `sentinelCell()` if no regular cell contains it.
+  //
+  // NOTE: The corners are normalized through the `GeoPoint` bit encoding, so
+  // that the result is identical for a freshly parsed bounding box and for
+  // one that took a round trip through the precomputed `GeometryInfo`.
   Cell cellFromBoundingBox(const BoundingBox& box) const;
 
   // The cell for a full WKT literal (with quotes and datatype suffix):
@@ -143,29 +148,32 @@ class GeoCellGrid {
     return annotatedIndex & (maxNumWords() - 1);
   }
 
-  // All cells that can be assigned to a geometry that intersects the
-  // geographic rectangle given by the two corner points, as closed ranges
-  // [first, last] of cell numbers, ascending and non-overlapping. Pruning by
-  // the result is conservative: every geometry whose bounding box intersects
-  // the rectangle has its cell in one of the ranges, and so do the
-  // "no information" cells.
+  // Compute the cell ranges for the geographic rectangle given by the two
+  // corner points, as closed ranges [first, last] of cell numbers, ascending
+  // and non-overlapping. The guarantee is: if the bounding box of a geometry
+  // intersects the rectangle, then the cell of that geometry (each geometry
+  // has exactly one, see `cellFromBoundingBox`) is contained in one of the
+  // ranges. The sentinel cell is always part of the ranges.
   CellRanges coveringCellRanges(double minLng, double minLat, double maxLng,
                                 double maxLat) const;
 
   // Helpers for the vocabulary indices of WKT literals in a
-  // `SplitGeoVocabulary` (see `SplitVocabulary`): there the WKT region is
-  // marked by the top bit of the index payload, below which the
-  // cell-annotated index of this grid is stored. NOTE: This encodes the
-  // marker layout of a `SplitVocabulary` with exactly two underlying
-  // vocabularies; unit tests check that the two stay consistent.
+  // `SplitGeoVocabulary` (see `SplitVocabulary`): there the topmost data bit
+  // of a vocabulary index is 1 exactly for the WKT literals, and the bits
+  // below it hold the cell-annotated index of this grid.
+  //
+  // NOTE: This encodes the marker layout of a `SplitVocabulary` with exactly
+  // two underlying vocabularies; unit tests check that the two stay
+  // consistent.
   static constexpr uint64_t geoVocabMarkerBit = uint64_t{1}
                                                 << (ValueId::numDataBits - 1);
   static constexpr bool isGeoVocabIndex(uint64_t vocabIndexBits) {
     return (vocabIndexBits & geoVocabMarkerBit) != 0;
   }
 
-  // The half-open range of vocabulary index payloads (marker bit included)
-  // that contains exactly the WKT literals with a cell in [first, last].
+  // The half-open range of vocabulary indices (with the marker bit set) that
+  // contains exactly the WKT literals whose cell is in [first, last].
+  //
   // NOTE: The bounds are computed by addition, not bitwise or: for the
   // largest cell number the exclusive upper bound `(last + 1) <<
   // numPositionBits()` carries into (or past) the marker bit.
