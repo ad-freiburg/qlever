@@ -571,7 +571,7 @@ std::optional<std::string> checkAndLogParameterSetting(
 }
 
 // Look up metadata for `cmd` in `commands`, run the access-token check (if
-// required), and log it. `cmd` must name an entry in `commands` -- it always
+// required), and log it. `cmd` must name an entry in `commands`. It always
 // comes from a literal used in the `process()` dispatch below.
 void dispatchLog(std::string_view cmd, bool accessTokenOk) {
   auto it = ql::ranges::find(commands, cmd, &CommandMeta::name_);
