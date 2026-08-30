@@ -588,6 +588,10 @@ SpatialJoin::applyRuntimeGeoBlockPrefilter(
                           const std::shared_ptr<QueryExecutionTree>& bigChild,
                           const Variable& bigVar)
       -> std::optional<std::shared_ptr<QueryExecutionTree>> {
+    if (dynamic_cast<const IndexScan*>(bigChild->getRootOperation().get()) ==
+        nullptr) {
+      return std::nullopt;
+    }
     auto smallResult = smallChild->getResult();
     const auto& smallTable = smallResult->idTableView();
     if (smallTable.size() > maxSmallSideRows) {
@@ -644,28 +648,14 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   std::tie(childLeft, childRight) = applyRuntimeGeoBlockPrefilter(
       childLeft, childRight, joinVarLeft, joinVarRight, timeBlockPrefilter);
 
-  // If a side contains a block-prefiltered scan (the prefilter may have been
-  // forwarded through sorts and joins), remember the unprefiltered row total
-  // of that scan for the runtime statistics.
+  // If a side is a block-prefiltered scan, remember the unprefiltered row
+  // total for the runtime statistics.
   auto numRowsBeforePrefilter =
       [](const std::shared_ptr<QueryExecutionTree>& child)
       -> std::optional<uint64_t> {
-    auto impl = [](const QueryExecutionTree& tree,
-                   const auto& self) -> std::optional<uint64_t> {
-      const auto* scan =
-          dynamic_cast<const IndexScan*>(tree.getRootOperation().get());
-      if (scan != nullptr) {
-        return scan->numBlockRowsBeforePrefilter();
-      }
-      const auto& op = std::as_const(*tree.getRootOperation());
-      for (const QueryExecutionTree* subtree : op.getChildren()) {
-        if (auto result = self(*subtree, self)) {
-          return result;
-        }
-      }
-      return std::nullopt;
-    };
-    return impl(*child, impl);
+    const auto* scan =
+        dynamic_cast<const IndexScan*>(child->getRootOperation().get());
+    return scan != nullptr ? scan->numBlockRowsBeforePrefilter() : std::nullopt;
   };
 
   // Input tables.

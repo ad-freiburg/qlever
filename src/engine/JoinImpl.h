@@ -47,11 +47,6 @@ class JoinImpl : public Operation {
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
-  // See `Join::getUpdatedQueryExecutionTreeWithPrefilterApplied`.
-  std::optional<std::shared_ptr<QueryExecutionTree>>
-  getUpdatedQueryExecutionTreeWithPrefilterApplied(
-      const std::vector<PrefilterVariablePair>& prefilters) const override;
-
   std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;

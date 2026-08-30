@@ -119,13 +119,6 @@ class Operation {
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
 
-  // Deep-copy a vector of prefilter pairs (the contained
-  // `PrefilterExpression`s are owned via `unique_ptr`). Used by operations
-  // that forward prefilters to more than one child or need to retain the
-  // original pairs.
-  static std::vector<PrefilterVariablePair> clonePrefilters(
-      const std::vector<PrefilterVariablePair>& prefilters);
-
   // Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
       : _executionContext(executionContext) {}

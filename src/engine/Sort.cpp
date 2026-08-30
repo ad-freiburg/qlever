@@ -312,18 +312,3 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
                                              std::move(subtree),
                                              sortColumnIndices, explicitSort_);
 }
-
-// _____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>>
-Sort::getUpdatedQueryExecutionTreeWithPrefilterApplied(
-    const std::vector<PrefilterVariablePair>& prefilters) const {
-  auto updatedSubtree =
-      subtree_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
-          clonePrefilters(prefilters));
-  if (!updatedSubtree.has_value()) {
-    return std::nullopt;
-  }
-  return ad_utility::makeExecutionTree<Sort>(getExecutionContext(),
-                                             std::move(updatedSubtree.value()),
-                                             sortColumnIndices_, explicitSort_);
-}
