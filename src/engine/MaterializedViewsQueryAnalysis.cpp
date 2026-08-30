@@ -136,8 +136,9 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
   if (!order.has_value()) {
     return std::nullopt;
   }
-  edges = ql::views::transform(order.value(),
-                               [&edges](size_t i) { return edges[i]; }) |
+  edges = ql::views::transform(
+              order.value(),
+              [&edges](size_t i) { return std::move(edges[i]); }) |
           ::ranges::to<std::vector>();
   // The view's physical column 0 must be assigned during matching, else
   // `makeIndexScan` throws (`throwIfScanColumnMissing`).
