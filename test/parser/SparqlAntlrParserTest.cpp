@@ -493,6 +493,22 @@ TEST(SparqlParser, FilterWithAggregateIsRejected) {
                    "(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })"));
 }
 
+// Same as `BindWithAggregateIsRejected` above, but for the expressions of a
+// GROUP BY clause.
+TEST(SparqlParser, GroupByWithAggregateIsRejected) {
+  auto expectGroupConditionFails = ExpectParseFails<&Parser::groupCondition>{};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a GROUP BY clause");
+  expectGroupConditionFails("COUNT(?x)", messageMatcher);
+  expectGroupConditionFails("(SAMPLE(?x))", messageMatcher);
+  expectGroupConditionFails("(1 + SUM(?x) AS ?y)", messageMatcher);
+  auto expectGroupCondition = ExpectCompleteParse<&Parser::groupCondition>{};
+  expectGroupCondition(
+      "(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })",
+      m::ExpressionGroupKey(
+          "EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } }"));
+}
+
 TEST(SparqlParser, Integer) {
   auto expectInteger = ExpectCompleteParse<&Parser::integer>{};
   auto expectIntegerFails = ExpectParseFails<&Parser::integer>();
@@ -568,7 +584,7 @@ TEST(SparqlParser, GroupCondition) {
   expectGroupCondition("(?test AS ?mehr)",
                        m::AliasGroupKey("?test", Var{"?mehr"}));
   // builtInCall
-  expectGroupCondition("COUNT(?test)", m::ExpressionGroupKey("COUNT(?test)"));
+  expectGroupCondition("STR(?test)", m::ExpressionGroupKey("STR(?test)"));
   // functionCall
   expectGroupCondition(
       "<http://www.opengis.net/def/function/geosparql/latitude>(?test)",
@@ -579,9 +595,9 @@ TEST(SparqlParser, GroupCondition) {
 TEST(SparqlParser, GroupClause) {
   expectCompleteParse(
       parse<&Parser::groupClause>(
-          "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)"),
+          "GROUP BY ?test (?foo - 10 as ?bar) STR(?baz)"),
       m::GroupKeys(
-          {Var{"?test"}, std::pair{"?foo - 10", Var{"?bar"}}, "COUNT(?baz)"}));
+          {Var{"?test"}, std::pair{"?foo - 10", Var{"?bar"}}, "STR(?baz)"}));
 }
 
 TEST(SparqlParser, SolutionModifier) {

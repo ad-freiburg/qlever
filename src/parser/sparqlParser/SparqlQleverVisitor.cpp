@@ -1737,18 +1737,16 @@ Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
 GroupKey Visitor::visit(Parser::GroupConditionContext* ctx) {
   if (ctx->var() && !ctx->expression()) {
     return Variable{ctx->var()->getText()};
-  } else if (ctx->builtInCall() || ctx->functionCall()) {
-    // builtInCall and functionCall are both also an Expression
-    return (ctx->builtInCall() ? visitExpressionPimpl(ctx->builtInCall())
-                               : visitExpressionPimpl(ctx->functionCall()));
+  }
+  // `builtInCall` and `functionCall` are both also an `Expression`.
+  auto expr = ctx->builtInCall()    ? visitExpressionPimpl(ctx->builtInCall())
+              : ctx->functionCall() ? visitExpressionPimpl(ctx->functionCall())
+                                    : visitExpressionPimpl(ctx->expression());
+  throwIfContainsAggregate(ctx, expr, "GROUP BY");
+  if (ctx->AS() && ctx->var()) {
+    return Alias{std::move(expr), visit(ctx->var())};
   } else {
-    AD_CORRECTNESS_CHECK(ctx->expression());
-    auto expr = visitExpressionPimpl(ctx->expression());
-    if (ctx->AS() && ctx->var()) {
-      return Alias{std::move(expr), visit(ctx->var())};
-    } else {
-      return expr;
-    }
+    return expr;
   }
 }
 
