@@ -81,6 +81,30 @@ QueryPatternCache::makeJoinReplacementIndexScans(
 }
 
 // _____________________________________________________________________________
+// Check whether `component` is an internal variable that occurs in no other
+// position of `triples`, i.e., it only states the existence of a triple
+// without making its object usable anywhere. The parser replaces blank nodes
+// (`[]` or `_:label`) in a query body by such internal variables; a user
+// cannot write internal variables directly, so they cannot occur in
+// expressions or in a SELECT clause, and counting the subject and object
+// positions of `triples` is exhaustive (internal variables introduced by the
+// parser itself, e.g. for property paths, occur in two triples and are
+// therefore not existential).
+static bool isExistentialObject(const TripleComponent& component,
+                                const std::vector<SparqlTriple>& triples) {
+  if (!component.isVariable() || !component.getVariable().name().starts_with(
+                                     QLEVER_INTERNAL_VARIABLE_PREFIX)) {
+    return false;
+  }
+  size_t numOccurrences = 0;
+  for (const auto& triple : triples) {
+    numOccurrences += triple.s_ == component;
+    numOccurrences += triple.o_ == component;
+  }
+  return numOccurrences == 1;
+}
+
+// _____________________________________________________________________________
 // Check that every restriction triple of the view's chain (e.g.
 // `?s rdf:type <SomeClass>`, see `ChainInfo::restrictions_`) has an exact
 // counterpart among the query's `triples`, with the view's chain variables
@@ -104,8 +128,20 @@ static bool chainRestrictionsCoveredByQuery(
                                                  : TripleComponent{queryObject};
 
     auto matches = [&](const SparqlTriple& triple) {
-      return triple.s_ == mappedSubject && triple.o_ == restriction.o_ &&
-             triple.getSimplePredicate() == restriction.getSimplePredicate();
+      if (triple.s_ != mappedSubject ||
+          triple.getSimplePredicate() != restriction.getSimplePredicate()) {
+        return false;
+      }
+      // An existential restriction (the view's object is an anonymous blank
+      // node, see `isExistentialObject`) matches a query triple whose object
+      // is likewise an anonymous blank node used nowhere else; such a triple
+      // asks for the same existence check that the view has materialized.
+      // An explicit query variable is NOT matched: it might be used in other
+      // parts of the query that are not visible here.
+      if (restriction.o_.isVariable()) {
+        return isExistentialObject(triple.o_, triples._triples);
+      }
+      return triple.o_ == restriction.o_;
     };
     auto it = ql::ranges::find_if(triples._triples, matches);
     if (it == triples._triples.end()) {
@@ -494,15 +530,21 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   bool patternFound = false;
 
   // Partition the view's triples into join triples (with a variable object)
-  // and restriction triples (with a variable subject, a simple IRI predicate
-  // and a fixed object, e.g. `?s rdf:type <SomeClass>`). Restriction triples
-  // restrict which rows end up in the view; a query can still be rewritten to
-  // scan the view if it contains the very same triples (checked at matching
-  // time by `chainRestrictionsCoveredByQuery`).
+  // and restriction triples (with a variable subject and a simple IRI
+  // predicate). Restriction triples restrict which rows end up in the view; a
+  // query can still be rewritten to scan the view if it contains the very
+  // same triples (checked at matching time by
+  // `chainRestrictionsCoveredByQuery`). There are two kinds: triples with a
+  // fixed object (e.g. `?s rdf:type <SomeClass>`) and existential
+  // restrictions, whose object is an anonymous blank node (e.g.
+  // `?s <somePredicate> []`, "a triple with this predicate exists").
   std::vector<SparqlTriple> joinTriples;
   std::vector<SparqlTriple> restrictions;
   for (const auto& triple : triples) {
-    if (triple.o_.isVariable()) {
+    if (triple.s_.isVariable() && triple.getSimplePredicate().has_value() &&
+        isExistentialObject(triple.o_, triples)) {
+      restrictions.push_back(triple);
+    } else if (triple.o_.isVariable()) {
       joinTriples.push_back(triple);
     } else if (triple.s_.isVariable() &&
                triple.getSimplePredicate().has_value()) {
