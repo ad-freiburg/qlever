@@ -399,7 +399,7 @@ void IndexBuilderConfig::validate() const {
 }
 
 // ___________________________________________________________________________
-void Qlever::writeMaterializedView(
+std::vector<std::string> Qlever::writeMaterializedView(
     std::string name, std::string query,
     const std::vector<DatasetClause>& datasetClauses,
     SharedCancellationHandle cancellationHandle,
@@ -412,7 +412,7 @@ void Qlever::writeMaterializedView(
       plan.queryExecutionContext().materializedViewsManager();
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  viewsManager.writeViewToDisk(std::move(name), plan, memoryLimit);
+  return viewsManager.writeViewToDisk(std::move(name), plan, memoryLimit);
 }
 
 // ___________________________________________________________________________

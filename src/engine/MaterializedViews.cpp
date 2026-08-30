@@ -31,14 +31,37 @@
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
+#include "parser/PropertyPath.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
+#include "parser/VariableCounter.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/Views.h"
+
+namespace {
+
+// Check if `path` is built only from `SEQUENCE`/`INVERSE` modifiers over
+// plain IRIs, i.e. it is equivalent to a chain of simple triples (with
+// direction flips for the inverted parts) and does not need actual property
+// path evaluation (as opposed to `ALTERNATIVE`, `NEGATED`, or a repetition
+// via `MinMaxPath`).
+bool isSimpleSequenceOrInversePath(const PropertyPath& path) {
+  return path.handlePath<bool>(
+      [](const ad_utility::triple_component::Iri&) { return true; },
+      [](const std::vector<PropertyPath>& children,
+         PropertyPath::Modifier modifier) {
+        return (modifier == PropertyPath::Modifier::SEQUENCE ||
+                modifier == PropertyPath::Modifier::INVERSE) &&
+               ql::ranges::all_of(children, &isSimpleSequenceOrInversePath);
+      },
+      [](const PropertyPath&, size_t, size_t) { return false; });
+}
+
+}  // namespace
 
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
@@ -55,6 +78,7 @@ MaterializedViewWriter::MaterializedViewWriter(
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
   throwIfLimitOffset();
+  warnAboutPatternRewriteObstacles();
 
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
@@ -76,6 +100,70 @@ void MaterializedViewWriter::throwIfLimitOffset() const {
         "view is sorted after query execution. If you are aware of this and "
         "want to forcefully apply a `LIMIT` or `OFFSET`, use an explicit "
         "subquery.");
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::warnAboutPatternRewriteObstacles() {
+  // Query planning has already rewritten `parsedQuery_` in place by the time
+  // this constructor runs, so re-parse the original query text to get an
+  // unmodified pattern to analyze (same reason as in
+  // `MaterializedView::MaterializedView`).
+  EncodedIriManager encodedIriManager;
+  auto reparsed = SparqlParser::parseQuery(&encodedIriManager,
+                                           parsedQuery_._originalString, {});
+
+  auto addWarning = [this](std::string warning) {
+    AD_LOG_WARN << warning << std::endl;
+    parsedQuery_.addWarning(std::move(warning));
+  };
+
+  // Blank nodes and the `[ ... ]` shorthand are parsed into unnamed internal
+  // variables (see `QLEVER_INTERNAL_VARIABLE_PREFIX` and
+  // `QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX`), which can never be selected
+  // as a column of the view and therefore block query-pattern rewriting.
+  parsedQuery::VariableCounter variableCounter;
+  variableCounter(reparsed._rootGraphPattern);
+  bool hasBlankNodeOrShorthand =
+      ql::ranges::any_of(variableCounter.counts(), [](const auto& varAndCount) {
+        return ql::starts_with(varAndCount.first.name(),
+                               QLEVER_INTERNAL_VARIABLE_PREFIX);
+      });
+  if (hasBlankNodeOrShorthand) {
+    addWarning(
+        "The query to write the materialized view contains blank nodes "
+        "(`_:label`) or the `[ ... ]` shorthand. Use an explicitly named and "
+        "selected variable instead for query rewriting to work.");
+  }
+
+  // Pattern-based (star/chain) query rewriting only ever looks at the
+  // top-level triples of the view's query (see `getTriplesForPatternRewrite`),
+  // so it suffices to check those for a property path that is only built from
+  // `/` and/or `^` and could equivalently be written as simple triples.
+  bool hasSimplePropertyPath = ql::ranges::any_of(
+      reparsed._rootGraphPattern._graphPatterns,
+      [](const parsedQuery::GraphPatternOperation& op) {
+        if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
+          return false;
+        }
+        return ql::ranges::any_of(
+            std::get<parsedQuery::BasicGraphPattern>(op)._triples,
+            [](const SparqlTriple& triple) {
+              // `getSimplePredicate()` already returns a value for a plain
+              // IRI predicate (no `/`/`^` involved), so excluding those here
+              // leaves only genuine, `/`/`^`-only property paths.
+              return std::holds_alternative<PropertyPath>(triple.p_) &&
+                     !triple.getSimplePredicate().has_value() &&
+                     isSimpleSequenceOrInversePath(
+                         std::get<PropertyPath>(triple.p_));
+            });
+      });
+  if (hasSimplePropertyPath) {
+    addWarning(
+        "The query to write the materialized view contains a property path "
+        "using only `/` and/or `^`, which could equivalently be expressed by "
+        "simple triples. Use simple triples on selected variables instead "
+        "for query rewriting to work.");
   }
 }
 
@@ -124,7 +212,7 @@ void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::writeViewToDisk(
+std::vector<std::string> MaterializedViewsManager::writeViewToDisk(
     std::string name, const qlever::PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) const {
@@ -139,6 +227,7 @@ void MaterializedViewsManager::writeViewToDisk(
   MaterializedViewWriter writer{onDiskBase_, std::move(name), plannedQuery,
                                 std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
+  return writer.warnings();
 }
 
 // _____________________________________________________________________________

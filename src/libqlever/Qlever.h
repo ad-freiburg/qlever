@@ -575,7 +575,11 @@ class Qlever {
   // (see there for their exact semantics). If omitted, the query is planned
   // and executed without a timer, without a time limit, and with a fresh,
   // never-triggered cancellation handle, i.e. it always runs to completion.
-  void writeMaterializedView(
+  //
+  // Returns warnings about constructs in `query` that would prevent
+  // query-pattern-based rewriting from using this view (blank nodes, the
+  // `[ ... ]` shorthand, or simple `/`/`^`-only property paths).
+  std::vector<std::string> writeMaterializedView(
       std::string name, std::string query,
       const std::vector<DatasetClause>& datasetClauses = {},
       SharedCancellationHandle handle =

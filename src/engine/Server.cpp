@@ -452,14 +452,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       queryThreadPool_,
       [name, query, requestTimer, cancellationHandle, timeLimit,
        this]() mutable {
-        qlever().writeMaterializedView(
+        return qlever().writeMaterializedView(
             name, std::move(query.query_), query.datasetClauses_,
             std::move(cancellationHandle), timeLimit.value(), requestTimer);
       },
       cancellationHandle);
-  co_await std::move(coroutine);
+  auto warnings = co_await std::move(coroutine);
 
-  co_return nlohmann::json{{"materialized-view-written", name}};
+  co_return nlohmann::json{{"materialized-view-written", name},
+                           {"warnings", warnings}};
 }
 
 // _____________________________________________________________________________
