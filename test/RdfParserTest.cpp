@@ -386,6 +386,19 @@ TEST(RdfParserTest, blankNodePropertyList) {
     ASSERT_EQ(p.triples_, exp);
     ASSERT_EQ(p.getPosition(), blankNodeL.size());
 
+    blankNodeL = "[\n\tp:p2 p:ob2 ;\n\tp:p3 p:ob3\n]";
+    exp = {{"_:g_5_1", iri("<http://example.org/p2>"),
+            iri("<http://example.org/ob2>")},
+           {"_:g_5_1", iri("<http://example.org/p3>"),
+            iri("<http://example.org/ob3>")},
+           {iri("<s>"), iri("<p1>"), "_:g_5_1"}};
+    p.prefixMap_["p"] = iri("<http://example.org/>");
+    p.triples_.clear();
+    p.setInputStream(blankNodeL);
+    ASSERT_TRUE(p.object());
+    ASSERT_EQ(p.triples_, exp);
+    ASSERT_EQ(p.getPosition(), blankNodeL.size());
+
     blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
     p.setInputStream(blankNodeL);
     ASSERT_THROW(p.blankNodePropertyList(),
@@ -827,6 +840,27 @@ TEST(RdfParserTest, collection) {
   };
   runCommonTests(checkParseResult<Re2Parser, &Re2Parser::collection, 22>);
   runCommonTests(checkParseResult<CtreParser, &CtreParser::collection, 22>);
+
+  auto testPrefixedNames = [](auto p) {
+    auto first = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>");
+    auto rest = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>");
+    auto nil = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
+    p.prefixMap_["p"] = iri("<http://example.org/>");
+
+    string collection = "(p:a p:b)";
+    std::vector<TurtleTriple> exp = {
+        {"_:g_22_0", first, iri("<http://example.org/a>")},
+        {"_:g_22_0", rest, "_:g_22_1"},
+        {"_:g_22_1", first, iri("<http://example.org/b>")},
+        {"_:g_22_1", rest, nil}};
+    p.setInputStream(collection);
+    p.setBlankNodePrefixOnlyForTesting(22);
+    ASSERT_TRUE(p.collection());
+    ASSERT_EQ(p.triples_, exp);
+    ASSERT_EQ(p.getPosition(), collection.size());
+  };
+  testPrefixedNames(re2Parser());
+  testPrefixedNames(ctreParser());
 }
 
 // Test the parsing of an IRI reference.

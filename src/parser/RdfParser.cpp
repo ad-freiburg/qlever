@@ -29,6 +29,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "util/DateYearDuration.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
@@ -38,6 +39,13 @@ namespace {
 // written reversed because they are matched against the reversed input.
 constexpr ctll::fixed_string newlineRegex = R"([\r\n]+)";
 constexpr ctll::fixed_string statementEndRegex = R"([\r\n]+[\t ]*\.)";
+
+// Characters that can be part of neither a prefix nor a local name of a
+// prefixed name, when assuming that no escape sequences were used.
+constexpr inline std::string_view localNameDelimiters = " \t\r\n,;[]()";
+constexpr inline std::string_view colon = ":";
+constexpr inline std::string_view prefixDelimiters =
+    ad_utility::constexprStrCat<localNameDelimiters, colon>();
 
 // Run `search` against the reversed `sv`, and return the number of bytes up to
 // and including the rightmost match, or `std::nullopt` if there is no match.
@@ -903,14 +911,13 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   // is ok
   tok_.skipWhitespaceAndComments();
   auto view = tok_.view();
-  auto pos = view.find(':');
-  if (pos == std::string::npos) {
+  // If anything but a `:` comes first, this is not a prefixed name, but for
+  // example the `[` of a blank node property list.
+  auto pos = view.find_first_of(prefixDelimiters);
+  if (pos == std::string::npos || view[pos] != ':') {
     return false;
   }
-  // these can also be part of a collection etc.
-  // find any character that can end a pnameLn when assuming that no
-  // escape sequences were used
-  auto posEnd = view.find_first_of(" \t\r\n,;", pos);
+  auto posEnd = view.find_first_of(localNameDelimiters, pos + 1);
   if (posEnd == std::string::npos) {
     // make tests work
     posEnd = view.size();
