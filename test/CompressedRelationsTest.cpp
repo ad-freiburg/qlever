@@ -1537,7 +1537,7 @@ std::string writePermutationAndCaptureLog(const std::string& filename,
 
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, showProgressBarCanBeDisabled) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   auto [filename, cleanup] = testFilenameWithCleanup();
   // With `showProgressBar` set to `true`, the progress bar is written.
   EXPECT_THAT(writePermutationAndCaptureLog(filename, true),
