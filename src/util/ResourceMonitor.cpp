@@ -368,8 +368,8 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     return rate.value() * 100.0;
   };
 
-  // Absolute deadlines keep the ticks on a steady grid, no matter how
-  // long each sample takes.
+  // Absolute deadlines keep the ticks on a steady grid, so the time a sample
+  // takes does not delay the next one.
   auto deadline = std::chrono::steady_clock::now() + interval;
   std::unique_lock lock{mutex_};
   while (!stopRequested_) {
@@ -377,7 +377,10 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
                                   [this] { return stopRequested_; })) {
       break;  // Woken by the destructor, not the timeout.
     }
-    deadline += interval;
+    // If one tick took longer than the interval, the next deadline lies in the
+    // past and waiting for it would not sleep. Move it up to now, so the
+    // missed ticks are skipped instead of all firing at once.
+    deadline = std::max(deadline + interval, std::chrono::steady_clock::now());
     const double elapsed = Timer::toSeconds(timer.value());
 
     const auto [numBytesRead, numBytesWritten] = readers_.diskIoReader_();

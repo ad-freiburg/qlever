@@ -557,11 +557,16 @@ TEST(ResourceMonitor, SamplesWriteWellFormedRows) {
   // The header plus at least one sampled row.
   ASSERT_GE(lines.size(), 2u);
   EXPECT_EQ(lines[0], rm::tsvHeader);
-  // Each data row has the header's seven tab-separated columns (six tabs),
-  // even when an individual reading was empty.
+  auto countTabs = [](std::string_view line) {
+    return std::count(line.begin(), line.end(), '\t');
+  };
+  // Every data row has seven tab-separated columns (six tabs), even when a
+  // reading was empty, and the header names exactly those columns. A column
+  // added on one side only therefore fails here.
   for (auto it = lines.begin() + 1; it != lines.end(); ++it) {
-    EXPECT_EQ(std::count(it->begin(), it->end(), '\t'), 6)
-        << "row does not have 7 columns: " << *it;
+    EXPECT_EQ(countTabs(*it), 6) << "row does not have 7 columns: " << *it;
+    EXPECT_EQ(countTabs(rm::tsvHeader), countTabs(*it))
+        << "the header does not name the row's columns: " << *it;
   }
 }
 
