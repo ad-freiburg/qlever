@@ -17,8 +17,11 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
+#include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "libqlever/Qlever.h"
+#include "parser/SparqlParser.h"
 #include "util/Exception.h"
 #include "util/FilesystemHelpers.h"
 
@@ -225,6 +228,62 @@ class MaterializedViewsPatternRewriteTestP
 // Pattern-based rewriting with a single write query.
 class MaterializedViewsPatternRewriteTest
     : public MaterializedViewsRewriteTestBase {};
+
+// Fixture for tests on `QueryPatternCache`.
+class MaterializedViewsPatternMatchingTest
+    : public MaterializedViewsRewriteTestBase {
+ protected:
+  const std::string onDiskBase_ = gtestCurrentTestName();
+  std::optional<qlever::Qlever> qlv_;
+  std::optional<MaterializedViewsManager> manager_;
+  std::shared_ptr<QueryExecutionContext> qec_;
+  EncodedIriManager encodedIriManager_;
+
+  // ___________________________________________________________________________
+  void SetUp() override {
+    MaterializedViewsRewriteTestBase::SetUp();
+    makeTestIndex(onDiskBase_, " <s1> <p0> <o1> .\n");
+    qlever::EngineConfig config;
+    config.baseName_ = onDiskBase_;
+    qlv_.emplace(config);
+    manager_.emplace(onDiskBase_);
+    qec_ = qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot());
+  }
+
+  // ___________________________________________________________________________
+  void TearDown() override {
+    manager_.reset();
+    qlv_.reset();
+    removeTestIndex(onDiskBase_);
+    MaterializedViewsRewriteTestBase::TearDown();
+  }
+
+  // ___________________________________________________________________________
+  qlever::Qlever& qlv() { return qlv_.value(); }
+  MaterializedViewsManager& manager() { return manager_.value(); }
+  QueryExecutionContext* qec() { return qec_.get(); }
+
+  // Parse `query`'s single basic graph pattern, without going through full
+  // query planning.
+  parsedQuery::BasicGraphPattern parseTriples(const std::string& query) {
+    auto parsed = SparqlParser::parseQuery(&encodedIriManager_, query, {});
+    return parsed._rootGraphPattern._graphPatterns.at(0).getBasic();
+  }
+
+  // Write `writeQuery` to disk as a view named `name` and add it to `qpc`.
+  void registerView(materializedViewsQueryAnalysis::QueryPatternCache& qpc,
+                    const std::string& name, const std::string& writeQuery) {
+    manager().writeViewToDisk(name, qlv().parseAndPlanQuery(writeQuery));
+    qpc.analyzeView(manager().getView(name, qec()), qec());
+  }
+
+  // Match `query`'s triples against `qpc`.
+  std::vector<materializedViewsQueryAnalysis::MaterializedViewJoinReplacement>
+  match(materializedViewsQueryAnalysis::QueryPatternCache& qpc,
+        const std::string& query) {
+    return qpc.makeJoinReplacementIndexScans(qec(), parseTriples(query));
+  }
+};
 
 // Check that both the greedy and the DP query planner produce a query plan that
 // matches `matcher`. To test only the query plan of the dynamic programming

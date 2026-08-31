@@ -9,6 +9,7 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/functional/bind_front.h>
+#include <absl/numeric/bits.h>
 #include <gmock/gmock.h>
 
 #include "./MaterializedViewsTestHelpers.h"
@@ -16,9 +17,7 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
-#include "index/vocabulary/EncodedIriManager.h"
 #include "libqlever/Qlever.h"
-#include "parser/SparqlParser.h"
 
 namespace {
 
@@ -127,6 +126,10 @@ TEST_F(MaterializedViewsPatternRewriteTest, starRewrite) {
   noStarRewrite("SELECT * { ?s <p1> ?o1 } ");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . ?o2 ^<p2> ?s }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2>* ?o2 }");
+
+  // A triple with neither side a variable cannot connect to the rest of the
+  // pattern and is rejected.
+  noStarRewrite("SELECT * { ?s <p1> ?o1 . <o2a> <p9> <o2b> }");
 }
 
 // _____________________________________________________________________________
@@ -226,31 +229,16 @@ TEST_F(MaterializedViewsPatternRewriteTest,
 // Regression test for #3193: an aggregate removes a pattern variable from the
 // view's columns, so the view must not be registered for rewriting. Covers
 // explicit (`GROUP BY`) and implicit (aggregate in `SELECT`) aggregation.
-TEST(MaterializedViewsPatternRewriteRejectionTest,
-     aggregatingPatternsNotRewritten) {
-  const std::string onDiskBase = gtestCurrentTestName();
-  const std::string starTtl =
-      " <s1> <p1> <o1a> . \n"
-      " <s1> <p2> <o2a> . \n"
-      " <s2> <p1> <o1b> . \n"
-      " <s2> <p2> <o2b> . \n";
-  materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
-  auto cleanUp = absl::Cleanup(
-      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
-  qlever::EngineConfig config;
-  config.baseName_ = onDiskBase;
-  qlever::Qlever qlv{config};
-  MaterializedViewsManager manager{onDiskBase};
-
+TEST_F(MaterializedViewsPatternMatchingTest, aggregatingPatternsNotRewritten) {
   constexpr std::string_view kAggregatingReason = "The view's query aggregates";
 
   expectNotSuitableForRewrite(
-      qlv, manager, "aggregatingStarView",
+      qlv(), manager(), "aggregatingStarView",
       "SELECT ?s (COUNT(?o1) AS ?c) { ?s <p1> ?o1 . ?s <p2> ?o2 } "
       "GROUP BY ?s",
       kAggregatingReason);
   expectNotSuitableForRewrite(
-      qlv, manager, "aggregatingChainView",
+      qlv(), manager(), "aggregatingChainView",
       "SELECT ?s (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
       "GROUP BY ?s",
       kAggregatingReason);
@@ -258,7 +246,7 @@ TEST(MaterializedViewsPatternRewriteRejectionTest,
   // Same as above, but the star's subject (rather than one of its arms) is
   // aggregated away.
   expectNotSuitableForRewrite(
-      qlv, manager, "aggregatingStarSubjectView",
+      qlv(), manager(), "aggregatingStarSubjectView",
       "SELECT ?o1 ?o2 (COUNT(?s) AS ?c) { ?s <p1> ?o1 . ?s <p2> ?o2 } "
       "GROUP BY ?o1 ?o2",
       kAggregatingReason);
@@ -266,12 +254,12 @@ TEST(MaterializedViewsPatternRewriteRejectionTest,
   // Same as `aggregatingChainView` above, but the chain's first (subject) or
   // last (object) variable is aggregated away instead of the middle one.
   expectNotSuitableForRewrite(
-      qlv, manager, "aggregatingChainSubjectView",
+      qlv(), manager(), "aggregatingChainSubjectView",
       "SELECT ?m ?o (COUNT(?s) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
       "GROUP BY ?m ?o",
       kAggregatingReason);
   expectNotSuitableForRewrite(
-      qlv, manager, "aggregatingChainObjectView",
+      qlv(), manager(), "aggregatingChainObjectView",
       "SELECT ?s ?m (COUNT(?o) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
       "GROUP BY ?s ?m",
       kAggregatingReason);
@@ -279,50 +267,36 @@ TEST(MaterializedViewsPatternRewriteRejectionTest,
   // Same as `aggregatingChainView` above, but the `GROUP BY` is implicit (no
   // explicit `GROUP BY` clause, just an aggregate in the `SELECT` clause).
   expectNotSuitableForRewrite(
-      qlv, manager, "implicitlyAggregatingChainView",
+      qlv(), manager(), "implicitlyAggregatingChainView",
       "SELECT (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o }",
       kAggregatingReason);
 }
 
 // _____________________________________________________________________________
-TEST(MaterializedViewsPatternRewriteRejectionTest,
-     unprojectedVariablePatternsNotRewritten) {
-  const std::string onDiskBase = gtestCurrentTestName();
-  const std::string starTtl =
-      " <s1> <p1> <o1a> . \n"
-      " <s1> <p2> <o2a> . \n"
-      " <s2> <p1> <o1b> . \n"
-      " <s2> <p2> <o2b> . \n";
-  materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
-  auto cleanUp = absl::Cleanup(
-      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
-  qlever::EngineConfig config;
-  config.baseName_ = onDiskBase;
-  qlever::Qlever qlv{config};
-  MaterializedViewsManager manager{onDiskBase};
-
+TEST_F(MaterializedViewsPatternMatchingTest,
+       unprojectedVariablePatternsNotRewritten) {
   constexpr std::string_view kNoPatternReason =
       "No supported query pattern for rewriting joins was found";
 
   // Star: the subject is not selected.
-  expectNotSuitableForRewrite(qlv, manager, "unprojectedStarSubjectView",
+  expectNotSuitableForRewrite(qlv(), manager(), "unprojectedStarSubjectView",
                               "SELECT ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }",
                               kNoPatternReason);
   // Star: one arm's object is not selected.
-  expectNotSuitableForRewrite(qlv, manager, "unprojectedStarArmView",
+  expectNotSuitableForRewrite(qlv(), manager(), "unprojectedStarArmView",
                               "SELECT ?s ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }",
                               kNoPatternReason);
 
   // Chain: the subject is not selected.
-  expectNotSuitableForRewrite(qlv, manager, "unprojectedChainSubjectView",
+  expectNotSuitableForRewrite(qlv(), manager(), "unprojectedChainSubjectView",
                               "SELECT ?m ?o { ?s <p1> ?m . ?m <p2> ?o }",
                               kNoPatternReason);
   // Chain: the middle (chain) variable is not selected.
-  expectNotSuitableForRewrite(qlv, manager, "unprojectedChainMiddleView",
+  expectNotSuitableForRewrite(qlv(), manager(), "unprojectedChainMiddleView",
                               "SELECT ?s ?o { ?s <p1> ?m . ?m <p2> ?o }",
                               kNoPatternReason);
   // Chain: the object is not selected.
-  expectNotSuitableForRewrite(qlv, manager, "unprojectedChainObjectView",
+  expectNotSuitableForRewrite(qlv(), manager(), "unprojectedChainObjectView",
                               "SELECT ?s ?m { ?s <p1> ?m . ?m <p2> ?o }",
                               kNoPatternReason);
 }
@@ -331,56 +305,41 @@ TEST(MaterializedViewsPatternRewriteRejectionTest,
 // restrict the rows written to disk, but (unlike aggregation) leave
 // `variableToColumnMap()` intact. Without an explicit check, the view would be
 // used for a query needing the full join.
-TEST(MaterializedViewsPatternRewriteRejectionTest,
-     restrictingModifiersNotRewritten) {
-  const std::string onDiskBase = gtestCurrentTestName();
-  const std::string starTtl =
-      " <s1> <p1> <o1a> . \n"
-      " <s1> <p2> <o2a> . \n"
-      " <s2> <p1> <o1b> . \n"
-      " <s2> <p2> <o2b> . \n";
-  materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
-  auto cleanUp = absl::Cleanup(
-      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
-  qlever::EngineConfig config;
-  config.baseName_ = onDiskBase;
-  qlever::Qlever qlv{config};
-  MaterializedViewsManager manager{onDiskBase};
-
+TEST_F(MaterializedViewsPatternMatchingTest, restrictingModifiersNotRewritten) {
   // Star / chain with a top-level FILTER.
   expectNotSuitableForRewrite(
-      qlv, manager, "filteredStarView",
+      qlv(), manager(), "filteredStarView",
       "SELECT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 . FILTER(?s = <s1>) }",
       "top-level FILTER");
   expectNotSuitableForRewrite(
-      qlv, manager, "filteredChainView",
+      qlv(), manager(), "filteredChainView",
       "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o . FILTER(?s = <s1>) }",
       "top-level FILTER");
 
   // Star / chain with a trailing VALUES clause.
   expectNotSuitableForRewrite(
-      qlv, manager, "valuesStarView",
+      qlv(), manager(), "valuesStarView",
       "SELECT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 } VALUES ?s { <s1> }",
       "trailing VALUES clause");
   expectNotSuitableForRewrite(
-      qlv, manager, "valuesChainView",
+      qlv(), manager(), "valuesChainView",
       "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o } VALUES ?s { <s1> }",
       "trailing VALUES clause");
 
   // Star with DISTINCT, chain with REDUCED.
   expectNotSuitableForRewrite(
-      qlv, manager, "distinctStarView",
+      qlv(), manager(), "distinctStarView",
       "SELECT DISTINCT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }",
       "DISTINCT or REDUCED");
   expectNotSuitableForRewrite(
-      qlv, manager, "reducedChainView",
+      qlv(), manager(), "reducedChainView",
       "SELECT REDUCED ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o }",
       "DISTINCT or REDUCED");
 
   // Star with LIMIT, chain with OFFSET.
   auto expectIgnoredForPatternRewrite = [&](const std::string& query,
                                             std::string_view expectedReason) {
-    auto plan = qlv.parseAndPlanQuery(query);
+    auto plan = qlv().parseAndPlanQuery(query);
     EXPECT_THAT(materializedViewsQueryAnalysis::getTriplesForPatternRewrite(
                     plan.parsedQuery()),
                 ::testing::VariantWith<
@@ -396,11 +355,11 @@ TEST(MaterializedViewsPatternRewriteRejectionTest,
 
   // Star with FROM, chain with FROM NAMED.
   expectNotSuitableForRewrite(
-      qlv, manager, "fromStarView",
+      qlv(), manager(), "fromStarView",
       "SELECT ?s ?o1 ?o2 FROM <g> { ?s <p1> ?o1 . ?s <p2> ?o2 }",
       "FROM or FROM NAMED clause");
   expectNotSuitableForRewrite(
-      qlv, manager, "fromNamedChainView",
+      qlv(), manager(), "fromNamedChainView",
       "SELECT ?s ?m ?o FROM NAMED <g> { ?s <p1> ?m . ?m <p2> ?o }",
       "FROM or FROM NAMED clause");
 }
@@ -542,35 +501,18 @@ TEST_F(MaterializedViewsPatternRewriteContextTest,
 
 // An assignment limit too small for one full match (a 2-edge chain needs >= 2
 // attempts) finds nothing and warns; the default limit finds the match.
-TEST(MaterializedViewsPatternMatchLimitsTest,
-     PatternMatchNumAssignmentsIsRespected) {
-  const std::string onDiskBase = gtestCurrentTestName();
-  materializedViewsTestHelpers::makeTestIndex(onDiskBase,
-                                              " <s1> <p0> <o1> .\n");
-  auto cleanUp = absl::Cleanup(
-      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
-  qlever::EngineConfig config;
-  config.baseName_ = onDiskBase;
-  qlever::Qlever qlv{config};
-  MaterializedViewsManager manager{onDiskBase};
-  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
-
+TEST_F(MaterializedViewsPatternMatchingTest,
+       PatternMatchNumAssignmentsIsRespected) {
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
-  manager.writeViewToDisk(
-      "numAssignmentsChain",
-      qlv.parseAndPlanQuery("SELECT * { ?s <bp1> ?m . ?m <bp2> ?o }"));
-  auto view = manager.getView("numAssignmentsChain", qec.get());
-  qpc.analyzeView(view, qec.get());
-
-  auto plan = qlv.parseAndPlanQuery("SELECT * { ?s <bp1> ?m . ?m <bp2> ?o }");
-  const auto& triples =
-      plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
+  registerView(qpc, "numAssignmentsChain",
+               "SELECT * { ?s <bp1> ?m . ?m <bp2> ?o }");
+  const std::string query = "SELECT * { ?s <bp1> ?m . ?m <bp2> ?o }";
 
   {
     auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
     auto cleanupNumAssignments = setRuntimeParameterForTest<
         &RuntimeParameters::materializedViewPatternMatchNumAssignments_>(1);
-    EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
+    EXPECT_TRUE(match(qpc, query).empty());
     EXPECT_THAT(logStream.str(),
                 ::testing::HasSubstr(
                     "materialized-view-pattern-match-num-assignments"));
@@ -579,79 +521,147 @@ TEST(MaterializedViewsPatternMatchLimitsTest,
     auto cleanupNumAssignments = setRuntimeParameterForTest<
         &RuntimeParameters::materializedViewPatternMatchNumAssignments_>(
         100'000);
-    EXPECT_FALSE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
+    EXPECT_FALSE(match(qpc, query).empty());
   }
 }
 
 // A limit of `0` assignment disables pattern-based rewriting: no match is
 // found and no warning is logged.
-TEST(MaterializedViewsPatternMatchLimitsTest,
-     PatternMatchNumAssignmentsZeroDisables) {
-  const std::string onDiskBase = gtestCurrentTestName();
-  materializedViewsTestHelpers::makeTestIndex(onDiskBase,
-                                              " <s1> <p0> <o1> .\n");
-  auto cleanUp = absl::Cleanup(
-      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
-  qlever::EngineConfig config;
-  config.baseName_ = onDiskBase;
-  qlever::Qlever qlv{config};
-  MaterializedViewsManager manager{onDiskBase};
-  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
-
+TEST_F(MaterializedViewsPatternMatchingTest,
+       PatternMatchNumAssignmentsZeroDisables) {
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
-  manager.writeViewToDisk(
-      "numAssignmentsZeroChain",
-      qlv.parseAndPlanQuery("SELECT * { ?s <bz1> ?m . ?m <bz2> ?o }"));
-  auto view = manager.getView("numAssignmentsZeroChain", qec.get());
-  qpc.analyzeView(view, qec.get());
-
-  auto plan = qlv.parseAndPlanQuery("SELECT * { ?s <bz1> ?m . ?m <bz2> ?o }");
-  const auto& triples =
-      plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
+  registerView(qpc, "numAssignmentsZeroChain",
+               "SELECT * { ?s <bz1> ?m . ?m <bz2> ?o }");
 
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
   auto cleanupNumAssignments = setRuntimeParameterForTest<
       &RuntimeParameters::materializedViewPatternMatchNumAssignments_>(0);
-  EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
+  EXPECT_TRUE(match(qpc, "SELECT * { ?s <bz1> ?m . ?m <bz2> ?o }").empty());
   EXPECT_THAT(logStream.str(),
               ::testing::Not(::testing::HasSubstr(
                   "materialized-view-pattern-match-num-assignments")));
 }
 
 // _____________________________________________________________________________
-TEST(MaterializedViewsPatternMatchLimitsTest, ReplacementCountIsCapped) {
-  const std::string onDiskBase = gtestCurrentTestName();
-  materializedViewsTestHelpers::makeTestIndex(onDiskBase,
-                                              " <s1> <p0> <o1> .\n");
-  auto cleanUp = absl::Cleanup(
-      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
-  qlever::EngineConfig config;
-  config.baseName_ = onDiskBase;
-  qlever::Qlever qlv{config};
-  MaterializedViewsManager manager{onDiskBase};
-  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
-
+TEST_F(MaterializedViewsPatternMatchingTest, ReplacementCountIsCapped) {
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
-  manager.writeViewToDisk(
-      "capView",
-      qlv.parseAndPlanQuery("SELECT * { ?s <cp1> ?o1 . ?s <cp1> ?o2 }"));
-  auto view = manager.getView("capView", qec.get());
-  qpc.analyzeView(view, qec.get());
+  registerView(qpc, "capView", "SELECT * { ?s <cp1> ?o1 . ?s <cp1> ?o2 }");
 
   // 40 triples sharing subject and predicate: assigning two of them to the
   // view's two interchangeable arms yields 40*39 = 1560 matches, well over the
-  // cap. Parsed directly, to sidestep the planner's 64-triple limit.
+  // cap.
   std::string hostQuery = "SELECT * { ";
   for (int i = 0; i < 40; ++i) {
     hostQuery += absl::StrCat("<s> <cp1> <o", i, "> . ");
   }
   hostQuery += "}";
-  EncodedIriManager encodedIriManager;
-  auto parsed = SparqlParser::parseQuery(&encodedIriManager, hostQuery, {});
-  const auto& triples =
-      parsed._rootGraphPattern._graphPatterns.at(0).getBasic();
 
-  auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
+  auto replacements = match(qpc, hostQuery);
   EXPECT_GT(replacements.size(), 0u);
   EXPECT_LE(replacements.size(), 1000u);
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsPatternMatchingTest, PatternMatchingEdgeCases) {
+  materializedViewsQueryAnalysis::QueryPatternCache qpc;
+  auto numReplacements = [&](const std::string& query) {
+    return match(qpc, query).size();
+  };
+
+  // Binding two or all three of a star view's first, second, and third
+  // columns to fixed values in a single match is legal.
+  registerView(qpc, "fixedPrefixStarView",
+               "SELECT * { ?s <fp1> ?o1 . ?s <fp2> ?o2 }");
+  EXPECT_EQ(numReplacements("SELECT * { <s1> <fp1> <o1a> . <s1> <fp2> ?o2 }"),
+            1u);
+  EXPECT_EQ(numReplacements("SELECT * { <s1> <fp1> <o1a> . <s1> <fp2> <o2a> }"),
+            1u);
+
+  // The first column is `?m`, the chain's middle variable, so the first
+  // edge's subject `?s` is a variable, but not the first column.
+  registerView(qpc, "differentSortChainView",
+               "SELECT ?m ?s ?o { ?s <cs1> ?m . ?m <cs2> ?o }");
+  EXPECT_EQ(numReplacements("SELECT * { ?a <cs1> ?b . ?b <cs2> ?c }"), 1u);
+
+  // The first column is `?o2`, so the first edge's fixed (not variable)
+  // object is also checked, but can never match the first column.
+  registerView(qpc, "reorderedFixedArmView",
+               "SELECT ?o2 ?s { ?s <cs3> <fixedArm> . ?s <cs4> ?o2 }");
+  EXPECT_EQ(numReplacements("SELECT * { ?a <cs3> <fixedArm> . ?a <cs4> ?b }"),
+            1u);
+
+  // A fixed value can never be bound to a payload column (after the third
+  // column), even if binding it would otherwise be legal.
+  registerView(qpc, "threeArmStarView",
+               "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> ?o3 }");
+  EXPECT_EQ(
+      numReplacements("SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> <o3a> }"),
+      0u);
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsPatternMatchingTest, BookkeepingEdgeCases) {
+  // Only a subset of candidates is found due to an assignments limit of 2.
+  {
+    materializedViewsQueryAnalysis::QueryPatternCache qpc;
+    registerView(qpc, "multiCandidateStarView",
+                 "SELECT * { ?s <mp1> ?o1 . ?s <mp2> ?o2 }");
+    auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    auto cleanupNumAssignments = setRuntimeParameterForTest<
+        &RuntimeParameters::materializedViewPatternMatchNumAssignments_>(2);
+    // Only one of the four possible (mp1-candidate, mp2-candidate)
+    // combinations is found before the limit of `2` assignments is
+    // exhausted.
+    EXPECT_EQ(match(qpc,
+                    "SELECT * { ?s <mp1> ?a . ?s <mp1> ?b . ?s <mp2> ?c . "
+                    "?s <mp2> ?d }")
+                  .size(),
+              1u);
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr(
+                    "materialized-view-pattern-match-num-assignments"));
+  }
+
+  // More than 64 triples in the user's query disable pattern-based
+  // rewriting, since a 64-bit bitmask is used to track covered triple
+  // indices.
+  {
+    materializedViewsQueryAnalysis::QueryPatternCache qpc;
+    registerView(qpc, "tooManyTriplesView",
+                 "SELECT * { ?s <tp1> ?o1 . ?s <tp2> ?o2 }");
+    std::string hostQuery = "SELECT * { ";
+    for (int i = 0; i < 65; ++i) {
+      hostQuery += absl::StrCat("<s", i, "> <tp1> <o", i, "> . ");
+    }
+    hostQuery += "}";
+    EXPECT_TRUE(match(qpc, hostQuery).empty());
+  }
+
+  // A property-path predicate has no `getSimplePredicate()` value and is
+  // skipped when grouping the user query's triples by predicate; the other
+  // triples in the same query are still matched normally.
+  {
+    materializedViewsQueryAnalysis::QueryPatternCache qpc;
+    registerView(qpc, "propertyPathStarView",
+                 "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 }");
+    auto replacements =
+        match(qpc, "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3>* ?o3 }");
+    ASSERT_EQ(replacements.size(), 1u);
+    EXPECT_EQ(absl::popcount(replacements.at(0).coveredTriples_), 2u);
+    EXPECT_EQ(replacements.at(0).coveredTriples_ & (uint64_t{1} << 2), 0u);
+  }
+
+  // With two candidate views sharing predicates with the query, once the
+  // first view exhausts the shared replacement-plan limit, the loop breaks
+  // before even attempting the second view.
+  {
+    materializedViewsQueryAnalysis::QueryPatternCache qpc;
+    registerView(qpc, "aFirstView", "SELECT * { ?s <cp1> ?o1 . ?s <cp2> ?o2 }");
+    registerView(qpc, "bSecondView", "SELECT * { ?x <cp2> ?y . ?x <cp3> ?z }");
+    auto cleanupNumReplacementPlans = setRuntimeParameterForTest<
+        &RuntimeParameters::materializedViewPatternMatchNumReplacementPlans_>(
+        1);
+    EXPECT_EQ(match(qpc, "SELECT * { ?s <cp1> ?o1 . ?s <cp2> ?o2 }").size(),
+              1u);
+  }
 }
