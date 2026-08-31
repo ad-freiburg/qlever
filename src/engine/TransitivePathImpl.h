@@ -162,23 +162,19 @@ class TransitivePathImpl : public TransitivePathBase {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
     auto edges = setupEdgesMap(sub->idTableView(), startSide, targetSide);
-    auto startNodes = setupNodes(sub->idTableView(), startSide, edges);
-    auto targetNodes = setupNodes(sub->idTableView(), targetSide, edges);
+    auto nodes = setupNodes(sub->idTableView(), startSide, edges);
 
     runtimeInfo().addDetail("Initialization time", timer.msecs());
 
     // Technically we should pass the localVocab of `sub` here, but this will
     // just lead to a merge with itself later on in the pipeline.
-    detail::TableColumnWithVocab<const decltype(startNodes)&> startTableInfo{
-        std::nullopt, startNodes, LocalVocab{}};
-    detail::TableColumnWithVocab<const decltype(targetNodes)&> targetTableInfo{
-        std::nullopt, targetNodes, LocalVocab{}};
+    detail::TableColumnWithVocab<const decltype(nodes)&> tableInfo{
+        std::nullopt, nodes, LocalVocab{}};
 
-    NodeGenerator hull =
-        transitiveHull(std::move(edges), sub->getCopyOfLocalVocab(),
-                       ql::span{&startTableInfo, 1},
-                       std::optional(ql::span{&targetTableInfo, 1}),
-                       startSide.value_, targetSide.value_, yieldOnce);
+    NodeGenerator hull = transitiveHull(
+        std::move(edges), sub->getCopyOfLocalVocab(), ql::span{&tableInfo, 1},
+        std::optional<decltype(ql::span{&tableInfo, 1})>(), startSide.value_,
+        targetSide.value_, yieldOnce);
 
     // We don't pass a payload table, so our `inputWidth` is 0.
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
