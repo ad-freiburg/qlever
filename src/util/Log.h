@@ -158,8 +158,15 @@ inline void setRuntimeLogLevel(LogLevel level) {
   detail::runtimeLogLevel.store(level.value(), std::memory_order_relaxed);
 }
 
-// Get the runtime log level (see `setRuntimeLogLevel`).
-inline LogLevel getRuntimeLogLevel() { return detail::runtimeLogLevel.load(); }
+// Get the runtime log level (see `setRuntimeLogLevel`). Note: The relaxed
+// memory order is deliberate and consistent with the other accesses to
+// `detail::runtimeLogLevel` (see `setRuntimeLogLevel` and
+// `detail::logLevelIsEnabled`): the log level is a standalone value that
+// synchronizes nothing, and the accesses are on the hot path of every single
+// log statement.
+inline LogLevel getRuntimeLogLevel() {
+  return detail::runtimeLogLevel.load(std::memory_order_relaxed);
+}
 
 // While an object of this class is alive, the runtime log level is the given
 // `level` (or the compile-time `LOGLEVEL`, if that is less verbose); the
