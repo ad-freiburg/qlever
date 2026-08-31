@@ -64,7 +64,6 @@ class ServerMetrics {
   absl::AnyInvocable<int64_t() const> getCacheLimit_;
   absl::AnyInvocable<int64_t() const> getRebuildInProgress_;
   absl::AnyInvocable<int64_t() const> getNumTriplesIndex_;
-  absl::AnyInvocable<int64_t() const> getNumTriplesTotal_;
 
   // Observable instruments: SDK invokes callbacks on scrape; RemoveCallback
   // in ~ServerMetrics() blocks until any in-flight callback returns.
@@ -80,8 +79,6 @@ class ServerMetrics {
       rebuildInProgressMetric_;
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
       numTriplesIndex_;
-  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
-      numTriplesTotal_;
 };
 
 #endif  // QLEVER_SRC_UTIL_METRICS_SERVERMETRICS_H

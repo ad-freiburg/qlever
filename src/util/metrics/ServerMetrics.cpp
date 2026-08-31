@@ -30,9 +30,7 @@ ServerMetrics::ServerMetrics(
       getCacheUsed_(std::move(getCacheUsed)),
       getCacheLimit_(std::move(getCacheLimit)),
       getRebuildInProgress_(std::move(getRebuildInProgress)),
-      getNumTriplesIndex_(std::move(getNumTriplesIndex)),
-      getNumTriplesTotal_(
-          [this]() { return getNumTriplesIndex_() + getDeltaTriples_(); }) {
+      getNumTriplesIndex_(std::move(getNumTriplesIndex)) {
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
   buildInfoMetric_ = meter->CreateInt64Gauge(
@@ -82,8 +80,6 @@ ServerMetrics::ServerMetrics(
   numTriplesIndex_ = meter->CreateInt64ObservableGauge(
       "qlever.num_triples.index",
       "Total number of triples in the index (excluding delta triples)");
-  numTriplesTotal_ = meter->CreateInt64ObservableGauge(
-      "qlever.num_triples.total", "Total number of triples");
 
   auto now = std::chrono::duration_cast<std::chrono::seconds>(
                  std::chrono::system_clock::now().time_since_epoch())
@@ -134,8 +130,6 @@ ServerMetrics::~ServerMetrics() {
       &observeCallback<&ServerMetrics::getRebuildInProgress_>, this);
   numTriplesIndex_->RemoveCallback(
       &observeCallback<&ServerMetrics::getNumTriplesIndex_>, this);
-  numTriplesTotal_->RemoveCallback(
-      &observeCallback<&ServerMetrics::getNumTriplesTotal_>, this);
 }
 
 // _____________________________________________________________________________
@@ -152,8 +146,6 @@ void ServerMetrics::registerCallbacks() {
       &observeCallback<&ServerMetrics::getRebuildInProgress_>, this);
   numTriplesIndex_->AddCallback(
       &observeCallback<&ServerMetrics::getNumTriplesIndex_>, this);
-  numTriplesTotal_->AddCallback(
-      &observeCallback<&ServerMetrics::getNumTriplesTotal_>, this);
 }
 
 // _____________________________________________________________________________
