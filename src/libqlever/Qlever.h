@@ -32,6 +32,7 @@
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
 #include "index/IndexRebuilderTypes.h"
+#include "index/IndexSwap.h"
 #include "index/InputFileSpecification.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
@@ -84,56 +85,6 @@ struct CommonConfig {
   // each literal, a triple `<literal> ql:has-word "word"` is added for each
   // word in the literal. This is useful for keyword search in literals.
   bool addHasWordTriples_ = false;
-};
-
-// Configuration for relocating a runtime-rebuilt index. It bundles the four
-// basenames that are involved in swapping a freshly rebuilt index into place.
-// All paths are relative to the working directory of the engine. The base names
-// are validated and fixed at construction time and afterwards only readable via
-// the accessors. The constructor enforces that the base names do not collide in
-// a way that would overwrite files that are still needed.
-class IndexRebuildConfig {
- private:
-  // These are documented at their accessors below.
-  std::string oldIndexSource_;
-  std::string newIndexSource_;
-  std::string oldIndexTarget_;
-  std::string newIndexTarget_;
-
- public:
-  // Construct from the four base names (see the accessors below for their
-  // meaning). Throws if the base names collide.
-  IndexRebuildConfig(std::string oldIndexSource, std::string newIndexSource,
-                     std::string oldIndexTarget, std::string newIndexTarget);
-
-  // The base name of the index that is currently being served, i.e. the index
-  // that is about to be replaced by the freshly rebuilt one. This is where the
-  // old index is moved *from*.
-  const std::string& oldIndexSource() const { return oldIndexSource_; }
-
-  // The base name under which the freshly rebuilt index was built in a
-  // temporary location. This is where the new index is moved *from*. After the
-  // new index has been moved to its final place, the containing directory is
-  // typically removed again.
-  const std::string& newIndexSource() const { return newIndexSource_; }
-
-  // The base name to which the files of the old (currently served) index are
-  // moved when the new index is swapped in. This is where the old index is
-  // moved *to*. The resulting files form a complete index that a server can be
-  // started on in case something is wrong with the new index.
-  const std::string& oldIndexTarget() const { return oldIndexTarget_; }
-
-  // The base name under which the new index is served after the swap (and from
-  // which a later restart loads it). This is where the new index is moved *to*.
-  // Typically the same location as the currently served index, so that the
-  // "current" index has a stable location.
-  const std::string& newIndexTarget() const { return newIndexTarget_; }
-
-  // The JSON that is reported to the client after a successful rebuild: a
-  // human-readable message plus the directory to which the old index was
-  // retired (the resolved value of the `rebuild-previous-index-dir` command
-  // parameter, which the client does not know when the default was used).
-  nlohmann::json successResponseAsJson() const;
 };
 
 // Additional configuration used for building an index for a given dataset.
@@ -665,24 +616,16 @@ class Qlever {
     *indexAndViews_.wlock() = std::move(indexAndViews);
   }
 
-  // Assemble the `IndexRebuildConfig` for a rebuild of `index` (which has to be
+  // Assemble the `IndexSwapConfig` for a rebuild of `index` (which has to be
   // the index that is currently being served) from the two directories a
   // rebuild can be configured with: `rebuildTmpDir`, in which the new index
   // is built, and `rebuildPreviousIndexDir`, to which the old index is retired.
-  // Both default (if `std::nullopt`) to a directory that is derived from the
-  // current time resp. from the build date of the current index. Inside these
-  // directories, and for the new index after the swap, the file name of
-  // `index.getOnDiskBase()` is used: the new index has to end up at the base
-  // name the current index is served from, so that a later restart loads it.
-  //
-  // The two directories must be relative paths (they are resolved against the
-  // working directory of the engine, just like the base name of the current
-  // index), must be empty or not exist yet, and must lie inside the directory
-  // of `index.getOnDiskBase()`, so that the index directories are not nested
-  // ever deeper. Throws `std::runtime_error` if one of these conditions is
-  // violated, and (via the `IndexRebuildConfig` constructor) if the resulting
-  // base names collide.
-  static IndexRebuildConfig makeIndexRebuildConfig(
+  // Both default (if `std::nullopt`) to `rebuild.<current datetime>.tmp` resp.
+  // `previous.<build date of the current index>`. This is a thin wrapper
+  // around `makeIndexSwapConfig` (see `index/IndexSwap.h`, in particular for
+  // the requirements on the two directories and the errors that are thrown
+  // when they are violated).
+  static IndexSwapConfig makeIndexRebuildConfig(
       const Index& index, std::optional<std::string> rebuildTmpDir,
       std::optional<std::string> rebuildPreviousIndexDir);
 
@@ -719,16 +662,19 @@ class Qlever {
   //    `config.oldIndexTarget()`.
   // 2. Move the files of the freshly rebuilt index from
   //    `config.newIndexSource()` to `config.newIndexTarget()`.
-  // 3. Re-anchor all path-derived state of the new index in memory (on-disk
-  //    base name, files for persisted updates and graph names, and the views
-  //    manager) to `config.newIndexTarget()`.
-  // 4. Remove the directory that contained `config.newIndexSource()`, which
+  // 3. Remove the directory that contained `config.newIndexSource()`, which
   //    step 2 has emptied (if it is actually empty). A failure here is only
   //    logged as a warning.
+  // 4. Re-anchor all path-derived state of the new index in memory (on-disk
+  //    base name, files for persisted updates and graph names, and the views
+  //    manager) to `config.newIndexTarget()`.
   // 5. Apply the `policy` for which `previous.*` index directories to keep
   //    (see `cleanUpPreviousIndexDirs` above), right after step 1 has retired
   //    the old index into such a directory. The default policy `all` keeps
   //    everything, i.e. performs no cleanup.
+  //
+  // Steps 1 to 3 are the pure on-disk part of the swap and are performed by
+  // `qlever::moveIndexIntoPlace` (see `index/IndexSwap.h`).
   //
   // Typically, `config.newIndexTarget()` is `config.oldIndexSource()`, i.e. the
   // new index is served from the place of the old index (so that a later
@@ -748,7 +694,7 @@ class Qlever {
   // function assumes that file handles are never reopened, so moving the files
   // while the file handle is still open is fine in POSIX compliant systems.
   static void moveRebuiltIndexIntoPlace(
-      IndexAndViews& newIndexAndViews, const IndexRebuildConfig& config,
+      IndexAndViews& newIndexAndViews, const IndexSwapConfig& config,
       KeepPreviousIndexDirs policy = KeepPreviousIndexDirs::All);
 
   // The result of the first phase of an index rebuild (see
@@ -775,7 +721,7 @@ class Qlever {
   // why `index` has to be passed in manually instead of using
   // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs.
   [[nodiscard]] RebuildResult rebuildIndexToDisk(
-      Index& index, const IndexRebuildConfig& config,
+      Index& index, const IndexSwapConfig& config,
       const ad_utility::SharedCancellationHandle& handle) const;
 
   // Remap the delta triples that accumulated on the old `index` (which has to
@@ -797,7 +743,7 @@ class Qlever {
   // for which `previous.*` index directories to keep.
   void swapInRebuiltIndex(const Index& index, RebuildResult rebuildResult,
                           const ad_utility::SharedCancellationHandle& handle,
-                          const IndexRebuildConfig& config,
+                          const IndexSwapConfig& config,
                           KeepPreviousIndexDirs keepPreviousIndexDirs);
 #endif
 
