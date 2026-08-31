@@ -131,8 +131,6 @@ class TransitivePathBase : public Operation {
  protected:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
 
-  using OpAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
-
   std::shared_ptr<QueryExecutionTree> subtree_;
   TransitivePathSide lhs_;
   TransitivePathSide rhs_;
@@ -172,8 +170,8 @@ class TransitivePathBase : public Operation {
   // operation if the amount of those values is smaller than all possible values
   // (as the transitive path has to be computed for fewer elements).
   std::shared_ptr<TransitivePathBase> bindSides(
-      std::optional<OpAndCol> leftOpAndCol = std::nullopt,
-      std::optional<OpAndCol> rightOpAndCol = std::nullopt) const;
+      std::optional<TreeAndCol> leftOpAndCol = std::nullopt,
+      std::optional<TreeAndCol> rightOpAndCol = std::nullopt) const;
 
   bool isBoundOrId() const;
 
@@ -237,8 +235,8 @@ class TransitivePathBase : public Operation {
   // Return how many columns would be joined given the passed `tree`. Return 1
   // if `getActualGraphColumnIndex(tree)` is `std::nullopt` or the returned
   // index is equal to `joinColumn`. Return 2 otherwise.
-  size_t numJoinColumnsWidth(const std::shared_ptr<QueryExecutionTree>& tree,
-                             ColumnIndex joinColumn) const;
+  size_t numJoinColumnsWith(const std::shared_ptr<QueryExecutionTree>& tree,
+                            ColumnIndex joinColumn) const;
 
  public:
   std::string getDescriptor() const override;
@@ -298,8 +296,9 @@ class TransitivePathBase : public Operation {
   // Traverse each side of the operation and insert columns which are not
   // related to joining into the plan.
   void insertPayloadColumnsToPlan(
-      auto& plan, const std::optional<OpAndCol>& opAndCol,
-      const std::optional<OpAndCol>& otherOpAndCol) const;
+      std::shared_ptr<TransitivePathBase>& plan,
+      const std::optional<TreeAndCol>& opAndCol,
+      const std::optional<TreeAndCol>& otherOpAndCol) const;
 
  public:
   size_t getCostEstimate() override;

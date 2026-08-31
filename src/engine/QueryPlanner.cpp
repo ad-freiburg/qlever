@@ -2667,7 +2667,8 @@ auto QueryPlanner::createJoinWithTransitivePath(
     // If both join columns are given, we can bind them both.
     if (joinCols.at(1).has_value()) {
       const auto& [secondColTransPath, secondColOther] = joinCols.at(1).value();
-      AD_CONTRACT_CHECK(secondColTransPath <= 1);
+      AD_CONTRACT_CHECK(secondColTransPath <= 1 &&
+                        secondColTransPath != firstColTransPath);
       if (firstColTransPath == 0) {
         // Bind both columns with transitive Path on the left side.
         return makeSubtreePlan(transPathOperation->bindSides(

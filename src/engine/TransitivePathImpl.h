@@ -4,7 +4,6 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include <range/v3/range/traits.hpp>
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
@@ -109,8 +108,7 @@ class TransitivePathImpl : public TransitivePathBase {
     // Only fetch the target nodes if the target side is also bound.
     std::optional<decltype(startNodes)> targetNodes = std::nullopt;
     if (targetSideResult) {
-      targetNodes =
-          std::move(setupNodes(targetSide, std::move(targetSideResult)));
+      targetNodes = setupNodes(targetSide, std::move(targetSideResult));
     }
 
     // Setup nodes returns a generator, so this time measurement won't include
@@ -124,7 +122,7 @@ class TransitivePathImpl : public TransitivePathBase {
 
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
     size_t numberOfPayloadColumns =
-        tree->getResultWidth() - numJoinColumnsWidth(tree, joinColumn);
+        tree->getResultWidth() - numJoinColumnsWith(tree, joinColumn);
 
     // Add the target side's payload columns as well.
     if (targetNodes.has_value()) {
@@ -132,7 +130,7 @@ class TransitivePathImpl : public TransitivePathBase {
           targetSide.treeAndCol_.value();
       numberOfPayloadColumns +=
           targetTree->getResultWidth() -
-          numJoinColumnsWidth(targetTree, targetJoinColumns);
+          numJoinColumnsWith(targetTree, targetJoinColumns);
     }
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce,

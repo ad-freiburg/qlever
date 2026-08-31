@@ -5,6 +5,8 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include "engine/TransitivePathBase.h"
+
 #include <absl/strings/str_cat.h>
 
 #include <limits>
@@ -313,7 +315,7 @@ std::optional<ColumnIndex> TransitivePathBase::getActualGraphColumnIndex(
 }
 
 // _____________________________________________________________________________
-size_t TransitivePathBase::numJoinColumnsWidth(
+size_t TransitivePathBase::numJoinColumnsWith(
     const std::shared_ptr<QueryExecutionTree>& tree,
     ColumnIndex joinColumn) const {
   auto graphCol = getActualGraphColumnIndex(tree);
@@ -543,8 +545,8 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
 
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
-    std::optional<OpAndCol> leftOpAndCol,
-    std::optional<OpAndCol> rightOpAndCol) const {
+    std::optional<TreeAndCol> leftOpAndCol,
+    std::optional<TreeAndCol> rightOpAndCol) const {
   // Ensure at least one side is given.
   AD_CORRECTNESS_CHECK(leftOpAndCol.has_value() || rightOpAndCol.has_value());
 
@@ -558,22 +560,21 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
   auto lhs = lhs_;
   auto rhs = rhs_;
 
-  // Process both sides according to if they're given or not.
-  // `resetPlaceholder` ensures a side is always cleared if its `opAndCol` has
-  // no value.
-  auto setTreeAndCol = [&](auto& side, auto& opAndCol, bool resetPlaceholder) {
-    if (opAndCol.has_value()) {
-      auto& [op, col] = opAndCol.value();
+  // Set a side's `treeAndCol_` member to the given `treeAndCol` or reset it.
+  // `resetPlaceholder` ensures a side is cleared if its `opAndCol` has no
+  // value.
+  auto setSideTreeAndCol = [&](auto& side, auto& treeAndCol,
+                               bool resetPlaceholder) {
+    if (treeAndCol.has_value()) {
+      auto& [op, col] = treeAndCol.value();
       op = matchWithKnowledgeGraph(col, std::move(op));
-
       side.treeAndCol_ = {op, col};
-
     } else if (resetPlaceholder || !side.isVariable()) {
       side.treeAndCol_ = std::nullopt;
     }
   };
-  setTreeAndCol(lhs, leftOpAndCol, boundVariableIsForEmptyPath_);
-  setTreeAndCol(rhs, rightOpAndCol, false);
+  setSideTreeAndCol(lhs, leftOpAndCol, boundVariableIsForEmptyPath_);
+  setSideTreeAndCol(rhs, rightOpAndCol, false);
 
   // We use the cheapest tree that can be created using any of the alternative
   // subtrees. This has the effect that the `TransitivePathBinSearch` will
@@ -610,8 +611,9 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
 
 // _____________________________________________________________________________
 void TransitivePathBase::insertPayloadColumnsToPlan(
-    auto& plan, const std::optional<OpAndCol>& opAndCol,
-    const std::optional<OpAndCol>& otherOpAndCol) const {
+    std::shared_ptr<TransitivePathBase>& plan,
+    const std::optional<TreeAndCol>& opAndCol,
+    const std::optional<TreeAndCol>& otherOpAndCol) const {
   // Ensure we only bind populated columns.
   if (!opAndCol.has_value()) {
     return;
@@ -651,7 +653,7 @@ void TransitivePathBase::insertPayloadColumnsToPlan(
     AD_CORRECTNESS_CHECK(!plan->variableColumns_.contains(variable));
     plan->variableColumns_[variable] = columnIndexWithType;
   }
-  plan->resultWidth_ += op->getResultWidth() - numJoinColumnsWidth(op, col);
+  plan->resultWidth_ += op->getResultWidth() - numJoinColumnsWith(op, col);
 }
 
 // _____________________________________________________________________________

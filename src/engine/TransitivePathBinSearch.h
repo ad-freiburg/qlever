@@ -4,7 +4,6 @@
 //   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include "util/AllocatorWithLimit.h"
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
@@ -18,6 +17,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
+#include "util/AllocatorWithLimit.h"
 
 // A set of edges of the implicit graph of a transitive path operation together
 // with the graph IRI of the source node of each edge. The edges are sorted by
