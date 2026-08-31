@@ -15,19 +15,19 @@
 #include <utility>
 
 #include "engine/CallFixedSize.h"
-#include "engine/Distinct.h"
-#include "engine/Filter.h"
+#include "engine/EmptyPath.h"
 #include "engine/IndexScan.h"
-#include "engine/Join.h"
-#include "engine/MultiColumnJoin.h"
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
-#include "engine/Union.h"
 #include "engine/Values.h"
-#include "engine/sparqlExpressions/LiteralExpression.h"
-#include "engine/sparqlExpressions/NaryExpression.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
+
+namespace {
+auto makeInternalVariable(std::string_view string) {
+  return Variable{absl::StrCat("?internal_property_path_variable_", string)};
+}
+}  // namespace
 
 // _____________________________________________________________________________
 TransitivePathBase::TransitivePathBase(
@@ -62,13 +62,25 @@ TransitivePathBase::TransitivePathBase(
         lhs_.value_ != rhs_.value_) {
       minDist_ = 1;
     } else if (lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
+      // Both sides are unbound, so the starting point for the empty path is the
+      // set of all entities of the knowledge graph. This can be re-bound to
+      // something cheaper later on (see `bindLeftOrRightSide`).
       boundVariableIsForEmptyPath_ = true;
       lhs_.treeAndCol_.emplace(
-          makeEmptyPathSide(qec, activeGraphs_, graphVariable_), 0);
+          ad_utility::makeExecutionTree<EmptyPath>(
+              qec, makeInternalVariable("x"), activeGraphs_, graphVariable_),
+          0);
     } else if (!startingSide.isVariable()) {
+      // TODO<RobinTF> According to the SPARQL standard there shouldn't be an
+      // existence check at all: A value should simply be matched once in every
+      // graph, even if it doesn't occur in the dataset. Only the invariants of
+      // the transitive path implementations (like always supplying a graph id)
+      // currently require this. See
+      // https://github.com/ad-freiburg/qlever/pull/2911 for the operation that
+      // will make this obsolete.
       startingSide.treeAndCol_.emplace(
-          joinWithIndexScan(qec, activeGraphs_, graphVariable_,
-                            startingSide.value_),
+          checkValueExistsInGraph(qec, activeGraphs_, graphVariable_,
+                                  startingSide.value_),
           0);
     }
   }
@@ -88,92 +100,16 @@ TransitivePathBase::TransitivePathBase(
   }
 }
 
-namespace {
-auto makeInternalVariable(std::string_view string) {
-  return Variable{absl::StrCat("?internal_property_path_variable_", string)};
-}
-
-// Helper function to make a sorted tree distinct on all columns.
-auto makeDistinct(std::shared_ptr<QueryExecutionTree> executionTree) {
-  auto* qec = executionTree->getRootOperation()->getExecutionContext();
-  std::vector<ColumnIndex> distinctColumns;
-  distinctColumns.reserve(executionTree->getResultWidth());
-  ql::ranges::copy(ad_utility::integerRange(executionTree->getResultWidth()),
-                   std::back_inserter(distinctColumns));
-  return ad_utility::makeExecutionTree<Distinct>(qec, std::move(executionTree),
-                                                 std::move(distinctColumns));
-}
-}  // namespace
-
 // _____________________________________________________________________________
-std::array<std::shared_ptr<QueryExecutionTree>, 2>
-TransitivePathBase::makeIndexScanPair(
-    QueryExecutionContext* qec, Graphs activeGraphs, const Variable& variable,
-    const std::optional<Variable>& graphVariable) {
-  // Dummy variables to get a full scan of the index.
-  auto a = makeInternalVariable("a");
-  auto b = makeInternalVariable("b");
-  auto c = makeInternalVariable("c");
-  auto d = makeInternalVariable("d");
-  std::set variables{variable};
-  SparqlTripleSimple::AdditionalScanColumns additionalColumns;
-  if (graphVariable.has_value()) {
-    additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
-                                   graphVariable.value());
-    variables.emplace(graphVariable.value());
-  }
-  auto stripColumns =
-      [&variables](std::shared_ptr<QueryExecutionTree> executionTree) {
-        return QueryExecutionTree::makeTreeWithStrippedColumns(
-            std::move(executionTree), variables);
-      };
-
-  return {
-      stripColumns(ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::Enum::SPO,
-          SparqlTripleSimple{TripleComponent{variable}, std::move(a),
-                             TripleComponent{std::move(b)}, additionalColumns},
-          activeGraphs)),
-      stripColumns(ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::Enum::OPS,
-          SparqlTripleSimple{TripleComponent{std::move(c)}, std::move(d),
-                             TripleComponent{variable}, additionalColumns},
-          activeGraphs))};
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::checkValueExistsInGraph(
     QueryExecutionContext* qec, Graphs activeGraphs,
     const std::optional<Variable>& graphVariable,
     const TripleComponent& tripleComponent) {
-  // TODO<RobinTF> Once prefiltering is propagated to nested index scans, we can
-  // simplify this by calling `makeEmptyPathSide` and merging this tree instead.
-
-  auto x = makeInternalVariable("x");
-
-  auto joinWithValues = [qec, &tripleComponent, &x](
-                            std::shared_ptr<QueryExecutionTree> executionTree) {
-    auto valuesClause = makeValuesForSingleValue(qec, x, tripleComponent);
-    return ad_utility::makeExecutionTree<Join>(qec, std::move(executionTree),
-                                               std::move(valuesClause), 0, 0);
-  };
-  auto [leftScan, rightScan] =
-      makeIndexScanPair(qec, std::move(activeGraphs), x, graphVariable);
-  return makeDistinct(ad_utility::makeExecutionTree<Union>(
-      qec, joinWithValues(std::move(leftScan)),
-      joinWithValues(std::move(rightScan))));
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
-    QueryExecutionContext* qec, Graphs activeGraphs,
-    const std::optional<Variable>& graphVariable,
-    std::optional<Variable> variable) {
-  auto [leftScan, rightScan] = makeIndexScanPair(
-      qec, std::move(activeGraphs),
-      std::move(variable).value_or(makeInternalVariable("x")), graphVariable);
-  return makeDistinct(ad_utility::makeExecutionTree<Union>(
-      qec, std::move(leftScan), std::move(rightScan)));
+  auto variable = makeInternalVariable("x");
+  auto valuesClause = makeValuesForSingleValue(qec, variable, tripleComponent);
+  return ad_utility::makeExecutionTree<EmptyPath>(
+      qec, std::move(variable), std::move(activeGraphs), graphVariable,
+      std::move(valuesClause), 0);
 }
 
 // _____________________________________________________________________________
@@ -477,9 +413,6 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindRightSide(
 // _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
     size_t& inputCol, std::shared_ptr<QueryExecutionTree> leftOrRightOp) const {
-  auto [originalVar, info] =
-      leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol);
-
   // If we don't include the empty path, then inputs which don't originate in
   // the graph will be automatically filtered out because they cannot appear in
   // the `subtree_`.
@@ -487,56 +420,33 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
     return leftOrRightOp;
   }
 
-  if (graphVariable_.has_value()) {
-    // Join with the starting side of a clone of the subtree to get the proper
-    // graph values.
-    if (!leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value())
-             .has_value()) {
-      auto completeScan = makeEmptyPathSide(
-          getExecutionContext(), activeGraphs_, graphVariable_, originalVar);
-      leftOrRightOp = ad_utility::makeExecutionTree<Join>(
-          getExecutionContext(), std::move(leftOrRightOp), completeScan,
-          inputCol, 0);
-      inputCol = leftOrRightOp->getVariableColumn(originalVar);
-    }
+  auto originalVar =
+      leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol).first;
+  // If we join on the graph variable itself, we cannot reuse it for the graph
+  // column, so we use an internal helper variable instead (which takes
+  // precedence in `getActualGraphColumnIndex`). Note that the values of the
+  // join column are not necessarily valid graph names, so this case always
+  // requires matching against the knowledge graph.
+  bool graphIsJoinColumn = originalVar == graphVariable_;
+  std::optional<Variable> graphVariable =
+      graphIsJoinColumn ? std::optional{internalGraphHelper_} : graphVariable_;
 
-    AD_CORRECTNESS_CHECK(
-        leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value())
-            .has_value());
-  }
-
-  bool graphIsJoin = originalVar == graphVariable_;
-
-  // If we cannot guarantee the values are part of the graph, we have to join
-  // with it first.
-  if (!leftOrRightOp->getRootOperation()->columnOriginatesFromGraphOrUndef(
+  // If the graph column is missing we have to add it, even if the values of the
+  // join column are already guaranteed to be part of the knowledge graph.
+  bool graphColumnIsMissing =
+      graphVariable.has_value() &&
+      !leftOrRightOp->getVariableColumnOrNullopt(graphVariable.value())
+           .has_value();
+  if (!graphColumnIsMissing &&
+      leftOrRightOp->getRootOperation()->columnOriginatesFromGraphOrUndef(
           originalVar)) {
-    auto completeScan = makeEmptyPathSide(
-        getExecutionContext(), activeGraphs_,
-        graphIsJoin ? internalGraphHelper_ : graphVariable_, originalVar);
-    if (graphVariable_.has_value() && !graphIsJoin) {
-      leftOrRightOp = ad_utility::makeExecutionTree<MultiColumnJoin>(
-          getExecutionContext(), std::move(leftOrRightOp),
-          std::move(completeScan));
-    } else {
-      leftOrRightOp = ad_utility::makeExecutionTree<Join>(
-          getExecutionContext(), std::move(leftOrRightOp),
-          std::move(completeScan), inputCol, 0);
-    }
-    inputCol = leftOrRightOp->getVariableColumn(originalVar);
-  } else if (graphIsJoin) {
-    // If the join column is a subject or object anywhere in the graph, we still
-    // don't know for sure if it is also a valid graph name. Hence, we need to
-    // join it with actual graphs. To get actual matching graph ids if they
-    // exist. We don't need a filter here, because
-    // `TransitivePathImpl::transitiveHull` already does the comparison.
-    auto completeScan = makeEmptyPathSide(getExecutionContext(), activeGraphs_,
-                                          internalGraphHelper_, originalVar);
-    leftOrRightOp = ad_utility::makeExecutionTree<Join>(
-        getExecutionContext(), std::move(leftOrRightOp),
-        std::move(completeScan), inputCol, 0);
-    inputCol = leftOrRightOp->getVariableColumn(originalVar);
+    return leftOrRightOp;
   }
+
+  leftOrRightOp = ad_utility::makeExecutionTree<EmptyPath>(
+      getExecutionContext(), originalVar, activeGraphs_,
+      std::move(graphVariable), std::move(leftOrRightOp), inputCol);
+  inputCol = leftOrRightOp->getVariableColumn(originalVar);
   return leftOrRightOp;
 }
 

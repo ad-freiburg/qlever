@@ -2264,7 +2264,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
   AD_CONTRACT_CHECK(!lastRow.empty());
   auto compare = [](const auto& a, const auto& b) {
     auto tie = [](const auto& x) {
-      return std::make_tuple(x.getSizeEstimate(), x.getSizeEstimate());
+      return std::make_tuple(x.getSizeEstimate(), x.getCostEstimate());
     };
     return tie(a) < tie(b);
   };

@@ -19,6 +19,7 @@
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
+#include "engine/EmptyPath.h"
 #include "engine/ExistsJoin.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/Filter.h"
@@ -319,6 +320,17 @@ constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<::OptionalJoin>;
 constexpr auto NeutralOptional = MatchTypeAndOrderedChildren<::NeutralOptional>;
 
 constexpr auto Minus = MatchTypeAndOrderedChildren<::Minus>;
+
+// Match an `EmptyPath` operation with the given `variable`, the given optional
+// `graphVariable` and the given (optional) child.
+inline auto EmptyPath = [](const Variable& variable,
+                           const std::optional<Variable>& graphVariable,
+                           const auto&... childMatchers) -> QetMatcher {
+  return RootOperation<::EmptyPath>(
+      AllOf(children(childMatchers...),
+            AD_PROPERTY(::EmptyPath, variable, Eq(variable)),
+            AD_PROPERTY(::EmptyPath, graphVariable, Eq(graphVariable))));
+};
 
 // Return a matcher that matches a query execution tree that consists of
 // multiple JOIN operations that join the `children`. The `INTERNAL SORT BY`
