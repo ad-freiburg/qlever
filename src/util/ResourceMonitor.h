@@ -17,7 +17,6 @@
 #include <cstdint>
 #include <fstream>
 #include <istream>
-#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -59,29 +58,35 @@ class RateTracker {
   double lastElapsed_ = 0.0;
 };
 
-// Cumulative bytes read from and written to disk, as `double` to feed a
-// `RateTracker`. Each counter is empty if the OS did not report it.
+// Holds the cumulative number of bytes that this process has read from and
+// written to disk, as the OS reports them. A counter is empty if the OS did
+// not report it.
 struct DiskIoBytes {
-  std::optional<double> readBytes_;
-  std::optional<double> writeBytes_;
+  std::optional<uint64_t> numBytesRead_;
+  std::optional<uint64_t> numBytesWritten_;
 };
 
-// Cumulative disk bytes of this process; both empty when unavailable.
+// Returns the cumulative disk bytes of this process. Both counters are empty
+// on platforms where the OS does not expose them.
 DiskIoBytes currentDiskIoBytes();
 
 #if defined(__linux__)
-// Disk bytes from a `/proc/self/io` stream, read by the `read_bytes:` and
-// `write_bytes:` keys, never by position.
+// Parses the cumulative disk bytes of this process from a `/proc/self/io`
+// stream. The values are taken from the lines with the `read_bytes:` and
+// `write_bytes:` keys. A counter whose key does not appear in the stream stays
+// empty.
 DiskIoBytes diskIoBytesFromProcIo(std::istream& procIo);
 #endif
 
-// Cumulative seconds during which at least one task was stalled on I/O, or
-// `std::nullopt` if unavailable. Linux-only as not supported elsewhere.
+// Returns the cumulative number of seconds during which at least one task was
+// stalled on I/O. The result is `std::nullopt` on platforms other than Linux,
+// which do not expose this figure.
 std::optional<double> ioStallSeconds();
 
 #if defined(__linux__)
-// Stall seconds from a `/proc/pressure/io` stream: the `total=` microseconds
-// on the `some` line, scaled to seconds.
+// Parses the I/O stall seconds from a `/proc/pressure/io` stream. The value is
+// the `total=` field on the `some` line, which the kernel reports in
+// microseconds and this function converts to seconds.
 std::optional<double> ioStallSecondsFromPressure(std::istream& pressure);
 #endif
 
@@ -91,12 +96,9 @@ struct Sample {
   int64_t timestampMs_;
   std::optional<uint64_t> rssBytes_;
   std::optional<double> cpuPercent_;
-  std::optional<double> readBytesPerSecond_;
-  std::optional<double> writeBytesPerSecond_;
+  std::optional<double> bytesReadPerSecond_;
+  std::optional<double> bytesWrittenPerSecond_;
   std::optional<double> ioStallPercent_;
-  // id of the index rebuild running at this sample, empty (and not 0) when no
-  // rebuild in progress.
-  std::optional<uint64_t> rebuildId_;
 };
 
 // The column names `formatTsvRow` produces values for, without the trailing
@@ -104,10 +106,16 @@ struct Sample {
 // notice that the format has changed since that file was written.
 inline constexpr std::string_view tsvHeader =
     "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes_per_s\t"
-    "write_bytes_per_s\tio_stall_percent\trebuild_id";
+    "write_bytes_per_s\tio_stall_percent";
 
 // One TSV row; a missing field becomes an empty cell.
 std::string formatTsvRow(const Sample& sample);
+
+// Moves the log at `path` aside if its first line is not `tsvHeader`, so that
+// rows of two TSV formats do not land in one file. Returns true if a fresh
+// header has to be written. If the move fails, the function still returns
+// true, and the file keeps its old rows followed by a second header.
+bool rotateLogIfHeaderOutdated(const ql::filesystem::path& path);
 
 // The OS readers, as swappable function objects (see
 // `ResourceMonitor::setReadersForTesting`).
@@ -127,39 +135,14 @@ struct Readers {
 
 }  // namespace resource_monitor
 
-// Tracks whether an index rebuild is running, and which one. The resource
-// sampler reads this once per tick and writes it into the `rebuild_id` column
-// of the resource-usage log.
-// Rebuilds are numbered from 1, starting over in each new server process.
-class RebuildIndexSignal {
- public:
-  // Call when a rebuild begins. It gets the next number as id.
-  void markStart() { currentId_.store(nextId_.fetch_add(1) + 1); }
-
-  // Call when a rebuild ends, whether it succeeded or not.
-  void markEnd() { currentId_.store(0); }
-
-  // The running rebuild's id, or nothing if none is running.
-  [[nodiscard]] std::optional<uint64_t> poll() const {
-    auto id = currentId_.load();
-    return id == 0 ? std::nullopt : std::optional(id);
-  }
-
- private:
-  // Counts the rebuilds started so far, so each one gets its own number as id.
-  std::atomic<uint64_t> nextId_{0};
-
-  // The running rebuild's number, or 0 for none. The sampling thread reads
-  // this while the rebuild thread writes it, so it has to be atomic.
-  std::atomic<uint64_t> currentId_{0};
-};
-
 // Samples the RSS, CPU usage, and disk IO rate of this process, plus
 // system-wide IO stall on a background thread and appends one TSV row
 // (`elapsed_s`, `timestamp_ms`, `rss`, `cpu_percent`, `read_bytes_per_s`,
-// `write_bytes_per_s`, `io_stall_percent`, `rebuild_id`) per interval; failed
-// readings become empty cells. The destructor stops the sampling thread and
-// closes the file.
+// `write_bytes_per_s`, `io_stall_percent`) per interval; failed readings
+// become empty cells. The destructor stops the sampling thread and closes
+// the file. Sampling is designed for intervals on the order of a second, as
+// set by the `--resource-usage-interval-s` option. One tick reads a few small
+// OS counters and costs a handful of microseconds.
 class ResourceMonitor {
  public:
   // `Truncate` starts a fresh file per run (index builds); `Append`
@@ -179,16 +162,11 @@ class ResourceMonitor {
   void start(const ql::filesystem::path& path, Mode mode,
              std::chrono::milliseconds interval);
 
-  // Test-only: swap the OS readers before `start`, e.g. a throwing reader to
-  // exercise the sampler's error handling. Readers that are not named keep
-  // their real implementation.
+  // Test-only: swaps the OS readers before `start`, for example a throwing
+  // reader that exercises the sampler's error handling. The readers that a
+  // test does not set keep the defaults from `Readers`, which are the real OS
+  // readers, so no reader is ever empty.
   void setReadersForTesting(resource_monitor::Readers readers);
-
-  // Set the signal that tells the sampler whether an index rebuild is
-  // running. Must be called before `start`, since the sampling thread reads
-  // it. When it is never called (index builds), the `rebuild_id` column
-  // stays empty.
-  void setRebuildIndexSignal(std::shared_ptr<const RebuildIndexSignal> signal);
 
  private:
   // Body of the sampling thread.
@@ -198,9 +176,6 @@ class ResourceMonitor {
   // (i.e. joined) first, while the members it uses are still alive.
   std::ofstream stream_;
   resource_monitor::Readers readers_;
-  // Null when nobody set one; then the `rebuild_id` column stays empty.
-  std::shared_ptr<const RebuildIndexSignal> rebuildIndexSignal_;
-
   std::atomic<bool> started_{false};
   std::mutex mutex_;
   std::condition_variable stopCondition_;

@@ -806,10 +806,13 @@ TEST(IndexTest, getBlankNodeManager) {
   // uninitialized Index.
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   EXPECT_ANY_THROW(index.getBlankNodeManager());
+  // The same holds for the access via the `LocalVocabContext`.
+  EXPECT_ANY_THROW(index.getLocalVocabContext().getBlankNodeManager());
 
   // Index is initialized -> no throw
   const Index& index2 = getQec("")->getIndex();
   EXPECT_NO_THROW(index2.getBlankNodeManager());
+  EXPECT_NO_THROW(index2.getLocalVocabContext().getBlankNodeManager());
 
   // Given an Index, ensure that the BlankNodeManager's `minIndex_` is set to
   // the number of blank nodes the Index is initialized with.
@@ -1113,6 +1116,13 @@ TEST(IndexImpl, dateOfIndexBuild) {
       indexImpl.configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
   EXPECT_EQ(indexImpl.dateOfIndexBuild(), storedDate);
 
+  // The `static` overload, which works without a loaded index, returns the
+  // same value when it is given the configuration and the base name of that
+  // index.
+  EXPECT_EQ(IndexImpl::dateOfIndexBuild(indexImpl.configurationJson_,
+                                        indexImpl.onDiskBase_),
+            storedDate);
+
   // The stored value is a valid UTC timestamp in the expected format.
   absl::Time parsed;
   std::string error;
@@ -1120,21 +1130,55 @@ TEST(IndexImpl, dateOfIndexBuild) {
                               absl::UTCTimeZone(), &parsed, &error))
       << error;
 
-  // For indexes that were built before the build date was recorded in the
-  // configuration, `dateOfIndexBuild()` falls back to the last modification
-  // time of the configuration file, which was just written. Since the format
-  // only has second precision, we don't compare the timestamp exactly, but
-  // check that it lies within the last second + tolerance.
-  indexImpl.configurationJson_.erase(std::string{DATE_OF_INDEX_BUILD_KEY});
+  // The fallback to the modification time of the configuration file (for
+  // indexes that were built before the build date was recorded) is tested in
+  // `dateOfIndexBuildStatic` below.
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, dateOfIndexBuildStatic) {
+  // The `static` overload of `dateOfIndexBuild` works on an index that is not
+  // loaded, so we can exercise it with an arbitrary configuration and base
+  // name.
+  auto onDiskBase = gtestCurrentTestName();
+  auto configFilename = absl::StrCat(onDiskBase, CONFIGURATION_FILE);
+
+  // If the configuration contains the build date, it is returned verbatim, and
+  // the configuration file doesn't even have to exist.
+  nlohmann::json configuration;
+  configuration[std::string{DATE_OF_INDEX_BUILD_KEY}] = "2026-07-12T14:03:52Z";
+  EXPECT_EQ(IndexImpl::dateOfIndexBuild(configuration, onDiskBase),
+            "2026-07-12T14:03:52Z");
+
+  // If the configuration doesn't contain the build date, the modification time
+  // of the configuration file is used instead. Since the format only has
+  // second precision, we don't compare the timestamp exactly, but check that
+  // it lies within the last second + tolerance.
+  configuration.erase(std::string{DATE_OF_INDEX_BUILD_KEY});
+  {
+    auto configFile = ad_utility::makeOfstream(configFilename);
+    configFile << configuration;
+  }
+  absl::Cleanup cleanup = [&configFilename]() {
+    ad_utility::deleteFile(configFilename);
+  };
   absl::Time fallbackTime;
   std::string parseError;
-  ASSERT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT,
-                              indexImpl.dateOfIndexBuild(), absl::UTCTimeZone(),
-                              &fallbackTime, &parseError))
+  ASSERT_TRUE(
+      absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT,
+                      IndexImpl::dateOfIndexBuild(configuration, onDiskBase),
+                      absl::UTCTimeZone(), &fallbackTime, &parseError))
       << parseError;
   EXPECT_THAT(absl::Now() - fallbackTime,
               ::testing::AllOf(::testing::Ge(absl::ZeroDuration()),
                                ::testing::Lt(absl::Seconds(2))));
+
+  // If the configuration doesn't contain the build date and there also is no
+  // configuration file to fall back to, the contract check on `stat` fails.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IndexImpl::dateOfIndexBuild(configuration,
+                                  absl::StrCat(onDiskBase, ".does-not-exist")),
+      ::testing::HasSubstr("stat(configFilename.c_str(), &fileStat) == 0"));
 }
 
 // _____________________________________________________________________________

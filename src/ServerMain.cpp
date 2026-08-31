@@ -121,8 +121,9 @@ int main(int argc, char** argv) {
       "start/end events is written next to the index files "
       "(`<index-basename>.metrics-log.jsonl`).");
   add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
-      "Disable the resource-usage log. By default a TSV log of the RSS and "
-      "CPU usage of the server is written next to the index files "
+      "Disable the resource-usage log. By default a TSV log of the RSS, CPU "
+      "and disk I/O of the server, plus the system-wide I/O stall (Linux "
+      "only), is written next to the index files "
       "(`<index-basename>.server.resource-usage-log.tsv`).");
   add("resource-usage-interval-s",
       po::value(&resourceUsageIntervalS)->default_value(2),
@@ -371,23 +372,16 @@ int main(int argc, char** argv) {
   }
 
   try {
-    // Shared by the resource sampler (the reader) and the server's rebuild
-    // path (the writer). Created before both, because the sampler starts
-    // before the `Server` exists.
-    auto rebuildIndexSignal =
-        std::make_shared<ad_utility::RebuildIndexSignal>();
     // Samples RSS and CPU usage, starting before the index is loaded.
     ad_utility::ResourceMonitor resourceMonitor;
     if (!noResourceUsageLog) {
-      resourceMonitor.setRebuildIndexSignal(rebuildIndexSignal);
       resourceMonitor.start(config.baseName_ + ".server.resource-usage-log.tsv",
                             ad_utility::ResourceMonitor::Mode::Append,
                             std::chrono::seconds{resourceUsageIntervalS});
     }
     auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
-                  noAccessCheck, std::move(metricsReader),
-                  std::move(rebuildIndexSignal));
+                  noAccessCheck, std::move(metricsReader));
     // Per-query jsonl metrics log, written next to the index files. On by
     // default; `--no-metrics-log` opts out.
     if (!noMetricsLog) {
