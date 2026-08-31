@@ -99,21 +99,31 @@ CPP_template(typename UnderlyingVocabulary,
   // has holes (see `VocabularyInMemoryBinSearch`) and `idx` is one of those
   // holes, return a placeholder (see `placeholderForMissingVocabIndex`).
   std::string operator[](uint64_t idx) const {
-    decltype(auto) word = underlyingVocabulary_[idx];
-    if constexpr (ad_utility::similarToInstantiation<decltype(word),
-                                                     std::optional>) {
-      // As a safeguard for the future: only a vocabulary that deliberately has
-      // holes may silently report a placeholder instead of throwing, see
-      // `replaceOptionalByPlaceholderOnExport` in `VocabularyTypes.h`.
-      static_assert(
-          ad_utility::vocabulary::replaceOptionalByPlaceholderOnExport<
-              UnderlyingVocabulary>);
-      if (!word.has_value()) {
+    if constexpr (underlyingHasHoles) {
+      // NOTE: We deliberately translate the index to a position (which
+      // requires a binary search) exactly once, and then use that position
+      // both to look up the word and to select the decoder. Using
+      // `underlyingVocabulary_[idx]` together with `getDecoderIdx(idx)` would
+      // perform the very same binary search twice.
+      auto position = underlyingVocabulary_.positionOfIndex(idx);
+      if (!position.has_value()) {
         return ad_utility::vocabulary::placeholderForMissingVocabIndex(idx);
       }
+      return compressionWrapper_.decompress(
+          underlyingVocabulary_.wordAtPosition(position.value()),
+          getDecoderIdxFromPosition(position.value()));
+    } else {
+      decltype(auto) word = underlyingVocabulary_[idx];
+      // As a safeguard for the future: only a vocabulary that deliberately has
+      // holes (see `underlyingHasHoles` and
+      // `replaceOptionalByPlaceholderOnExport` in `VocabularyTypes.h`) may
+      // report a missing word via an empty optional instead of throwing, and
+      // such a vocabulary is handled by the branch above.
+      static_assert(
+          !ad_utility::similarToInstantiation<decltype(word), std::optional>);
+      return compressionWrapper_.decompress(toStringView(word),
+                                            getDecoderIdx(idx));
     }
-    return compressionWrapper_.decompress(toStringView(word),
-                                          getDecoderIdx(idx));
   }
 
   // Wrap the underlying vocabulary's `scanAll` (which reads the compressed
@@ -165,15 +175,19 @@ CPP_template(typename UnderlyingVocabulary,
 
   // Return the range of vocabulary indices at which `word` is stored, or the
   // empty range at the index at which it would be stored if it is not
-  // contained. This is only needed (and only used, see
-  // `HasSpecialGetPositionOfWord` in `VocabularyConstraints.h`) if the
-  // underlying vocabulary has holes, for which the generic implementation
-  // would use the wrong "one past the end" index (see `endIndex`). It is
-  // nevertheless defined for all underlying vocabularies, because it is
-  // correct for all of them.
+  // contained. This is only needed (and, see `HasSpecialGetPositionOfWord` in
+  // `VocabularyConstraints.h`, only used) if the underlying vocabulary has
+  // holes, for which the generic implementation would use the wrong "one past
+  // the end" index (see `endIndex`). The `static_assert` below enforces that
+  // this function is never instantiated for any other underlying vocabulary
+  // (for which the generic implementation is correct and cheaper).
   template <typename InternalStringType, typename Comparator>
   std::pair<uint64_t, uint64_t> getPositionOfWord(
       const InternalStringType& word, Comparator comparator) const {
+    static_assert(underlyingHasHoles,
+                  "`CompressedVocabulary::getPositionOfWord` is only intended "
+                  "for an underlying vocabulary with holes, see "
+                  "`HasSpecialGetPositionOfWord` in `VocabularyConstraints.h`");
     return ad_utility::vocabulary::getPositionOfWordInVocabWithHoles(
         *this, word, std::move(comparator), endIndex());
   }
@@ -548,8 +562,9 @@ CPP_template(typename UnderlyingVocabulary,
   size_t getDecoderIdx(size_t idx) const {
     if constexpr (underlyingHasHoles) {
       // NOTE: If `idx` is one of the holes, then there is no word to
-      // decompress at all (`operator[]` returns the placeholder without ever
-      // asking for a decoder), so the value of the fallback is irrelevant.
+      // decompress at all, and no caller ever asks for a decoder in that case
+      // (`operator[]` returns the placeholder directly), so the value of the
+      // fallback is irrelevant.
       return getDecoderIdxFromPosition(
           underlyingVocabulary_.positionOfIndex(idx).value_or(0));
     } else {

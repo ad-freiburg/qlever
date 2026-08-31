@@ -56,13 +56,20 @@ uint64_t VocabularyInMemoryBinSearch::endIndex() const {
 }
 
 // _____________________________________________________________________________
+std::string_view VocabularyInMemoryBinSearch::wordAtPosition(
+    size_t position) const {
+  AD_CORRECTNESS_CHECK(position < words_.size());
+  return words_[position];
+}
+
+// _____________________________________________________________________________
 std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
     uint64_t index) const {
   auto position = positionOfIndex(index);
   if (!position.has_value()) {
     return std::nullopt;
   }
-  return words_[position.value()];
+  return wordAtPosition(position.value());
 }
 
 // _____________________________________________________________________________

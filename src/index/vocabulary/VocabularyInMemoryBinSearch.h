@@ -99,6 +99,12 @@ class VocabularyInMemoryBinSearch
   // `position` must be smaller than `size()`.
   uint64_t indexAtPosition(size_t position) const;
 
+  // Return the word at the given `position` (i.e. the offset into the words,
+  // which because of the holes is in general different from the vocabulary
+  // index, see `positionOfIndex`). The `position` must be smaller than
+  // `size()`.
+  std::string_view wordAtPosition(size_t position) const;
+
   // Return the vocabulary index one past the largest index that is contained
   // in this vocabulary, or `0` if the vocabulary is empty. Because of the
   // holes, this is in general much larger than `size()`.

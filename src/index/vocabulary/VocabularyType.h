@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPE_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPE_H
 
+#include "util/Algorithm.h"
 #include "util/EnumWithStrings.h"
 #include "util/Random.h"
 
@@ -81,6 +82,12 @@ class VocabularyType
           return VocabularyType{type}.toString();
         }),
         ", ");
+  }
+
+  // Return true if this vocabulary type can be used to build a regular index,
+  // i.e. if it is one of `allForIndexBuilding_` (see above).
+  bool isSupportedForIndexBuilding() const {
+    return ad_utility::contains(allForIndexBuilding_, value());
   }
 
   // Return a random vocabulary type that can be used to build a regular index

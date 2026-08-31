@@ -36,9 +36,8 @@ class PolymorphicVocabulary;
 // needs a special `getPositionOfWord` for a completely different reason.
 template <typename T>
 CPP_concept HasSpecialGetPositionOfWord =
-    std::is_same_v<T, PolymorphicVocabulary> ||
     ad_utility::isInstantiation<T, SplitVocabulary> ||
-    ad_utility::SameAsAny<T, VocabularyInMemoryBinSearch,
+    ad_utility::SameAsAny<T, PolymorphicVocabulary, VocabularyInMemoryBinSearch,
                           CompressedVocabulary<VocabularyInMemoryBinSearch>>;
 
 // As a safeguard for the future: Concept that a vocabulary does NOT require a

@@ -217,6 +217,7 @@ TEST(VocabularyInMemoryBinSearch, positionOfIndexAndAccessOperator) {
     uint64_t index = indicesWithHoles.at(position);
     EXPECT_EQ(vocab.positionOfIndex(index), std::optional{position});
     EXPECT_EQ(vocab.indexAtPosition(position), index);
+    EXPECT_EQ(vocab.wordAtPosition(position), wordsWithHoles.at(position));
     EXPECT_EQ(vocab[index], std::optional{wordsWithHoles.at(position)});
   }
 
@@ -229,6 +230,7 @@ TEST(VocabularyInMemoryBinSearch, positionOfIndexAndAccessOperator) {
 
   // A position that is out of range is a bug and hence throws.
   EXPECT_THROW(vocab.indexAtPosition(vocab.size()), ad_utility::Exception);
+  EXPECT_THROW(vocab.wordAtPosition(vocab.size()), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________

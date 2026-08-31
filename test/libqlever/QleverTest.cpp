@@ -238,6 +238,21 @@ TEST(IndexBuilderConfig, validate) {
   c.wordsfile_ = "";
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
                                HasSubstr("Only specified docsfile"));
+
+  // The vocabulary types with "holes" cannot be built word by word and hence
+  // are rejected, all other types are accepted.
+  c = IndexBuilderConfig{};
+  for (auto type : ad_utility::VocabularyType::all()) {
+    c.vocabType_ = ad_utility::VocabularyType{type};
+    if (c.vocabType_.isSupportedForIndexBuilding()) {
+      EXPECT_NO_THROW(c.validate());
+    } else {
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          c.validate(), AllOf(HasSubstr("cannot be used for index building"),
+                              HasSubstr(c.vocabType_.toString()),
+                              HasSubstr("on-disk-compressed")));
+    }
+  }
 }
 
 // _____________________________________________________________________________

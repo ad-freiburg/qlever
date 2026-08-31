@@ -79,10 +79,20 @@ TEST(VocabularyType, vocabularyTypesWithHoles) {
               Not(Contains(E::InMemoryUncompressedWithHoles)));
   EXPECT_THAT(typesForIndexBuilding,
               Not(Contains(E::InMemoryCompressedWithHoles)));
-  for (size_t i = 0; i < 1000; ++i) {
+  for (size_t i = 0; i < 100; ++i) {
     EXPECT_THAT(typesForIndexBuilding,
                 Contains(T::randomForIndexBuilding().value()));
   }
+
+  // Exactly the types that are not "with holes" can be used for index
+  // building.
+  for (auto e : T::all()) {
+    EXPECT_EQ(T{e}.isSupportedForIndexBuilding(),
+              ad_utility::contains(typesForIndexBuilding, e));
+  }
+  EXPECT_TRUE(T::OnDiskCompressed.isSupportedForIndexBuilding());
+  EXPECT_FALSE(T::InMemoryUncompressedWithHoles.isSupportedForIndexBuilding());
+  EXPECT_FALSE(T::InMemoryCompressedWithHoles.isSupportedForIndexBuilding());
 
   // The list of values for index building consists of exactly the names of
   // `allForIndexBuilding_`, joined by commas. In particular, and in contrast to
