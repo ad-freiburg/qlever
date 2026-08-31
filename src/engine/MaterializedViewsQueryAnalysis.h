@@ -46,23 +46,20 @@ struct ViewPattern {
 // Map from predicate IRI to a bitmask of the triple indices.
 using TriplesByPredicate = ad_utility::HashMap<std::string_view, uint64_t>;
 
-// The limits bounding one call to `PatternMatcher::findReplacementPlans`
-// (aliased there as `PatternMatcher::Limits`; here at namespace scope to avoid
-// a circular include). Also used to report how much a call actually used, so
-// that several calls can share one pool.
+// Limits bookkeeping for `PatternMatcher::findReplacementPlans`.
 struct PatternMatcherLimits {
   size_t numAssignments_;
   size_t numReplacementPlans_;
 
-  // A fixed share of `*this` per view, split evenly across `numViews` (must be
-  // nonzero), so that the limits apply per query and not per (view, query)
-  // pair. Never below a floor, so that a share stays usable for many views.
+  // A fixed, floored share of these limits, so the limits apply per query
+  // rather than per (view, query) pair.
   PatternMatcherLimits perViewShare(size_t numViews) const;
 
   bool isExhausted() const {
     return numAssignments_ == 0 || numReplacementPlans_ == 0;
   }
 
+  // Limit a given `requestedAmount` to at most all that is available.
   PatternMatcherLimits requestBounded(
       PatternMatcherLimits requestedAmount) const;
 
@@ -123,10 +120,9 @@ class QueryPatternCache {
   ByCacheKeyInfoPtr lookupByCacheKey(const std::string& cacheKey) const;
 
  private:
-  // Helper for `analyzeView`: build the view's pattern graph (one `PatternEdge`
-  // per triple), reordered by `connectedOrder` for `PatternMatcher`'s benefit.
-  // Returns `nullopt` if the view is not eligible; the individual reasons are
-  // documented at the corresponding checks.
+  // Helper for `analyzeView`: build the view as a graph for pattern-based
+  // rewriting and check it is connected. `nullopt` if the view is not
+  // eligible.
   static std::optional<std::vector<PatternEdge>> buildPatternEdges(
       const ViewPtr& view, const std::vector<SparqlTriple>& triples);
 };
@@ -141,11 +137,9 @@ std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
 // rewriting, as returned by `getTriplesForPatternRewrite`.
 using RewriteIgnoreReason = std::string;
 
-// Helper for `QueryPatternCache::analyzeView` that extracts the triples of a
-// view's defining query's single `BasicGraphPattern` for further pattern
-// analysis, provided the query has a shape that pattern-based rewriting can
-// apply to (see the checks in the implementation). Otherwise a
-// `RewriteIgnoreReason` explaining why is returned.
+// Helper for `QueryPatternCache::analyzeView`: extracts the triples of a
+// view's defining query for pattern analysis, or a `RewriteIgnoreReason` if
+// the query's shape doesn't support pattern-based rewriting.
 std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed);
 

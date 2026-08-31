@@ -1622,12 +1622,8 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     checkCancellation();
   }
   auto& result = dpTab.back();
-  // Replacement plans (scans of materialized views) that cover the whole
-  // connected component only enter the final row, after which no joining
-  // round follows. As in the `numSeeds < 2` case above, enforced filter
-  // substitutes (e.g. a `SpatialJoin` with one fixed side) must therefore be
-  // applied here explicitly; otherwise such plans would receive the filter
-  // only as a regular `FILTER` operation at the very end of the planning.
+  // A full-cover replacement plan lands directly in the final row, so, as in
+  // the `numSeeds < 2` case above, apply enforced filter substitutes here too.
   applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(result, filters);
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
                                                                      filters);

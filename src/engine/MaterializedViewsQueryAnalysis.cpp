@@ -31,17 +31,11 @@ namespace materializedViewsQueryAnalysis {
 
 namespace {
 
-// A traversal order for the non-empty pattern graph `edges` that starts at
-// `edges[0]` and reaches every other edge via a shared variable with an
-// already-visited one, or `nullopt` if `edges` is not connected this way.
-// Disconnected patterns are rejected because the query planner's DP table is
-// built per connected component, so such a replacement could never be
-// selected. The order is also the traversal order of `PatternMatcher`: every
-// edge is matched against maximal already-bound context, which prunes illegal
-// partial matches as early as possible.
+// BFS to determine if the `edges` given constitute a connected component.
 std::optional<std::vector<size_t>> connectedOrder(
     const std::vector<PatternEdge>& edges) {
   AD_CORRECTNESS_CHECK(!edges.empty());
+  // Collect all edges containing each variable.
   ad_utility::HashMap<Variable, std::vector<size_t>> edgesByVariable;
   for (size_t i = 0; i < edges.size(); ++i) {
     for (const auto& side : {edges[i].s_, edges[i].o_}) {
@@ -53,8 +47,9 @@ std::optional<std::vector<size_t>> connectedOrder(
 
   ad_utility::HashSet<size_t> reached{0};
   std::vector<size_t> order{0};
-  // `order` doubles as the BFS queue: indices not yet processed for
-  // neighbors are simply the ones not yet reached by `idx`.
+  // `order` is used as the BFS queue: indices not yet processed for
+  // neighbors are simply the ones not yet reached by `idx`. Therefore this
+  // cannot be `for (auto current : order)`.
   for (size_t idx = 0; idx < order.size(); ++idx) {
     size_t current = order[idx];
     for (const auto& side : {edges[current].s_, edges[current].o_}) {
@@ -106,24 +101,27 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
   const auto& viewCols = view->variableToColumnMap();
   std::vector<PatternEdge> edges;
   edges.reserve(triples.size());
+
+  // Check each triple for unsupported cases and fill `edges`.
   for (const auto& triple : triples) {
     // Variable predicates and non-trivial property paths are unsupported.
     auto predicate = triple.getSimplePredicate();
     if (!predicate.has_value()) {
       return std::nullopt;
     }
-    // Full-text pseudo-predicates don't become plain triples, but special text
-    // operations in the `QueryPlanner`, which `coveredTriples_` cannot
-    // represent.
+
+    // Full-text pseudo-predicates are unsupported.
     if (isFullTextPseudoPredicate(predicate.value())) {
       return std::nullopt;
     }
-    // At least one endpoint must be a variable, or the edge can't connect to
-    // the rest of the pattern (see `connectedOrder`).
+
+    // At least one of subject or object must be a variable, or the triples can
+    // never be a connected component.
     if (!triple.s_.isVariable() && !triple.o_.isVariable()) {
       return std::nullopt;
     }
-    // A variable endpoint must be a column of the view.
+
+    // A variable subject or object must be a column of the view.
     auto isUsableColumn = [&viewCols](const TripleComponent& side) {
       return !side.isVariable() || viewCols.contains(side.getVariable());
     };
@@ -132,16 +130,19 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
     }
     edges.push_back({triple.s_, std::string{predicate.value()}, triple.o_});
   }
+
+  // Check that the edges are a connected component.
   auto order = connectedOrder(edges);
   if (!order.has_value()) {
     return std::nullopt;
   }
-  edges = ql::views::transform(
-              order.value(),
-              [&edges](size_t i) { return std::move(edges[i]); }) |
-          ::ranges::to<std::vector>();
-  // The view's physical column 0 must be assigned during matching, else
-  // `makeIndexScan` throws (`throwIfScanColumnMissing`).
+  edges =
+      ql::views::transform(order.value(),
+                           [&edges](size_t i) { return std::move(edges[i]); }) |
+      ::ranges::to<std::vector>();
+
+  // The view's first column must be assigned during matching (for example, it
+  // may not come from an invariant, stripped-away `BIND`).
   auto col0 = ql::ranges::find_if(viewCols, [](const auto& varAndCol) {
     return varAndCol.second.columnIndex_ == 0;
   });
@@ -335,10 +336,6 @@ std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
 }
 
 // _____________________________________________________________________________
-// The checks below all guard one invariant: the view's on-disk rows must be
-// exactly the rows of the plain join over `triples`, because pattern-based
-// rewriting substitutes the view's index scan directly for that join. Any
-// future solution modifier breaking this equivalence needs a check here too.
 std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed) {
   if (parsed.isAggregatingQuery()) {
