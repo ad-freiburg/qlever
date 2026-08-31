@@ -50,15 +50,15 @@ using Literal = ad_utility::triple_component::Literal;
 // These semantics are useful for the string expressions in
 // StringExpressions.cpp.
 //
-// All datatypes are handled, in one of the following ways: the words of the
+// All datatypes are handled, in one of the following ways. The words of the
 // vocabularies (`VocabIndex`, `LocalVocabIndex`) and the encoded IRIs
-// (`EncodedVal`) are resolved via `getLiteralOrIriFromVocabIndex` resp.
-// `encodedIdToLiteralOrIri` and then processed as described above; the words of
-// the text index (`WordVocabIndex`, `TextRecordIndex`) always are plain
-// literals; and all remaining datatypes are handled by
-// `idToLiteralForEncodedValue`, which turns the value that the `Id` stores into
-// a plain literal (`Bool`, `Int`, `Double`, `Date`, `GeoPoint`), returns the
-// label of the blank node (`BlankNodeIndex`), resp. returns `std::nullopt`
+// (`EncodedVal`) are resolved via `getLiteralOrIriFromVocabIndex` and
+// `encodedIdToLiteralOrIri`, respectively, and then processed as described
+// above. The words of the text index (`WordVocabIndex`, `TextRecordIndex`)
+// are always plain literals. All remaining datatypes are handled by
+// `idToLiteralForEncodedValue`, which turns the value that the `Id` stores
+// into a plain literal (`Bool`, `Int`, `Double`, `Date`, `GeoPoint`), returns
+// the label of the blank node (`BlankNodeIndex`), or returns `std::nullopt`
 // (`Undefined`).
 std::optional<Literal> idToLiteral(
     const IndexImpl& index, Id id, const LocalVocab& localVocab,
@@ -186,11 +186,12 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
   auto datatype = id.getDatatype();
   if constexpr (returnOnlyLiterals) {
     // In this mode, restrict the result to the words of the vocabularies that
-    // store their words as strings. Only those are routed through
-    // `literalOrIriToStringAndType`, which applies the actual `isLiteral()`
-    // check; the other datatypes below would bypass it (the words of the text
-    // index and the values that are encoded in the `Id` are turned into a
-    // string directly), so they have to be discarded here.
+    // store their words as strings. The words of the text index and the values
+    // that are encoded in the `Id` are turned into a string directly below and
+    // would bypass the `isLiteral()` check in `literalOrIriToStringAndType`,
+    // so they have to be discarded here. An encoded IRI (`EncodedVal`) would
+    // pass through that check, but can never be a literal, so discarding it
+    // here as well is equivalent and cheaper.
     static constexpr std::array stringVocabDatatypes{VocabIndex,
                                                      LocalVocabIndex};
     if (!ad_utility::contains(stringVocabDatatypes, datatype)) {
