@@ -2287,48 +2287,11 @@ bool QueryPlanner::hasPrefilterableGeoScan(const QueryExecutionTree& tree,
 }
 
 // _________________________________________________________________________________
-size_t QueryPlanner::numPrefilterableSpatialJoinSides(const SubtreePlan& plan) {
-  auto* sj = dynamic_cast<SpatialJoin*>(plan._qet->getRootOperation().get());
-  if (sj == nullptr || !sj->isConstructed()) {
-    return 0;
-  }
-  auto [leftVariable, rightVariable] = sj->getSpatialJoinVariables();
-  auto children = sj->getChildren();
-  AD_CORRECTNESS_CHECK(children.size() == 2);
-  // The runtime block prefilter prunes the side with the larger size
-  // estimate, using the bounding rectangle of the (materialized) smaller
-  // side. Prefilterability of the smaller side is therefore worthless, and
-  // preferring it would force an unnecessary scan and sort of all geometries
-  // into that side.
-  bool leftIsLarger =
-      children.at(0)->getSizeEstimate() >= children.at(1)->getSizeEstimate();
-  return static_cast<size_t>(
-      hasPrefilterableGeoScan(*children.at(leftIsLarger ? 0 : 1),
-                              leftIsLarger ? leftVariable : rightVariable));
-}
-
-// _________________________________________________________________________________
 size_t QueryPlanner::findCheapestExecutionTree(
     const std::vector<SubtreePlan>& lastRow) const {
   AD_CONTRACT_CHECK(!lastRow.empty());
   checkCancellation();
-  // A complete spatial join whose sides can be pruned by its runtime block
-  // prefilter is preferred over any cheaper-looking plan with the same
-  // result: the cost estimates cannot account for the pruning, and in the
-  // worst case (no pruning) the preferred plan only pays an extra sort of
-  // rows that the spatial join has to parse anyway.
-  bool anyPrefilterable = !spatialJoinPrefilterVariables_.empty() &&
-                          ql::ranges::any_of(lastRow, [](const auto& plan) {
-                            return numPrefilterableSpatialJoinSides(plan) > 0;
-                          });
-  auto compare = [this, anyPrefilterable](const auto& a, const auto& b) {
-    if (anyPrefilterable) {
-      auto aSides = numPrefilterableSpatialJoinSides(a);
-      auto bSides = numPrefilterableSpatialJoinSides(b);
-      if (aSides != bSides) {
-        return aSides > bSides;
-      }
-    }
+  auto compare = [this](const auto& a, const auto& b) {
     auto aCost = a.getCostEstimate(), bCost = b.getCostEstimate();
     if (aCost == bCost && isInTestMode()) {
       // Make the tiebreaking deterministic for the unit tests.

@@ -13,6 +13,7 @@
 #include "./util/IndexTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "QueryRewriteUtilTestHelpers.h"
+#include "absl/cleanup/cleanup.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
@@ -20,6 +21,7 @@
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
+#include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/GeoCellGrid.h"
@@ -38,7 +40,7 @@ constexpr std::string_view wktDatatype =
 // grid (4 x 4 cells of 90 x 45 degrees): cell 10 (lng 0..90, lat 0..45),
 // cell 0 (bottom left) and the sentinel cell (a linestring crossing a cell
 // border). The two `POINT` literals become `GeoPoint` IDs.
-std::string geoTurtleInput() {
+std::string geoTurtleInput(int numFar = 16) {
   auto wktTriple = [](std::string_view subject, std::string_view content) {
     return absl::StrCat(subject, " <hasGeom> \"", content, "\"", wktDatatype,
                         " . \n");
@@ -55,14 +57,15 @@ std::string geoTurtleInput() {
       "<spanning> <hasType> <T> . \n"
       "<pointNear> <hasType> <P> . \n",
       "<pointFar> <hasGeom> \"POINT(-100.5 -50.01)\"", wktDatatype, " . \n",
-      [] {
+      [numFar] {
         // A batch of far-away geometries, so that (in every scheme) there
         // are whole blocks that a covering query near (10, 10) can prune.
         std::string result;
-        for (int i = 0; i < 16; ++i) {
-          result += absl::StrCat("<far", i, "> <hasGeom> \"LINESTRING(",
-                                 -170 + i, " -60, ", -169.5 + i, " -60)\"",
-                                 wktDatatype, " . \n");
+        for (int i = 0; i < numFar; ++i) {
+          result += absl::StrCat(
+              "<far", i, "> <hasGeom> \"LINESTRING(", -170 + i % 320, " -",
+              60 - i / 320, ".0, ", -169.5 + i % 320, " -", 60 - i / 320,
+              ".0)\"", wktDatatype, " . \n", "<far", i, "> <hasType> <T> . \n");
         }
         return result;
       }());
@@ -70,10 +73,11 @@ std::string geoTurtleInput() {
 
 // A `QueryExecutionContext` for an index over `geoTurtleInput` with the
 // geo-split vocabulary and a level-2 geo cell grid.
-QueryExecutionContext* geoQec(uint8_t gridLevel = 2,
-                              ad_utility::GeoCellGridScheme scheme =
-                                  ad_utility::GeoCellGridScheme::Flat) {
-  ad_utility::testing::TestIndexConfig config{geoTurtleInput()};
+QueryExecutionContext* geoQec(
+    uint8_t gridLevel = 2,
+    ad_utility::GeoCellGridScheme scheme = ad_utility::GeoCellGridScheme::Flat,
+    int numFar = 16) {
+  ad_utility::testing::TestIndexConfig config{geoTurtleInput(numFar)};
   config.vocabularyType = ad_utility::VocabularyType{
       ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
   config.geoCellGridLevel = gridLevel;
@@ -362,6 +366,14 @@ TEST_P(GeoRectanglePrefilterSchemeTest, spatialJoinPushesBlockPrefilter) {
 // scan's blocks using the bounding rectangle of the materialized small side.
 TEST_P(GeoRectanglePrefilterSchemeTest, runtimeBlockPrefilter) {
   auto* qec = geoQec(2, GetParam());
+  // Disable the plan-time materialization, so that this test exercises the
+  // runtime block prefilter in isolation.
+  setRuntimeParameter<&RuntimeParameters::spatialJoinPlanTimePrefilterMaxRows_>(
+      0);
+  absl::Cleanup restoreParameter{[]() {
+    setRuntimeParameter<
+        &RuntimeParameters::spatialJoinPlanTimePrefilterMaxRows_>(100'000);
+  }};
   Variable pointVar{"?point"};
   Variable wktVar{"?wkt"};
   parsedQuery::SparqlValues values;
@@ -479,48 +491,37 @@ TEST_P(GeoRectanglePrefilterSchemeTest,
   }
 }
 
-// With a type restriction on both geometry sides, the planner prefers the
-// plan whose geometry scan is sorted by the geometry variable (reachable for
-// the runtime block prefilter through the sort and join above the scan),
-// although the plan without the extra sort looks cheaper. End-to-end check:
-// the funnel of the executed spatial join shows pruned blocks.
-TEST_P(GeoRectanglePrefilterSchemeTest, plannerPrefersPrefilterablePlan) {
-  auto* qec = geoQec(2, GetParam());
-  auto qet = queryPlannerTestHelpers::parseAndPlan(R"(
+// A query with type restrictions on both geometry sides: the plan-time
+// prefilter materializes the small side during planning, computes its
+// bounding rectangle, and prunes candidate plans of the other side. This
+// must not change the result (whichever plan the cost comparison picks).
+TEST_P(GeoRectanglePrefilterSchemeTest, planTimePrefilterKeepsResultsCorrect) {
+  auto* qec = geoQec(2, GetParam(), 300);
+  constexpr std::string_view query = R"(
     PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
     SELECT * WHERE {
       ?a <hasType> <P> . ?a <hasGeom> ?g1 .
       ?b <hasType> <T> . ?b <hasGeom> ?g2 .
       FILTER (geof:metricDistance(?g1, ?g2) <= 200000)
-    })",
-                                                   qec);
+    })";
 
-  // Find the spatial join in the plan.
-  std::function<const SpatialJoin*(const QueryExecutionTree&)> findSj =
-      [&findSj](const QueryExecutionTree& tree) -> const SpatialJoin* {
-    if (const auto* sj =
-            dynamic_cast<const SpatialJoin*>(tree.getRootOperation().get())) {
-      return sj;
-    }
-    for (const auto* child :
-         std::as_const(*tree.getRootOperation()).getChildren()) {
-      if (const auto* sj = findSj(*child)) {
-        return sj;
-      }
-    }
-    return nullptr;
+  auto numRows = [&qec](std::string_view q) {
+    qec->clearCacheUnpinnedOnly();
+    auto qet = queryPlannerTestHelpers::parseAndPlan(std::string{q}, qec);
+    auto result = qet.getRootOperation()->getResult();
+    return result->idTableView().size();
   };
-  const auto* sj = findSj(qet);
-  ASSERT_NE(sj, nullptr);
 
-  // Execute and check that the runtime block prefilter pruned the scan of
-  // the larger side through the join with the type restriction.
-  auto result = qet.getRootOperation()->getResult();
-  ASSERT_NE(result, nullptr);
-  const auto& details = sj->runtimeInfo().details_;
-  ASSERT_TRUE(details.contains("num-geoms-before-block-prefilter"));
-  EXPECT_GT(details.at("num-geoms-before-block-prefilter").get<int64_t>(),
-            details.at("num-geoms-after-block-prefilter").get<int64_t>());
+  auto rowsWithPlanTimePrefilter = numRows(query);
+  setRuntimeParameter<&RuntimeParameters::spatialJoinPlanTimePrefilterMaxRows_>(
+      0);
+  absl::Cleanup restoreParameter{[]() {
+    setRuntimeParameter<
+        &RuntimeParameters::spatialJoinPlanTimePrefilterMaxRows_>(100'000);
+  }};
+  auto rowsWithoutPlanTimePrefilter = numRows(query);
+  EXPECT_GT(rowsWithPlanTimePrefilter, 0u);
+  EXPECT_EQ(rowsWithPlanTimePrefilter, rowsWithoutPlanTimePrefilter);
 }
 
 INSTANTIATE_TEST_SUITE_P(
