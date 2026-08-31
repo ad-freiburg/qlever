@@ -14,6 +14,8 @@
 #include "engine/CountAvailablePredicates.h"
 #include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "engine/PermutationSelector.h"
 #include "engine/ValuesForTesting.h"
 #include "global/Pattern.h"
@@ -370,10 +372,132 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
    *   ?x ?predicate ?o
    * } GROUP BY ?predicate
    */
+  // Free the cache to get a fresh `IndexScan`.
+  qec->getQueryTreeCache().clearAll();
   auto indexScan = HasPredicateScan::makePatternScan(
       qec, TripleComponent{V{"?x"}}, V{"?predicate"});
   auto patternTrick =
       CountAvailablePredicates(qec, indexScan, 0, V{"?predicate"}, V{"?count"});
 
   runTestUnordered(patternTrick, {{p3, Int(2)}, {p2, Int(1)}, {p, Int(2)}});
+
+  // The scan of the full `ql:has-pattern` relation must have been consumed
+  // lazily by `computePatternTrickAllEntities`, instead of being fully
+  // materialized by the generic path. Without this check the test would
+  // silently pass on the generic path, which is what happened for years while
+  // the condition that selects the special implementation was always false.
+  EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
+            RuntimeInformation::Status::lazilyMaterializedCompleted);
+
+  // Run again to test handling a cached `IndexScan`, which is fully
+  // materialized and thus takes the other branch of the special
+  // implementation.
+  runTestUnordered(patternTrick, {{p3, Int(2)}, {p2, Int(1)}, {p, Int(2)}});
+  EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
+            RuntimeInformation::Status::fullyMaterializedCompleted);
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickAllEntitiesWithDeltaTriples) {
+  // Cover the two branches of `computePatternTrickAllEntities` for entities
+  // without a pattern and for patterns that no entity uses. Neither occurs in
+  // a freshly built index (the `ql:has-pattern` relation only contains
+  // subjects with non-empty patterns), so we modify the internal relation
+  // directly via delta triples on a private copy of the index.
+  auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+      "patternTrickAllEntitiesWithDeltaTriples", kg));
+  auto getIdPrivate = ad_utility::testing::makeGetId(*index);
+  Id o = getIdPrivate("<o>");
+  Id zPrivate = getIdPrivate("<z>");
+  // Note: `ql:has-pattern` is a regular word in the vocabulary of the index,
+  // so its `Id` must be looked up there (the fixed `Id` from `specialIds()`
+  // is a different, unrelated `Id`).
+  Id hasPattern = getIdPrivate(std::string{HAS_PATTERN_PREDICATE});
+  QueryResultCache queryResultCache;
+  NamedResultCache namedResultCache;
+  auto makeQec = [&]() {
+    return QueryExecutionContext{index,
+                                 &queryResultCache,
+                                 makeAllocator(),
+                                 SortPerformanceEstimator{},
+                                 &namedResultCache,
+                                 std::make_shared<MaterializedViewsManager>()};
+  };
+
+  // Read the `ql:has-pattern` entry of `<z>` (subject, pattern, and the
+  // graph, which we need to delete the exact triple below).
+  auto qecBefore = makeQec();
+  auto scanBefore = ad_utility::makeExecutionTree<IndexScan>(
+      &qecBefore,
+      qlever::getPermutationForTriple(
+          Permutation::Enum::PSO, *index,
+          SparqlTripleSimple{Variable{"?s"},
+                             ad_utility::triple_component::Iri::fromIriref(
+                                 HAS_PATTERN_PREDICATE),
+                             Variable{"?p"}}),
+      qecBefore.locatedTriplesSharedState(),
+      SparqlTripleSimple{
+          Variable{"?s"},
+          ad_utility::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
+          Variable{"?p"},
+          {std::pair{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID},
+                     Variable{"?g"}}}});
+  auto before = scanBefore->getResult();
+  std::optional<Id> zPattern;
+  std::optional<Id> graphOfHasPattern;
+  for (const auto& row : before->idTableView()) {
+    if (row[0] == zPrivate) {
+      zPattern = row[1];
+      graphOfHasPattern = row[2];
+    }
+  }
+  ASSERT_TRUE(zPattern.has_value());
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    // The object-only entity `<o>` gets an entry without a pattern, like a
+    // subject that is added by an update.
+    deltaTriples.insertInternalTriplesForTesting(
+        cancellationHandle,
+        {IdTriple<0>{std::array{o, hasPattern,
+                                Id::makeFromInt(Pattern::NoPattern),
+                                graphOfHasPattern.value()}}});
+    // Remove the entry of `<z>`. Its pattern (which contains only `<p3>`) is
+    // then used by no entity.
+    deltaTriples.deleteInternalTriplesForTesting(
+        cancellationHandle,
+        {IdTriple<0>{std::array{zPrivate, hasPattern, zPattern.value(),
+                                graphOfHasPattern.value()}}});
+  });
+
+  auto qec = makeQec();
+
+  // The modified relation must contain `<x>`, `<y>`, and `<o>` (with
+  // `NoPattern`), but no longer `<z>`.
+  {
+    auto scanAfter = HasPredicateScan::makePatternScan(
+        &qec, TripleComponent{V{"?x2"}}, V{"?p2"});
+    auto after = scanAfter->getRootOperation()->computeResultOnlyForTesting();
+    std::vector<std::pair<Id, Id>> rows;
+    for (const auto& row : after.idTableView()) {
+      rows.emplace_back(row[0], row[1]);
+    }
+    EXPECT_THAT(rows, ::testing::SizeIs(3));
+    EXPECT_THAT(rows, ::testing::Contains(
+                          std::pair{o, Id::makeFromInt(Pattern::NoPattern)}));
+    EXPECT_THAT(rows, ::testing::Not(::testing::Contains(::testing::Field(
+                          &std::pair<Id, Id>::first, zPrivate))));
+  }
+
+  auto indexScan = HasPredicateScan::makePatternScan(
+      &qec, TripleComponent{V{"?x"}}, V{"?predicate"});
+  auto patternTrick = CountAvailablePredicates(&qec, indexScan, 0,
+                                               V{"?predicate"}, V{"?count"});
+
+  // `<o>` contributes to no predicate, and the pattern of `<z>` is unused, so
+  // `<p3>` is only counted for `<y>`.
+  runTestUnordered(patternTrick, {{p3, Int(1)}, {p2, Int(1)}, {p, Int(2)}});
+  EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
+            RuntimeInformation::Status::lazilyMaterializedCompleted);
 }
