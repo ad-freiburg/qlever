@@ -911,6 +911,22 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
           "The algorithm `<libspatialjoin>` supports the "
           "`<maxDistance>` option only if `<joinType>` is set to "
           "`<within-dist>`"));
+  // `<within-dist>` join type requires the `<maxDistance>` parameter.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+                "spatialSearch:joinType <within-dist> ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr("`<within-dist>` requires the `<maxDistance>` "
+                           "parameter"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"

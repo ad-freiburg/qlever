@@ -676,6 +676,7 @@ GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
   }
 
   auto expression = visitExpressionPimpl(ctx->expression());
+  throwIfContainsAggregate(ctx, expression, "BIND");
   warnOrThrowIfUnboundVariables(ctx, expression, "BIND");
   addVisibleVariable(target);
   return GraphPatternOperation{Bind{std::move(expression), std::move(target)}};
@@ -1777,18 +1778,16 @@ Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
 GroupKey Visitor::visit(Parser::GroupConditionContext* ctx) {
   if (ctx->var() && !ctx->expression()) {
     return Variable{ctx->var()->getText()};
-  } else if (ctx->builtInCall() || ctx->functionCall()) {
-    // builtInCall and functionCall are both also an Expression
-    return (ctx->builtInCall() ? visitExpressionPimpl(ctx->builtInCall())
-                               : visitExpressionPimpl(ctx->functionCall()));
+  }
+  // `builtInCall` and `functionCall` are both also an `Expression`.
+  auto expr = ctx->builtInCall()    ? visitExpressionPimpl(ctx->builtInCall())
+              : ctx->functionCall() ? visitExpressionPimpl(ctx->functionCall())
+                                    : visitExpressionPimpl(ctx->expression());
+  throwIfContainsAggregate(ctx, expr, "GROUP BY");
+  if (ctx->AS() && ctx->var()) {
+    return Alias{std::move(expr), visit(ctx->var())};
   } else {
-    AD_CORRECTNESS_CHECK(ctx->expression());
-    auto expr = visitExpressionPimpl(ctx->expression());
-    if (ctx->AS() && ctx->var()) {
-      return Alias{std::move(expr), visit(ctx->var())};
-    } else {
-      return expr;
-    }
+    return expr;
   }
 }
 
@@ -1951,12 +1950,27 @@ void Visitor::warnOrThrowIfUnboundVariables(
 }
 
 // ____________________________________________________________________________________
+void Visitor::throwIfContainsAggregate(const antlr4::ParserRuleContext* ctx,
+                                       const SparqlExpressionPimpl& expression,
+                                       std::string_view clauseName) {
+  if (expression.containsAggregate()) {
+    reportError(
+        ctx,
+        absl::StrCat("Aggregate functions are not allowed in a ", clauseName,
+                     " clause, they may only be used in SELECT, HAVING, "
+                     "and ORDER BY clauses."));
+  }
+}
+
+// ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
   // NOTE: We cannot add a warning or throw an exception if the FILTER
   // expression contains unbound variables, because the variables of the FILTER
   // might be bound after the filter appears in the query (which is perfectly
   // legal).
-  return SparqlFilter{visitExpressionPimpl(ctx->constraint())};
+  auto expression = visitExpressionPimpl(ctx->constraint());
+  throwIfContainsAggregate(ctx, expression, "FILTER");
+  return SparqlFilter{std::move(expression)};
 }
 
 // ____________________________________________________________________________________

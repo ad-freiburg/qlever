@@ -4,6 +4,9 @@
 
 #include "index/LocalVocabEntry.h"
 
+#include <utility>
+#include <variant>
+
 #include "global/VocabIndex.h"
 #include "index/LocalVocabContext.h"
 
@@ -36,14 +39,23 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   // NOTE: For encoded IRIs, the only purpose of the returned `std::pair` is to
   // give us a consistent ordering, which is important for determining equality
   // and for operations like `Join`, `Distinct`, `GroupBy`, etc.
-  auto [lower, upper] = [&]() {
+  auto [lower, upper] = [&]() -> std::pair<Id, Id> {
     if (auto opt = context_->encodeAsId(toStringRepresentation());
         opt.has_value()) {
-      return std::pair{opt.value(), Id::fromBits(opt.value().getBits() + 1)};
+      return {opt.value(), Id::fromBits(opt.value().getBits() + 1)};
     }
-    auto [l, u] = context_->getPositionOfWord(toStringRepresentation());
-    AD_CORRECTNESS_CHECK(u.get() - l.get() <= 1);
-    return std::pair{Id::makeFromVocabIndex(l), Id::makeFromVocabIndex(u)};
+    // Look up the word in the vocabularies of the index. A word that is
+    // contained in one of them is positioned exactly at its `Id`, so its range
+    // is that single `Id`. A word that is contained in none of them is
+    // positioned at the empty range at which it would be sorted into the
+    // vocabulary of the main index.
+    auto idOrBounds =
+        context_->lookupWordInVocabularies(toStringRepresentation());
+    if (const auto* id = std::get_if<Id>(&idOrBounds)) {
+      return {*id, Id::fromBits(id->getBits() + 1)};
+    }
+    auto [l, u] = std::get<LocalVocabContext::VocabBounds>(idOrBounds);
+    return {Id::makeFromVocabIndex(l), Id::makeFromVocabIndex(u)};
   }();
   positionInVocab.lowerBound_ = IdProxy::make(lower.getBits());
   positionInVocab.upperBound_ = IdProxy::make(upper.getBits());

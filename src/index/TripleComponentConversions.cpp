@@ -13,6 +13,7 @@
 
 #include "index/ExportIds.h"
 #include "index/IndexImpl.h"
+#include "index/LocalVocabContext.h"
 #include "rdfTypes/GeoPoint.h"
 
 // ____________________________________________________________________________
@@ -72,7 +73,7 @@ std::string toRdfLiteral(const TripleComponent& tripleComponent) {
 }
 
 // _____________________________________________________________________________
-std::variant<Id, std::pair<VocabIndex, VocabIndex>> toValueIdOrBounds(
+LocalVocabContext::IdOrVocabBounds toValueIdOrBounds(
     const TripleComponent& tripleComponent, const IndexImpl& index) {
   AD_CONTRACT_CHECK(!tripleComponent.isString());
   std::optional<Id> vid =
@@ -85,11 +86,12 @@ std::variant<Id, std::pair<VocabIndex, VocabIndex>> toValueIdOrBounds(
       tripleComponent.isLiteral()
           ? tripleComponent.getLiteral().toStringRepresentation()
           : tripleComponent.getIri().toStringRepresentation();
-  auto [lower, upper] = index.getVocab().getPositionOfWord(content);
-  if (lower != upper) {
-    return Id::makeFromVocabIndex(lower);
-  }
-  return std::pair(lower, upper);
+  // Look up the word in the vocabularies of the index. NOTE: It is crucial that
+  // this lookup uses the exact same logic as the `LocalVocabEntry` for looking
+  // up words in the vocabulary, as the resulting bounds are passed manually to
+  // the `LocalVocabEntry` constructor in `toValueId` below. We thus delegate
+  // that lookup to the `LocalVocabContext`.
+  return index.getLocalVocabContext().lookupWordInVocabularies(content);
 }
 
 // _____________________________________________________________________________
@@ -109,7 +111,7 @@ Id toValueId(TripleComponent&& tripleComponent, const IndexImpl& index,
   if (const auto* id = std::get_if<Id>(&idOrBounds)) {
     return *id;
   }
-  using Bounds = std::pair<VocabIndex, VocabIndex>;
+  using Bounds = LocalVocabContext::VocabBounds;
   AD_CORRECTNESS_CHECK(std::holds_alternative<Bounds>(idOrBounds));
   auto [lower, upper] = std::get<Bounds>(idOrBounds);
   // If `toValueIdOrBounds` could not convert to `Id`, we have a Literal or Iri,
