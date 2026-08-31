@@ -13,6 +13,7 @@
 #include "engine/MaterializedViews.h"
 #include "util/Algorithm.h"
 #include "util/BitUtils.h"
+#include "util/Exception.h"
 
 namespace materializedViewsQueryAnalysis {
 
@@ -142,10 +143,10 @@ bool PatternMatcher::hasLegalFixedValuePrefix() const {
   uint64_t boundColumnsMask = 0;
   for (const auto& [viewVar, node] : assignment_) {
     if (!node.isVariable()) {
+      // `tryAssignment` never binds a fixed value to a payload column
+      // (index > 2), so this is a column among the first three.
       size_t col = viewCols_.at(viewVar).columnIndex_;
-      if (col > 2) {
-        return false;
-      }
+      AD_CORRECTNESS_CHECK(col <= 2);
       boundColumnsMask |= (uint64_t{1} << col);
     }
   }

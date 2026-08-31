@@ -127,8 +127,6 @@ class QueryPlanner {
     bool isSimilar(const TripleGraph& other) const;
     std::string asString() const;
 
-    bool isTextNode(size_t i) const;
-
     vector<vector<size_t>> _adjLists;
     ad_utility::HashMap<size_t, Node*> _nodeMap;
     std::list<TripleGraph::Node> _nodeStorage;

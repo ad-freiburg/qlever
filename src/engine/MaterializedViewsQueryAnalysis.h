@@ -10,8 +10,6 @@
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 
-#include <absl/numeric/bits.h>
-
 #include <cstdint>
 #include <variant>
 
@@ -79,9 +77,6 @@ struct MaterializedViewJoinReplacement {
   // Bitmask of covered query triple indices, like
   // `QueryPlanner::SubtreePlan::_idsOfIncludedNodes`.
   uint64_t coveredTriples_;
-
-  // ___________________________________________________________________________
-  size_t numJoins() const { return absl::popcount(coveredTriples_) - 1; }
 };
 
 // Cache data structure for the `MaterializedViewsManager`. This object can be

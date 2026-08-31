@@ -308,10 +308,11 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   // twice here; harmless, since `removeView` erases all copies.
   if (patternFound) {
     for (const auto& triple : triples) {
+      // `buildPatternEdges` already required a simple predicate for every
+      // triple here, or `patternFound` would be `false`.
       auto predicate = triple.getSimplePredicate();
-      if (predicate.has_value()) {
-        predicateInView_[predicate.value()].push_back(view);
-      }
+      AD_CORRECTNESS_CHECK(predicate.has_value());
+      predicateInView_[predicate.value()].push_back(view);
     }
   }
 
