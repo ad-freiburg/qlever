@@ -53,7 +53,7 @@ class ServerMetrics {
   void registerCallbacks();
 
  private:
-  template <absl::AnyInvocable<int64_t() const> ServerMetrics::* Getter>
+  template <absl::AnyInvocable<int64_t() const> ServerMetrics::*Getter>
   static void observeCallback(opentelemetry::metrics::ObserverResult result,
                               void* state);
   static void deltaTriplesCallback(
