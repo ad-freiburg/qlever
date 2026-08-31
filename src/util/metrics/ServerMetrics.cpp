@@ -18,7 +18,7 @@
 
 // _____________________________________________________________________________
 ServerMetrics::ServerMetrics(
-    absl::AnyInvocable<int64_t() const> getDeltaTriples,
+    absl::AnyInvocable<DeltaTriplesCount() const> getDeltaTriples,
     absl::AnyInvocable<int64_t() const> getMemoryLeft,
     absl::AnyInvocable<int64_t() const> getCacheUsed,
     absl::AnyInvocable<int64_t() const> getCacheLimit,
@@ -118,8 +118,7 @@ ServerMetrics::ServerMetrics(
 
 // _____________________________________________________________________________
 ServerMetrics::~ServerMetrics() {
-  deltaTriplesMetric_->RemoveCallback(
-      &observeCallback<&ServerMetrics::getDeltaTriples_>, this);
+  deltaTriplesMetric_->RemoveCallback(&deltaTriplesCallback, this);
   memoryQueryFree_->RemoveCallback(
       &observeCallback<&ServerMetrics::getMemoryLeft_>, this);
   memoryCacheUsed_->RemoveCallback(
@@ -134,8 +133,7 @@ ServerMetrics::~ServerMetrics() {
 
 // _____________________________________________________________________________
 void ServerMetrics::registerCallbacks() {
-  deltaTriplesMetric_->AddCallback(
-      &observeCallback<&ServerMetrics::getDeltaTriples_>, this);
+  deltaTriplesMetric_->AddCallback(&deltaTriplesCallback, this);
   memoryQueryFree_->AddCallback(
       &observeCallback<&ServerMetrics::getMemoryLeft_>, this);
   memoryCacheUsed_->AddCallback(&observeCallback<&ServerMetrics::getCacheUsed_>,
@@ -157,9 +155,28 @@ void ServerMetrics::observe(opentelemetry::metrics::ObserverResult result,
 }
 
 // _____________________________________________________________________________
-template <absl::AnyInvocable<int64_t() const> ServerMetrics::*Getter>
+void ServerMetrics::observe(opentelemetry::metrics::ObserverResult result,
+                            int64_t value, const std::string& label,
+                            const std::string& labelValue) {
+  opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
+      opentelemetry::metrics::ObserverResultT<int64_t>>>(result)
+      ->Observe(value, {{label, labelValue}});
+}
+
+// _____________________________________________________________________________
+template <absl::AnyInvocable<int64_t() const> ServerMetrics::* Getter>
 void ServerMetrics::observeCallback(
     opentelemetry::metrics::ObserverResult result, void* state) {
   const auto& self = *static_cast<const ServerMetrics*>(state);
   observe(std::move(result), (self.*Getter)());
+}
+
+// _____________________________________________________________________________
+void ServerMetrics::deltaTriplesCallback(
+    opentelemetry::metrics::ObserverResult result, void* state) {
+  const auto& self = *static_cast<const ServerMetrics*>(state);
+  auto deltaTriples = self.getDeltaTriples_();
+  observe(result, deltaTriples.triplesInserted_, "type", "added");
+  observe(result, deltaTriples.triplesDeleted_, "type", "removed");
+  observe(result, deltaTriples.triplesInserted_ + deltaTriples.triplesDeleted_);
 }

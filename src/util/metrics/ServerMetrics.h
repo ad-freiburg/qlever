@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "index/DeltaTriples.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Owns all OTEL instruments and deregisters observable callbacks on
@@ -42,7 +43,7 @@ class ServerMetrics {
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> httpErrors_;
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryQueryTotal_;
 
-  ServerMetrics(absl::AnyInvocable<int64_t() const> getDeltaTriples,
+  ServerMetrics(absl::AnyInvocable<DeltaTriplesCount() const> getDeltaTriples,
                 absl::AnyInvocable<int64_t() const> getMemoryLeft,
                 absl::AnyInvocable<int64_t() const> getCacheUsed,
                 absl::AnyInvocable<int64_t() const> getCacheLimit,
@@ -52,13 +53,18 @@ class ServerMetrics {
   void registerCallbacks();
 
  private:
-  template <absl::AnyInvocable<int64_t() const> ServerMetrics::*Getter>
+  template <absl::AnyInvocable<int64_t() const> ServerMetrics::* Getter>
   static void observeCallback(opentelemetry::metrics::ObserverResult result,
                               void* state);
+  static void deltaTriplesCallback(
+      opentelemetry::metrics::ObserverResult result, void* state);
   static void observe(opentelemetry::metrics::ObserverResult result,
                       int64_t value);
+  static void observe(opentelemetry::metrics::ObserverResult result,
+                      int64_t value, const std::string& label,
+                      const std::string& labelValue);
 
-  absl::AnyInvocable<int64_t() const> getDeltaTriples_;
+  absl::AnyInvocable<DeltaTriplesCount() const> getDeltaTriples_;
   absl::AnyInvocable<int64_t() const> getMemoryLeft_;
   absl::AnyInvocable<int64_t() const> getCacheUsed_;
   absl::AnyInvocable<int64_t() const> getCacheLimit_;
