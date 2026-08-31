@@ -17,9 +17,15 @@
 #include "backports/filesystem.h"
 #include "engine/ExternalValues.h"
 #include "engine/MaterializedViews.h"
+#include "engine/UpdateMetadata.h"
 #include "global/FileSuffixConstants.h"
+#include "global/RuntimeParameters.h"
+#include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "libqlever/Qlever.h"
+#include "parser/SparqlParser.h"
+#include "util/BlankNodeManager.h"
+#include "util/FilesystemHelpers.h"
 
 using namespace qlever;
 using namespace testing;
@@ -685,6 +691,132 @@ TEST(LibQlever, clearCache) {
   // the same cache as the non-`const` one.
   const Qlever& constEngine = engine;
   EXPECT_EQ(&constEngine.namedResultCache(), &engine.namedResultCache());
+}
+
+// _____________________________________________________________________________
+// Test that `Qlever::applyUpdate` is directly usable through `Qlever`,
+// independent of the HTTP `Server` layer (which only wraps this in
+// thread/timer/response-formatting concerns, see `Server::processUpdate`).
+TEST(LibQlever, applyUpdate) {
+  // Never persist updates to disk in this test (would leave files behind
+  // after the test, and pollute a re-run of the same test that reuses the
+  // same on-disk base name).
+  auto config = buildTestIndex("<s> <p> <o> .");
+  config.persistUpdates_ = false;
+  Qlever engine{config};
+
+  // Populate the cache with a pinned query result, so that clearing the
+  // cache as a side effect of `applyUpdate` is actually observable below.
+  PlannedQuery plan = engine.planQuery(engine.parseQuery(
+      "SELECT ?s WHERE { ?s <p> ?o }", {}, ad_utility::noop, false, true));
+  engine.query(plan, ad_utility::MediaType::tsv);
+  ASSERT_GT(engine.cache().numPinnedEntries(), 0U);
+
+  // `Qlever::parseQuery`/`parseAndPlanQuery` only accept SPARQL queries, not
+  // updates (see `SparqlParser::parseQuery` vs. `parseUpdate`), so an update
+  // has to be parsed separately and then planned via `bindParsedQuery`.
+  ad_utility::BlankNodeManager bnm;
+  auto parsedUpdates =
+      SparqlParser::parseUpdate(&bnm, ad_utility::testing::encodedIriManager(),
+                                "INSERT DATA { <a> <b> <c> }");
+  ASSERT_THAT(parsedUpdates, SizeIs(1));
+  auto plannedUpdate =
+      engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
+  ASSERT_TRUE(plannedUpdate.parsedQuery().hasUpdateClause());
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  // NOTE: This takes a fresh index snapshot, independent of the one
+  // `plannedUpdate` was planned against a few lines above. In general this
+  // is not thread-safe: if a concurrent index rebuild swapped in a new
+  // `IndexAndViews` between the two calls, `deltaTriples` here would belong
+  // to a different `Index` than the one `plannedUpdate` was planned
+  // against, violating `applyUpdate`'s precondition. This test gets away
+  // with it because it is single-threaded and nothing swaps the index in
+  // between. `PlannedQuery`/`QueryExecutionContext` currently don't expose
+  // a way to get back the exact snapshot a query was planned against (only
+  // a `const Index&`), so there is no easy way to avoid the second
+  // snapshot here yet. A future API that threads the `IndexAndViews`
+  // snapshot explicitly through parsing/planning/execution would close
+  // this gap, but that is a larger redesign, out of scope for now.
+  auto snapshot = engine.indexAndViewsSnapshot();
+  UpdateMetadata updateMetadata =
+      snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(
+          [&](DeltaTriples& deltaTriples) {
+            return engine.applyUpdate(plannedUpdate, handle, deltaTriples);
+          });
+
+  EXPECT_THAT(updateMetadata.countBefore_,
+              Optional(Eq(DeltaTriplesCount{0, 0})));
+  EXPECT_THAT(updateMetadata.countAfter_,
+              Optional(Eq(DeltaTriplesCount{1, 0})));
+
+  // The query result cache is invalidated as a side effect of `applyUpdate`.
+  EXPECT_EQ(engine.cache().numPinnedEntries(), 0U);
+  EXPECT_EQ(engine.cache().numNonPinnedEntries(), 0U);
+}
+
+namespace {
+// Parse and plan `update` and apply it to `engine` via `Qlever::applyUpdate`,
+// returning the metadata. For why the update has to be parsed separately and
+// for the thread-safety caveat of taking the snapshot only here, see the
+// comments in `LibQlever.applyUpdate` above.
+UpdateMetadata applyUpdateToEngine(Qlever& engine, const std::string& update) {
+  ad_utility::BlankNodeManager bnm;
+  auto parsedUpdates = SparqlParser::parseUpdate(
+      &bnm, ad_utility::testing::encodedIriManager(), update);
+  AD_CORRECTNESS_CHECK(parsedUpdates.size() == 1);
+  auto plannedUpdate =
+      engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto snapshot = engine.indexAndViewsSnapshot();
+  return snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(
+      [&](DeltaTriples& deltaTriples) {
+        return engine.applyUpdate(plannedUpdate, handle, deltaTriples);
+      });
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Direct counterpart to `ServerTest.clearDeltaTriples`: populate the delta
+// triples via `applyUpdate` and clear them directly through `Qlever`,
+// independent of the HTTP `Server` layer.
+TEST(LibQlever, clearDeltaTriples) {
+  auto config = buildTestIndex("<s> <p> <o> .");
+  config.persistUpdates_ = false;
+  Qlever engine{config};
+
+  auto metadata = applyUpdateToEngine(engine, "INSERT DATA { <a> <b> <c> }");
+  EXPECT_THAT(metadata.countAfter_, Optional(Eq(DeltaTriplesCount{1, 0})));
+
+  EXPECT_THAT(engine.clearDeltaTriples(), Eq(DeltaTriplesCount{0, 0}));
+}
+
+// _____________________________________________________________________________
+// Direct counterpart to `ServerTest.vacuumDeltaTriples`: insert a triple that
+// is already in the index (a redundant insertion that `vacuum` removes) and
+// vacuum directly through `Qlever`, independent of the HTTP `Server` layer.
+TEST(LibQlever, vacuumDeltaTriples) {
+  auto config = buildTestIndex("<a> <b> <c> .");
+  config.persistUpdates_ = false;
+  Qlever engine{config};
+
+  // Without this, the single block of the (tiny) test index doesn't meet the
+  // minimum size for `vacuum` to process it.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+          size_t{0});
+
+  auto metadata = applyUpdateToEngine(engine, "INSERT DATA { <a> <b> <c> }");
+  EXPECT_THAT(metadata.countAfter_, Optional(Eq(DeltaTriplesCount{1, 0})));
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto stats = engine.vacuumDeltaTriples(handle);
+  EXPECT_EQ(stats["external"]["insertionsRemoved"], 1);
+  EXPECT_THAT(engine.indexAndViewsSnapshot()
+                  ->index_.deltaTriplesManager()
+                  .getCurrentLocatedTriplesSharedState()
+                  ->counts_,
+              Optional(Eq(DeltaTriplesCount{0, 0})));
 }
 
 // _____________________________________________________________________________
