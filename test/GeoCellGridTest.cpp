@@ -53,34 +53,34 @@ TEST(GeoCellGrid, schemeStringConversion) {
   EXPECT_FALSE(ad_utility::geoCellGridSchemeFromString("nope").has_value());
 }
 
-TEST(GeoCellGrid, cellFromPoint) {
+TEST(GeoCellGrid, cellIndexFromPoint) {
   GeoCellGrid grid{1};
   // Level 1 divides the earth into 2 x 2 cells; cell = (cellY << 1) | cellX.
-  EXPECT_EQ(grid.cellFromPoint(-90.0, -45.0), 0u);
-  EXPECT_EQ(grid.cellFromPoint(90.0, -45.0), 1u);
-  EXPECT_EQ(grid.cellFromPoint(-90.0, 45.0), 2u);
-  EXPECT_EQ(grid.cellFromPoint(90.0, 45.0), 3u);
+  EXPECT_EQ(grid.cellIndexFromPoint(-90.0, -45.0), 0u);
+  EXPECT_EQ(grid.cellIndexFromPoint(90.0, -45.0), 1u);
+  EXPECT_EQ(grid.cellIndexFromPoint(-90.0, 45.0), 2u);
+  EXPECT_EQ(grid.cellIndexFromPoint(90.0, 45.0), 3u);
   // The boundary values are clamped into the valid grid range.
-  EXPECT_EQ(grid.cellFromPoint(180.0, 90.0), 3u);
-  EXPECT_EQ(grid.cellFromPoint(-180.0, -90.0), 0u);
+  EXPECT_EQ(grid.cellIndexFromPoint(180.0, 90.0), 3u);
+  EXPECT_EQ(grid.cellIndexFromPoint(-180.0, -90.0), 0u);
 
   // Spot check on a fine grid against the closed formula.
   GeoCellGrid fine{10};
   uint64_t cx = static_cast<uint64_t>((13.405 + 180.0) / 360.0 * 1024.0);
   uint64_t cy = static_cast<uint64_t>((52.52 + 90.0) / 180.0 * 1024.0);
-  EXPECT_EQ(fine.cellFromPoint(13.405, 52.52), (cy << 10) | cx);
+  EXPECT_EQ(fine.cellIndexFromPoint(13.405, 52.52), (cy << 10) | cx);
 }
 
-TEST(GeoCellGrid, cellFromBoundingBoxAndWktLiteral) {
+TEST(GeoCellGrid, cellIndexFromBoundingBoxAndWktLiteral) {
   GeoCellGrid grid{1};
   // A geometry entirely inside one cell gets that cell.
-  EXPECT_EQ(grid.cellFromWktLiteral(wkt("POINT(90 45)")), 3u);
-  EXPECT_EQ(grid.cellFromWktLiteral(wkt("LINESTRING(10 10, 20 20)")), 3u);
+  EXPECT_EQ(grid.cellIndexFromWktLiteral(wkt("POINT(90 45)")), 3u);
+  EXPECT_EQ(grid.cellIndexFromWktLiteral(wkt("LINESTRING(10 10, 20 20)")), 3u);
   // A geometry whose bounding box crosses a cell border gets the sentinel.
-  EXPECT_EQ(grid.cellFromWktLiteral(wkt("LINESTRING(-10 10, 20 20)")),
+  EXPECT_EQ(grid.cellIndexFromWktLiteral(wkt("LINESTRING(-10 10, 20 20)")),
             grid.sentinelCell());
   // Unparsable literals also get the sentinel.
-  EXPECT_EQ(grid.cellFromWktLiteral(wkt("NOTAGEOMETRY(1 2)")),
+  EXPECT_EQ(grid.cellIndexFromWktLiteral(wkt("NOTAGEOMETRY(1 2)")),
             grid.sentinelCell());
 }
 
@@ -127,14 +127,14 @@ TEST(GeoCellGrid, coveringCellRanges) {
                          P{grid.sentinelCell(), grid.sentinelCell()}));
 }
 
-TEST(GeoCellGrid, isWktLiteralMatchesGeoSplitFunc) {
-  detail::splitVocabulary::GeoSplitFunc splitFunc;
+TEST(GeoCellGrid, isWktLiteral) {
+  for (const std::string& word : {wkt("POINT(1 2)"), wkt("NOTAGEOMETRY")}) {
+    EXPECT_TRUE(GeoCellGrid::isWktLiteral(word)) << word;
+  }
   for (const std::string& word :
-       {wkt("POINT(1 2)"), wkt("NOTAGEOMETRY"), std::string{"\"foo\""},
-        std::string{"<http://example.org>"}, std::string{"\"foo\"@en"}}) {
-    EXPECT_EQ(GeoCellGrid::isWktLiteral(word),
-              static_cast<bool>(splitFunc(word)))
-        << word;
+       {std::string{"\"foo\""}, std::string{"<http://example.org>"},
+        std::string{"\"foo\"@en"}}) {
+    EXPECT_FALSE(GeoCellGrid::isWktLiteral(word)) << word;
   }
 }
 
@@ -166,7 +166,7 @@ TEST(GeoCellGrid, cellNumbersFitTheField) {
                                            std::clamp(lng, -180.0, 180.0)},
                                   GeoPoint{std::clamp(lat + h, -90.0, 90.0),
                                            std::clamp(lng + w, -180.0, 180.0)}};
-      auto cell = grid.cellFromBoundingBox(box);
+      auto cell = grid.cellIndexFromBoundingBox(box);
       EXPECT_LT(cell, uint64_t{1} << grid.numCellBits());
     }
   }
@@ -183,7 +183,7 @@ TEST(GeoCellGrid, coverIsConservativeForAllSchemes) {
   std::uniform_real_distribution<double> querySize{0.01, 30.0};
 
   auto contains = [](const GeoCellGrid::CellRanges& ranges,
-                     GeoCellGrid::Cell cell) {
+                     GeoCellGrid::CellIndex cell) {
     for (const auto& [first, last] : ranges) {
       if (cell >= first && cell <= last) {
         return true;
@@ -216,7 +216,7 @@ TEST(GeoCellGrid, coverIsConservativeForAllSchemes) {
           continue;
         }
         ad_utility::BoundingBox box{GeoPoint{lat, lng}, GeoPoint{lat2, lng2}};
-        auto cell = grid.cellFromBoundingBox(box);
+        auto cell = grid.cellIndexFromBoundingBox(box);
         EXPECT_TRUE(contains(ranges, cell))
             << ad_utility::toString(scheme) << " geometry [" << lng << ", "
             << lat << ", " << lng2 << ", " << lat2 << "] query [" << qLng

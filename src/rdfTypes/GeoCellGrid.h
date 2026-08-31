@@ -25,7 +25,7 @@
 
 namespace ad_utility {
 
-// The cell assignment scheme of the `GeoCellGrid` below. There is currently
+// The available schemes for the `GeoCellGrid` class below. There is currently
 // only one scheme: `Flat`, a single grid of 2^level x 2^level cells, where
 // each geometry that fits inside a single cell gets that cell and every
 // other geometry gets the sentinel cell. A further scheme (for example,
@@ -47,138 +47,150 @@ std::string_view toString(GeoCellGridScheme scheme);
 std::optional<GeoCellGridScheme> geoCellGridSchemeFromString(
     std::string_view name);
 
-// A grid over the earth's surface in geographic coordinates, used to encode
-// a coarse spatial key ("grid cell") into the vocabulary indices of WKT
-// literals. The base grid of `level` L subdivides the longitude range
-// [-180, 180] and the latitude range [-90, 90] into 2^L intervals each; the
-// cell assignment on top of it is determined by the `GeoCellGridScheme`.
+// A grid over the earth's surface in geographic coordinates. The base grid of
+// `level` L subdivides the longitude range [-180, 180] and the latitude range
+// [-90, 90] into 2^L intervals each. How exactly the grid is placed and how
+// the grid cells are indexed is determined by the `GeoCellGridScheme`. The
+// relation between the grid and a WKT literal is defined as follows:
 //
-// Each WKT literal has exactly one cell, computed by `cellFromWktLiteral`
-// from the WKT string alone. The method `coveringCellRanges` guarantees: if
-// the bounding box of a geometry intersects a given rectangle, then the cell
-// of that geometry is contained in one of the ranges computed for that
-// rectangle. Code that only wants the geometries in the rectangle can
-// therefore safely skip every WKT literal whose cell lies outside all of the
-// ranges. In particular, the ranges always contain the sentinel cell, so
-// that geometries that span several cells and literals that cannot be
-// parsed are never skipped.
+// 1. Each WKT literal is assigned to exactly one cell, computed by
+// `cellIndexFromWktLiteral` from the WKT string alone. That cell either covers
+// the entire geometry or, if there is no such cell, is the special "sentinel"
+// cell.
+//
+// 2. For a given rectangle, `coveringCellRanges` computes ranges of cell
+// indices that are guaranteed to contain the cell index of every geometry
+// whose bounding box intersects the rectangle; see the method for details.
 class GeoCellGrid {
  public:
-  // Cell numbers and cell-annotated vocabulary indices.
-  using Cell = uint64_t;
+  // The type for the index of a cell in the grid. In particular, this index is
+  // encoded into the vocabulary index of a WKT literal.
+  using CellIndex = uint64_t;
 
-  // A list of closed, ascending, non-overlapping cell ranges.
-  using CellRanges = std::vector<std::pair<Cell, Cell>>;
+  // A list of closed, ascending, non-overlapping ranges of cell indices.
+  using CellRanges = std::vector<std::pair<CellIndex, CellIndex>>;
 
   // Return true iff `word` is a WKT literal (with quotes and datatype
-  // suffix). This is the same criterion by which the `SplitGeoVocabulary`
-  // routes words into the geo vocabulary.
+  // suffix). This is the criterion by which the `SplitGeoVocabulary` routes
+  // words into the geo vocabulary (its `GeoSplitFunc` calls this function).
   static bool isWktLiteral(std::string_view word) {
     return ql::starts_with(word, "\"") &&
            ql::ends_with(word, GEO_LITERAL_SUFFIX);
   }
 
  private:
+  // The level `L` of the base grid, which has `2^L x 2^L` cells.
   uint8_t level_;
+
+  // The scheme by which cell indices are assigned to geometries.
   GeoCellGridScheme scheme_;
 
  public:
-  // The level must be at least 1 and small enough that the cell bits plus at
-  // least one position bit fit into a vocabulary index (see
-  // `numPositionBits()`).
+  // Create a grid of the given `level` with the given `scheme`. The grid has
+  // `2^level x 2^level` cells.
+  //
+  // NOTE: The level must be at least 1 and small enough that a vocabulary
+  // index can hold the cell index plus at least one bit for the position of
+  // the word inside the geo vocabulary; see `numPositionBits()`.
   explicit GeoCellGrid(uint8_t level,
                        GeoCellGridScheme scheme = GeoCellGridScheme::Flat);
 
   uint8_t level() const { return level_; }
   GeoCellGridScheme scheme() const { return scheme_; }
 
-  // Number of grid columns (= rows).
+  // The number of grid columns or rows (the same in all schemes).
   uint64_t numCellsPerDimension() const { return uint64_t{1} << level_; }
 
-  // Number of bits occupied by a cell number.
+  // The number of bits occupied by a cell number.
   //
   // NOTE: This can depend on the scheme (a scheme with several grid copies
   // needs extra bits to select the copy), so the bit count must never be
   // hard-coded elsewhere.
   uint64_t numCellBits() const { return 2 * uint64_t{level_} + 1; }
 
-  // The cell number for "no information": for the flat scheme the reserved
-  // all-ones sentinel (larger than every regular cell number). It is always
-  // part of `coveringCellRanges`, so it is never pruned.
-  Cell sentinelCell() const;
+  // The index of the special "sentinel" cell, which is assigned to every WKT
+  // literal that does not fit into any regular cell.
+  CellIndex sentinelCell() const;
 
-  // Number of bits remaining for the position of a word inside the geo
+  // The number of bits remaining for the position of a word inside the geo
   // vocabulary: the data bits of a `ValueId` minus one marker bit of the
   // `SplitVocabulary` minus the cell bits.
   uint64_t numPositionBits() const {
     return ValueId::numDataBits - 1 - numCellBits();
   }
 
-  // Maximum number of words the geo vocabulary can hold with this grid.
+  // The maximum number of words the geo vocabulary can hold with this grid.
   uint64_t maxNumWords() const { return uint64_t{1} << numPositionBits(); }
 
-  // The flat-grid cell containing the point (`lng`, `lat`), with clamping.
-  // Only valid for the `Flat` scheme (used by tests and diagnostics).
-  Cell cellFromPoint(double lng, double lat) const;
+  // The cell index containing the point (`lng`, `lat`), with clamping.
+  CellIndex cellIndexFromPoint(double lng, double lat) const;
 
-  // The cell for the given bounding box: the smallest cell that contains it
-  // entirely, or `sentinelCell()` if no regular cell contains it.
+  // The cell index for the given bounding box: the smallest regular cell that
+  // contains it entirely, or `sentinelCell()` if no such cell exists.
   //
   // NOTE: The corners are normalized through the `GeoPoint` bit encoding, so
   // that the result is identical for a freshly parsed bounding box and for
   // one that took a round trip through the precomputed `GeometryInfo`.
-  Cell cellFromBoundingBox(const BoundingBox& box) const;
+  CellIndex cellIndexFromBoundingBox(const BoundingBox& box) const;
 
-  // The cell for a full WKT literal (with quotes and datatype suffix):
-  // `cellFromBoundingBox` of its parsed bounding box, or `sentinelCell()` if
-  // the literal cannot be parsed. This is the canonical assignment used both
+  // The cell index for a full WKT literal (with quotes and datatype suffix):
+  // `cellIndexFromBoundingBox` of its parsed bounding box, or `sentinelCell()`
+  // if the literal cannot be parsed. This is the canonical assignment used both
   // when sorting the vocabulary and when comparing words at query time, so it
   // must be a pure function of the literal string.
-  Cell cellFromWktLiteral(std::string_view wktLiteral) const;
+  CellIndex cellIndexFromWktLiteral(std::string_view wktLiteral) const;
 
   // Combine a cell and a position into a cell-annotated vocabulary index and
   // take it apart again. The position must be smaller than `maxNumWords()`.
-  uint64_t annotateIndex(Cell cell, uint64_t position) const {
+  uint64_t annotateIndex(CellIndex cell, uint64_t position) const {
     return (cell << numPositionBits()) | position;
   }
-  Cell cellOfIndex(uint64_t annotatedIndex) const {
+  CellIndex cellOfIndex(uint64_t annotatedIndex) const {
     return annotatedIndex >> numPositionBits();
   }
   uint64_t positionOfIndex(uint64_t annotatedIndex) const {
     return annotatedIndex & (maxNumWords() - 1);
   }
 
-  // Compute the cell ranges for the geographic rectangle given by the two
-  // corner points, as closed ranges [first, last] of cell numbers, ascending
-  // and non-overlapping. The guarantee is: if the bounding box of a geometry
-  // intersects the rectangle, then the cell of that geometry (each geometry
-  // has exactly one, see `cellFromBoundingBox`) is contained in one of the
-  // ranges. The sentinel cell is always part of the ranges.
+  // For the rectangle given by the two corner points, compute closed,
+  // ascending, and non-overlapping ranges of cell indices with the following
+  // property:
+  //
+  // If the bounding box of a geometry intersects the rectangle, then the cell
+  // of that geometry (each geometry has exactly one, see
+  // `cellIndexFromBoundingBox`) is contained in one of the ranges. The sentinel
+  // cell is always part of the ranges.
+  //
+  // NOTE: When using these ranges for pre-filtering, this will keep blocks
+  // that contain potential results; all other blocks are guaranteed to contain
+  // no results.
   CellRanges coveringCellRanges(double minLng, double minLat, double maxLng,
                                 double maxLat) const;
 
-  // Helpers for the vocabulary indices of WKT literals in a
-  // `SplitGeoVocabulary` (see `SplitVocabulary`): there the topmost data bit
-  // of a vocabulary index is 1 exactly for the WKT literals, and the bits
-  // below it hold the cell-annotated index of this grid.
+  // Helper that checks whether a vocabulary index is in the geo vocabulary.
   //
   // NOTE: This encodes the marker layout of a `SplitVocabulary` with exactly
-  // two underlying vocabularies; unit tests check that the two stay
-  // consistent.
+  // two underlying vocabularies. In the unit tests, there are checks that the
+  // two are consistent.
   static constexpr uint64_t geoVocabMarkerBit = uint64_t{1}
                                                 << (ValueId::numDataBits - 1);
   static constexpr bool isGeoVocabIndex(uint64_t vocabIndexBits) {
     return (vocabIndexBits & geoVocabMarkerBit) != 0;
   }
 
-  // The half-open range of vocabulary indices (with the marker bit set) that
-  // contains exactly the WKT literals whose cell is in [first, last].
+  // For the given closed range of cell indices, compute the half-open range of
+  // vocabulary indices (with the marker bit set) that contains exactly the WKT
+  // literals whose cell index is in `[first, last]`.
   //
-  // NOTE: The bounds are computed by addition, not bitwise or: for the
-  // largest cell number the exclusive upper bound `(last + 1) <<
-  // numPositionBits()` carries into (or past) the marker bit.
-  std::pair<uint64_t, uint64_t> vocabIndexRangeForCells(Cell first,
-                                                        Cell last) const {
+  // NOTE: The bounds must be computed by addition, not by bitwise or. For
+  // the sentinel cell, `(last + 1) << numPositionBits()` is exactly the
+  // marker bit, so the addition carries into the bit above it. That is
+  // harmless: the upper bound is exclusive and only used in comparisons, so
+  // it may be larger than every valid vocabulary index. With a bitwise or,
+  // the carry would be lost and the upper bound would be smaller than the
+  // lower bound.
+  std::pair<uint64_t, uint64_t> vocabIndexRangeForCells(CellIndex first,
+                                                        CellIndex last) const {
     return {geoVocabMarkerBit + (first << numPositionBits()),
             geoVocabMarkerBit + ((last + 1) << numPositionBits())};
   }
@@ -186,13 +198,13 @@ class GeoCellGrid {
   bool operator==(const GeoCellGrid&) const = default;
 
  private:
-  // Integer grid coordinates of a normalized coordinate in [0, 1], clamped
-  // to [0, 2^level - 1].
+  // Integer grid coordinates of a normalized coordinate in `[0, 1]`, clamped
+  // to `[0, 2^level - 1]`.
   uint64_t gridCoordinate(double normalized) const;
 
   // Cell assignment and cover computation of the `Flat` scheme, on
-  // normalized coordinates in [0, 1].
-  Cell flatCell(double u1, double v1, double u2, double v2) const;
+  // normalized coordinates in `[0, 1]`.
+  CellIndex flatCell(double u1, double v1, double u2, double v2) const;
   void flatCover(double u1, double v1, double u2, double v2,
                  CellRanges& ranges) const;
 };

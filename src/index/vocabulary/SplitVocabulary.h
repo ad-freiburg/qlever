@@ -18,6 +18,7 @@
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
@@ -342,8 +343,7 @@ namespace detail::splitVocabulary {
 // vocabulary 0 except WKT literals, which go to vocabulary 1.
 struct GeoSplitFunc {
   uint8_t operator()(std::string_view word) const {
-    return ql::starts_with(word, "\"") &&
-           ql::ends_with(word, GEO_LITERAL_SUFFIX);
+    return ad_utility::GeoCellGrid::isWktLiteral(word);
   }
 };
 

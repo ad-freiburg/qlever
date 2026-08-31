@@ -44,7 +44,7 @@ GeoCellGrid::GeoCellGrid(uint8_t level, GeoCellGridScheme scheme)
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::sentinelCell() const {
+GeoCellGrid::CellIndex GeoCellGrid::sentinelCell() const {
   return (uint64_t{1} << numCellBits()) - 1;
 }
 
@@ -58,15 +58,16 @@ uint64_t GeoCellGrid::gridCoordinate(double normalized) const {
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::cellFromPoint(double lng, double lat) const {
+GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromPoint(double lng,
+                                                       double lat) const {
   AD_CONTRACT_CHECK(scheme_ == GeoCellGridScheme::Flat);
   return (gridCoordinate((lat + 90.0) / 180.0) << level_) |
          gridCoordinate((lng + 180.0) / 360.0);
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::flatCell(double u1, double v1, double u2,
-                                        double v2) const {
+GeoCellGrid::CellIndex GeoCellGrid::flatCell(double u1, double v1, double u2,
+                                             double v2) const {
   uint64_t x1 = gridCoordinate(u1);
   uint64_t x2 = gridCoordinate(u2);
   uint64_t y1 = gridCoordinate(v1);
@@ -78,7 +79,7 @@ GeoCellGrid::Cell GeoCellGrid::flatCell(double u1, double v1, double u2,
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::cellFromBoundingBox(
+GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromBoundingBox(
     const BoundingBox& box) const {
   // Normalize the corners through the `GeoPoint` bit encoding (idempotent):
   // the precomputed bounding boxes of the `GeoVocabulary` have gone through
@@ -100,13 +101,13 @@ GeoCellGrid::Cell GeoCellGrid::cellFromBoundingBox(
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::cellFromWktLiteral(
+GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromWktLiteral(
     std::string_view wktLiteral) const {
   auto box = GeometryInfo::getBoundingBox(wktLiteral);
   if (!box.has_value()) {
     return sentinelCell();
   }
-  return cellFromBoundingBox(box.value());
+  return cellIndexFromBoundingBox(box.value());
 }
 
 // ____________________________________________________________________________
