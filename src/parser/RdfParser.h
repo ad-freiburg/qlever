@@ -85,8 +85,6 @@ class RdfParserBase {
 
   explicit RdfParserBase(const EncodedIriManager* encodedIriManager)
       : encodedIriManager_{encodedIriManager} {}
-  // Wrapper to getLine that is expected by the rest of QLever
-  bool getLine(TurtleTriple& triple) { return getLineImpl(&triple); }
 
   virtual TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() final {
     return integerOverflowBehavior_;
@@ -104,20 +102,13 @@ class RdfParserBase {
     // overridden).
   }
 
-  // Main access method to the parser
-  // If a triple can be parsed (or has previously been parsed and stored
-  // Writes the triple to the argument (format subject, object predicate)
-  // returns true iff a triple can be successfully written, else the triple
-  // value is invalid and the parser is at the end of the input.
-  virtual bool getLineImpl(TurtleTriple* triple) = 0;
-
   // Get the offset (relative to the beginning of the file) of the first byte
   // that has not yet been dealt with by the parser.
   [[nodiscard]] virtual size_t getParsePosition() const = 0;
 
-  // Return a batch of the next 100'000 triples at once. If the parser is
-  // exhausted, return `nullopt`.
-  virtual std::optional<std::vector<TurtleTriple>> getBatch();
+  // Main access method to the parser. Return the next batch of triples, or
+  // `nullopt` if the parser is exhausted.
+  virtual std::optional<std::vector<TurtleTriple>> getBatch() = 0;
 
  protected:
   const auto& encodedIriManager() const { return *encodedIriManager_; }
@@ -441,17 +432,15 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
     : public Parser {
  public:
   using Parser::baseIri_;
-  using Parser::getLine;
   using Parser::prefixMap_;
   explicit RdfStringParser(const EncodedIriManager* encodedIriManager)
       : Parser{encodedIriManager} {}
   explicit RdfStringParser(const EncodedIriManager* encodedIriManager,
                            TripleComponent defaultGraph)
       : Parser{encodedIriManager, std::move(defaultGraph)} {}
-  bool getLineImpl(TurtleTriple* triple) override {
-    (void)triple;
+  std::optional<std::vector<TurtleTriple>> getBatch() override {
     throw std::runtime_error(
-        "RdfStringParser doesn't support calls to getLine. Only use "
+        "RdfStringParser doesn't support calls to getBatch. Only use "
         "parseUtf8String() for unit tests\n");
   }
 
@@ -590,7 +579,9 @@ class RdfStreamParser : public Parser {
     initialize(spec, blocksize);
   }
 
-  bool getLineImpl(TurtleTriple* triple) override;
+  // Return the triples that were parsed since the last call, at most
+  // `PARSER_MIN_TRIPLES_AT_ONCE` of them.
+  std::optional<std::vector<TurtleTriple>> getBatch() override;
 
   void initialize(const qlever::InputFileSpecification& spec,
                   ad_utility::MemorySize blocksize);
@@ -603,6 +594,7 @@ class RdfStreamParser : public Parser {
   using Parser::isParserExhausted_;
   using Parser::tok_;
   using Parser::triples_;
+
   // Backup the current state of the turtle parser to a
   // `TurtleParserBackupState` object. This can be used e.g. when parsing from
   // a compressed input and the currently uncompressed buffer is not sufficient
@@ -654,11 +646,6 @@ class RdfParallelParser : public Parser {
     initialize(spec, blocksize);
   }
 
-  // inherit the wrapper overload
-  using Parser::getLine;
-
-  bool getLineImpl(TurtleTriple* triple) override;
-
   std::optional<std::vector<TurtleTriple>> getBatch() override;
 
   void printAndResetQueueStatistics() override {
@@ -694,9 +681,8 @@ class RdfParallelParser : public Parser {
   template <typename Batch>
   void feedBatchesToParser(Batch remainingBatchFromInitialization);
 
-  // Helper function used by `getBatch()` and `getLimeImpl()` to abstract away
-  // common code. Return true if some triples could be collected and false if
-  // the input has been fully consumed.
+  // Wait until `triples_` contains at least one triple. Return true if some
+  // triples could be collected and false if the input has been fully consumed.
   bool processTriples();
 
   using Parser::isParserExhausted_;
@@ -746,10 +732,6 @@ class RdfMultifileParser : public RdfParserBase {
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE);
-
-  // This function is needed for the interface, but always throws an exception.
-  // `getBatch` (below) has to be used instead.
-  bool getLineImpl(TurtleTriple* triple) override;
 
   // Retrieve the next batch of triples, or `nullopt` if there are no more
   // batches. There is no guarantee about the order in which batches from

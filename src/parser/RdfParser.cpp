@@ -17,6 +17,7 @@
 #include <ctre-unicode.hpp>
 #include <exception>
 #include <optional>
+#include <utility>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
@@ -1050,92 +1051,83 @@ void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
 
 // _____________________________________________________________________________
 template <class T>
-bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
-  if (triples_.empty()) {
-    // if parsing the line fails because our buffer ends before the end of
-    // the next statement we need to be able to recover
-    TurtleParserBackupState b = backupState();
-    // always try to parse a batch of triples at once to make up for the
-    // relatively expensive backup calls.
-    while (triples_.size() < PARSER_MIN_TRIPLES_AT_ONCE &&
-           !isParserExhausted_) {
-      bool parsedStatement;
-      std::optional<ParseException> ex;
-      // If this buffer reads from a memory-mapped file, then exceptions are
-      // immediately rethrown. If we are reading from a stream in chunks of
-      // bytes, we can try again with a larger buffer.
-      try {
-        parsedStatement = T::statement();
-      } catch (const typename T::ParseException& p) {
-        parsedStatement = false;
-        ex = p;
-      }
+std::optional<std::vector<TurtleTriple>> RdfStreamParser<T>::getBatch() {
+  // If parsing a statement fails because our buffer ends before the end of
+  // that statement, we need to be able to recover.
+  TurtleParserBackupState b = backupState();
+  // Always parse a batch of triples at once to make up for the relatively
+  // expensive backup calls.
+  while (triples_.size() < PARSER_MIN_TRIPLES_AT_ONCE && !isParserExhausted_) {
+    bool parsedStatement;
+    std::optional<ParseException> ex;
+    // If this buffer reads from a memory-mapped file, then exceptions are
+    // immediately rethrown. If we are reading from a stream in chunks of
+    // bytes, we can try again with a larger buffer.
+    try {
+      parsedStatement = T::statement();
+    } catch (const typename T::ParseException& p) {
+      parsedStatement = false;
+      ex = p;
+    }
 
-      if (!parsedStatement) {
-        // we read chunks of memories in a buffered way
-        // try to parse with a larger buffer and repeat the reading process
-        // (maybe the failure was due to statements crossing our block).
-        if (resetStateAndRead(&b)) {
-          // we have successfully extended our buffer
-          if (byteVec_.size() > RDF_PARSER_MAX_TOTAL_BUFFER_SIZE().getBytes()) {
-            std::string_view unparsed = tok_.view();
-            AD_LOG_ERROR << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
-                         << " Within " << RDF_PARSER_MAX_TOTAL_BUFFER_SIZE()
-                         << " of Turtle input\n";
-            AD_LOG_ERROR << "If you really have Turtle input with such a "
-                            "long structure please recompile with adjusted "
-                            "constants in ConstantsIndexCreation.h or "
-                            "decompress your file and "
-                            "use --file-format mmap\n";
-            AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
-            AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
-            if (ex.has_value()) {
-              throw ex.value();
-            } else {
-              this->raise(
-                  "Too many bytes parsed without finishing a turtle "
-                  "statement");
-            }
-          }
-          // we have reset our state to a safe position and now have more
-          // bytes to try, so just go to the next iterations
-          continue;
-        } else {
-          // there are no more bytes in the buffer
+    if (!parsedStatement) {
+      // we read chunks of memories in a buffered way
+      // try to parse with a larger buffer and repeat the reading process
+      // (maybe the failure was due to statements crossing our block).
+      if (resetStateAndRead(&b)) {
+        // we have successfully extended our buffer
+        if (byteVec_.size() > RDF_PARSER_MAX_TOTAL_BUFFER_SIZE().getBytes()) {
+          std::string_view unparsed = tok_.view();
+          AD_LOG_ERROR << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
+                       << " Within " << RDF_PARSER_MAX_TOTAL_BUFFER_SIZE()
+                       << " of Turtle input\n";
+          AD_LOG_ERROR << "If you really have Turtle input with such a "
+                          "long structure please recompile with adjusted "
+                          "constants in ConstantsIndexCreation.h or "
+                          "decompress your file and "
+                          "use --file-format mmap\n";
+          AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
+          AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
           if (ex.has_value()) {
             throw ex.value();
           } else {
-            // we are at the end of an input stream without an exception
-            // the input is exhausted, but we still may retrieve
-            // triples parsed so far, check if we have indeed parsed through
-            // the complete input
-            tok_.skipWhitespaceAndComments();
-            std::string_view unparsed = tok_.view();
-            if (!unparsed.empty()) {
-              AD_LOG_INFO
-                  << "Parsing of line has Failed, but parseInput is not "
-                     "yet exhausted. Remaining bytes: "
-                  << unparsed.size() << '\n';
-              AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
-              AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
-            }
-            isParserExhausted_ = true;
-            break;
+            this->raise(
+                "Too many bytes parsed without finishing a turtle "
+                "statement");
           }
+        }
+        // we have reset our state to a safe position and now have more
+        // bytes to try, so just go to the next iterations
+        continue;
+      } else {
+        // there are no more bytes in the buffer
+        if (ex.has_value()) {
+          throw ex.value();
+        } else {
+          // we are at the end of an input stream without an exception
+          // the input is exhausted, but we still may retrieve
+          // triples parsed so far, check if we have indeed parsed through
+          // the complete input
+          tok_.skipWhitespaceAndComments();
+          std::string_view unparsed = tok_.view();
+          if (!unparsed.empty()) {
+            AD_LOG_INFO << "Parsing of line has Failed, but parseInput is not "
+                           "yet exhausted. Remaining bytes: "
+                        << unparsed.size() << '\n';
+            AD_LOG_INFO << "Logging first 1000 unparsed characters\n";
+            AD_LOG_INFO << unparsed.substr(0, 1000) << std::endl;
+          }
+          isParserExhausted_ = true;
+          break;
         }
       }
     }
   }
 
-  // if we have a triple now we can return it, else we are done parsing.
   if (triples_.empty()) {
-    return false;
+    return std::nullopt;
   }
-
-  // we now have at least one triple, return it.
-  *triple = triples_.back();
-  triples_.pop_back();
-  return true;
+  return std::exchange(triples_, {});
 }
 
 // We will use the  following trick: For a batch that is forwarded to the
@@ -1303,18 +1295,6 @@ bool RdfParallelParser<T>::processTriples() {
 
 // _______________________________________________________________________
 template <class T>
-bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
-  bool triplesRemaining = processTriples();
-  if (triplesRemaining) {
-    // we now have at least one triple, return it.
-    *triple = std::move(triples_.back());
-    triples_.pop_back();
-  }
-  return triplesRemaining;
-}
-
-// _______________________________________________________________________
-template <class T>
 std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
   bool triplesRemaining = processTriples();
   return triplesRemaining ? std::optional{std::move(triples_)} : std::nullopt;
@@ -1367,24 +1347,6 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
       std::array{input.parseInParallel_ ? 1 : 0,
                  input.filetype_ == qlever::Filetype::Turtle ? 1 : 0},
       makeRdfParserImpl);
-}
-
-// _____________________________________________________________________________
-std::optional<std::vector<TurtleTriple>> RdfParserBase::getBatch() {
-  std::vector<TurtleTriple> result;
-  result.reserve(100'000);
-  for (size_t i = 0; i < 100'000; ++i) {
-    result.emplace_back();
-    bool success = getLine(result.back());
-    if (!success) {
-      result.resize(result.size() - 1);
-      break;
-    }
-  }
-  if (result.empty()) {
-    return std::nullopt;
-  }
-  return result;
 }
 
 // _____________________________________________________________________________
@@ -1447,9 +1409,6 @@ RdfMultifileParser::~RdfMultifileParser() {
       },
       "During the destruction of an RdfMultifileParser");
 }
-
-//______________________________________________________________________________
-bool RdfMultifileParser::getLineImpl(TurtleTriple*) { AD_FAIL(); }
 
 // _____________________________________________________________________________
 std::optional<std::vector<TurtleTriple>> RdfMultifileParser::getBatch() {
