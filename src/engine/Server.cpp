@@ -135,6 +135,7 @@ CPP_template_def(typename RequestT)(
                                       MediaType::textPlain);
 }
 
+// _____________________________________________________________________________
 // Thrown by `verifyUserSubmittedQueryTimeout` when the user-submitted
 // timeout is rejected, instead of building and sending the 403 response
 // itself. This lets callers between `verifyUserSubmittedQueryTimeout` and

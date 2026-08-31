@@ -221,8 +221,7 @@ class Server {
   // to `None{}` so that `process()` doesn't also try to execute it as a
   // regular query. Unlike `processWriteMaterializedView` above, this neither
   // executes a query nor honors a timeout, so it runs synchronously and
-  // either returns its result or throws -- there's no optional-json/
-  // early-return convention needed here.
+  // either returns its result or throws.
   json processLoadMaterializedView(const ParamValueMap& parameters,
                                    const SharedIndexAndView& indexAndViews);
 
