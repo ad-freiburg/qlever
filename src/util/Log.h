@@ -159,9 +159,7 @@ inline void setRuntimeLogLevel(LogLevel level) {
 }
 
 // Get the runtime log level (see `setRuntimeLogLevel`).
-inline LogLevel getRuntimeLogLevel() {
-  return detail::runtimeLogLevel.load(std::memory_order_relaxed);
-}
+inline LogLevel getRuntimeLogLevel() { return detail::runtimeLogLevel.load(); }
 
 // While an object of this class is alive, the runtime log level is the given
 // `level` (or the compile-time `LOGLEVEL`, if that is less verbose); the
@@ -172,7 +170,9 @@ inline LogLevel getRuntimeLogLevel() {
 // NOTE: The runtime log level is global, so this must only be used when nothing
 // else logs concurrently, for example in a standalone command-line tool or in a
 // test, but never in the server.
-class [[nodiscard]] ScopedLogLevel {
+class QL_NODISCARD(
+    "The log level is only changed while this object is alive. Store it in a "
+    "variable.") ScopedLogLevel {
  private:
   LogLevel previousLevel_ = getRuntimeLogLevel();
 
@@ -184,9 +184,14 @@ class [[nodiscard]] ScopedLogLevel {
   ScopedLogLevel(const ScopedLogLevel&) = delete;
   ScopedLogLevel& operator=(const ScopedLogLevel&) = delete;
 
-  // NOTE: This cannot throw, because `previousLevel_` was the runtime log level
-  // before and hence is at most the compile-time `LOGLEVEL`.
-  ~ScopedLogLevel() { setRuntimeLogLevel(previousLevel_); }
+  // Restore the previous level via the raw store: it was the runtime log
+  // level before and hence is always valid, and the checking
+  // `setRuntimeLogLevel` could structurally throw, which a destructor must
+  // never do.
+  ~ScopedLogLevel() {
+    detail::runtimeLogLevel.store(previousLevel_.value(),
+                                  std::memory_order_relaxed);
+  }
 };
 
 // A singleton that holds a pointer to a single `std::ostream`. This enables us
