@@ -158,6 +158,49 @@ inline void setRuntimeLogLevel(LogLevel level) {
   detail::runtimeLogLevel.store(level.value(), std::memory_order_relaxed);
 }
 
+// Get the runtime log level (see `setRuntimeLogLevel`). Note: The relaxed
+// memory order is deliberate and consistent with the other accesses to
+// `detail::runtimeLogLevel` (see `setRuntimeLogLevel` and
+// `detail::logLevelIsEnabled`): the log level is a standalone value that
+// synchronizes nothing, and the accesses are on the hot path of every single
+// log statement.
+inline LogLevel getRuntimeLogLevel() {
+  return detail::runtimeLogLevel.load(std::memory_order_relaxed);
+}
+
+// While an object of this class is alive, the runtime log level is the given
+// `level` (or the compile-time `LOGLEVEL`, if that is less verbose); the
+// previous level is restored when the object is destroyed. Use this to silence
+// a subroutine that logs more than the caller wants, or to set up a specific
+// log level in a test.
+//
+// NOTE: The runtime log level is global, so this must only be used when nothing
+// else logs concurrently, for example in a standalone command-line tool or in a
+// test, but never in the server.
+class QL_NODISCARD(
+    "The log level is only changed while this object is alive. Store it in a "
+    "variable.") ScopedLogLevel {
+ private:
+  LogLevel previousLevel_ = getRuntimeLogLevel();
+
+ public:
+  explicit ScopedLogLevel(LogLevel::Enum level) {
+    setRuntimeLogLevel(std::min(level, LOGLEVEL));
+  }
+
+  ScopedLogLevel(const ScopedLogLevel&) = delete;
+  ScopedLogLevel& operator=(const ScopedLogLevel&) = delete;
+
+  // Restore the previous level via the raw store: it was the runtime log
+  // level before and hence is always valid, and the checking
+  // `setRuntimeLogLevel` could structurally throw, which a destructor must
+  // never do.
+  ~ScopedLogLevel() {
+    detail::runtimeLogLevel.store(previousLevel_.value(),
+                                  std::memory_order_relaxed);
+  }
+};
+
 // A singleton that holds a pointer to a single `std::ostream`. This enables us
 // to globally redirect the `AD_LOG_...` macros to another output stream.
 struct LogstreamChoice {
