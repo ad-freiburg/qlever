@@ -22,8 +22,9 @@
 
 // The constants that describe the on-disk representation of a materialized view
 // (see `engine/MaterializedViews.h`). They live in this separate header because
-// they are also needed by tools that must not depend on the query engine, in
-// particular by the index converter (see `index/IndexFormatConverter.h`).
+// they are also needed by code that must not depend on the query engine, in
+// particular by the index-swap machinery (see `index/IndexSwap.h`) and by the
+// index converter (see `index/IndexFormatConverter.h`).
 
 // Materialized views save their version. If we change something about the way
 // materialized views are stored, we can break the existing ones cleanly without

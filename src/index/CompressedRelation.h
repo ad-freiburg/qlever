@@ -380,8 +380,8 @@ class CompressedRelationWriter {
   // be sorted by this permutation.
   //
   // With `showProgressBar` set to `false`, this writes no progress bar of its
-  // own. That is for callers that write several permutations and display the
-  // progress of all of them together (see `qlever::indexFormatConverter`).
+  // own. That is for callers that write several permutations and want to
+  // report the overall progress themselves.
   static PermutationSingleResult createPermutation(
       WriterAndCallback writerAndCallback,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,

@@ -97,9 +97,9 @@ class Permutation {
   // Everything that has to be done when reading an index from disk.
   //
   // With `logRegistration` set to `false`, the "Registered ... permutation"
-  // message is not logged. That is for callers that write a progress bar of
-  // their own, which such a message would interrupt (see
-  // `qlever::indexFormatConverter`).
+  // message is not logged. That is for callers that load several permutations
+  // and write a progress bar of their own, which such a message would
+  // interrupt.
   void loadFromDisk(
       const std::string& onDiskBase, bool loadInternalPermutation = false,
       Type permutationType = Type::NORMAL,

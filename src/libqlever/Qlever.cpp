@@ -19,9 +19,11 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
+#include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
+#include "engine/UpdateMetadata.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "index/IndexImpl.h"
@@ -34,7 +36,6 @@
 #include "util/FilesystemHelpers.h"
 #include "util/Log.h"
 #include "util/TimeTracer.h"
-#include "util/http/UrlParser.h"
 
 namespace qlever {
 
@@ -217,6 +218,34 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
 }
 
 // _____________________________________________________________________________
+UpdateMetadata Qlever::applyUpdate(
+    const PlannedQuery& plannedUpdate,
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
+  const auto& qet = plannedUpdate.queryExecutionTree();
+  AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
+  AD_CORRECTNESS_CHECK(&plannedUpdate.getIndex().getImpl() ==
+                       &deltaTriples.getIndex());
+
+  DeltaTriplesCount countBefore = deltaTriples.getCounts();
+  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
+      plannedUpdate.getIndex(), plannedUpdate.parsedQuery(), qet, deltaTriples,
+      cancellationHandle, tracer);
+  updateMetadata.countBefore_ = countBefore;
+  updateMetadata.countAfter_ = deltaTriples.getCounts();
+
+  tracer.beginTrace("clearCache");
+  // Clear the cache, because all cache entries have been invalidated by
+  // the update anyway (The index of the located triples snapshot is
+  // part of the cache key).
+  cache_.clearAll();
+  namedResultCache_.clear();
+  tracer.endTrace("clearCache");
+
+  return updateMetadata;
+}
+
+// _____________________________________________________________________________
 void Qlever::queryAndPinResultWithName(
     QueryExecutionContext::PinResultWithName options, std::string query) {
   if (options.geoIndexSimplificationInMeters_.has_value() &&
@@ -242,6 +271,24 @@ void Qlever::clearNamedResultCache() { namedResultCache_.clear(); }
 
 // _____________________________________________________________________________
 void Qlever::clearQueryResultCache() { cache_.clearAll(); }
+
+// _____________________________________________________________________________
+DeltaTriplesCount Qlever::clearDeltaTriples() const {
+  auto snapshot = indexAndViewsSnapshot();
+  return snapshot->index_.deltaTriplesManager().modify<DeltaTriplesCount>(
+      [](auto& deltaTriples) {
+        deltaTriples.clear();
+        return deltaTriples.getCounts();
+      });
+}
+
+// _____________________________________________________________________________
+nlohmann::json Qlever::vacuumDeltaTriples(
+    SharedCancellationHandle handle) const {
+  auto snapshot = indexAndViewsSnapshot();
+  return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
+      [handle](auto& deltaTriples) { return deltaTriples.vacuum(handle); });
+}
 
 // _____________________________________________________________________________
 void Qlever::eraseResultWithName(std::string name) {
@@ -404,20 +451,6 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
       &namedResultCache_, std::move(viewsManager), std::move(updateCallback),
       pinSubtrees, pinResult, disableCaching);
-}
-
-// ___________________________________________________________________________
-nlohmann::json rebuildSuccessResponseAsJson(const IndexSwapConfig& config) {
-  nlohmann::json json;
-  json["message"] = "Index successfully rebuilt and swapped in";
-  // Report the directory (not the full base name): it mirrors the
-  // `rebuild-previous-index-dir` command parameter and is the one piece of
-  // information the client cannot know in advance (the default is derived from
-  // the build date of the old index). The new index is not mentioned because
-  // it is always served from the base name of the old one.
-  json["previous-index-dir"] =
-      ql::filesystem::path{config.oldIndexTarget()}.parent_path().string();
-  return json;
 }
 
 // ___________________________________________________________________________

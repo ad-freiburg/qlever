@@ -6,9 +6,12 @@
 #ifndef QLEVER_TEST_VALUEGETTERTESTHELPERS_H
 #define QLEVER_TEST_VALUEGETTERTESTHELPERS_H
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "./GeometryInfoTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
@@ -92,11 +95,9 @@ using LiteralValueGetterVariant = std::variant<
     sparqlExpression::detail::LiteralValueGetterWithoutStrFunction>;
 
 // Apply `getter` to `id` in the given context, then check the content and the
-// datatype of the resulting literal, see `checkLiteralContentAndDatatype`. The
-// context is a `TestContextWithGivenTTl` or a `SecondaryVocabTestContext`.
-template <typename Context>
-void checkLiteralContentAndDatatypeForId(
-    Context& testContext, Id id,
+// datatype of the resulting literal, see `checkLiteralContentAndDatatype`.
+inline void checkLiteralContentAndDatatypeForId(
+    TestContextWithGivenTTl& testContext, Id id,
     const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype,
     LiteralValueGetterVariant getter) {
@@ -147,13 +148,14 @@ inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
                                         expectedDatatype);
 };
 
-// The words of the secondary vocabulary of an index (see
-// `index/vocabulary/SecondaryVocabulary.h`) that the tests use, in the order in
-// which a `SecondaryVocabulary` stores them. NOTE: That order is the one of
-// `std::string`, whereas the actual implementation will use the collation of
-// the vocabulary of the main index. These words are deliberately chosen such
-// that the two orders agree (verified against the vocabulary of a test index),
-// so that the tests do not encode a wrong assumption about the order.
+// The words of the secondary vocabulary of the index of
+// `AllDatatypesTestContext` (see `index/vocabulary/SecondaryVocabulary.h`), in
+// the order in which a `SecondaryVocabulary` stores them. NOTE: That order is
+// the one of `std::string`, whereas the actual implementation will use the
+// collation of the vocabulary of the main index. These words are deliberately
+// chosen such that the two orders agree (verified against the vocabulary of a
+// test index), so that the tests do not encode a wrong assumption about the
+// order.
 inline const std::vector<std::string> secondaryVocabWords{
     "\"\"",
     "\"LINESTRING(6 6, 8 8)\""
@@ -174,34 +176,35 @@ inline const std::string secondaryLangLiteral = secondaryVocabWords.at(4);
 inline const std::string secondaryUnitIri = secondaryVocabWords.at(5);
 inline const std::string secondaryIri = secondaryVocabWords.at(6);
 
-// The words of the vocabulary of the main index of `SecondaryVocabTestContext`,
-// one per kind of literal and IRI that the value getters distinguish. They are
+// The words of the vocabulary of the index of `AllDatatypesTestContext`, one
+// per kind of literal and IRI that the value getters distinguish. They are
 // deliberately disjoint from `secondaryVocabWords`, because the two
 // vocabularies are.
-inline const std::string mainPlainLiteral = "\"noMainType\"";
-inline const std::string mainTypedLiteral = "\"someMainType\"^^<someType>";
-inline const std::string mainLangLiteral = "\"withMainLang\"@en";
-inline const std::string mainWktLiteral =
+inline const std::string vocabPlainLiteral = "\"noVocabType\"";
+inline const std::string vocabTypedLiteral = "\"someVocabType\"^^<someType>";
+inline const std::string vocabLangLiteral = "\"withVocabLang\"@en";
+inline const std::string vocabWktLiteral =
     "\"LINESTRING(2 2, 4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
-inline const std::string mainIri = "<https://example.com/main>";
+inline const std::string vocabIri = "<https://example.com/vocab>";
 
-// The prefix of the IRIs that the index of `SecondaryVocabTestContext` encodes
+// The prefix of the IRIs that the index of `AllDatatypesTestContext` encodes
 // directly in the `Id`, and an IRI that has that prefix.
 inline const std::string encodedIriPrefix = "https://encoded.example.com/";
 inline const std::string encodedIri = "<https://encoded.example.com/123>";
 
-// A test context whose index has a secondary vocabulary that holds
-// `secondaryVocabWords`. Its knowledge graph holds the `main...` words above,
-// and its index encodes the IRIs that start with `encodedIriPrefix` directly in
-// the `Id`, such that an `Id` of every `Datatype` can be created for it (see
-// the fixture in `ValueGetterTest.cpp`).
+// A test context whose index is built such that an `Id` of every `Datatype`
+// can be created for it (see the fixture in `ValueGetterTest.cpp`): its
+// knowledge graph holds the `vocab...` words above, its secondary vocabulary
+// holds `secondaryVocabWords`, its index encodes the IRIs that start with
+// `encodedIriPrefix` directly in the `Id`, and it has a text index, which makes
+// the `Id`s of the datatypes `WordVocabIndex` and `TextRecordIndex` resolvable.
 //
 // NOTE: The knowledge graph deliberately contains none of the
 // `secondaryVocabWords`, because a secondary vocabulary is disjoint from the
 // vocabulary of the main index.
-struct SecondaryVocabTestContext : TestContextWithGivenTTl {
-  SecondaryVocabTestContext() : TestContextWithGivenTTl{makeConfig()} {}
+struct AllDatatypesTestContext : TestContextWithGivenTTl {
+  AllDatatypesTestContext() : TestContextWithGivenTTl{makeConfig()} {}
 
   // The `Id` of the given word of the secondary vocabulary. The word has to be
   // one of `secondaryVocabWords`.
@@ -220,8 +223,9 @@ struct SecondaryVocabTestContext : TestContextWithGivenTTl {
   }
 
   // The `Id` of `word` in the local vocabulary of this context. The word has to
-  // be contained in neither vocabulary of the index, else it would not be
-  // stored in a local vocabulary in the first place.
+  // be contained in neither the knowledge graph nor one of the vocabularies of
+  // the index, else it would not be stored in a local vocabulary in the first
+  // place.
   Id localVocabId(const std::string& word) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         LocalVocabEntry::fromStringRepresentation(
@@ -230,25 +234,14 @@ struct SecondaryVocabTestContext : TestContextWithGivenTTl {
 
  private:
   // The configuration of the index, see the class comment.
-  //
-  // NOTE: The index deliberately has NO text index, although that would make
-  // the `Id`s of the types `WordVocabIndex` and `TextRecordIndex` resolvable.
-  // The reason is a bug in `TextIndexBuilder::...` (see the loop over the
-  // vocabulary at `TextIndexBuilder.cpp:170`): it iterates over the words of
-  // the vocabulary with *dense* indices, whereas the indices of a
-  // `SplitVocabulary` are marker-encoded, so building a text index over a
-  // knowledge graph that contains a WKT literal (like this one) fails as soon
-  // as the vocabulary is geo-split. `makeTestIndex` picks the vocabulary type
-  // at random if it is not set, so enabling the text index here would make the
-  // tests flaky.
-  // TODO<joka921> Fix that bug, then enable the text index here.
   static ad_utility::testing::TestIndexConfig makeConfig() {
     ad_utility::testing::TestIndexConfig config{absl::StrCat(
-        "<x> <y> ", mainPlainLiteral, " , ", mainTypedLiteral, " , ",
-        mainLangLiteral, " , ", mainWktLiteral, " , ", mainIri, " .\n")};
+        "<x> <y> ", vocabPlainLiteral, " , ", vocabTypedLiteral, " , ",
+        vocabLangLiteral, " , ", vocabWktLiteral, " , ", vocabIri, " .\n")};
     config.encodedPrefixesWithoutAngleBrackets =
         std::vector<std::string>{encodedIriPrefix};
     config.secondaryVocabWords = secondaryVocabWords;
+    config.createTextIndex = true;
     return config;
   }
 };
@@ -260,7 +253,7 @@ inline void checkLiteralContentAndDatatypeFromSecondaryVocabId(
     const std::string& word, const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype,
     LiteralValueGetterVariant getter) {
-  SecondaryVocabTestContext testContext;
+  AllDatatypesTestContext testContext;
   checkLiteralContentAndDatatypeForId(
       testContext, testContext.secondaryVocabId(word), expectedContent,
       expectedDatatype, std::move(getter));
@@ -288,11 +281,10 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         "x".
   )";
 
-// Apply `getter` to `id` in the given context and check the result. The context
-// is a `TestContextWithGivenTTl` or a `SecondaryVocabTestContext`.
-template <typename Context>
-void checkUnitValueGetterForId(
-    Context& testContext, Id id, UnitOfMeasurement expectedResult,
+// Apply `getter` to `id` in the given context and check the result.
+inline void checkUnitValueGetterForId(
+    TestContextWithGivenTTl& testContext, Id id,
+    UnitOfMeasurement expectedResult,
     sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
   ASSERT_EQ(getter(id, &testContext.context), expectedResult);
 }
@@ -315,13 +307,13 @@ inline void checkUnitValueGetterFromIdEncodedValue(
                             getter);
 }
 
-// Helper to test `UnitOfMeasurementValueGetter` on the given word of an
+// Helper to test `UnitOfMeasurementValueGetter` on the given word of a
 // secondary vocabulary, see `checkUnitValueGetterFromId` above. The word has to
 // be one of `secondaryVocabWords`.
 inline void checkUnitValueGetterFromSecondaryVocabId(
     const std::string& word, UnitOfMeasurement expectedResult,
     sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
-  SecondaryVocabTestContext testContext;
+  AllDatatypesTestContext testContext;
   checkUnitValueGetterForId(testContext, testContext.secondaryVocabId(word),
                             expectedResult, getter);
 }
@@ -423,14 +415,14 @@ class ValueGetterTester {
   }
 
   // Helper that tests the `ValueGetter` using the `ValueId` of the given word
-  // of the secondary vocabulary of the index, see `SecondaryVocabTestContext`.
+  // of the secondary vocabulary of the index, see `AllDatatypesTestContext`.
   // The word has to be one of `secondaryVocabWords`.
   void checkFromSecondaryVocab(
       const std::string& word,
       ::testing::Matcher<std::optional<ReturnType>> expected,
       Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(sourceLocation);
-    SecondaryVocabTestContext testContext;
+    AllDatatypesTestContext testContext;
     checkImpl(testContext, testContext.secondaryVocabId(word), expected);
   }
 
@@ -476,9 +468,9 @@ class ValueGetterTester {
   // Apply the `ValueGetter` to `input` (a `ValueId` or a `LiteralOrIri`) in the
   // given context and check the result. All the public helpers above funnel
   // into this.
-  template <typename Context, typename Input>
+  template <typename Input>
   void checkImpl(
-      Context& testContext, const Input& input,
+      TestContextWithGivenTTl& testContext, const Input& input,
       const ::testing::Matcher<std::optional<ReturnType>>& expected) {
     EXPECT_THAT(ValueGetter{}(input, &testContext.context), expected);
   }
@@ -495,7 +487,6 @@ using IntValueGetterTester =
 using NumericOrDateValueGetterTester =
     ValueGetterTester<sparqlExpression::detail::NumericOrDateValueGetter,
                       sparqlExpression::detail::NumericOrDateValue>;
-
 // _____________________________________________________________________________
 inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
     std::string wktInput, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {

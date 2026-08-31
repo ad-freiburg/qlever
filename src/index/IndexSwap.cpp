@@ -1,6 +1,8 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
+// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
 // 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -109,36 +111,38 @@ IndexSwapConfig makeIndexSwapConfig(const std::string& currentBaseName,
             .string();
       };
 
-  // The default directories lie inside the directory of the current index
-  // (an explicitly given directory is resolved against the working directory
-  // instead, but has to lie inside the directory of the current index as
-  // well, see the check below).
+  // The default directories lie inside the directory of the current index (an
+  // explicitly given directory is resolved against the working directory
+  // instead, but has to lie inside the directory of the current index as well,
+  // see the check below).
   auto defaultDirectory =
       [indexDirectory =
            fs::path{currentBaseName}.parent_path()](std::string name) {
         return (indexDirectory / std::move(name)).string();
       };
 
-  // Uniquify the default name of the retired directory with `.1`, `.2`, ...
-  // if it is already taken, see the comment on `makeIndexSwapConfig` in the
-  // header for why.
+  // Uniquify the default name of the retired directory with `.1`, `.2`, ... if
+  // it is already taken, see the comment on `makeIndexSwapConfig` in the header
+  // for why.
   //
   // NOTE: The check-then-use is not atomic; this is fine because swaps of the
   // same index are serialized (rebuilds via `Server::rebuildInProgress_`, and
   // `qlever-upgrade-index` is a manually run standalone binary).
-  auto uniquify = [&naming](const std::string& directory) {
-    std::string candidate = directory;
-    for (size_t i = 1; fs::exists(candidate); ++i) {
-      if (i > 99) {
-        throw std::runtime_error{
-            absl::StrCat("The directories \"", directory, "\" and \"",
-                         directory, ".1\" through \"", directory,
-                         ".99\" all already exist; remove some of them",
-                         naming.retiredDirConflictHint_)};
-      }
-      candidate = absl::StrCat(directory, ".", i);
+  auto uniquify = [&naming](const std::string& directory) -> std::string {
+    if (!fs::exists(directory)) {
+      return directory;
     }
-    return candidate;
+    for (size_t i = 1; i <= 99; ++i) {
+      std::string candidate = absl::StrCat(directory, ".", i);
+      if (!fs::exists(candidate)) {
+        return candidate;
+      }
+    }
+    throw std::runtime_error{
+        absl::StrCat("The directories \"", directory, "\" and \"", directory,
+                     ".1\" through \"", directory,
+                     ".99\" all already exist; remove some of them",
+                     naming.retiredDirConflictHint_)};
   };
   bool stagingDirWasExplicit = stagingDir.has_value();
   bool retiredDirWasExplicit = retiredDir.has_value();
@@ -155,10 +159,10 @@ IndexSwapConfig makeIndexSwapConfig(const std::string& currentBaseName,
   // Check the two base names that were derived from the arguments: an
   // explicitly given directory must be relative (it is resolved against the
   // working directory; a default directory instead inherits the directory of
-  // `currentBaseName` and hence needs no such check), and both directories
-  // must be empty or not exist yet and be a subdirectory of the directory of
-  // the current index. Base names that would collide with each other or with
-  // the current index are rejected by the `IndexSwapConfig` constructor below.
+  // `currentBaseName` and hence needs no such check), and both directories must
+  // be empty or not exist yet and be a subdirectory of the directory of the
+  // current index. Base names that would collide with each other or with the
+  // current index are rejected by the `IndexSwapConfig` constructor below.
   for (const auto& [baseName, wasExplicit] :
        {std::pair{baseNameForStaging, stagingDirWasExplicit},
         std::pair{baseNameForOldIndex, retiredDirWasExplicit}}) {
@@ -184,8 +188,8 @@ IndexSwapConfig makeIndexSwapConfig(const std::string& currentBaseName,
     }
   }
 
-  // The new index ends up at the base name the current index lives at, so
-  // that a later start of the server loads it.
+  // The new index ends up at the base name the current index lives at, so that
+  // a later start of the server loads it.
   return IndexSwapConfig{currentBaseName, baseNameForStaging,
                          baseNameForOldIndex, currentBaseName};
 }
@@ -224,8 +228,8 @@ void moveIndexIntoPlace(const IndexSwapConfig& config) {
     };
     ql::ranges::for_each(IndexImpl::allIndexFiles(source), move);
     // The files of the materialized views (this is what
-    // `MaterializedViewsManager::viewFilesOnDisk` enumerates, which is not
-    // used here directly so that this file does not depend on the engine).
+    // `MaterializedViewsManager::viewFilesOnDisk` enumerates, which is not used
+    // here directly so that this file does not depend on the engine).
     ql::ranges::for_each(
         qlever::util::filesWithBaseNameAndSuffix(source, VIEW_FILE_INFIX),
         move);
@@ -242,9 +246,9 @@ void moveIndexIntoPlace(const IndexSwapConfig& config) {
   moveIndex(config.newIndexSource(), config.newIndexTarget());
 
   // The move took the new index (and its rebuild log, if any) out of the
-  // directory in which it was staged, so that directory is now empty and can
-  // be removed. Everything that matters has already happened at this point, so
-  // a failure here is only worth a warning.
+  // directory in which it was staged, so that directory is now empty and can be
+  // removed. Everything that matters has already happened at this point, so a
+  // failure here is only worth a warning.
   // NOTE: The `error_code` is only there to select the non-throwing overload of
   // `fs::remove`; it does not have to be inspected, because that overload
   // returns `false` whenever it sets an error code (and also if the directory
