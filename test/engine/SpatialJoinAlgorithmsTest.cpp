@@ -1848,8 +1848,7 @@ TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
         Variable{"?area2"},
         std::nullopt,
         PayloadVariables::all(),
-        SpatialJoinAlgorithm::LIBSPATIALJOIN,
-        SpatialJoinType::DE9IM};
+        SpatialJoinAlgorithm::LIBSPATIALJOIN};
     auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
         qec, config, leftChild, rightChild);
     auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
