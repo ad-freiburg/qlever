@@ -636,7 +636,7 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Server::Awaitable<Server::CommandResult> Server::processCommands(
+    Server::Awaitable<Server::ProcessCommandsResult> Server::processCommands(
         bool accessTokenOk, const SharedIndexAndView& indexAndViews,
         const ParamValueMap& parameters, const SparqlOperation& operation,
         const ad_utility::Timer& requestTimer, RequestT& request, SendT& send) {
@@ -668,7 +668,7 @@ CPP_template_def(typename RequestT, typename SendT)(
     return composeCacheStats(cache, namedResultCache);
   };
 
-  CommandResult result;
+  ProcessCommandsResult result;
   if (commandIs("stats")) {
     result.response_ = jsonResponse(composeIndexStats(index));
   } else if (commandIs("cache-stats")) {
@@ -803,13 +803,13 @@ CPP_template_def(typename RequestT, typename SendT)(
   //
   // Some parameters require that "access-token" is set correctly. If not, that
   // parameter is ignored.
-  auto commandsResult = co_await processCommands(
+  auto commandResult = co_await processCommands(
       accessTokenOk, indexAndViews, parameters, parsedHttpRequest.operation_,
       requestTimer, request, send);
-  if (commandsResult.stop_) {
+  if (commandResult.stop_) {
     co_return;
   }
-  response = std::move(commandsResult.response_);
+  response = std::move(commandResult.response_);
 
   // Ping with or without message.
   if (parsedHttpRequest.path_ == "/ping") {
@@ -984,7 +984,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   };
 
   co_return co_await processOperation(
-      commandsResult.consumedQueryOperation_
+      commandResult.consumedQueryOperation_
           ? None{}
           : std::move(parsedHttpRequest.operation_),
       ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
