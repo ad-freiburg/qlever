@@ -400,7 +400,7 @@ class ValueGetterFixture : public ::testing::Test {
   // together with the content of the literal.
   std::vector<std::pair<Id, std::string>> plainLiterals_{
       {plainLiteral_, "noVocabType"}, {localPlainLiteral_, "noLocalType"}};
-  // The same for the literals with a datatype resp. a language tag, and for the
+  // The same for the literals with a datatype or a language tag, and for the
   // IRIs.
   std::vector<std::pair<Id, std::string>> typedLiterals_{
       {typedLiteral_, "someVocabType"}, {localTypedLiteral_, "someLocalType"}};
