@@ -1227,7 +1227,7 @@ TEST(IndexImpl, allIndexFilesAreListed) {
   // (`<base>.ttl` and the settings input `<base>.ttl.settings.json`).
   std::string baseName = ql::pathFilename(base).string();
   for (const auto& entry : ql::directoryRange(directory)) {
-    if (!entry.is_regular_file()) {
+    if (!ql::isRegularFile(entry)) {
       continue;
     }
     std::string name = entry.path().filename().string();
