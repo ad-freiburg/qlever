@@ -40,13 +40,6 @@ namespace {
 constexpr ctll::fixed_string newlineRegex = R"([\r\n]+)";
 constexpr ctll::fixed_string statementEndRegex = R"([\r\n]+[\t ]*\.)";
 
-// Characters that can be part of neither a prefix nor a local name of a
-// prefixed name, when assuming that no escape sequences were used.
-constexpr inline std::string_view localNameDelimiters = " \t\r\n,;[]()";
-constexpr inline std::string_view colon = ":";
-constexpr inline std::string_view prefixDelimiters =
-    ad_utility::constexprStrCat<localNameDelimiters, colon>();
-
 // Run `search` against the reversed `sv`, and return the number of bytes up to
 // and including the rightmost match, or `std::nullopt` if there is no match.
 template <typename Search>
@@ -909,6 +902,16 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   // is ok
   tok_.skipWhitespaceAndComments();
   auto view = tok_.view();
+  // Characters that can be part of neither the prefix nor the local name of a
+  // prefixed name, assuming that no escape sequences are used (which is
+  // exactly the assumption that makes this parsing "relaxed"). They are used
+  // below to determine where the prefix and the local name end. Note that the
+  // `:` (the last of the `prefixDelimiters`) terminates the prefix, but may
+  // legally occur inside a local name, hence it is not part of the
+  // `localNameDelimiters`.
+  constexpr std::string_view prefixDelimiters = " \t\r\n,;[]():";
+  constexpr std::string_view localNameDelimiters =
+      prefixDelimiters.substr(0, prefixDelimiters.size() - 1);
   // If anything but a `:` comes first, this is not a prefixed name, but for
   // example the `[` of a blank node property list.
   auto pos = view.find_first_of(prefixDelimiters);
