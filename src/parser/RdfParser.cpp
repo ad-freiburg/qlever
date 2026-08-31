@@ -1161,11 +1161,7 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
     parser.setFileBlankNodePrefix(fileBlankNodePrefix_);
     parser.setInputStream(std::move(batch));
     // TODO: raise error message if a prefix parsing fails;
-    std::vector<TurtleTriple> triples = parser.parseAndReturnAllTriples();
-
-    tripleCollector_.push([triples = std::move(triples), this]() mutable {
-      triples_ = std::move(triples);
-    });
+    tripleCollector_.push(parser.parseAndReturnAllTriples());
     finishTripleCollectorIfLastBatch();
   } catch (std::exception& e) {
     errorMessages_.wlock()->emplace_back(parsePosition, e.what());
@@ -1259,45 +1255,29 @@ void RdfParallelParser<T>::initialize(
 
 // _____________________________________________________________________________
 template <class T>
-bool RdfParallelParser<T>::processTriples() {
-  // If the current batch is out of triples_ get the next batch of triples.
-  // We need a while loop instead of a simple if in case there is a batch that
-  // contains no triples. (Theoretically this might happen, and it is safer this
-  // way)
-  while (triples_.empty()) {
-    auto optionalTripleTask = [&]() {
-      try {
-        return tripleCollector_.pop();
-      } catch (const std::exception&) {
-        AD_LOG_ERROR << "Error detected during parallel parsing, waiting for "
-                        "workers to finish ..."
-                     << std::endl;
-        // In case of multiple errors in parallel batches, we always report the
-        // first error.
-        parallelParser_.finish();
-        parallelParser_.waitUntilFinished();
-        auto errors = std::move(*errorMessages_.wlock());
-        const auto& firstError =
-            ql::ranges::min_element(errors, {}, ad_utility::first);
-        AD_CORRECTNESS_CHECK(firstError != errors.end());
-        throw std::runtime_error{firstError->second};
-      }
-    }();
-    if (!optionalTripleTask) {
-      // Everything has been parsed
-      return false;
-    }
-    // OptionalTripleTask fills the triples_ vector
-    (*optionalTripleTask)();
-  }
-  return true;
-}
-
-// _______________________________________________________________________
-template <class T>
 std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
-  bool triplesRemaining = processTriples();
-  return triplesRemaining ? std::optional{std::move(triples_)} : std::nullopt;
+  // Skip batches that contain no triples. (Theoretically this might happen, and
+  // it is safer this way.) A `nullopt` means that everything has been parsed.
+  std::optional<std::vector<TurtleTriple>> triples;
+  do {
+    try {
+      triples = tripleCollector_.pop();
+    } catch (const std::exception&) {
+      AD_LOG_ERROR << "Error detected during parallel parsing, waiting for "
+                      "workers to finish ..."
+                   << std::endl;
+      // In case of multiple errors in parallel batches, we always report the
+      // first error.
+      parallelParser_.finish();
+      parallelParser_.waitUntilFinished();
+      auto errors = std::move(*errorMessages_.wlock());
+      const auto& firstError =
+          ql::ranges::min_element(errors, {}, ad_utility::first);
+      AD_CORRECTNESS_CHECK(firstError != errors.end());
+      throw std::runtime_error{firstError->second};
+    }
+  } while (triples.has_value() && triples.value().empty());
+  return triples;
 }
 
 // __________________________________________________________

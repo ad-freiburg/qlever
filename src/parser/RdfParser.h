@@ -701,13 +701,6 @@ class RdfParallelParser : public RdfParserBase {
   template <typename Batch>
   void feedBatchesToParser(Batch remainingBatchFromInitialization);
 
-  // Wait until `triples_` contains at least one triple. Return true if some
-  // triples could be collected and false if the input has been fully consumed.
-  bool processTriples();
-
-  // The triples of the batch that is currently being handed out by `getBatch`.
-  std::vector<TurtleTriple> triples_;
-
   // The header of the input file, parsed once by `initialize` and then set on
   // each of the worker parsers.
   RdfParserHeader header_;
@@ -737,7 +730,7 @@ class RdfParallelParser : public RdfParserBase {
   // These datastructures are ordered last, such that in the destructor all
   // threads are joined before the other data members (which might be accessed
   // by those threads) are destroyed.
-  ad_utility::data_structures::ThreadSafeQueue<std::function<void()>>
+  ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
       tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING};
   ad_utility::TaskQueue<true> parallelParser_{
       QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
