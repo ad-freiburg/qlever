@@ -114,6 +114,14 @@ class RdfParserBase {
   const auto& encodedIriManager() const { return *encodedIriManager_; }
 };
 
+// The "header" of an RDF file: the prefixes and the base IRI that are declared
+// at its beginning. The parallel parser parses this once up front and then
+// transfers it to each of the workers that parse the actual triples.
+struct RdfParserHeader {
+  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_;
+  std::optional<qlever::util::ParsedUri> baseIri_;
+};
+
 /**
  * @brief The actual parser class
  *
@@ -231,14 +239,6 @@ class TurtleParser : public RdfParserBase {
   // grammar that can be parsed in parallel. This disallows re-definitions of
   // @base and @prefix as well as usage of multiline literals.
   bool useSimplifiedGrammar_ = false;
-
-  // Unified interface to copy/move data that has been collected by the parallel
-  // parser before sharding out to parallel worker threads.
-  template <typename Source, typename Target>
-  static void copyHeaderFrom(Source&& source, Target& target) {
-    target.prefixMap_ = AD_FWD(source).prefixMap_;
-    target.baseIri_ = AD_FWD(source).baseIri_;
-  }
 
  public:
   explicit TurtleParser(const EncodedIriManager* encodedIriManager)
@@ -375,6 +375,24 @@ class TurtleParser : public RdfParserBase {
   // to ensure that user-specified blank node labels have the same ID across
   // all sub-parsers of the same file.
   void setFileBlankNodePrefix(size_t id) { fileBlankNodePrefix_ = id; }
+
+  // Draw the next blank node prefix. Every parser instance implicitly draws one
+  // of these, the parallel parser additionally draws the prefix that it shares
+  // with all of its sub-parsers (see `setFileBlankNodePrefix`).
+  static size_t nextBlankNodePrefix() { return numParsers_.fetch_add(1); }
+
+  // Move the header (see `RdfParserHeader`) out of this parser. The parser must
+  // not be used for further parsing afterwards.
+  RdfParserHeader takeHeader() {
+    return {std::move(prefixMap_), std::move(baseIri_)};
+  }
+
+  // Set the header (see `RdfParserHeader`) of this parser. Used by the parallel
+  // parser to set up its worker parsers.
+  void setHeader(const RdfParserHeader& header) {
+    prefixMap_ = header.prefixMap_;
+    baseIri_ = header.baseIri_;
+  }
 
  protected:
   FRIEND_TEST(RdfParserTest, prefixedName);
@@ -619,16 +637,18 @@ class RdfStreamParser : public Parser {
 };
 
 /**
- * This class is a TurtleParser that always assumes that
- * its input file is an uncompressed .ttl file that will be read in
- * chunks. Input file can also be a stream like stdin.
+ * This class parses an uncompressed .ttl file (which can also be a stream like
+ * stdin) by reading it in chunks and handing each of those chunks to one of
+ * several worker parsers of type `RdfStringParser<Parser>` that run in
+ * parallel. It does not parse anything itself, it only owns the state that its
+ * workers need (see `RdfParserHeader` and `fileBlankNodePrefix_`) and collects
+ * their results.
  */
 template <typename Parser>
-class RdfParallelParser : public Parser {
+class RdfParallelParser : public RdfParserBase {
  public:
-  using Triple = std::array<std::string, 3>;
   // Default construction needed for tests
-  explicit RdfParallelParser(const EncodedIriManager* ev) : Parser{ev} {}
+  explicit RdfParallelParser(const EncodedIriManager* ev) : RdfParserBase{ev} {}
 
   // Construct a parser that reads from an `InputFileSpecification`. The parser
   // creates its own I/O thread and `AsyncBlockSource` internally. The
@@ -640,7 +660,7 @@ class RdfParallelParser : public Parser {
                         qlever::specialIds().at(DEFAULT_GRAPH_IRI),
                     std::chrono::milliseconds sleepTimeForTesting =
                         std::chrono::milliseconds{0})
-      : Parser{ev, defaultGraphIri},
+      : RdfParserBase{ev},
         defaultGraphIri_{defaultGraphIri},
         sleepTimeForTesting_(sleepTimeForTesting) {
     initialize(spec, blocksize);
@@ -685,9 +705,16 @@ class RdfParallelParser : public Parser {
   // triples could be collected and false if the input has been fully consumed.
   bool processTriples();
 
-  using Parser::isParserExhausted_;
-  using Parser::tok_;
-  using Parser::triples_;
+  // The triples of the batch that is currently being handed out by `getBatch`.
+  std::vector<TurtleTriple> triples_;
+
+  // The header of the input file, parsed once by `initialize` and then set on
+  // each of the worker parsers.
+  RdfParserHeader header_;
+
+  // The blank node prefix that all the workers for this file share, such that
+  // user-specified blank node labels get the same ID across batches.
+  size_t fileBlankNodePrefix_ = Parser::nextBlankNodePrefix();
 
   // Initialized in the call to `initialize`.
   std::optional<qlever::parser::AsyncFileBlockDriver> driver_;
