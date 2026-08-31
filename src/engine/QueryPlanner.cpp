@@ -3130,19 +3130,19 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
 void QueryPlanner::GraphPatternPlanner::bindGraphVariableIfUnbound(
     const Variable& graphVar, std::vector<SubtreePlan>& candidates) {
   const auto& namedGraphs = planner_.activeDatasetClauses_.namedGraphs();
-  auto graphsCand = [&namedGraphs, &graphVar, this](){
-    if(!namedGraphs.has_value()){
+  auto graphsCand = [&namedGraphs, &graphVar, this]() {
+    if (!namedGraphs.has_value()) {
       return makeSubtreePlan<DistinctGraphs>(qec_, graphVar);
     }
     p::SparqlValues values;
     values._variables.push_back(graphVar);
-    for(const auto& graph: namedGraphs.value()){
+    for (const auto& graph : namedGraphs.value()) {
       values._values.push_back({graph});
     }
     return makeSubtreePlan<Values>(qec_, std::move(values));
   }();
-  for(auto& innerCand: candidates){
-    if(!innerCand._qet->getVariableColumns().contains(graphVar)){
+  for (auto& innerCand : candidates) {
+    if (!innerCand._qet->getVariableColumns().contains(graphVar)) {
       innerCand = makeSubtreePlan<CartesianProductJoin>(
           planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
                              graphsCand._qet, innerCand._qet});
@@ -3509,11 +3509,10 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
 void QueryPlanner::GraphPatternPlanner::visitSubquery(
     parsedQuery::Subquery& arg) {
   std::optional<Variable> outerGraphVariable = planner_.activeGraphVariable_;
-  absl::Cleanup resetActiveGraphs{
-      [this, &outerGraphVariable]() mutable {
-        // Reset back to original
-        planner_.activeGraphVariable_ = std::move(outerGraphVariable);
-      }};
+  absl::Cleanup resetActiveGraphs{[this, &outerGraphVariable]() mutable {
+    // Reset back to original
+    planner_.activeGraphVariable_ = std::move(outerGraphVariable);
+  }};
 
   ParsedQuery& subquery = arg.get();
   const auto& select = subquery.selectClause();

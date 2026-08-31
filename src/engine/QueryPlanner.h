@@ -734,7 +734,6 @@ class QueryPlanner {
     void bindGraphVariableIfUnbound(const Variable& graphVar,
                                     std::vector<SubtreePlan>& candidates);
 
-
     // This function finds a set of candidates that unite all the different
     // `candidatePlans_` and `candidateTriples_`. It then replaces the contents
     // of `candidatePlans_` with those plans and clears the `candidateTriples_`.

@@ -40,8 +40,8 @@ auto I = &Id::makeFromInt;
 // of an `Operation`.
 ad_utility::HashSet<Id::T> computeUniqueGraphIdsForIndex(
     const Index& index,
-    ad_utility::SharedCancellationHandle cancellationHandle =
-        std::make_shared<ad_utility::SharedCancellationHandle::element_type>()) {
+    ad_utility::SharedCancellationHandle cancellationHandle = std::make_shared<
+        ad_utility::SharedCancellationHandle::element_type>()) {
   const auto& permutation =
       index.getImpl().getPermutation(Permutation::Enum::SPO);
   auto snapshot =
@@ -50,7 +50,7 @@ ad_utility::HashSet<Id::T> computeUniqueGraphIdsForIndex(
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt}, *snapshot);
   const auto& ltpb = permutation.getLocatedTriplesForPermutation(*snapshot);
   return permutation.reader().computeUniqueGraphIds(scanSpecAndBlocks, ltpb,
-                                                     cancellationHandle);
+                                                    cancellationHandle);
 }
 
 // Retrieve the corresponding `BlockMetadataRanges` value for the
@@ -1311,7 +1311,8 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsAcrossMultipleBlocks) {
 // _____________________________________________________________________________
 TEST(CompressedRelationReader, computeUniqueGraphIdsIncludesDefaultGraph) {
   auto index = ad_utility::testing::makeTestIndex(
-      "computeUniqueGraphIdsIncludesDefaultGraph", "<x> <p> <y> . <x> <p2> <z> .");
+      "computeUniqueGraphIdsIncludesDefaultGraph",
+      "<x> <p> <y> . <x> <p2> <z> .");
   auto defaultGraphId = toValueId(
       TripleComponent{
           ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)},
@@ -1320,7 +1321,7 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsIncludesDefaultGraph) {
 
   auto graphIds = computeUniqueGraphIdsForIndex(index);
   EXPECT_THAT(graphIds,
-             ::testing::UnorderedElementsAre(defaultGraphId->getBits()));
+              ::testing::UnorderedElementsAre(defaultGraphId->getBits()));
 }
 
 // _____________________________________________________________________________
@@ -1350,8 +1351,8 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsHandlesGraphInfoOverflow) {
 
 // _____________________________________________________________________________
 TEST(CompressedRelationReader, computeUniqueGraphIdsOnEmptyIndex) {
-  auto index =
-      ad_utility::testing::makeTestIndex("computeUniqueGraphIdsOnEmptyIndex", "");
+  auto index = ad_utility::testing::makeTestIndex(
+      "computeUniqueGraphIdsOnEmptyIndex", "");
 
   auto graphIds = computeUniqueGraphIdsForIndex(index);
   EXPECT_THAT(graphIds, ::testing::IsEmpty());
@@ -1366,7 +1367,7 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsRespectsCancellation) {
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
 
   EXPECT_THROW(computeUniqueGraphIdsForIndex(index, cancellationHandle),
-              ad_utility::CancellationException);
+               ad_utility::CancellationException);
 }
 
 // Test the correct setting of the metadata for the contained graphs.
