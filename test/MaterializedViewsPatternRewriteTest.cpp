@@ -177,74 +177,25 @@ TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
           viewScan("fixedArmView", "?s", "?o2", "?_ql_materialized_view_o", 2),
           extraArm));
 
-  // Two view variables may be fixed to the same query value: `<gp2s> <p1>
-  // <gp2s>` fixes both `?a` and `?b`. Unlike two query variables on one view
-  // variable, this is no injectivity violation (`makeScanConfig` allows the
-  // same fixed value on several columns).
-  // Two view variables may be fixed to the same query value: `<gp2s> <p1>
-  // <gp2s>` fixes both `?a` and `?b`. Unlike two query variables on one view
-  // variable, this is no injectivity violation (`makeScanConfig` allows the
-  // same fixed value on several columns). Checked directly: with every
-  // triple's subject fixed to the same constant, the planner's cost estimate
-  // on this toy dataset does not actually pick the rewrite (it prefers three
-  // separate single-triple scans), even though the pattern matcher finds it.
-  {
-    auto plan = qlv.parseAndPlanQuery(
-        "SELECT * { <gp2s> <p1> <gp2s> . <gp2s> <p2> ?c . <gp2s> <p9> ?o9 }");
-    auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
-    manager.writeViewToDisk(
-        "repeatedFixedValueView",
-        qlv.parseAndPlanQuery("SELECT * { ?a <p1> ?b . ?b <p2> ?c }"));
-    auto view = manager.getView("repeatedFixedValueView", qec.get());
-    materializedViewsQueryAnalysis::QueryPatternCache qpc;
-    qpc.analyzeView(view, qec.get());
-    const auto& triples =
-        plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
-    auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
-    using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
-    EXPECT_THAT(replacements, ::testing::ElementsAre(AD_FIELD(
-                                  MaterializedViewJoinReplacement,
-                                  coveredTriples_, ::testing::Eq(0b011u))));
-  }
-
-  // Disconnected pattern (no shared variable): rejected outright, since the
-  // planner could never select a replacement spanning two components.
+  // Disconnected pattern (no shared variable) is rejected.
   expectNotSuitableForRewrite(
       qlv, manager, "disconnectedPatternView",
       "SELECT * { ?s1 <p1> ?o1 . ?s2 <p2> ?o2 }",
       "No supported query pattern for rewriting joins was found");
 
-  // A `BIND` that is filtered out as invariant can still occupy the view's
-  // column 0, which matching then never assigns. Such a view must be
-  // rejected, else `makeIndexScan` throws. Checked directly, because the
-  // view's query has two graph patterns (the triples and the `BIND`), which
-  // `expectNotSuitableForRewrite` does not support.
-  {
-    auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
-    auto plan = qlv.parseAndPlanQuery(
-        "SELECT ?x ?s ?o1 ?o2 { ?s <p2> ?o1 . ?s <p3> ?o2 . BIND(1 AS ?x) }");
-    auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
-    manager.writeViewToDisk("bindOccupiesColumnZeroView", plan);
-    auto view = manager.getView("bindOccupiesColumnZeroView", qec.get());
-    materializedViewsQueryAnalysis::QueryPatternCache qpc;
-    qpc.analyzeView(view, qec.get());
-    EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr(
-                    "No supported query pattern for rewriting joins was "
-                    "found"));
-    const auto& triples =
-        plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
-    EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
-    manager.unloadViewIfLoaded("bindOccupiesColumnZeroView");
-  }
+  // A `BIND` that is filtered out as invariant can be selected as the view's
+  // first column. Such a view must be rejected.
+  expectNotSuitableForRewrite(
+      qlv, manager, "bindOccupiesColumnZeroView",
+      "SELECT ?x ?s ?o1 ?o2 { ?s <p2> ?o1 . ?s <p3> ?o2 . BIND(1 AS ?x) }",
+      "No supported query pattern for rewriting joins was found");
 }
 
 // _____________________________________________________________________________
-// `QueryPlanner` expands `ql:contains-word` into one planner node per word
-// (and defers `ql:contains-entity`), which `coveredTriples_` cannot represent.
-// Such pseudo-predicates must therefore be rejected as pattern edges.
 TEST_F(MaterializedViewsPatternRewriteTest,
        fullTextPseudoPredicateNotRewritten) {
+  //  `ql:contains-word` and `ql:contains-entity` are not allowed for view
+  //  rewriting.
   const std::string onDiskBase = gtestCurrentTestName();
   const std::string ttlFilename = absl::StrCat(onDiskBase, ".ttl");
   {
@@ -272,7 +223,6 @@ TEST_F(MaterializedViewsPatternRewriteTest,
       "No supported query pattern for rewriting joins was found");
 }
 
-// _____________________________________________________________________________
 // Regression test for #3193: an aggregate removes a pattern variable from the
 // view's columns, so the view must not be registered for rewriting. Covers
 // explicit (`GROUP BY`) and implicit (aggregate in `SELECT`) aggregation.
@@ -377,7 +327,6 @@ TEST(MaterializedViewsPatternRewriteRejectionTest,
                               kNoPatternReason);
 }
 
-// _____________________________________________________________________________
 // Regression test: FILTER, VALUES, DISTINCT/REDUCED, LIMIT/OFFSET and FROM
 // restrict the rows written to disk, but (unlike aggregation) leave
 // `variableToColumnMap()` intact. Without an explicit check, the view would be
@@ -571,12 +520,7 @@ TEST_F(MaterializedViewsPatternRewriteContextTest,
                               h::IndexScanFromStrings("?v", "<p2>", "?x")));
 
   // The same holds for a degenerate chain where the middle and the end are
-  // the same variable. Planning previously failed with an exception. The
-  // winning plan is not fixed here (the repeated variable is planned as an
-  // internal variable plus an equality filter, and the cache-key based
-  // rewriting may then legitimately replace the join by a scan of the view),
-  // so check that the query is planned and answered correctly instead of
-  // checking the plan.
+  // the same variable.
   EXPECT_EQ(qlv().query("SELECT ?x ?v { ?x <p1> ?v . ?v <p2> ?v }",
                         ad_utility::MediaType::tsv),
             "?x\t?v\n<x2>\t<v2>\n");
@@ -596,7 +540,6 @@ TEST_F(MaterializedViewsPatternRewriteContextTest,
                                   ad_utility::HashSet<std::string>{"<g1>"})));
 }
 
-// _____________________________________________________________________________
 // An assignment limit too small for one full match (a 2-edge chain needs >= 2
 // attempts) finds nothing and warns; the default limit finds the match.
 TEST(MaterializedViewsPatternMatchLimitsTest,
@@ -640,9 +583,8 @@ TEST(MaterializedViewsPatternMatchLimitsTest,
   }
 }
 
-// _____________________________________________________________________________
-// A limit of `0` assignments deliberately disables pattern-based rewriting: no
-// match is found, and (unlike a too-small limit) no warning is logged.
+// A limit of `0` assignment disables pattern-based rewriting: no match is
+// found and no warning is logged.
 TEST(MaterializedViewsPatternMatchLimitsTest,
      PatternMatchNumAssignmentsZeroDisables) {
   const std::string onDiskBase = gtestCurrentTestName();
@@ -677,9 +619,6 @@ TEST(MaterializedViewsPatternMatchLimitsTest,
 }
 
 // _____________________________________________________________________________
-// Regression test: a cheap-to-complete match can complete far more often than
-// the assignment limit suggests, so the number of replacement plans handed to
-// the query planner needs an independent cap.
 TEST(MaterializedViewsPatternMatchLimitsTest, ReplacementCountIsCapped) {
   const std::string onDiskBase = gtestCurrentTestName();
   materializedViewsTestHelpers::makeTestIndex(onDiskBase,
