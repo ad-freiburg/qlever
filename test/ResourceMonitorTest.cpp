@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -212,36 +214,43 @@ TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
   base.bytesReadPerSecond_ = 8192.0;
   base.bytesWrittenPerSecond_ = 4096.0;
   base.ioStallPercent_ = 25.0;
+  base.rebuildId_ = 7u;
   EXPECT_EQ(rm::formatTsvRow(base),
-            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\n");
+            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\t7\n");
 
   auto noRss = base;
   noRss.rssBytes_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noRss),
-            "1.0\t1000\t\t50.0\t8192.0\t4096.0\t25.0\n");
+            "1.0\t1000\t\t50.0\t8192.0\t4096.0\t25.0\t7\n");
 
   auto noCpu = base;
   noCpu.cpuPercent_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noCpu),
-            "1.0\t1000\t2048\t\t8192.0\t4096.0\t25.0\n");
+            "1.0\t1000\t2048\t\t8192.0\t4096.0\t25.0\t7\n");
 
   auto noReadRate = base;
   noReadRate.bytesReadPerSecond_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noReadRate),
-            "1.0\t1000\t2048\t50.0\t\t4096.0\t25.0\n");
+            "1.0\t1000\t2048\t50.0\t\t4096.0\t25.0\t7\n");
 
   auto noWriteRate = base;
   noWriteRate.bytesWrittenPerSecond_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noWriteRate),
-            "1.0\t1000\t2048\t50.0\t8192.0\t\t25.0\n");
+            "1.0\t1000\t2048\t50.0\t8192.0\t\t25.0\t7\n");
 
-  // `io_stall_percent` is the last column, so an empty value makes the row end
-  // in a tab. A consumer that strips trailing whitespace before splitting
-  // would lose a column.
+  // On a non-Linux machine there is no stall reading, so that cell is empty.
   auto noIoStall = base;
   noIoStall.ioStallPercent_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noIoStall),
-            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t\n");
+            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t\t7\n");
+
+  // Most rows look like this, because no rebuild is running. `rebuild_id` is
+  // the last column, so the row ends in a tab. A consumer that strips trailing
+  // whitespace before splitting would lose a column.
+  auto noRebuild = base;
+  noRebuild.rebuildId_ = std::nullopt;
+  EXPECT_EQ(rm::formatTsvRow(noRebuild),
+            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\t\n");
 
   auto nothing = base;
   nothing.rssBytes_ = std::nullopt;
@@ -249,7 +258,8 @@ TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
   nothing.bytesReadPerSecond_ = std::nullopt;
   nothing.bytesWrittenPerSecond_ = std::nullopt;
   nothing.ioStallPercent_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(nothing), "1.0\t1000\t\t\t\t\t\n");
+  nothing.rebuildId_ = std::nullopt;
+  EXPECT_EQ(rm::formatTsvRow(nothing), "1.0\t1000\t\t\t\t\t\t\n");
 }
 
 // _____________________________________________________________________________
@@ -334,6 +344,25 @@ TEST(ResourceMonitor, RotateLogIfHeaderOutdatedMovesAFileOfAnOlderFormat) {
 }
 
 // _____________________________________________________________________________
+TEST(ResourceMonitor, RebuildIndexSignalNumbersRebuildsFromOne) {
+  ad_utility::RebuildIndexSignal signal;
+  // No rebuild yet. The answer is empty and not 0, which a consumer reading
+  // the column would take for a rebuild that has the id 0.
+  EXPECT_FALSE(signal.poll().has_value());
+
+  signal.markStart();
+  EXPECT_THAT(signal.poll(), ::testing::Optional(1u));
+
+  signal.markEnd();
+  EXPECT_FALSE(signal.poll().has_value());
+
+  // The next rebuild gets the next number, so two rebuilds of one server run
+  // can be told apart in the log.
+  signal.markStart();
+  EXPECT_THAT(signal.poll(), ::testing::Optional(2u));
+}
+
+// _____________________________________________________________________________
 TEST(ResourceMonitor, StartTwiceThrows) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   ResourceMonitor monitor;
@@ -356,6 +385,20 @@ TEST(ResourceMonitor, SetReadersAfterStartThrows) {
   // must throw.
   AD_EXPECT_THROW_WITH_MESSAGE(monitor.setReadersForTesting({}),
                                ::testing::HasSubstr("before `start`"));
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, SetRebuildIndexSignalAfterStartThrows) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  ResourceMonitor monitor;
+  // A long interval so the sampling thread never actually writes a row.
+  monitor.start(path, ResourceMonitor::Mode::Truncate, std::chrono::hours{1});
+  // The sampling thread reads the signal on every tick, so replacing it
+  // afterwards would race that read and must throw.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      monitor.setRebuildIndexSignal(
+          std::make_shared<ad_utility::RebuildIndexSignal>()),
+      ::testing::HasSubstr("before `start`"));
 }
 
 // _____________________________________________________________________________
@@ -560,11 +603,11 @@ TEST(ResourceMonitor, SamplesWriteWellFormedRows) {
   auto countTabs = [](std::string_view line) {
     return std::count(line.begin(), line.end(), '\t');
   };
-  // Every data row has seven tab-separated columns (six tabs), even when a
+  // Every data row has eight tab-separated columns (seven tabs), even when a
   // reading was empty, and the header names exactly those columns. A column
   // added on one side only therefore fails here.
   for (auto it = lines.begin() + 1; it != lines.end(); ++it) {
-    EXPECT_EQ(countTabs(*it), 6) << "row does not have 7 columns: " << *it;
+    EXPECT_EQ(countTabs(*it), 7) << "row does not have 8 columns: " << *it;
     EXPECT_EQ(countTabs(rm::tsvHeader), countTabs(*it))
         << "the header does not name the row's columns: " << *it;
   }
@@ -592,7 +635,7 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   // cell. The first two hold the elapsed time and a timestamp, which differ on
   // every run.
   const std::vector<std::string> cells = absl::StrSplit(lines[1], '\t');
-  ASSERT_EQ(cells.size(), 7u);
+  ASSERT_EQ(cells.size(), 8u);
   EXPECT_EQ(cells[2], "2048");  // rss, taken over unchanged
   EXPECT_EQ(cells[3], "0.0");   // cpu, a counter that stands still
   EXPECT_EQ(cells[4], "0.0");   // read bytes, likewise
@@ -601,6 +644,39 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   // this cell is parsed instead of compared against an exact string.
   EXPECT_GT(std::stod(cells[5]), 0.0);
   EXPECT_EQ(cells[6], "0.0");  // io stall, also stands still
+  EXPECT_EQ(cells[7], "");     // no signal was set, so no rebuild id
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, RowsCarryTheRebuildIdOnlyWhileARebuildRuns) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  auto signal = std::make_shared<ad_utility::RebuildIndexSignal>();
+  {
+    ResourceMonitor monitor;
+    monitor.setRebuildIndexSignal(signal);
+    // A short interval and a sleep per phase, so about ten rows are written
+    // before the rebuild, ten during it and ten after it.
+    monitor.start(path, ResourceMonitor::Mode::Truncate,
+                  std::chrono::milliseconds{5});
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    signal->markStart();
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    signal->markEnd();
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+  }
+  auto lines = readLines(path);
+  ASSERT_GE(lines.size(), 2u);
+  // The signal is polled every tick rather than read once at startup, so the
+  // column changes during the run: rows written while the rebuild ran carry
+  // its id, the rest are empty. Which row lands on a phase boundary is up to
+  // the scheduler, so the values that occur are checked, not how often.
+  std::set<std::string> rebuildIds;
+  for (auto it = lines.begin() + 1; it != lines.end(); ++it) {
+    const std::vector<std::string> cells = absl::StrSplit(*it, '\t');
+    ASSERT_EQ(cells.size(), 8u);
+    rebuildIds.insert(cells[7]);
+  }
+  EXPECT_THAT(rebuildIds, ::testing::UnorderedElementsAre("", "1"));
 }
 
 // _____________________________________________________________________________
@@ -616,8 +692,8 @@ TEST(ResourceMonitor, IoStallPercentIsClampedToAHundred) {
 
   auto lines = sampledLines(std::move(readers));
   ASSERT_GE(lines.size(), 2u);
-  // `io_stall_percent` is the last column, so the row ends with the value.
-  EXPECT_THAT(lines[1], ::testing::EndsWith("\t100.0"));
+  // No signal was set, so the empty `rebuild_id` cell follows the stall.
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t100.0\t"));
 }
 
 // _____________________________________________________________________________
@@ -631,10 +707,11 @@ TEST(ResourceMonitor, AMissingIoStallReadingLeavesTheColumnEmpty) {
 
   auto lines = sampledLines(std::move(readers));
   ASSERT_GE(lines.size(), 2u);
-  // All seven columns are still there rather than one being dropped; the
-  // stall cell is simply empty, which ends the row in a tab.
-  EXPECT_EQ(std::count(lines[1].begin(), lines[1].end(), '\t'), 6);
-  EXPECT_THAT(lines[1], ::testing::EndsWith("\t"));
+  // All eight columns are still there rather than one being dropped. The stall
+  // cell is empty, and so is the `rebuild_id` cell after it, because no signal
+  // was set.
+  EXPECT_EQ(std::count(lines[1].begin(), lines[1].end(), '\t'), 7);
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t\t"));
 }
 
 // _____________________________________________________________________________
@@ -646,10 +723,10 @@ TEST(ResourceMonitor, AMissingDiskIoReadingLeavesBothColumnsEmpty) {
 
   auto lines = sampledLines(std::move(readers));
   ASSERT_GE(lines.size(), 2u);
-  // Only the two disk cells are empty; the row keeps all seven columns and the
+  // Only the two disk cells are empty; the row keeps all eight columns and the
   // surrounding readings still arrive.
   const std::vector<std::string> cells = absl::StrSplit(lines[1], '\t');
-  ASSERT_EQ(cells.size(), 7u);
+  ASSERT_EQ(cells.size(), 8u);
   EXPECT_EQ(cells[2], "2048");
   EXPECT_EQ(cells[4], "");
   EXPECT_EQ(cells[5], "");

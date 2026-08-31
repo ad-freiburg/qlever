@@ -52,6 +52,10 @@ namespace serverTestHelpers {
 class ServerForTesting;
 }
 
+namespace ad_utility {
+class RebuildIndexSignal;
+}
+
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
@@ -75,11 +79,13 @@ class Server {
   friend serverTestHelpers::ServerForTesting;
 
  public:
-  explicit Server(unsigned short port, size_t numThreads,
-                  std::string accessToken, const qlever::EngineConfig& config,
-                  bool noAccessCheck = false,
-                  std::shared_ptr<ad_utility::metrics::MetricsReader>
-                      metricsReader = nullptr);
+  explicit Server(
+      unsigned short port, size_t numThreads, std::string accessToken,
+      const qlever::EngineConfig& config, bool noAccessCheck = false,
+      std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader =
+          nullptr,
+      std::shared_ptr<ad_utility::RebuildIndexSignal> rebuildIndexSignal =
+          nullptr);
 
   virtual ~Server() = default;
 
@@ -130,6 +136,11 @@ class Server {
   // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
   // disabled (--enable-metrics not passed).
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
+
+  // A signal to track whether a rebuild is running for the resource-usage log.
+  // Written by the rebuild path, read by the resource sampler through the same
+  // object in `ServerMain`.
+  std::shared_ptr<ad_utility::RebuildIndexSignal> rebuildIndexSignal_;
 
   // Deregisters callbacks on destruction. Declared after `qlever_` so that it
   // is destroyed before `qlever_` which the callbacks access.

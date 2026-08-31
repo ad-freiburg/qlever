@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -372,16 +373,23 @@ int main(int argc, char** argv) {
   }
 
   try {
+    // Shared by the resource sampler (the reader) and the server's rebuild
+    // path (the writer). Created before both, because the sampler starts
+    // before the `Server` exists.
+    auto rebuildIndexSignal =
+        std::make_shared<ad_utility::RebuildIndexSignal>();
     // Samples RSS and CPU usage, starting before the index is loaded.
     ad_utility::ResourceMonitor resourceMonitor;
     if (!noResourceUsageLog) {
+      resourceMonitor.setRebuildIndexSignal(rebuildIndexSignal);
       resourceMonitor.start(config.baseName_ + ".server.resource-usage-log.tsv",
                             ad_utility::ResourceMonitor::Mode::Append,
                             std::chrono::seconds{resourceUsageIntervalS});
     }
     auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
-                  noAccessCheck, std::move(metricsReader));
+                  noAccessCheck, std::move(metricsReader),
+                  std::move(rebuildIndexSignal));
     // Per-query jsonl metrics log, written next to the index files. On by
     // default; `--no-metrics-log` opts out.
     if (!noMetricsLog) {

@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <fstream>
 #include <istream>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -99,6 +100,9 @@ struct Sample {
   std::optional<double> bytesReadPerSecond_;
   std::optional<double> bytesWrittenPerSecond_;
   std::optional<double> ioStallPercent_;
+  // id of the index rebuild running at this sample, empty (and not 0) when no
+  // rebuild in progress.
+  std::optional<uint64_t> rebuildId_;
 };
 
 // The column names `formatTsvRow` produces values for, without the trailing
@@ -106,7 +110,7 @@ struct Sample {
 // notice that the format has changed since that file was written.
 inline constexpr std::string_view tsvHeader =
     "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes_per_s\t"
-    "write_bytes_per_s\tio_stall_percent";
+    "write_bytes_per_s\tio_stall_percent\trebuild_id";
 
 // One TSV row; a missing field becomes an empty cell.
 std::string formatTsvRow(const Sample& sample);
@@ -135,14 +139,41 @@ struct Readers {
 
 }  // namespace resource_monitor
 
+// Tracks whether an index rebuild is running, and which one. The resource
+// sampler reads this once per tick and writes it into the `rebuild_id` column
+// of the resource-usage log.
+// Rebuilds are numbered from 1, starting over in each new server process.
+class RebuildIndexSignal {
+ public:
+  // Call when a rebuild begins. It gets the next number as id.
+  void markStart() { currentId_.store(nextId_.fetch_add(1) + 1); }
+
+  // Call when a rebuild ends, whether it succeeded or not.
+  void markEnd() { currentId_.store(0); }
+
+  // The running rebuild's id, or nothing if none is running.
+  [[nodiscard]] std::optional<uint64_t> poll() const {
+    auto id = currentId_.load();
+    return id == 0 ? std::nullopt : std::optional(id);
+  }
+
+ private:
+  // Counts the rebuilds started so far, so each one gets its own number as id.
+  std::atomic<uint64_t> nextId_{0};
+
+  // The running rebuild's number, or 0 for none. The sampling thread reads
+  // this while the rebuild thread writes it, so it has to be atomic.
+  std::atomic<uint64_t> currentId_{0};
+};
+
 // Samples the RSS, CPU usage, and disk IO rate of this process, plus
 // system-wide IO stall on a background thread and appends one TSV row
 // (`elapsed_s`, `timestamp_ms`, `rss`, `cpu_percent`, `read_bytes_per_s`,
-// `write_bytes_per_s`, `io_stall_percent`) per interval; failed readings
-// become empty cells. The destructor stops the sampling thread and closes
-// the file. Sampling is designed for intervals on the order of a second, as
-// set by the `--resource-usage-interval-s` option. One tick reads a few small
-// OS counters and costs a handful of microseconds.
+// `write_bytes_per_s`, `io_stall_percent`, `rebuild_id`) per interval; failed
+// readings become empty cells. The destructor stops the sampling thread and
+// closes the file. Sampling is designed for intervals on the order of a
+// second, as set by the `--resource-usage-interval-s` option. One tick reads
+// a few small OS counters and costs a handful of microseconds.
 class ResourceMonitor {
  public:
   // `Truncate` starts a fresh file per run (index builds); `Append`
@@ -168,6 +199,12 @@ class ResourceMonitor {
   // readers, so no reader is ever empty.
   void setReadersForTesting(resource_monitor::Readers readers);
 
+  // Set the signal that tells the sampler whether an index rebuild is
+  // running. Must be called before `start`, since the sampling thread reads
+  // it. When it is never called (index builds), the `rebuild_id` column
+  // stays empty.
+  void setRebuildIndexSignal(std::shared_ptr<const RebuildIndexSignal> signal);
+
  private:
   // Body of the sampling thread.
   void runLoop(std::chrono::milliseconds interval);
@@ -176,6 +213,9 @@ class ResourceMonitor {
   // (i.e. joined) first, while the members it uses are still alive.
   std::ofstream stream_;
   resource_monitor::Readers readers_;
+  // Null when nobody set one; then the `rebuild_id` column stays empty.
+  std::shared_ptr<const RebuildIndexSignal> rebuildIndexSignal_;
+
   std::atomic<bool> started_{false};
   std::mutex mutex_;
   std::condition_variable stopCondition_;
