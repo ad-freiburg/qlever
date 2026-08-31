@@ -299,10 +299,10 @@ class Server {
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<ProcessCommandsResult> processCommands(
-          bool accessTokenOk, const SharedIndexAndView& indexAndViews,
+          const SharedIndexAndView& indexAndViews,
           const ParamValueMap& parameters, const SparqlOperation& operation,
-          const ad_utility::Timer& requestTimer, RequestT& request,
-          SendT& send);
+          bool accessTokenOk, const ad_utility::Timer& requestTimer,
+          RequestT& request, SendT& send);
 
   // Initialize and register server metrics which are stored in `metrics_`.
   void initializeServerMetrics(

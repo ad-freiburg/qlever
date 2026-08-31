@@ -637,9 +637,10 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
 CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Server::Awaitable<Server::ProcessCommandsResult> Server::processCommands(
-        bool accessTokenOk, const SharedIndexAndView& indexAndViews,
+        const SharedIndexAndView& indexAndViews,
         const ParamValueMap& parameters, const SparqlOperation& operation,
-        const ad_utility::Timer& requestTimer, RequestT& request, SendT& send) {
+        bool accessTokenOk, const ad_utility::Timer& requestTimer,
+        RequestT& request, SendT& send) {
   using namespace ad_utility::httpUtils;
   using namespace responseJson;
   using namespace serverProcessHelpers;
@@ -648,9 +649,8 @@ CPP_template_def(typename RequestT, typename SendT)(
 
   auto checkParameter = makeCheckParameter(parameters);
 
-  // Check if the current command is selected in the parameters from
-  // `parameters`. If so, log this information via `dispatchLog()` and return
-  // true. Return false otherwise.
+  // Check if `cmd=<cmd>` is set in `parameters`. If so, log this information
+  // via `dispatchLog()` and return true. Return false otherwise.
   auto commandIs = [accessTokenOk, &checkParameter](std::string_view cmd) {
     if (checkParameter("cmd", std::string{cmd})) {
       dispatchLog(cmd, accessTokenOk);
@@ -804,7 +804,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   // Some parameters require that "access-token" is set correctly. If not, that
   // parameter is ignored.
   auto commandResult = co_await processCommands(
-      accessTokenOk, indexAndViews, parameters, parsedHttpRequest.operation_,
+      indexAndViews, parameters, parsedHttpRequest.operation_, accessTokenOk,
       requestTimer, request, send);
   if (commandResult.stop_) {
     co_return;
