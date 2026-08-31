@@ -32,6 +32,15 @@ static constexpr std::string_view dummyTurtle = R"(
   <s2> <p3> <http://example.com/> .
 )";
 
+static constexpr std::string_view chainRewriteContextDummyTurtle = R"(
+  <s1> <p1> <m2> .
+  <m2> <p2> <http://example.com/> .
+  <x> <p1> <v> .
+  <v> <p2> <x> .
+  <x2> <p1> <v2> .
+  <v2> <p2> <v2> .
+)";
+
 static constexpr std::string_view cacheKeyRewriteDummyTurtle = R"(
   @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
   <s1> <p1> "abc" .
@@ -176,6 +185,14 @@ class MaterializedViewsCacheKeyRewriteTest : public MaterializedViewsTest {
  protected:
   std::string getDummyTurtle() const override {
     return std::string{cacheKeyRewriteDummyTurtle};
+  }
+};
+
+// _____________________________________________________________________________
+class MaterializedViewsChainRewriteContextTest : public MaterializedViewsTest {
+ protected:
+  std::string getDummyTurtle() const override {
+    return std::string{chainRewriteContextDummyTurtle};
   }
 };
 

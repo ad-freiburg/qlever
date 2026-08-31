@@ -1234,7 +1234,10 @@ TEST(RdfParserTest, betterErrorMessageOnMultilineLiteralError) {
 
 // Test that the parallel parser's destructor can be run quickly and without
 // blocking, even when there are still lots of blocks in the pipeline that are
-// currently being parsed.
+// currently being parsed. Draining the pipeline would take on the order of
+// seconds, so the bound below still proves the point but is generous enough
+// for a loaded CI runner (20ms were not, see the frequent spurious failures in
+// August 2026).
 TEST(RdfParserTest, stopParsingOnOutsideFailure) {
 #ifdef _QLEVER_NO_TIMING_TESTS
   GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
@@ -1265,7 +1268,7 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
       }();
       timer.cont();
     }
-    EXPECT_LE(timer.msecs(), 20ms);
+    EXPECT_LE(timer.msecs(), 200ms);
   };
   const std::string input = []() {
     std::string singleBlock = "<subject> <predicate> <object> . \n ";

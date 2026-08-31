@@ -1329,8 +1329,14 @@ void IndexImpl::writeConfiguration() const {
 
 // ____________________________________________________________________________
 std::string IndexImpl::dateOfIndexBuild() const {
-  if (configurationJson_.contains(DATE_OF_INDEX_BUILD_KEY)) {
-    return configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
+  return dateOfIndexBuild(configurationJson_, onDiskBase_);
+}
+
+// ____________________________________________________________________________
+std::string IndexImpl::dateOfIndexBuild(const nlohmann::json& configurationJson,
+                                        const std::string& onDiskBase) {
+  if (configurationJson.contains(DATE_OF_INDEX_BUILD_KEY)) {
+    return configurationJson[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
   }
   // For indexes that were built before the build date was recorded in the
   // configuration, fall back to the last modification time of the
@@ -1341,7 +1347,7 @@ std::string IndexImpl::dateOfIndexBuild() const {
   // C++20), and `std::filesystem` is not available on all toolchains that
   // QLever targets.
   struct stat fileStat {};
-  auto configFilename = onDiskBase_ + CONFIGURATION_FILE;
+  auto configFilename = onDiskBase + CONFIGURATION_FILE;
   AD_CONTRACT_CHECK(stat(configFilename.c_str(), &fileStat) == 0);
   return formatIndexBuildTime(absl::FromTimeT(fileStat.st_mtime));
 }
