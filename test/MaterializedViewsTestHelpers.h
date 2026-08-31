@@ -217,8 +217,7 @@ class MaterializedViewsRewriteTestBase : public ::testing::Test {
   }
 };
 
-// Pattern-based rewriting, parameterized on the view's write query. No budget
-// parameter, because `qpExpect` already tests both query planners.
+// Pattern-based rewriting, parameterized on the view's write query.
 class MaterializedViewsPatternRewriteTestP
     : public MaterializedViewsRewriteTestBase,
       public ::testing::WithParamInterface<std::string> {};
@@ -227,11 +226,9 @@ class MaterializedViewsPatternRewriteTestP
 class MaterializedViewsPatternRewriteTest
     : public MaterializedViewsRewriteTestBase {};
 
-// _____________________________________________________________________________
-// Check that both the greedy and the DP query planner produce `matcher`.
-// Cache-key based rewriting must pass `TestBothPlanners = false`: the greedy
-// planner may build a subtree whose cache key matches no view, even where the
-// DP planner's does.
+// Check that both the greedy and the DP query planner produce a query plan that
+// matches `matcher`. To test only the query plan of the dynamic programming
+// planner, pass `TestBothPlanners = false`.
 template <bool TestBothPlanners = true>
 inline void qpExpect(qlever::Qlever& qlv, std::string_view query,
                      ::testing::Matcher<const QueryExecutionTree&> matcher,
@@ -307,11 +304,8 @@ inline void expectNotSuitableForRewrite(
   manager.unloadViewIfLoaded(viewName);
 };
 
-// _____________________________________________________________________________
 // Write and load a view from `viewQuery`, then check that `testQuery` is
-// planned as `matcher`. To actually exercise the pattern matcher, `testQuery`
-// must not be satisfiable by cache-key based rewriting alone, so give it at
-// least one triple more than `viewQuery`.
+// planned as `matcher`.
 inline void expectRewrite(
     qlever::Qlever& qlv, std::string_view viewName, std::string_view viewQuery,
     std::string_view testQuery,

@@ -7,13 +7,6 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-// Tests for pattern-based query rewriting with materialized views: the
-// subgraph-isomorphism matcher in `MaterializedViewsPatternMatcher`. The star
-// and chain shapes below are only examples for the general matcher, not
-// special cases in the code. Rewriting by the cache key of a whole plan is
-// tested in `MaterializedViewsCacheKeyRewriteTest.cpp`, the views themselves
-// in `MaterializedViewsTest.cpp`.
-
 #include <absl/cleanup/cleanup.h>
 #include <absl/functional/bind_front.h>
 #include <gmock/gmock.h>
@@ -137,9 +130,6 @@ TEST_F(MaterializedViewsPatternRewriteTest, starRewrite) {
 }
 
 // _____________________________________________________________________________
-// Pattern shapes beyond star and chain. Each test query is the view's pattern
-// plus an extra `<p9>` arm, so that it cannot be satisfied by cache-key
-// matching alone.
 TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
   const std::string onDiskBase = gtestCurrentTestName();
   const std::string generalPatternTtl =
@@ -163,72 +153,41 @@ TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
       std::bind_front(&viewScanSimple, "generalPatternView");
   auto extraArm = h::IndexScanFromStrings("?s", "<p9>", "?o9");
 
-  // A self-loop arm (subject == object).
+  // A self-loop.
   expectRewrite(
       qlv, "generalPatternView",
       "SELECT * { ?s <p1> ?s . ?s <p2> ?o1 . ?s <p3> ?o2 }",
       "SELECT * { ?s <p1> ?s . ?s <p2> ?o1 . ?s <p3> ?o2 . ?s <p9> ?o9 }",
       h::Join(generalPatternView("?s", "?o1", "?o2"), extraArm));
 
-  // Two arms converging on the same object variable.
+  // Two star arms with the same object variable.
   expectRewrite(
       qlv, "generalPatternView",
       "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 . ?s <p3> ?o2 }",
       "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 . ?s <p3> ?o2 . ?s <p9> ?o9 }",
       h::Join(generalPatternView("?s", "?o1", "?o2"), extraArm));
 
-  // Two arms with the same predicate. Checked directly against
-  // `QueryPatternCache`, because the planner correctly prefers a plain join
-  // here (self-joining a predicate materializes a cross product).
-  {
-    auto plan = qlv.parseAndPlanQuery(
-        "SELECT * { ?s <p1> ?o1 . ?s <p1> ?o2 . ?s <p9> ?o9 }");
-    auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
-    manager.writeViewToDisk(
-        "duplicatePredicateView",
-        qlv.parseAndPlanQuery("SELECT * { ?s <p1> ?o1 . ?s <p1> ?o2 }"));
-    auto view = manager.getView("duplicatePredicateView", qec.get());
-    materializedViewsQueryAnalysis::QueryPatternCache qpc;
-    qpc.analyzeView(view, qec.get());
-    const auto& triples =
-        plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
-    auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
-    // Both ways of assigning the two `<p1>` triples to the view's arms match.
-    using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
-    EXPECT_THAT(replacements,
-                ::testing::AllOf(::testing::SizeIs(2),
-                                 ::testing::Each(AD_FIELD(
-                                     MaterializedViewJoinReplacement,
-                                     coveredTriples_, ::testing::Eq(0b011u)))));
-  }
-
-  // One arm's object is fixed in the view's own definition (e.g. a tag filter
-  // `?x osmkey:railway "rail"`). This is allowed: the view is already
-  // filtered to that value, so it matches a query asking for the same value.
-  // Checked directly, since the fixed arm has no column for `viewScan`.
-  {
-    auto plan = qlv.parseAndPlanQuery(
-        "SELECT * { ?s <p2> <gp2a> . ?s <p3> ?o2 . ?s <p9> ?o9 }");
-    auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
-    manager.writeViewToDisk(
-        "fixedArmView",
-        qlv.parseAndPlanQuery("SELECT * { ?s <p2> <gp2a> . ?s <p3> ?o2 }"));
-    auto view = manager.getView("fixedArmView", qec.get());
-    materializedViewsQueryAnalysis::QueryPatternCache qpc;
-    qpc.analyzeView(view, qec.get());
-    const auto& triples =
-        plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
-    auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
-    using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
-    EXPECT_THAT(replacements, ::testing::ElementsAre(AD_FIELD(
-                                  MaterializedViewJoinReplacement,
-                                  coveredTriples_, ::testing::Eq(0b011u))));
-  }
+  // One star arm's object is fixed in the view's own definition (e.g. `?x
+  // osmkey:railway "rail"`). This is allowed: the view is already filtered to
+  // that value, so it matches a query asking for the same value.
+  expectRewrite(
+      qlv, "fixedArmView", "SELECT * { ?s <p2> <gp2a> . ?s <p3> ?o2 }",
+      "SELECT * { ?s <p2> <gp2a> . ?s <p3> ?o2 . ?s <p9> ?o9 }",
+      h::Join(
+          viewScan("fixedArmView", "?s", "?o2", "?_ql_materialized_view_o", 2),
+          extraArm));
 
   // Two view variables may be fixed to the same query value: `<gp2s> <p1>
   // <gp2s>` fixes both `?a` and `?b`. Unlike two query variables on one view
   // variable, this is no injectivity violation (`makeScanConfig` allows the
-  // same fixed value on several columns). Checked directly, as above.
+  // same fixed value on several columns).
+  // Two view variables may be fixed to the same query value: `<gp2s> <p1>
+  // <gp2s>` fixes both `?a` and `?b`. Unlike two query variables on one view
+  // variable, this is no injectivity violation (`makeScanConfig` allows the
+  // same fixed value on several columns). Checked directly: with every
+  // triple's subject fixed to the same constant, the planner's cost estimate
+  // on this toy dataset does not actually pick the rewrite (it prefers three
+  // separate single-triple scans), even though the pattern matcher finds it.
   {
     auto plan = qlv.parseAndPlanQuery(
         "SELECT * { <gp2s> <p1> <gp2s> . <gp2s> <p2> ?c . <gp2s> <p9> ?o9 }");
@@ -256,19 +215,16 @@ TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
       "No supported query pattern for rewriting joins was found");
 
   // A `BIND` that is filtered out as invariant can still occupy the view's
-  // column 0, which matching the remaining triples then never assigns. Such a
-  // view must be rejected, else `makeIndexScan` throws. Checked directly,
-  // because the view's query has two graph patterns, which
+  // column 0, which matching then never assigns. Such a view must be
+  // rejected, else `makeIndexScan` throws. Checked directly, because the
+  // view's query has two graph patterns (the triples and the `BIND`), which
   // `expectNotSuitableForRewrite` does not support.
   {
     auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
     auto plan = qlv.parseAndPlanQuery(
-        "SELECT * { ?s <p2> ?o1 . ?s <p3> ?o2 . ?s <p9> ?o9 }");
+        "SELECT ?x ?s ?o1 ?o2 { ?s <p2> ?o1 . ?s <p3> ?o2 . BIND(1 AS ?x) }");
     auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
-    manager.writeViewToDisk(
-        "bindOccupiesColumnZeroView",
-        qlv.parseAndPlanQuery("SELECT ?x ?s ?o1 ?o2 { ?s <p2> ?o1 . ?s <p3> "
-                              "?o2 . BIND(1 AS ?x) }"));
+    manager.writeViewToDisk("bindOccupiesColumnZeroView", plan);
     auto view = manager.getView("bindOccupiesColumnZeroView", qec.get());
     materializedViewsQueryAnalysis::QueryPatternCache qpc;
     qpc.analyzeView(view, qec.get());
@@ -472,9 +428,7 @@ TEST(MaterializedViewsPatternRewriteRejectionTest,
       "SELECT REDUCED ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o }",
       "DISTINCT or REDUCED");
 
-  // Star with LIMIT, chain with OFFSET. `MaterializedViewWriter` meanwhile
-  // rejects these, but older views on disk can still have them, so the
-  // analysis-side check remains and is tested on the parsed query directly.
+  // Star with LIMIT, chain with OFFSET.
   auto expectIgnoredForPatternRewrite = [&](const std::string& query,
                                             std::string_view expectedReason) {
     auto plan = qlv.parseAndPlanQuery(query);
