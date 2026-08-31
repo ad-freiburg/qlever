@@ -3,7 +3,13 @@
 //  Authors: @DuDaAG,
 //           Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
+
+#include <cmath>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "../test/printers/UnitOfMeasurementPrinters.h"
 #include "./ValueGetterTestHelpers.h"
@@ -16,19 +22,42 @@ using namespace valueGetterTestHelpers;
 using namespace unitVGTestHelpers;
 using namespace geoInfoVGTestHelpers;
 
+// One input for the two `LiteralValueGetter`s below, together with the content
+// that each of them is expected to extract from it. The two getters see exactly
+// the same inputs and differ only in those expectations, so they share this
+// table.
+struct LiteralGetterTestCase {
+  std::string word_;
+  std::optional<std::string> expectedWithStrFunction_;
+  std::optional<std::string> expectedWithoutStrFunction_;
+};
+
+const std::vector<LiteralGetterTestCase> literalGetterTestCases{
+    {"\"noType\"", "noType", "noType"},
+    {"\"someType\"^^<someType>", "someType", std::nullopt},
+    {"\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
+     "anXsdString", "anXsdString"},
+    {"<x>", "x", std::nullopt}};
+
+// Run all of `literalGetterTestCases` against `getter`, where `getExpected`
+// selects the expectation that belongs to that getter.
+template <typename GetExpected>
+void checkAllLiteralGetterTestCases(LiteralValueGetterVariant getter,
+                                    const GetExpected& getExpected) {
+  for (const auto& testCase : literalGetterTestCases) {
+    SCOPED_TRACE(testCase.word_);
+    checkLiteralContentAndDatatypeFromId(testCase.word_, getExpected(testCase),
+                                         std::nullopt, getter);
+  }
+}
+
 // _____________________________________________________________________________
 TEST(LiteralValueGetterWithStrFunction, OperatorWithId) {
-  sparqlExpression::detail::LiteralValueGetterWithStrFunction
-      literalValueGetter;
-  checkLiteralContentAndDatatypeFromId("\"noType\"", "noType", std::nullopt,
-                                       literalValueGetter);
-  checkLiteralContentAndDatatypeFromId("\"someType\"^^<someType>", "someType",
-                                       std::nullopt, literalValueGetter);
-  checkLiteralContentAndDatatypeFromId(
-      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
-      "anXsdString", std::nullopt, literalValueGetter);
-  checkLiteralContentAndDatatypeFromId("<x>", "x", std::nullopt,
-                                       literalValueGetter);
+  checkAllLiteralGetterTestCases(
+      sparqlExpression::detail::LiteralValueGetterWithStrFunction{},
+      [](const LiteralGetterTestCase& testCase) {
+        return testCase.expectedWithStrFunction_;
+      });
 }
 
 // _____________________________________________________________________________
@@ -52,17 +81,11 @@ TEST(LiteralValueGetterWithStrFunction, OperatorWithLiteralOrIri) {
 
 // _____________________________________________________________________________
 TEST(LiteralValueGetterWithoutStrFunction, OperatorWithId) {
-  sparqlExpression::detail::LiteralValueGetterWithoutStrFunction
-      literalValueGetter;
-  checkLiteralContentAndDatatypeFromId("\"noType\"", "noType", std::nullopt,
-                                       literalValueGetter);
-  checkLiteralContentAndDatatypeFromId("\"someType\"^^<someType>", std::nullopt,
-                                       std::nullopt, literalValueGetter);
-  checkLiteralContentAndDatatypeFromId(
-      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
-      "anXsdString", std::nullopt, literalValueGetter);
-  checkLiteralContentAndDatatypeFromId("<x>", std::nullopt, std::nullopt,
-                                       literalValueGetter);
+  checkAllLiteralGetterTestCases(
+      sparqlExpression::detail::LiteralValueGetterWithoutStrFunction{},
+      [](const LiteralGetterTestCase& testCase) {
+        return testCase.expectedWithoutStrFunction_;
+      });
 }
 
 // _____________________________________________________________________________
@@ -318,5 +341,291 @@ TEST(NumericOrDateValueGetterTest, OperatorWithId) {
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", isNotNumeric);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
                                            isNotNumeric);
+}
+
+// The value getters below had no test of their own in this file yet. Each of
+// them is now tested for an `Id` of every `Datatype`, using the fixture below.
+
+// A test fixture that provides an `Id` of every `Datatype` that a value getter
+// can encounter, together with the context in which those `Id`s are valid (see
+// `AllDatatypesTestContext`). The `Id`s are created once per test, such that
+// the tests below can simply use them.
+class ValueGetterFixture : public ::testing::Test {
+ protected:
+  AllDatatypesTestContext context_;
+
+  // The `Id`s that encode their value directly in the `Id`.
+  Id undefined_ = Id::makeUndefined();
+  Id boolTrue_ = Id::makeFromBool(true);
+  Id boolFalse_ = Id::makeFromBool(false);
+  Id int_ = Id::makeFromInt(42);
+  Id intZero_ = Id::makeFromInt(0);
+  Id double_ = Id::makeFromDouble(4.5);
+  Id doubleZero_ = Id::makeFromDouble(0.0);
+  Id date_ = Id::makeFromDate(DateYearOrDuration{Date{2013, 5, 16}});
+  Id geoPoint_ = Id::makeFromGeoPoint(GeoPoint{3, 4});
+
+  // The `Id`s that point into a data structure of the index, but that denote
+  // neither a literal nor an IRI of its vocabulary. NOTE: The knowledge graph
+  // contains no blank node, so `blankNode_` must only be used with a value
+  // getter that does not resolve it. That is the case for every getter below:
+  // all of them either ignore that datatype outright, or resolve it via
+  // `idToStringAndType` with `returnOnlyLiterals`, which discards it before the
+  // lookup.
+  Id blankNode_ = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
+  Id textRecord_ = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
+  Id wordVocab_ = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
+
+  // An IRI that is encoded directly in the `Id`.
+  Id encodedIri_ = context_.encodedIriId();
+
+  // The words of the vocabulary of the index.
+  Id plainLiteral_ = context_.getId(vocabPlainLiteral);
+  Id typedLiteral_ = context_.getId(vocabTypedLiteral);
+  Id langLiteral_ = context_.getId(vocabLangLiteral);
+  Id wktLiteral_ = context_.getId(vocabWktLiteral);
+  Id iri_ = context_.getId(vocabIri);
+
+  // The same kinds of word, but from the local vocabulary, which holds the
+  // words that are contained in neither the knowledge graph nor the vocabulary
+  // of the index.
+  Id localEmptyLiteral_ = context_.localVocabId("\"\"");
+  Id localPlainLiteral_ = context_.localVocabId("\"noLocalType\"");
+  Id localTypedLiteral_ =
+      context_.localVocabId("\"someLocalType\"^^<someType>");
+  Id localLangLiteral_ = context_.localVocabId("\"withLocalLang\"@en");
+  Id localIri_ = context_.localVocabId("<https://example.com/local>");
+
+  // The `Id`s of the plain literals of the two vocabularies that store strings,
+  // together with the content of the literal.
+  std::vector<std::pair<Id, std::string>> plainLiterals_{
+      {plainLiteral_, "noVocabType"}, {localPlainLiteral_, "noLocalType"}};
+  // The same for the literals with a datatype or a language tag, and for the
+  // IRIs.
+  std::vector<std::pair<Id, std::string>> typedLiterals_{
+      {typedLiteral_, "someVocabType"}, {localTypedLiteral_, "someLocalType"}};
+  std::vector<std::pair<Id, std::string>> langLiterals_{
+      {langLiteral_, "withVocabLang"}, {localLangLiteral_, "withLocalLang"}};
+  std::vector<std::pair<Id, std::string>> iris_{
+      {iri_, "https://example.com/vocab"},
+      {localIri_, "https://example.com/local"}};
+
+  // Apply the `ValueGetter` to `id` in the context of this fixture.
+  template <typename ValueGetter>
+  auto get(Id id) {
+    return ValueGetter{}(id, &context_.context);
+  }
+
+  // Check that the `ValueGetter` maps every `Id` in `ids` to a value that
+  // matches `expected`.
+  template <typename ValueGetter, typename Matcher>
+  void expectAll(std::initializer_list<Id> ids, const Matcher& expected,
+                 ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    for (Id id : ids) {
+      EXPECT_THAT(get<ValueGetter>(id), expected) << id;
+    }
+  }
+
+  // Same as `expectAll` above, but for the `Id`s of the given words (see
+  // `plainLiterals_` and friends above), where the expected value depends on
+  // the content of the word: `makeMatcher` is called with that content.
+  template <typename ValueGetter, typename MatcherFactory>
+  void expectAllWords(
+      const std::vector<std::pair<Id, std::string>>& words,
+      const MatcherFactory& makeMatcher,
+      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    for (const auto& [id, content] : words) {
+      EXPECT_THAT(get<ValueGetter>(id), makeMatcher(content)) << content;
+    }
+  }
+};
+
+// One fixture per value getter, such that each test suite below is named after
+// the getter that it tests.
+class NumericValueGetterTest : public ValueGetterFixture {};
+class EffectiveBooleanValueGetterTest : public ValueGetterFixture {};
+class DatatypeValueGetterTest : public ValueGetterFixture {};
+class LanguageTagValueGetterTest : public ValueGetterFixture {};
+class ToNumericValueGetterTest : public ValueGetterFixture {};
+class IsIriAndIsLiteralValueGetterTest : public ValueGetterFixture {};
+class IriOrUriValueGetterTest : public ValueGetterFixture {};
+
+// _____________________________________________________________________________
+TEST_F(NumericValueGetterTest, OperatorWithId) {
+  using namespace sparqlExpression::detail;
+  using Getter = NumericValueGetter;
+  EXPECT_THAT(get<Getter>(int_), VariantWith<int64_t>(42));
+  EXPECT_THAT(get<Getter>(double_), VariantWith<double>(DoubleNear(4.5, 0.01)));
+  EXPECT_THAT(get<Getter>(boolTrue_), VariantWith<int64_t>(1));
+  EXPECT_THAT(get<Getter>(boolFalse_), VariantWith<int64_t>(0));
+  // Nothing else is numeric, in particular no word of one of the two
+  // vocabularies that store strings, and no encoded IRI.
+  expectAll<Getter>({undefined_, date_, geoPoint_, blankNode_, textRecord_,
+                     wordVocab_, encodedIri_, plainLiteral_, localPlainLiteral_,
+                     wktLiteral_, iri_, localIri_},
+                    VariantWith<NotNumeric>(_));
+}
+
+// _____________________________________________________________________________
+TEST_F(EffectiveBooleanValueGetterTest, OperatorWithId) {
+  using Getter = sparqlExpression::detail::EffectiveBooleanValueGetter;
+  using Result = Getter::Result;
+  // Numbers are `true` iff they are not zero, booleans are themselves. A word
+  // of a local vocabulary is `true` iff its content is not empty. The remaining
+  // datatypes are unconditionally `true`, except for the ones that have no
+  // truth value at all.
+  expectAll<Getter>({int_, double_, boolTrue_, plainLiteral_, typedLiteral_,
+                     langLiteral_, wktLiteral_, iri_, localPlainLiteral_,
+                     localTypedLiteral_, localLangLiteral_, localIri_,
+                     encodedIri_, date_, geoPoint_, textRecord_, wordVocab_},
+                    Eq(Result::True));
+  expectAll<Getter>({intZero_, doubleZero_, boolFalse_,
+                     Id::makeFromDouble(std::nan("")), localEmptyLiteral_},
+                    Eq(Result::False));
+  expectAll<Getter>({undefined_, blankNode_}, Eq(Result::Undef));
+}
+
+// _____________________________________________________________________________
+TEST_F(DatatypeValueGetterTest, OperatorWithId) {
+  using Getter = sparqlExpression::detail::DatatypeValueGetter;
+  using Iri = ad_utility::triple_component::Iri;
+  auto iriMatcher = [](std::string_view iri) {
+    return Optional(Iri::fromIrirefWithoutBrackets(iri));
+  };
+  // The datatypes of the values that are encoded directly in the `Id`.
+  EXPECT_THAT(get<Getter>(boolTrue_), iriMatcher(XSD_BOOLEAN_TYPE));
+  EXPECT_THAT(get<Getter>(int_), iriMatcher(XSD_INT_TYPE));
+  EXPECT_THAT(get<Getter>(double_), iriMatcher(XSD_DOUBLE_TYPE));
+  EXPECT_THAT(get<Getter>(geoPoint_), iriMatcher(GEO_WKT_LITERAL));
+  EXPECT_THAT(get<Getter>(date_),
+              iriMatcher(date_.getDate().toStringAndType().second));
+
+  // For a word of one of the two vocabularies that store strings, the datatype
+  // is the one of the literal, `xsd:string` if it has none, or
+  // `rdf:langString` if it has a language tag.
+  // The datatype is the same for all the words of one group, so ignore the
+  // content that `expectAllWords` passes to the matcher factory.
+  auto ignoreContent = [](auto matcher) {
+    return [matcher](const std::string&) { return matcher; };
+  };
+  expectAllWords<Getter>(plainLiterals_, ignoreContent(iriMatcher(XSD_STRING)));
+  expectAllWords<Getter>(typedLiterals_, ignoreContent(iriMatcher("someType")));
+  expectAllWords<Getter>(langLiterals_,
+                         ignoreContent(iriMatcher(RDF_LANGTAG_STRING)));
+  EXPECT_THAT(get<Getter>(wktLiteral_), iriMatcher(GEO_WKT_LITERAL));
+
+  // An IRI has no datatype, and neither have the remaining datatypes.
+  expectAllWords<Getter>(iris_, ignoreContent(Eq(std::nullopt)));
+  expectAll<Getter>(
+      {encodedIri_, undefined_, blankNode_, textRecord_, wordVocab_},
+      Eq(std::nullopt));
+}
+
+// _____________________________________________________________________________
+// NOTE: There are additional tests for this getter in the `LanguageTagGetter`
+// suite in `LanguageExpressionsTest.cpp`, which covers the words of the
+// vocabulary of the index and of a local vocabulary.
+TEST_F(LanguageTagValueGetterTest, OperatorWithId) {
+  using Getter = sparqlExpression::detail::LanguageTagValueGetter;
+  // Only a literal with a language tag has one.
+  expectAllWords<Getter>(langLiterals_, [](const std::string&) {
+    return Optional(std::string{"en"});
+  });
+  // For a literal without a language tag the standard requires the empty
+  // string, and the values that are encoded directly in the `Id` all are
+  // literals.
+  expectAll<Getter>(
+      {boolTrue_, int_, double_, date_, geoPoint_, plainLiteral_, typedLiteral_,
+       wktLiteral_, localEmptyLiteral_, localPlainLiteral_, localTypedLiteral_},
+      Optional(::testing::IsEmpty()));
+  // An IRI is not a literal, so it has no language tag at all, and neither have
+  // the remaining datatypes.
+  expectAll<Getter>({iri_, localIri_, encodedIri_, undefined_, blankNode_,
+                     textRecord_, wordVocab_},
+                    Eq(std::nullopt));
+}
+
+// _____________________________________________________________________________
+TEST_F(ToNumericValueGetterTest, OperatorWithId) {
+  using Getter = sparqlExpression::detail::ToNumericValueGetter;
+  EXPECT_THAT(get<Getter>(int_), VariantWith<int64_t>(42));
+  EXPECT_THAT(get<Getter>(double_), VariantWith<double>(DoubleNear(4.5, 0.01)));
+  EXPECT_THAT(get<Getter>(boolTrue_), VariantWith<int64_t>(1));
+  EXPECT_THAT(get<Getter>(geoPoint_),
+              VariantWith<std::string>(
+                  geoPoint_.getGeoPoint().toStringRepresentation()));
+
+  // For a literal of one of the two vocabularies that store strings, the getter
+  // falls back to its content.
+  for (const auto& literals : {plainLiterals_, typedLiterals_, langLiterals_}) {
+    expectAllWords<Getter>(literals, [](const std::string& content) {
+      return VariantWith<std::string>(content);
+    });
+  }
+
+  // An IRI is not a literal, so there is nothing to convert, and the remaining
+  // datatypes have no string representation that this getter uses.
+  expectAll<Getter>({iri_, localIri_, encodedIri_, undefined_, date_,
+                     blankNode_, textRecord_, wordVocab_},
+                    VariantWith<std::monostate>(_));
+}
+
+// _____________________________________________________________________________
+TEST_F(IsIriAndIsLiteralValueGetterTest, OperatorWithId) {
+  using namespace sparqlExpression::detail;
+  auto expectIsIriAndIsLiteral = [this](std::initializer_list<Id> ids,
+                                        bool isIri, bool isLiteral) {
+    expectAll<IsIriValueGetter>(ids, Eq(Id::makeFromBool(isIri)));
+    expectAll<IsLiteralValueGetter>(ids, Eq(Id::makeFromBool(isLiteral)));
+  };
+  // The literals of the two vocabularies that store strings.
+  //
+  // NOTE: `wktLiteral_` (the WKT literal of the vocabulary of the index) is
+  // deliberately absent, because `Vocabulary::isLiteral` misclassifies it as
+  // soon as that vocabulary is geo-split (which `makeTestIndex` chooses at
+  // random unless the vocabulary type is set explicitly):
+  // `Vocabulary::prefixRanges` describes the literals by a single contiguous
+  // range of indices, but the indices of a `SplitVocabulary` are
+  // marker-encoded, so the words of the geo sub-vocabulary lie far outside that
+  // range.
+  // TODO<joka921> Fix that bug, then add `wktLiteral_` here.
+  expectIsIriAndIsLiteral(
+      {plainLiteral_, typedLiteral_, langLiteral_, localEmptyLiteral_,
+       localPlainLiteral_, localTypedLiteral_, localLangLiteral_},
+      false, true);
+  // Their IRIs, and the IRIs that are encoded directly in the `Id`.
+  expectIsIriAndIsLiteral({iri_, localIri_, encodedIri_}, true, false);
+  // The values that are encoded directly in the `Id` are literals.
+  expectIsIriAndIsLiteral({boolTrue_, int_, double_, date_, geoPoint_}, false,
+                          true);
+  // The remaining datatypes are neither.
+  expectIsIriAndIsLiteral({undefined_, blankNode_, textRecord_, wordVocab_},
+                          false, false);
+}
+
+// _____________________________________________________________________________
+TEST_F(IriOrUriValueGetterTest, OperatorWithId) {
+  using Getter = sparqlExpression::detail::IriOrUriValueGetter;
+  // The getter turns a literal or an IRI into an IRI, which is a
+  // `LocalVocabEntry` because it does not have to be contained in any
+  // vocabulary of the index.
+  auto isIriEntry = [](const std::string& expected) {
+    return VariantWith<LocalVocabEntry>(
+        AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                    Eq(absl::StrCat("<", expected, ">"))));
+  };
+  for (const auto& words : {plainLiterals_, typedLiterals_, iris_}) {
+    expectAllWords<Getter>(words, isIriEntry);
+  }
+  EXPECT_THAT(get<Getter>(encodedIri_),
+              isIriEntry("https://encoded.example.com/123"));
+
+  // For all the other datatypes there is no IRI, which the getter signals with
+  // an undefined `Id`.
+  expectAll<Getter>({undefined_, boolTrue_, int_, double_, date_, geoPoint_,
+                     blankNode_, textRecord_, wordVocab_},
+                    VariantWith<Id>(Eq(Id::makeUndefined())));
 }
 };  // namespace
