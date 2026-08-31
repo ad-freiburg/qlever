@@ -537,7 +537,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "SELECT * WHERE {"
       "?x <p> ?y ."
       "SERVICE spatialSearch: {"
-      "  _:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "  _:config1 spatialSearch:algorithm spatialSearch:s2 ;"
       "    spatialSearch:left ?y ;"
       "    spatialSearch:right ?b ;"
       "    spatialSearch:numNearestNeighbors 5 ; "
@@ -545,7 +545,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "  { ?ab <p1> ?b } "
       "}"
       "SERVICE spatialSearch: {"
-      "  _:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "  _:config2 spatialSearch:algorithm spatialSearch:s2 ;"
       "    spatialSearch:left ?y ;"
       "    spatialSearch:right ?c ;"
       "    spatialSearch:numNearestNeighbors 5 ; "
@@ -911,6 +911,22 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
           "The algorithm `<libspatialjoin>` supports the "
           "`<maxDistance>` option only if `<joinType>` is set to "
           "`<within-dist>`"));
+  // `<within-dist>` join type requires the `<maxDistance>` parameter.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+                "spatialSearch:joinType <within-dist> ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr("`<within-dist>` requires the `<maxDistance>` "
+                           "parameter"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"

@@ -155,9 +155,16 @@ class alignas(16) LocalVocabEntry
   bool operator==(const LocalVocabEntry& rhs) const {
     return static_cast<const Base&>(*this) == static_cast<const Base&>(rhs);
   }
-  // Declaring `operator==` above hides the ones inherited from `Base`, which
+  bool operator!=(const LocalVocabEntry& rhs) const { return !(*this == rhs); }
+  // Declaring the operators above hides the ones inherited from `Base`, which
   // would otherwise make comparisons against a plain `LiteralOrIri` ill-formed.
+  // NOTE: `Base` has an `operator!=` only in C++17 mode (in C++20 mode it is
+  // synthesized from its `operator==`), so it cannot be pulled in via a
+  // `using` declaration, but only be forwarded to explicitly.
   using Base::operator==;
+  bool operator!=(const Base& rhs) const {
+    return static_cast<const Base&>(*this) != rhs;
+  }
 
   // Expose `context_` for testing.
   const LocalVocabContext& getContextForTesting() const { return *context_; }
