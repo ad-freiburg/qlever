@@ -10,7 +10,6 @@
 #include "engine/MaterializedViewsQueryAnalysis.h"
 
 #include <algorithm>
-#include <map>
 #include <optional>
 #include <variant>
 
@@ -185,10 +184,10 @@ QueryPatternCache::makeJoinReplacementIndexScans(
   }
 
   // Group the query triples by predicate and collect the views sharing a
-  // predicate with the query. Keyed by name, so that the sharing of the limits
-  // pool below is deterministic (a hash set of `shared_ptr`s is not).
+  // predicate with the query. Sorted and deduplicated by name below, so
+  // that the sharing of the limits pool is deterministic.
   TriplesByPredicate triplesByPredicate;
-  std::map<std::string_view, ViewPtr> candidateViews;
+  std::vector<std::pair<std::string_view, ViewPtr>> candidateViews;
   for (const auto& [tripleIdx, triple] :
        ::ranges::views::enumerate(triples._triples)) {
     auto iri = triple.getSimplePredicate();
@@ -201,14 +200,20 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     }
     triplesByPredicate[iri.value()] |= (uint64_t{1} << tripleIdx);
     for (const auto& view : views.value()) {
-      candidateViews.emplace(view->name(), view);
+      candidateViews.emplace_back(view->name(), view);
     }
   }
   if (candidateViews.empty()) {
     return result;
   }
+  ql::ranges::sort(candidateViews, {}, ad_utility::first);
+  candidateViews.erase(std::unique(candidateViews.begin(), candidateViews.end(),
+                                   [](const auto& a, const auto& b) {
+                                     return a.first == b.first;
+                                   }),
+                       candidateViews.end());
 
-  // Match all `candidateViews` against the query, sharing one pool of limits
+  // Match all `candidateViews` against the query, using a shared pool of limits
   // across them.
   PatternMatcherLimits remaining{totalNumAssignments, totalNumReplacementPlans};
   const PatternMatcherLimits share =
@@ -222,8 +227,6 @@ QueryPatternCache::makeJoinReplacementIndexScans(
                            remaining.requestBounded(share), result)
                            .used_);
   }
-  // Only the exhaustion of the shared pool is worth a warning: a single view
-  // hitting its share only means the other views get their turn.
   if (remaining.isExhausted()) {
     AD_LOG_WARN
         << "Pattern matching for materialized views hit the `"
