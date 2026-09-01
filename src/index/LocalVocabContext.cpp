@@ -9,6 +9,21 @@
 
 #include "index/LocalVocabContext.h"
 
+#include "util/Exception.h"
+
 // The destructor is defined out of line, such that the vtable is emitted in
 // exactly one translation unit.
 LocalVocabContext::~LocalVocabContext() = default;
+
+// _____________________________________________________________________________
+auto LocalVocabContext::lookupWordInVocabularies(std::string_view word) const
+    -> IdOrVocabBounds {
+  auto [lower, upper] = getPositionOfWord(word);
+  if (lower != upper) {
+    // The word is contained in the vocabulary of the main index, in which case
+    // the range consists of exactly that one word.
+    AD_CORRECTNESS_CHECK(upper.get() == lower.get() + 1);
+    return Id::makeFromVocabIndex(lower);
+  }
+  return VocabBounds{lower, upper};
+}
