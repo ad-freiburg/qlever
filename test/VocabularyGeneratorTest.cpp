@@ -4,6 +4,7 @@
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_format.h>
 #include <gmock/gmock.h>
 #include <re2/re2.h>
 
@@ -259,6 +260,11 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 
 // _____________________________________________________________________________
 TEST(MergeVocabulary, mergeVocabularyAssertion) {
+  // The order of the merged words is only checked if the expensive checks are
+  // enabled.
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP();
+  }
   auto callback = [](const auto&, bool) { return uint64_t{0}; };
 
   std::string basePath = gtestCurrentTestName();
@@ -412,4 +418,122 @@ TEST(VocabularyGeneratorTest, createInternalMappingFirstWordDuplicates) {
   EXPECT_EQ(0u, res[99]);
   EXPECT_EQ(1u, res[3]);
   EXPECT_EQ(1u, res[55]);
+}
+
+// _____________________________________________________________________________
+// Test that an `IdMapWriter` writes exactly the format that
+// `getIdMapFromFile` expects, also for a number of pairs that by far exceeds
+// the internal buffer of the writer.
+TEST(IdMapWriter, writeAndReadBack) {
+  // The number of pairs is chosen such that the internal buffer (which
+  // currently is 1 MB, and each pair takes 16 bytes) has to be flushed several
+  // times.
+  const size_t numPairs = 5 * IdMapWriter::bufferSize.getBytes() / 16;
+  IdMap expected;
+  expected.reserve(numPairs);
+  for (size_t i = 0; i < numPairs; ++i) {
+    expected.emplace_back(V(i), V(2 * i + 1));
+  }
+
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  {
+    IdMapWriter writer{filename};
+    for (const auto& pair : expected) {
+      writer.push_back(pair);
+    }
+  }
+  EXPECT_THAT(getIdMapFromFile(filename),
+              ::testing::ElementsAreArray(expected));
+  // The file consists of the number of pairs (8 bytes), followed by the pairs
+  // (16 bytes each). This is exactly the format of a serialized
+  // `std::vector<std::pair<Id, Id>>`.
+  EXPECT_EQ(ql::filesystem::file_size(filename), 8 + 16 * numPairs);
+}
+
+// _____________________________________________________________________________
+// An `IdMapWriter` to which nothing was pushed yields an empty `IdMap`, and an
+// explicit call to `finish()` makes the file readable before the writer is
+// destroyed (and can be repeated without any effect).
+TEST(IdMapWriter, emptyAndExplicitFinish) {
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  {
+    IdMapWriter writer{filename};
+    writer.finish();
+    EXPECT_THAT(getIdMapFromFile(filename), ::testing::IsEmpty());
+    writer.finish();
+  }
+  EXPECT_THAT(getIdMapFromFile(filename), ::testing::IsEmpty());
+
+  {
+    IdMapWriter writer{filename};
+    writer.push_back({V(3), V(4)});
+    writer.finish();
+    EXPECT_THAT(getIdMapFromFile(filename),
+                ::testing::ElementsAre(std::pair{V(3), V(4)}));
+  }
+  EXPECT_THAT(getIdMapFromFile(filename),
+              ::testing::ElementsAre(std::pair{V(3), V(4)}));
+}
+
+// _____________________________________________________________________________
+// Merge a number of words that is large enough for the ID map entries to be
+// handed to the asynchronous writer in several batches, and check that all the
+// entries arrive in the correct ID map, in the correct order.
+TEST(MergeVocabulary, manyWordsWithSeveralIdMapBatches) {
+  // The entries are currently written in batches of 100000, so this leads to
+  // several batches, of which the last one is only partially filled.
+  static constexpr size_t numWords = 250'000;
+  std::string basePath = absl::StrCat(gtestCurrentTestName(), "-");
+  std::vector<std::string> filenames;
+  for (size_t i = 0; i < 2; ++i) {
+    filenames.push_back(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, i));
+    filenames.push_back(absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, i));
+  }
+  absl::Cleanup cleanup = [&filenames] {
+    for (const auto& filename : filenames) {
+      ad_utility::deleteFile(filename, false);
+    }
+  };
+
+  // The `i`-th word (in sorted order) goes to the partial vocabulary
+  // `i % 2`. The words are zero-padded, such that their lexicographic order is
+  // the same as the order of their indices.
+  std::array<std::vector<std::string>, 2> words;
+  for (size_t i = 0; i < numWords; ++i) {
+    words.at(i % 2).push_back(absl::StrFormat("\"word%08d\"", i));
+  }
+  writePartialVocabularyFile(
+      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0), words[0]);
+  writePartialVocabularyFile(
+      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1), words[1]);
+
+  // All the words are distinct, so they simply get the vocabulary indices
+  // `0, 1, ...` in sorted order.
+  size_t numWordsInCallback = 0;
+  auto wordCallback = [&numWordsInCallback](std::string_view,
+                                            bool) -> uint64_t {
+    return numWordsInCallback++;
+  };
+  auto result = mergeVocabulary(
+      basePath, 2,
+      [](std::string_view a, bool, std::string_view b, bool) {
+        return std::less{}(a, b);
+      },
+      wordCallback, 1_GB);
+  EXPECT_EQ(numWordsInCallback, numWords);
+  EXPECT_EQ(result.numWordsTotal(), numWords);
+
+  // In the partial vocabulary `f`, the word with local id `j` is the word with
+  // global id `2 * j + f`.
+  for (size_t f = 0; f < 2; ++f) {
+    IdMap expected;
+    for (size_t j = 0; j < words.at(f).size(); ++j) {
+      expected.emplace_back(V(j), V(2 * j + f));
+    }
+    EXPECT_THAT(
+        getIdMapFromFile(absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, f)),
+        ::testing::ElementsAreArray(expected));
+  }
 }
