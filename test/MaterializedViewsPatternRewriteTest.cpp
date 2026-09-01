@@ -526,7 +526,7 @@ TEST_F(MaterializedViewsPatternMatchingTest,
   }
 }
 
-// A limit of `0` assignment disables pattern-based rewriting: no match is
+// A limit of `0` assignments disables pattern-based rewriting: no match is
 // found and no warning is logged.
 TEST_F(MaterializedViewsPatternMatchingTest,
        PatternMatchNumAssignmentsZeroDisables) {
@@ -557,9 +557,13 @@ TEST_F(MaterializedViewsPatternMatchingTest, ReplacementCountIsCapped) {
   }
   hostQuery += "}";
 
-  auto replacements = match(qpc, hostQuery);
-  EXPECT_GT(replacements.size(), 0u);
-  EXPECT_LE(replacements.size(), 1000u);
+  {
+    auto cleanupNumReplacementPlans = setRuntimeParameterForTest<
+        &RuntimeParameters::materializedViewPatternMatchNumReplacementPlans_>(
+        20);
+    auto replacements = match(qpc, hostQuery);
+    EXPECT_EQ(replacements.size(), 20u);
+  }
 }
 
 // _____________________________________________________________________________

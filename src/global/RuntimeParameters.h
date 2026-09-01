@@ -210,7 +210,7 @@ struct RuntimeParameters {
       true, "enable-materialized-view-query-rewrite"};
 
   // When matching materialized views using pattern-based query rewriting, the
-  // maximum number of candidate assignments tried by the the backtracking
+  // maximum number of candidate assignments tried by the backtracking
   // algorithm. `0` disables pattern-based rewriting.
   SizeT materializedViewPatternMatchNumAssignments_{
       100'000, "materialized-view-pattern-match-num-assignments"};

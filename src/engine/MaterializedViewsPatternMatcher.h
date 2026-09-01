@@ -126,7 +126,7 @@ class PatternMatcher {
   // on backtrack). Must be called before `tryAssignment`.
   bool isNewBinding(const TripleComponent& viewSide) const;
 
-  // Reverses `tryAssignment` if it added a new binding(`wasNew`), a no-op
+  // Reverses `tryAssignment` if it added a new binding (`wasNew`), a no-op
   // otherwise.
   void undoAssignment(const TripleComponent& viewSide, bool wasNew);
 
