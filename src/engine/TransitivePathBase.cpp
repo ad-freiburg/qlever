@@ -611,7 +611,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
 
 // _____________________________________________________________________________
 void TransitivePathBase::insertPayloadColumnsToPlan(
-    std::shared_ptr<TransitivePathBase>& plan,
+    const std::shared_ptr<TransitivePathBase>& plan,
     const std::optional<TreeAndCol>& opAndCol,
     const std::optional<TreeAndCol>& otherOpAndCol) const {
   // Ensure we only bind populated columns.

@@ -2664,29 +2664,23 @@ auto QueryPlanner::createJoinWithTransitivePath(
   // The left or right side is a transitive path and its join column corresponds
   // to the left side of its input.
   SubtreePlan plan = [&]() {
-    // If both join columns are given, we can bind them both.
+    auto firstSide = std::pair{otherTree, firstColOther};
+    auto secondSide = std::optional<decltype(firstSide)>();
+
+    // Assign the targeet side if given.
     if (joinCols.at(1).has_value()) {
       const auto& [secondColTransPath, secondColOther] = joinCols.at(1).value();
       AD_CONTRACT_CHECK(secondColTransPath <= 1 &&
                         secondColTransPath != firstColTransPath);
-      if (firstColTransPath == 0) {
-        // Bind both columns with transitive Path on the left side.
-        return makeSubtreePlan(transPathOperation->bindSides(
-            std::pair{otherTree, firstColOther},
-            std::pair{otherTree, secondColOther}));
-      }
-      // Bind both columns with transitive Path on the right side.
+      secondSide = std::pair{otherTree, secondColOther};
+    }
+
+    if (firstColTransPath == 1) {
       return makeSubtreePlan(
-          transPathOperation->bindSides(std::pair{otherTree, secondColOther},
-                                        std::pair{otherTree, firstColOther}));
+          transPathOperation->bindSides(secondSide, firstSide));
     }
-    // Bind a single join column.
-    if (firstColTransPath == 0) {
-      return makeSubtreePlan(transPathOperation->bindSides(
-          std::pair{otherTree, firstColOther}, std::nullopt));
-    }
-    return makeSubtreePlan(transPathOperation->bindSides(
-        std::nullopt, std::pair{otherTree, firstColOther}));
+    return makeSubtreePlan(
+        transPathOperation->bindSides(firstSide, secondSide));
   }();
   mergeSubtreePlanIds(plan, a, b);
   return plan;

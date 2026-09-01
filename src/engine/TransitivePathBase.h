@@ -296,7 +296,7 @@ class TransitivePathBase : public Operation {
   // Traverse each side of the operation and insert columns which are not
   // related to joining into the plan.
   void insertPayloadColumnsToPlan(
-      std::shared_ptr<TransitivePathBase>& plan,
+      const std::shared_ptr<TransitivePathBase>& plan,
       const std::optional<TreeAndCol>& opAndCol,
       const std::optional<TreeAndCol>& otherOpAndCol) const;
 
