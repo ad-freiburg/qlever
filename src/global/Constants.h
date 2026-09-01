@@ -96,7 +96,7 @@ constexpr inline std::string_view CONTAINS_WORD_PREDICATE =
 
 // Whether `predicate` is one of the full-text pseudo-predicates, which are
 // rewritten into dedicated text operations rather than plain index scans.
-constexpr inline bool isFullTextPseudoPredicate(std::string_view predicate) {
+constexpr bool isFullTextPseudoPredicate(std::string_view predicate) {
   return predicate == CONTAINS_ENTITY_PREDICATE ||
          predicate == CONTAINS_WORD_PREDICATE;
 }
