@@ -46,8 +46,15 @@ TEST(GeoCellGrid, basics) {
   EXPECT_EQ(grid.numPositionBits(), ValueId::numDataBits - 22);
   EXPECT_EQ(grid.maxNumWords(), uint64_t{1} << (ValueId::numDataBits - 22));
 
-  // Level 0 is invalid, as are levels where no position bits remain.
+  // Level 0 is invalid, as are levels where no position bits remain. The
+  // largest valid level leaves exactly one bit for the position: a vocabulary
+  // index has one marker bit, `2 * level + 1` cell bits, and at least one
+  // position bit.
+  uint8_t maxLevel = (ValueId::numDataBits - 3) / 2;
+  EXPECT_NO_THROW(GeoCellGrid{maxLevel});
+  EXPECT_GE(GeoCellGrid{maxLevel}.numPositionBits(), 1u);
   EXPECT_ANY_THROW(GeoCellGrid{0});
+  EXPECT_ANY_THROW(GeoCellGrid{static_cast<uint8_t>(maxLevel + 1)});
   EXPECT_ANY_THROW(GeoCellGrid{40});
 }
 
@@ -272,10 +279,9 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
         ad_utility::BoundingBox box{GeoPoint{lat, lng}, GeoPoint{lat2, lng2}};
         auto cellIndex = grid.cellIndexFromBoundingBox(box);
         EXPECT_TRUE(contains(ranges, cellIndex))
-            << name << " geometry [" << lng << ", "
-            << lat << ", " << lng2 << ", " << lat2 << "] query [" << qLng
-            << ", " << qLat << ", " << qLng2 << ", " << qLat2 << "] cell index "
-            << cellIndex;
+            << name << " geometry [" << lng << ", " << lat << ", " << lng2
+            << ", " << lat2 << "] query [" << qLng << ", " << qLat << ", "
+            << qLng2 << ", " << qLat2 << "] cell index " << cellIndex;
         ++numChecked;
       }
     }
