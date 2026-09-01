@@ -47,7 +47,7 @@ struct IndexFormatVersion {
 // to the new pair of versions; else an index of the previous version can no
 // longer be converted, but only be rebuilt.
 inline const IndexFormatVersion& indexFormatVersion{
-    3159, DateYearOrDuration{Date{2026, 8, 14}}};
+    3159, DateYearOrDuration{Date{2026, 9, 1}}};
 
 // The index version that directly precedes `indexFormatVersion` above. An index
 // with exactly this version can be converted to the current version by the

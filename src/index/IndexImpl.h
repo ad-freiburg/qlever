@@ -209,6 +209,9 @@ class IndexImpl {
 
   GraphNameManager graphNameManager_ = GraphNameManager();
 
+  // See `wasLoadedFromDisk()`.
+  bool wasLoadedFromDisk_ = false;
+
   // The secondary vocabulary, see `secondaryVocab()`.
   std::shared_ptr<const SecondaryVocabulary> secondaryVocab_;
 
@@ -274,6 +277,11 @@ class IndexImpl {
   void addTextFromOnDiskIndex();
 
   const auto& getVocab() const { return vocab_; }
+
+  // Whether this index was loaded from disk (see `createFromOnDiskIndex`), as
+  // opposed to merely being built. Used for the "was unloaded" message, see
+  // `Index::~Index()`.
+  bool wasLoadedFromDisk() const { return wasLoadedFromDisk_; }
   auto& getNonConstVocabForTesting() { return vocab_; }
 
   // Return the secondary vocabulary of this index (see

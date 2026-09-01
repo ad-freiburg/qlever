@@ -680,7 +680,21 @@ TEST(IndexTest, trivialGettersAndSetters) {
 // _____________________________________________________________________________
 TEST(IndexTest, destructorLogsUnloading) {
   ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
-  // An `Index` that still owns its `IndexImpl` logs on destruction.
+  // An `Index` that was loaded from disk logs on destruction.
+  std::string basename = gtestCurrentTestName();
+  ad_utility::testing::makeTestIndex(basename, "<a> <b> <c> .");
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    std::optional<Index> index;
+    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
+    index->createFromOnDiskIndex(basename, false);
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr(absl::StrCat(
+                    "Index with basename \"", basename, "\" was unloaded")));
+  }
+  // An `Index` that was never loaded from disk (for example, one that was
+  // merely built) stays silent on destruction.
   {
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
     std::optional<Index> index;
@@ -688,7 +702,7 @@ TEST(IndexTest, destructorLogsUnloading) {
     index->setOnDiskBase("someIndexBase");
     index.reset();
     EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr("Index at someIndexBase was unloaded"));
+                ::testing::Not(::testing::HasSubstr("was unloaded")));
   }
   // A moved-from `Index` no longer owns an `IndexImpl` and therefore stays
   // silent on destruction. We reset it while `movedInto` is still alive, so no
@@ -697,7 +711,7 @@ TEST(IndexTest, destructorLogsUnloading) {
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
     std::optional<Index> index;
     index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
-    index->setOnDiskBase("someIndexBase");
+    index->createFromOnDiskIndex(basename, false);
     Index movedInto{std::move(index).value()};
     index.reset();
     EXPECT_THAT(logStream.str(),
@@ -1226,11 +1240,10 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
       applyVersionAndExpectThrow(
           qlever::indexFormatConverter::sourceVersion,
           ::testing::AllOf(
-              ::testing::HasSubstr("index format that was introduced on "
-                                   "2024-10-22 (PR = 1572)"),
-              ::testing::HasSubstr("You have three options"),
-              ::testing::HasSubstr("Upgrade your index with "
-                                   "`qlever-upgrade-index <basename>`"))),
+              ::testing::HasSubstr("but your index uses the previous format"),
+              ::testing::HasSubstr("sometimes they are unavoidable"),
+              ::testing::HasSubstr("the old index is preserved"),
+              ::testing::HasSubstr("qlever-upgrade-index "))),
       ::testing::Not(::testing::HasSubstr("The index is too old")));
 }
 

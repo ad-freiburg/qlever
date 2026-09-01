@@ -2,7 +2,7 @@
 
 This directory contains a (very small) QLever index in the index format
 `{PR = 1572, Date = 2024-10-22}`, which is the format that directly precedes the
-current one `{PR = 3159, Date = 2026-08-14}` (see
+current one `{PR = 3159, Date = 2026-09-01}` (see
 `qlever::previousIndexFormatVersion` resp. `qlever::indexFormatVersion` in
 `src/index/IndexFormatVersion.h`, and `sourceVersion` resp. `targetVersion` in
 `src/index/IndexFormatConverter.h`). Its materialized view is in the
