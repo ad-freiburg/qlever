@@ -971,7 +971,7 @@ TEST(IndexRebuilder, serverIntegration) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   cleanDirsWithPrefix("droppedState.");
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
