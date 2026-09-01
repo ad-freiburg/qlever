@@ -168,8 +168,10 @@ class GeoCellGrid {
   // Helper that checks whether a vocabulary index is in the geo vocabulary.
   //
   // NOTE: This encodes the marker layout of a `SplitVocabulary` with exactly
-  // two underlying vocabularies. In the unit tests, there are checks that the
-  // two are consistent.
+  // two underlying vocabularies. It cannot use the constants of the
+  // `SplitGeoVocabulary` directly, because that class lives in the vocabulary
+  // layer above this one. In the unit tests, there are checks that the two
+  // are consistent.
   static constexpr uint64_t geoVocabMarkerBit = uint64_t{1}
                                                 << (ValueId::numDataBits - 1);
   static constexpr bool isGeoVocabIndex(uint64_t vocabIndexBits) {
