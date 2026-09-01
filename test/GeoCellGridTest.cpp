@@ -170,22 +170,6 @@ TEST(GeoCellGrid, coveringCellRanges) {
                          P{grid.sentinelCell(), grid.sentinelCell()}));
 }
 
-// Test `isWktLiteral` on positive and negative examples.
-TEST(GeoCellGrid, isWktLiteral) {
-  // WKT literals. The check is purely syntactic (quotes plus the WKT datatype
-  // suffix), so invalid WKT content also counts.
-  for (const std::string& word : {wkt("POINT(1 2)"), wkt("NOTAGEOMETRY")}) {
-    EXPECT_TRUE(GeoCellGrid::isWktLiteral(word)) << word;
-  }
-
-  // Not WKT literals: a plain literal, an IRI, a language-tagged literal.
-  for (const std::string& word :
-       {std::string{"\"foo\""}, std::string{"<http://example.org>"},
-        std::string{"\"foo\"@en"}}) {
-    EXPECT_FALSE(GeoCellGrid::isWktLiteral(word)) << word;
-  }
-}
-
 // Check that `GeoCellGrid::geoVocabMarkerBit` matches the marker layout of
 // the `SplitGeoVocabulary`.
 TEST(GeoCellGrid, markerBitConsistentWithSplitGeoVocabulary) {

@@ -18,8 +18,6 @@
 #include <utility>
 #include <vector>
 
-#include "backports/StartsWithAndEndsWith.h"
-#include "global/Constants.h"
 #include "global/ValueId.h"
 #include "rdfTypes/GeometryInfo.h"
 
@@ -67,14 +65,6 @@ class GeoCellGrid {
 
   // A list of closed, ascending, non-overlapping ranges of cell indices.
   using CellRanges = std::vector<std::pair<CellIndex, CellIndex>>;
-
-  // Return true iff `word` is a WKT literal (with quotes and datatype
-  // suffix). This is the criterion by which the `SplitGeoVocabulary` routes
-  // words into the geo vocabulary (its `GeoSplitFunc` calls this function).
-  static bool isWktLiteral(std::string_view word) {
-    return ql::starts_with(word, "\"") &&
-           ql::ends_with(word, GEO_LITERAL_SUFFIX);
-  }
 
  private:
   // The level of the base grid, which has `2^level x 2^level` cells.
