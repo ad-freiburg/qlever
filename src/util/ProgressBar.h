@@ -192,9 +192,11 @@ class ProgressBar {
 // A class for the same general goal as `ProgressBar` above (reporting the
 // progress of a long-running computation), but with two differences:
 //
-// 1. The total number of steps is known in advance, so the progress can be
-// shown as a percentage of the total, together with the average speed; no need
-// to show the last, fastest, and slowest batch speeds like for `ProgressBar`.
+// 1. The total number of steps is typically known in advance, so the progress
+// can be shown as a percentage of the total, together with the average speed;
+// no need to show the last, fastest, and slowest batch speeds like for
+// `ProgressBar`. If the total is not known (`std::nullopt`), only the number of
+// steps and the average speed are shown.
 //
 // 2. The computation is done by several threads that concurrently report their
 // progress. The progress counter therefore lives inside this class, and the
@@ -247,9 +249,11 @@ class ConcurrentProgressBar {
     std::string progressString_;
   };
 
-  // Create and initialize a concurrent progress bar.
+  // Create and initialize a concurrent progress bar. A `totalSteps` of
+  // `std::nullopt` means that the total number of steps is not known in
+  // advance (see above).
   ConcurrentProgressBar(
-      std::string displayStringPrefix, size_t totalSteps,
+      std::string displayStringPrefix, std::optional<size_t> totalSteps,
       size_t statisticsBatchSize = DEFAULT_PROGRESS_BAR_BATCH_SIZE,
       SpeedDescriptionFunction getSpeedDescription =
           DEFAULT_SPEED_DESCRIPTION_FUNCTION,
@@ -271,6 +275,11 @@ class ConcurrentProgressBar {
   // steps locally and report them in larger batches.
   void add(size_t numSteps) {
     std::lock_guard lock{countMutex_};
+    // The timer is only started with the first reported step, such that a long
+    // startup time before the first step is processed (for example, an input
+    // generator that takes a while to produce its first triple) does not
+    // distort the reported average speed.
+    timer_.cont();
     numStepsProcessed_ += numSteps;
   }
 
@@ -308,7 +317,10 @@ class ConcurrentProgressBar {
                       "`ConcurrentProgressBar::getFinalProgressString()` "
                       "should only be called once after the computation has "
                       "finished");
-    timer_.stop();
+    {
+      std::lock_guard lock{countMutex_};
+      timer_.stop();
+    }
     finished_ = true;
     std::unique_lock displayLock{displayMutex_};
     return getProgressStringImpl(true);
@@ -324,22 +336,31 @@ class ConcurrentProgressBar {
   // the `\r` overwrites all of it and no leftover characters remain.
   std::string getProgressStringImpl(bool isFinal) {
     size_t numStepsProcessed;
+    double secondsElapsed;
     {
       std::lock_guard lock{countMutex_};
       numStepsProcessed = numStepsProcessed_;
+      secondsElapsed = Timer::toSeconds(timer_.value());
     }
-    // A total of zero steps is trivially complete.
-    double percentage =
-        totalSteps_ == 0
-            ? 100.0
-            : std::min(100.0, 100.0 * static_cast<double>(numStepsProcessed) /
-                                  static_cast<double>(totalSteps_));
+    // If the total is known, also show it and the percentage. A total of zero
+    // steps is trivially complete.
+    std::string totalAndPercentage;
+    if (totalSteps_.has_value()) {
+      size_t totalSteps = totalSteps_.value();
+      double percentage =
+          totalSteps == 0
+              ? 100.0
+              : std::min(100.0, 100.0 * static_cast<double>(numStepsProcessed) /
+                                    static_cast<double>(totalSteps));
+      totalAndPercentage =
+          absl::StrCat(" of ", withThousandSeparators(totalSteps),
+                       absl::StrFormat(" (%.1f%%)", percentage));
+    }
     std::string progressString = absl::StrCat(
-        displayStringPrefix_, withThousandSeparators(numStepsProcessed), " of ",
-        withThousandSeparators(totalSteps_),
-        absl::StrFormat(" (%.1f%%)", percentage), " [average speed ",
+        displayStringPrefix_, withThousandSeparators(numStepsProcessed),
+        totalAndPercentage, " [average speed ",
         getSpeedDescription_(static_cast<double>(numStepsProcessed) /
-                             std::max(Timer::toSeconds(timer_.value()), 0.001)),
+                             std::max(secondsElapsed, 0.001)),
         "]");
     bool reuseLine = displayUpdateOptions_ == ProgressBar::ReuseLine;
     if (reuseLine) {
@@ -351,8 +372,8 @@ class ConcurrentProgressBar {
 
   // The first part of the display string (e.g., "Triples processed: ").
   std::string displayStringPrefix_;
-  // The total number of steps, known in advance.
-  size_t totalSteps_;
+  // The total number of steps if it is known in advance.
+  std::optional<size_t> totalSteps_;
   // Produce a progress string every this many steps.
   size_t statisticsBatchSize_;
   // Function that returns a string with a speed description (e.g., "3.4
@@ -361,8 +382,9 @@ class ConcurrentProgressBar {
   // See `ProgressBar::DisplayUpdateOptions`.
   DisplayUpdateOptions displayUpdateOptions_;
 
-  // Timer that is started as soon as this progress bar is created.
-  Timer timer_{Timer::Started};
+  // Timer that is started with the first call to `add` (see there). Protected
+  // by `countMutex_`.
+  Timer timer_{Timer::Stopped};
   // Finished yet or not.
   bool finished_ = false;
   // The total number of units that have been processed so far. Protected by
