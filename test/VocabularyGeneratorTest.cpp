@@ -33,7 +33,7 @@
 using namespace ad_utility::vocabulary_merger;
 namespace {
 // equality operator used in this test
-bool vocabTestCompare(const IdMap& a, const std::vector<std::pair<Id, Id>>& b) {
+bool vocabTestCompare(const IdMap& a, const IdMap& b) {
   if (a.size() != b.size()) {
     return false;
   }
@@ -84,7 +84,7 @@ class MergeVocabularyTest : public ::testing::Test {
 
   // two std::vectors where we store the expected mapping
   // form partial to global ids;
-  using Mapping = std::vector<std::pair<Id, Id>>;
+  using Mapping = IdMap;
   Mapping _expMapping0;
   Mapping _expMapping1;
 
@@ -268,6 +268,16 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
   auto callback = [](const auto&, bool) { return uint64_t{0}; };
 
   std::string basePath = gtestCurrentTestName();
+  std::vector<std::string> filenames;
+  for (size_t i = 0; i < 2; ++i) {
+    filenames.push_back(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, i));
+    filenames.push_back(absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, i));
+  }
+  absl::Cleanup cleanup = [&filenames] {
+    for (const auto& filename : filenames) {
+      ad_utility::deleteFile(filename, false);
+    }
+  };
 
   // Intentionally in wrong order, so that the merge detects a violated order.
   std::array<std::string_view, 3> unorderedWords{"\"c\"", "\"b\"", "\"a\""};
@@ -349,12 +359,12 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
     return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(index));
   };
   IdMap idMap = getIdMapFromFile(idMapFile);
-  EXPECT_THAT(idMap, ::testing::ElementsAreArray(std::vector<std::pair<Id, Id>>{
-                         {V(0), V(0)},     // "bn_lit"
-                         {V(1), V(1)},     // <http://ex/apple>
-                         {V(2), BN(0)},    // <http://ex/bn_1>
-                         {V(3), BN(1)},    // <http://ex/bn_2>
-                         {V(4), V(2)}}));  // <http://ex/cherry>
+  EXPECT_THAT(idMap, ::testing::ElementsAreArray(
+                         IdMap{{V(0), V(0)},     // "bn_lit"
+                               {V(1), V(1)},     // <http://ex/apple>
+                               {V(2), BN(0)},    // <http://ex/bn_1>
+                               {V(3), BN(1)},    // <http://ex/bn_2>
+                               {V(4), V(2)}}));  // <http://ex/cherry>
 }
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {
@@ -425,10 +435,10 @@ TEST(VocabularyGeneratorTest, createInternalMappingFirstWordDuplicates) {
 // `getIdMapFromFile` expects, also for a number of pairs that by far exceeds
 // the internal buffer of the writer.
 TEST(IdMapWriter, writeAndReadBack) {
-  // The number of pairs is chosen such that the internal buffer (which
-  // currently is 1 MB, and each pair takes 16 bytes) has to be flushed several
-  // times.
-  const size_t numPairs = 5 * IdMapWriter::bufferSize.getBytes() / 16;
+  // Far more entries than fit into the internal buffer of the writer, such
+  // that the buffer has to be flushed many times.
+  const size_t numPairs = 200'000;
+  ASSERT_GT(numPairs * 16, 10 * IdMapWriter::bufferSize.getBytes());
   IdMap expected;
   expected.reserve(numPairs);
   for (size_t i = 0; i < numPairs; ++i) {
@@ -445,9 +455,9 @@ TEST(IdMapWriter, writeAndReadBack) {
   }
   EXPECT_THAT(getIdMapFromFile(filename),
               ::testing::ElementsAreArray(expected));
-  // The file consists of the number of pairs (8 bytes), followed by the pairs
-  // (16 bytes each). This is exactly the format of a serialized
-  // `std::vector<std::pair<Id, Id>>`.
+  // The file consists of the number of entries (8 bytes), followed by the
+  // entries (16 bytes each). This is exactly the format of a serialized
+  // `IdMap`.
   EXPECT_EQ(ql::filesystem::file_size(filename), 8 + 16 * numPairs);
 }
 
@@ -471,10 +481,10 @@ TEST(IdMapWriter, emptyAndExplicitFinish) {
     writer.push_back({V(3), V(4)});
     writer.finish();
     EXPECT_THAT(getIdMapFromFile(filename),
-                ::testing::ElementsAre(std::pair{V(3), V(4)}));
+                ::testing::ElementsAre(IdMapEntry{V(3), V(4)}));
   }
   EXPECT_THAT(getIdMapFromFile(filename),
-              ::testing::ElementsAre(std::pair{V(3), V(4)}));
+              ::testing::ElementsAre(IdMapEntry{V(3), V(4)}));
 }
 
 // _____________________________________________________________________________

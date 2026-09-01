@@ -29,16 +29,52 @@
 #include "util/TaskQueue.h"
 #include "util/TypeTraits.h"
 
-// Writes pairs of (partial ID, global ID) incrementally to a file. The pairs
-// are buffered and only handed to the file in large blocks, because a single
-// pair is only 16 bytes and writing each of them directly to the file would be
-// very inefficient. The resulting file has exactly the format of a serialized
-// `std::vector<std::pair<Id, Id>>` (see `getIdMapFromFile` below).
+// A single entry of an ID map (see `IdMapWriter` below): the ID that a word has
+// inside a partial vocabulary, and the global ID that the vocabulary merger has
+// assigned to that word.
+//
+// NOTE: This deliberately is a plain struct and not a `std::pair<Id, Id>`.
+// libstdc++'s `std::pair` has user-provided assignment operators and hence is
+// not trivially copyable, which would make a `std::vector` of them neither
+// trivially serializable (it would then be written and read one `Id` at a time)
+// nor bitwise relocatable.
+struct IdMapEntry {
+  Id localId_;
+  Id globalId_;
+
+  bool operator==(const IdMapEntry& other) const {
+    return localId_ == other.localId_ && globalId_ == other.globalId_;
+  }
+  bool operator!=(const IdMapEntry& other) const { return !(*this == other); }
+
+  // Enable the serialization of an `IdMapEntry` (and of contiguous ranges of
+  // them) in the `ad_utility::serialization` framework.
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(IdMapEntry, T);
+
+  // Make the output of failed tests readable.
+  friend std::ostream& operator<<(std::ostream& str, const IdMapEntry& entry) {
+    return str << '{' << entry.localId_ << ", " << entry.globalId_ << '}';
+  }
+};
+static_assert(
+    ad_utility::serialization::TriviallySerializable<IdMapEntry>,
+    "An `IdMapEntry` has to be trivially serializable, else a whole `IdMap` "
+    "would be written and read one `Id` at a time");
+
+// Writes `IdMapEntry`s incrementally to a file. The entries are buffered and
+// only handed to the file in blocks, because a single entry is only 16 bytes
+// and writing each of them directly to the file would be very inefficient. The
+// resulting file has exactly the format of a serialized `IdMap`.
 class IdMapWriter {
  public:
   // The amount of data that is buffered before it is written to the file.
+  // NOTE: There is one `IdMapWriter` per partial vocabulary, of which there can
+  // be thousands, so this must not be too large: it is not only the memory
+  // footprint, but also the cache and TLB pressure of the writes, which are
+  // scattered over all the writers.
   static constexpr ad_utility::MemorySize bufferSize =
-      ad_utility::MemorySize::megabytes(1);
+      ad_utility::MemorySize::kilobytes(16);
 
  private:
   using Serializer = ad_utility::serialization::BufferedWriteSerializer<
@@ -46,18 +82,18 @@ class IdMapWriter {
   // NOTE: The indirection via the `unique_ptr` makes this class movable, which
   // is required because the `IdMapWriter`s are stored in a `std::vector`.
   std::unique_ptr<Serializer> serializer_;
-  // The number of pairs that have been pushed so far. It is written to the
+  // The number of entries that have been pushed so far. It is written to the
   // beginning of the file by `finish()`.
-  uint64_t numPairs_ = 0;
+  uint64_t numEntries_ = 0;
 
  public:
   explicit IdMapWriter(const std::string& filename)
       : serializer_{std::make_unique<Serializer>(
             ad_utility::serialization::FileWriteSerializer{filename},
             bufferSize)} {
-    // Write a placeholder for the number of pairs, which is only known once
+    // Write a placeholder for the number of entries, which is only known once
     // `finish()` is called.
-    *serializer_ << numPairs_;
+    *serializer_ << numEntries_;
   }
 
   // This class is move-only. NOTE: There deliberately is no move assignment,
@@ -72,15 +108,16 @@ class IdMapWriter {
                                   "The closing of an `IdMapWriter` failed");
   }
 
-  // Append a single pair of (partial ID, global ID).
-  void push_back(const std::pair<Id, Id>& pair) {
-    *serializer_ << pair;
-    ++numPairs_;
+  // Append a single entry.
+  void push_back(const IdMapEntry& entry) {
+    *serializer_ << entry;
+    ++numEntries_;
   }
 
-  // Flush the buffer, write the total number of pairs to the beginning of the
-  // file, and close the file. This is automatically called by the destructor.
-  // After a call to `finish()`, no more calls to `push_back()` are allowed.
+  // Flush the buffer, write the total number of entries to the beginning of
+  // the file, and close the file. This is automatically called by the
+  // destructor. After a call to `finish()`, no more calls to `push_back()` are
+  // allowed.
   void finish() {
     if (!serializer_) {
       return;
@@ -88,14 +125,14 @@ class IdMapWriter {
     auto file = std::move(*serializer_).underlyingSerializer();
     serializer_.reset();
     file.setSerializationPosition(0);
-    file << numPairs_;
+    file << numEntries_;
     file.close();
   }
 };
 
-// Get a vector of pairs of (partial ID, global ID) deserialized from a file
-// that has previously been written using the `IdMapWriter` class above.
-using IdMap = std::vector<std::pair<Id, Id>>;
+// Get the `IdMapEntry`s deserialized from a file that has previously been
+// written using the `IdMapWriter` class above.
+using IdMap = std::vector<IdMapEntry>;
 inline IdMap getIdMapFromFile(const std::string& filename) {
   IdMap idMap;
   ad_utility::serialization::FileReadSerializer serializer(filename);
@@ -254,18 +291,22 @@ class VocabularyMerger {
   // `isBlankNode` (which may run a set of regexes) is evaluated only once per
   // distinct word.
   bool lastTripleComponentIsBlankNode_ = false;
+  // The global ID of `lastTripleComponent_`. Cached here because it is the same
+  // for all the (possibly many) occurrences of a word in the partial
+  // vocabularies, and computing it involves a branch and a range check.
+  Id lastTargetId_ = Id::makeUndefined();
   // we will store pairs of <partialId, globalId>
   std::vector<IdMapWriter> idMaps_;
 
-  // A single entry of one of the `idMaps_`: the index of the partial vocabulary
-  // that the word came from, and the pair of (local ID, global ID) that has to
-  // be written to the corresponding `IdMapWriter`.
-  struct IdMapEntry {
+  // An `IdMapEntry` together with the index of the partial vocabulary it has to
+  // be written to.
+  struct QueuedIdMapEntry {
     size_t partialFileId_;
-    std::pair<Id, Id> localAndGlobalId_;
+    IdMapEntry entry_;
   };
 
-  // The `IdMapEntry`s are not written by the thread that performs the merge,
+  // The `QueuedIdMapEntry`s are not written by the thread that performs the
+  // merge,
   // but by a single separate thread, such that the (rather expensive) merging
   // of the words and the writing of the ID maps happen concurrently.
   std::optional<ad_utility::TaskQueue<false>> idMapWriterQueue_;
@@ -276,9 +317,9 @@ class VocabularyMerger {
   // `idMapWriterQueue_`. This is necessary because a single call to
   // `writeQueueWordsToIdMap` only deals with a rather small number of words
   // (currently 100), which is much too fine-grained for a task queue.
-  std::vector<IdMapEntry> idMapEntryBuffer_;
-  // The number of `IdMapEntry`s that are collected in the `idMapEntryBuffer_`
-  // before they are handed to the `idMapWriterQueue_` as a single task.
+  std::vector<QueuedIdMapEntry> idMapEntryBuffer_;
+  // The number of entries that are collected in the `idMapEntryBuffer_` before
+  // they are handed to the `idMapWriterQueue_` as a single task.
   static constexpr size_t idMapEntryBatchSize = 100'000;
 
   // Friend declaration for the publicly available function.
@@ -357,6 +398,7 @@ class VocabularyMerger {
     metaData_ = VocabularyMetaData{};
     lastTripleComponent_ = std::nullopt;
     lastTripleComponentIsBlankNode_ = false;
+    lastTargetId_ = Id::makeUndefined();
     idMapEntryBuffer_.clear();
     // NOTE: The order is important. The destructor of the `idMapWriterQueue_`
     // blocks until all pending entries have been written, so the `idMaps_` may
