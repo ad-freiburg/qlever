@@ -616,187 +616,22 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
   return nlohmann::json(globalRuntimeParameters.rlock()->toMap());
 }
 
-// _____________________________________________________________________________
+// The terminal step of `process()`: by this point the operation type is
+// known, so this builds the query/update/graph-store-protocol/no-operation
+// visitors and hands them, together with `operation`, to `processOperation`.
 CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::process(RequestT& request, SendT&& send) {
+    Awaitable<void> Server::processSparqlOperation(
+        SparqlOperation operation, const ParamValueMap& parameters,
+        bool accessTokenOk, const ad_utility::Timer& requestTimer,
+        SharedIndexAndView indexAndViews, RequestT& request, SendT&& send,
+        std::optional<ResponseT> response) {
   using namespace ad_utility::httpUtils;
-  using namespace responseJson;
-  using namespace serverProcessHelpers;
-  // Acquire the current index and the materialized views manager exactly once
-  // for the whole request, under a single read lock. This way a concurrent
-  // rebuild that swaps both in cannot make different helpers observe a
-  // mismatched (index, manager) pair.
-  auto indexAndViews = indexAndViewsSnapshot();
   auto& index = indexAndViews->index_;
-
-  // Log some basic information about the request. Start with an empty line so
-  // that in a low-traffic scenario (or when the query processing is very fast),
-  // we have one visual block per request in the log.
-  std::string_view contentType = request.base()[http::field::content_type];
-  AD_LOG_INFO << std::endl;
-  AD_LOG_INFO << "Request received via " << request.method()
-              << (contentType.empty()
-                      ? absl::StrCat(", no content type specified")
-                      : absl::StrCat(", content type \"", contentType, "\""))
-              << std::endl;
-
-  // Start timing.
-  ad_utility::Timer requestTimer{ad_utility::Timer::Started};
-
-  // Parse the path and the URL parameters from the given request. Works for GET
-  // requests as well as the two kinds of POST requests allowed by the SPARQL
-  // standard, see method `getUrlPathAndParameters`.
-  auto parsedHttpRequest = SparqlProtocol::parseHttpRequest(request);
-  const auto& parameters = parsedHttpRequest.parameters_;
-
-  // We always want to call `Server::checkParameter` with the same first
-  // parameter.
   auto checkParameter = absl::bind_front(
       &ad_utility::url_parser::checkParameter, std::cref(parameters));
-
-  // Check the access token. If an access token is provided and the check fails,
-  // throw an exception and do not process any part of the query (even if the
-  // processing had been allowed without access token).
-  bool accessTokenOk = checkAccessToken(parsedHttpRequest.accessToken_);
-
-  // We always want to call `serverProcessHelpers::requireValidAccessToken`
-  // with the same `accessTokenOk`.
   auto requireValidAccessToken = absl::bind_front(
       &serverProcessHelpers::requireValidAccessToken, accessTokenOk);
-
-  // We always want to call `serverProcessHelpers::checkAndLogParameterSetting`
-  // with the same `parameters` and `accessTokenOk`.
-  auto checkAndLogParameterSetting =
-      [&parameters, accessTokenOk](std::string_view paramName) {
-        return serverProcessHelpers::checkAndLogParameterSetting(
-            parameters, paramName, accessTokenOk);
-      };
-
-  // Check if the current command is selected in the parameters from the
-  // `parsedHttpRequest.parameters_`. If so, log this information via
-  // `dispatchLog()` and return true. Return false otherwise.
-  auto commandIs = [accessTokenOk, &checkParameter](std::string_view cmd) {
-    if (checkParameter("cmd", std::string{cmd})) {
-      dispatchLog(cmd, accessTokenOk);
-      return true;
-    }
-    return false;
-  };
-
-  // We call `createJsonResponse` always with the same `request` parameter.
-  auto jsonResponse = [&request](const json& j) {
-    return createJsonResponse(j, request);
-  };
-
-  // We call `composeCacheStats()` always with the same parameters:
-  // `qlever().cache()` and `qlever().namedResultCache()`.
-  auto cacheStats = [&cache = qlever().cache(),
-                     &namedResultCache = qlever().namedResultCache()]() {
-    return composeCacheStats(cache, namedResultCache);
-  };
-  std::optional<http::response<streamable_body>> response;
-
-  // Process all URL parameters known to QLever. If there is more than one,
-  // QLever processes all of them, but only returns the result from the last
-  // one. In particular, if there is a "query" parameter, it will be processed
-  // last and its result returned.
-  //
-  // Some parameters require that "access-token" is set correctly. If not, that
-  // parameter is ignored.
-  if (commandIs("stats")) {
-    response = jsonResponse(composeIndexStats(index));
-  } else if (commandIs("cache-stats")) {
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-cache")) {
-    cache().clearUnpinnedOnly();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-cache-complete")) {
-    cache().clearAll();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-named-cache")) {
-    namedResultCache().clear();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-delta-triples")) {
-    auto countAfterClear = co_await processClearDeltaTriples();
-    response = jsonResponse(json(countAfterClear));
-  } else if (commandIs("vacuum-delta-triples")) {
-    auto vacuumStats = co_await processVacuumDeltaTriples(
-        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
-    // An empty optional means that the user-submitted timeout was rejected
-    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
-    // error response to the client. We can stop here.
-    if (!vacuumStats.has_value()) {
-      co_return;
-    }
-    response = jsonResponse(vacuumStats.value());
-  } else if (commandIs("get-settings")) {
-    response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
-  } else if (commandIs("get-index-id")) {
-    response =
-        createOkResponse(index.getIndexId(), request, MediaType::textPlain);
-  } else if (commandIs("dump-active-queries")) {
-    auto json = nlohmann::json::object();
-    for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
-      json[nlohmann::json(key)] = std::move(value);
-    }
-    response = jsonResponse(json);
-  } else if (commandIs("rebuild-index")) {
-    response = co_await processRebuildIndex(parameters, request);
-  } else if (commandIs("write-materialized-view")) {
-    auto materializedViewStats = co_await processWriteMaterializedView(
-        parameters, parsedHttpRequest.operation_, accessTokenOk, requestTimer,
-        request, send);
-    // An empty optional means that the user-submitted timeout was rejected
-    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
-    // error response to the client. We can stop here.
-    if (!materializedViewStats.has_value()) {
-      co_return;
-    }
-    response = jsonResponse(materializedViewStats.value());
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
-  } else if (commandIs("load-materialized-view")) {
-    response =
-        jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
-  } else if (commandIs("delete-materialized-view")) {
-    response = jsonResponse(processDeleteMaterializedView(parameters));
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
-  }
-
-  // Ping with or without message.
-  if (parsedHttpRequest.path_ == "/ping") {
-    response = processPing(checkParameter("msg", std::nullopt), request);
-  }
-
-  // Prometheus metrics scrape endpoint.
-  if (parsedHttpRequest.path_ == "/metrics") {
-    response = processMetrics(accessTokenOk, request);
-  }
-
-  // Set description of KB index.
-  if (auto description = checkAndLogParameterSetting("index-description")) {
-    index.setKbName(description.value());
-    response = jsonResponse(composeIndexStats(index));
-  }
-
-  // Set description of text index.
-  if (auto description = checkAndLogParameterSetting("text-description")) {
-    index.setTextName(description.value());
-    response = jsonResponse(composeIndexStats(index));
-  }
-
-  // Set one or several of the runtime parameters.
-  if (auto updatedSettings =
-          processSetRuntimeParameters(parameters, accessTokenOk)) {
-    response = jsonResponse(updatedSettings.value());
-  }
 
   // Store the QueryExecutionTree outside the lambda, s.t. we have access in
   // case of errors to create an informative error message that includes the
@@ -943,10 +778,193 @@ CPP_template_def(typename RequestT, typename SendT)(
   };
 
   co_return co_await processOperation(
-      std::move(parsedHttpRequest.operation_),
+      std::move(operation),
       ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
                                        visitNone},
       requestTimer, request, send, plannedQuery);
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename RequestT, typename SendT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<void> Server::process(RequestT& request, SendT&& send) {
+  using namespace ad_utility::httpUtils;
+  using namespace responseJson;
+  using namespace serverProcessHelpers;
+  // Acquire the current index and the materialized views manager exactly once
+  // for the whole request, under a single read lock. This way a concurrent
+  // rebuild that swaps both in cannot make different helpers observe a
+  // mismatched (index, manager) pair.
+  auto indexAndViews = indexAndViewsSnapshot();
+  auto& index = indexAndViews->index_;
+
+  // Log some basic information about the request. Start with an empty line so
+  // that in a low-traffic scenario (or when the query processing is very fast),
+  // we have one visual block per request in the log.
+  std::string_view contentType = request.base()[http::field::content_type];
+  AD_LOG_INFO << std::endl;
+  AD_LOG_INFO << "Request received via " << request.method()
+              << (contentType.empty()
+                      ? absl::StrCat(", no content type specified")
+                      : absl::StrCat(", content type \"", contentType, "\""))
+              << std::endl;
+
+  // Start timing.
+  ad_utility::Timer requestTimer{ad_utility::Timer::Started};
+
+  // Parse the path and the URL parameters from the given request. Works for GET
+  // requests as well as the two kinds of POST requests allowed by the SPARQL
+  // standard, see method `getUrlPathAndParameters`.
+  auto parsedHttpRequest = SparqlProtocol::parseHttpRequest(request);
+  const auto& parameters = parsedHttpRequest.parameters_;
+
+  // We always want to call `Server::checkParameter` with the same first
+  // parameter.
+  auto checkParameter = absl::bind_front(
+      &ad_utility::url_parser::checkParameter, std::cref(parameters));
+
+  // Check the access token. If an access token is provided and the check fails,
+  // throw an exception and do not process any part of the query (even if the
+  // processing had been allowed without access token).
+  bool accessTokenOk = checkAccessToken(parsedHttpRequest.accessToken_);
+
+  // We always want to call `serverProcessHelpers::checkAndLogParameterSetting`
+  // with the same `parameters` and `accessTokenOk`.
+  auto checkAndLogParameterSetting =
+      [&parameters, accessTokenOk](std::string_view paramName) {
+        return serverProcessHelpers::checkAndLogParameterSetting(
+            parameters, paramName, accessTokenOk);
+      };
+
+  // Check if the current command is selected in the parameters from the
+  // `parsedHttpRequest.parameters_`. If so, log this information via
+  // `dispatchLog()` and return true. Return false otherwise.
+  auto commandIs = [accessTokenOk, &checkParameter](std::string_view cmd) {
+    if (checkParameter("cmd", std::string{cmd})) {
+      dispatchLog(cmd, accessTokenOk);
+      return true;
+    }
+    return false;
+  };
+
+  // We call `createJsonResponse` always with the same `request` parameter.
+  auto jsonResponse = [&request](const json& j) {
+    return createJsonResponse(j, request);
+  };
+
+  // We call `composeCacheStats()` always with the same parameters:
+  // `qlever().cache()` and `qlever().namedResultCache()`.
+  auto cacheStats = [&cache = qlever().cache(),
+                     &namedResultCache = qlever().namedResultCache()]() {
+    return composeCacheStats(cache, namedResultCache);
+  };
+  std::optional<http::response<streamable_body>> response;
+
+  // Process all URL parameters known to QLever. If there is more than one,
+  // QLever processes all of them, but only returns the result from the last
+  // one. In particular, if there is a "query" parameter, it will be processed
+  // last and its result returned.
+  //
+  // Some parameters require that "access-token" is set correctly. If not, that
+  // parameter is ignored.
+  if (commandIs("stats")) {
+    response = jsonResponse(composeIndexStats(index));
+  } else if (commandIs("cache-stats")) {
+    response = jsonResponse(cacheStats());
+  } else if (commandIs("clear-cache")) {
+    cache().clearUnpinnedOnly();
+    response = jsonResponse(cacheStats());
+  } else if (commandIs("clear-cache-complete")) {
+    cache().clearAll();
+    response = jsonResponse(cacheStats());
+  } else if (commandIs("clear-named-cache")) {
+    namedResultCache().clear();
+    response = jsonResponse(cacheStats());
+  } else if (commandIs("clear-delta-triples")) {
+    auto countAfterClear = co_await processClearDeltaTriples();
+    response = jsonResponse(json(countAfterClear));
+  } else if (commandIs("vacuum-delta-triples")) {
+    auto vacuumStats = co_await processVacuumDeltaTriples(
+        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
+    // An empty optional means that the user-submitted timeout was rejected
+    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
+    // error response to the client. We can stop here.
+    if (!vacuumStats.has_value()) {
+      co_return;
+    }
+    response = jsonResponse(vacuumStats.value());
+  } else if (commandIs("get-settings")) {
+    response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
+  } else if (commandIs("get-index-id")) {
+    response =
+        createOkResponse(index.getIndexId(), request, MediaType::textPlain);
+  } else if (commandIs("dump-active-queries")) {
+    auto json = nlohmann::json::object();
+    for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
+      json[nlohmann::json(key)] = std::move(value);
+    }
+    response = jsonResponse(json);
+  } else if (commandIs("rebuild-index")) {
+    response = co_await processRebuildIndex(parameters, request);
+  } else if (commandIs("write-materialized-view")) {
+    auto materializedViewStats = co_await processWriteMaterializedView(
+        parameters, parsedHttpRequest.operation_, accessTokenOk, requestTimer,
+        request, send);
+    // An empty optional means that the user-submitted timeout was rejected
+    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
+    // error response to the client. We can stop here.
+    if (!materializedViewStats.has_value()) {
+      co_return;
+    }
+    response = jsonResponse(materializedViewStats.value());
+    // Prevent regular query processing by removing the query from the
+    // request.
+    parsedHttpRequest.operation_ = None{};
+  } else if (commandIs("load-materialized-view")) {
+    response =
+        jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
+    // Prevent regular query processing by removing the query from the
+    // request.
+    parsedHttpRequest.operation_ = None{};
+  } else if (commandIs("delete-materialized-view")) {
+    response = jsonResponse(processDeleteMaterializedView(parameters));
+    // Prevent regular query processing by removing the query from the
+    // request.
+    parsedHttpRequest.operation_ = None{};
+  }
+
+  // Ping with or without message.
+  if (parsedHttpRequest.path_ == "/ping") {
+    response = processPing(checkParameter("msg", std::nullopt), request);
+  }
+
+  // Prometheus metrics scrape endpoint.
+  if (parsedHttpRequest.path_ == "/metrics") {
+    response = processMetrics(accessTokenOk, request);
+  }
+
+  // Set description of KB index.
+  if (auto description = checkAndLogParameterSetting("index-description")) {
+    index.setKbName(description.value());
+    response = jsonResponse(composeIndexStats(index));
+  }
+
+  // Set description of text index.
+  if (auto description = checkAndLogParameterSetting("text-description")) {
+    index.setTextName(description.value());
+    response = jsonResponse(composeIndexStats(index));
+  }
+
+  // Set one or several of the runtime parameters.
+  if (auto updatedSettings =
+          processSetRuntimeParameters(parameters, accessTokenOk)) {
+    response = jsonResponse(updatedSettings.value());
+  }
+
+  co_return co_await processSparqlOperation(
+      std::move(parsedHttpRequest.operation_), parameters, accessTokenOk,
+      requestTimer, std::move(indexAndViews), request, send,
+      std::move(response));
 }
 
 // Explicit instantiation so that friend test code (`ServerForTesting`, the

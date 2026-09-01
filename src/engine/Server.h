@@ -324,6 +324,17 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> process(RequestT& request, SendT&& send);
 
+  // The terminal step of `process()`: by this point the operation type is
+  // known, so this builds the query/update/graph-store-protocol/no-operation
+  // visitors and hands them, together with `operation`, to `processOperation`.
+  CPP_template(typename RequestT, typename SendT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> processSparqlOperation(
+          SparqlOperation operation, const ParamValueMap& parameters,
+          bool accessTokenOk, const ad_utility::Timer& requestTimer,
+          SharedIndexAndView indexAndViews, RequestT& request, SendT&& send,
+          std::optional<ResponseT> response);
+
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
   CPP_template(typename VisitorT, typename RequestT, typename SendT)(
