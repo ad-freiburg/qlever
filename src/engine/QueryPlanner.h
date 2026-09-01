@@ -416,6 +416,18 @@ class QueryPlanner {
   std::vector<SubtreePlan> applyJoinDistributivelyToUnion(
       const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
 
+  // Store the join columns for a transitive path operation. If the target
+  // sides' columns exist, the start side's must also exist.
+  struct TransitivePathJoinCols {
+    using T = std::tuple<size_t, size_t>;
+    const std::optional<T> startCols;
+    const std::optional<T> targetCols;
+
+    TransitivePathJoinCols() = default;
+    explicit TransitivePathJoinCols(T p) : startCols(p) {}
+    TransitivePathJoinCols(T p, T s) : startCols(p), targetCols(s) {}
+  };
+
   // Return two pairs of join columns (the first from the transitive path
   // operation, the second from the other operation with which the result of the
   // transitive path operation is joined). Otherwise return `std::nullopt`, in
@@ -423,9 +435,8 @@ class QueryPlanner {
   // `leftSideTransitivePath` is true, the column indices of the transitive path
   // are on the "left side" of the pairs from `jcs`, otherwise they are on the
   // "right side".
-  static std::array<std::optional<std::tuple<size_t, size_t>>, 2>
-  getJoinColumnsForTransitivePath(const JoinColumns& jcs,
-                                  bool leftSideTransitivePath);
+  static TransitivePathJoinCols getJoinColumnsForTransitivePath(
+      const JoinColumns& jcs, bool leftSideTransitivePath);
 
   // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
   // path operation and the other input can be bound to this transitive path

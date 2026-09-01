@@ -563,8 +563,8 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
   // Set a side's `treeAndCol_` member to the given `treeAndCol` or reset it.
   // `resetPlaceholder` ensures a side is cleared if its `opAndCol` has no
   // value.
-  auto setSideTreeAndCol = [&](auto& side, auto& treeAndCol,
-                               bool resetPlaceholder) {
+  auto assignTreeAndColToSide = [&](auto& side, auto& treeAndCol,
+                                    bool resetPlaceholder) {
     if (treeAndCol.has_value()) {
       auto& [op, col] = treeAndCol.value();
       op = matchWithKnowledgeGraph(col, std::move(op));
@@ -573,8 +573,8 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
       side.treeAndCol_ = std::nullopt;
     }
   };
-  setSideTreeAndCol(lhs, leftOpAndCol, boundVariableIsForEmptyPath_);
-  setSideTreeAndCol(rhs, rightOpAndCol, false);
+  assignTreeAndColToSide(lhs, leftOpAndCol, boundVariableIsForEmptyPath_);
+  assignTreeAndColToSide(rhs, rightOpAndCol, false);
 
   // We use the cheapest tree that can be created using any of the alternative
   // subtrees. This has the effect that the `TransitivePathBinSearch` will
