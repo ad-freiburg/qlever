@@ -54,12 +54,16 @@ GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromPoint(double lng,
 }
 
 // ____________________________________________________________________________
+GeoCellGrid::GridBox GeoCellGrid::gridBox(double u1, double v1, double u2,
+                                          double v2) const {
+  return {gridCoordinate(u1), gridCoordinate(v1), gridCoordinate(u2),
+          gridCoordinate(v2)};
+}
+
+// ____________________________________________________________________________
 GeoCellGrid::CellIndex GeoCellGrid::flatCell(double u1, double v1, double u2,
                                              double v2) const {
-  uint64_t x1 = gridCoordinate(u1);
-  uint64_t x2 = gridCoordinate(u2);
-  uint64_t y1 = gridCoordinate(v1);
-  uint64_t y2 = gridCoordinate(v2);
+  auto [x1, y1, x2, y2] = gridBox(u1, v1, u2, v2);
   if (x1 != x2 || y1 != y2) {
     return sentinelCell();
   }
@@ -101,10 +105,7 @@ GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromWktLiteral(
 // ____________________________________________________________________________
 void GeoCellGrid::flatCover(double u1, double v1, double u2, double v2,
                             CellRanges& ranges) const {
-  uint64_t x1 = gridCoordinate(u1);
-  uint64_t x2 = gridCoordinate(u2);
-  uint64_t y1 = gridCoordinate(v1);
-  uint64_t y2 = gridCoordinate(v2);
+  auto [x1, y1, x2, y2] = gridBox(u1, v1, u2, v2);
   ranges.reserve(ranges.size() + (y2 - y1 + 1));
   for (uint64_t y = y1; y <= y2; ++y) {
     ranges.emplace_back((y << level_) | x1, (y << level_) | x2);

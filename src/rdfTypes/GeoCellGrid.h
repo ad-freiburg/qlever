@@ -195,6 +195,16 @@ class GeoCellGrid {
   bool operator==(const GeoCellGrid&) const = default;
 
  private:
+  // The integer grid coordinates of the two corners of a normalized
+  // rectangle.
+  struct GridBox {
+    uint64_t x1;
+    uint64_t y1;
+    uint64_t x2;
+    uint64_t y2;
+  };
+  GridBox gridBox(double u1, double v1, double u2, double v2) const;
+
   // Integer grid coordinates of a normalized coordinate in `[0, 1]`, clamped
   // to `[0, 2^level - 1]`.
   uint64_t gridCoordinate(double normalized) const;
