@@ -212,8 +212,25 @@ class TurtleParser : public RdfParserBase {
   // `TripleComponent` since it can hold any parsing result, not only objects.
   TripleComponent lastParseResult_;
 
-  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_;
-  std::optional<qlever::util::ParsedUri> baseIri_;
+  // The prefixes and the base IRI that were declared in the input (see
+  // `RdfParserHeader`).
+  RdfParserHeader header_;
+
+  // Access the prefixes and the base IRI that are stored in the header.
+  ad_utility::HashMap<std::string, TripleComponent::Iri>& prefixMap() {
+    return header_.prefixMap_;
+  }
+
+  const ad_utility::HashMap<std::string, TripleComponent::Iri>& prefixMap()
+      const {
+    return header_.prefixMap_;
+  }
+
+  std::optional<qlever::util::ParsedUri>& baseIri() { return header_.baseIri_; }
+
+  const std::optional<qlever::util::ParsedUri>& baseIri() const {
+    return header_.baseIri_;
+  }
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
@@ -381,18 +398,11 @@ class TurtleParser : public RdfParserBase {
   // with all of its sub-parsers (see `setFileBlankNodePrefix`).
   static size_t nextBlankNodePrefix() { return numParsers_.fetch_add(1); }
 
-  // Move the header (see `RdfParserHeader`) out of this parser. The parser must
-  // not be used for further parsing afterwards.
-  RdfParserHeader takeHeader() {
-    return {std::move(prefixMap_), std::move(baseIri_)};
-  }
+  // Access the header (see `RdfParserHeader`) of this parser. The mutable
+  // overload is used by the parallel parser to set up its worker parsers.
+  RdfParserHeader& header() { return header_; }
 
-  // Set the header (see `RdfParserHeader`) of this parser. Used by the parallel
-  // parser to set up its worker parsers.
-  void setHeader(const RdfParserHeader& header) {
-    prefixMap_ = header.prefixMap_;
-    baseIri_ = header.baseIri_;
-  }
+  const RdfParserHeader& header() const { return header_; }
 
  protected:
   FRIEND_TEST(RdfParserTest, prefixedName);
@@ -449,8 +459,8 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
                               Parser, RdfParserBase>) class RdfStringParser
     : public Parser {
  public:
-  using Parser::baseIri_;
-  using Parser::prefixMap_;
+  using Parser::baseIri;
+  using Parser::prefixMap;
   explicit RdfStringParser(const EncodedIriManager* encodedIriManager)
       : Parser{encodedIriManager} {}
   explicit RdfStringParser(const EncodedIriManager* encodedIriManager,
@@ -528,10 +538,6 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
     tmpToParse_.insert(tmpToParse_.end(), toParse.begin(), toParse.end());
     this->tok_.reset(tmpToParse_.data(), tmpToParse_.size());
   }
-
-  const auto& getPrefixMap() const { return prefixMap_; }
-
-  const auto& getBaseIri() const { return baseIri_; }
 
   // __________________________________________________________
   void setInputStream(qlever::parser::ByteBlock&& toParse) {
@@ -636,14 +642,18 @@ class RdfStreamParser : public Parser {
   std::optional<qlever::parser::AsyncFileBlockDriver> driver_;
 };
 
-/**
- * This class parses an uncompressed .ttl file (which can also be a stream like
- * stdin) by reading it in chunks and handing each of those chunks to one of
- * several worker parsers of type `RdfStringParser<Parser>` that run in
- * parallel. It does not parse anything itself, it only owns the state that its
- * workers need (see `RdfParserHeader` and `fileBlankNodePrefix_`) and collects
- * their results.
- */
+// This class parses an uncompressed file (which can also be a stream like
+// stdin) in parallel. It parses the header (see `RdfParserHeader`) itself, then
+// splits the rest of the input into blocks at statement boundaries (see
+// `detail::findEndOfLastStatement`) and lets several worker parsers of type
+// `RdfStringParser<Parser>` parse those blocks in parallel. Apart from the
+// header it parses nothing itself, it only owns the state that the workers
+// share (the header and `fileBlankNodePrefix_`) and collects their results, in
+// no particular order. Because the workers see neither the other blocks nor the
+// order in which they are parsed, `@base` and `@prefix` may only be declared in
+// the header, and multiline literals are disallowed (a `.` followed by a
+// newline inside such a literal would be mistaken for a statement boundary).
+// The workers enforce this, see `TurtleParser::useSimplifiedGrammar_`.
 template <typename Parser>
 class RdfParallelParser : public RdfParserBase {
  public:

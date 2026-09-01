@@ -74,8 +74,7 @@ void TurtleParser<Tokenizer_T>::clear() {
   activePredicate_ = TripleComponent::Iri::fromIriref("<>");
   activePrefix_.clear();
 
-  prefixMap_ = {};
-  baseIri_.reset();
+  header_ = {};
 
   tok_.reset(nullptr, 0);
   triples_.clear();
@@ -651,10 +650,10 @@ template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
     const std::string& key, const ad_utility::triple_component::Iri& prefix) {
   if (useSimplifiedGrammar_ &&
-      (!prefixMap_.contains(key) || prefixMap_[key] != prefix)) {
+      (!prefixMap().contains(key) || prefixMap()[key] != prefix)) {
     raiseDisallowedPrefixOrBaseError();
   }
-  prefixMap_[key] = prefix;
+  prefixMap()[key] = prefix;
 }
 
 // _____________________________________________________________________________
@@ -663,10 +662,10 @@ void TurtleParser<Tokenizer_T>::setBaseIriOrThrow(
     const ad_utility::triple_component::Iri& iri) {
   qlever::util::ParsedUri uri{asStringViewUnsafe(iri.getContent())};
   if (useSimplifiedGrammar_ &&
-      (!baseIri_.has_value() || baseIri_.value() != uri)) {
+      (!baseIri().has_value() || baseIri().value() != uri)) {
     raiseDisallowedPrefixOrBaseError();
   }
-  baseIri_ = std::move(uri);
+  baseIri() = std::move(uri);
 }
 
 // ______________________________________________________________________
@@ -837,12 +836,12 @@ bool TurtleParser<Tokenizer_T>::check(bool result) const {
 template <class Tokenizer_T>
 TripleComponent::Iri TurtleParser<Tokenizer_T>::expandPrefix(
     const std::string& prefix) {
-  if (!prefixMap_.count(prefix)) {
+  if (!prefixMap().count(prefix)) {
     raise("Prefix " + prefix +
           " was not previously defined using a PREFIX or @prefix "
           "declaration");
   } else {
-    return prefixMap_[prefix];
+    return prefixMap()[prefix];
   }
 }
 
@@ -944,9 +943,9 @@ bool TurtleParser<T>::iriref() {
   }
 
   auto resolveIri = [this](std::string_view iri) {
-    if (baseIri_.has_value()) {
+    if (baseIri().has_value()) {
       lastParseResult_ =
-          TripleComponent::Iri::fromIrirefConsiderBase(iri, baseIri_.value());
+          TripleComponent::Iri::fromIrirefConsiderBase(iri, baseIri().value());
     } else {
       lastParseResult_ = TripleComponent::Iri::fromIriref(iri);
     }
@@ -1152,7 +1151,7 @@ template <typename Batch>
 void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   try {
     RdfStringParser<T> parser{&this->encodedIriManager(), defaultGraphIri_};
-    parser.setHeader(header_);
+    parser.header() = header_;
     parser.useSimplifiedGrammar();
     parser.setPositionOffset(parsePosition);
     // Ensure that all sub-parsers use the same file-level blank node prefix
@@ -1240,7 +1239,7 @@ void RdfParallelParser<T>::initialize(
       break;
     }
   }
-  header_ = declarationParser.takeHeader();
+  header_ = std::move(declarationParser.header());
   remainingBatchFromInitialization.reserve(remainder.size());
   ql::ranges::copy(remainder,
                    std::back_inserter(remainingBatchFromInitialization));
@@ -1256,12 +1255,16 @@ void RdfParallelParser<T>::initialize(
 // _____________________________________________________________________________
 template <class T>
 std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
-  // Skip batches that contain no triples. (Theoretically this might happen, and
-  // it is safer this way.) A `nullopt` means that everything has been parsed.
-  std::optional<std::vector<TurtleTriple>> triples;
-  do {
+  while (true) {
     try {
-      triples = tripleCollector_.pop();
+      auto triples = tripleCollector_.pop();
+      // Skip batches that contain no triples. (Theoretically this might happen,
+      // and it is safer this way.) A `nullopt` means that everything has been
+      // parsed.
+      if (triples.has_value() && triples.value().empty()) {
+        continue;
+      }
+      return triples;
     } catch (const std::exception&) {
       AD_LOG_ERROR << "Error detected during parallel parsing, waiting for "
                       "workers to finish ..."
@@ -1276,8 +1279,7 @@ std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
       AD_CORRECTNESS_CHECK(firstError != errors.end());
       throw std::runtime_error{firstError->second};
     }
-  } while (triples.has_value() && triples.value().empty());
-  return triples;
+  }
 }
 
 // __________________________________________________________

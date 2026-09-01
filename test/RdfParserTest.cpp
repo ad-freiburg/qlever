@@ -113,7 +113,7 @@ std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
 }
 TEST(RdfParserTest, prefixedName) {
   auto runCommonTests = [](auto& parser) {
-    parser.prefixMap_["wd"] = iri("<www.wikidata.org/>");
+    parser.prefixMap()["wd"] = iri("<www.wikidata.org/>");
     parser.setInputStream("wd:Q430 someotherContent");
     ASSERT_TRUE(parser.prefixedName());
     ASSERT_EQ(parser.lastParseResult_, iri("<www.wikidata.org/Q430>"));
@@ -181,12 +181,12 @@ TEST(RdfParserTest, prefixedName) {
 TEST(RdfParserTest, prefixID) {
   auto runCommonTests = [](const auto& checker) {
     auto p = checker("@prefix bla:<www.bla.org/> .");
-    ASSERT_EQ(p.prefixMap_["bla"], iri("<www.bla.org/>"));
+    ASSERT_EQ(p.prefixMap()["bla"], iri("<www.bla.org/>"));
 
     // different spaces that don't change meaning
     std::string s;
     p = checker("@prefix bla: <www.bla.org/>.");
-    ASSERT_EQ(p.prefixMap_["bla"], iri("<www.bla.org/>"));
+    ASSERT_EQ(p.prefixMap()["bla"], iri("<www.bla.org/>"));
 
     // invalid LL1
     ASSERT_THROW(checker("@prefix bla<www.bla.org/>."),
@@ -285,7 +285,7 @@ TEST(RdfParserTest, rdfLiteral) {
   testLiteral(R"("-INF"^^)"s + "<" + XSD_DOUBLE_TYPE + ">", isNegativeInfinity);
 
   auto runCommonTests = [](auto p) {
-    p.prefixMap_["doof"] = iri("<www.doof.org/>");
+    p.prefixMap()["doof"] = iri("<www.doof.org/>");
 
     string s("\"valuePrefixed\"^^doof:sometype");
     p.setInputStream(s);
@@ -418,7 +418,7 @@ TEST(RdfParserTest, base) {
   auto testForGivenParser = [](auto parser) {
     parser.setInputStream("@base <http://www.example.org/path/> .");
     ASSERT_TRUE(parser.base());
-    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri_.value())
+    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri().value())
                   .toStringRepresentation(),
               "<http://www.example.org/path/>");
     parser.setInputStream("@base \"no iriref\" .");
@@ -432,7 +432,7 @@ TEST(RdfParserTest, sparqlBase) {
   auto testForGivenParser = [](auto parser) {
     parser.setInputStream("BASE <http://www.example.org/path/> .");
     ASSERT_TRUE(parser.sparqlBase());
-    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri_.value())
+    ASSERT_EQ(TripleComponent::Iri::fromUri(parser.baseIri().value())
                   .toStringRepresentation(),
               "<http://www.example.org/path/>");
     parser.setInputStream("BASE \"no iriref\" .");
@@ -449,7 +449,7 @@ TEST(RdfParserTest, object) {
     auto pred = iri("<pred>");
     p.activeSubject_ = sub;
     p.activePredicate_ = pred;
-    p.prefixMap_["b"] = iri("<bla/>");
+    p.prefixMap()["b"] = iri("<bla/>");
     string input = " b:input";
     p.setInputStream(input);
     ASSERT_TRUE(p.object());
@@ -574,7 +574,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"kartoffelsalat\"^^xsd:double",
           "<a> <b> \"123kartoffel\"^^xsd:decimal"};
       Parser parser{encodedIriManager()};
-      parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
+      parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       for (const auto& input : inputs) {
         assertParsingFails(parser, input);
       }
@@ -592,7 +592,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           9999999999999999999999.0, 99999999999999999999E4,
           99999999999999999999E4};
       Parser parser{encodedIriManager()};
-      parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
+      parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       testTripleObjects(parser, inputs, expectedObjects);
     }
     {
@@ -605,7 +605,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"kartoffelsalat\"^^xsd:integer",
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
       Parser parser{encodedIriManager()};
-      parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
+      parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.integerOverflowBehavior() =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
       for (const auto& input : nonWorkingInputs) {
@@ -625,7 +625,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"kartoffelsalat\"^^xsd:integer",
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
       Parser parser{encodedIriManager()};
-      parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
+      parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.integerOverflowBehavior() =
           TurtleParserIntegerOverflowBehavior::AllToDouble;
       for (const auto& input : nonWorkingInputs) {
@@ -673,7 +673,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           {iri("<a>"), iri("<b>"), 99999999999999999999999.0},
           {iri("<e>"), iri("<f>"), 234}};
       Parser parser{encodedIriManager()};
-      parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
+      parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.invalidLiteralsAreSkipped() = true;
       parser.integerOverflowBehavior() =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
