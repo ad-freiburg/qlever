@@ -45,6 +45,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "global/Constants.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
@@ -52,6 +53,7 @@
 #include "parser/SparqlTriple.h"
 #include "parser/TripleComponent.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/AllocatorWithLimit.h"
@@ -1899,6 +1901,61 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
     ASSERT_TRUE(runtimeInfo.contains("num-geoms-dropped-by-prefilter"));
     EXPECT_EQ(runtimeInfo.at("num-geoms-dropped-by-prefilter"), 3);
   }
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsSpatialJoinTest, FixedValueFilterOnFullyCoveredView) {
+  // A spatial `FILTER` with one fixed side, on a query fully covered by a
+  // materialized view, must still be substituted by a `SpatialJoin` even
+  // though the view scan only enters the final DP round.
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string viewName = "geoms";
+
+  // Pad with non-joining triples so the view-based plan is cheaper than the
+  // standard plan.
+  std::string ttl{geoTtl};
+  for (size_t i = 0; i < 500; ++i) {
+    absl::StrAppend(&ttl, "<pad", i, "> geo:hasGeometry <nowkt", i, "> .\n");
+    absl::StrAppend(&ttl, "<nogeom", i, "> geo:asWKT \"POINT(", i % 10, " ",
+                    i / 10, ")\"^^geo:wktLiteral .\n");
+  }
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, ttl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+
+  qlv.writeMaterializedView(
+      viewName,
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
+      "SELECT ?osm_id ?intermediate ?geometry {\n"
+      "  ?osm_id geo:hasGeometry ?intermediate .\n"
+      "  ?intermediate geo:asWKT ?geometry .\n"
+      "}");
+  qlv.loadMaterializedView(viewName);
+
+  const std::string query = R"qy(
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    SELECT * {
+      ?osm_id geo:hasGeometry ?intermediate .
+      ?intermediate geo:asWKT ?geometry .
+      FILTER (geof:metricDistance(
+        "POINT(1 1)"^^geo:wktLiteral, ?geometry) <= 500)
+    }
+  )qy";
+  // The fixed side becomes the first internal variable.
+  V internalVar{absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 0)};
+  auto valuesPoint = h::ValuesClause(
+      absl::StrCat("VALUES (", internalVar.name(),
+                   ") { (G:", GeoPoint{1, 1}.toStringRepresentation(), ") }"));
+  qpExpect(qlv, query,
+           h::spatialJoinFilterSubstitute(
+               500, -1, internalVar, V{"?geometry"}, std::nullopt,
+               PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+               SpatialJoinType::WITHIN_DIST, std::nullopt, valuesPoint,
+               viewScan(viewName, "?osm_id", "?intermediate", "?geometry", 3)));
 }
 
 // _____________________________________________________________________________
