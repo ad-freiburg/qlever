@@ -831,7 +831,7 @@ TEST(RdfParserTest, collection) {
 
 // Test the parsing of an IRI reference.
 TEST(RdfParserTest, iriref) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   // Run test for given parser.
   auto runTestsForParser = [](auto parser) {
     std::string iriref_1 = "<fine>";

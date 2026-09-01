@@ -220,7 +220,7 @@ TEST(IndexSwap, moveIndexIntoPlaceWithBareNewIndexSource) {
 // that is not part of the index), the swap is still complete and only a warning
 // is logged.
 TEST(IndexSwap, moveIndexIntoPlaceWithNonRemovableBuildDirectory) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   std::string baseFolder = gtestCurrentTestName();
   absl::Cleanup removeFiles{
       [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
