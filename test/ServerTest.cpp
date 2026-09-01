@@ -494,6 +494,87 @@ TEST(ServerTest, metricsEndpoint) {
 }
 
 // _____________________________________________________________________________
+TEST(ServerTest, pingEndpoint) {
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  // Without a `msg` parameter.
+  auto response = server.process(makeGetRequest("/ping"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("This QLever server is up and running\n"));
+  EXPECT_THAT(logStream.str(),
+              testing::HasSubstr("Alive check without message"));
+
+  // With a `msg` parameter; the response is the same regardless of the
+  // message, which is only used for logging.
+  logStream.str("");
+  response = server.process(makeGetRequest("/ping?msg=hello"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("This QLever server is up and running\n"));
+  EXPECT_THAT(logStream.str(),
+              testing::HasSubstr("Alive check with message \"hello\""));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, setRuntimeParameters) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(false);
+
+  // Setting a runtime parameter requires a valid access token.
+  expectRequiresValidAccessToken("setting runtime parameters", [&] {
+    server.process(makeGetRequest("/?strip-columns=true"));
+  });
+  EXPECT_FALSE(globalRuntimeParameters.rlock()->stripColumns_.get());
+
+  // With a valid access token, the parameter is set and the response reports
+  // the full, updated settings map.
+  auto response =
+      server.process(makeGetRequest("/?strip-columns=true", "accessToken"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_TRUE(globalRuntimeParameters.rlock()->stripColumns_.get());
+  auto body = responseBodyAsJson(std::move(response));
+  ASSERT_TRUE(body.has_value());
+  EXPECT_THAT(body.value().at("strip-columns"), testing::Eq("true"));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, setIndexAndTextDescription) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  auto expectDescriptionSettable = [&server](std::string_view paramName,
+                                             std::string_view newName,
+                                             std::string_view jsonKey) {
+    auto url = absl::StrCat("/?", paramName, "=", newName);
+
+    // Setting the description requires a valid access token.
+    expectRequiresValidAccessToken(
+        paramName, [&] { server.process(makeGetRequest(url)); });
+
+    // With a valid access token, the description is set and the response
+    // reports the updated index statistics.
+    auto response = server.process(makeGetRequest(url, "accessToken"));
+    EXPECT_THAT(response, StatusIs(http::status::ok));
+    auto body = responseBodyAsJson(std::move(response));
+    ASSERT_TRUE(body.has_value());
+    EXPECT_THAT(body.value().at(jsonKey), testing::Eq(newName));
+  };
+
+  expectDescriptionSettable("index-description", "new-kb-name", "name-index");
+  EXPECT_THAT(server.getIndex().getKbName(), testing::Eq("new-kb-name"));
+
+  expectDescriptionSettable("text-description", "new-text-name",
+                            "name-text-index");
+  EXPECT_THAT(server.getIndex().getTextName(), testing::Eq("new-text-name"));
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, clearDeltaTriples) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
   auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
