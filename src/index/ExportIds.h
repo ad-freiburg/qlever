@@ -51,9 +51,9 @@ using Literal = ad_utility::triple_component::Literal;
 // StringExpressions.cpp.
 //
 // All datatypes are handled, in one of the following ways. The words of the
-// vocabularies (`VocabIndex`, `LocalVocabIndex`) and the encoded IRIs
-// (`EncodedVal`) are resolved via `getLiteralOrIriFromVocabIndex` and
-// `encodedIdToLiteralOrIri`, respectively, and then processed as described
+// vocabularies (`VocabIndex`, `LocalVocabIndex`, `SecondaryVocabIndex`) and the
+// encoded IRIs (`EncodedVal`) are resolved via `getLiteralOrIriFromVocabIndex`
+// and `encodedIdToLiteralOrIri`, respectively, and then processed as described
 // above. The words of the text index (`WordVocabIndex`, `TextRecordIndex`)
 // are always plain literals. All remaining datatypes are handled by
 // `idToLiteralForEncodedValue`, which turns the value that the `Id` stores
@@ -114,9 +114,11 @@ std::optional<std::string_view> blankNodeIriToString(
     const IriType& iri AD_LIFETIMEBOUND);
 
 // Acts as a helper to retrieve a LiteralOrIri object from an Id, where the Id
-// is of type `VocabIndex`, `LocalVocabIndex`, or `EncodedVal`. This function
-// should only be called with suitable `Datatype` Ids, otherwise `AD_FAIL()` is
-// called.
+// is of type `VocabIndex`, `LocalVocabIndex`, `SecondaryVocabIndex`, or
+// `EncodedVal`. This function should only be called with suitable `Datatype`
+// Ids, otherwise `AD_FAIL()` is called. Note that an `Id` of type
+// `SecondaryVocabIndex` requires the `index` to have a secondary vocabulary
+// (see `IndexImpl::secondaryVocab`), which is checked.
 LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                            const LocalVocab& localVocab);
 
@@ -165,9 +167,10 @@ CPP_template(bool removeQuotesAndAngleBrackets = false,
 
 // Convert the `id` to a human-readable string. The `index` is used to resolve
 // the `Id`s that point into one of its data structures (`VocabIndex`,
-// `WordVocabIndex`, `TextRecordIndex`, and `EncodedVal`). The `localVocab` is
-// used to resolve `Id`s with datatype `LocalVocabIndex`. The `escapeFunction`
-// is applied to the resulting string if it is not of a numeric type.
+// `SecondaryVocabIndex`, `WordVocabIndex`, `TextRecordIndex`, and
+// `EncodedVal`). The `localVocab` is used to resolve `Id`s with datatype
+// `LocalVocabIndex`. The `escapeFunction` is applied to the resulting string if
+// it is not of a numeric type.
 //
 // Return value: If the `Id` encodes a numeric value (integer, double, etc.)
 // then the `string` (first element of the pair) will be the number as a
@@ -192,8 +195,8 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
     // so they have to be discarded here. An encoded IRI (`EncodedVal`) would
     // pass through that check, but can never be a literal, so discarding it
     // here as well is equivalent and cheaper.
-    static constexpr std::array stringVocabDatatypes{VocabIndex,
-                                                     LocalVocabIndex};
+    static constexpr std::array stringVocabDatatypes{
+        VocabIndex, LocalVocabIndex, SecondaryVocabIndex};
     if (!ad_utility::contains(stringVocabDatatypes, datatype)) {
       return std::nullopt;
     }
@@ -212,6 +215,7 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
     }
     case VocabIndex:
     case LocalVocabIndex:
+    case SecondaryVocabIndex:
       return formatLiteralOrIri(
           getLiteralOrIriFromVocabIndex(index.getImpl(), id, localVocab));
     case EncodedVal:
