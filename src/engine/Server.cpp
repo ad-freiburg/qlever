@@ -14,6 +14,7 @@
 #include <absl/strings/str_join.h>
 
 #include <array>
+#include <cmath>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -35,6 +36,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
+#include "util/CgroupCpuQuota.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
@@ -69,6 +71,10 @@ Server::Server(
       keepPreviousIndexDirs_(config.keepPreviousIndexDirs_),
       metricsReader_(std::move(metricsReader)) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
+
+  // Detect once whether per-query CPU quotas are possible on this system
+  // (see the runtime parameter `query-cpu-quota-cores`).
+  ad_utility::CgroupCpuQuotaManager::getInstance().initialize();
 
   initializeServerMetrics(config.memoryLimit_);
 
@@ -855,7 +861,8 @@ CPP_template_def(typename RequestT, typename SendT)(
         auto qecPtr = makeQec(indexAndViews);
         co_await processQuery(parameters, std::move(query), requestTimer,
                               cancellationHandle, *qecPtr, std::move(request),
-                              send, timeLimit.value(), plannedQuery);
+                              send, timeLimit.value(), accessTokenOk,
+                              plannedQuery);
       }
       queryStatus->store(OK);
       co_return;
@@ -995,15 +1002,58 @@ CPP_template_def(typename RequestT)(
 }
 
 // _____________________________________________________________________________
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// Yield all chunks of `inner`, computing each of them while the calling
+// thread is a member of the query's cgroup. The computation of a chunk is
+// what actually evaluates the query, so this puts the whole (lazy)
+// evaluation, including all worker threads spawned by it, under the CPU
+// quota. The thread leaves the cgroup before each chunk is sent, so the
+// time spent writing to the socket is not billed and, more importantly,
+// other coroutines that interleave on this thread are not throttled.
+static cppcoro::generator<std::string> wrapGeneratorWithCpuQuota(
+    cppcoro::generator<std::string> inner,
+    std::shared_ptr<ad_utility::CgroupCpuQuota> cpuQuota) {
+  auto it = [&]() {
+    ad_utility::ScopedCgroupMembership guard{cpuQuota.get()};
+    return inner.begin();
+  }();
+  while (it != inner.end()) {
+    co_yield *it;
+    ad_utility::ScopedCgroupMembership guard{cpuQuota.get()};
+    ++it;
+  }
+}
+#endif
+
 CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::sendStreamableResponse(
         const RequestT& request, SendT& send, MediaType mediaType,
         const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
-        SharedCancellationHandle cancellationHandle) const {
-  auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
-      requestTimer, std::move(cancellationHandle));
+        SharedCancellationHandle cancellationHandle,
+        std::shared_ptr<ad_utility::CgroupCpuQuota> cpuQuota) const {
+  // NOTE:
+  // Depending on the export path, parts of the query evaluation run eagerly
+  // inside this call (rather than lazily during the chunk generation below),
+  // so it needs the cgroup membership just like the chunk computation.
+  auto responseGenerator = [&]() {
+    ad_utility::ScopedCgroupMembership guard{cpuQuota.get()};
+    return ExportQueryExecutionTrees::computeResult(
+        plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(),
+        mediaType, requestTimer, std::move(cancellationHandle));
+  }();
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  if (cpuQuota != nullptr) {
+    responseGenerator = wrapGeneratorWithCpuQuota(std::move(responseGenerator),
+                                                  std::move(cpuQuota));
+  }
+#else
+  // NOTE:
+  // In the reduced C++17 build the whole result is produced eagerly inside
+  // the `computeResult` call above, which already runs under the cgroup
+  // membership, so no wrapping of the (then nonexistent) lazy generator is
+  // needed.
+#endif
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
@@ -1101,7 +1151,8 @@ CPP_template_def(typename RequestT, typename SendT)(
         const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, SendT&& send,
-        TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
+        TimeLimit timeLimit, bool accessTokenOk,
+        std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
   ad_utility::metrics::ActiveCounterGuard queryGuard{
       *metrics_->runningSparqlOperations_, "query"};
@@ -1117,6 +1168,42 @@ CPP_template_def(typename RequestT, typename SendT)(
                      ", ")
               << std::endl;
 
+  // Determine the CPU quota for this query. The runtime parameter
+  // `query-cpu-quota-cores` is the default, the URL parameter
+  // `cpu-quota-cores` overrides it. Raising the quota above the default
+  // requires a valid access token. A value of `0` means "no quota" and is
+  // therefore the maximal raise, not a lowering: without an access token a
+  // query can only tighten its own quota, never escape it.
+  double cpuQuotaCores =
+      getRuntimeParameter<&RuntimeParameters::queryCpuQuotaCores_>();
+  if (auto candidate = ad_utility::url_parser::checkParameter(
+          params, "cpu-quota-cores", std::nullopt)) {
+    double requested = 0;
+    try {
+      requested = std::stod(candidate.value());
+    } catch (const std::exception&) {
+      throw std::runtime_error(absl::StrCat(
+          "The parameter \"cpu-quota-cores\" must be a number, but was \"",
+          candidate.value(), "\""));
+    }
+    if (!std::isfinite(requested) || requested < 0 || requested > 1024) {
+      throw std::runtime_error(absl::StrCat(
+          "The parameter \"cpu-quota-cores\" must be between 0 and 1024,"
+          " but was \"",
+          candidate.value(), "\""));
+    }
+    bool isTightening =
+        cpuQuotaCores > 0 && requested > 0 && requested <= cpuQuotaCores;
+    if (!isTightening && !accessTokenOk) {
+      throw std::runtime_error(
+          "Raising the CPU quota of a query above the server's default"
+          " requires a valid access token");
+    }
+    cpuQuotaCores = requested;
+  }
+  auto cpuQuota = ad_utility::CgroupCpuQuotaManager::getInstance().createQuota(
+      cpuQuotaCores);
+
   // The usage of an `optional` here is required because of a limitation in
   // Boost::Asio which forces us to use default-constructible result types with
   // `computeInNewThread`. We also can't unwrap the optional directly in this
@@ -1126,8 +1213,9 @@ CPP_template_def(typename RequestT, typename SendT)(
   // an explicit variable instead of directly `co_await`-ing it.
   auto coroutine = computeInNewThread(
       queryThreadPool_,
-      [this, &query, &requestTimer, &timeLimit, &qec,
-       &cancellationHandle]() -> std::optional<PlannedQuery> {
+      [this, &query, &requestTimer, &timeLimit, &qec, &cancellationHandle,
+       cpuQuota]() -> std::optional<PlannedQuery> {
+        ad_utility::ScopedCgroupMembership cgroupGuard{cpuQuota.get()};
         return this->planQuery(std::move(query), qec, cancellationHandle,
                                timeLimit, requestTimer);
       },
@@ -1156,7 +1244,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   // requested format.
   co_await sendStreamableResponse(request, AD_FWD(send), mediaType,
                                   plannedQuery.value(), requestTimer,
-                                  cancellationHandle);
+                                  cancellationHandle, std::move(cpuQuota));
   // Print the runtime info. This needs to be done after the query
   // was computed.
   AD_LOG_INFO << "Done processing query and sending result"
