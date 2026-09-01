@@ -1511,8 +1511,11 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     auto viewScanWithBind =
         viewScan("bindView", "?s2", "?o2", "?_ql_materialized_view_o", 3,
                  AC{{3, V{"?bind"}}});
+    // NOTE: `spatialJoinFilterSubstitute`, because the `SpatialJoin` results
+    // from substituting the `FILTER` and (since the flag is now preserved by
+    // `makeTreeWithBindColumn`) reports so.
     qpExpect(qlv(), bindThroughSpatialJoin,
-             h::spatialJoin(
+             h::spatialJoinFilterSubstitute(
                  100, -1, V{"?o"}, V{"?o2"}, std::nullopt,
                  PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
                  SpatialJoinType::WITHIN_DIST, std::nullopt,
