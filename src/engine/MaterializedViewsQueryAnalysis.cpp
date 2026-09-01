@@ -132,7 +132,8 @@ void QueryPatternCache::makeScansFromChainCandidates(
           result.push_back(
               {makeScanForSingleChain(qec, chainInfo, left.s_, varLeft,
                                       right.o_.getVariable()),
-               {tripleIdxLeft, tripleIdxRight}});
+               (uint64_t{1} << tripleIdxLeft) |
+                   (uint64_t{1} << tripleIdxRight)});
         }
       }
     }
@@ -205,7 +206,7 @@ void QueryPatternCache::makeScansFromStarCandidates(
       if (ql::ranges::includes(queryPredicates,
                                starInfo.arms_ | ql::views::keys)) {
         parsedQuery::MaterializedViewQuery::RequestedColumns cols;
-        std::vector<size_t> coveredTriples;
+        uint64_t coveredTriples = 0;
 
         // The subject must be read.
         cols.insert({starInfo.subject_, subject});
@@ -215,13 +216,13 @@ void QueryPatternCache::makeScansFromStarCandidates(
           size_t idx = predicateToTripleIdx.at(predicate);
           auto queryObject = triples._triples.at(idx).o_;
           cols.insert({object, queryObject});
-          coveredTriples.push_back(idx);
+          coveredTriples |= (uint64_t{1} << idx);
         }
 
         // Construct the `MaterializedViewJoinReplacement`, in particular the
         // `IndexScan`.
-        result.push_back({makeScanForStar(qec, view, std::move(cols)),
-                          std::move(coveredTriples)});
+        result.push_back(
+            {makeScanForStar(qec, view, std::move(cols)), coveredTriples});
       }
     }
   }
