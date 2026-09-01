@@ -293,7 +293,7 @@ template <bool TestBothPlanners = true>
 inline void qpExpect(qlever::Qlever& qlv, std::string_view query,
                      ::testing::Matcher<const QueryExecutionTree&> matcher,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
+  auto trace = generateLocationTrace(sourceLocation);
   static constexpr size_t kDpBudget = 1500;
   auto budgets = TestBothPlanners ? std::vector<size_t>{1, kDpBudget}
                                   : std::vector<size_t>{kDpBudget};
@@ -343,7 +343,7 @@ inline void expectNotSuitableForRewrite(
     const ViewName& viewName, const Query& query,
     std::string_view expectedLogMessage,
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
+  auto trace = generateLocationTrace(sourceLocation);
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
   auto plan = qlv.parseAndPlanQuery(query);
@@ -370,7 +370,7 @@ inline void expectRewrite(
     std::string_view testQuery,
     ::testing::Matcher<const QueryExecutionTree&> matcher,
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
+  auto trace = generateLocationTrace(sourceLocation);
   qlv.writeMaterializedView(std::string{viewName}, std::string{viewQuery});
   qlv.loadMaterializedView(std::string{viewName});
   qpExpect(qlv, testQuery, matcher, sourceLocation);

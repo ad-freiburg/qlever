@@ -28,7 +28,7 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
                             size_t expectedRows, const auto& qpMatcher,
                             source_location sourceLocation =
                                 AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
+    auto trace = generateLocationTrace(sourceLocation);
     EXPECT_EQ(getQueryResultAsIdTable(query).numRows(), expectedRows);
     qlv().writeMaterializedView(name, query);
     qlv().loadMaterializedView(name);
