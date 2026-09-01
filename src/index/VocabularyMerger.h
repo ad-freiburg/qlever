@@ -19,32 +19,120 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/vocabulary/Vocabulary.h"
+#include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
 #include "util/ProgressBar.h"
+#include "util/Serializer/BufferedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializePair.h"
 #include "util/Serializer/SerializeVector.h"
+#include "util/TaskQueue.h"
 #include "util/TypeTraits.h"
 
-// Writes pairs of (partial ID, global ID) incrementally to a file.
+// A single entry of an ID map (see `IdMapWriter` below): the ID that a word has
+// inside a partial vocabulary, and the global ID that the vocabulary merger has
+// assigned to that word.
+//
+// NOTE: This deliberately is a plain struct and not a `std::pair<Id, Id>`.
+// libstdc++'s `std::pair` has user-provided assignment operators and hence is
+// not trivially copyable, which would make a `std::vector` of them neither
+// trivially serializable (it would then be written and read one `Id` at a time)
+// nor bitwise relocatable.
+struct IdMapEntry {
+  Id localId_;
+  Id globalId_;
+
+  bool operator==(const IdMapEntry& other) const {
+    return localId_ == other.localId_ && globalId_ == other.globalId_;
+  }
+  bool operator!=(const IdMapEntry& other) const { return !(*this == other); }
+
+  // Enable the serialization of an `IdMapEntry` (and of contiguous ranges of
+  // them) in the `ad_utility::serialization` framework.
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(IdMapEntry, T);
+
+  // Make the output of failed tests readable.
+  friend std::ostream& operator<<(std::ostream& str, const IdMapEntry& entry) {
+    return str << '{' << entry.localId_ << ", " << entry.globalId_ << '}';
+  }
+};
+static_assert(
+    ad_utility::serialization::TriviallySerializable<IdMapEntry>,
+    "An `IdMapEntry` has to be trivially serializable, else a whole `IdMap` "
+    "would be written and read one `Id` at a time");
+
+// Writes `IdMapEntry`s incrementally to a file. The entries are buffered and
+// only handed to the file in blocks, because a single entry is only 16 bytes
+// and writing each of them directly to the file would be very inefficient. The
+// resulting file has exactly the format of a serialized `IdMap`.
 class IdMapWriter {
+ public:
+  // The amount of data that is buffered before it is written to the file.
+  // NOTE: There is one `IdMapWriter` per partial vocabulary, of which there can
+  // be thousands, so this must not be too large: it is not only the memory
+  // footprint, but also the cache and TLB pressure of the writes, which are
+  // scattered over all the writers.
+  static constexpr ad_utility::MemorySize bufferSize =
+      ad_utility::MemorySize::kilobytes(16);
+
  private:
-  std::string filename_;
-  using Serializer = ad_utility::serialization::VectorIncrementalSerializer<
-      std::pair<Id, Id>, ad_utility::serialization::FileWriteSerializer>;
+  using Serializer = ad_utility::serialization::BufferedWriteSerializer<
+      ad_utility::serialization::FileWriteSerializer>;
+  // NOTE: The indirection via the `unique_ptr` makes this class movable, which
+  // is required because the `IdMapWriter`s are stored in a `std::vector`.
   std::unique_ptr<Serializer> serializer_;
+  // The number of entries that have been pushed so far. It is written to the
+  // beginning of the file by `finish()`.
+  uint64_t numEntries_ = 0;
 
  public:
-  explicit IdMapWriter(const std::string& filename) : filename_(filename) {
-    serializer_ = std::make_unique<Serializer>(filename);
+  explicit IdMapWriter(const std::string& filename)
+      : serializer_{std::make_unique<Serializer>(
+            ad_utility::serialization::FileWriteSerializer{filename},
+            bufferSize)} {
+    // Write a placeholder for the number of entries, which is only known once
+    // `finish()` is called.
+    *serializer_ << numEntries_;
   }
 
-  void push_back(const std::pair<Id, Id>& pair) { serializer_->push(pair); }
+  // This class is move-only. NOTE: There deliberately is no move assignment,
+  // as it would have to deal with the (currently never occurring) case that the
+  // assigned-to writer has not been finished yet.
+  IdMapWriter(const IdMapWriter&) = delete;
+  IdMapWriter& operator=(const IdMapWriter&) = delete;
+  IdMapWriter(IdMapWriter&&) noexcept = default;
+
+  ~IdMapWriter() {
+    ad_utility::terminateIfThrows([this]() { finish(); },
+                                  "The closing of an `IdMapWriter` failed");
+  }
+
+  // Append a single entry.
+  void push_back(const IdMapEntry& entry) {
+    *serializer_ << entry;
+    ++numEntries_;
+  }
+
+  // Flush the buffer, write the total number of entries to the beginning of
+  // the file, and close the file. This is automatically called by the
+  // destructor. After a call to `finish()`, no more calls to `push_back()` are
+  // allowed.
+  void finish() {
+    if (!serializer_) {
+      return;
+    }
+    auto file = std::move(*serializer_).underlyingSerializer();
+    serializer_.reset();
+    file.setSerializationPosition(0);
+    file << numEntries_;
+    file.close();
+  }
 };
 
-// Get a vector of pairs of (partial ID, global ID) deserialized from a file
-// that has previously been written using the `IdMapWriter` class above.
-using IdMap = std::vector<std::pair<Id, Id>>;
+// Get the `IdMapEntry`s deserialized from a file that has previously been
+// written using the `IdMapWriter` class above.
+using IdMap = std::vector<IdMapEntry>;
 inline IdMap getIdMapFromFile(const std::string& filename) {
   IdMap idMap;
   ad_utility::serialization::FileReadSerializer serializer(filename);
@@ -203,8 +291,36 @@ class VocabularyMerger {
   // `isBlankNode` (which may run a set of regexes) is evaluated only once per
   // distinct word.
   bool lastTripleComponentIsBlankNode_ = false;
+  // The global ID of `lastTripleComponent_`. Cached here because it is the same
+  // for all the (possibly many) occurrences of a word in the partial
+  // vocabularies, and computing it involves a branch and a range check.
+  Id lastTargetId_ = Id::makeUndefined();
   // we will store pairs of <partialId, globalId>
   std::vector<IdMapWriter> idMaps_;
+
+  // An `IdMapEntry` together with the index of the partial vocabulary it has to
+  // be written to.
+  struct QueuedIdMapEntry {
+    size_t partialFileId_;
+    IdMapEntry entry_;
+  };
+
+  // The `QueuedIdMapEntry`s are not written by the thread that performs the
+  // merge,
+  // but by a single separate thread, such that the (rather expensive) merging
+  // of the words and the writing of the ID maps happen concurrently.
+  std::optional<ad_utility::TaskQueue<false>> idMapWriterQueue_;
+  // The maximal number of batches that may be waiting in the
+  // `idMapWriterQueue_`.
+  static constexpr size_t idMapWriterQueueSize = 5;
+  // The entries are collected in this buffer before they are handed to the
+  // `idMapWriterQueue_`. This is necessary because a single call to
+  // `writeQueueWordsToIdMap` only deals with a rather small number of words
+  // (currently 100), which is much too fine-grained for a task queue.
+  std::vector<QueuedIdMapEntry> idMapEntryBuffer_;
+  // The number of entries that are collected in the `idMapEntryBuffer_` before
+  // they are handed to the `idMapWriterQueue_` as a single task.
+  static constexpr size_t idMapEntryBatchSize = 100'000;
 
   // Friend declaration for the publicly available function.
   template <typename W, typename C>
@@ -258,16 +374,23 @@ class VocabularyMerger {
 
   // Write the queue words in the buffer to their corresponding `idMaps`.
   // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
-  // across multiple calls).
+  // across multiple calls). NOTE: This order is only checked if the expensive
+  // checks are enabled (see `AD_EXPENSIVE_CHECK`), because the additional
+  // comparison per word is rather costly.
   // clang-format off
     CPP_template(typename C, typename L)(
       requires WordCallback<C> CPP_and ranges::predicate<
           L, TripleComponentWithIndex, TripleComponentWithIndex>)
       // clang-format on
       void writeQueueWordsToIdMap(
-          std::vector<QueueWord>& buffer, C& wordCallback, const L& lessThan,
+          std::vector<QueueWord>& buffer, C& wordCallback,
+          [[maybe_unused]] const L& lessThan,
           const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes,
           ad_utility::ProgressBar& progressBar);
+
+  // Hand the contents of the `idMapEntryBuffer_` to the `idMapWriterQueue_`,
+  // which then asynchronously writes them to the corresponding `idMaps_`.
+  void flushIdMapEntries();
 
   // Close all associated files and file-based vectors and reset all internal
   // variables.
@@ -275,6 +398,12 @@ class VocabularyMerger {
     metaData_ = VocabularyMetaData{};
     lastTripleComponent_ = std::nullopt;
     lastTripleComponentIsBlankNode_ = false;
+    lastTargetId_ = Id::makeUndefined();
+    idMapEntryBuffer_.clear();
+    // NOTE: The order is important. The destructor of the `idMapWriterQueue_`
+    // blocks until all pending entries have been written, so the `idMaps_` may
+    // only be destroyed afterwards.
+    idMapWriterQueue_.reset();
     idMaps_.clear();
   }
 };
