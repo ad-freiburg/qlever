@@ -253,6 +253,15 @@ TEST(IndexBuilderConfig, validate) {
                               HasSubstr("on-disk-compressed")));
     }
   }
+
+  // `Qlever::buildIndex` validates its config, such that the informative error
+  // message is also reported when the library API is used directly (and not
+  // via `IndexBuilderMain`, which validates the config explicitly).
+  c = IndexBuilderConfig{};
+  c.vocabType_ = ad_utility::VocabularyType{
+      ad_utility::VocabularyType::Enum::InMemoryCompressedWithHoles};
+  AD_EXPECT_THROW_WITH_MESSAGE(Qlever::buildIndex(c),
+                               HasSubstr("cannot be used for index building"));
 }
 
 // _____________________________________________________________________________

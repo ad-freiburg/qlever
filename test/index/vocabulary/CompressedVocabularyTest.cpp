@@ -456,3 +456,41 @@ TEST(CompressedVocabularyWithHoles, addWordAfterFinishThrows) {
   EXPECT_EQ(vocab.size(), 1);
   EXPECT_EQ(vocab[indices.at(0)], words.at(0));
 }
+
+// _____________________________________________________________________________
+TEST(CompressedVocabularyWithHoles, nonAscendingIndicesThrow) {
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  CompressedVocabularyWithHoles::WordWriter writer{
+      absl::StrCat(filename, ".words"), absl::StrCat(filename, ".codebooks")};
+  auto words = wordsWithHoles();
+  auto indices = indicesWithHoles();
+  // Write one word more than a single block holds, such that the check for
+  // ascending indices is also tested across a block boundary (the buffer of
+  // indices is cleared whenever a block is written).
+  static constexpr size_t numWords = 5;
+  for (size_t i = 0; i < numWords; ++i) {
+    EXPECT_EQ(writer(words.at(i), indices.at(i)), indices.at(i));
+  }
+
+  // Adding a word with an index that is not strictly greater than the last
+  // index is a contract violation.
+  auto expectThrow = [&writer, &words](uint64_t index) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        writer(words.at(numWords), index),
+        ::testing::HasSubstr("strictly ascending order"));
+  };
+  expectThrow(indices.at(numWords - 1));
+  expectThrow(indices.at(numWords - 1) - 1);
+  expectThrow(0);
+
+  // The failed calls have left the writer intact, so the words that were added
+  // before them can still be written.
+  writer.finish();
+  CompressedVocabularyWithHoles vocab;
+  vocab.open(filename);
+  ASSERT_EQ(vocab.size(), numWords);
+  for (size_t i = 0; i < numWords; ++i) {
+    EXPECT_EQ(vocab[indices.at(i)], words.at(i)) << "at position " << i;
+  }
+}

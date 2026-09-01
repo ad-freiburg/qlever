@@ -113,6 +113,8 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
 
 // _____________________________________________________________________________
 void Qlever::buildIndex(IndexBuilderConfig config) {
+  // Reject invalid configurations early and with an informative error message.
+  config.validate();
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Set memory limit and parser buffer size if specified.

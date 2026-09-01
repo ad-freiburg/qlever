@@ -415,6 +415,9 @@ CPP_template(typename UnderlyingVocabulary,
     typename UnderlyingVocabulary::WordWriter underlyingWriter_;
     std::string filenameDecoders_;
     bool finishWasCalled_ = false;
+    // The index of the word that was added last, `nullopt` if no word has been
+    // added yet.
+    std::optional<uint64_t> lastIndex_ = std::nullopt;
 
    public:
     // Constructor.
@@ -442,6 +445,13 @@ CPP_template(typename UnderlyingVocabulary,
     // must be greater than all previous indices. Return `idx`.
     uint64_t operator()(std::string_view uncompressedWord, uint64_t idx) {
       AD_CONTRACT_CHECK(!finishWasCalled_);
+      // Check the invariant eagerly here, and not only in the underlying
+      // writer (which only sees the words once a full block is written), such
+      // that a violation is reported at the call site that caused it.
+      AD_CONTRACT_CHECK(!lastIndex_.has_value() || lastIndex_.value() < idx,
+                        "The indices of a vocabulary with holes have to be "
+                        "added in strictly ascending order");
+      lastIndex_ = idx;
       wordBuffer_.emplace_back(uncompressedWord);
       indexBuffer_.push_back(idx);
       if (wordBuffer_.size() == NumWordsPerBlock) {
