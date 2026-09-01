@@ -128,6 +128,19 @@ TEST_F(MaterializedViewsPatternRewriteTest, starRewrite) {
   // A triple with neither side a variable cannot connect to the rest of the
   // pattern and is rejected.
   noStarRewrite("SELECT * { ?s <p1> ?o1 . <o2a> <p9> <o2b> }");
+
+  // A predicate used twice in the query leaves the view's other predicate
+  // uncovered, so the star as a whole is rejected.
+  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p1> ?o2 }");
+
+  // A self-loop (subject equals object) is rejected.
+  noStarRewrite("SELECT * { ?s <p1> ?s . ?s <p2> ?o1 }");
+
+  // Two star arms sharing the same object variable are rejected.
+  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 }");
+
+  // A 3-arm star where one arm's object is fixed is rejected.
+  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> <o2a> }");
 }
 
 // _____________________________________________________________________________
