@@ -33,7 +33,7 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
     qlv().writeMaterializedView(name, query);
     qlv().loadMaterializedView(name);
     // The view is always detected if the user query is exactly the view query.
-    qpExpect(qlv(), query, qpMatcher);
+    qpExpect<false>(qlv(), query, qpMatcher);
   };
 
   // Neither a star nor a chain.
@@ -48,40 +48,41 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
               viewScan("testView1", "?s", "?m", "?o1", 4, {{3, V{"?o2"}}}));
 
   // User query is the view query only with an edge reversed.
-  qpExpect(qlv(), R"(
+  qpExpect<false>(qlv(), R"(
       SELECT * {
         ?s <p1> ?o1 .
         ?s <p3> ?m .
         ?o2 ^<p2> ?m .
       }
     )",
-           viewScan("testView1", "?s", "?m", "?o1", 4, {{3, V{"?o2"}}}));
+                  viewScan("testView1", "?s", "?m", "?o1", 4, {{3, V{"?o2"}}}));
 
   // User query is the view query only with a property path instead of a manual
   // join.
-  qpExpect(qlv(), R"(
+  qpExpect<false>(qlv(), R"(
       SELECT * {
         ?s <p1> ?o1 .
         ?s <p3>/<p2> ?o2 .
       }
     )",
-           viewScan("testView1", "?s", "?_QLever_internal_variable_qp_0", "?o1",
-                    4, {{3, V{"?o2"}}}));
+                  viewScan("testView1", "?s", "?_QLever_internal_variable_qp_0",
+                           "?o1", 4, {{3, V{"?o2"}}}));
 
   // User query contains an additional filter.
-  qpExpect(qlv(), R"(
+  qpExpect<false>(
+      qlv(), R"(
       SELECT * {
         ?s <p1> ?o1 .
         ?s <p3>/<p2> ?o2 .
         FILTER (?o2 > 5)
       }
     )",
-           h::Filter("?o2 > 5", viewScan("testView1", "?s",
-                                         "?_QLever_internal_variable_qp_0",
-                                         "?o1", 4, {{3, V{"?o2"}}})));
+      h::Filter("?o2 > 5",
+                viewScan("testView1", "?s", "?_QLever_internal_variable_qp_0",
+                         "?o1", 4, {{3, V{"?o2"}}})));
 
   // User query contains an additional join.
-  qpExpect(qlv(), R"(
+  qpExpect<false>(qlv(), R"(
       SELECT * {
         ?s <p1> ?o1 .
         ?s <p3> ?m1 .
@@ -89,9 +90,9 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
         ?m1 <p2> ?m2 .
       }
     )",
-           h::Join(h::Sort(viewScan("testView1", "?s", "?m1", "?o1", 4,
-                                    {{3, V{"?m2"}}})),
-                   h::IndexScanFromStrings("?m2", "<p4>", "?o2")));
+                  h::Join(h::Sort(viewScan("testView1", "?s", "?m1", "?o1", 4,
+                                           {{3, V{"?m2"}}})),
+                          h::IndexScanFromStrings("?m2", "<p4>", "?o2")));
 
   // User query contains an additional `OPTIONAL`.
   const std::string optionalQuery = R"(
@@ -102,10 +103,11 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
         OPTIONAL { ?m2 <p4> ?o2 }
       }
     )";
-  qpExpect(qlv(), optionalQuery,
-           h::OptionalJoin(h::Sort(viewScan("testView1", "?s", "?m1", "?o1", 4,
-                                            {{3, V{"?m2"}}})),
-                           h::IndexScanFromStrings("?m2", "<p4>", "?o2")));
+  qpExpect<false>(
+      qlv(), optionalQuery,
+      h::OptionalJoin(h::Sort(viewScan("testView1", "?s", "?m1", "?o1", 4,
+                                       {{3, V{"?m2"}}})),
+                      h::IndexScanFromStrings("?m2", "<p4>", "?o2")));
 
   // Filter in write query.
   qlv().unloadMaterializedView("testView1");
@@ -121,7 +123,7 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
               viewScan("testView2", "?s", "?m", "?o1", 4, {{3, V{"?o2"}}}));
 
   // Filter in write query and an additional filter in the user query.
-  qpExpect(qlv(), R"(
+  qpExpect<false>(qlv(), R"(
         SELECT ?s ?m ?o1 ?o2 {
           ?s <p1> ?o1 .
           ?s <p3> ?m .
@@ -130,8 +132,8 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
           FILTER (?m != <s1>)
         }
       )",
-           h::Filter("?m != <s1>", viewScan("testView2", "?s", "?m", "?o1", 4,
-                                            {{3, V{"?o2"}}})));
+                  h::Filter("?m != <s1>", viewScan("testView2", "?s", "?m",
+                                                   "?o1", 4, {{3, V{"?o2"}}})));
 
   // Optional in write query.
   qlv().unloadMaterializedView("testView2");
@@ -154,12 +156,12 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
                        {{3, V{"?o2"}}, {4, V{"?b"}}}));
 
   // User query is the same as the write query but the `BIND` is omitted.
-  qpExpect(qlv(), writeQuery1,
-           viewScan("testView4", "?s", "?m", "?o1", 4, {{3, V{"?o2"}}}));
+  qpExpect<false>(qlv(), writeQuery1,
+                  viewScan("testView4", "?s", "?m", "?o1", 4, {{3, V{"?o2"}}}));
 
   // User query is the same as the write query but it contains an additional
   // `BIND`.
-  qpExpect(qlv(), R"(
+  qpExpect<false>(qlv(), R"(
       SELECT * {
         ?s <p1> ?o1 .
         ?s <p3> ?m .
@@ -168,7 +170,7 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
         BIND (?o2 + 2 AS ?b2)
       }
     )",
-           h::Bind(viewScan("testView4", "?s", "?m", "?o1", 5,
-                            {{3, V{"?o2"}}, {4, V{"?b1"}}}),
-                   "?o2 + 2", V{"?b2"}));
+                  h::Bind(viewScan("testView4", "?s", "?m", "?o1", 5,
+                                   {{3, V{"?o2"}}, {4, V{"?b1"}}}),
+                          "?o2 + 2", V{"?b2"}));
 }

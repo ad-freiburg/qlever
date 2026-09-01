@@ -14,6 +14,7 @@
 
 #include "./QueryPlannerTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
@@ -241,16 +242,28 @@ inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
 }
 
 // _____________________________________________________________________________
-template <typename Query>
-inline void qpExpect(qlever::Qlever& qlv, const Query& query,
+// Check that both the greedy and the DP query planner produce a query plan that
+// matches `matcher`. To test only the query plan of the dynamic programming
+// planner, pass `TestBothPlanners = false`.
+template <bool TestBothPlanners = true>
+inline void qpExpect(qlever::Qlever& qlv, std::string_view query,
                      ::testing::Matcher<const QueryExecutionTree&> matcher,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
-  // For query planning to produce the expected results reliably, we need to
-  // clear the cache.
-  qlv.clearQueryResultCache();
-  auto plannedQuery = qlv.parseAndPlanQuery(std::string{query});
-  EXPECT_THAT(plannedQuery.queryExecutionTree(), matcher);
+  static constexpr size_t kDpBudget = 1500;
+  auto budgets = TestBothPlanners ? std::vector<size_t>{1, kDpBudget}
+                                  : std::vector<size_t>{kDpBudget};
+  for (size_t budget : budgets) {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
+            budget);
+    // For query planning to produce the expected results reliably, we need to
+    // clear the cache.
+    qlv.clearQueryResultCache();
+    auto plannedQuery = qlv.parseAndPlanQuery(std::string{query});
+    EXPECT_THAT(plannedQuery.queryExecutionTree(), matcher)
+        << "budget = " << budget;
+  }
 };
 
 // _____________________________________________________________________________
