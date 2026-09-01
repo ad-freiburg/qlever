@@ -46,10 +46,11 @@ struct DummyCompressionWrapper
   }
 
   static std::tuple<int, std::vector<std::string>, DummyDecoder> compressAll(
-      const std::vector<std::string>& strings) {
+      Words words) {
     std::vector<std::string> result;
-    for (const auto& string : strings) {
-      result.push_back(compress(string));
+    result.reserve(words.size());
+    for (const auto& word : words) {
+      result.push_back(compress(word));
     }
     return {0, std::move(result), DummyDecoder{}};
   }
