@@ -136,26 +136,6 @@ CPP_template_def(typename RequestT)(
 }
 
 // _____________________________________________________________________________
-// Thrown by `verifyUserSubmittedQueryTimeout` when the user-submitted
-// timeout is rejected, instead of building and sending the 403 response
-// itself. This lets callers between `verifyUserSubmittedQueryTimeout` and
-// `handleHttpRequest` (which is the only place that actually sends the
-// resulting response, via a plain-text `createForbiddenResponse`) stay free
-// of the `SendT`/`RequestT` machinery. `processOperation` sits in between
-// and rethrows this type unchanged so it isn't turned into a JSON error
-// response like other exceptions.
-class TimeoutRejectedError : public std::runtime_error {
- public:
-  explicit TimeoutRejectedError(std::string_view defaultTimeout)
-      : std::runtime_error{absl::StrCat(
-            "User submitted timeout was higher than what is currently "
-            "allowed by this instance (",
-            defaultTimeout,
-            "). Please use a valid-access token to override this server "
-            "configuration.")} {}
-};
-
-// _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::handleHttpRequest(RequestT request, SendT& send) {
@@ -185,8 +165,6 @@ CPP_template_def(typename RequestT, typename SendT)(
   std::optional<ResponseT> errorResponse;
   try {
     co_await process(request, sendWithAccessControlHeaders);
-  } catch (const TimeoutRejectedError& e) {
-    errorResponse = createForbiddenResponse(e.what(), request);
   } catch (const HttpError& e) {
     errorResponse =
         reportHttpError(e.what(), e.status(), request, HttpErrorType::http);
@@ -258,7 +236,14 @@ Server::TimeLimit Server::verifyUserSubmittedQueryTimeout(
         ad_utility::ParseableDuration<TimeLimit>::fromString(
             userTimeout.value());
     if (timeoutCandidate > defaultTimeout && !accessTokenOk) {
-      throw TimeoutRejectedError{defaultTimeout.toString()};
+      throw HttpError(
+          boost::beast::http::status::forbidden,
+          absl::StrCat(
+              "User submitted timeout was higher than what is currently "
+              "allowed by this instance (",
+              defaultTimeout.toString(),
+              "). Please use a valid-access token to override this server "
+              "configuration."));
     }
     return timeoutCandidate;
   }
@@ -1368,11 +1353,6 @@ CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
   std::optional<ExceptionMetadata> metadata;
   try {
     co_return co_await std::visit(visitor, std::move(operation));
-  } catch (const TimeoutRejectedError&) {
-    // Rethrow unchanged: only `handleHttpRequest` builds and sends the
-    // resulting 403 response; turning this into a JSON error response here
-    // like the other exception types below would be wrong.
-    throw;
   } catch (const HttpError& e) {
     responseStatus = e.status();
     exceptionErrorMsg = e.what();

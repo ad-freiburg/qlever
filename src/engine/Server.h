@@ -197,17 +197,16 @@ class Server {
   // honoring a user-submitted timeout (see `verifyUserSubmittedQueryTimeout`).
   // Unlike `processClearDeltaTriples` above, this can fail (because of an
   // invalid timeout), in which case `verifyUserSubmittedQueryTimeout` throws
-  // a `TimeoutRejectedError` that unwinds out of `process()`, all the way up
-  // to `handleHttpRequest`. Otherwise the resulting vacuum stats are
-  // returned.
+  // an `HttpError` that unwinds out of `process()`, all the way up to
+  // `handleHttpRequest`. Otherwise the resulting vacuum stats are returned.
   Awaitable<json> processVacuumDeltaTriples(
       std::optional<std::string_view> userTimeout, bool accessTokenOk);
 
   // Handle a `write-materialized-view` command: extract the view name, query,
   // and timeout from `parameters`/`operation`, execute the query, and store
   // its result as a named materialized view. Like `processVacuumDeltaTriples`
-  // above, a rejected timeout throws a `TimeoutRejectedError` that unwinds
-  // out of `process()`, all the way up to `handleHttpRequest`. Otherwise the
+  // above, a rejected timeout throws an `HttpError` that unwinds out of
+  // `process()`, all the way up to `handleHttpRequest`. Otherwise the
   // resulting materialized-view stats are returned. On success, the caller is
   // responsible for resetting the request's operation to `None{}` so that
   // `process()` doesn't also try to execute it as a regular query.
@@ -444,10 +443,9 @@ class Server {
   FRIEND_TEST(ServerTest, checkAccessToken);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
-  /// lower than the server default. Throw a `TimeoutRejectedError` if the
-  /// change is not allowed; only `handleHttpRequest` catches it and turns it
-  /// into the actual 403 Forbidden HTTP response. Return the new timeout
-  /// otherwise.
+  /// lower than the server default. Throw an `HttpError` (403 Forbidden) if
+  /// the change is not allowed; `handleHttpRequest` catches it and turns it
+  /// into the actual HTTP response. Return the new timeout otherwise.
   TimeLimit verifyUserSubmittedQueryTimeout(
       std::optional<std::string_view> userTimeout, bool accessTokenOk) const;
 
