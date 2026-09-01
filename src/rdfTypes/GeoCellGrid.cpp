@@ -43,21 +43,21 @@ uint64_t GeoCellGrid::gridCoordinate(double normalized) const {
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromPoint(double lng,
-                                                       double lat) const {
-  switch (scheme_) {
-    case GeoCellGridScheme::Enum::Flat:
-      return (gridCoordinate((lat + 90.0) / 180.0) << level_) |
-             gridCoordinate((lng + 180.0) / 360.0);
-  }
-  AD_FAIL();
-}
-
-// ____________________________________________________________________________
 GeoCellGrid::GridBox GeoCellGrid::gridBox(double u1, double v1, double u2,
                                           double v2) const {
   return {gridCoordinate(u1), gridCoordinate(v1), gridCoordinate(u2),
           gridCoordinate(v2)};
+}
+
+// ____________________________________________________________________________
+GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromPoint(double lng,
+                                                       double lat) const {
+  auto [u, v] = normalize(lng, lat);
+  switch (scheme_) {
+    case GeoCellGridScheme::Enum::Flat:
+      return (gridCoordinate(v) << level_) | gridCoordinate(u);
+  }
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________
@@ -77,14 +77,12 @@ GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromBoundingBox(
   // the precomputed bounding boxes of the `GeoVocabulary` have gone through
   // this quantization, freshly parsed ones have not, and the cell assignment
   // must be identical for both.
-  uint64_t llBits = box.lowerLeft().toBitRepresentation();
-  uint64_t urBits = box.upperRight().toBitRepresentation();
-  auto ll = GeoPoint::fromBitRepresentation(llBits);
-  auto ur = GeoPoint::fromBitRepresentation(urBits);
-  double u1 = (ll.getLng() + 180.0) / 360.0;
-  double u2 = (ur.getLng() + 180.0) / 360.0;
-  double v1 = (ll.getLat() + 90.0) / 180.0;
-  double v2 = (ur.getLat() + 90.0) / 180.0;
+  auto ll =
+      GeoPoint::fromBitRepresentation(box.lowerLeft().toBitRepresentation());
+  auto ur =
+      GeoPoint::fromBitRepresentation(box.upperRight().toBitRepresentation());
+  auto [u1, v1] = normalize(ll.getLng(), ll.getLat());
+  auto [u2, v2] = normalize(ur.getLng(), ur.getLat());
   switch (scheme_) {
     case GeoCellGridScheme::Enum::Flat:
       return flatCell(u1, v1, u2, v2);
@@ -118,10 +116,8 @@ GeoCellGrid::CellRanges GeoCellGrid::coveringCellRanges(double minLng,
                                                         double maxLng,
                                                         double maxLat) const {
   AD_CONTRACT_CHECK(minLng <= maxLng && minLat <= maxLat);
-  double u1 = (minLng + 180.0) / 360.0;
-  double u2 = (maxLng + 180.0) / 360.0;
-  double v1 = (minLat + 90.0) / 180.0;
-  double v2 = (maxLat + 90.0) / 180.0;
+  auto [u1, v1] = normalize(minLng, minLat);
+  auto [u2, v2] = normalize(maxLng, maxLat);
   CellRanges ranges;
   switch (scheme_) {
     case GeoCellGridScheme::Enum::Flat:

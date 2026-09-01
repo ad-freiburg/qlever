@@ -195,6 +195,10 @@ class GeoCellGrid {
   bool operator==(const GeoCellGrid&) const = default;
 
  private:
+  // Coordinate convention of the private helpers: `u` and `v` are normalized
+  // longitude and latitude in `[0, 1]` (as computed by `normalize`), `x` and
+  // `y` are integer grid coordinates in `[0, 2^level - 1]`.
+
   // The integer grid coordinates of the two corners of a normalized
   // rectangle.
   struct GridBox {
@@ -208,6 +212,11 @@ class GeoCellGrid {
   // Integer grid coordinates of a normalized coordinate in `[0, 1]`, clamped
   // to `[0, 2^level - 1]`.
   uint64_t gridCoordinate(double normalized) const;
+
+  // Map a longitude and a latitude to normalized coordinates in `[0, 1]`.
+  static std::pair<double, double> normalize(double lng, double lat) {
+    return {(lng + 180.0) / 360.0, (lat + 90.0) / 180.0};
+  }
 
   // Cell assignment and cover computation of the `Flat` scheme, on
   // normalized coordinates in `[0, 1]`.
