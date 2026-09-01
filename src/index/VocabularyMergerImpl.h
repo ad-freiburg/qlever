@@ -82,6 +82,8 @@ auto VocabularyMerger::mergeVocabulary(
     generators.push_back(makeWordRangeFromFile(i));
     idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
   }
+  idMapWriterQueue_.emplace(idMapWriterQueueSize, 1, "Writing the ID maps");
+  idMapEntryBuffer_.reserve(idMapEntryBatchSize);
 
   // Some memory (that is hard to measure exactly) is used for the writing of
   // a batch of merged words, so we only give 80% of the total memory to the
@@ -97,6 +99,10 @@ auto VocabularyMerger::mergeVocabulary(
     writeQueueWordsToIdMap(currentWords, wordCallback, lessThan,
                            blankNodeIriRegexes, progressBar);
   }
+  // Hand the remaining ID map entries to the queue and wait until all of them
+  // have actually been written.
+  flushIdMapEntries();
+  idMapWriterQueue_.value().finish();
 
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
 
@@ -112,20 +118,29 @@ CPP_template_def(typename C, typename L)(
         ranges::predicate<L, TripleComponentWithIndex,
                           TripleComponentWithIndex>) void VocabularyMerger::
     writeQueueWordsToIdMap(
-        std::vector<QueueWord>& buffer, C& wordCallback, const L& lessThan,
+        std::vector<QueueWord>& buffer, C& wordCallback,
+        [[maybe_unused]] const L& lessThan,
         const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes,
         ad_utility::ProgressBar& progressBar) {
   AD_LOG_TIMING << "Start writing a batch of merged words\n";
+
+  // The entries for the `idMaps_` are not written here, but collected in the
+  // `idMapEntryBuffer_`, which is then handed to the `idMapWriterQueue_` (see
+  // `flushIdMapEntries`), such that the writing happens concurrently to the
+  // merging of the next batch of words. Each of the `buffer`'s words yields
+  // exactly one entry, so the following `reserve` (which typically is a no-op)
+  // makes sure that the `push_back`s below never have to reallocate.
+  idMapEntryBuffer_.reserve(idMapEntryBuffer_.size() + buffer.size());
 
   // Iterate (avoid duplicates).
   for (auto& top : buffer) {
     if (!lastTripleComponent_.has_value() ||
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
       if (lastTripleComponent_.has_value()) {
-        AD_CORRECTNESS_CHECK(lessThan(lastTripleComponent_.value(), top.entry_),
-                             "Total vocabulary order violated for ",
-                             lastTripleComponent_->iriOrLiteral(), " and ",
-                             top.iriOrLiteral());
+        AD_EXPENSIVE_CHECK(lessThan(lastTripleComponent_.value(), top.entry_),
+                           "Total vocabulary order violated for ",
+                           lastTripleComponent_->iriOrLiteral(), " and ",
+                           top.iriOrLiteral());
       }
       lastTripleComponent_ =
           TripleComponentWithIndex{std::move(top.iriOrLiteral()),
@@ -141,10 +156,14 @@ CPP_template_def(typename C, typename L)(
       auto& nextWord = lastTripleComponent_.value();
       if (lastTripleComponentIsBlankNode_) {
         nextWord.index_ = metaData_.getNextBlankNodeIndex();
+        lastTargetId_ =
+            Id::makeFromBlankNodeIndex(BlankNodeIndex::make(nextWord.index_));
       } else {
         nextWord.index_ =
             wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
         metaData_.addWord(nextWord.iriOrLiteral(), nextWord.index_);
+        lastTargetId_ =
+            Id::makeFromVocabIndex(VocabIndex::make(nextWord.index_));
       }
       if (progressBar.update()) {
         AD_LOG_INFO << progressBar.getProgressString() << std::flush;
@@ -155,15 +174,39 @@ CPP_template_def(typename C, typename L)(
       bool& external = lastTripleComponent_.value().isExternal();
       external = external || top.isExternal();
     }
-    const auto& word = lastTripleComponent_.value();
-    Id targetId =
-        lastTripleComponentIsBlankNode_
-            ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
-            : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
-    // Write pair of local and global ID to buffer.
-    idMaps_[top.partialFileId_].push_back(
-        {Id::makeFromVocabIndex(VocabIndex::make(top.id())), targetId});
+    // Remember the local and the global ID; they are written asynchronously by
+    // the `idMapWriterQueue_`. NOTE: The global ID (`lastTargetId_`) is the
+    // same for all the occurrences of a word, so it is only computed once per
+    // distinct word (see above).
+    idMapEntryBuffer_.push_back(QueuedIdMapEntry{
+        top.partialFileId_,
+        {Id::makeFromVocabIndex(VocabIndex::make(top.id())), lastTargetId_}});
   }
+
+  if (idMapEntryBuffer_.size() >= idMapEntryBatchSize) {
+    flushIdMapEntries();
+  }
+}
+
+// ________________________________________________________________________________
+inline void VocabularyMerger::flushIdMapEntries() {
+  if (idMapEntryBuffer_.empty()) {
+    return;
+  }
+  // NOTE: The queue has a single worker thread, so the entries are written in
+  // exactly the order in which they are pushed here, and the `idMaps_` require
+  // no further synchronization.
+  idMapWriterQueue_.value().push(
+      [this, entries = std::move(idMapEntryBuffer_)]() {
+        AD_LOG_TIMING << "Start writing a batch of ID map entries\n";
+        for (const auto& entry : entries) {
+          idMaps_[entry.partialFileId_].push_back(entry.entry_);
+        }
+      });
+  // NOTE: A moved-from vector is in a valid but unspecified state, so we have
+  // to explicitly clear it.
+  idMapEntryBuffer_.clear();
+  idMapEntryBuffer_.reserve(idMapEntryBatchSize);
 }
 
 // ____________________________________________________________________________________________________________
@@ -302,7 +345,12 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
     const std::string& filename) {
   auto vec = getIdMapFromFile(filename);
-  return ad_utility::HashMap<Id, Id>{vec.begin(), vec.end()};
+  ad_utility::HashMap<Id, Id> map;
+  map.reserve(vec.size());
+  for (const auto& entry : vec) {
+    map.emplace(entry.localId_, entry.globalId_);
+  }
+  return map;
 }
 }  // namespace ad_utility::vocabulary_merger
 
