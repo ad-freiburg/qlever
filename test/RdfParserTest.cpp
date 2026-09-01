@@ -1746,7 +1746,7 @@ TEST(RdfParserTest, getBatchRaisesOnTooLargeBufferWithoutPendingException) {
 // triples and then mark itself exhausted while logging the remainder.
 TEST(RdfParserTest, getBatchLogsRemainingUnparsedBytesWhenInputExhausted) {
   using Parser = RdfStreamParser<TurtleParser<Tokenizer>>;
-  std::string filename{"rdfParserGetLineLogsRemainingUnparsedBytes.dat"};
+  std::string filename{absl::StrCat(gtestCurrentTestName(), ".dat")};
   std::string trailingGarbage =
       "@@@invalid trailing bytes that cannot be parsed@@@";
   {
