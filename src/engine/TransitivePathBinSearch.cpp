@@ -16,15 +16,13 @@
 // _____________________________________________________________________________
 BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
                            ql::span<const Id> targetIds,
-                           const ad_utility::AllocatorWithLimit<Id>& allocator,
                            const std::optional<ql::span<const Id>>& graphIds)
     : startIds_{startIds},
       targetIds_{targetIds},
       graphIds_{graphIds.has_value() ? graphIds.value() : ql::span<const Id>{}},
       // Set size to zero if graphs are active to avoid undefined behaviour in
       // case we forget to call `setActiveGraph`.
-      sizeOfActiveGraph_{graphIds.has_value() ? 0 : startIds_.size()},
-      targetIdLookup_{allocator} {
+      sizeOfActiveGraph_{graphIds.has_value() ? 0 : startIds_.size()} {
   AD_CORRECTNESS_CHECK(startIds.size() == targetIds.size());
   AD_CORRECTNESS_CHECK(startIds.size() == graphIds_.size() ||
                        !graphIds.has_value());
@@ -34,8 +32,6 @@ BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
   } else {
     AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(startIds));
   }
-
-  targetIdLookup_.insert(targetIds.begin(), targetIds.end());
 }
 
 // _____________________________________________________________________________
@@ -112,9 +108,6 @@ IdWithGraphs BinSearchMap::getEquivalentIdAndMatchingGraphs(Id node) const {
       graphIdsIt = graphIdsUpper;
     }
   }
-  if (result.empty() && !node.isUndefined() && targetIdLookup_.contains(node)) {
-    result.emplace_back(node, Id::makeUndefined());
-  }
   return result;
 }
 
@@ -165,7 +158,6 @@ BinSearchMap TransitivePathBinSearch::setupEdgesMap(
     const TransitivePathSide& targetSide) const {
   return BinSearchMap{
       dynSub.getColumn(startSide.subCol_), dynSub.getColumn(targetSide.subCol_),
-      allocator(),
       graphVariable_.has_value()
           ? std::optional{dynSub.getColumn(
                 subtree_->getVariableColumn(graphVariable_.value()))}

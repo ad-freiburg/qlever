@@ -17,7 +17,6 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
-#include "util/AllocatorWithLimit.h"
 
 // A set of edges of the implicit graph of a transitive path operation together
 // with the graph IRI of the source node of each edge. The edges are sorted by
@@ -40,17 +39,12 @@ class BinSearchMap {
   size_t offsetOfActiveGraph_ = 0;
   size_t sizeOfActiveGraph_;
 
-  // Store all existing target ids, which might be needed for filling in
-  // undefineds on the target side.
-  Set targetIdLookup_;
-
  public:
   // Construct with the given edges. The `sizeOfActiveGraph_` is set to the
   // total number of edges if no graphs are given, or to zero otherwise. In the
   // latter case, the correct size has to be set via `setGraphId`.
   BinSearchMap(
       ql::span<const Id> startIds, ql::span<const Id> targetIds,
-      const ad_utility::AllocatorWithLimit<Id>& allocator,
       const std::optional<ql::span<const Id>>& graphIds = std::nullopt);
 
   // Return all target nodes for the given source node in the currently

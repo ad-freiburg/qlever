@@ -15,26 +15,22 @@
 
 // _____________________________________________________________________________
 HashMapWrapper::HashMapWrapper(
-    Map map, Set targetIdLookup,
-    const ad_utility::AllocatorWithLimit<Id>& allocator)
+    Map map, const ad_utility::AllocatorWithLimit<Id>& allocator)
     : graphMap_{allocator},
       map_{nullptr},
       emptySet_{allocator},
-      emptyMap_{allocator},
-      targetIdLookup_{std::move(targetIdLookup)} {
+      emptyMap_{allocator} {
   graphMap_.try_emplace(Id::makeUndefined(), std::move(map));
   map_ = &graphMap_.at(Id::makeUndefined());
 }
 
 // _____________________________________________________________________________
 HashMapWrapper::HashMapWrapper(
-    MapOfMaps graphMap, Set targetIdLookup,
-    const ad_utility::AllocatorWithLimit<Id>& allocator)
+    MapOfMaps graphMap, const ad_utility::AllocatorWithLimit<Id>& allocator)
     : graphMap_{std::move(graphMap)},
       map_{&emptyMap_},
       emptySet_{allocator},
-      emptyMap_{allocator},
-      targetIdLookup_{std::move(targetIdLookup)} {}
+      emptyMap_{allocator} {}
 
 // _____________________________________________________________________________
 const Set& HashMapWrapper::successors(const Id node) const {
@@ -57,9 +53,6 @@ IdWithGraphs HashMapWrapper::getEquivalentIdAndMatchingGraphs(Id node) const {
       }
     }
   }
-  if (result.empty() && !node.isUndefined() && targetIdLookup_.contains(node)) {
-    result.emplace_back(node, Id::makeUndefined());
-  }
   return result;
 }
 
@@ -79,10 +72,6 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     const TransitivePathSide& targetSide) const {
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
-  // Save all nodes present on the target side to correctly handle undef
-  // expansion.
-  Set targetIdLookup{allocator()};
-
   if (graphVariable_.has_value()) {
     decltype(auto) graphCol =
         sub.getColumn(subtree_->getVariableColumn(graphVariable_.value()));
@@ -92,10 +81,8 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
       auto it1 = edgesWithGraph.try_emplace(graphCol[i], allocator()).first;
       auto it2 = it1->second.try_emplace(startCol[i], allocator()).first;
       it2->second.insert(targetCol[i]);
-      targetIdLookup.insert(targetCol[i]);
     }
-    return HashMapWrapper{std::move(edgesWithGraph), std::move(targetIdLookup),
-                          allocator()};
+    return HashMapWrapper{std::move(edgesWithGraph), allocator()};
   }
   HashMapWrapper::Map edges{allocator()};
 
@@ -103,10 +90,8 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     checkCancellation();
     auto [it, _] = edges.try_emplace(startCol[i], allocator());
     it->second.insert(targetCol[i]);
-    targetIdLookup.insert(targetCol[i]);
   }
-  return HashMapWrapper{std::move(edges), std::move(targetIdLookup),
-                        allocator()};
+  return HashMapWrapper{std::move(edges), allocator()};
 }
 
 // _____________________________________________________________________________

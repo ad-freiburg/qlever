@@ -2255,8 +2255,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST(TransitivePathBinSearch, successors) {
   auto input =
       makeIdTableFromVector({{0, 10}, {1, 10}, {2, 11}, {2, 12}, {3, 13}});
-  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1),
-                            input.getAllocator()};
+  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1)};
   EXPECT_THAT(binSearchMap.successors(V(0)), ElementsAre(V(10)));
   EXPECT_THAT(binSearchMap.successors(V(1)), ElementsAre(V(10)));
   EXPECT_THAT(binSearchMap.successors(V(2)), ElementsAre(V(11), V(12)));
@@ -2267,8 +2266,7 @@ TEST(TransitivePathBinSearch, successors) {
 TEST(TransitivePathBinSearch, successorsWithGraph) {
   auto input = makeIdTableFromVector(
       {{0, 10, 100}, {1, 10, 100}, {2, 11, 100}, {2, 12, 101}, {3, 13, 101}});
-  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1),
-                            input.getAllocator(), input.getColumn(2)};
+  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1), input.getColumn(2)};
   binSearchMap.setGraphId(V(100));
   EXPECT_THAT(binSearchMap.successors(V(0)), ElementsAre(V(10)));
   EXPECT_THAT(binSearchMap.successors(V(1)), ElementsAre(V(10)));
@@ -2323,8 +2321,7 @@ TEST(TransitivePathHashMap, successors) {
       makeIdTableFromVector({{0, 10}, {1, 10}, {2, 11}, {2, 12}, {3, 13}});
   HashMapWrapper hashMapWrapper{
       columnsToMap(input.getAllocator(), input.getColumn(0),
-                   input.getColumn(1)),
-      Set{input.getAllocator()}, input.getAllocator()};
+                   input.getColumn(1)), input.getAllocator()};
   EXPECT_THAT(hashMapWrapper.successors(V(0)), UnorderedElementsAre(V(10)));
   EXPECT_THAT(hashMapWrapper.successors(V(1)), UnorderedElementsAre(V(10)));
   EXPECT_THAT(hashMapWrapper.successors(V(2)),
@@ -2336,8 +2333,7 @@ TEST(TransitivePathHashMap, successorsWithGraph) {
       {{0, 10, 100}, {1, 10, 100}, {2, 11, 100}, {2, 12, 101}, {3, 13, 101}});
   HashMapWrapper hashMapWrapper{
       columnsToMap(input.getAllocator(), input.getColumn(0), input.getColumn(1),
-                   input.getColumn(2)),
-      Set{input.getAllocator()}, input.getAllocator()};
+                   input.getColumn(2)), input.getAllocator()};
   hashMapWrapper.setGraphId(V(100));
   EXPECT_THAT(hashMapWrapper.successors(V(0)), UnorderedElementsAre(V(10)));
   EXPECT_THAT(hashMapWrapper.successors(V(1)), UnorderedElementsAre(V(10)));
@@ -2361,8 +2357,7 @@ TEST(TransitivePathHashMap, successorsWithGraph) {
 TEST(TransitivePathBinSearch, getEquivalentIdAndMatchingGraphs) {
   auto input =
       makeIdTableFromVector({{0, 10}, {1, 10}, {2, 11}, {2, 12}, {3, 13}});
-  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1),
-                            input.getAllocator()};
+  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1)};
   EXPECT_THAT(
       binSearchMap.getEquivalentIdAndMatchingGraphs(U),
       ElementsAre(Pair(V(0), U), Pair(V(1), U), Pair(V(2), U), Pair(V(3), U)));
@@ -2387,8 +2382,7 @@ TEST(TransitivePathBinSearch, getEquivalentIdAndMatchingGraphsWithGraphs) {
                                       {2, 12, 101},
                                       {3, 13, 101},
                                       {3, 14, 101}});
-  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1),
-                            input.getAllocator(), input.getColumn(2)};
+  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1), input.getColumn(2)};
   // The active graph should be ignored
   for (Id graphId : {U, V(100), V(101)}) {
     // Don't explicitly set undefined, this works fine because by default no
@@ -2419,8 +2413,7 @@ TEST(TransitivePathHashMap, getEquivalentIdAndMatchingGraphs) {
       makeIdTableFromVector({{0, 10}, {1, 10}, {2, 11}, {2, 12}, {3, 13}});
   HashMapWrapper hashMapWrapper{
       columnsToMap(input.getAllocator(), input.getColumn(0),
-                   input.getColumn(1)),
-      Set{input.getAllocator()}, input.getAllocator()};
+                   input.getColumn(1)), input.getAllocator()};
   EXPECT_THAT(hashMapWrapper.getEquivalentIdAndMatchingGraphs(U),
               UnorderedElementsAre(Pair(V(0), U), Pair(V(1), U), Pair(V(2), U),
                                    Pair(V(3), U)));
@@ -2447,8 +2440,7 @@ TEST(TransitivePathHashMap, getEquivalentIdAndMatchingGraphsWithGraphs) {
                                       {3, 14, 101}});
   HashMapWrapper hashMapWrapper{
       columnsToMap(input.getAllocator(), input.getColumn(0), input.getColumn(1),
-                   input.getColumn(2)),
-      Set{input.getAllocator()}, input.getAllocator()};
+                   input.getColumn(2)), input.getAllocator()};
   // The active graph should be ignored
   for (Id graphId : {U, V(100), V(101)}) {
     // Don't explicitly set undefined, this works fine because by default no
