@@ -927,6 +927,14 @@ auto liftCallback(Callback callback) {
     ql::ranges::for_each(block, callback);
   };
 }
+
+// Callbacks that already work on complete blocks are used as they are. Pushing
+// a complete block into an external sorter is much more efficient than pushing
+// its rows one by one, because the `IdTable`s are stored column-based.
+template <typename Table>
+auto liftCallback(ad_utility::PushBlockCallback<Table> callback) {
+  return callback;
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -2016,7 +2024,7 @@ CPP_template_def(typename... NextSorter)(requires(
       };
   size_t numPredicates =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
-                            nextSorter.makePushCallback()..., countTriples,
+                            nextSorter.makePushBlockCallback()..., countTriples,
                             determineNextAvailableInternalGraph);
   configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormal(numPredicates);
@@ -2063,7 +2071,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     };
     size_t numSubjects = createPermutationPair(
         numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-        nextSorter.makePushCallback()..., pushTripleToPatterns);
+        nextSorter.makePushBlockCallback()..., pushTripleToPatterns);
     patternCreator.finish();
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
@@ -2073,7 +2081,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     size_t numSubjects =
         createPermutationPair(numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-                              nextSorter.makePushCallback()...);
+                              nextSorter.makePushBlockCallback()...);
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
     writeConfiguration();
@@ -2091,7 +2099,7 @@ CPP_template_def(typename... NextSorter)(
   // have no fourth argument.
   size_t numObjects =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
-                            nextSorter.makePushCallback()...);
+                            nextSorter.makePushBlockCallback()...);
   configurationJson_["num-objects"] =
       NumNormalAndInternal::fromNormal(numObjects);
   configurationJson_["has-all-permutations"] = true;
