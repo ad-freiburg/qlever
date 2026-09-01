@@ -8,7 +8,7 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 // Upgrade an index in the index format `{PR = 1572, Date = 2024-10-22}` to the
-// index format `{PR = 3159, Date = 2026-08-14}` in place, so that it does not
+// index format `{PR = 3159, Date = 2026-09-01}` in place, so that it does not
 // have to be rebuilt from its input files. See `index/IndexFormatConverter.h`
 // for the details, in particular for the difference between the two formats
 // and for how the upgraded index is staged in a subdirectory and only swapped

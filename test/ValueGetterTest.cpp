@@ -49,8 +49,9 @@ const std::vector<LiteralGetterTestCase> literalGetterTestCases{
 
 // Run all of `literalGetterTestCases` against `getter`, where `getExpected`
 // selects the expectation that belongs to that getter.
+template <typename GetExpected>
 void checkAllLiteralGetterTestCases(LiteralValueGetterVariant getter,
-                                    const auto& getExpected) {
+                                    const GetExpected& getExpected) {
   for (const auto& testCase : literalGetterTestCases) {
     SCOPED_TRACE(testCase.word_);
     const auto& expected = getExpected(testCase);
@@ -399,11 +400,11 @@ TEST(NumericOrDateValueGetterTest, OperatorWithId) {
 
 // A test fixture that provides an `Id` of every `Datatype` that a value getter
 // can encounter, together with the context in which those `Id`s are valid (see
-// `SecondaryVocabTestContext`). The `Id`s are created once per test, such that
+// `AllDatatypesTestContext`). The `Id`s are created once per test, such that
 // the tests below can simply use them.
 class ValueGetterFixture : public ::testing::Test {
  protected:
-  SecondaryVocabTestContext context_;
+  AllDatatypesTestContext context_;
 
   // The `Id`s that encode their value directly in the `Id`.
   Id undefined_ = Id::makeUndefined();
@@ -417,13 +418,12 @@ class ValueGetterFixture : public ::testing::Test {
   Id geoPoint_ = Id::makeFromGeoPoint(GeoPoint{3, 4});
 
   // The `Id`s that point into a data structure of the index, but that denote
-  // neither a literal nor an IRI of one of its vocabularies. NOTE: The index
-  // has no text index (see `SecondaryVocabTestContext::makeConfig`), so the
-  // last two of these must only be used with a value getter that does not
-  // resolve them, which is the case for every getter below: all of them either
-  // ignore those two datatypes outright, or resolve them via
-  // `idToStringAndType` with `returnOnlyLiterals`, which discards them before
-  // the lookup.
+  // neither a literal nor an IRI of its vocabulary. NOTE: The knowledge graph
+  // contains no blank node, so `blankNode_` must only be used with a value
+  // getter that does not resolve it. That is the case for every getter below:
+  // all of them either ignore that datatype outright, or resolve it via
+  // `idToStringAndType` with `returnOnlyLiterals`, which discards it before the
+  // lookup.
   Id blankNode_ = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
   Id textRecord_ = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
   Id wordVocab_ = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
@@ -431,12 +431,12 @@ class ValueGetterFixture : public ::testing::Test {
   // An IRI that is encoded directly in the `Id`.
   Id encodedIri_ = context_.encodedIriId();
 
-  // The words of the vocabulary of the main index.
-  Id plainLiteral_ = context_.getId(mainPlainLiteral);
-  Id typedLiteral_ = context_.getId(mainTypedLiteral);
-  Id langLiteral_ = context_.getId(mainLangLiteral);
-  Id wktLiteral_ = context_.getId(mainWktLiteral);
-  Id iri_ = context_.getId(mainIri);
+  // The words of the vocabulary of the index.
+  Id plainLiteral_ = context_.getId(vocabPlainLiteral);
+  Id typedLiteral_ = context_.getId(vocabTypedLiteral);
+  Id langLiteral_ = context_.getId(vocabLangLiteral);
+  Id wktLiteral_ = context_.getId(vocabWktLiteral);
+  Id iri_ = context_.getId(vocabIri);
 
   // The same kinds of word, but from the secondary vocabulary.
   Id secondaryEmptyLiteral_ = context_.secondaryVocabId(secondaryEmptyLiteral);
@@ -447,7 +447,8 @@ class ValueGetterFixture : public ::testing::Test {
   Id secondaryIri_ = context_.secondaryVocabId(secondaryIri);
 
   // And from the local vocabulary, which holds the words that are contained in
-  // neither vocabulary of the index.
+  // none of the vocabularies of the index.
+  Id localEmptyLiteral_ = context_.localVocabId("\"\"");
   Id localPlainLiteral_ = context_.localVocabId("\"noLocalType\"");
   Id localTypedLiteral_ =
       context_.localVocabId("\"someLocalType\"^^<someType>");
@@ -457,21 +458,21 @@ class ValueGetterFixture : public ::testing::Test {
   // The `Id`s of the plain literals of the three vocabularies that store
   // strings, together with the content of the literal.
   std::vector<std::pair<Id, std::string>> plainLiterals_{
-      {plainLiteral_, "noMainType"},
+      {plainLiteral_, "noVocabType"},
       {localPlainLiteral_, "noLocalType"},
       {secondaryPlainLiteral_, "noSecondaryType"}};
-  // The same for the literals with a datatype resp. a language tag, and for the
+  // The same for the literals with a datatype or a language tag, and for the
   // IRIs.
   std::vector<std::pair<Id, std::string>> typedLiterals_{
-      {typedLiteral_, "someMainType"},
+      {typedLiteral_, "someVocabType"},
       {localTypedLiteral_, "someLocalType"},
       {secondaryTypedLiteral_, "someSecondaryType"}};
   std::vector<std::pair<Id, std::string>> langLiterals_{
-      {langLiteral_, "withMainLang"},
+      {langLiteral_, "withVocabLang"},
       {localLangLiteral_, "withLocalLang"},
       {secondaryLangLiteral_, "withSecondaryLang"}};
   std::vector<std::pair<Id, std::string>> iris_{
-      {iri_, "https://example.com/main"},
+      {iri_, "https://example.com/vocab"},
       {localIri_, "https://example.com/local"},
       {secondaryIri_, "https://example.com/secondary"}};
 
@@ -493,7 +494,7 @@ class ValueGetterFixture : public ::testing::Test {
   }
 
   // Same as `expectAll` above, but for the `Id`s of the given words (see
-  // `plainLiterals_` and friends below), where the expected value depends on
+  // `plainLiterals_` and friends above), where the expected value depends on
   // the content of the word: `makeMatcher` is called with that content.
   template <typename ValueGetter, typename MatcherFactory>
   void expectAllWords(
@@ -525,12 +526,12 @@ TEST_F(NumericValueGetterTest, OperatorWithId) {
   EXPECT_THAT(get<Getter>(double_), VariantWith<double>(DoubleNear(4.5, 0.01)));
   EXPECT_THAT(get<Getter>(boolTrue_), VariantWith<int64_t>(1));
   EXPECT_THAT(get<Getter>(boolFalse_), VariantWith<int64_t>(0));
-  // Nothing else is numeric, in particular no word of any of the three
+  // Nothing else is numeric, in particular no word of one of the three
   // vocabularies that store strings, and no encoded IRI.
   expectAll<Getter>(
       {undefined_, date_, geoPoint_, blankNode_, textRecord_, wordVocab_,
        encodedIri_, plainLiteral_, localPlainLiteral_, secondaryPlainLiteral_,
-       wktLiteral_, secondaryWktLiteral_, iri_, secondaryIri_},
+       wktLiteral_, secondaryWktLiteral_, iri_, localIri_, secondaryIri_},
       VariantWith<NotNumeric>(_));
 }
 
@@ -539,8 +540,8 @@ TEST_F(EffectiveBooleanValueGetterTest, OperatorWithId) {
   using Getter = sparqlExpression::detail::EffectiveBooleanValueGetter;
   using Result = Getter::Result;
   // Numbers are `true` iff they are not zero, booleans are themselves. A word
-  // is `true` iff its content is not empty, no matter which vocabulary it comes
-  // from. The remaining datatypes are unconditionally `true`, except for the
+  // of a local or a secondary vocabulary is `true` iff its content is not
+  // empty. The remaining datatypes are unconditionally `true`, except for the
   // ones that have no truth value at all.
   expectAll<Getter>({int_,
                      double_,
@@ -551,6 +552,8 @@ TEST_F(EffectiveBooleanValueGetterTest, OperatorWithId) {
                      wktLiteral_,
                      iri_,
                      localPlainLiteral_,
+                     localTypedLiteral_,
+                     localLangLiteral_,
                      localIri_,
                      secondaryPlainLiteral_,
                      secondaryTypedLiteral_,
@@ -563,9 +566,10 @@ TEST_F(EffectiveBooleanValueGetterTest, OperatorWithId) {
                      textRecord_,
                      wordVocab_},
                     Eq(Result::True));
-  expectAll<Getter>({intZero_, doubleZero_, boolFalse_,
-                     Id::makeFromDouble(std::nan("")), secondaryEmptyLiteral_},
-                    Eq(Result::False));
+  expectAll<Getter>(
+      {intZero_, doubleZero_, boolFalse_, Id::makeFromDouble(std::nan("")),
+       localEmptyLiteral_, secondaryEmptyLiteral_},
+      Eq(Result::False));
   expectAll<Getter>({undefined_, blankNode_}, Eq(Result::Undef));
 }
 
@@ -609,7 +613,7 @@ TEST_F(DatatypeValueGetterTest, OperatorWithId) {
 // _____________________________________________________________________________
 // NOTE: There are additional tests for this getter in the `LanguageTagGetter`
 // suite in `LanguageExpressionsTest.cpp`, which covers the words of the
-// vocabulary of the main index and of a local vocabulary.
+// vocabulary of the index and of a local vocabulary.
 TEST_F(LanguageTagValueGetterTest, OperatorWithId) {
   using Getter = sparqlExpression::detail::LanguageTagValueGetter;
   // Only a literal with a language tag has one.
@@ -621,9 +625,9 @@ TEST_F(LanguageTagValueGetterTest, OperatorWithId) {
   // literals.
   expectAll<Getter>(
       {boolTrue_, int_, double_, date_, geoPoint_, plainLiteral_, typedLiteral_,
-       wktLiteral_, localPlainLiteral_, localTypedLiteral_,
-       secondaryPlainLiteral_, secondaryTypedLiteral_, secondaryWktLiteral_,
-       secondaryEmptyLiteral_},
+       wktLiteral_, localEmptyLiteral_, localPlainLiteral_, localTypedLiteral_,
+       secondaryEmptyLiteral_, secondaryPlainLiteral_, secondaryTypedLiteral_,
+       secondaryWktLiteral_},
       Optional(::testing::IsEmpty()));
   // An IRI is not a literal, so it has no language tag at all, and neither have
   // the remaining datatypes.
@@ -667,20 +671,21 @@ TEST_F(IsIriAndIsLiteralValueGetterTest, OperatorWithId) {
   };
   // The literals of the three vocabularies that store strings.
   //
-  // NOTE: `wktLiteral_` (the WKT literal of the vocabulary of the main index)
-  // is deliberately absent, because `Vocabulary::isLiteral` misclassifies it as
+  // NOTE: `wktLiteral_` (the WKT literal of the vocabulary of the index) is
+  // deliberately absent, because `Vocabulary::isLiteral` misclassifies it as
   // soon as that vocabulary is geo-split (which `makeTestIndex` chooses at
-  // random): `Vocabulary::prefixRanges` describes the literals by a single
-  // contiguous range of indices, but the indices of a `SplitVocabulary` are
+  // random unless the vocabulary type is set explicitly):
+  // `Vocabulary::prefixRanges` describes the literals by a single contiguous
+  // range of indices, but the indices of a `SplitVocabulary` are
   // marker-encoded, so the words of the geo sub-vocabulary lie far outside that
-  // range. The WKT literal of the secondary vocabulary below is unaffected,
-  // because that vocabulary does not split its words.
+  // range. The WKT literal of the secondary vocabulary is unaffected, because
+  // that vocabulary does not split its words.
   // TODO<joka921> Fix that bug, then add `wktLiteral_` here.
   expectIsIriAndIsLiteral(
-      {plainLiteral_, typedLiteral_, langLiteral_, localPlainLiteral_,
-       localTypedLiteral_, localLangLiteral_, secondaryEmptyLiteral_,
-       secondaryPlainLiteral_, secondaryTypedLiteral_, secondaryLangLiteral_,
-       secondaryWktLiteral_},
+      {plainLiteral_, typedLiteral_, langLiteral_, localEmptyLiteral_,
+       localPlainLiteral_, localTypedLiteral_, localLangLiteral_,
+       secondaryEmptyLiteral_, secondaryPlainLiteral_, secondaryTypedLiteral_,
+       secondaryLangLiteral_, secondaryWktLiteral_},
       false, true);
   // Their IRIs, and the IRIs that are encoded directly in the `Id`.
   expectIsIriAndIsLiteral({iri_, localIri_, secondaryIri_, encodedIri_}, true,

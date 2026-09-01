@@ -209,6 +209,9 @@ class IndexImpl {
 
   GraphNameManager graphNameManager_ = GraphNameManager();
 
+  // See `wasLoadedFromDisk()`.
+  bool wasLoadedFromDisk_ = false;
+
   // The secondary vocabulary, see `secondaryVocab()`.
   std::shared_ptr<const SecondaryVocabulary> secondaryVocab_;
 
@@ -274,6 +277,11 @@ class IndexImpl {
   void addTextFromOnDiskIndex();
 
   const auto& getVocab() const { return vocab_; }
+
+  // Whether this index was loaded from disk (see `createFromOnDiskIndex`), as
+  // opposed to merely being built. Used for the "was unloaded" message, see
+  // `Index::~Index()`.
+  bool wasLoadedFromDisk() const { return wasLoadedFromDisk_; }
   auto& getNonConstVocabForTesting() { return vocab_; }
 
   // Return the secondary vocabulary of this index (see
@@ -603,7 +611,8 @@ class IndexImpl {
 
   // The same as `dateOfIndexBuild` above, but for an index that is not
   // loaded: `configurationJson` and `onDiskBase` are the configuration
-  // (`<onDiskBase>.meta-data.json`) and the base name of that index.
+  // (`<onDiskBase>.meta-data.json`) and the base name of that index. This is
+  // useful for tooling that inspects an index on disk without loading it.
   static std::string dateOfIndexBuild(const nlohmann::json& configurationJson,
                                       const std::string& onDiskBase);
 

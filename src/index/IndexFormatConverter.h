@@ -39,7 +39,7 @@ namespace qlever::indexFormatConverter {
 inline const IndexFormatVersion sourceVersion{
     1572, DateYearOrDuration{Date{2024, 10, 22}}};
 inline const IndexFormatVersion targetVersion{
-    3159, DateYearOrDuration{Date{2026, 8, 14}}};
+    3159, DateYearOrDuration{Date{2026, 9, 1}}};
 
 // Return a human-readable description of the two index formats above and of
 // their difference. This is the overview message of `qlever-upgrade-index`.

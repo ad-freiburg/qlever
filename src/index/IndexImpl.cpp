@@ -1162,6 +1162,11 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (persistUpdatesOnDisk) {
     setFilenamesForPersistentUpdates(true);
   }
+
+  // Only set at the very end, so that an index that failed to load (for
+  // example, because it has an incompatible format) does not count as loaded
+  // and the destructor does not log that it was unloaded.
+  wasLoadedFromDisk_ = true;
 }
 
 // _____________________________________________________________________________
@@ -1415,30 +1420,27 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
         if (indexFormatVersion == sourceVersion &&
             currentVersion == targetVersion) {
           throw std::runtime_error{absl::StrCat(
-              "This index is in an index format that was introduced on ",
-              sourceVersion.date_.toStringAndType().first,
-              " (PR = ", sourceVersion.prNumber_,
-              "). However, the index format changed on ",
+              "The index format changed on ",
               targetVersion.date_.toStringAndType().first,
               " (PR = ", targetVersion.prNumber_,
-              "). You have three options:\n\n"
-              "1. Use an older version of QLever; that way, you won't get the "
-              "latest features\n"
-              "2. Rebuild the index from scratch with the version of qlever "
-              "you are currently using; we recommend this if it is easy to do "
-              "for you\n"
-              "3. Upgrade your index with `qlever-upgrade-index <basename>`; "
-              "this is much faster than rebuilding the index from scratch\n\n"
-              "NOTE: We do our best to keep index format changes rare, but "
-              "sometimes they are unavoidable; we also do our best to then "
-              "keep the new format for a long time")};
+              "), but your index uses the previous format\n\nWe do our best "
+              "to keep index format changes rare, but sometimes they are "
+              "unavoidable. Either use an older version of QLever, or rebuild "
+              "the index from scratch with the version of QLever you are "
+              "currently using, or upgrade your index with the following "
+              "command. Upgrading your index is more than 10 times faster "
+              "than rebuilding it from scratch, and the old index is "
+              "preserved in a subdirectory of your index directory in case "
+              "something goes wrong.\n\nqlever upgrade-index ",
+              std::string(onDiskBase_.size(), ' '),
+              "   (if you use the qlever CLI)\n", "qlever-upgrade-index ",
+              onDiskBase_, "   (if the qlever-* binaries are in your PATH)\n")};
         }
         AD_LOG_ERROR
             << "The index is too old for this version of QLever. "
-               "We recommend that you rebuild the index and start the "
-               "server with the current master. Alternatively start the "
-               "engine with a version of QLever that is compatible with "
-               "this index (PR = "
+               "Either rebuild the index from scratch with the version of "
+               "QLever you are currently using, or use an older version of "
+               "QLever that is compatible with this index (PR = "
             << indexFormatVersion.prNumber_
             << ", Date = " << indexFormatVersion.date_.toStringAndType().first
             << ")." << std::endl;
@@ -1661,8 +1663,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
-                << "\"" << std::endl;
+                << "\" "
+                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+                << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN

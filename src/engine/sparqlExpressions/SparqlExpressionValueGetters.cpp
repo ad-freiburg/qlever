@@ -45,10 +45,9 @@ auto idToLiteral(Id id, EvaluationContextPtr context,
 
 // Convert `id` to a `LiteralOrIri`, see `ql::exportIds::idToLiteralOrIri`.
 auto idToLiteralOrIri(Id id, EvaluationContextPtr context,
-                      bool onlyReturnLiteralsWithXsdString = false) {
-  return ql::exportIds::idToLiteralOrIri(context->_qec.getIndex(), id,
-                                         context->_localVocab,
-                                         onlyReturnLiteralsWithXsdString);
+                      bool skipEncodedValues = false) {
+  return ql::exportIds::idToLiteralOrIri(
+      context->_qec.getIndex(), id, context->_localVocab, skipEncodedValues);
 }
 
 // Convert `id` to a string and its datatype, see

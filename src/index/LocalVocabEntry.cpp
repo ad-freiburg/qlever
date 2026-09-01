@@ -75,8 +75,9 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
     }
     // Look up the word in the vocabularies of the index. A word that is
     // contained in one of them is positioned exactly at its `Id`, so its range
-    // is that single `Id`. A word that is contained in neither is positioned at
-    // the empty range at which it would be sorted into the main vocabulary.
+    // is that single `Id`. A word that is contained in none of them is
+    // positioned at the empty range at which it would be sorted into the
+    // vocabulary of the main index.
     auto idOrBounds =
         context_->lookupWordInVocabularies(toStringRepresentation());
     if (const auto* id = std::get_if<Id>(&idOrBounds)) {
