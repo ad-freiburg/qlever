@@ -1868,7 +1868,10 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
   {
     auto plannedQuery = qlv.parseAndPlanQuery(spatialJoinQuery);
     auto& qet = plannedQuery.queryExecutionTree();
-    auto sjMatcher = h::spatialJoin(
+    // NOTE: `spatialJoinFilterSubstitute`, because the `SpatialJoin` results
+    // from substituting the `FILTER` and (since the flag is preserved by
+    // `cloneWithBoundingBoxColumns`) reports so.
+    auto sjMatcher = h::spatialJoinFilterSubstitute(
         -1, -1, V{"?geometry1"}, V{"?geometry2"}, std::nullopt,
         PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
         SpatialJoinType::INTERSECTS, std::nullopt,
@@ -1892,6 +1895,65 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
     ASSERT_TRUE(runtimeInfo.contains("num-geoms-dropped-by-prefilter"));
     EXPECT_EQ(runtimeInfo.at("num-geoms-dropped-by-prefilter"), 3);
   }
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsSpatialJoinTest, FixedValueFilterOnFullyCoveredView) {
+  // A spatial `FILTER` with one fixed side on a query that is fully covered
+  // by a materialized view: the enforced `SpatialJoin` substitute must be
+  // applied to the full-cover view scan (which only enters the final round of
+  // the query planner's dynamic programming), with the bounding box columns
+  // pushed down. Without this, the filter would only be evaluated as a
+  // regular `Filter` operation over the whole view scan.
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string viewName = "geoms";
+
+  // Pad the test dataset with `geo:hasGeometry` and `geo:asWKT` triples that
+  // do not join with each other. This makes the standard plan (which scans
+  // both predicates in full) clearly more expensive than a scan of the view
+  // (which only contains the few joining rows), so that the view-based plan
+  // reliably wins the cost-based plan selection.
+  std::string ttl{geoTtl};
+  for (size_t i = 0; i < 500; ++i) {
+    absl::StrAppend(&ttl, "<pad", i, "> geo:hasGeometry <nowkt", i, "> .\n");
+    absl::StrAppend(&ttl, "<nogeom", i, "> geo:asWKT \"POINT(", i % 10, " ",
+                    i / 10, ")\"^^geo:wktLiteral .\n");
+  }
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, ttl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+
+  qlv.writeMaterializedView(viewName, std::string{geoBoundingBoxesViewQuery});
+  qlv.loadMaterializedView(viewName);
+
+  const std::string query = R"qy(
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    SELECT * {
+      ?osm_id geo:hasGeometry ?intermediate .
+      ?intermediate geo:asWKT ?geometry .
+      FILTER (geof:metricDistance(
+        "POINT(1 1)"^^geo:wktLiteral, ?geometry) <= 500)
+    }
+  )qy";
+  // The fixed side of the filter is bound to the first internal variable by
+  // the filter substitution (see `QueryPlanner,
+  // SpatialJoinFromFilterWithFixedValue`).
+  V internalVar{absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 0)};
+  auto valuesPoint = h::ValuesClause(
+      absl::StrCat("VALUES (", internalVar.name(),
+                   ") { (G:", GeoPoint{1, 1}.toStringRepresentation(), ") }"));
+  qpExpect(qlv, query,
+           h::spatialJoinFilterSubstitute(
+               500, -1, internalVar, V{"?geometry"}, std::nullopt,
+               PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+               SpatialJoinType::WITHIN_DIST, std::nullopt, valuesPoint,
+               viewScan(viewName, "?osm_id", "?intermediate", "?geometry", 5,
+                        {{3, V{"?_ql_sj_ll_geometry"}},
+                         {4, V{"?_ql_sj_ur_geometry"}}})));
 }
 
 // Example queries for testing query rewriting.
@@ -2025,6 +2087,193 @@ TEST_F(MaterializedViewsChainRewriteContextTest, ChainRewriteContext) {
                                   ad_utility::HashSet<std::string>{"<g1>"}),
           h::IndexScanFromStrings("?m", "<p2>", "?o", {},
                                   ad_utility::HashSet<std::string>{"<g1>"})));
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsChainRestrictionTest, chainWithRestrictions) {
+  // A view whose query is a simple chain plus one or more restriction triples
+  // with a fixed object (e.g. `?s <type> <T>`) can replace the chain in a
+  // query that contains the very same restriction triples, which the view
+  // scan then also covers.
+  const std::string chainTtl =
+      " <s1> <type> <T> . \n"
+      " <s1> <p1> <m1> . \n"
+      " <m1> <p2> <o1> . \n"
+      " <s2> <p1> <m2> . \n"
+      " <m2> <p2> <o2> . \n"
+      " <s3> <type> <U> . \n"
+      " <s3> <p1> <m3> . \n"
+      " <m3> <p2> <o3> . \n"
+      " <m1> <mtype> <MT> . \n";
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string viewName = "testViewRestrictedChain";
+
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, chainTtl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+
+  // Check that the query plan for `query` does not contain a scan of a
+  // materialized view anywhere in the tree.
+  auto expectViewNotUsed = [&qlv](std::string_view query,
+                                  source_location sourceLocation =
+                                      AD_CURRENT_SOURCE_LOC()) {
+    auto l = generateLocationTrace(sourceLocation);
+    qlv.clearQueryResultCache();
+    auto plan = qlv.parseAndPlanQuery(std::string{query});
+    std::function<void(const QueryExecutionTree&)> check =
+        [&check](const QueryExecutionTree& qet) {
+          const auto& op = qet.getRootOperation();
+          if (auto* scan = dynamic_cast<const IndexScan*>(op.get())) {
+            EXPECT_EQ(scan->permutation().materializedView(), nullptr);
+          }
+          for (auto* child : op->getChildren()) {
+            check(*child);
+          }
+        };
+    check(plan.queryExecutionTree());
+  };
+
+  // View restricted on the chain's subject.
+  qlv.writeMaterializedView(
+      viewName, "SELECT ?s ?m ?o { ?s <type> <T> . ?s <p1> ?m . ?m <p2> ?o }");
+  qlv.loadMaterializedView(viewName);
+  auto chainView = std::bind_front(&viewScanSimple, viewName);
+
+  // A query with the same restriction triple is replaced by a single view
+  // scan that covers all three triples (no separate join with the
+  // restriction triple).
+  qpExpect(qlv, "SELECT * { ?a <type> <T> . ?a <p1> ?b . ?b <p2> ?c }",
+           chainView("?a", "?b", "?c"));
+
+  // Also with a fixed subject (which is the first column of the view). The
+  // restriction triple then has no variables at all and forms its own
+  // connected component in the query planner, so the view scan only covers
+  // the two chain triples and the restriction remains a separate (cheap)
+  // existence check.
+  qpExpect(qlv, "SELECT * { <s1> <type> <T> . <s1> <p1>/<p2> ?c }",
+           h::CartesianProductJoin(
+               h::IndexScanFromStrings("<s1>", "<type>", "<T>"),
+               chainView("<s1>", "?_QLever_internal_variable_qp_0", "?c")));
+
+  // Without the restriction triple, or with a different fixed object, the
+  // view must not be used: it only contains the restricted rows.
+  expectViewNotUsed("SELECT * { ?a <p1> ?b . ?b <p2> ?c }");
+  expectViewNotUsed("SELECT * { ?a <type> <U> . ?a <p1> ?b . ?b <p2> ?c }");
+
+  // View restricted on the chain's middle variable.
+  qlv.writeMaterializedView(
+      viewName,
+      "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o . ?m <mtype> <MT> }");
+  qlv.loadMaterializedView(viewName);
+  qpExpect(qlv, "SELECT * { ?a <p1> ?b . ?b <p2> ?c . ?b <mtype> <MT> }",
+           chainView("?a", "?b", "?c"));
+  expectViewNotUsed("SELECT * { ?a <p1> ?b . ?b <p2> ?c }");
+  qlv.deleteMaterializedView(viewName);
+
+  // A restriction triple whose subject is not one of the three chain
+  // variables cannot be translated to the query and makes the view
+  // unsuitable for pattern-based rewriting.
+  MaterializedViewsManager manager{onDiskBase};
+  materializedViewsTestHelpers::expectNotSuitableForRewrite(
+      qlv, manager, "testViewUnrelatedRestriction",
+      "SELECT ?s ?m ?o ?x { ?s <p1> ?m . ?m <p2> ?o . ?x <type> <T> }",
+      "No supported query pattern for rewriting joins was found");
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsChainRestrictionTest, chainWithExistentialRestriction) {
+  // A view whose restriction triple has an anonymous blank node as object
+  // (e.g. `?s <key> []`, "a triple with this predicate exists, whatever its
+  // object") can replace the chain in a query that contains the same
+  // existential triple.
+  const std::string chainTtl =
+      " <s1> <key> \"v1\" . \n"
+      " <s1> <p1> <m1> . \n"
+      " <m1> <p2> <o1> . \n"
+      " <s2> <p1> <m2> . \n"
+      " <m2> <p2> <o2> . \n"
+      " <s3> <key> \"x\" . \n"
+      " <s3> <key> \"y\" . \n"
+      " <s3> <p1> <m3> . \n"
+      " <m3> <p2> <o3> . \n"
+      " <m1> <mkey> \"z\" . \n";
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string viewName = "testViewExistentialRestriction";
+
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, chainTtl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+
+  // Check that the query plan for `query` does not contain a scan of a
+  // materialized view anywhere in the tree.
+  auto expectViewNotUsed = [&qlv](std::string_view query,
+                                  source_location sourceLocation =
+                                      AD_CURRENT_SOURCE_LOC()) {
+    auto l = generateLocationTrace(sourceLocation);
+    qlv.clearQueryResultCache();
+    auto plan = qlv.parseAndPlanQuery(std::string{query});
+    std::function<void(const QueryExecutionTree&)> check =
+        [&check](const QueryExecutionTree& qet) {
+          const auto& op = qet.getRootOperation();
+          if (auto* scan = dynamic_cast<const IndexScan*>(op.get())) {
+            EXPECT_EQ(scan->permutation().materializedView(), nullptr);
+          }
+          for (auto* child : op->getChildren()) {
+            check(*child);
+          }
+        };
+    check(plan.queryExecutionTree());
+  };
+
+  // View with an existential restriction on the chain's subject.
+  qlv.writeMaterializedView(
+      viewName, "SELECT ?s ?m ?o { ?s <key> [] . ?s <p1> ?m . ?m <p2> ?o }");
+  qlv.loadMaterializedView(viewName);
+  auto chainView = std::bind_front(&viewScanSimple, viewName);
+
+  // A query with the same existential triple is replaced by a single view
+  // scan that covers all three triples. Both an anonymous blank node and a
+  // labeled blank node that occurs only once qualify.
+  qpExpect(qlv, "SELECT * { ?a <key> [] . ?a <p1> ?b . ?b <p2> ?c }",
+           chainView("?a", "?b", "?c"));
+  qpExpect(qlv, "SELECT * { ?a <key> _:k . ?a <p1> ?b . ?b <p2> ?c }",
+           chainView("?a", "?b", "?c"));
+
+  // An explicit query variable is not matched, even if it looks unused: it
+  // could occur in parts of the query that are not visible to the matching
+  // (e.g. a FILTER or the SELECT clause).
+  expectViewNotUsed("SELECT * { ?a <key> ?v . ?a <p1> ?b . ?b <p2> ?c }");
+  // A labeled blank node that occurs in more than one triple is not
+  // existential.
+  expectViewNotUsed(
+      "SELECT * { ?a <key> _:k . ?z <p2> _:k . ?a <p1> ?b . ?b <p2> ?c }");
+  // Without the existential triple, the view must not be used: it only
+  // contains the subjects for which the triple exists.
+  expectViewNotUsed("SELECT * { ?a <p1> ?b . ?b <p2> ?c }");
+
+  // View with an existential restriction on the chain's middle variable.
+  qlv.writeMaterializedView(
+      viewName, "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o . ?m <mkey> [] }");
+  qlv.loadMaterializedView(viewName);
+  qpExpect(qlv, "SELECT * { ?a <p1> ?b . ?b <p2> ?c . ?b <mkey> [] }",
+           chainView("?a", "?b", "?c"));
+  expectViewNotUsed("SELECT * { ?a <p1> ?b . ?b <p2> ?c }");
+  qlv.deleteMaterializedView(viewName);
+
+  // On the view side, an explicit variable as the restriction's object is
+  // not treated as existential either (the view would then have three join
+  // triples, which is no supported pattern).
+  MaterializedViewsManager manager{onDiskBase};
+  materializedViewsTestHelpers::expectNotSuitableForRewrite(
+      qlv, manager, "testViewExplicitVariableRestriction",
+      "SELECT ?s ?m ?o { ?s <key> ?v . ?s <p1> ?m . ?m <p2> ?o }",
+      "No supported query pattern for rewriting joins was found");
 }
 
 // _____________________________________________________________________________
