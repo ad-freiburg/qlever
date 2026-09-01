@@ -645,7 +645,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   using namespace responseJson;
   using namespace serverProcessHelpers;
 
-  auto& index = indexAndViews->index_;
+  const auto& index = indexAndViews->index_;
 
   auto checkParameter = makeCheckParameter(parameters);
 
