@@ -7,36 +7,12 @@
 
 #include <absl/strings/str_join.h>
 
-#include "backports/algorithm.h"
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/NormalizedString.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlTriple.h"
-
-namespace {
-constexpr ctll::fixed_string de9imFilterRegex = "[0-2TtFf*]{9}";
-}  // namespace
-
-// ____________________________________________________________________________
-std::optional<De9imFilterString> parseDe9imFilterString(
-    std::string_view filter) {
-  if (!ctre::match<de9imFilterRegex>(filter)) {
-    return std::nullopt;
-  }
-  // The regex above already enforces that `filter` has exactly 9 characters.
-  AD_CORRECTNESS_CHECK(filter.size() == De9imFilterString{}.size());
-  De9imFilterString result{};
-  ql::ranges::copy(filter, result.begin());
-  return result;
-}
-
-// ____________________________________________________________________________
-bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter) {
-  auto admitsF = [](char c) { return c == '*' || c == 'F' || c == 'f'; };
-  return admitsF(filter[0]) && admitsF(filter[1]) && admitsF(filter[3]) &&
-         admitsF(filter[4]);
-}
+#include "rdfTypes/GeoSparqlHelpers.h"
 
 namespace parsedQuery {
 
@@ -189,6 +165,10 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
           "`<maxDistance>` option only if `<joinType>` is set to "
           "`<within-dist>`.");
 
+  throwIf(joinType_ == SpatialJoinType::WITHIN_DIST && !maxDist_.has_value(),
+          "The join type `<within-dist>` requires the `<maxDistance>` "
+          "parameter to be set.");
+
   throwIf(joinType_ == SpatialJoinType::DE9IM && !de9imFilter_.has_value(),
           "The join type `<de9im>` requires the `<de9imFilter>` parameter to "
           "be set.");
@@ -271,7 +251,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
 
   return SpatialJoinConfiguration{
       task, left_.value(), right_.value(), distanceVariable_,
-      pv,   algo,          joinType,       rightCacheName_};
+      pv,   algo,          rightCacheName_};
 }
 
 // ____________________________________________________________________________
