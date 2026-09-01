@@ -1663,9 +1663,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" "
-                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-                << std::endl;
+                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
+                << "\"" << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
