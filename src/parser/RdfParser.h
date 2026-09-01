@@ -221,16 +221,7 @@ class TurtleParser : public RdfParserBase {
     return header_.prefixMap_;
   }
 
-  const ad_utility::HashMap<std::string, TripleComponent::Iri>& prefixMap()
-      const {
-    return header_.prefixMap_;
-  }
-
   std::optional<qlever::util::ParsedUri>& baseIri() { return header_.baseIri_; }
-
-  const std::optional<qlever::util::ParsedUri>& baseIri() const {
-    return header_.baseIri_;
-  }
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
@@ -398,11 +389,9 @@ class TurtleParser : public RdfParserBase {
   // with all of its sub-parsers (see `setFileBlankNodePrefix`).
   static size_t nextBlankNodePrefix() { return numParsers_.fetch_add(1); }
 
-  // Access the header (see `RdfParserHeader`) of this parser. The mutable
-  // overload is used by the parallel parser to set up its worker parsers.
+  // Access the header (see `RdfParserHeader`) of this parser. This is used
+  // by the parallel parser to set up its worker parsers.
   RdfParserHeader& header() { return header_; }
-
-  const RdfParserHeader& header() const { return header_; }
 
  protected:
   FRIEND_TEST(RdfParserTest, prefixedName);
@@ -657,9 +646,6 @@ class RdfStreamParser : public Parser {
 template <typename Parser>
 class RdfParallelParser : public RdfParserBase {
  public:
-  // Default construction needed for tests
-  explicit RdfParallelParser(const EncodedIriManager* ev) : RdfParserBase{ev} {}
-
   // Construct a parser that reads from an `InputFileSpecification`. The parser
   // creates its own I/O thread and `AsyncBlockSource` internally. The
   // `blocksize` parameter controls the size of the underlying I/O block buffer.

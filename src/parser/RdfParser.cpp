@@ -1255,7 +1255,7 @@ void RdfParallelParser<T>::initialize(
 // _____________________________________________________________________________
 template <class T>
 std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
-  while (true) {
+  for (;;) {
     try {
       auto triples = tripleCollector_.pop();
       // Skip batches that contain no triples. (Theoretically this might happen,
