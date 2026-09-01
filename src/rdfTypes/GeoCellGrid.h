@@ -120,9 +120,7 @@ class GeoCellGrid {
   // The maximum number of words the geo vocabulary can hold with this grid.
   uint64_t maxNumWords() const { return uint64_t{1} << numPositionBits(); }
 
-  // The index of the cell that contains the point (`lng`, `lat`), with
-  // clamping. Only valid for the `Flat` scheme; used by tests and
-  // diagnostics.
+  // The cell index containing the point (`lng`, `lat`), with clamping.
   CellIndex cellIndexFromPoint(double lng, double lat) const;
 
   // The cell index for the given bounding box: the smallest regular cell that
