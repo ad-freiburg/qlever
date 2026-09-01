@@ -1,6 +1,9 @@
-//   Copyright 2024, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #ifndef QLEVER_RUNTIMEPARAMETERS_H
 #define QLEVER_RUNTIMEPARAMETERS_H
@@ -51,6 +54,11 @@ struct RuntimeParameters {
   Double sortEstimateCancellationFactor_{3.0,
                                          "sort-estimate-cancellation-factor"};
   SizeT cacheMaxNumEntries_{1000, "cache-max-num-entries"};
+
+  // Threads used to format CONSTRUCT triples in parallel. 0 means all
+  // logical cores, matching `computeInParallelChunks`. The default of 1
+  // keeps the serial generator (one formatted triple per yield).
+  SizeT constructExportNumThreads_{1, "construct-export-num-threads"};
 
   MemorySizeParameter cacheMaxSize_{ad_utility::MemorySize::gigabytes(30),
                                     "cache-max-size"};
@@ -237,10 +245,13 @@ struct RuntimeParameters {
                               "log-level"};
 
   // Controls deduplication of triples in CONSTRUCT query results.
-  // "false" (default): no deduplication, every triple is emitted.
-  // "global": a triple is emitted at most once across the entire result.
-  // N (positive integer): deduplicate against the N most recently seen unique
-  // triples (per template triple); bounded memory, partial deduplication.
+  // "none" (default): no duplicate tracking; every valid instantiated result
+  // triple is emitted.
+  // "full": one shared set stores the full triple keys for the whole query;
+  // repeated result triples are suppressed.
+  // "lru:<positive integer>": one shared LRU cache stores at most that many
+  // recently seen unique full triple keys; bounded memory, partial
+  // deduplication.
   DeduplicationModeParameter constructDeduplication_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
 

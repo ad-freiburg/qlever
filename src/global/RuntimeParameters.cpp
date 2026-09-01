@@ -1,7 +1,7 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026, The QLever Authors, in particular:
 //
-// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2025 NN, BMW
+// 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 // BMW =  Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
@@ -25,6 +25,7 @@ RuntimeParameters::RuntimeParameters() {
   add(stripColumns_);
   add(sortEstimateCancellationFactor_);
   add(cacheMaxNumEntries_);
+  add(constructExportNumThreads_);
   add(cacheMaxSize_);
   add(cacheMaxSizeSingleEntry_);
   add(lazyIndexScanQueueSize_);
