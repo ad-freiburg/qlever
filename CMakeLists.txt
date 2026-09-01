@@ -861,6 +861,9 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     if (USE_PRECOMPILED_HEADERS)
         target_precompile_headers(qlever-server REUSE_FROM engine)
     endif()
+
+    add_executable(qlever-upgrade-index src/IndexUpgraderMain.cpp)
+    qlever_target_link_libraries(qlever-upgrade-index index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
@@ -876,6 +879,7 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     install(TARGETS
         qlever-index
         qlever-server
+        qlever-upgrade-index
         RUNTIME DESTINATION bin
     )
 endif()
