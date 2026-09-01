@@ -120,7 +120,9 @@ class GeoCellGrid {
   // The maximum number of words the geo vocabulary can hold with this grid.
   uint64_t maxNumWords() const { return uint64_t{1} << numPositionBits(); }
 
-  // The cell index containing the point (`lng`, `lat`), with clamping.
+  // The index of the cell that contains the point (`lng`, `lat`), with
+  // clamping. Only valid for the `Flat` scheme; used by tests and
+  // diagnostics.
   CellIndex cellIndexFromPoint(double lng, double lat) const;
 
   // The cell index for the given bounding box: the smallest regular cell that
@@ -156,9 +158,9 @@ class GeoCellGrid {
   // property:
   //
   // If the bounding box of a geometry intersects the rectangle, then the cell
-  // of that geometry (each geometry has exactly one, see
-  // `cellIndexFromBoundingBox`) is contained in one of the ranges. The sentinel
-  // cell is always part of the ranges.
+  // index of that geometry (each geometry has exactly one, see
+  // `cellIndexFromBoundingBox`) is contained in one of the ranges. The index
+  // of the sentinel cell is always part of the ranges.
   //
   // NOTE: When using these ranges for pre-filtering, this will keep blocks
   // that contain potential results; all other blocks are guaranteed to contain
