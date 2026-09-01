@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <exception>
+#include <functional>
 
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
@@ -81,9 +82,9 @@ using unsignedTypeForNumberOfBits =
 // iteration, so unset bits are never visited.
 CPP_template(typename F)(
     requires InvocableWithConvertibleReturnType<
-        F, bool, size_t>) inline void forEachSetBit(uint64_t bits, F&& fn) {
+        F, bool, uint8_t>) inline void forEachSetBit(uint64_t bits, F&& fn) {
   while (bits != 0) {
-    if (!fn(static_cast<size_t>(absl::countr_zero(bits)))) {
+    if (!std::invoke(fn, static_cast<uint8_t>(absl::countr_zero(bits)))) {
       return;
     }
     bits &= bits - 1;
