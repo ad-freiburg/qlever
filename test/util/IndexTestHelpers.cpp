@@ -7,6 +7,7 @@
 #include <absl/strings/str_cat.h>
 
 #include <array>
+#include <memory>
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
@@ -20,6 +21,7 @@
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "index/TripleComponentConversions.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/FilesystemHelpers.h"
 #include "util/ProgressBar.h"
@@ -310,6 +312,12 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   index.createFromOnDiskIndex(indexBasename, false);
   if (c.createTextIndex) {
     index.addTextFromOnDiskIndex();
+  }
+
+  if (c.secondaryVocabWords.has_value()) {
+    index.getImpl().setSecondaryVocabForTesting(
+        std::make_shared<SecondaryVocabulary>(
+            std::move(c.secondaryVocabWords).value()));
   }
 
   if (c.usePatterns && c.loadAllPermutations) {
