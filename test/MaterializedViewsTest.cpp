@@ -1511,9 +1511,6 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     auto viewScanWithBind =
         viewScan("bindView", "?s2", "?o2", "?_ql_materialized_view_o", 3,
                  AC{{3, V{"?bind"}}});
-    // NOTE: `spatialJoinFilterSubstitute`, because the `SpatialJoin` results
-    // from substituting the `FILTER` and (since the flag is now preserved by
-    // `makeTreeWithBindColumn`) reports so.
     qpExpect(qlv(), bindThroughSpatialJoin,
              h::spatialJoinFilterSubstitute(
                  100, -1, V{"?o"}, V{"?o2"}, std::nullopt,
@@ -1871,9 +1868,6 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
   {
     auto plannedQuery = qlv.parseAndPlanQuery(spatialJoinQuery);
     auto& qet = plannedQuery.queryExecutionTree();
-    // NOTE: `spatialJoinFilterSubstitute`, because the `SpatialJoin` results
-    // from substituting the `FILTER` and (since the flag is preserved by
-    // `cloneWithBoundingBoxColumns`) reports so.
     auto sjMatcher = h::spatialJoinFilterSubstitute(
         -1, -1, V{"?geometry1"}, V{"?geometry2"}, std::nullopt,
         PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
