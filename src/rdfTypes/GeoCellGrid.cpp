@@ -45,9 +45,12 @@ uint64_t GeoCellGrid::gridCoordinate(double normalized) const {
 // ____________________________________________________________________________
 GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromPoint(double lng,
                                                        double lat) const {
-  AD_CONTRACT_CHECK(scheme_ == GeoCellGridScheme::Flat);
-  return (gridCoordinate((lat + 90.0) / 180.0) << level_) |
-         gridCoordinate((lng + 180.0) / 360.0);
+  switch (scheme_) {
+    case GeoCellGridScheme::Enum::Flat:
+      return (gridCoordinate((lat + 90.0) / 180.0) << level_) |
+             gridCoordinate((lng + 180.0) / 360.0);
+  }
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________
