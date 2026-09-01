@@ -17,9 +17,14 @@
 #include "backports/filesystem.h"
 #include "engine/ExternalValues.h"
 #include "engine/MaterializedViews.h"
+#include "engine/UpdateMetadata.h"
 #include "global/FileSuffixConstants.h"
+#include "global/RuntimeParameters.h"
+#include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "libqlever/Qlever.h"
+#include "parser/SparqlParser.h"
+#include "util/BlankNodeManager.h"
 #include "util/FilesystemHelpers.h"
 
 using namespace qlever;
@@ -435,266 +440,39 @@ RebuildSetup setUpRebuild(const std::string& baseFolder) {
 }  // namespace
 
 // _____________________________________________________________________________
-// Build an "old" index and a freshly "rebuilt" index (in a temporary
-// directory), then move the rebuilt index into the place of the old one and
-// check the resulting on-disk layout and the re-anchored in-memory state.
+// `Qlever::moveRebuiltIndexIntoPlace` performs the on-disk swap (which is
+// tested in detail in `test/index/IndexSwapTest.cpp`) and then re-anchors the
+// path-derived in-memory state of the new index to its final base name. Only
+// the latter is tested here.
 TEST(Qlever, moveRebuiltIndexIntoPlace) {
-  std::string baseFolder = gtestCurrentTestName();
-  absl::Cleanup removeFiles{
-      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
-  auto setup = setUpRebuild(baseFolder);
+  // The re-anchoring of the filenames for the persisted updates only happens
+  // for an index that persists its updates, so run the test for both cases.
+  for (bool persistUpdates : {false, true}) {
+    std::string baseFolder =
+        absl::StrCat(gtestCurrentTestName(), persistUpdates);
+    absl::Cleanup removeFiles{
+        [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+    auto setup = setUpRebuild(baseFolder);
+    auto& index = setup.indexAndViews_->index_;
 
-  // Use a base name for the old index that lives in a not-yet-existing
-  // directory AND uses a different file-name prefix than the original index.
-  // This exercises that the individual files are re-prefixed, not just moved.
-  std::string oldIndexBackup = baseFolder + "/previous/old-index";
-  std::string newBase = baseFolder + "/index";
-  qlever::IndexRebuildConfig config{setup.oldBase_, setup.rebuiltBase_,
-                                    oldIndexBackup, newBase};
+    if (persistUpdates) {
+      index.getImpl().setFilenamesForPersistentUpdates(false);
+    }
+    ASSERT_EQ(index.deltaTriplesManager().persists(), persistUpdates);
+    ASSERT_EQ(index.getOnDiskBase(), setup.rebuiltBase_);
 
-  // The old index carries a build log, and the rebuilt index a rebuild log;
-  // both must travel with their respective index (exercising the log-moving
-  // branches).
-  auto touch = [](const std::string& path) {
-    ad_utility::makeOfstream(path) << "log";
-  };
-  touch(setup.oldBase_ + INDEX_LOG_SUFFIX);
-  touch(setup.rebuiltBase_ + REBUILD_INDEX_LOG_SUFFIX);
+    std::string newBase = baseFolder + "/index";
+    qlever::IndexSwapConfig config{setup.oldBase_, setup.rebuiltBase_,
+                                   baseFolder + "/previous/index", newBase};
+    qlever::Qlever::moveRebuiltIndexIntoPlace(*setup.indexAndViews_, config);
 
-  // Enable persistence of updates for the rebuilt index, so that the re-anchor
-  // of the persisted-updates filenames is exercised.
-  setup.indexAndViews_->index_.getImpl().setFilenamesForPersistentUpdates(
-      false);
-  ASSERT_TRUE(setup.indexAndViews_->index_.deltaTriplesManager().persists());
-
-  qlever::Qlever::moveRebuiltIndexIntoPlace(*setup.indexAndViews_, config);
-
-  // The old index's files were moved to the base name for the old index, with
-  // their file-name prefix changed to match that base name. This includes the
-  // build log.
-  EXPECT_TRUE(ql::filesystem::exists(oldIndexBackup + CONFIGURATION_FILE));
-  EXPECT_TRUE(ql::filesystem::exists(oldIndexBackup + ".index.pso"));
-  EXPECT_TRUE(ql::filesystem::exists(oldIndexBackup + INDEX_LOG_SUFFIX));
-
-  // The rebuilt index now lives at the final base name (the place of the old
-  // index) and no longer in the temporary directory. Its rebuild log traveled
-  // with it to the final base name.
-  EXPECT_TRUE(ql::filesystem::exists(newBase + CONFIGURATION_FILE));
-  EXPECT_TRUE(ql::filesystem::exists(newBase + ".index.pso"));
-  EXPECT_TRUE(ql::filesystem::exists(newBase + REBUILD_INDEX_LOG_SUFFIX));
-  // The temporary directory in which the new index was built became empty by
-  // the move and was therefore removed (which also implies that no file of the
-  // new index was left behind in it).
-  EXPECT_FALSE(ql::filesystem::exists(baseFolder + "/rebuild.tmp"));
-
-  // The in-memory state of the new index was re-anchored to the final base, and
-  // it still persists its updates (now under the new base name).
-  EXPECT_EQ(setup.indexAndViews_->index_.getOnDiskBase(), newBase);
-  EXPECT_TRUE(setup.indexAndViews_->index_.deltaTriplesManager().persists());
-}
-
-// _____________________________________________________________________________
-// The base name for the retired old index may also be a plain directory (given
-// with a trailing separator). The directory does not exist yet and has to be
-// created; the old index's files then live directly inside it, with an empty
-// file-name prefix (e.g. `<dir>/.index.pso`).
-TEST(Qlever, moveRebuiltIndexIntoPlaceWithDirectoryBasename) {
-  std::string baseFolder = gtestCurrentTestName();
-  absl::Cleanup removeFiles{
-      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
-  auto setup = setUpRebuild(baseFolder);
-
-  std::string oldDir = baseFolder + "/previous/";
-  std::string newBase = baseFolder + "/index";
-  qlever::IndexRebuildConfig config{setup.oldBase_, setup.rebuiltBase_, oldDir,
-                                    newBase};
-
-  // Complementary to `moveRebuiltIndexIntoPlace` above: here neither index has
-  // a log file and the rebuilt index does not persist its updates, so this test
-  // covers the "no log file to move" and "index does not persist" branches
-  // (whereas the other test covers their counterparts). Do not add log files or
-  // enable persistence here, or that negative coverage is lost.
-  qlever::Qlever::moveRebuiltIndexIntoPlace(*setup.indexAndViews_, config);
-
-  // The (previously non-existent) directory was created and the old index's
-  // files now live inside it (with an empty base-name prefix).
-  EXPECT_TRUE(ql::filesystem::is_directory(oldDir));
-  EXPECT_TRUE(ql::filesystem::exists(oldDir + CONFIGURATION_FILE));
-  EXPECT_TRUE(ql::filesystem::exists(oldDir + ".index.pso"));
-
-  // The new index is installed at its final base name as usual, and no rebuild
-  // log was created for it.
-  EXPECT_TRUE(ql::filesystem::exists(newBase + CONFIGURATION_FILE));
-  EXPECT_TRUE(ql::filesystem::exists(newBase + ".index.pso"));
-  EXPECT_FALSE(ql::filesystem::exists(newBase + REBUILD_INDEX_LOG_SUFFIX));
-  EXPECT_FALSE(setup.indexAndViews_->index_.deltaTriplesManager().persists());
-}
-
-// _____________________________________________________________________________
-// The standard production layout: the index is served with a BARE base name
-// (no directory component) from the current working directory, which is how
-// `qlever-control` starts the server. The file enumeration must then return
-// bare file names as well, otherwise the base-name prefix substitution of the
-// move fails on the globbed files (vocabulary, views).
-TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareBasename) {
-  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
-  ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
-  ql::filesystem::create_directory("rebuild.tmp");
-  Index rebuilt = ad_utility::testing::makeTestIndex(
-      "rebuild.tmp/index", "<a> <b> <c> . <d> <e> <f> .");
-  auto indexAndViews = std::make_shared<qlever::Qlever::IndexAndViews>(
-      std::move(rebuilt), MaterializedViewsManager{"rebuild.tmp/index"});
-
-  qlever::IndexRebuildConfig config{"index", "rebuild.tmp/index",
-                                    "previous/index", "index"};
-  qlever::Qlever::moveRebuiltIndexIntoPlace(*indexAndViews, config);
-
-  // The old index (including its vocabulary, which is enumerated via the glob)
-  // was moved away completely, and the new index is installed in its place.
-  EXPECT_TRUE(ql::filesystem::exists(std::string{"previous/index"} +
-                                     std::string{CONFIGURATION_FILE}));
-  EXPECT_FALSE(
-      qlever::util::filesWithBaseNameAndSuffix("previous/index", VOCAB_SUFFIX)
-          .empty());
-  EXPECT_TRUE(ql::filesystem::exists(std::string{"index"} +
-                                     std::string{CONFIGURATION_FILE}));
-  EXPECT_FALSE(
-      qlever::util::filesWithBaseNameAndSuffix("index", VOCAB_SUFFIX).empty());
-  EXPECT_TRUE(IndexImpl::allIndexFiles("rebuild.tmp/index").empty());
-  EXPECT_EQ(indexAndViews->index_.getOnDiskBase(), "index");
-  // A bare base name has no directory component, so nothing has to be created
-  // for it. In particular, the base name itself must not be mistaken for a
-  // directory to create.
-  EXPECT_FALSE(ql::filesystem::exists("index"));
-}
-
-// _____________________________________________________________________________
-// The freshly rebuilt index may also live at a BARE base name (no directory
-// component), i.e. directly in the working directory. There is then no
-// temporary directory that the new index has to be taken out of, so the removal
-// of that directory has to be skipped (in particular, the working directory
-// itself must not be removed).
-TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareNewIndexSource) {
-  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
-  ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
-  Index rebuilt = ad_utility::testing::makeTestIndex(
-      "rebuilt", "<a> <b> <c> . <d> <e> <f> .");
-  auto indexAndViews = std::make_shared<qlever::Qlever::IndexAndViews>(
-      std::move(rebuilt), MaterializedViewsManager{"rebuilt"});
-
-  qlever::IndexRebuildConfig config{"index", "rebuilt", "previous/index",
-                                    "index"};
-  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
-  qlever::Qlever::moveRebuiltIndexIntoPlace(*indexAndViews, config);
-
-  // The swap happened as usual: the old index was moved away and the new index
-  // took its place, with nothing left at the base name it was built under.
-  EXPECT_TRUE(ql::filesystem::exists(std::string{"previous/index"} +
-                                     std::string{CONFIGURATION_FILE}));
-  EXPECT_TRUE(ql::filesystem::exists(std::string{"index"} +
-                                     std::string{CONFIGURATION_FILE}));
-  EXPECT_TRUE(IndexImpl::allIndexFiles("rebuilt").empty());
-  EXPECT_EQ(indexAndViews->index_.getOnDiskBase(), "index");
-  // No directory removal was attempted, hence also no warning about a failed
-  // one, and the working directory is of course still there.
-  EXPECT_THAT(logStream.str(),
-              Not(HasSubstr("Could not remove the directory")));
-  EXPECT_TRUE(ql::filesystem::is_directory(ql::filesystem::current_path()));
-}
-
-// _____________________________________________________________________________
-// If the directory in which the new index was built cannot be removed after the
-// new index has been moved out of it (here because it still holds a file that
-// is not part of the index), the swap is still complete and only a warning is
-// logged.
-TEST(Qlever, moveRebuiltIndexIntoPlaceWithNonRemovableBuildDirectory) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
-  std::string baseFolder = gtestCurrentTestName();
-  absl::Cleanup removeFiles{
-      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
-  auto setup = setUpRebuild(baseFolder);
-
-  // Put a file that is not part of the index into the temporary directory of
-  // the rebuild: it is not moved along and hence keeps the directory from being
-  // removed (unlike in `moveRebuiltIndexIntoPlace`, where the directory becomes
-  // empty and is removed).
-  std::string unrelatedFile = baseFolder + "/rebuild.tmp/unrelated.txt";
-  ad_utility::makeOfstream(unrelatedFile) << "keep me";
-
-  std::string oldIndexBackup = baseFolder + "/previous/index";
-  std::string newBase = baseFolder + "/index";
-  qlever::IndexRebuildConfig config{setup.oldBase_, setup.rebuiltBase_,
-                                    oldIndexBackup, newBase};
-
-  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
-  qlever::Qlever::moveRebuiltIndexIntoPlace(*setup.indexAndViews_, config);
-  EXPECT_THAT(logStream.str(), HasSubstr("Could not remove the directory"));
-
-  // Both indexes still ended up where they belong, and only the unrelated file
-  // was left behind.
-  EXPECT_TRUE(ql::filesystem::exists(oldIndexBackup + CONFIGURATION_FILE));
-  EXPECT_TRUE(ql::filesystem::exists(newBase + CONFIGURATION_FILE));
-  EXPECT_TRUE(IndexImpl::allIndexFiles(setup.rebuiltBase_).empty());
-  EXPECT_TRUE(ql::filesystem::exists(unrelatedFile));
-}
-
-// _____________________________________________________________________________
-// The `IndexRebuildConfig` constructor rejects base-name combinations that
-// would collide destructively. Because the validation lives in the constructor,
-// this needs no index on disk at all.
-TEST(Qlever, indexRebuildConfigRejectsCollidingBaseNames) {
-  using qlever::IndexRebuildConfig;
-  // The four positional arguments are: current index, rebuilt index, retired
-  // old index, new index. The common (valid) case has the new index served
-  // from the place of the current index.
-  EXPECT_NO_THROW(
-      IndexRebuildConfig("index", "tmp/index", "previous/old", "index"));
-
-  // The currently served index and the freshly rebuilt index must differ.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "index", "previous/old", "index"),
-      ::testing::HasSubstr(
-          "currently served index and the freshly rebuilt index"));
-
-  // The retired-old-index base name must differ from the currently served
-  // index, ...
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "tmp/index", "index", "index"),
-      ::testing::HasSubstr("differ from the currently served index"));
-
-  // ... from the freshly rebuilt index, ...
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "tmp/index", "tmp/index", "index"),
-      ::testing::HasSubstr("differ from the freshly rebuilt index"));
-
-  // ... and from the new index.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "tmp/index", "shared", "shared"),
-      ::testing::HasSubstr("retired old index and the new index must differ"));
-
-  // Collisions are detected up to lexical path normalization, so `abc/../index`
-  // (which denotes `index`) collides with the currently served index `index`.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "tmp/index", "abc/../index", "index"),
-      ::testing::HasSubstr("differ from the currently served index"));
-
-  // Base names that merely share a string prefix (e.g. `index` and `indexdata`)
-  // do NOT collide: the `.`-delimited file-name suffixes keep the two indexes'
-  // files apart, so such a configuration is valid.
-  EXPECT_NO_THROW(
-      IndexRebuildConfig("index", "tmp/index", "indexdata", "index"));
-
-  // But a base name that is another base name followed by a '.' DOES collide:
-  // `index.view` sits inside the `index.view.*` glob that enumerates `index`'s
-  // materialized views, so retiring the old index to `index.view` would sweep
-  // up the current index's view files.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "tmp/index", "index.view", "index"),
-      ::testing::HasSubstr("differ from the currently served index"));
-  // The same holds regardless of which of the two base names is the longer one.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      IndexRebuildConfig("index", "index.view", "previous/old", "newidx"),
-      ::testing::HasSubstr("currently served index and the freshly rebuilt"));
+    // The on-disk swap happened, and the in-memory state of the new index was
+    // re-anchored to the final base name, with its persistence of updates
+    // unchanged.
+    EXPECT_TRUE(ql::filesystem::exists(newBase + CONFIGURATION_FILE));
+    EXPECT_EQ(index.getOnDiskBase(), newBase);
+    EXPECT_EQ(index.deltaTriplesManager().persists(), persistUpdates);
+  }
 }
 
 // _____________________________________________________________________________
@@ -916,6 +694,132 @@ TEST(LibQlever, clearCache) {
 }
 
 // _____________________________________________________________________________
+// Test that `Qlever::applyUpdate` is directly usable through `Qlever`,
+// independent of the HTTP `Server` layer (which only wraps this in
+// thread/timer/response-formatting concerns, see `Server::processUpdate`).
+TEST(LibQlever, applyUpdate) {
+  // Never persist updates to disk in this test (would leave files behind
+  // after the test, and pollute a re-run of the same test that reuses the
+  // same on-disk base name).
+  auto config = buildTestIndex("<s> <p> <o> .");
+  config.persistUpdates_ = false;
+  Qlever engine{config};
+
+  // Populate the cache with a pinned query result, so that clearing the
+  // cache as a side effect of `applyUpdate` is actually observable below.
+  PlannedQuery plan = engine.planQuery(engine.parseQuery(
+      "SELECT ?s WHERE { ?s <p> ?o }", {}, ad_utility::noop, false, true));
+  engine.query(plan, ad_utility::MediaType::tsv);
+  ASSERT_GT(engine.cache().numPinnedEntries(), 0U);
+
+  // `Qlever::parseQuery`/`parseAndPlanQuery` only accept SPARQL queries, not
+  // updates (see `SparqlParser::parseQuery` vs. `parseUpdate`), so an update
+  // has to be parsed separately and then planned via `bindParsedQuery`.
+  ad_utility::BlankNodeManager bnm;
+  auto parsedUpdates =
+      SparqlParser::parseUpdate(&bnm, ad_utility::testing::encodedIriManager(),
+                                "INSERT DATA { <a> <b> <c> }");
+  ASSERT_THAT(parsedUpdates, SizeIs(1));
+  auto plannedUpdate =
+      engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
+  ASSERT_TRUE(plannedUpdate.parsedQuery().hasUpdateClause());
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  // NOTE: This takes a fresh index snapshot, independent of the one
+  // `plannedUpdate` was planned against a few lines above. In general this
+  // is not thread-safe: if a concurrent index rebuild swapped in a new
+  // `IndexAndViews` between the two calls, `deltaTriples` here would belong
+  // to a different `Index` than the one `plannedUpdate` was planned
+  // against, violating `applyUpdate`'s precondition. This test gets away
+  // with it because it is single-threaded and nothing swaps the index in
+  // between. `PlannedQuery`/`QueryExecutionContext` currently don't expose
+  // a way to get back the exact snapshot a query was planned against (only
+  // a `const Index&`), so there is no easy way to avoid the second
+  // snapshot here yet. A future API that threads the `IndexAndViews`
+  // snapshot explicitly through parsing/planning/execution would close
+  // this gap, but that is a larger redesign, out of scope for now.
+  auto snapshot = engine.indexAndViewsSnapshot();
+  UpdateMetadata updateMetadata =
+      snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(
+          [&](DeltaTriples& deltaTriples) {
+            return engine.applyUpdate(plannedUpdate, handle, deltaTriples);
+          });
+
+  EXPECT_THAT(updateMetadata.countBefore_,
+              Optional(Eq(DeltaTriplesCount{0, 0})));
+  EXPECT_THAT(updateMetadata.countAfter_,
+              Optional(Eq(DeltaTriplesCount{1, 0})));
+
+  // The query result cache is invalidated as a side effect of `applyUpdate`.
+  EXPECT_EQ(engine.cache().numPinnedEntries(), 0U);
+  EXPECT_EQ(engine.cache().numNonPinnedEntries(), 0U);
+}
+
+namespace {
+// Parse and plan `update` and apply it to `engine` via `Qlever::applyUpdate`,
+// returning the metadata. For why the update has to be parsed separately and
+// for the thread-safety caveat of taking the snapshot only here, see the
+// comments in `LibQlever.applyUpdate` above.
+UpdateMetadata applyUpdateToEngine(Qlever& engine, const std::string& update) {
+  ad_utility::BlankNodeManager bnm;
+  auto parsedUpdates = SparqlParser::parseUpdate(
+      &bnm, ad_utility::testing::encodedIriManager(), update);
+  AD_CORRECTNESS_CHECK(parsedUpdates.size() == 1);
+  auto plannedUpdate =
+      engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto snapshot = engine.indexAndViewsSnapshot();
+  return snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(
+      [&](DeltaTriples& deltaTriples) {
+        return engine.applyUpdate(plannedUpdate, handle, deltaTriples);
+      });
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Direct counterpart to `ServerTest.clearDeltaTriples`: populate the delta
+// triples via `applyUpdate` and clear them directly through `Qlever`,
+// independent of the HTTP `Server` layer.
+TEST(LibQlever, clearDeltaTriples) {
+  auto config = buildTestIndex("<s> <p> <o> .");
+  config.persistUpdates_ = false;
+  Qlever engine{config};
+
+  auto metadata = applyUpdateToEngine(engine, "INSERT DATA { <a> <b> <c> }");
+  EXPECT_THAT(metadata.countAfter_, Optional(Eq(DeltaTriplesCount{1, 0})));
+
+  EXPECT_THAT(engine.clearDeltaTriples(), Eq(DeltaTriplesCount{0, 0}));
+}
+
+// _____________________________________________________________________________
+// Direct counterpart to `ServerTest.vacuumDeltaTriples`: insert a triple that
+// is already in the index (a redundant insertion that `vacuum` removes) and
+// vacuum directly through `Qlever`, independent of the HTTP `Server` layer.
+TEST(LibQlever, vacuumDeltaTriples) {
+  auto config = buildTestIndex("<a> <b> <c> .");
+  config.persistUpdates_ = false;
+  Qlever engine{config};
+
+  // Without this, the single block of the (tiny) test index doesn't meet the
+  // minimum size for `vacuum` to process it.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+          size_t{0});
+
+  auto metadata = applyUpdateToEngine(engine, "INSERT DATA { <a> <b> <c> }");
+  EXPECT_THAT(metadata.countAfter_, Optional(Eq(DeltaTriplesCount{1, 0})));
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto stats = engine.vacuumDeltaTriples(handle);
+  EXPECT_EQ(stats["external"]["insertionsRemoved"], 1);
+  EXPECT_THAT(engine.indexAndViewsSnapshot()
+                  ->index_.deltaTriplesManager()
+                  .getCurrentLocatedTriplesSharedState()
+                  ->counts_,
+              Optional(Eq(DeltaTriplesCount{0, 0})));
+}
+
+// _____________________________________________________________________________
 // The non-`const` getter for the allocator yields a mutable reference to the
 // allocator of the engine, so that memory allocated through it counts towards
 // the engine's memory limit, which the `const` getter observes.
@@ -963,12 +867,13 @@ TEST(LibQlever, allocatorMakesRoomByClearingTheCache) {
 }
 
 // _____________________________________________________________________________
-// `Qlever::makeIndexRebuildConfig` turns the two directories that a rebuild can
-// be configured with into base names (by appending the file name of the current
-// index) and validates them. The test runs in a fresh working directory,
-// because the directories are resolved against the working directory and have
-// to lie inside the directory of the current index (which is the working
-// directory here as the index is served from the bare base name `index`).
+// `Qlever::makeIndexRebuildConfig` is a thin wrapper around
+// `qlever::makeIndexSwapConfig` (which is tested in detail in
+// `test/index/IndexSwapTest.cpp`): it takes the base name of the current index
+// from the `Index` and fills in the naming scheme of `qlever-server`'s index
+// rebuild. Only that is tested here. The test runs in a fresh working
+// directory, because the default directories are created relative to the
+// directory of the current index.
 TEST(Qlever, makeIndexRebuildConfig) {
   auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
   Index index = ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
@@ -979,99 +884,38 @@ TEST(Qlever, makeIndexRebuildConfig) {
                                           std::move(rebuildPreviousIndexDir));
   };
 
-  // Both directories default to a directory that does not exist yet, derived
-  // from the current time resp. the build date of the current index. The new
-  // index ends up at the base name the current index is served from.
-  {
-    auto config = makeConfig(std::nullopt, std::nullopt);
-    EXPECT_EQ(config.oldIndexSource(), "index");
-    EXPECT_EQ(config.newIndexTarget(), "index");
-    EXPECT_THAT(config.newIndexSource(),
-                AllOf(StartsWith("rebuild."), EndsWith(".tmp/index")));
-    EXPECT_THAT(config.oldIndexTarget(),
-                AllOf(StartsWith("previous."), EndsWith("/index")));
-    // The success response reports the directory of the old index (which the
-    // client cannot know in advance when it was defaulted), not its base name.
-    auto response = config.successResponseAsJson();
-    EXPECT_THAT(response["previous-index-dir"].get<std::string>(),
-                AllOf(StartsWith("previous."), Not(EndsWith("/index"))));
+  // The base name of the current index is where the old index is taken from
+  // and where the new index has to end up, the new index is staged in
+  // `rebuild.<current datetime>.tmp`, and the old index is retired to
+  // `previous.<datetime of the build of the current index>`.
+  auto config = makeConfig(std::nullopt, std::nullopt);
+  EXPECT_EQ(config.oldIndexSource(), index.getOnDiskBase());
+  EXPECT_EQ(config.newIndexTarget(), index.getOnDiskBase());
+  EXPECT_THAT(config.newIndexSource(),
+              AllOf(StartsWith("rebuild."), EndsWith(".tmp/index")));
+  EXPECT_EQ(
+      config.oldIndexTarget(),
+      absl::StrCat("previous.", index.getImpl().dateOfIndexBuild(), "/index"));
+
+  // The two directories can also be given explicitly, in which case the file
+  // name of the current index is used inside them.
+  EXPECT_EQ(makeConfig("tmpForRebuild", "oldIndex").newIndexSource(),
+            "tmpForRebuild/index");
+  EXPECT_EQ(makeConfig("tmpForRebuild", "oldIndex").oldIndexTarget(),
+            "oldIndex/index");
+
+  // If the default directory for the old index and all of its uniquified
+  // variants are taken, the error message points at the command parameter with
+  // which the directory can be chosen explicitly.
+  std::string defaultPreviousDir =
+      absl::StrCat("previous.", index.getImpl().dateOfIndexBuild());
+  ql::filesystem::create_directory(defaultPreviousDir);
+  ad_utility::makeOfstream(defaultPreviousDir + "/index.meta-data.json")
+      << "occupied";
+  for (size_t i = 1; i <= 99; ++i) {
+    ql::filesystem::create_directory(absl::StrCat(defaultPreviousDir, ".", i));
   }
-
-  // Explicitly given directories that do not exist yet are accepted as is (the
-  // rebuild creates them), and the file name of the current index is used
-  // inside them.
-  {
-    auto config = makeConfig("tmpForRebuild", "oldIndex");
-    EXPECT_EQ(config.newIndexSource(), "tmpForRebuild/index");
-    EXPECT_EQ(config.oldIndexTarget(), "oldIndex/index");
-    EXPECT_EQ(config.successResponseAsJson()["previous-index-dir"], "oldIndex");
-  }
-
-  // Directories that already exist are fine as long as they are empty.
-  ql::filesystem::create_directory("emptyTmpForRebuild");
-  ql::filesystem::create_directory("emptyOldIndex");
-  EXPECT_NO_THROW(makeConfig("emptyTmpForRebuild", "emptyOldIndex"));
-
-  // But a directory that exists and is not empty is rejected, no matter which
-  // of the two directories it is.
-  ql::filesystem::create_directory("notEmpty");
-  ad_utility::makeOfstream("notEmpty/someFile") << "not empty";
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      makeConfig("notEmpty", std::nullopt),
-      ::testing::HasSubstr("already exists and is not empty"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      makeConfig(std::nullopt, "notEmpty"),
-      ::testing::HasSubstr("already exists and is not empty"));
-
-  // An empty directory string yields a base name without a directory component
-  // (here simply `index`), which refers to the working directory itself. That
-  // directory exists and is not empty (it holds the current index), so it is
-  // rejected with the same message as above, and the message names the working
-  // directory.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      makeConfig("", std::nullopt),
-      AllOf(HasSubstr(ql::filesystem::current_path().string()),
-            HasSubstr("already exists and is not empty")));
-
-  // The directories must be relative paths, ...
-  AD_EXPECT_THROW_WITH_MESSAGE(makeConfig("/absolute", std::nullopt),
-                               HasSubstr("must be a relative path"));
-  AD_EXPECT_THROW_WITH_MESSAGE(makeConfig(std::nullopt, "/absolute"),
-                               HasSubstr("must be a relative path"));
-
-  // ... and must lie inside the directory of the current index.
-  AD_EXPECT_THROW_WITH_MESSAGE(makeConfig("../outside", std::nullopt),
-                               HasSubstr("not a subdirectory"));
-
-  // The default directory for the old index is `previous.<datetime of the
-  // build of the current index>`, which has a granularity of one second. When
-  // that directory is already taken by a previous rebuild (e.g. rebuilds in
-  // quick succession with `--rebuild-index-strategy`), `.1`, `.2`, ... is
-  // appended; an occupied directory must not fail the rebuild, because the
-  // datetime of the served index only changes on a successful swap, so all
-  // subsequent rebuilds would fail with the same name.
-  {
-    std::string defaultPreviousDir =
-        absl::StrCat("previous.", index.getImpl().dateOfIndexBuild());
-    ql::filesystem::create_directory(defaultPreviousDir);
-    ad_utility::makeOfstream(defaultPreviousDir + "/index.meta-data.json")
-        << "occupied";
-    EXPECT_EQ(makeConfig(std::nullopt, std::nullopt).oldIndexTarget(),
-              absl::StrCat(defaultPreviousDir, ".1/index"));
-    ql::filesystem::create_directory(defaultPreviousDir + ".1");
-    ad_utility::makeOfstream(defaultPreviousDir + ".1/index.meta-data.json")
-        << "occupied";
-    EXPECT_EQ(makeConfig(std::nullopt, std::nullopt).oldIndexTarget(),
-              absl::StrCat(defaultPreviousDir, ".2/index"));
-
-    // After `.99`, the rebuild fails with a readable message.
-    for (size_t i = 2; i <= 99; ++i) {
-      ql::filesystem::create_directory(
-          absl::StrCat(defaultPreviousDir, ".", i));
-    }
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        makeConfig(std::nullopt, std::nullopt),
-        AllOf(HasSubstr("all already exist"),
-              HasSubstr("rebuild-previous-index-dir")));
-  }
+  AD_EXPECT_THROW_WITH_MESSAGE(makeConfig(std::nullopt, std::nullopt),
+                               AllOf(HasSubstr("all already exist"),
+                                     HasSubstr("rebuild-previous-index-dir")));
 }

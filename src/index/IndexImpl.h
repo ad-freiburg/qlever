@@ -563,6 +563,13 @@ class IndexImpl {
   // build).
   std::string dateOfIndexBuild() const;
 
+  // The same as `dateOfIndexBuild` above, but for an index that is not
+  // loaded: `configurationJson` and `onDiskBase` are the configuration
+  // (`<onDiskBase>.meta-data.json`) and the base name of that index. This is
+  // useful for tooling that inspects an index on disk without loading it.
+  static std::string dateOfIndexBuild(const nlohmann::json& configurationJson,
+                                      const std::string& onDiskBase);
+
   // Format the given time as a UTC timestamp string in the
   // `DATE_OF_INDEX_BUILD_FORMAT` (e.g. `2026-07-12T14:03:52Z`).
   static std::string formatIndexBuildTime(absl::Time time);
