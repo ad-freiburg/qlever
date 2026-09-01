@@ -152,11 +152,9 @@ TEST_F(MaterializedViewsPatternRewriteTest,
   //  rewriting.
   const std::string onDiskBase = gtestCurrentTestName();
   const std::string ttlFilename = absl::StrCat(onDiskBase, ".ttl");
-  {
-    ad_utility::makeOfstream(ttlFilename)
-        << " <s1> <p1> \"some text with several needle words\" . \n"
-           " <s1> <p2> <o1> . \n";
-  }
+  ad_utility::makeOfstream(ttlFilename)
+      << " <s1> <p1> \"some text with several needle words\" . \n"
+         " <s1> <p2> <o1> . \n";
   qlever::IndexBuilderConfig indexConfig;
   indexConfig.inputFiles_.emplace_back(ttlFilename, qlever::Filetype::Turtle);
   indexConfig.baseName_ = onDiskBase;
