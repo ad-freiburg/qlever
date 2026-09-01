@@ -193,6 +193,16 @@ int main(int argc, char** argv) {
       "erroneous silently into empty results (e.g. LOAD or SERVICE requests to "
       "nonexisting endpoints). This mode should only be used for running the "
       "syntax tests from the W3C SPARQL 1.1 test suite.");
+  add("strict-sparql",
+      optionFactory.getProgramOption<&RuntimeParameters::strictSparql_>(),
+      "Follow the SPARQL 1.1 standard also in corner cases where it mandates "
+      "behavior that is expensive to compute and of little practical use. "
+      "Currently this only affects property paths that can have length zero "
+      "(`*` and `?`): with this option, a value that is bound to the start or "
+      "end of such a path via `VALUES` or `BIND` only matches the path of "
+      "length zero if it occurs as a subject or object in the graph, which "
+      "requires an expensive scan. By default, such a value matches the path "
+      "of length zero unconditionally, like in Blazegraph and Virtuoso.");
   add("enable-prefilter-on-index-scans",
       optionFactory
           .getProgramOption<&RuntimeParameters::enablePrefilterOnIndexScans_>(),
