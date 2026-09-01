@@ -34,7 +34,6 @@ TEST(GeoCellGrid, basics) {
   // A grid of level 10 has 1024 x 1024 cells. A cell index for that
   // grid has 21 bits: 10 bits per dimension, plus one extra bit so that the
   // all-ones sentinel is larger than every regular cell index.
-
   EXPECT_EQ(grid.level(), 10);
   EXPECT_EQ(grid.scheme(), GeoCellGridScheme::Flat);
   EXPECT_EQ(grid.numCellsPerDimension(), 1024u);
@@ -134,9 +133,12 @@ TEST(GeoCellGrid, vocabIndexRangeForCells) {
   EXPECT_EQ(upper, GeoCellGrid::geoVocabMarkerBit +
                        (uint64_t{6} << grid.numPositionBits()));
 
-  // The sentinel cell. Here the exclusive upper bound must carry past the
-  // marker bit. This is why the bounds are computed by addition and not by
-  // bitwise or; see the comment on `vocabIndexRangeForCells`.
+  // The sentinel cell is the largest cell index. Its exclusive upper bound
+  // is `(sentinelCell() + 1) << numPositionBits()`, which is the same value
+  // as the marker bit. The method adds the two, so the result is larger than
+  // every vocabulary index, which is correct for an exclusive bound. With a
+  // bitwise or instead of the addition, the result would be just the marker
+  // bit, which is smaller than the lower bound.
   auto [sLower, sUpper] =
       grid.vocabIndexRangeForCells(grid.sentinelCell(), grid.sentinelCell());
   EXPECT_GT(sUpper, sLower);
@@ -229,6 +231,8 @@ TEST(GeoCellGrid, cellIndicesFitTheField) {
 // intersects a rectangle, then the cell index of that geometry is contained
 // in the covering cell ranges of the rectangle.
 TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
+  // Random rectangles of up to 30 x 30 degrees and random geometries of up
+  // to 8 x 8 degrees, anywhere on earth.
   std::mt19937_64 gen{4711};
   std::uniform_real_distribution<double> lngDist{-180.0, 179.0};
   std::uniform_real_distribution<double> latDist{-90.0, 89.0};
@@ -249,6 +253,8 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
   for (auto scheme : ad_utility::allGeoCellGridSchemes) {
     GeoCellGrid grid{5, scheme};
     size_t numChecked = 0;
+
+    // For each of 60 random rectangles, compute the covering cell ranges.
     for (int q = 0; q < 60; ++q) {
       double qLng = lngDist(gen);
       double qLat = latDist(gen);
@@ -261,6 +267,8 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
       for (size_t i = 1; i < ranges.size(); ++i) {
         EXPECT_GT(ranges[i].first, ranges[i - 1].second + 1);
       }
+      // Draw 300 random geometries and skip those that do not intersect
+      // the rectangle.
       for (int g = 0; g < 300; ++g) {
         double lng = lngDist(gen);
         double lat = latDist(gen);
@@ -271,6 +279,9 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
         if (!intersects) {
           continue;
         }
+
+        // The cell index of an intersecting geometry must be in one of the
+        // ranges. On failure, print the geometry and the rectangle.
         ad_utility::BoundingBox box{GeoPoint{lat, lng}, GeoPoint{lat2, lng2}};
         auto cell = grid.cellIndexFromBoundingBox(box);
         EXPECT_TRUE(contains(ranges, cell))
