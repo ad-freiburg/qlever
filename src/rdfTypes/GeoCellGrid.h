@@ -181,13 +181,10 @@ class GeoCellGrid {
   // vocabulary indices (with the marker bit set) that contains exactly the WKT
   // literals whose cell index is in `[first, last]`.
   //
-  // NOTE: The bounds must be computed by addition, not by bitwise or. For
-  // the sentinel cell, `(last + 1) << numPositionBits()` is exactly the
-  // marker bit, so the addition carries into the bit above it. That is
-  // harmless: the upper bound is exclusive and only used in comparisons, so
-  // it may be larger than every valid vocabulary index. With a bitwise or,
-  // the carry would be lost and the upper bound would be smaller than the
-  // lower bound.
+  // NOTE: The bounds are computed by addition, not bitwise or: for the
+  // largest cell index, `(last + 1) << numPositionBits()` carries into (or
+  // past) the marker bit. That is fine because the upper bound is exclusive
+  // and only used in comparisons.
   std::pair<uint64_t, uint64_t> vocabIndexRangeForCells(CellIndex first,
                                                         CellIndex last) const {
     return {geoVocabMarkerBit + (first << numPositionBits()),
