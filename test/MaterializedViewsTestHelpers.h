@@ -285,6 +285,7 @@ class MaterializedViewsPatternMatchingTest
   }
 };
 
+// _____________________________________________________________________________
 // Check that both the greedy and the DP query planner produce a query plan that
 // matches `matcher`. To test only the query plan of the dynamic programming
 // planner, pass `TestBothPlanners = false`.
