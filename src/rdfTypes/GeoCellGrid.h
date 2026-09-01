@@ -19,6 +19,7 @@
 #include "global/ValueId.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/EnumWithStrings.h"
+#include "util/Exception.h"
 
 namespace ad_utility {
 
@@ -141,6 +142,7 @@ class GeoCellGrid {
   // and take it apart again. The position must be smaller than
   // `maxNumWords()`.
   uint64_t annotateIndex(CellIndex cellIndex, uint64_t position) const {
+    AD_EXPENSIVE_CHECK(position < maxNumWords());
     return (cellIndex << numPositionBits()) | position;
   }
   CellIndex cellOfIndex(uint64_t annotatedIndex) const {
