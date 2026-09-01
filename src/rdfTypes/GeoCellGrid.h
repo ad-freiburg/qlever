@@ -12,36 +12,45 @@
 
 #include <array>
 #include <cstdint>
-#include <optional>
-#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "global/ValueId.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "util/EnumWithStrings.h"
 
 namespace ad_utility {
 
+namespace detail {
 // The available schemes for the `GeoCellGrid` class below.
 //
 // NOTE: There is currently only one scheme, `Flat`, implemented below. It's a
 // simple flat grid. Future schemes may be hierarchical or have several copies
 // of the grid shifted against each other. The abstract interface of the
 // `GeoCellGrid` class below is general enough to support these future schemes.
-enum class GeoCellGridScheme : uint8_t {
+enum class GeoCellGridSchemeEnum : uint8_t {
   Flat = 0,
 };
+}  // namespace detail
 
-// All schemes, in the order of their numeric values. Used for parsing and
-// for iterating over the schemes in tests.
-inline constexpr std::array allGeoCellGridSchemes{GeoCellGridScheme::Flat};
+// Wrapper around `detail::GeoCellGridSchemeEnum` that provides conversion to
+// and from the parameter value ("flat").
+class GeoCellGridScheme
+    : public EnumWithStrings<GeoCellGridScheme, detail::GeoCellGridSchemeEnum> {
+ public:
+  using Enum = detail::GeoCellGridSchemeEnum;
 
-// Conversion of a `GeoCellGridScheme` to and from its parameter value
-// ("flat").
-std::string_view toString(GeoCellGridScheme scheme);
-std::optional<GeoCellGridScheme> geoCellGridSchemeFromString(
-    std::string_view name);
+  static constexpr std::array<std::pair<Enum, std::string_view>, 1>
+      descriptions_{{{Enum::Flat, "flat"}}};
+  static const GeoCellGridScheme Flat;
+
+  static constexpr std::string_view typeName() {
+    return "geo cell grid scheme";
+  }
+
+  using EnumWithStrings::EnumWithStrings;
+};
 
 // A grid over the earth's surface in geographic coordinates. The base grid of
 // `level` L subdivides the longitude range [-180, 180] and the latitude range
@@ -80,8 +89,8 @@ class GeoCellGrid {
   // NOTE: The level must be at least 1 and small enough that a vocabulary
   // index can hold the cell index plus at least one bit for the position of
   // the word inside the geo vocabulary; see `numPositionBits()`.
-  explicit GeoCellGrid(uint8_t level,
-                       GeoCellGridScheme scheme = GeoCellGridScheme::Flat);
+  explicit GeoCellGrid(
+      uint8_t level, GeoCellGridScheme scheme = GeoCellGridScheme::Enum::Flat);
 
   uint8_t level() const { return level_; }
   GeoCellGridScheme scheme() const { return scheme_; }

@@ -36,6 +36,7 @@ TEST(GeoCellGrid, basics) {
   // all-ones sentinel is larger than every regular cell index.
   EXPECT_EQ(grid.level(), 10);
   EXPECT_EQ(grid.scheme(), GeoCellGridScheme::Flat);
+  static_assert(std::is_same_v<decltype(grid.scheme()), GeoCellGridScheme>);
   EXPECT_EQ(grid.numCellsPerDimension(), 1024u);
   EXPECT_EQ(grid.numCellBits(), 21u);
   EXPECT_EQ(grid.sentinelCell(), (uint64_t{1} << 21) - 1);
@@ -52,17 +53,15 @@ TEST(GeoCellGrid, basics) {
 
 // Test the conversion of the schemes to and from their parameter names.
 TEST(GeoCellGrid, schemeStringConversion) {
-  // `toString` and `geoCellGridSchemeFromString` are inverse to each other.
-  for (auto scheme : ad_utility::allGeoCellGridSchemes) {
-    auto parsed =
-        ad_utility::geoCellGridSchemeFromString(ad_utility::toString(scheme));
-    ASSERT_TRUE(parsed.has_value());
-    EXPECT_EQ(parsed.value(), scheme);
+  // `toString` and `fromString` are inverse to each other.
+  for (const auto& [scheme, name] : GeoCellGridScheme::descriptions_) {
+    EXPECT_EQ(GeoCellGridScheme{scheme}.toString(), name);
+    EXPECT_EQ(GeoCellGridScheme::fromString(name), scheme);
   }
 
-  // The name of `Flat` is "flat". An unknown name yields `std::nullopt`.
-  EXPECT_EQ(ad_utility::toString(GeoCellGridScheme::Flat), "flat");
-  EXPECT_FALSE(ad_utility::geoCellGridSchemeFromString("nope").has_value());
+  // The name of `Flat` is "flat". An unknown name throws.
+  EXPECT_EQ(GeoCellGridScheme::Flat.toString(), "flat");
+  EXPECT_ANY_THROW(GeoCellGridScheme::fromString("nope"));
 }
 
 // Test `cellIndexFromPoint` on two simple grids.
@@ -194,7 +193,7 @@ TEST(GeoCellGrid, cellIndicesFitTheField) {
 
   // This is the invariant that makes it safe to store the cell index in the
   // bit field above the position.
-  for (auto scheme : ad_utility::allGeoCellGridSchemes) {
+  for (const auto& [scheme, name] : GeoCellGridScheme::descriptions_) {
     GeoCellGrid grid{6, scheme};
     for (int i = 0; i < 2000; ++i) {
       double lng = lngDist(gen);
@@ -237,7 +236,7 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
   };
 
   // Do this for every scheme.
-  for (auto scheme : ad_utility::allGeoCellGridSchemes) {
+  for (const auto& [scheme, name] : GeoCellGridScheme::descriptions_) {
     GeoCellGrid grid{5, scheme};
     size_t numChecked = 0;
 
@@ -273,7 +272,7 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
         ad_utility::BoundingBox box{GeoPoint{lat, lng}, GeoPoint{lat2, lng2}};
         auto cellIndex = grid.cellIndexFromBoundingBox(box);
         EXPECT_TRUE(contains(ranges, cellIndex))
-            << ad_utility::toString(scheme) << " geometry [" << lng << ", "
+            << name << " geometry [" << lng << ", "
             << lat << ", " << lng2 << ", " << lat2 << "] query [" << qLng
             << ", " << qLat << ", " << qLng2 << ", " << qLat2 << "] cell index "
             << cellIndex;
@@ -283,7 +282,7 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
 
     // Make sure the random choices actually produced enough intersecting
     // pairs to test something.
-    EXPECT_GT(numChecked, 50u) << ad_utility::toString(scheme);
+    EXPECT_GT(numChecked, 50u) << name;
   }
 }
 

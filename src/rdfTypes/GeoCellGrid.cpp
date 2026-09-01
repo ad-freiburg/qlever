@@ -17,24 +17,7 @@
 namespace ad_utility {
 
 // ____________________________________________________________________________
-std::string_view toString(GeoCellGridScheme scheme) {
-  switch (scheme) {
-    case GeoCellGridScheme::Flat:
-      return "flat";
-  }
-  AD_FAIL();
-}
-
-// ____________________________________________________________________________
-std::optional<GeoCellGridScheme> geoCellGridSchemeFromString(
-    std::string_view name) {
-  for (auto scheme : allGeoCellGridSchemes) {
-    if (name == toString(scheme)) {
-      return scheme;
-    }
-  }
-  return std::nullopt;
-}
+const GeoCellGridScheme GeoCellGridScheme::Flat{Enum::Flat};
 
 // ____________________________________________________________________________
 GeoCellGrid::GeoCellGrid(uint8_t level, GeoCellGridScheme scheme)
@@ -94,7 +77,7 @@ GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromBoundingBox(
   double v1 = (ll.getLat() + 90.0) / 180.0;
   double v2 = (ur.getLat() + 90.0) / 180.0;
   switch (scheme_) {
-    case GeoCellGridScheme::Flat:
+    case GeoCellGridScheme::Enum::Flat:
       return flatCell(u1, v1, u2, v2);
   }
   AD_FAIL();
@@ -134,7 +117,7 @@ GeoCellGrid::CellRanges GeoCellGrid::coveringCellRanges(double minLng,
   double v2 = (maxLat + 90.0) / 180.0;
   CellRanges ranges;
   switch (scheme_) {
-    case GeoCellGridScheme::Flat:
+    case GeoCellGridScheme::Enum::Flat:
       flatCover(u1, v1, u2, v2, ranges);
       ranges.emplace_back(sentinelCell(), sentinelCell());
       break;
