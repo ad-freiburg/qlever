@@ -27,20 +27,22 @@ std::string wkt(std::string_view content) {
   return absl::StrCat("\"", content, "\"", GEO_LITERAL_SUFFIX);
 }
 
-// Test that the quantities derived from the grid level are correct, for a
-// grid of level 10. Such a grid has 1024 x 1024 cells. A cell index has 21
-// bits: 10 bits per dimension, plus one extra bit so that the all-ones
-// sentinel is larger than every regular cell index. The bits of a vocabulary
-// index below the marker bit and the cell bits hold the position of a word
-// inside the geo vocabulary. Also test that the constructor throws for level
-// 0 and for a level so large that no position bits remain.
+// Test correctness of the basic methods of `GeoCellGrid`.
 TEST(GeoCellGrid, basics) {
   GeoCellGrid grid{10};
+
+  // A grid of level 10 has 1024 x 1024 cells. A cell index for that
+  // grid has 21 bits: 10 bits per dimension, plus one extra bit so that the
+  // all-ones sentinel is larger than every regular cell index.
+
   EXPECT_EQ(grid.level(), 10);
   EXPECT_EQ(grid.scheme(), GeoCellGridScheme::Flat);
   EXPECT_EQ(grid.numCellsPerDimension(), 1024u);
   EXPECT_EQ(grid.numCellBits(), 21u);
   EXPECT_EQ(grid.sentinelCell(), (uint64_t{1} << 21) - 1);
+
+  // The bits of a vocabulary index below the marker bit and the cell bits hold
+  // the position of a word inside the geo vocabulary.
   EXPECT_EQ(grid.numPositionBits(), ValueId::numDataBits - 22);
   EXPECT_EQ(grid.maxNumWords(), uint64_t{1} << (ValueId::numDataBits - 22));
 
@@ -49,25 +51,25 @@ TEST(GeoCellGrid, basics) {
   EXPECT_ANY_THROW(GeoCellGrid{40});
 }
 
-// Test that `toString` and `geoCellGridSchemeFromString` are inverse to each
-// other for every scheme, and that an unknown scheme name yields
-// `std::nullopt`.
+// Test the conversion of the schemes to and from their parameter names.
 TEST(GeoCellGrid, schemeStringConversion) {
+  // `toString` and `geoCellGridSchemeFromString` are inverse to each other.
   for (auto scheme : ad_utility::allGeoCellGridSchemes) {
     auto parsed =
         ad_utility::geoCellGridSchemeFromString(ad_utility::toString(scheme));
     ASSERT_TRUE(parsed.has_value());
     EXPECT_EQ(parsed.value(), scheme);
   }
+
+  // The name of `Flat` is "flat". An unknown name yields `std::nullopt`.
   EXPECT_EQ(ad_utility::toString(GeoCellGridScheme::Flat), "flat");
   EXPECT_FALSE(ad_utility::geoCellGridSchemeFromString("nope").has_value());
 }
 
-// Test that `cellIndexFromPoint` computes the correct cell indices on a
-// 2 x 2 grid, where they are easy to compute by hand. Points on the boundary
-// of the coordinate domain are clamped into the grid. On a level-10 grid,
-// test against the closed formula for the cell index of a point.
+// Test `cellIndexFromPoint` on two simple grids.
 TEST(GeoCellGrid, cellIndexFromPoint) {
+  // A simple 2 x 2 grid, where the cell indices are easy to compute by hand.
+  // Points on the boundary of the coordinate domain are clamped into the grid.
   GeoCellGrid grid{1};
 
   // Level 1 divides the earth into 2 x 2 cells; cell = (cellY << 1) | cellX.
@@ -87,10 +89,7 @@ TEST(GeoCellGrid, cellIndexFromPoint) {
   EXPECT_EQ(fine.cellIndexFromPoint(13.405, 52.52), (cy << 10) | cx);
 }
 
-// Test that `cellIndexFromWktLiteral` computes the correct cell index of a
-// geometry that fits inside a single cell. Two kinds of literals get the
-// sentinel cell: geometries whose bounding box crosses a cell border, and
-// literals that cannot be parsed.
+// Test `cellIndexFromWktLiteral` on a 2 x 2 grid.
 TEST(GeoCellGrid, cellIndexFromBoundingBoxAndWktLiteral) {
   GeoCellGrid grid{1};
 
@@ -107,22 +106,24 @@ TEST(GeoCellGrid, cellIndexFromBoundingBoxAndWktLiteral) {
             grid.sentinelCell());
 }
 
-// Test that `cellOfIndex` and `positionOfIndex` are the two inverses of
-// `annotateIndex`. Also test that the annotated index has the documented bit
-// layout, with the cell index above the position.
+// Test the round trip between a pair of cell index and position and the
+// annotated vocabulary index.
 TEST(GeoCellGrid, annotateIndexRoundtrip) {
   GeoCellGrid grid{4};
   uint64_t annotated = grid.annotateIndex(5, 7);
+
+  // `cellOfIndex` and `positionOfIndex` are the two inverses of
+  // `annotateIndex`.
   EXPECT_EQ(grid.cellOfIndex(annotated), 5u);
   EXPECT_EQ(grid.positionOfIndex(annotated), 7u);
+
+  // The annotated index has the documented bit layout, with the cell index
+  // above the position.
   EXPECT_EQ(annotated, (uint64_t{5} << grid.numPositionBits()) | 7);
 }
 
-// Test that `vocabIndexRangeForCells` computes the correct half-open range
-// of vocabulary indices. The tricky part is the second case, for the
-// sentinel cell. There, the exclusive upper bound must carry past the marker
-// bit. This is why the bounds are computed by addition and not by bitwise
-// or; see the comment on that method.
+// Test `vocabIndexRangeForCells` for a range of regular cells and for the
+// sentinel cell.
 TEST(GeoCellGrid, vocabIndexRangeForCells) {
   GeoCellGrid grid{2};
 
@@ -133,7 +134,9 @@ TEST(GeoCellGrid, vocabIndexRangeForCells) {
   EXPECT_EQ(upper, GeoCellGrid::geoVocabMarkerBit +
                        (uint64_t{6} << grid.numPositionBits()));
 
-  // The sentinel cell, where the upper bound carries past the marker bit.
+  // The sentinel cell. Here the exclusive upper bound must carry past the
+  // marker bit. This is why the bounds are computed by addition and not by
+  // bitwise or; see the comment on `vocabIndexRangeForCells`.
   auto [sLower, sUpper] =
       grid.vocabIndexRangeForCells(grid.sentinelCell(), grid.sentinelCell());
   EXPECT_GT(sUpper, sLower);
@@ -141,17 +144,15 @@ TEST(GeoCellGrid, vocabIndexRangeForCells) {
                         ((grid.sentinelCell() + 1) << grid.numPositionBits()));
 }
 
-// Test that `coveringCellRanges` computes the correct covers of two
-// rectangles on a 4 x 4 grid, where they are easy to compute by hand. The
-// cell indices of one grid row are contiguous. The cover of a rectangle is
-// therefore one range per touched grid row, followed by the range that
-// contains only the sentinel cell.
+// Test `coveringCellRanges` on a 4 x 4 grid, where the covers are easy to
+// compute by hand.
 TEST(GeoCellGrid, coveringCellRanges) {
   GeoCellGrid grid{2};
 
   // Level 2 divides the earth into 4 x 4 cells of 90 x 45 degrees. The box
-  // below covers grid columns 1-2 and grid rows 1-2, i.e. one range per row,
-  // plus the sentinel range at the end.
+  // below covers grid columns 1-2 and grid rows 1-2. The cell indices of one
+  // grid row are contiguous, so the cover is one range per row, followed by
+  // the range that contains only the sentinel cell.
   auto ranges = grid.coveringCellRanges(-10.0, -10.0, 10.0, 10.0);
   using P = std::pair<uint64_t, uint64_t>;
   EXPECT_THAT(ranges,
@@ -166,15 +167,15 @@ TEST(GeoCellGrid, coveringCellRanges) {
                          P{grid.sentinelCell(), grid.sentinelCell()}));
 }
 
-// Test that `isWktLiteral` accepts WKT literals and rejects other words.
-// The check is purely syntactic (quotes plus the WKT datatype suffix).
-// Therefore a literal with that datatype but invalid WKT content also counts
-// as a WKT literal.
+// Test `isWktLiteral` on positive and negative examples.
 TEST(GeoCellGrid, isWktLiteral) {
+  // WKT literals. The check is purely syntactic (quotes plus the WKT datatype
+  // suffix), so invalid WKT content also counts.
   for (const std::string& word : {wkt("POINT(1 2)"), wkt("NOTAGEOMETRY")}) {
     EXPECT_TRUE(GeoCellGrid::isWktLiteral(word)) << word;
   }
 
+  // Not WKT literals: a plain literal, an IRI, a language-tagged literal.
   for (const std::string& word :
        {std::string{"\"foo\""}, std::string{"<http://example.org>"},
         std::string{"\"foo\"@en"}}) {
@@ -183,25 +184,29 @@ TEST(GeoCellGrid, isWktLiteral) {
 }
 
 // Check that `GeoCellGrid::geoVocabMarkerBit` matches the marker layout of
-// the `SplitGeoVocabulary`. That vocabulary marks the words of its geo
-// vocabulary with the topmost data bit of the vocabulary index. This test
-// fails if one of the two sides changes its layout.
+// the `SplitGeoVocabulary`.
 TEST(GeoCellGrid, markerBitConsistentWithSplitGeoVocabulary) {
   using SGV = SplitGeoVocabulary<VocabularyInMemory>;
+
+  // The `SplitGeoVocabulary` marks the words of its geo vocabulary with the
+  // topmost data bit of the vocabulary index. These checks fail if one of
+  // the two sides changes its layout.
   EXPECT_EQ(SGV::markerShift, ValueId::numDataBits - 1);
   EXPECT_EQ(SGV::addMarker(0, 1), GeoCellGrid::geoVocabMarkerBit);
   EXPECT_TRUE(GeoCellGrid::isGeoVocabIndex(SGV::addMarker(42, 1)));
   EXPECT_FALSE(GeoCellGrid::isGeoVocabIndex(SGV::addMarker(42, 0)));
 }
 
-// Test that for random bounding boxes and every scheme, the assigned cell
-// index fits into `numCellBits()` bits. This is the invariant that makes it
-// safe to store the cell index in the bit field above the position.
+// Test that the cell index of a random bounding box always fits into
+// `numCellBits()` bits, for every scheme.
 TEST(GeoCellGrid, cellIndicesFitTheField) {
   std::mt19937_64 gen{42};
   std::uniform_real_distribution<double> lngDist{-180.0, 180.0};
   std::uniform_real_distribution<double> latDist{-90.0, 90.0};
   std::uniform_real_distribution<double> sizeDist{0.0, 5.0};
+
+  // This is the invariant that makes it safe to store the cell index in the
+  // bit field above the position.
   for (auto scheme : ad_utility::allGeoCellGridSchemes) {
     GeoCellGrid grid{6, scheme};
     for (int i = 0; i < 2000; ++i) {
@@ -219,13 +224,10 @@ TEST(GeoCellGrid, cellIndicesFitTheField) {
   }
 }
 
-// Test that the central guarantee of the class holds for random rectangles
-// and geometries and for every scheme: if the bounding box of a geometry
+// Test the central guarantee of the class, for random rectangles and
+// geometries and for every scheme: if the bounding box of a geometry
 // intersects a rectangle, then the cell index of that geometry is contained
-// in the covering cell ranges of the rectangle. Along the way, check that
-// the ranges are ascending, with gaps between them. Finally, check that the
-// random choices actually produced enough intersecting pairs to test
-// something.
+// in the covering cell ranges of the rectangle.
 TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
   std::mt19937_64 gen{4711};
   std::uniform_real_distribution<double> lngDist{-180.0, 179.0};
@@ -233,6 +235,7 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
   std::uniform_real_distribution<double> geomSize{0.0, 8.0};
   std::uniform_real_distribution<double> querySize{0.01, 30.0};
 
+  // Whether `cell` is contained in one of the `ranges`.
   auto contains = [](const GeoCellGrid::CellRanges& ranges,
                      GeoCellGrid::CellIndex cell) {
     for (const auto& [first, last] : ranges) {
@@ -279,7 +282,8 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
       }
     }
 
-    // Make sure the test actually exercised intersecting pairs.
+    // Make sure the random choices actually produced enough intersecting
+    // pairs to test something.
     EXPECT_GT(numChecked, 50u) << ad_utility::toString(scheme);
   }
 }
