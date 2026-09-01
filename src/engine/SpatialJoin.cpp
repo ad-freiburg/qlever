@@ -655,7 +655,8 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
         auto& left = newChildren.at(0);
         auto& right = newChildren.at(1);
         return ad_utility::makeExecutionTree<SpatialJoin>(
-            _executionContext, config_, std::move(left), std::move(right));
+            _executionContext, config_, std::move(left), std::move(right),
+            substitutesFilterOp_);
       });
 }
 
