@@ -5,8 +5,12 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSIONWRAPPERS_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSIONWRAPPERS_H
 
+#include <string_view>
+#include <vector>
+
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/span.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/PrefixHeuristic.h"
 #include "util/CompilerWarnings.h"
@@ -46,7 +50,7 @@ CPP_requires(
         // Compress all the strings and return the strings together with a
         // `Decoder` that can be used to decompress the strings again.
         BulkResultForDecoder<
-            decltype(T::compressAll(std::vector<std::string>{})),
+            decltype(T::compressAll(ql::span<const std::string_view>{})),
             typename T::Decoder>,
         concepts::constructible_from<T, std::vector<typename T::Decoder>>));
 
@@ -65,7 +69,10 @@ template <typename DecoderT>
 struct DecoderMultiplexer {
   using Decoder = DecoderT;
   using Decoders = std::vector<Decoder>;
-  using Strings = std::vector<std::string>;
+  // The input type of the `compressAll` functions of the compression wrappers
+  // below. The words are not owned by the wrappers, they only have to stay
+  // valid for the duration of the `compressAll` call.
+  using Words = ql::span<const std::string_view>;
 
  private:
   std::vector<Decoder> decoders_;
@@ -89,8 +96,8 @@ struct DecoderMultiplexer {
 struct FsstCompressionWrapper : detail::DecoderMultiplexer<FsstDecoder> {
   using Base = detail::DecoderMultiplexer<FsstDecoder>;
   using Base::Base;
-  static FsstEncoder::BulkResult compressAll(const Strings& strings) {
-    return FsstEncoder::compressAll(strings);
+  static FsstEncoder::BulkResult compressAll(Words words) {
+    return FsstEncoder::compressAll(words);
   }
 };
 static_assert(CompressionWrapper<FsstCompressionWrapper>);
@@ -103,8 +110,8 @@ struct FsstSquaredCompressionWrapper
   using BulkResult =
       std::tuple<std::shared_ptr<std::string>, std::vector<std::string_view>,
                  FsstRepeatedDecoder<2>>;
-  static BulkResult compressAll(const Strings& strings) {
-    auto [buffer, views, decoder1] = FsstEncoder::compressAll(strings);
+  static BulkResult compressAll(Words words) {
+    auto [buffer, views, decoder1] = FsstEncoder::compressAll(words);
     auto [buffer2, views2, decoder2] = FsstEncoder::compressAll(views);
     return {std::move(buffer2), std::move(views2),
             FsstRepeatedDecoder{std::array{decoder1, decoder2}}};
@@ -119,17 +126,21 @@ struct PrefixCompressionWrapper : detail::DecoderMultiplexer<PrefixCompressor> {
   using Base::Base;
   using BulkResult = std::tuple<bool, std::vector<std::string>, Decoder>;
 
-  static BulkResult compressAll(const Strings& strings) {
+  static BulkResult compressAll(Words words) {
     PrefixCompressor compressor;
-    auto stringsCopy = strings;
-    ql::ranges::sort(stringsCopy);
-    auto prefixes = calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES);
+    // Note: `calculatePrefixes` requires a `vector<string>`, so we have to
+    // materialize the words here. This is not a problem in practice, as this
+    // wrapper is currently not used for the actual index building.
+    std::vector<std::string> wordsCopy(words.begin(), words.end());
+    ql::ranges::sort(wordsCopy);
+    auto prefixes = calculatePrefixes(wordsCopy, NUM_COMPRESSION_PREFIXES);
     compressor.buildCodebook(prefixes);
-    Strings compressedStrings;
-    for (const auto& string : strings) {
-      compressedStrings.push_back(compressor.compress(string));
+    std::vector<std::string> compressedWords;
+    compressedWords.reserve(words.size());
+    for (const auto& word : words) {
+      compressedWords.push_back(compressor.compress(word));
     }
-    return {true, std::move(compressedStrings), std::move(compressor)};
+    return {true, std::move(compressedWords), std::move(compressor)};
   }
 };
 static_assert(CompressionWrapper<PrefixCompressionWrapper>);
