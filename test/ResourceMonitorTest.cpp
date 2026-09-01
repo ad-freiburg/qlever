@@ -16,11 +16,11 @@
 #endif
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <fstream>
 #include <iterator>
-#include <memory>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -344,25 +344,6 @@ TEST(ResourceMonitor, RotateLogIfHeaderOutdatedMovesAFileOfAnOlderFormat) {
 }
 
 // _____________________________________________________________________________
-TEST(ResourceMonitor, RebuildIndexSignalNumbersRebuildsFromOne) {
-  ad_utility::RebuildIndexSignal signal;
-  // No rebuild yet. The answer is empty and not 0, which a consumer reading
-  // the column would take for a rebuild that has the id 0.
-  EXPECT_FALSE(signal.poll().has_value());
-
-  signal.markStart();
-  EXPECT_THAT(signal.poll(), ::testing::Optional(1u));
-
-  signal.markEnd();
-  EXPECT_FALSE(signal.poll().has_value());
-
-  // The next rebuild gets the next number, so two rebuilds of one server run
-  // can be told apart in the log.
-  signal.markStart();
-  EXPECT_THAT(signal.poll(), ::testing::Optional(2u));
-}
-
-// _____________________________________________________________________________
 TEST(ResourceMonitor, StartTwiceThrows) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   ResourceMonitor monitor;
@@ -388,16 +369,15 @@ TEST(ResourceMonitor, SetReadersAfterStartThrows) {
 }
 
 // _____________________________________________________________________________
-TEST(ResourceMonitor, SetRebuildIndexSignalAfterStartThrows) {
+TEST(ResourceMonitor, SetRebuildIdReaderAfterStartThrows) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   ResourceMonitor monitor;
   // A long interval so the sampling thread never actually writes a row.
   monitor.start(path, ResourceMonitor::Mode::Truncate, std::chrono::hours{1});
-  // The sampling thread reads the signal on every tick, so replacing it
-  // afterwards would race that read and must throw.
+  // The sampling thread calls the reader on every tick, so replacing it
+  // afterwards would race that call and must throw.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      monitor.setRebuildIndexSignal(
-          std::make_shared<ad_utility::RebuildIndexSignal>()),
+      monitor.setRebuildIdReader([]() { return std::optional<uint64_t>{}; }),
       ::testing::HasSubstr("before `start`"));
 }
 
@@ -644,29 +624,33 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   // this cell is parsed instead of compared against an exact string.
   EXPECT_GT(std::stod(cells[5]), 0.0);
   EXPECT_EQ(cells[6], "0.0");  // io stall, also stands still
-  EXPECT_EQ(cells[7], "");     // no signal was set, so no rebuild id
+  EXPECT_EQ(cells[7], "");     // no reader was set, so no rebuild id
 }
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, RowsCarryTheRebuildIdOnlyWhileARebuildRuns) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  auto signal = std::make_shared<ad_utility::RebuildIndexSignal>();
+  // Stands in for a rebuild that is running. The test turns it on and off
+  // while the monitor samples, so the log gets rows of both kinds.
+  std::atomic<bool> rebuildRunning{false};
   {
     ResourceMonitor monitor;
-    monitor.setRebuildIndexSignal(signal);
+    monitor.setRebuildIdReader([&rebuildRunning]() -> std::optional<uint64_t> {
+      return rebuildRunning ? std::optional<uint64_t>{1} : std::nullopt;
+    });
     // A short interval and a sleep per phase, so about ten rows are written
     // before the rebuild, ten during it and ten after it.
     monitor.start(path, ResourceMonitor::Mode::Truncate,
                   std::chrono::milliseconds{5});
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
-    signal->markStart();
+    rebuildRunning = true;
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
-    signal->markEnd();
+    rebuildRunning = false;
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
   }
   auto lines = readLines(path);
   ASSERT_GE(lines.size(), 2u);
-  // The signal is polled every tick rather than read once at startup, so the
+  // The reader is called every tick rather than once at startup, so the
   // column changes during the run: rows written while the rebuild ran carry
   // its id, the rest are empty. Which row lands on a phase boundary is up to
   // the scheduler, so the values that occur are checked, not how often.
@@ -692,7 +676,7 @@ TEST(ResourceMonitor, IoStallPercentIsClampedToAHundred) {
 
   auto lines = sampledLines(std::move(readers));
   ASSERT_GE(lines.size(), 2u);
-  // No signal was set, so the empty `rebuild_id` cell follows the stall.
+  // No reader was set, so the empty `rebuild_id` cell follows the stall.
   EXPECT_THAT(lines[1], ::testing::EndsWith("\t100.0\t"));
 }
 
@@ -708,7 +692,7 @@ TEST(ResourceMonitor, AMissingIoStallReadingLeavesTheColumnEmpty) {
   auto lines = sampledLines(std::move(readers));
   ASSERT_GE(lines.size(), 2u);
   // All eight columns are still there rather than one being dropped. The stall
-  // cell is empty, and so is the `rebuild_id` cell after it, because no signal
+  // cell is empty, and so is the `rebuild_id` cell after it, because no reader
   // was set.
   EXPECT_EQ(std::count(lines[1].begin(), lines[1].end(), '\t'), 7);
   EXPECT_THAT(lines[1], ::testing::EndsWith("\t\t"));

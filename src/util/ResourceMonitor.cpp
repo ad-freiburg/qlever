@@ -352,12 +352,12 @@ void ResourceMonitor::setReadersForTesting(resource_monitor::Readers readers) {
 }
 
 // _____________________________________________________________________________
-void ResourceMonitor::setRebuildIndexSignal(
-    std::shared_ptr<const RebuildIndexSignal> signal) {
+void ResourceMonitor::setRebuildIdReader(
+    resource_monitor::RebuildIdReader reader) {
   AD_CONTRACT_CHECK(!started_,
-                    "The rebuild index signal must be set before `start` is "
+                    "The rebuild id reader must be set before `start` is "
                     "called, otherwise this would race the sampling thread.");
-  rebuildIndexSignal_ = std::move(signal);
+  rebuildIdReader_ = std::move(reader);
 }
 
 // _____________________________________________________________________________
@@ -416,8 +416,7 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     sample.bytesWrittenPerSecond_ =
         bytesWrittenTracker.update(numBytesWritten, elapsed);
     sample.ioStallPercent_ = ioStallPercent;
-    sample.rebuildId_ =
-        rebuildIndexSignal_ ? rebuildIndexSignal_->poll() : std::nullopt;
+    sample.rebuildId_ = rebuildIdReader_ ? rebuildIdReader_() : std::nullopt;
     stream_ << resource_monitor::formatTsvRow(sample);
     stream_.flush();
     if (stream_.fail()) {
