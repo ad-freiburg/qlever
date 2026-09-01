@@ -967,7 +967,7 @@ void upgradeIndexInPlace(const std::string& basename) {
                          configuration.at("num-triples")));
   moveIndexIntoPlace(config);
   AD_LOG_INFO << "The upgrade was successful: the upgraded index is at \""
-              << config.newIndexTarget();
+              << config.newIndexTarget() << "\"" << std::endl;
   AD_LOG_INFO << "The index in the old format was moved to the directory \""
               << fs::path{config.oldIndexTarget()}.parent_path().string()
               << "\"" << std::endl;
