@@ -624,9 +624,7 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
   return nlohmann::json(globalRuntimeParameters.rlock()->toMap());
 }
 
-// The terminal step of `process()`: by this point the operation type is
-// known, so this builds the query/update/graph-store-protocol/no-operation
-// visitors and hands them, together with `operation`, to `processOperation`.
+// _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processSparqlOperation(
@@ -646,11 +644,10 @@ CPP_template_def(typename RequestT, typename SendT)(
   std::optional<PlannedQuery> plannedQuery;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, &plannedQuery, &indexAndViews, this](
-          std::vector<ParsedQuery> operations, std::string operationName,
-          const std::string operationString,
-          std::function<bool(const ParsedQuery&)> expectedOperation,
-          const std::string msg, SharedTimeTracer tracer) -> Awaitable<void> {
+       &requestTimer, &plannedQuery, &indexAndViews,
+       this](std::vector<ParsedQuery> operations, std::string operationName,
+             const std::string operationString,
+             SharedTimeTracer tracer = nullptr) -> Awaitable<void> {
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     if (!timeLimit.has_value()) {
@@ -676,12 +673,9 @@ CPP_template_def(typename RequestT, typename SendT)(
     auto& [makeQec, cancellationHandle, cancelTimeoutOnDestruction] =
         preparedOp;
     try {
-      if (!ql::ranges::all_of(operations, expectedOperation)) {
-        throw std::runtime_error(absl::StrCat(
-            msg, ad_utility::truncateOperationString(operationString)));
-      }
       if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
         metrics_->startedSparqlOperations_->Add(1, {OperationType::update});
+        AD_CORRECTNESS_CHECK(tracer != nullptr);
         co_await processUpdate(std::move(makeQec), std::move(operations),
                                requestTimer, tracer, cancellationHandle,
                                std::move(request), send, timeLimit.value(),
@@ -713,13 +707,14 @@ CPP_template_def(typename RequestT, typename SendT)(
     // needs it.
     auto parsedQuery = SparqlParser::parseQuery(
         &index.encodedIriManager(), query.query_, query.datasetClauses_);
-    auto dummy = std::make_shared<ad_utility::timer::TimeTracer>("dummy");
-    return visitOperation(
-        {std::move(parsedQuery)}, "SPARQL query", std::move(query.query_),
-        std::not_fn(&ParsedQuery::hasUpdateClause),
-        "SPARQL QUERY was requested via the HTTP request, but the "
-        "following update was sent instead of an query: ",
-        dummy);
+    if (parsedQuery.hasUpdateClause()) {
+      throw std::runtime_error(absl::StrCat(
+          "SPARQL QUERY was requested via the HTTP request, but the "
+          "following update was sent instead of an query: ",
+          ad_utility::truncateOperationString(query.query_)));
+    }
+    return visitOperation({std::move(parsedQuery)}, "SPARQL query",
+                          std::move(query.query_));
   };
   auto visitUpdate = [&index, &visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
@@ -732,12 +727,14 @@ CPP_template_def(typename RequestT, typename SendT)(
         index.getBlankNodeManager(), &index.encodedIriManager(), update.update_,
         update.datasetClauses_);
     tracer->endTrace("parsing");
-    return visitOperation(
-        std::move(parsedUpdates), "SPARQL update", std::move(update.update_),
-        &ParsedQuery::hasUpdateClause,
-        "SPARQL UPDATE was requested via the HTTP request, but the "
-        "following query was sent instead of an update: ",
-        tracer);
+    if (!ql::ranges::all_of(parsedUpdates, &ParsedQuery::hasUpdateClause)) {
+      throw std::runtime_error(absl::StrCat(
+          "SPARQL UPDATE was requested via the HTTP request, but the "
+          "following query was sent instead of an update: ",
+          ad_utility::truncateOperationString(update.update_)));
+    }
+    return visitOperation(std::move(parsedUpdates), "SPARQL update",
+                          std::move(update.update_), tracer);
   };
   auto visitGraphStore =
       [&request, &visitOperation, &requireValidAccessToken,
@@ -755,15 +752,12 @@ CPP_template_def(typename RequestT, typename SendT)(
       requireValidAccessToken("Update from Graph Store Protocol");
     }
 
-    // Don't check for the `ParsedQuery`s actual type (Query or Update) here
-    // because graph store operations can result in both.
-    auto trueFunc = [](const ParsedQuery&) { return true; };
     std::string operationString = parsedOperations[0]._originalString;
     return visitOperation(
         std::move(parsedOperations),
         absl::StrCat("Graph Store (", std::string_view{request.method_string()},
                      ")"),
-        std::move(operationString), trueFunc, "Unused dummy message", tracer);
+        std::move(operationString), tracer);
   };
   auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before
