@@ -102,6 +102,7 @@ void GeoCellGrid::flatCover(double u1, double v1, double u2, double v2,
   uint64_t x2 = gridCoordinate(u2);
   uint64_t y1 = gridCoordinate(v1);
   uint64_t y2 = gridCoordinate(v2);
+  ranges.reserve(ranges.size() + (y2 - y1 + 1));
   for (uint64_t y = y1; y <= y2; ++y) {
     ranges.emplace_back((y << level_) | x1, (y << level_) | x2);
   }
