@@ -18,6 +18,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "libqlever/Qlever.h"
+#include "util/File.h"
 
 namespace {
 
@@ -45,12 +46,13 @@ constexpr std::string_view singleTripleFromStar = "SELECT * { ?s <p1> ?o1 }";
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsPatternRewriteTest, starRewrite) {
   // Test dataset: subjects with predicates p1, p2, p3.
-  const std::string starTtl =
-      " <s1> <p1> <o1a> . \n"
-      " <s1> <p2> <o2a> . \n"
-      " <s2> <p1> <o1b> . \n"
-      " <s2> <p2> <o2b> . \n"
-      " <s2> <p3> <o3a> . \n";
+  const std::string starTtl = R"(
+      <s1> <p1> <o1a> .
+      <s1> <p2> <o2a> .
+      <s2> <p1> <o1b> .
+      <s2> <p2> <o2b> .
+      <s2> <p3> <o3a> .
+  )";
   const std::string onDiskBase = gtestCurrentTestName();
   const std::string viewName = "testViewStar";
 
@@ -113,7 +115,7 @@ TEST_F(MaterializedViewsPatternRewriteTest, starRewrite) {
   auto noStarRewrite = [&qlv, &manager](std::string query,
                                         source_location sourceLocation =
                                             AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
+    auto trace = generateLocationTrace(sourceLocation);
     expectNotSuitableForRewrite(qlv, manager, "noStarRewriteView", query,
                                 "No supported query pattern for rewriting "
                                 "joins was found");
@@ -201,11 +203,9 @@ TEST_F(MaterializedViewsPatternRewriteTest,
   //  rewriting.
   const std::string onDiskBase = gtestCurrentTestName();
   const std::string ttlFilename = absl::StrCat(onDiskBase, ".ttl");
-  {
-    std::ofstream ttl{ttlFilename};
-    ttl << " <s1> <p1> \"some text with several needle words\" . \n"
-           " <s1> <p2> <o1> . \n";
-  }
+  ad_utility::makeOfstream(ttlFilename)
+      << " <s1> <p1> \"some text with several needle words\" . \n"
+         " <s1> <p2> <o1> . \n";
   qlever::IndexBuilderConfig indexConfig;
   indexConfig.inputFiles_.emplace_back(ttlFilename, qlever::Filetype::Turtle);
   indexConfig.baseName_ = onDiskBase;
@@ -398,13 +398,14 @@ TEST_P(MaterializedViewsPatternRewriteTestP, simpleChain) {
   const std::string& writeQuery = GetParam();
 
   // Test dataset and query.
-  const std::string chainTtl =
-      " <s1> <p1> <m2> . \n"
-      " <m1> <p2> <o1> . \n"
-      " <s2> <p1> <m2> . \n"
-      " <m2> <p2> <http://example.com/> . \n"
-      " <m2> <p3> \"abc\" . \n"
-      " <s2> <p3> <o3> . \n";
+  const std::string chainTtl = R"(
+      <s1> <p1> <m2> .
+      <m1> <p2> <o1> .
+      <s2> <p1> <m2> .
+      <m2> <p2> <http://example.com/> .
+      <m2> <p3> "abc" .
+      <s2> <p3> <o3> .
+  )";
   const std::string onDiskBase = gtestCurrentTestName();
   const std::string viewName = "testViewChain";
 
