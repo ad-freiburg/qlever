@@ -570,6 +570,14 @@ std::optional<std::string> checkAndLogParameterSetting(
   return value;
 }
 
+// Create a bound version of `checkParameter` with `parameters` as the first
+// bound argument.
+auto makeCheckParameter(
+    const ad_utility::url_parser::ParamValueMap& parameters) {
+  return absl::bind_front(&ad_utility::url_parser::checkParameter,
+                          std::cref(parameters));
+}
+
 // Look up metadata for `cmd` in `commands`, run the access-token check (if
 // required), and log it. `cmd` must name an entry in `commands`. It always
 // comes from a literal used in the `process()` dispatch below.
@@ -628,8 +636,7 @@ CPP_template_def(typename RequestT, typename SendT)(
         std::optional<ResponseT> response) {
   using namespace ad_utility::httpUtils;
   auto& index = indexAndViews->index_;
-  auto checkParameter = absl::bind_front(
-      &ad_utility::url_parser::checkParameter, std::cref(parameters));
+  auto checkParameter = serverProcessHelpers::makeCheckParameter(parameters);
   auto requireValidAccessToken = absl::bind_front(
       &serverProcessHelpers::requireValidAccessToken, accessTokenOk);
 
@@ -818,10 +825,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   auto parsedHttpRequest = SparqlProtocol::parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
 
-  // We always want to call `Server::checkParameter` with the same first
-  // parameter.
-  auto checkParameter = absl::bind_front(
-      &ad_utility::url_parser::checkParameter, std::cref(parameters));
+  auto checkParameter = makeCheckParameter(parameters);
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
