@@ -408,6 +408,24 @@ size_t TransitivePathBase::getCostEstimate() {
   // We assume that the cost of computing the transitive path is proportional to
   // the result size.
   auto costEstimate = getSizeEstimateBeforeLimit();
+  // If one side is bound, the hull is computed by traversing the graph from
+  // the values of the bound side. The work for one step of that traversal is
+  // the number of start values times the average number of edges per node in
+  // the direction of the traversal, which is the multiplicity of the start
+  // column of the subtree. This term makes the cost direction-aware: for a
+  // hierarchy-like predicate such as `wdt:P279` (subclass of), a node has few
+  // successors (parents), but possibly very many predecessors (descendants).
+  // Without this term, plans that traverse in either direction have identical
+  // cost estimates and the planner picks one of them arbitrarily; see #3258.
+  auto boundSide = lhs_.treeAndCol_.has_value()   ? std::optional{&lhs_}
+                   : rhs_.treeAndCol_.has_value() ? std::optional{&rhs_}
+                                                  : std::nullopt;
+  if (boundSide.has_value()) {
+    const TransitivePathSide& side = *boundSide.value();
+    costEstimate += static_cast<size_t>(
+        static_cast<double>(side.treeAndCol_.value().first->getSizeEstimate()) *
+        subtree_->getMultiplicity(side.subCol_));
+  }
   // Add the cost for the index scan of the predicate involved.
   for (auto* ptr : getChildren()) {
     if (ptr) {
