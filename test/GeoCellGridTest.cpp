@@ -252,6 +252,7 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
     return false;
   };
 
+  // Do this for every scheme.
   for (auto scheme : ad_utility::allGeoCellGridSchemes) {
     GeoCellGrid grid{5, scheme};
     size_t numChecked = 0;
@@ -269,6 +270,7 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
       for (size_t i = 1; i < ranges.size(); ++i) {
         EXPECT_GT(ranges[i].first, ranges[i - 1].second + 1);
       }
+
       // Draw 300 random geometries and skip those that do not intersect
       // the rectangle.
       for (int g = 0; g < 300; ++g) {
