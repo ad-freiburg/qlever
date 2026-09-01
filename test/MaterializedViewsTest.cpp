@@ -1868,7 +1868,10 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
   {
     auto plannedQuery = qlv.parseAndPlanQuery(spatialJoinQuery);
     auto& qet = plannedQuery.queryExecutionTree();
-    auto sjMatcher = h::spatialJoin(
+    // NOTE: `spatialJoinFilterSubstitute`, because the `SpatialJoin` results
+    // from substituting the `FILTER` and (since the flag is preserved by
+    // `cloneWithBoundingBoxColumns`) reports so.
+    auto sjMatcher = h::spatialJoinFilterSubstitute(
         -1, -1, V{"?geometry1"}, V{"?geometry2"}, std::nullopt,
         PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
         SpatialJoinType::INTERSECTS, std::nullopt,
