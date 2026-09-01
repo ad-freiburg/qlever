@@ -25,14 +25,12 @@
 
 namespace ad_utility {
 
-// The available schemes for the `GeoCellGrid` class below. There is currently
-// only one scheme: `Flat`, a single grid of 2^level x 2^level cells, where
-// each geometry that fits inside a single cell gets that cell and every
-// other geometry gets the sentinel cell. A further scheme (for example,
-// several grid copies shifted against each other, or a hierarchical grid)
-// only adds an enum value and private methods to the `GeoCellGrid`, because
-// all its public methods work with plain cell numbers of `numCellBits()`
-// bits.
+// The available schemes for the `GeoCellGrid` class below.
+//
+// NOTE: There is currently only one scheme, `Flat`, implemented below. It's a
+// simple flat grid. Future schemes may be hierarchical or have several copies
+// of the grid shifted against each other. The abstract interface of the
+// `GeoCellGrid` class below is general enough to support these future schemes.
 enum class GeoCellGridScheme : uint8_t {
   Flat = 0,
 };
@@ -51,16 +49,16 @@ std::optional<GeoCellGridScheme> geoCellGridSchemeFromString(
 // `level` L subdivides the longitude range [-180, 180] and the latitude range
 // [-90, 90] into 2^L intervals each. How exactly the grid is placed and how
 // the grid cells are indexed is determined by the `GeoCellGridScheme`. The
-// relation between the grid and a WKT literal is defined as follows:
+// relation between the grid and a WKT literal is defined by the following two
+// methods (see the methods themselves for details):
 //
-// 1. Each WKT literal is assigned to exactly one cell, computed by
-// `cellIndexFromWktLiteral` from the WKT string alone. That cell either covers
-// the entire geometry or, if there is no such cell, is the special "sentinel"
-// cell.
+// 1. For a given WKT literal, `cellIndexFromWktLiteral` returns the index of a
+// cell that covers the geometry, or, if there is no such cell, the index of the
+// special "sentinel" cell.
 //
-// 2. For a given rectangle, `coveringCellRanges` computes ranges of cell
+// 2. For any given rectangle, `coveringCellRanges` computes ranges of cell
 // indices that are guaranteed to contain the cell index of every geometry
-// whose bounding box intersects the rectangle; see the method for details.
+// whose bounding box intersects the rectangle.
 class GeoCellGrid {
  public:
   // The type for the index of a cell in the grid. In particular, this index is
@@ -79,7 +77,7 @@ class GeoCellGrid {
   }
 
  private:
-  // The level `L` of the base grid, which has `2^L x 2^L` cells.
+  // The level of the base grid, which has `2^level x 2^level` cells.
   uint8_t level_;
 
   // The scheme by which cell indices are assigned to geometries.
@@ -101,7 +99,7 @@ class GeoCellGrid {
   // The number of grid columns or rows (the same in all schemes).
   uint64_t numCellsPerDimension() const { return uint64_t{1} << level_; }
 
-  // The number of bits occupied by a cell number.
+  // The number of bits occupied by a cell index.
   //
   // NOTE: This can depend on the scheme (a scheme with several grid copies
   // needs extra bits to select the copy), so the bit count must never be
@@ -140,10 +138,11 @@ class GeoCellGrid {
   // must be a pure function of the literal string.
   CellIndex cellIndexFromWktLiteral(std::string_view wktLiteral) const;
 
-  // Combine a cell and a position into a cell-annotated vocabulary index and
-  // take it apart again. The position must be smaller than `maxNumWords()`.
-  uint64_t annotateIndex(CellIndex cell, uint64_t position) const {
-    return (cell << numPositionBits()) | position;
+  // Combine a cell index and a position into an annotated vocabulary index
+  // and take it apart again. The position must be smaller than
+  // `maxNumWords()`.
+  uint64_t annotateIndex(CellIndex cellIndex, uint64_t position) const {
+    return (cellIndex << numPositionBits()) | position;
   }
   CellIndex cellOfIndex(uint64_t annotatedIndex) const {
     return annotatedIndex >> numPositionBits();

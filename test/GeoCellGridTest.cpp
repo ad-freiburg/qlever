@@ -71,7 +71,8 @@ TEST(GeoCellGrid, cellIndexFromPoint) {
   // Points on the boundary of the coordinate domain are clamped into the grid.
   GeoCellGrid grid{1};
 
-  // Level 1 divides the earth into 2 x 2 cells; cell = (cellY << 1) | cellX.
+  // Level 1 divides the earth into 2 x 2 cells, with
+  // cellIndex = (cellY << 1) | cellX.
   EXPECT_EQ(grid.cellIndexFromPoint(-90.0, -45.0), 0u);
   EXPECT_EQ(grid.cellIndexFromPoint(90.0, -45.0), 1u);
   EXPECT_EQ(grid.cellIndexFromPoint(-90.0, 45.0), 2u);
@@ -220,8 +221,8 @@ TEST(GeoCellGrid, cellIndicesFitTheField) {
                                            std::clamp(lng, -180.0, 180.0)},
                                   GeoPoint{std::clamp(lat + h, -90.0, 90.0),
                                            std::clamp(lng + w, -180.0, 180.0)}};
-      auto cell = grid.cellIndexFromBoundingBox(box);
-      EXPECT_LT(cell, uint64_t{1} << grid.numCellBits());
+      auto cellIndex = grid.cellIndexFromBoundingBox(box);
+      EXPECT_LT(cellIndex, uint64_t{1} << grid.numCellBits());
     }
   }
 }
@@ -239,11 +240,12 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
   std::uniform_real_distribution<double> geomSize{0.0, 8.0};
   std::uniform_real_distribution<double> querySize{0.01, 30.0};
 
-  // Whether `cell` is contained in one of the `ranges`.
+  // Helper lambda that computes whether `cellIndex` is contained in one of
+  // the `ranges`.
   auto contains = [](const GeoCellGrid::CellRanges& ranges,
-                     GeoCellGrid::CellIndex cell) {
+                     GeoCellGrid::CellIndex cellIndex) {
     for (const auto& [first, last] : ranges) {
-      if (cell >= first && cell <= last) {
+      if (cellIndex >= first && cellIndex <= last) {
         return true;
       }
     }
@@ -283,12 +285,12 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
         // The cell index of an intersecting geometry must be in one of the
         // ranges. On failure, print the geometry and the rectangle.
         ad_utility::BoundingBox box{GeoPoint{lat, lng}, GeoPoint{lat2, lng2}};
-        auto cell = grid.cellIndexFromBoundingBox(box);
-        EXPECT_TRUE(contains(ranges, cell))
+        auto cellIndex = grid.cellIndexFromBoundingBox(box);
+        EXPECT_TRUE(contains(ranges, cellIndex))
             << ad_utility::toString(scheme) << " geometry [" << lng << ", "
             << lat << ", " << lng2 << ", " << lat2 << "] query [" << qLng
-            << ", " << qLat << ", " << qLng2 << ", " << qLat2 << "] cell "
-            << cell;
+            << ", " << qLat << ", " << qLng2 << ", " << qLat2 << "] cell index "
+            << cellIndex;
         ++numChecked;
       }
     }
