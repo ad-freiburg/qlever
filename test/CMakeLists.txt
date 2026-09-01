@@ -296,6 +296,8 @@ addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)
 
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
+addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
+
 addLinkAndDiscoverTest(TaskQueueTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
@@ -481,6 +483,8 @@ if (EMSCRIPTEN)
     set_source_files_properties(AsioHelpersTest.cpp PROPERTIES COMPILE_OPTIONS "-O1")
 endif ()
 
+addLinkAndDiscoverTest(AsyncSemaphoreTest)
+
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
 addLinkAndDiscoverTest(WebSocketSessionTest http)
@@ -502,6 +506,18 @@ addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
+
+addLinkAndDiscoverTestNoLibs(RunsInputPolicyTest)
+
+addLinkAndDiscoverTestNoLibs(MergeExecutorTest)
+
+addLinkAndDiscoverTestNoLibs(InOrderBlockSinkTest)
+
+addLinkAndDiscoverTestNoLibs(BlockStorageTest)
+
+addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
+
+addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 
