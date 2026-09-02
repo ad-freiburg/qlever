@@ -106,6 +106,11 @@ void testForVocabTypeWithHoles(VocabularyType::Enum vocabType) {
   EXPECT_TRUE(wI.isEnd());
   EXPECT_EQ(vocab.getPositionOfWord("beta", ql::ranges::less{}),
             (std::pair<uint64_t, uint64_t>{2, 3}));
+  // A word that sorts after all contained words has to be reported as "one
+  // past the largest contained index" (here 7), and not as `size()` (here 4),
+  // which because of the holes is the index of an actual, smaller word.
+  EXPECT_EQ(vocab.getPositionOfWord("zzz", ql::ranges::less{}),
+            (std::pair<uint64_t, uint64_t>{7, 7}));
 
   // A vocabulary with holes never provides geometry information.
   EXPECT_FALSE(vocab.isGeoInfoAvailable());

@@ -60,16 +60,17 @@ struct LibSpatialJoinConfig {
   explicit LibSpatialJoinConfig(SpatialJoinType joinType)
       : LibSpatialJoinConfig(joinType, std::nullopt, std::nullopt) {}
 
-  // The constructor checks that `maxDist_` and `de9imFilter_` are only set
-  // together with their respective matching `joinType_`, because these
-  // fields are not independent of each other.
+  // The constructor checks that `maxDist_` is set if and only if the join
+  // type is `WITHIN_DIST`, and that `de9imFilter_` is set if and only if the
+  // join type is `DE9IM`, because these fields are not independent of each
+  // other.
   LibSpatialJoinConfig(SpatialJoinType joinType, std::optional<double> maxDist,
                        std::optional<De9imFilterString> de9imFilter)
       : joinType_{joinType}, maxDist_{maxDist}, de9imFilter_{de9imFilter} {
-    AD_CORRECTNESS_CHECK(!maxDist_.has_value() ||
-                         joinType_ == SpatialJoinType::WITHIN_DIST);
-    AD_CORRECTNESS_CHECK(!de9imFilter_.has_value() ||
-                         joinType_ == SpatialJoinType::DE9IM);
+    AD_CORRECTNESS_CHECK(maxDist_.has_value() ==
+                         (joinType_ == SpatialJoinType::WITHIN_DIST));
+    AD_CORRECTNESS_CHECK(de9imFilter_.has_value() ==
+                         (joinType_ == SpatialJoinType::DE9IM));
   }
 };
 
@@ -154,9 +155,6 @@ struct SpatialJoinConfiguration {
   // Choice of algorithm.
   SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
 
-  // Join type for `libspatialjoin` algorithm.
-  std::optional<SpatialJoinType> joinType_ = std::nullopt;
-
   // Cache name for precomputed right child with s2 index (only for
   // s2-point-polyline algorithm)
   std::optional<std::string> rightCacheName_ = std::nullopt;
@@ -184,6 +182,35 @@ struct SpatialJoinConfiguration {
       } else {
         static_assert(std::is_same_v<T, NearestNeighborsConfig>);
         return config.maxResults_;
+      }
+    };
+    return std::visit(visitor, task_);
+  }
+
+  // Extract the join type from `task_`. Only `LibSpatialJoinConfig` tasks
+  // specify one; for the other task types this is always `std::nullopt`.
+  std::optional<SpatialJoinType> getJoinType() const {
+    auto visitor = [](const auto& config) -> std::optional<SpatialJoinType> {
+      using T = std::decay_t<decltype(config)>;
+      if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
+        return config.joinType_;
+      } else {
+        return std::nullopt;
+      }
+    };
+    return std::visit(visitor, task_);
+  }
+
+  // Extract the DE-9IM filter pattern from `task_`, if the task is a
+  // `LibSpatialJoinConfig` with one set (only relevant for the `DE9IM` join
+  // type).
+  std::optional<De9imFilterString> getDe9imFilter() const {
+    auto visitor = [](const auto& config) -> std::optional<De9imFilterString> {
+      using T = std::decay_t<decltype(config)>;
+      if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
+        return config.de9imFilter_;
+      } else {
+        return std::nullopt;
       }
     };
     return std::visit(visitor, task_);

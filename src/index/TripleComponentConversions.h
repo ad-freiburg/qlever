@@ -12,12 +12,11 @@
 
 #include <optional>
 #include <string>
-#include <utility>
-#include <variant>
 
 #include "global/Id.h"
 #include "global/VocabIndex.h"
 #include "index/LocalVocab.h"
+#include "index/LocalVocabContext.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "parser/TripleComponent.h"
 
@@ -37,11 +36,14 @@ class IndexImpl;
     const EncodedIriManager* encodedIriManager);
 
 // Convert `tripleComponent` to an `Id`. If it is a literal or IRI, resolve it
-// using the vocabulary of `index`. If it is not found there, return the
-// positions of the two neighboring entries.
-[[nodiscard]] std::variant<Id, std::pair<VocabIndex, VocabIndex>>
-toValueIdOrBounds(const TripleComponent& tripleComponent,
-                  const IndexImpl& index);
+// using the vocabularies of `index`, that is, its main vocabulary (which yields
+// an `Id` of type `VocabIndex`) and its secondary vocabulary (which yields an
+// `Id` of type `SecondaryVocabIndex`), see
+// `LocalVocabContext::lookupWordInVocabularies`. If it is found in neither of
+// them, return the positions of the two neighboring entries of the main
+// vocabulary (which then are equal).
+[[nodiscard]] LocalVocabContext::IdOrVocabBounds toValueIdOrBounds(
+    const TripleComponent& tripleComponent, const IndexImpl& index);
 
 // Like `toValueIdOrBounds`, but return `std::nullopt` if not found.
 [[nodiscard]] std::optional<Id> toValueId(

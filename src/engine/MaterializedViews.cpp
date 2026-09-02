@@ -144,7 +144,7 @@ void MaterializedViewsManager::writeViewToDisk(
 // _____________________________________________________________________________
 std::string MaterializedView::getFilenameBase(std::string_view onDiskBase,
                                               std::string_view name) {
-  return absl::StrCat(onDiskBase, ".view.", name);
+  return materializedViewFilenameBase(onDiskBase, name);
 }
 
 // _____________________________________________________________________________
@@ -621,11 +621,9 @@ bool MaterializedViewsManager::hasLoadedViews() const {
 // _____________________________________________________________________________
 std::vector<ql::filesystem::path> MaterializedViewsManager::viewFilesOnDisk(
     const ql::filesystem::path& onDiskBase) {
-  // View files are named `<base>.view.<name>...`. Reuse the canonical filename
-  // builder so the `.view.` infix is not duplicated here, and let the shared
-  // helper enumerate the matching files in the directory of `onDiskBase`.
-  std::string suffix = MaterializedView::getFilenameBase("", "");
-  return qlever::util::filesWithBaseNameAndSuffix(onDiskBase, suffix);
+  // View files are named `<base>.view.<name>...`, so let the shared helper
+  // enumerate the files with that infix in the directory of `onDiskBase`.
+  return qlever::util::filesWithBaseNameAndSuffix(onDiskBase, VIEW_FILE_INFIX);
 }
 
 // _____________________________________________________________________________

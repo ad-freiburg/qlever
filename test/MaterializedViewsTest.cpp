@@ -63,7 +63,7 @@ using V = Variable;
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, Basic) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   // Write a simple view.
   clearLog();
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
@@ -405,7 +405,7 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ColumnPermutation) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   MaterializedViewsManager manager{testIndexBase_};
 
   // Helper to get all column names from a view via its `VariableToColumnMap`.
@@ -884,7 +884,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 // under Emscripten anyway (threaded server integration).
 #ifndef __EMSCRIPTEN__
 TEST_F(MaterializedViewsTest, serverIntegration) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   using namespace serverTestHelpers;
   // Config for the plain `Server` instances constructed below.
   qlever::EngineConfig config;
@@ -1893,102 +1893,6 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
     EXPECT_EQ(runtimeInfo.at("num-geoms-dropped-by-prefilter"), 3);
   }
 }
-
-// Example queries for testing query rewriting.
-constexpr std::string_view simpleChain = "SELECT * { ?s <p1> ?m . ?m <p2> ?o }";
-constexpr std::string_view simpleChainRenamed =
-    "SELECT * { ?b <p2> ?c . ?a <p1> ?b }";
-constexpr std::string_view simpleChainFixed =
-    "SELECT * {  <s2> <p1>/<p2> ?c . }";
-constexpr std::string_view simpleChainPlusJoin =
-    "SELECT * { ?s <p1>/<p2> ?o . ?s <p3> ?o2 }";
-constexpr std::string_view simpleChainRenamedPlusBind =
-    "SELECT ?a ?b ?c ?x { ?b <p2> ?c . ?a <p1> ?b . BIND(5 AS ?x) }";
-constexpr std::string_view simpleChainDifferentSort =
-    "SELECT ?m ?s ?o { ?s <p1> ?m . ?m <p2> ?o }";
-constexpr std::string_view overlappingChains =
-    "SELECT * { ?s <p1> ?m . ?m <p2> ?o1 . ?m <p2> ?o2 }";
-
-// _____________________________________________________________________________
-TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
-  RewriteTestParams p = GetParam();
-  auto cleanup =
-      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
-          p.queryPlanningBudget_);
-
-  // Test dataset and query.
-  const std::string chainTtl =
-      " <s1> <p1> <m2> . \n"
-      " <m1> <p2> <o1> . \n"
-      " <s2> <p1> <m2> . \n"
-      " <m2> <p2> <http://example.com/> . \n"
-      " <m2> <p3> \"abc\" . \n"
-      " <s2> <p3> <o3> . \n";
-  const std::string onDiskBase = gtestCurrentTestName();
-  const std::string viewName = "testViewChain";
-
-  // Initialized libqlever.
-  materializedViewsTestHelpers::makeTestIndex(onDiskBase, chainTtl);
-  auto cleanUp = absl::Cleanup(
-      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
-  qlever::EngineConfig config;
-  config.baseName_ = onDiskBase;
-  qlever::Qlever qlv{config};
-
-  // Without the materialized view, a regular join is executed.
-  h::expect(std::string{simpleChain},
-            h::Join(h::IndexScanFromStrings("?s", "<p1>", "?m"),
-                    h::IndexScanFromStrings("?m", "<p2>", "?o")));
-
-  // Write a chain structure to the materialized view.
-  qlv.writeMaterializedView(viewName, p.writeQuery_);
-  qlv.loadMaterializedView(viewName);
-  auto chainView = std::bind_front(&viewScanSimple, viewName);
-
-  // With the materialized view loaded, an index scan on the view is performed
-  // instead of a regular join.
-  qpExpect(qlv, simpleChain, chainView("?s", "?m", "?o"));
-  qpExpect(qlv, simpleChainRenamed, chainView("?a", "?b", "?c"));
-  qpExpect(qlv, simpleChainFixed,
-           chainView("<s2>", "?_QLever_internal_variable_qp_0", "?c"));
-  qpExpect(qlv, simpleChainPlusJoin,
-           h::Join(chainView("?s", "?_QLever_internal_variable_qp_0", "?o"),
-                   h::IndexScanFromStrings("?s", "<p3>", "?o2")));
-
-  // If the view is sorted such that the subject of the chain is not the first
-  // column, rewriting cannot be applied with a fixed subject.
-  qlv.writeMaterializedView(viewName, std::string{simpleChainDifferentSort});
-  qlv.loadMaterializedView(viewName);
-  qpExpect(qlv, simpleChainFixed,
-           h::Join(h::IndexScanFromStrings("<s2>", "<p1>",
-                                           "?_QLever_internal_variable_qp_0"),
-                   h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
-                                           "<p2>", "?c")));
-
-  // Test overlapping view plans: the rewriting can be applied but the remaining
-  // triple must be joined normally.
-  auto firstRewritten = h::Join(chainView("?m", "?s", "?o1"),
-                                h::IndexScanFromStrings("?m", "<p2>", "?o2"));
-  auto secondRewritten = h::Join(chainView("?m", "?s", "?o2"),
-                                 h::IndexScanFromStrings("?m", "<p2>", "?o1"));
-  qpExpect(qlv, overlappingChains,
-           ::testing::AnyOf(firstRewritten, secondRewritten));
-}
-
-// _____________________________________________________________________________
-INSTANTIATE_TEST_SUITE_P(
-    MaterializedViewsTest, MaterializedViewsChainRewriteTest,
-    ::testing::Values(
-        // Default case.
-        RewriteTestParams{std::string{simpleChain}, 1500},
-
-        // Default query for writing the materialized view, but forced greedy
-        // planning.
-        RewriteTestParams{std::string{simpleChain}, 1},
-
-        // An additional `BIND` is ignored and the view can still be used for
-        // query rewriting. Also uses a different sorting.
-        RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {

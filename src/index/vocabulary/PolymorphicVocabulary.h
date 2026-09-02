@@ -85,7 +85,10 @@ class PolymorphicVocabulary {
   // Return the total number of words in the vocabulary.
   size_t size() const;
 
-  // Return the `i`-th word, throw if `i` is out of bounds.
+  // Return the word with the vocabulary index `i`, throw if `i` is out of
+  // bounds. For a vocabulary with holes (see `VocabularyInMemoryBinSearch`)
+  // return `placeholderForMissingVocabIndex(i)` if `i` is one of those holes,
+  // instead of throwing.
   std::string operator[](uint64_t i) const;
 
   // Iterate over all words. The ranges of the different possible
@@ -145,7 +148,9 @@ class PolymorphicVocabulary {
 
   // Analogous to `lower_bound`, but since `word` is guaranteed to be a full
   // word, not a prefix, this function can respect the split of an underlying
-  // `SplitVocabulary`.
+  // `SplitVocabulary`, as well as the "one past the end" index of a vocabulary
+  // with holes (see `HasSpecialGetPositionOfWord` in
+  // `VocabularyConstraints.h`).
   template <typename String, typename Comp>
   std::pair<uint64_t, uint64_t> getPositionOfWord(const String& word,
                                                   Comp comp) const {
@@ -205,7 +210,8 @@ class PolymorphicVocabulary {
   }
 
   // Create a `WordWriter` that will create a vocabulary with the given `type`
-  // at the given `filename`.
+  // at the given `filename`. Throw for a `type` with holes (see
+  // `VocabularyInMemoryBinSearch`), which cannot be built word by word.
   static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
       const std::string& filename, VocabularyType type);
 

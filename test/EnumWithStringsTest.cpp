@@ -44,9 +44,10 @@ TEST(EnumWithStrings, VocabularyTypeEnum) {
           V::OnDiskCompressed, V::OnDiskCompressedGeoSplit,
           V::InMemoryUncompressedWithHoles, V::InMemoryCompressedWithHoles));
 
-  // Each of the values has to be drawn roughly equally often. NOTE: The bounds
-  // are computed from the number of values, such that adding another value does
-  // not require this test to be changed.
+  // Each of the values has to be drawn roughly equally often.
+  //
+  // NOTE: The bounds are computed from the number of values, such that adding
+  // another value does not require this test to be changed.
   size_t numSamples = 50000;
   ad_utility::HashMap<V, size_t> h;
   for (size_t i = 0; i < numSamples; ++i) {
