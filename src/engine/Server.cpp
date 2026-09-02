@@ -484,8 +484,8 @@ CPP_template_def(typename RequestT)(
 }
 
 namespace {
-// Helpers used only by `Server::process` below, for dispatching its `cmd=`
-// URL parameter.
+// Helpers used by `Server::processCommands` below to dispatch its `cmd=` URL
+// parameter, and by other command/setting handlers in this file.
 namespace serverProcessHelpers {
 using namespace ad_utility::url_parser;
 using namespace ad_utility::httpUtils;
@@ -546,8 +546,8 @@ std::optional<std::string> checkAndLogParameterSetting(
   return value;
 }
 
-// Create parameter binded version of `checkParameter` with `parameters` as the
-// first binded argument.
+// Create a version of `checkParameter` bound to `parameters` as its first
+// argument.
 auto makeCheckParameter(const ParamValueMap& parameters) {
   return absl::bind_front(&checkParameter, std::cref(parameters));
 }
@@ -643,57 +643,57 @@ CPP_template_def(typename RequestT)(
     return composeCacheStats(cache, namedResultCache);
   };
 
-  std::optional<ResponseT> result;
+  std::optional<ResponseT> response;
   if (commandIs("stats")) {
-    result = jsonResponse(composeIndexStats(index));
+    response = jsonResponse(composeIndexStats(index));
   } else if (commandIs("cache-stats")) {
-    result = jsonResponse(cacheStats());
+    response = jsonResponse(cacheStats());
   } else if (commandIs("clear-cache")) {
     cache().clearUnpinnedOnly();
-    result = jsonResponse(cacheStats());
+    response = jsonResponse(cacheStats());
   } else if (commandIs("clear-cache-complete")) {
     cache().clearAll();
-    result = jsonResponse(cacheStats());
+    response = jsonResponse(cacheStats());
   } else if (commandIs("clear-named-cache")) {
     namedResultCache().clear();
-    result = jsonResponse(cacheStats());
+    response = jsonResponse(cacheStats());
   } else if (commandIs("clear-delta-triples")) {
     auto countAfterClear = co_await processClearDeltaTriples();
-    result = jsonResponse(json(countAfterClear));
+    response = jsonResponse(json(countAfterClear));
   } else if (commandIs("vacuum-delta-triples")) {
     auto vacuumStats = co_await processVacuumDeltaTriples(
         checkParameter("timeout", std::nullopt), accessTokenOk);
-    result = jsonResponse(vacuumStats);
+    response = jsonResponse(vacuumStats);
   } else if (commandIs("get-settings")) {
-    result = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
+    response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
   } else if (commandIs("get-index-id")) {
-    result =
+    response =
         createOkResponse(index.getIndexId(), request, MediaType::textPlain);
   } else if (commandIs("dump-active-queries")) {
     auto activeQueries = nlohmann::json::object();
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
       activeQueries[nlohmann::json(key)] = std::move(value);
     }
-    result = jsonResponse(activeQueries);
+    response = jsonResponse(activeQueries);
   } else if (commandIs("rebuild-index")) {
-    result = co_await processRebuildIndex(parameters, request);
+    response = co_await processRebuildIndex(parameters, request);
   } else if (commandIs("write-materialized-view")) {
     auto materializedViewStats = co_await processWriteMaterializedView(
         parameters, operation, accessTokenOk, requestTimer);
-    result = jsonResponse(materializedViewStats);
+    response = jsonResponse(materializedViewStats);
     // Prevent regular query processing by removing the query from the request.
     operation = None{};
   } else if (commandIs("load-materialized-view")) {
-    result =
+    response =
         jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
     // Prevent regular query processing by removing the query from the request.
     operation = None{};
   } else if (commandIs("delete-materialized-view")) {
-    result = jsonResponse(processDeleteMaterializedView(parameters));
+    response = jsonResponse(processDeleteMaterializedView(parameters));
     // Prevent regular query processing by removing the query from the request.
     operation = None{};
   }
-  co_return result;
+  co_return response;
 }
 
 // _____________________________________________________________________________
