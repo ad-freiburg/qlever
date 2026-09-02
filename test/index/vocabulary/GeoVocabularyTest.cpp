@@ -268,4 +268,93 @@ TEST(GeoVocabularyTest, WordWriterDestructor) {
   wordWriter2.reset();
 }
 
+// Test that a `GeoVocabulary` with a geo cell grid hands out cell-annotated
+// indices, persists the grid in the `.geocells` file, and translates between
+// annotated indices and plain positions in all its operations.
+TEST(GeoVocabulary, cellAnnotatedIndices) {
+  using GV = GeoVocabulary<VocabularyInMemory>;
+  GeoCellGrid grid{2};
+  const std::string fn = "geocellvocab-test.dat";
+  auto wkt = [](std::string_view content) {
+    return absl::StrCat("\"", content, "\"", GEO_LITERAL_SUFFIX);
+  };
+
+  // Words in (cell index, lexicographic) order: cell 3, cell 12 (twice), the
+  // sentinel cell (for the unparsable literal).
+  std::string w0 = wkt("POINT(170 -80)");  // cell 3
+  std::string w1 = wkt("POINT(-170 80)");  // cell 12
+  std::string w2 = wkt("POINT(-171 80)");  // cell 12
+  std::string w3 = wkt("NOTAGEOMETRY");    // sentinel (invalid)
+  std::vector<std::string> words{w0, w1, w2, w3};
+  std::vector<uint64_t> expectedIndices{
+      grid.annotateIndex(3, 0), grid.annotateIndex(12, 1),
+      grid.annotateIndex(12, 2), grid.annotateIndex(grid.sentinelCell(), 3)};
+
+  // The writer assigns the annotated indices.
+  {
+    GV writeVocab;
+    writeVocab.setGeoCellGrid(grid);
+    auto ww = writeVocab.makeDiskWriterPtr(fn);
+    ww->readableName() = "test";
+    for (size_t i = 0; i < words.size(); ++i) {
+      EXPECT_EQ((*ww)(words[i], false), expectedIndices[i]);
+    }
+    ww->finish();
+  }
+
+  // Opening restores the grid from the `.geocells` file.
+  GV geoVocab;
+  geoVocab.open(fn);
+  ASSERT_TRUE(geoVocab.getGeoCellGrid().has_value());
+  EXPECT_EQ(geoVocab.getGeoCellGrid().value(), grid);
+  EXPECT_EQ(geoVocab.size(), words.size());
+
+  // Retrieval and index translation by annotated index.
+  for (size_t i = 0; i < words.size(); ++i) {
+    EXPECT_EQ(geoVocab[expectedIndices[i]], words[i]);
+    EXPECT_EQ(geoVocab.toPosition(expectedIndices[i]), i);
+    EXPECT_EQ(geoVocab.toAnnotatedIndex(i), expectedIndices[i]);
+  }
+  EXPECT_TRUE(geoVocab.getGeoInfo(expectedIndices[0]).has_value());
+  EXPECT_FALSE(geoVocab.getGeoInfo(expectedIndices[3]).has_value());
+
+  // The past-the-end index is larger than every valid index.
+  EXPECT_EQ(geoVocab.endIndex(),
+            grid.annotateIndex(grid.sentinelCell(), words.size()));
+
+  // `scanAll` yields the annotated indices.
+  std::vector<uint64_t> scannedIndices;
+  for (const auto& indexAndWord : geoVocab.scanAll()) {
+    scannedIndices.push_back(indexAndWord.index_);
+  }
+  EXPECT_THAT(scannedIndices, ::testing::ElementsAreArray(expectedIndices));
+
+  // Binary search returns annotated indices. The comparator orders WKT
+  // literals by cell index first; here it is written by hand, in a follow-up
+  // change the `TripleComponentComparator` produces this order.
+  auto comparator = [&grid](std::string_view a, std::string_view b) {
+    auto key = [&grid](std::string_view w) {
+      return std::pair{grid.cellIndexFromWktLiteral(w), w};
+    };
+    return key(a) < key(b);
+  };
+  for (size_t i = 0; i < words.size(); ++i) {
+    auto wordAndIndex = geoVocab.lower_bound(words[i], comparator);
+    ASSERT_FALSE(wordAndIndex.isEnd());
+    EXPECT_EQ(wordAndIndex.index(), expectedIndices[i]);
+    EXPECT_EQ(wordAndIndex.word(), words[i]);
+  }
+
+  // Feeding words out of cell order must fail.
+  {
+    GV badVocab;
+    badVocab.setGeoCellGrid(grid);
+    auto ww = badVocab.makeDiskWriterPtr("geocellvocab-test-bad.dat");
+    ww->readableName() = "test";
+    (*ww)(w1, false);
+    EXPECT_ANY_THROW((*ww)(w0, false));
+    ww->finish();
+  }
+}
+
 }  // namespace
