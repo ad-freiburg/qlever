@@ -25,7 +25,6 @@
 #include <variant>
 #include <vector>
 
-#include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
@@ -87,15 +86,6 @@ class AsyncResourcePool {
                                           std::remove_const_t<T>>;
   using StoredType = StoredTypeOf<ResourceType>;
 
-  // The type from which a single resource is constructed when the pool is set
-  // up from a range. The elements of an rvalue range are moved out of it, the
-  // elements of an lvalue range are copied.
-  template <typename Range>
-  using RangeElement = std::conditional_t<
-      std::is_rvalue_reference_v<Range&&>,
-      std::remove_reference_t<ql::ranges::range_reference_t<Range>>&&,
-      ql::ranges::range_reference_t<Range>>;
-
   // The channel that holds the resources: it buffers one element per resource
   // that is currently free. The element is a `std::optional`, because a
   // cancelled `async_receive` completes with a value-initialized element, and
@@ -119,10 +109,6 @@ class AsyncResourcePool {
         : executor_{std::move(executor)}, resources_{executor_, numResources} {}
   };
   std::shared_ptr<Impl> impl_;
-
-  // A tag for the private constructor that all the public constructors
-  // delegate to, see below.
-  struct FromResourcesTag {};
 
  public:
   // A single resource of an `AsyncResourcePool`, which is returned to that pool
@@ -203,23 +189,33 @@ class AsyncResourcePool {
   // Construct a pool of `numResources` value-initialized resources. The channel
   // of this pool runs on the `executor`, which somebody else has to run.
   //
-  // NOTE: This is the only constructor of an `AsyncResourcePool<void>`, where
-  // `numResources` is simply the number of permits of the semaphore.
+  // NOTE: This is the constructor to use for an `AsyncResourcePool<void>`,
+  // where `numResources` is simply the number of permits of the semaphore.
   CPP_template_2(typename T = ResourceType)(
       requires ql::concepts::default_initializable<StoredTypeOf<T>>)
       AsyncResourcePool(net::any_io_executor executor, size_t numResources)
-      : AsyncResourcePool{FromResourcesTag{}, std::move(executor),
+      : AsyncResourcePool{std::move(executor),
                           std::vector<StoredType>(numResources)} {}
 
-  // Construct a pool that manages exactly the elements of the `range`, one
-  // resource per element. The elements are moved out of the `range` if it is an
-  // rvalue range.
-  CPP_template_2(typename Range)(
-      requires ql::ranges::input_range<Range> CPP_and_2 std::is_constructible_v<
-          StoredTypeOf<ResourceType>, RangeElement<Range>>)
-      AsyncResourcePool(net::any_io_executor executor, Range&& range)
-      : AsyncResourcePool{FromResourcesTag{}, std::move(executor),
-                          toVector(AD_FWD(range))} {}
+  // Construct a pool that manages exactly the elements of `resources`, one
+  // resource per element. The elements are moved out of the vector, so this is
+  // the constructor to use for resources that are neither copyable nor
+  // default-constructible.
+  AsyncResourcePool(net::any_io_executor executor,
+                    std::vector<StoredType> resources)
+      : impl_{std::make_shared<Impl>(std::move(executor), resources.size())} {
+    size_t numResources = resources.size();
+    AD_CONTRACT_CHECK(numResources > 0);
+    // Hand out the initial resources. NOTE: This happens in the constructor,
+    // which is always synchronous and which nothing else can run concurrently
+    // with.
+    for (auto& resource : resources) {
+      bool resourceWasSent = impl_->resources_.try_send(
+          boost::system::error_code{},
+          std::optional<StoredType>{std::move(resource)});
+      AD_CORRECTNESS_CHECK(resourceWasSent);
+    }
+  }
 
   // Construct a pool of `numResources` resources, each of which is a copy of
   // the `prototype`.
@@ -228,7 +224,7 @@ class AsyncResourcePool {
           CPP_and_2 ql::concepts::copy_constructible<StoredTypeOf<T>>)
       AsyncResourcePool(net::any_io_executor executor, size_t numResources,
                         const StoredTypeOf<T>& prototype)
-      : AsyncResourcePool{FromResourcesTag{}, std::move(executor),
+      : AsyncResourcePool{std::move(executor),
                           std::vector<StoredType>(numResources, prototype)} {}
 
   // Return the executor on which a completion handler of this pool runs if it
@@ -298,40 +294,6 @@ class AsyncResourcePool {
   }
 
  private:
-  // The constructor that all the public constructors above delegate to: it
-  // takes the resources that this pool manages, one per element.
-  AsyncResourcePool(FromResourcesTag, net::any_io_executor executor,
-                    std::vector<StoredType> resources)
-      : impl_{std::make_shared<Impl>(std::move(executor), resources.size())} {
-    size_t numResources = resources.size();
-    AD_CONTRACT_CHECK(numResources > 0);
-    // Hand out the initial resources. NOTE: This happens in the constructor,
-    // which is always synchronous and which nothing else can run concurrently
-    // with.
-    for (auto& resource : resources) {
-      bool resourceWasSent = impl_->resources_.try_send(
-          boost::system::error_code{},
-          std::optional<StoredType>{std::move(resource)});
-      AD_CORRECTNESS_CHECK(resourceWasSent);
-    }
-  }
-
-  // Collect the elements of the `range` into a vector of the stored resources,
-  // moving them out of the `range` if it is an rvalue range, see
-  // `RangeElement`.
-  template <typename Range>
-  static std::vector<StoredType> toVector(Range&& range) {
-    std::vector<StoredType> result;
-    for (auto&& element : range) {
-      if constexpr (std::is_rvalue_reference_v<Range&&>) {
-        result.emplace_back(std::move(element));
-      } else {
-        result.emplace_back(element);
-      }
-    }
-    return result;
-  }
-
   // Return the `resource` that is held by the `impl` (if any). The channel is
   // concurrent, so this sends the resource right away and never waits, which
   // makes it callable from anywhere, in particular from a destructor.

@@ -355,7 +355,7 @@ ASYNC_TEST(AsyncResourcePool, countConstructorValueInitializesTheResources) {
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST(AsyncResourcePool, rangeConstructorTakesOneResourcePerElement) {
+ASYNC_TEST(AsyncResourcePool, vectorConstructorTakesOneResourcePerElement) {
   AsyncResourcePool<std::string> pool{ioContext.get_executor(),
                                       std::vector<std::string>{"a", "b", "c"}};
   std::vector<std::string> acquired;
@@ -367,7 +367,7 @@ ASYNC_TEST(AsyncResourcePool, rangeConstructorTakesOneResourcePerElement) {
     acquired.push_back(handle.get());
     handles.push_back(std::move(handle));
   }
-  // The channel is FIFO, so the resources come out in the order of the range.
+  // The channel is FIFO, so the resources come out in the order of the vector.
   EXPECT_THAT(acquired, ::testing::ElementsAre("a", "b", "c"));
 }
 
@@ -399,7 +399,7 @@ ASYNC_TEST(AsyncResourcePool, modificationsOfTheResourceArePreserved) {
 // _____________________________________________________________________________
 ASYNC_TEST(AsyncResourcePool, moveOnlyResources) {
   // A resource that is neither copyable nor default-constructible can only be
-  // set up via the range constructor.
+  // set up via the vector constructor.
   std::vector<MoveOnlyResource> resources;
   resources.emplace_back(17);
   AsyncResourcePool<MoveOnlyResource> pool{ioContext.get_executor(),
