@@ -122,9 +122,11 @@ GeoCellGrid::CellRanges GeoCellGrid::coveringCellRanges(double minLng,
   switch (scheme_) {
     case GeoCellGridScheme::Enum::Flat:
       flatCover(u1, v1, u2, v2, ranges);
-      ranges.emplace_back(sentinelCell(), sentinelCell());
       break;
   }
+  // The sentinel cell can hold a geometry that intersects any rectangle, so
+  // its range is part of every cover, independently of the scheme.
+  ranges.emplace_back(sentinelCell(), sentinelCell());
   // Sort and merge into ascending, non-overlapping ranges (adjacent ranges
   // are merged as well).
   ql::ranges::sort(ranges);

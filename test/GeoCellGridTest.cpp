@@ -292,4 +292,59 @@ TEST(GeoCellGrid, coverForAllSchemesContainsEveryIntersectingGeometry) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(GeoCellGrid, equality) {
+  // Two grids are equal iff their level and scheme agree. There is currently
+  // only one scheme, so only the level can differ.
+  GeoCellGrid grid1{2};
+  GeoCellGrid grid2{2};
+  GeoCellGrid grid3{3};
+  EXPECT_TRUE(grid1 == grid2);
+  EXPECT_FALSE(grid1 == grid3);
+}
+
+// _____________________________________________________________________________
+TEST(GeoCellGrid, coveringCellRangesRequiresOrderedBounds) {
+  // The bounds of the rectangle must be ordered in both dimensions.
+  GeoCellGrid grid{2};
+  EXPECT_THROW(grid.coveringCellRanges(10.0, -10.0, -10.0, 10.0),
+               ad_utility::Exception);
+  EXPECT_THROW(grid.coveringCellRanges(-10.0, 10.0, 10.0, -10.0),
+               ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(GeoCellGrid, coveringCellRangesMergesAdjacentRanges) {
+  // A box that spans the full longitude range covers each of its grid rows
+  // completely. The cell range of a full row is adjacent to that of the next
+  // row, so the per-row ranges merge into a single range.
+  GeoCellGrid grid{2};
+  auto ranges = grid.coveringCellRanges(-180.0, -10.0, 180.0, 10.0);
+  using P = std::pair<uint64_t, uint64_t>;
+  EXPECT_THAT(ranges, ::testing::ElementsAre(
+                          P{(1 << 2) | 0, (2 << 2) | 3},
+                          P{grid.sentinelCell(), grid.sentinelCell()}));
+}
+
+// _____________________________________________________________________________
+TEST(GeoCellGrid, unknownSchemeIsDefendedAgainst) {
+  // The switches over the scheme end in `AD_FAIL()` as a defense against a
+  // future scheme that is not yet handled everywhere. Neither the constructor
+  // of `GeoCellGridScheme` nor that of `GeoCellGrid` inspects the scheme
+  // value, so these paths can be tested with an artificial invalid scheme.
+  GeoCellGrid grid{2,
+                   GeoCellGridScheme{static_cast<GeoCellGridScheme::Enum>(99)}};
+  EXPECT_THROW(grid.cellIndexFromPoint(0.0, 0.0), ad_utility::Exception);
+  EXPECT_THROW(grid.cellIndexFromWktLiteral(wkt("POINT(90 45)")),
+               ad_utility::Exception);
+
+  // `coveringCellRanges` has no `AD_FAIL()`: an unhandled scheme contributes
+  // no regular cell ranges, but the scheme-independent sentinel range is
+  // always part of the cover.
+  using P = std::pair<uint64_t, uint64_t>;
+  EXPECT_THAT(
+      grid.coveringCellRanges(-10.0, -10.0, 10.0, 10.0),
+      ::testing::ElementsAre(P{grid.sentinelCell(), grid.sentinelCell()}));
+}
+
 }  // namespace
