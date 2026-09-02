@@ -29,7 +29,7 @@ std::vector<MaterializedViewJoinReplacement>
 QueryPatternCache::makeJoinReplacementIndexScans(
     QueryExecutionContext* qec,
     const parsedQuery::BasicGraphPattern& triples) const {
-  // We do not allow `triples` to contain more than 64 triples, because use a
+  // We do not allow `triples` to contain more than 64 triples, because we use a
   // 64-bit bitmask for them. This is not a problem, because `QueryPlanner` does
   // not allow graph patterns with more than 64 triples anyway.
   AD_CONTRACT_CHECK(triples._triples.size() <= 64,
