@@ -397,6 +397,8 @@ addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
 
 addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
+addLinkAndDiscoverTestNoLibs(NoCopyNoMoveTest)
+
 addLinkAndDiscoverTestSerial(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
@@ -564,7 +566,7 @@ else ()
     addLinkAndDiscoverTest(MaterializedViewsTest qlever engine)
 endif ()
 
-addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine)
+addLinkAndDiscoverTest(MaterializedViewsPatternRewriteTest qlever engine)
 
 addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 

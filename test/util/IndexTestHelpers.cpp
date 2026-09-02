@@ -230,10 +230,12 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.addHasWordTriples() = c.addHasWordTriples;
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
-    // randomly choose one of the vocabulary implementations
+    // Use the explicitly configured vocabulary type, or a random one
+    // otherwise.
     index.getImpl().setVocabularyTypeForIndexBuilding(
-        c.vocabularyType.has_value() ? c.vocabularyType.value()
-                                     : VocabularyType::random());
+        c.vocabularyType.has_value()
+            ? c.vocabularyType.value()
+            : VocabularyType::randomForIndexBuilding());
     if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
       index.getImpl().setPrefixesForEncodedValues(
           std::move(c.encodedPrefixesWithoutAngleBrackets.value()));

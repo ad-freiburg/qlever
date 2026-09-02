@@ -189,36 +189,30 @@ class Server {
 
   // Run `qlever().clearDeltaTriples()` on `updateThreadPool_` and return the
   // resulting counts. Not cancellable. Unlike `processVacuumDeltaTriples`
-  // below, this is unconditional and has no timeout, so it neither needs the
-  // request/response nor can it fail partway through.
+  // below, this is unconditional and has no timeout, so it can never fail
+  // partway through.
   Awaitable<DeltaTriplesCount> processClearDeltaTriples();
 
   // Vacuum (remove redundant) delta triples of the currently active index,
   // honoring a user-submitted timeout (see `verifyUserSubmittedQueryTimeout`).
   // Unlike `processClearDeltaTriples` above, this can fail (because of an
-  // invalid timeout), in which case an error response has already been sent to
-  // the client and an empty optional is returned; the caller must stop
-  // processing in that case. Otherwise the resulting vacuum stats are
-  // returned.
-  CPP_template(typename RequestT, typename SendT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<std::optional<json>> processVacuumDeltaTriples(
-          std::optional<std::string_view> userTimeout, bool accessTokenOk,
-          const RequestT& request, SendT& send);
+  // invalid timeout), in which case `verifyUserSubmittedQueryTimeout` throws
+  // an `HttpError` that unwinds out of `process()`, all the way up to
+  // `handleHttpRequest`. Otherwise the resulting vacuum stats are returned.
+  Awaitable<json> processVacuumDeltaTriples(
+      std::optional<std::string_view> userTimeout, bool accessTokenOk);
 
   // Handle a `write-materialized-view` command: extract the view name, query,
   // and timeout from `parameters`/`operation`, execute the query, and store
-  // its result as a named materialized view. Uses the same convention as
-  // `processVacuumDeltaTriples` above: an empty optional means an error
-  // response has already been sent to the client. On success, the caller is
+  // its result as a named materialized view. Like `processVacuumDeltaTriples`
+  // above, a rejected timeout throws an `HttpError` that unwinds out of
+  // `process()`, all the way up to `handleHttpRequest`. Otherwise the
+  // resulting materialized-view stats are returned. On success, the caller is
   // responsible for resetting the request's operation to `None{}` so that
   // `process()` doesn't also try to execute it as a regular query.
-  CPP_template(typename RequestT, typename SendT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<std::optional<json>> processWriteMaterializedView(
-          const ParamValueMap& parameters, const SparqlOperation& operation,
-          bool accessTokenOk, const ad_utility::Timer& requestTimer,
-          const RequestT& request, SendT& send);
+  Awaitable<json> processWriteMaterializedView(
+      const ParamValueMap& parameters, const SparqlOperation& operation,
+      bool accessTokenOk, const ad_utility::Timer& requestTimer);
 
   // Handle a `load-materialized-view` command: extract the view name from
   // `parameters` and load it via `indexAndViews`'s materialized views
@@ -226,8 +220,7 @@ class Server {
   // to `None{}` so that `process()` doesn't also try to execute it as a
   // regular query. Unlike `processWriteMaterializedView` above, this neither
   // executes a query nor honors a timeout, so it runs synchronously and
-  // either returns its result or throws -- there's no optional-json/
-  // early-return convention needed here.
+  // either returns its result or throws.
   json processLoadMaterializedView(const ParamValueMap& parameters,
                                    const SharedIndexAndView& indexAndViews);
 
@@ -264,7 +257,7 @@ class Server {
   // parameters and trigger a rebuild unless one is already in progress.
   // Unlike `processVacuumDeltaTriples`/`processWriteMaterializedView` above,
   // this never needs to bypass query processing, so it returns the response
-  // directly instead of following the optional-json convention.
+  // directly.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<ResponseT> processRebuildIndex(const ParamValueMap& parameters,
@@ -323,6 +316,18 @@ class Server {
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> process(RequestT& request, SendT&& send);
+
+  // The final step of `process()`: by this point the operation type (which also
+  // can be `no-operation`) is known, so this builds the
+  // query/update/graph-store-protocol/no-operation visitors and hands them,
+  // together with `operation`, to `processOperation`.
+  CPP_template(typename RequestT, typename SendT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> processSparqlOperation(
+          SparqlOperation operation, const ParamValueMap& parameters,
+          bool accessTokenOk, const ad_utility::Timer& requestTimer,
+          SharedIndexAndView indexAndViews, RequestT& request, SendT&& send,
+          std::optional<ResponseT> response);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
@@ -450,14 +455,13 @@ class Server {
   FRIEND_TEST(ServerTest, checkAccessToken);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
-  /// lower than the server default. Return an empty optional and send a 403
-  /// Forbidden HTTP response if the change is not allowed. Return the new
-  /// timeout otherwise.
-  CPP_template(typename RequestT, typename SendT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) boost::asio::
-      awaitable<std::optional<Server::TimeLimit>> verifyUserSubmittedQueryTimeout(
-          std::optional<std::string_view> userTimeout, bool accessTokenOk,
-          const RequestT& request, SendT& send) const;
+  /// lower than the server default. Throw an `HttpError` (403 Forbidden) if
+  /// the change is not allowed. For queries and updates, `processOperation`
+  /// catches it and builds the standard JSON error response. On the `cmd=`
+  /// paths it unwinds to `handleHttpRequest`, which builds a plain-text
+  /// response. Return the new timeout otherwise.
+  TimeLimit verifyUserSubmittedQueryTimeout(
+      std::optional<std::string_view> userTimeout, bool accessTokenOk) const;
 
   /// Send response for the streamable media types (tsv, csv, octet-stream,
   /// turtle, sparqlJson, qleverJson).

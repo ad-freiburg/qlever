@@ -204,6 +204,24 @@ std::string wordAsStringOrPlaceholder(const Vocab& vocab, uint64_t index) {
   }
 }
 
+// The implementation of `getPositionOfWord` (see `VocabularyConstraints.h`)
+// for a vocabulary with "holes" (see `VocabularyInMemoryBinSearch`): binary
+// search for the `word` and return the range of vocabulary indices at which it
+// is stored, or the empty range at the index at which it would be stored if it
+// is not contained. Note that the "one past the end" index has to be passed in
+// as `endIndex` and must not be `vocab.size()`: because of the holes, the
+// largest vocabulary index that is contained is in general much larger than
+// the number of words, so using `vocab.size()` would report a word that sorts
+// after all contained words as if it sorted somewhere in the middle.
+template <typename Vocab, typename InternalStringType, typename Comparator>
+std::pair<uint64_t, uint64_t> getPositionOfWordInVocabWithHoles(
+    const Vocab& vocab, const InternalStringType& word, Comparator comparator,
+    uint64_t endIndex) {
+  return vocab.lower_bound(word, std::move(comparator))
+      .positionOfWord(word)
+      .value_or(std::pair<uint64_t, uint64_t>{endIndex, endIndex});
+}
+
 // Sequential fallback for `lookupBatch`: look up each index individually via
 // `vocab[idx]`, returning one `string_view` per index. Works for any vocabulary
 // whose `operator[]` yields something convertible to `std::string`, or a
