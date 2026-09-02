@@ -29,7 +29,6 @@
 #include "rdfTypes/GeoPoint.h"
 #include "util/DateYearDuration.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
-#include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
