@@ -587,48 +587,42 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   std::atomic<size_t> numHasWordTriples = 0;
 
   using WorkerResult = BuildPartialVocabulariesResult::WorkerResult;
-  BuildPartialVocabulariesResult result;
-  {
-    ad_utility::TaskQueue<> workerPool{1, NUM_PARALLEL_ITEM_MAPS};
-    std::vector<std::future<WorkerResult>> futures;
-    for (size_t workerIdx : ad_utility::integerRange(NUM_PARALLEL_ITEM_MAPS)) {
-      futures.push_back(
-          workerPool.submit([this, linesPerPartial, &parser, itemAlloc,
-                             &numHasWordTriples, &progressBar, workerIdx]() {
-            return runPartialVocabularyWorker(
-                linesPerPartial, *parser, itemAlloc,
-                addHasWordTriples_ ? &numHasWordTriples : nullptr, progressBar,
-                workerIdx);
-          }));
-    }
-    // First wait for all the workers (they still access the local variables of
-    // this function), and only then collect their results. If one of them has
-    // thrown, the exception is rethrown by the corresponding `get()`.
-    workerPool.finish();
-    for (auto& future : futures) {
-      result.perWorker_.push_back(future.get());
-    }
-  }
+  auto tasks = ad_utility::integerRange(NUM_PARALLEL_ITEM_MAPS) |
+               ql::views::transform([this, linesPerPartial, &parser, itemAlloc,
+                                     &numHasWordTriples,
+                                     &progressBar](size_t workerIdx) {
+                 return std::packaged_task<WorkerResult()>(
+                     [this, linesPerPartial, &parser, itemAlloc,
+                      &numHasWordTriples, &progressBar, workerIdx]() {
+                       return runPartialVocabularyWorker(
+                           linesPerPartial, *parser, itemAlloc,
+                           addHasWordTriples_ ? &numHasWordTriples : nullptr,
+                           progressBar, workerIdx);
+                     });
+               }) |
+               ::ranges::to<std::vector>();
+  // Waits for all the workers to finish, and rethrows an exception if one of
+  // them has thrown.
+  BuildPartialVocabulariesResult result{
+      ad_utility::runTasksInParallel(std::move(tasks))};
   parser->printAndResetQueueStatistics();
 
   // If the input didn't contain a single triple, we still have to write one
   // partial vocabulary, because the vocabulary has to contain the special IDs
   // (which every `ItemMapManager` adds to its map).
   if (result.partialVocabularySuffixes().empty()) {
-    auto& perWorker = result.perWorker_.at(0);
-    perWorker.numTriplesPerPartialVocab_.push_back(0);
+    auto& workerResult = result.workerResults_.at(0);
+    workerResult.numTriplesPerPartialVocab_.push_back(0);
     writePartialVocabulary(
         BuildPartialVocabulariesResult::partialVocabularySuffix(0, 0),
         ItemMapManager{0, &vocab_.getCaseComparator(), itemAlloc}.moveMap(), {},
-        *perWorker.idTriples_);
+        *workerResult.idTriples_);
   }
 
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-  size_t numTriplesTotal =
-      std::accumulate(result.perWorker_.begin(), result.perWorker_.end(),
-                      size_t{0}, [](size_t count, const auto& perWorker) {
-                        return count + perWorker.idTriples_->size();
-                      });
+  size_t numTriplesTotal = ::ranges::accumulate(
+      result.workerResults_, size_t{0}, {},
+      [](const auto& workerResult) { return workerResult.idTriples_->size(); });
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << numTriplesTotal << " [may contain duplicates]" << std::endl;
   if (addHasWordTriples_) {
@@ -828,10 +822,10 @@ auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
   // The mappings are yielded in the same order as `partialVocabSuffixes`, that
   // is, in the order in which the triples of the individual workers are stored.
   auto mappingIt = mappings.begin();
-  for (auto& perWorker : data.perWorker_) {
-    auto triplesGenerator = perWorker.idTriples_->getRows();
+  for (auto& workerResult : data.workerResults_) {
+    auto triplesGenerator = workerResult.idTriples_->getRows();
     auto it = triplesGenerator.begin();
-    for (size_t numTriples : perWorker.numTriplesPerPartialVocab_) {
+    for (size_t numTriples : workerResult.numTriplesPerPartialVocab_) {
       AD_CORRECTNESS_CHECK(mappingIt != mappings.end());
       auto idMap = std::make_shared<Map>(std::move(*mappingIt));
 

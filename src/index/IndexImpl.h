@@ -77,7 +77,7 @@ struct BuildPartialVocabulariesResult {
     std::unique_ptr<TripleVec> idTriples_;
   };
   // One entry per worker, in the order of the worker indices.
-  std::vector<WorkerResult> perWorker_;
+  std::vector<WorkerResult> workerResults_;
 
   // The suffix of the filenames of the `partialVocabIdx`-th partial vocabulary
   // of the worker with index `workerIdx`. The partial vocabularies are named
@@ -93,8 +93,9 @@ struct BuildPartialVocabulariesResult {
   // vocabularies of the first worker, then those of the second worker, etc.).
   std::vector<std::string> partialVocabularySuffixes() const {
     std::vector<std::string> suffixes;
-    for (size_t workerIdx = 0; workerIdx < perWorker_.size(); ++workerIdx) {
-      const auto& numTriples = perWorker_[workerIdx].numTriplesPerPartialVocab_;
+    for (size_t workerIdx = 0; workerIdx < workerResults_.size(); ++workerIdx) {
+      const auto& numTriples =
+          workerResults_[workerIdx].numTriplesPerPartialVocab_;
       for (size_t partialVocabIdx = 0; partialVocabIdx < numTriples.size();
            ++partialVocabIdx) {
         suffixes.push_back(partialVocabularySuffix(workerIdx, partialVocabIdx));
