@@ -26,124 +26,34 @@
 #include "util/Timer.h"
 
 namespace ad_utility::vocabulary_merger {
-// _________________________________________________________________
-template <typename W, typename C>
-auto mergeVocabulary(
-    const std::string& basename, size_t numFiles, W comparator,
-    C& internalWordCallback, ad_utility::MemorySize memoryToUse,
-    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
-    -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>) {
-  VocabularyMerger merger;
-  return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
-                                internalWordCallback, memoryToUse,
-                                blankNodeIriRegexes);
-}
-
-// _________________________________________________________________
-template <typename W, typename C>
-auto VocabularyMerger::mergeVocabulary(
-    const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
-    ad_utility::MemorySize memoryToUse,
-    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
-    -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>) {
-  // Return true iff p1 >= p2 according to the lexicographic order of the IRI
-  // or literal.
-  auto lessThanForQueue = [&comparator](const QueueWord& p1,
-                                        const QueueWord& p2) {
-    return comparator(p1.iriOrLiteral(), p1.isExternal(), p2.iriOrLiteral(),
-                      p2.isExternal());
-  };
-
-  // Open and prepare all infiles and file-based output vectors.
-  auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
-    ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, fileIndex)};
-    uint64_t numWords;
-    infile >> numWords;
-
-    return ad_utility::CachingTransformInputRange{
-        ad_utility::integerRange(numWords),
-        [fileIndex, infile{std::move(infile)}](
-            [[maybe_unused]] const std::size_t i) mutable {
-          TripleComponentWithIndex val;
-          infile >> val;
-          return QueueWord{std::move(val), fileIndex};
-        }};
-  };
-  std::vector<decltype(makeWordRangeFromFile(0))> generators;
-  generators.reserve(numFiles);
-
-  // The index of the partial vocabulary is stored in a `uint32_t` for each of
-  // the (very many) ID map entries, see `QueuedIdMapEntry`.
-  AD_CORRECTNESS_CHECK(numFiles <= std::numeric_limits<uint32_t>::max());
-  for (std::size_t i : ad_utility::integerRange(numFiles)) {
-    generators.push_back(makeWordRangeFromFile(i));
-    idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
-  }
-
-  ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
-                                      "Words merged: "};
-  idMapWriterQueue_.emplace(queueSize, 1, "Writing the ID maps");
-  mergedWordsDestructionQueue_.emplace(queueSize, 1,
-                                       "Destroying the merged words");
-  wordWriterQueue_.emplace(queueSize, 1, "Writing the merged vocabulary");
-  processWordBatch_ = [this, &wordCallback, &blankNodeIriRegexes,
-                       &progressBar](WordBatch batch) {
-    writeUniqueWordsToVocabulary(std::move(batch), wordCallback,
-                                 blankNodeIriRegexes, progressBar);
-  };
-  startNewBatch();
-
-  // Some memory (that is hard to measure exactly) is used for the writing of
-  // a batch of merged words, so we only give 80% of the total memory to the
-  // merging. This is very approximate and should be investigated in more
-  // detail.
-  auto mergedWords =
-      ad_utility::parallelMultiwayMerge<QueueWord, true,
-                                        decltype(sizeOfQueueWord)>(
-          0.8 * memoryToUse, std::move(generators), lessThanForQueue);
-  for (std::vector<QueueWord>& currentWords : mergedWords) {
-    // NOTE: The buffer is deliberately not consumed, but kept alive as part of
-    // the batch, such that the merged words neither have to be moved nor
-    // destroyed by this thread.
-    currentBatch_.mergedWordBuffers_.push_back(std::move(currentWords));
-    processMergedWords(currentBatch_.mergedWordBuffers_.back(), comparator);
-  }
-  // Hand the remaining words to the pipeline and wait until all of them have
-  // actually been written. NOTE: The order is important, see the declaration of
-  // the queues.
-  flushBatch();
-  wordWriterQueue_.value().finish();
-  mergedWordsDestructionQueue_.value().finish();
-  idMapWriterQueue_.value().finish();
-
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-
-  auto metaData = std::move(metaData_);
-  // completely reset all the inner state
-  clear();
-  return metaData;
-}
+namespace detail {
 
 // ________________________________________________________________________________
-CPP_template_def(typename W)(requires WordComparator<W>) void VocabularyMerger::
-    processMergedWords(const std::vector<QueueWord>& buffer,
-                       [[maybe_unused]] const W& comparator) {
+CPP_template_def(typename W,
+                 typename F)(requires WordComparator<W> CPP_and_def
+                                 WordBatchCallback<F>) void WordBatchBuilder::
+    addMergedWords(std::vector<QueueWord> buffer,
+                   [[maybe_unused]] const W& comparator,
+                   const F& batchCallback) {
+  // NOTE: The buffer is deliberately not consumed, but kept alive as part of
+  // the batch, such that the merged words neither have to be moved nor
+  // destroyed by the merging thread.
+  currentBatch_.mergedWordBuffers_.push_back(std::move(buffer));
+  const auto& words = currentBatch_.mergedWordBuffers_.back();
+
   auto& idMapBatch = currentBatch_.idMapBatch_;
   auto& entries = idMapBatch.entries_;
   size_t& numEntries = idMapBatch.numEntries_;
-  // Each of the `buffer`'s words yields exactly one entry. The entries are
-  // allocated in advance (see `startNewBatch`), so the following `resize`
-  // (which would have to copy the entries that are already in the buffer)
-  // typically is a no-op, and the writes below are simple unchecked stores.
-  if (entries.size() < numEntries + buffer.size()) {
-    entries.resize(numEntries + buffer.size());
+  // Each of the `words` yields exactly one entry. The entries are allocated in
+  // advance (see `startNewBatch`), so the following `resize` (which would have
+  // to copy the entries that are already in the buffer) typically is a no-op,
+  // and the writes below are simple unchecked stores.
+  if (entries.size() < numEntries + words.size()) {
+    entries.resize(numEntries + words.size());
   }
 
   // Iterate (avoid duplicates).
-  for (const auto& top : buffer) {
+  for (const auto& top : words) {
     if (!hasLastWord_ || top.iriOrLiteral() != lastWord_) {
       AD_EXPENSIVE_CHECK(
           !hasLastWord_ || comparator(lastWord_, lastWordIsExternal_,
@@ -175,12 +85,14 @@ CPP_template_def(typename W)(requires WordComparator<W>) void VocabularyMerger::
   }
 
   if (numEntries >= idMapEntryBatchSize) {
-    flushBatch();
+    flush(batchCallback);
   }
 }
 
 // ________________________________________________________________________________
-inline void VocabularyMerger::flushBatch() {
+CPP_template_def(typename F)(
+    requires WordBatchCallback<
+        F>) void WordBatchBuilder::flush(const F& batchCallback) {
   if (currentBatch_.idMapBatch_.numEntries_ == 0) {
     return;
   }
@@ -193,15 +105,12 @@ inline void VocabularyMerger::flushBatch() {
     lastWordStorage_.assign(lastWord_.data(), lastWord_.size());
     lastWord_ = lastWordStorage_;
   }
-  wordWriterQueue_.value().push(
-      [this, batch = std::move(currentBatch_)]() mutable {
-        processWordBatch_(std::move(batch));
-      });
+  batchCallback(std::move(currentBatch_));
   startNewBatch();
 }
 
 // ________________________________________________________________________________
-inline void VocabularyMerger::startNewBatch() {
+inline void WordBatchBuilder::startNewBatch() {
   // NOTE: A moved-from vector is in a valid but unspecified state, so we have
   // to explicitly reset the batch.
   currentBatch_ = WordBatch{};
@@ -216,21 +125,21 @@ inline void VocabularyMerger::startNewBatch() {
 }
 
 // ________________________________________________________________________________
-CPP_template_def(typename C)(requires WordCallback<C>) void VocabularyMerger::
-    writeUniqueWordsToVocabulary(
-        WordBatch batch, C& wordCallback,
-        const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes,
-        ad_utility::ProgressBar& progressBar) {
+CPP_template_def(typename C)(requires WordCallback<C>)
+    IdMapBatch VocabularyWriter::writeWordsToVocabulary(
+        const std::vector<UniqueWord>& uniqueWords, IdMapBatch idMapBatch,
+        C& wordCallback,
+        const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes) {
   AD_LOG_TIMING << "Start writing a batch of merged words\n";
 
   // TODO<optimization> If we aim to further speed this up, we could
   // order all the write requests to _outfile _externalOutfile and all the
   // idVecs to have a more useful external access pattern.
-  auto& globalIds = batch.idMapBatch_.globalIds_;
-  globalIds.resize(batch.uniqueWords_.size() + 1);
+  auto& globalIds = idMapBatch.globalIds_;
+  globalIds.resize(uniqueWords.size() + 1);
   globalIds.at(0) = lastGlobalId_;
   size_t i = 1;
-  for (const auto& uniqueWord : batch.uniqueWords_) {
+  for (const auto& uniqueWord : uniqueWords) {
     const auto& word = uniqueWord.word_;
     if (isBlankNode(word, blankNodeIriRegexes)) {
       globalIds[i] = Id::makeFromBlankNodeIndex(
@@ -241,33 +150,154 @@ CPP_template_def(typename C)(requires WordCallback<C>) void VocabularyMerger::
       globalIds[i] = Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
     }
     ++i;
-    if (progressBar.update()) {
-      AD_LOG_INFO << progressBar.getProgressString() << std::flush;
+    if (progressBar_.update()) {
+      AD_LOG_INFO << progressBar_.getProgressString() << std::flush;
     }
   }
   lastGlobalId_ = globalIds.back();
-
-  // The merged words are no longer needed. Their destruction (which involves
-  // freeing one string per word) is expensive enough to be done by yet another
-  // thread. NOTE: The `clear()` is the actual work of this task; it happens on
-  // the queue's thread, as does the destruction of the (then empty) buffers.
-  mergedWordsDestructionQueue_.value().push(
-      [buffers = std::move(batch.mergedWordBuffers_)]() mutable {
-        buffers.clear();
-      });
-
-  idMapWriterQueue_.value().push(
-      [this, idMapBatch = std::move(batch.idMapBatch_)]() {
-        AD_LOG_TIMING << "Start writing a batch of ID map entries\n";
-        const auto& globalIds = idMapBatch.globalIds_;
-        for (size_t j = 0; j < idMapBatch.numEntries_; ++j) {
-          const auto& entry = idMapBatch.entries_[j];
-          idMaps_[entry.partialFileId_].push_back(IdMapEntry{
-              entry.localIndex_, globalIds[entry.indexOfWordInBatch_]});
-        }
-      });
+  return idMapBatch;
 }
 
+// ________________________________________________________________________________
+inline void VocabularyWriter::logFinalProgress() {
+  AD_LOG_INFO << progressBar_.getFinalProgressString() << std::flush;
+}
+
+// ________________________________________________________________________________
+inline IdMapBatchWriter::IdMapBatchWriter(const std::string& basename,
+                                          size_t numFiles) {
+  // The index of the partial vocabulary is stored in a `uint32_t` for each of
+  // the (very many) ID map entries, see `QueuedIdMapEntry`.
+  AD_CORRECTNESS_CHECK(numFiles <= std::numeric_limits<uint32_t>::max());
+  idMaps_.reserve(numFiles);
+  for (size_t i : ad_utility::integerRange(numFiles)) {
+    idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
+  }
+}
+
+// ________________________________________________________________________________
+inline void IdMapBatchWriter::writeBatch(const IdMapBatch& batch) {
+  AD_LOG_TIMING << "Start writing a batch of ID map entries\n";
+  const auto& globalIds = batch.globalIds_;
+  for (size_t i = 0; i < batch.numEntries_; ++i) {
+    const auto& entry = batch.entries_[i];
+    idMaps_[entry.partialFileId_].push_back(
+        IdMapEntry{entry.localIndex_, globalIds[entry.indexOfWordInBatch_]});
+  }
+}
+
+// ________________________________________________________________________________
+inline void IdMapBatchWriter::finish() {
+  for (auto& idMap : idMaps_) {
+    idMap.finish();
+  }
+}
+
+// ________________________________________________________________________________
+CPP_template_def(typename C)(
+    requires WordCallback<C>) void VocabularyMergePipeline::
+    push(WordBatch batch, C& wordCallback,
+         const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes) {
+  wordWriterQueue_.push([this, batch = std::move(batch), &wordCallback,
+                         &blankNodeIriRegexes]() mutable {
+    auto idMapBatch = vocabularyWriter_.writeWordsToVocabulary(
+        batch.uniqueWords_, std::move(batch.idMapBatch_), wordCallback,
+        blankNodeIriRegexes);
+
+    // The merged words are no longer needed. Their destruction (which involves
+    // freeing one string per word) is expensive enough to be done by yet
+    // another thread. NOTE: The `clear()` is the actual work of this task; it
+    // happens on the queue's thread, as does the destruction of the (then
+    // empty) buffers.
+    mergedWordsDestructionQueue_.push(
+        [buffers = std::move(batch.mergedWordBuffers_)]() mutable {
+          buffers.clear();
+        });
+
+    idMapWriterQueue_.push([this, idMapBatch = std::move(idMapBatch)]() {
+      idMapBatchWriter_.writeBatch(idMapBatch);
+    });
+  });
+}
+
+// ________________________________________________________________________________
+inline VocabularyMetaData VocabularyMergePipeline::finish() {
+  // NOTE: The order is important, see the declaration of the members.
+  wordWriterQueue_.finish();
+  mergedWordsDestructionQueue_.finish();
+  idMapWriterQueue_.finish();
+  idMapBatchWriter_.finish();
+  vocabularyWriter_.logFinalProgress();
+  return std::move(vocabularyWriter_.metaData());
+}
+}  // namespace detail
+
+// _________________________________________________________________
+template <typename W, typename C>
+auto mergeVocabulary(
+    const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
+    ad_utility::MemorySize memoryToUse,
+    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
+    -> CPP_ret(VocabularyMetaData)(
+        requires WordComparator<W>&& WordCallback<C>) {
+  using detail::QueueWord;
+  // Return true iff `p1` is smaller than `p2` according to the order of the
+  // IRI or literal.
+  auto lessThanForQueue = [&comparator](const QueueWord& p1,
+                                        const QueueWord& p2) {
+    return comparator(p1.iriOrLiteral(), p1.isExternal(), p2.iriOrLiteral(),
+                      p2.isExternal());
+  };
+
+  // Open and prepare all the input files.
+  auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
+    ad_utility::serialization::FileReadSerializer infile{
+        absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, fileIndex)};
+    uint64_t numWords;
+    infile >> numWords;
+
+    return ad_utility::CachingTransformInputRange{
+        ad_utility::integerRange(numWords),
+        [fileIndex, infile{std::move(infile)}](
+            [[maybe_unused]] const std::size_t i) mutable {
+          TripleComponentWithIndex val;
+          infile >> val;
+          return QueueWord{std::move(val), fileIndex};
+        }};
+  };
+  std::vector<decltype(makeWordRangeFromFile(0))> generators;
+  generators.reserve(numFiles);
+  for (std::size_t i : ad_utility::integerRange(numFiles)) {
+    generators.push_back(makeWordRangeFromFile(i));
+  }
+
+  // The stages of the pipeline. The `batchBuilder` (the first stage) runs on
+  // this thread, the `pipeline` owns the three stages that run concurrently to
+  // it.
+  detail::VocabularyMergePipeline pipeline{basename, numFiles};
+  detail::WordBatchBuilder batchBuilder;
+  auto batchCallback = [&pipeline, &wordCallback,
+                        &blankNodeIriRegexes](detail::WordBatch batch) {
+    pipeline.push(std::move(batch), wordCallback, blankNodeIriRegexes);
+  };
+
+  // Some memory (that is hard to measure exactly) is used for the writing of
+  // a batch of merged words, so we only give 80% of the total memory to the
+  // merging. This is very approximate and should be investigated in more
+  // detail.
+  auto mergedWords =
+      ad_utility::parallelMultiwayMerge<QueueWord, true,
+                                        decltype(detail::sizeOfQueueWord)>(
+          0.8 * memoryToUse, std::move(generators), lessThanForQueue);
+  for (std::vector<QueueWord>& currentWords : mergedWords) {
+    batchBuilder.addMergedWords(std::move(currentWords), comparator,
+                                batchCallback);
+  }
+  // Hand the remaining words to the pipeline and wait until all of them have
+  // actually been written.
+  batchBuilder.flush(batchCallback);
+  return pipeline.finish();
+}
 // ____________________________________________________________________________________________________________
 inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
   HashMap<uint64_t, uint64_t> res;

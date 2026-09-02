@@ -5,11 +5,11 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -264,148 +264,117 @@ struct VocabularyMetaData {
   const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ =
       &qlever::specialIds();
 };
-// _______________________________________________________________
-// Merge the partial vocabularies in the  binary files
-// `basename + PARTIAL_VOCAB_WORDS_INFIX + to_string(i)`
-// where `0 <= i < numFiles`.
-// Return the number of total Words merged and the lower and upper bound of
-// language tagged predicates. Argument `comparator` gives the way to order
-// strings (case-sensitive or not). Argument `wordCallback`
-// is called for each merged word in the vocabulary in the order of their
-// appearance. Argument `blankNodeIriRegexes` is a (possibly empty) list of
-// compiled regexes; IRIs that are fully matched by any of them are treated as
-// blank nodes (see `TripleComponentWithIndex::isBlankNode`). The regexes are
-// compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
-template <typename W, typename C>
-auto mergeVocabulary(
-    const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
-    ad_utility::MemorySize memoryToUse,
-    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes = {})
-    -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>);
+// The internal helper types and the individual stages of the merging pipeline
+// (see the comment above `mergeVocabulary` below). None of them is part of the
+// public interface of this header.
+namespace detail {
 
-// A helper class that implements the `mergeVocabulary` function (see
-// above). Everything in this class is private and only the
-// `mergeVocabulary` function is a friend.
+// Helper `struct` for a word from a partial vocabulary.
+struct QueueWord {
+  QueueWord() = default;
+  QueueWord(TripleComponentWithIndex&& v, size_t file)
+      : entry_(std::move(v)), partialFileId_(file) {}
+  TripleComponentWithIndex entry_;  // the word, its local ID and the
+                                    // information if it will be externalized
+  size_t partialFileId_;  // from which partial vocabulary did this word come
+
+  [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
+  [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
+
+  [[nodiscard]] const std::string& iriOrLiteral() const {
+    return entry_.iriOrLiteral();
+  }
+
+  [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
+
+  [[nodiscard]] const auto& id() const { return entry_.index_; }
+};
+
+// Compute the memory footprint of a `QueueWord`, which the parallel merging
+// needs to limit its memory consumption.
+struct SizeOfQueueWord {
+  ad_utility::MemorySize operator()(const QueueWord& q) const {
+    return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
+                                         q.entry_.iriOrLiteral().size());
+  }
+};
+inline constexpr SizeOfQueueWord sizeOfQueueWord{};
+
+// A word that occurs in the merged vocabulary for the first time, together
+// with the information whether it is to be externalized.
+struct UniqueWord {
+  // NOTE: This is a view into one of the `mergedWordBuffers_` of the
+  // `WordBatch` that this word belongs to. Those buffers are deliberately
+  // kept alive until the batch has been written to the vocabulary, such that
+  // the merging thread never has to copy or move a single word.
+  std::string_view word_;
+  bool isExternal_;
+};
+
+// A single entry of one of the partial ID maps, as it is created by the
+// merging thread. NOTE: At that point, the global ID of the corresponding
+// word is not yet known (it is only determined when the word is written to
+// the vocabulary), so the entry instead stores the index of the word within
+// its batch (see `IdMapBatch::globalIds_`).
+struct QueuedIdMapEntry {
+  uint32_t partialFileId_;
+  uint32_t indexOfWordInBatch_;
+  uint64_t localIndex_;
+};
+
+// All the ID map entries of a single batch, together with the global IDs
+// that those entries refer to.
+struct IdMapBatch {
+  // The entries. NOTE: The vector is allocated (but not initialized) in
+  // advance, and only the first `numEntries_` of its elements are valid, see
+  // `WordBatchBuilder::startNewBatch`.
+  ad_utility::UninitializedVector<QueuedIdMapEntry> entries_;
+  size_t numEntries_ = 0;
+  // The global IDs of the distinct words of the batch. The element at index
+  // `0` is the global ID of the *last* distinct word of the *previous*
+  // batch, because the first words of a batch may well be further
+  // occurrences of that word.
+  std::vector<Id> globalIds_;
+};
+
+// A batch of merged words, as it is handed from the merging thread to the
+// thread that writes the words to the vocabulary.
+struct WordBatch {
+  std::vector<UniqueWord> uniqueWords_;
+  IdMapBatch idMapBatch_;
+  // The buffers of merged words that back the `string_view`s of the
+  // `uniqueWords_` (see there).
+  std::vector<std::vector<QueueWord>> mergedWordBuffers_;
+};
+
+// Concept for a callback that consumes a complete `WordBatch`.
+template <typename T>
+CPP_concept WordBatchCallback = std::is_invocable_v<const T&, WordBatch>;
+
+// The number of ID map entries (which is the same as the number of merged
+// words) that are collected in a single batch. A single buffer of merged
+// words only contains a rather small number of words (currently 100), which
+// would be much too fine-grained for a task queue.
+inline constexpr size_t idMapEntryBatchSize = 100'000;
+
+// The maximal number of batches that may be waiting in each of the queues of
+// the pipeline. NOTE: A batch keeps all the merged words alive that it was
+// created from (typically a few megabytes, see `idMapEntryBatchSize`), so this
+// also determines the memory footprint of the pipeline, which currently is in
+// the order of a hundred megabytes.
+inline constexpr size_t queueSize = 3;
+
+// The first stage of the merging pipeline: eliminate the duplicates from the
+// merged words and collect the distinct words as well as the entries for the
+// partial ID maps in batches.
 //
-// The merging is organized as a pipeline of four threads, which communicate
-// via task queues, such that all of them can work concurrently:
-//
-// 1. The thread that calls `mergeVocabulary` obtains the merged words in
-//    sorted order and eliminates the duplicates (a word typically occurs in
-//    many of the partial vocabularies). It collects the distinct words as well
-//    as the entries for the partial ID maps in batches (see `WordBatch`) and
-//    hands each batch to the second thread.
-// 2. The `wordWriterQueue_`'s thread writes the distinct words of a batch to
-//    the vocabulary (via the `wordCallback`) and thereby determines their
-//    global IDs.
-// 3. The `idMapWriterQueue_`'s thread writes the entries of the partial ID
-//    maps (which only now know their global IDs) to the `idMaps_`.
-// 4. The `mergedWordsDestructionQueue_`'s thread destroys the merged words of
-//    a batch (which involves freeing one string per word) once they have been
-//    written to the vocabulary.
-//
-// NOTE: Each of the queues has exactly one worker thread, so the batches are
-// processed in exactly the order in which they are created by the merging
-// thread, and the `metaData_` as well as the `idMaps_` require no further
-// synchronization.
-class VocabularyMerger {
+// NOTE: This class is used exclusively by the merging thread; the complete
+// `WordBatch`es are the only thing that it hands on to the other stages.
+class WordBatchBuilder {
  private:
-  // Helper `struct` for a word from a partial vocabulary.
-  struct QueueWord {
-    QueueWord() = default;
-    QueueWord(TripleComponentWithIndex&& v, size_t file)
-        : entry_(std::move(v)), partialFileId_(file) {}
-    TripleComponentWithIndex entry_;  // the word, its local ID and the
-                                      // information if it will be externalized
-    size_t partialFileId_;  // from which partial vocabulary did this word come
-
-    [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
-    [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
-
-    [[nodiscard]] const std::string& iriOrLiteral() const {
-      return entry_.iriOrLiteral();
-    }
-
-    [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
-
-    [[nodiscard]] const auto& id() const { return entry_.index_; }
-  };
-
-  struct SizeOfQueueWord {
-    ad_utility::MemorySize operator()(const QueueWord& q) const {
-      return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
-                                           q.entry_.iriOrLiteral().size());
-    }
-  };
-  constexpr static SizeOfQueueWord sizeOfQueueWord{};
-
-  // A word that occurs in the merged vocabulary for the first time, together
-  // with the information whether it is to be externalized.
-  struct UniqueWord {
-    // NOTE: This is a view into one of the `mergedWordBuffers_` of the
-    // `WordBatch` that this word belongs to. Those buffers are deliberately
-    // kept alive until the batch has been written to the vocabulary, such that
-    // the merging thread never has to copy or move a single word.
-    std::string_view word_;
-    bool isExternal_;
-  };
-
-  // A single entry of one of the partial ID maps, as it is created by the
-  // merging thread. NOTE: At that point, the global ID of the corresponding
-  // word is not yet known (it is only determined when the word is written to
-  // the vocabulary), so the entry instead stores the index of the word within
-  // its batch (see `IdMapBatch::globalIds_`).
-  struct QueuedIdMapEntry {
-    uint32_t partialFileId_;
-    uint32_t indexOfWordInBatch_;
-    uint64_t localIndex_;
-  };
-
-  // All the ID map entries of a single batch, together with the global IDs
-  // that those entries refer to.
-  struct IdMapBatch {
-    // The entries. NOTE: The vector is allocated (but not initialized) in
-    // advance, and only the first `numEntries_` of its elements are valid, see
-    // `VocabularyMerger::startNewBatch`.
-    ad_utility::UninitializedVector<QueuedIdMapEntry> entries_;
-    size_t numEntries_ = 0;
-    // The global IDs of the distinct words of the batch. The element at index
-    // `0` is the global ID of the *last* distinct word of the *previous*
-    // batch, because the first words of a batch may well be further
-    // occurrences of that word.
-    std::vector<Id> globalIds_;
-  };
-
-  // A batch of merged words, as it is handed from the merging thread to the
-  // thread that writes the words to the vocabulary.
-  struct WordBatch {
-    std::vector<UniqueWord> uniqueWords_;
-    IdMapBatch idMapBatch_;
-    // The buffers of merged words that back the `string_view`s of the
-    // `uniqueWords_` (see there).
-    std::vector<std::vector<QueueWord>> mergedWordBuffers_;
-  };
-
-  // The maximal number of batches that may be waiting in each of the queues
-  // below. NOTE: A batch keeps all the merged words alive that it was created
-  // from (typically a few megabytes, see `idMapEntryBatchSize`), so this also
-  // determines the memory footprint of the pipeline, which currently is in the
-  // order of a hundred megabytes.
-  static constexpr size_t queueSize = 3;
-  // The number of ID map entries (which is the same as the number of merged
-  // words) that are collected in a single batch. A single call to
-  // `processMergedWords` only deals with a rather small number of words
-  // (currently 100), which would be much too fine-grained for a task queue.
-  static constexpr size_t idMapEntryBatchSize = 100'000;
-
-  // The result (mostly metadata) which we'll return. NOTE: While the merging
-  // is running, this is only touched by the `wordWriterQueue_`'s thread.
-  VocabularyMetaData metaData_;
-
   // The word that was merged last. It is a view into one of the
   // `mergedWordBuffers_` of the `currentBatch_`, or, as soon as that batch has
-  // been handed to the `wordWriterQueue_`, into `lastWordStorage_`.
+  // been handed on to the next stage, into `lastWordStorage_`.
   std::string_view lastWord_;
   std::string lastWordStorage_;
   bool hasLastWord_ = false;
@@ -418,107 +387,180 @@ class VocabularyMerger {
   // that it is the last distinct word of the previous batch (see
   // `IdMapBatch::globalIds_`).
   uint32_t indexOfLastWordInBatch_ = 0;
-  // The batch that the merging thread is currently filling.
+  // The batch that is currently being filled.
   WordBatch currentBatch_;
-  // The global ID of the word that was written to the vocabulary last. NOTE:
-  // This is only touched by the `wordWriterQueue_`'s thread.
-  Id lastGlobalId_ = Id::makeUndefined();
 
-  // The action that is performed by the `wordWriterQueue_` for a single batch.
-  // It is set up by `mergeVocabulary`, because it requires access to the word
-  // callback and to the regexes for blank nodes.
-  //
-  // NOTE: This has to be declared before the queues, because it is used by the
-  // `wordWriterQueue_`'s thread and hence may only be destroyed after that
-  // thread has been joined.
-  std::function<void(WordBatch)> processWordBatch_;
+ public:
+  WordBatchBuilder() { startNewBatch(); }
 
-  // we will store pairs of <partialId, globalId>
-  std::vector<IdMapWriter> idMaps_;
-
-  // The queues that make up the pipeline (see the comment above the class).
-  //
-  // NOTE: The order of the declarations is important, because the members are
-  // destroyed in the reverse order of their declaration, and the destructor of
-  // a queue blocks until all its pending tasks have been run. The
-  // `wordWriterQueue_` pushes to the two other queues, and the
-  // `idMapWriterQueue_` writes to the `idMaps_`, so this is the only order in
-  // which no task can be pushed to (or run on) an already destroyed object.
-  std::optional<ad_utility::TaskQueue<false>> idMapWriterQueue_;
-  std::optional<ad_utility::TaskQueue<false>> mergedWordsDestructionQueue_;
-  std::optional<ad_utility::TaskQueue<false>> wordWriterQueue_;
-
-  // Friend declaration for the publicly available function.
-  template <typename W, typename C>
-  friend auto mergeVocabulary(
-      const std::string& basename, size_t numFiles, W comparator,
-      C& wordCallback, ad_utility::MemorySize memoryToUse,
-      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
-      -> CPP_ret(VocabularyMetaData)(
-          requires WordComparator<W>&& WordCallback<C>);
-  VocabularyMerger() = default;
-
-  // _______________________________________________________________
-  // The function that performs the actual merge. See the static global
-  // `mergeVocabulary` function for details.
-  template <typename W, typename C>
-  auto mergeVocabulary(
-      const std::string& basename, size_t numFiles, W comparator,
-      C& wordCallback, ad_utility::MemorySize memoryToUse,
-      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
-      -> CPP_ret(VocabularyMetaData)(
-          requires WordComparator<W>&& WordCallback<C>);
-
-  // Eliminate the duplicates from a buffer of merged words and add the
+  // Eliminate the duplicates from a `buffer` of merged words and add the
   // resulting distinct words as well as one ID map entry per word to the
-  // `currentBatch_`, which is handed to the `wordWriterQueue_` as soon as it is
-  // full. The `QueueWord`s must be passed in alphabetical order wrt the
-  // `comparator` (also across multiple calls). NOTE: This order is only checked
-  // if the expensive checks are enabled (see `AD_EXPENSIVE_CHECK`), because the
-  // additional comparison per word is rather costly.
-  CPP_template(typename W)(requires WordComparator<W>) void processMergedWords(
-      const std::vector<QueueWord>& buffer, const W& comparator);
+  // current batch. Whenever a batch is full, it is handed to the
+  // `batchCallback`. The `QueueWord`s must be passed in alphabetical order wrt
+  // the `comparator` (also across multiple calls). NOTE: This order is only
+  // checked if the expensive checks are enabled (see `AD_EXPENSIVE_CHECK`),
+  // because the additional comparison per word is rather costly.
+  CPP_template(typename W, typename F)(
+      requires WordComparator<W> CPP_and WordBatchCallback<
+          F>) void addMergedWords(std::vector<QueueWord> buffer,
+                                  const W& comparator, const F& batchCallback);
 
-  // Hand the `currentBatch_` to the `wordWriterQueue_` (which then
-  // asynchronously writes the words to the vocabulary) and start a new batch.
-  void flushBatch();
+  // Hand the current (typically only partially filled) batch to the
+  // `batchCallback` and start a new batch. Do nothing if the current batch is
+  // empty.
+  CPP_template(typename F)(requires WordBatchCallback<F>) void flush(
+      const F& batchCallback);
 
+ private:
   // Reset the `currentBatch_` and allocate its buffers.
   void startNewBatch();
-
-  // Write the distinct words of the `batch` to the vocabulary, determine their
-  // global IDs, and hand the batch on to the `idMapWriterQueue_` and to the
-  // `mergedWordsDestructionQueue_`. This runs on the `wordWriterQueue_`'s
-  // thread (see `processWordBatch_`).
-  CPP_template(typename C)(
-      requires WordCallback<
-          C>) void writeUniqueWordsToVocabulary(WordBatch batch,
-                                                C& wordCallback,
-                                                const std::vector<
-                                                    std::unique_ptr<re2::RE2>>&
-                                                    blankNodeIriRegexes,
-                                                ad_utility::ProgressBar&
-                                                    progressBar);
-
-  // Close all associated files and file-based vectors and reset all internal
-  // variables.
-  void clear() {
-    // NOTE: The order is important, see the declaration of the queues above.
-    wordWriterQueue_.reset();
-    mergedWordsDestructionQueue_.reset();
-    idMapWriterQueue_.reset();
-    processWordBatch_ = {};
-    idMaps_.clear();
-    metaData_ = VocabularyMetaData{};
-    currentBatch_ = WordBatch{};
-    lastWord_ = {};
-    lastWordStorage_.clear();
-    hasLastWord_ = false;
-    lastWordIsExternal_ = false;
-    indexOfLastWordInBatch_ = 0;
-    lastGlobalId_ = Id::makeUndefined();
-  }
 };
+
+// The second stage of the merging pipeline: write the distinct words of a
+// batch to the vocabulary (via the word callback) and thereby determine their
+// global IDs.
+//
+// NOTE: This class is used exclusively by the thread of the
+// `wordWriterQueue_` of the `VocabularyMergePipeline` below.
+class VocabularyWriter {
+ private:
+  // The metadata of the merged vocabulary, which is built up incrementally as
+  // the words are written.
+  VocabularyMetaData metaData_;
+  // The global ID of the word that was written to the vocabulary last (see
+  // `IdMapBatch::globalIds_`).
+  Id lastGlobalId_ = Id::makeUndefined();
+  ad_utility::ProgressBar progressBar_{metaData_.numWordsTotal(),
+                                       "Words merged: "};
+
+ public:
+  // Write the `uniqueWords` to the vocabulary, store their global IDs in the
+  // `idMapBatch`, and return that batch (which is then complete and can be
+  // handed on to the third stage).
+  CPP_template(typename C)(requires WordCallback<C>) IdMapBatch
+      writeWordsToVocabulary(
+          const std::vector<UniqueWord>& uniqueWords, IdMapBatch idMapBatch,
+          C& wordCallback,
+          const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes);
+
+  // The metadata, which is complete as soon as all the batches have been
+  // written.
+  VocabularyMetaData& metaData() { return metaData_; }
+
+  // Log the final state of the progress bar. This has to be called exactly
+  // once, after the last batch has been written.
+  void logFinalProgress();
+};
+
+// The third stage of the merging pipeline: write the entries of a complete
+// `IdMapBatch` to the partial ID maps, one of which is created per partial
+// vocabulary.
+//
+// NOTE: This class is used exclusively by the thread of the
+// `idMapWriterQueue_` of the `VocabularyMergePipeline` below.
+class IdMapBatchWriter {
+ private:
+  // The ID maps, one per partial vocabulary.
+  std::vector<IdMapWriter> idMaps_;
+
+ public:
+  // Create the ID map for each of the `numFiles` partial vocabularies. The
+  // filenames are `basename + PARTIAL_VOCAB_IDMAP_INFIX + i`.
+  IdMapBatchWriter(const std::string& basename, size_t numFiles);
+
+  // Write all the entries of the `batch` to their respective ID maps.
+  void writeBatch(const IdMapBatch& batch);
+
+  // Flush and close all the ID maps. After this, no more batches may be
+  // written.
+  void finish();
+};
+
+// The stages of the merging pipeline that run asynchronously to the merging
+// thread (stages 2 to 4 in the comment above `mergeVocabulary` below).
+//
+// NOTE: Each of the queues has exactly one worker thread, so the batches are
+// processed in exactly the order in which the merging thread creates them, and
+// the state of the individual stages requires no further synchronization.
+class VocabularyMergePipeline {
+ private:
+  // NOTE: The order of the following declarations is important, because the
+  // members are destroyed in the reverse order of their declaration, and the
+  // destructor of a queue blocks until all its pending tasks have been run. The
+  // `wordWriterQueue_` pushes to the two other queues, and the
+  // `idMapWriterQueue_` writes to the `idMapBatchWriter_`, so this is the only
+  // order in which no task can be pushed to (or run on) an already destroyed
+  // object.
+  IdMapBatchWriter idMapBatchWriter_;
+  VocabularyWriter vocabularyWriter_;
+  ad_utility::TaskQueue<false> idMapWriterQueue_{queueSize, 1,
+                                                 "Writing the ID maps"};
+  ad_utility::TaskQueue<false> mergedWordsDestructionQueue_{
+      queueSize, 1, "Destroying the merged words"};
+  ad_utility::TaskQueue<false> wordWriterQueue_{
+      queueSize, 1, "Writing the merged vocabulary"};
+
+ public:
+  // Create the pipeline. The `basename` and `numFiles` determine the files of
+  // the partial ID maps (see `IdMapBatchWriter`).
+  VocabularyMergePipeline(const std::string& basename, size_t numFiles)
+      : idMapBatchWriter_{basename, numFiles} {}
+
+  // Asynchronously process a single `batch` of merged words: write its
+  // distinct words to the vocabulary (via the `wordCallback` and the
+  // `blankNodeIriRegexes`), then write its ID map entries and destroy the
+  // merged words that it was created from. Block if the pipeline is busy.
+  CPP_template(typename C)(requires WordCallback<C>) void push(
+      WordBatch batch, C& wordCallback,
+      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes);
+
+  // Wait until all the batches that were pushed have been processed
+  // completely, close the ID maps, and return the metadata of the merged
+  // vocabulary. After this, no more batches may be pushed.
+  VocabularyMetaData finish();
+};
+}  // namespace detail
+
+// _______________________________________________________________
+// Merge the partial vocabularies in the  binary files
+// `basename + PARTIAL_VOCAB_WORDS_INFIX + to_string(i)`
+// where `0 <= i < numFiles`.
+// Return the number of total Words merged and the lower and upper bound of
+// language tagged predicates. Argument `comparator` gives the way to order
+// strings (case-sensitive or not). Argument `wordCallback`
+// is called for each merged word in the vocabulary in the order of their
+// appearance. Argument `blankNodeIriRegexes` is a (possibly empty) list of
+// compiled regexes; IRIs that are fully matched by any of them are treated as
+// blank nodes (see `TripleComponentWithIndex::isBlankNode`). The regexes are
+// compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
+//
+// The merging is organized as a pipeline of four threads, which communicate
+// via task queues, such that all of them can work concurrently:
+//
+// 1. The thread that calls `mergeVocabulary` obtains the merged words in
+//    sorted order and eliminates the duplicates (a word typically occurs in
+//    many of the partial vocabularies). It collects the distinct words as well
+//    as the entries for the partial ID maps in batches (see
+//    `detail::WordBatchBuilder`) and hands each batch to the second thread.
+// 2. The `wordWriterQueue_`'s thread writes the distinct words of a batch to
+//    the vocabulary (via the `wordCallback`) and thereby determines their
+//    global IDs (see `detail::VocabularyWriter`).
+// 3. The `idMapWriterQueue_`'s thread writes the entries of the partial ID
+//    maps (which only now know their global IDs) to the ID maps (see
+//    `detail::IdMapBatchWriter`).
+// 4. The `mergedWordsDestructionQueue_`'s thread destroys the merged words of
+//    a batch (which involves freeing one string per word) once they have been
+//    written to the vocabulary.
+//
+// The last three of those stages are owned by the
+// `detail::VocabularyMergePipeline`.
+template <typename W, typename C>
+auto mergeVocabulary(
+    const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
+    ad_utility::MemorySize memoryToUse,
+    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes = {})
+    -> CPP_ret(VocabularyMetaData)(
+        requires WordComparator<W>&& WordCallback<C>);
 
 // ____________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
