@@ -743,11 +743,15 @@ class RdfMultifileParser : public RdfParserBase {
       : RdfParserBase{encodedIriManager} {}
 
   // Construct the parser from a type-erased input range of file specifications
-  // and eagerly start parsing them on background threads.
+  // and eagerly start parsing them on background threads. If
+  // `useRelaxedParsing` is true, the faster `TokenizerCtre` is used for all
+  // files instead of the standard-compliant `Tokenizer` (see the comment on
+  // `TurtleParser` above for the limitations of the relaxed mode).
   RdfMultifileParser(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,
-      ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE);
+      ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
+      bool useRelaxedParsing = false);
 
   // Retrieve the next batch of triples, or `nullopt` if there are no more
   // batches. There is no guarantee about the order in which batches from
@@ -780,6 +784,11 @@ class RdfMultifileParser : public RdfParserBase {
   // before the `finishedBatchQueue_` (which they are using!) is destroyed.
   ad_utility::TaskQueue<false> parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
                                              NUM_PARALLEL_PARSER_THREADS};
+
+  // If true, all files are parsed with the relaxed `TokenizerCtre` instead of
+  // the standard-compliant `Tokenizer`. Only read by the parsing threads, and
+  // never modified after construction.
+  bool useRelaxedParsing_ = false;
 
   // A thread that feeds the file specifications to the actual parser threads.
   ad_utility::JThread feederThread_;
