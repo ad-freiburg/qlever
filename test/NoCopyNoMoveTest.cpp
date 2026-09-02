@@ -177,3 +177,51 @@ TEST(NoCopyNoMove, TheBaseClassesCannotBeDestroyedFromTheOutside) {
   static_assert(std::is_destructible_v<DerivedNoCopy>);
   static_assert(std::is_destructible_v<DerivedNoCopyNoMove>);
 }
+
+// The following declarations set up the test
+// `DerivingDoesNotPolluteTheAdlNamespacesWithAdUtility` below, which checks
+// that deriving from `NoCopy` or `NoCopyNoMove` does not make the free
+// functions from `ad_utility` visible to argument-dependent lookup (ADL) for
+// the derived class.
+namespace ad_utility {
+// A free function template in `ad_utility` that can only ever be found by ADL
+// (and not by ordinary unqualified lookup) from the global namespace below.
+struct AdlProbeResult {};
+template <typename T>
+AdlProbeResult adlProbe(const T&);
+
+// A type that lives directly in `ad_utility`, used as the positive control for
+// the detector below.
+struct AdlProbePositiveControl {};
+}  // namespace ad_utility
+
+namespace {
+// Detect whether the unqualified call `adlProbe(t)` for a `const T& t` finds
+// `ad_utility::adlProbe`. As this detector lives in the global namespace, and
+// as there is no using-directive for `ad_utility`, that function can only be
+// found via ADL, so this is exactly the question whether `ad_utility` is one of
+// the associated namespaces of `T`.
+template <typename T, typename = void>
+struct IsFoundByAdl : std::false_type {};
+template <typename T>
+struct IsFoundByAdl<T,
+                    std::void_t<decltype(adlProbe(std::declval<const T&>()))>>
+    : std::true_type {};
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(NoCopyNoMove, DerivingDoesNotPolluteTheAdlNamespacesWithAdUtility) {
+  // The detector works: for a type that lives directly in `ad_utility`, the
+  // probe function is found via ADL.
+  static_assert(IsFoundByAdl<ad_utility::AdlProbePositiveControl>::value);
+
+  // But the derived types (which live in the anonymous namespace of this file)
+  // don't get `ad_utility` as an associated namespace, because they derive from
+  // classes in `ad_utility::detail::noCopyNoMove` via an alias.
+  static_assert(!IsFoundByAdl<DerivedNoCopy>::value);
+  static_assert(!IsFoundByAdl<DerivedNoCopyNoMove>::value);
+
+  // Sanity check: a type that is completely unrelated to `ad_utility` of course
+  // also doesn't find the probe function.
+  static_assert(!IsFoundByAdl<Payload>::value);
+}
