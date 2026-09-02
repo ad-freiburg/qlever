@@ -643,7 +643,8 @@ std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
   return std::make_unique<SpatialJoin>(
       _executionContext, config_,
       childLeft_ ? std::optional{childLeft_->clone()} : std::nullopt,
-      childRight_ ? std::optional{childRight_->clone()} : std::nullopt);
+      childRight_ ? std::optional{childRight_->clone()} : std::nullopt,
+      substitutesFilterOp_);
 }
 
 // _____________________________________________________________________________
