@@ -38,6 +38,7 @@
 #include "index/TextScoring.h"
 #include "index/VocabularyMerger.h"
 #include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
@@ -208,12 +209,18 @@ class IndexImpl {
 
   GraphNameManager graphNameManager_ = GraphNameManager();
 
+  // See `wasLoadedFromDisk()`.
+  bool wasLoadedFromDisk_ = false;
+
+  // The secondary vocabulary, see `secondaryVocab()`.
+  std::shared_ptr<const SecondaryVocabulary> secondaryVocab_;
+
   // The implementation of the `LocalVocabContext` interface for this index.
   // NOTE: `IndexImpl` deliberately does not implement that interface itself, so
   // that it doesn't become a polymorphic type. There must be exactly one of
   // these per index, see `LocalVocabContext.h`.
-  LocalVocabContextImpl localVocabContext_{&vocab_, &encodedIriManager_,
-                                           &blankNodeManager_};
+  LocalVocabContextImpl localVocabContext_{
+      &vocab_, &encodedIriManager_, &blankNodeManager_, &secondaryVocab_};
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -270,7 +277,36 @@ class IndexImpl {
   void addTextFromOnDiskIndex();
 
   const auto& getVocab() const { return vocab_; }
+
+  // Whether this index was loaded from disk (see `createFromOnDiskIndex`), as
+  // opposed to merely being built. Used for the "was unloaded" message, see
+  // `Index::~Index()`.
+  bool wasLoadedFromDisk() const { return wasLoadedFromDisk_; }
   auto& getNonConstVocabForTesting() { return vocab_; }
+
+  // Return the secondary vocabulary of this index (see
+  // `index/vocabulary/SecondaryVocabulary.h`), or `nullptr` if it has none.
+  // Note that this member is immutable once the index has been loaded, because
+  // the `Id`s of a secondary vocabulary are only valid for the very vocabulary
+  // that they were created for.
+  //
+  // TODO<joka921> Nothing sets this yet, except for unit tests. It will be set
+  // when the index is read from disk, together with the persisted data that
+  // the words belong to; until then the only way to obtain a secondary
+  // vocabulary is `setSecondaryVocabForTesting`.
+  const SecondaryVocabulary* secondaryVocab() const {
+    return secondaryVocab_.get();
+  }
+
+  // Set the secondary vocabulary, see above. NOTE: Tests that need an index
+  // with a secondary vocabulary should not call this directly, but set
+  // `TestIndexConfig::secondaryVocabWords` (see
+  // `test/util/IndexTestHelpers.h`), such that the vocabulary is part of the
+  // index right from its creation.
+  void setSecondaryVocabForTesting(
+      std::shared_ptr<const SecondaryVocabulary> secondaryVocab) {
+    secondaryVocab_ = std::move(secondaryVocab);
+  }
 
   // Replace the currently loaded vocabulary with a zero-copy view directly
   // into `serializer`'s buffer. See `Vocabulary::loadFromZeroCopyDeserializer`
@@ -640,10 +676,10 @@ class IndexImpl {
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr)
       const;
 
-  // Return a Turtle parser that parses the given file. The parser will be
-  // configured to either parse in parallel or not, and to either use the
-  // CTRE-based relaxed parser or not, depending on the settings of the
-  // corresponding member variables.
+  // Return a Turtle parser that parses the given files. The parser will be
+  // configured to either parse in parallel or not (per input file), and to
+  // either use the CTRE-based relaxed parser or not (via the
+  // `ascii-prefixes-only` setting, see `onlyAsciiTurtlePrefixes_`).
   std::unique_ptr<RdfParserBase> makeRdfParser(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
       const;

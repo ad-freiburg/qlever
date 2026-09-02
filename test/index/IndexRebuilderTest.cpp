@@ -112,7 +112,7 @@ void deleteVocabFiles(const std::string& vocabBasename,
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeEmptyLocalVocab) {
-  auto type = ad_utility::VocabularyType::random();
+  auto type = ad_utility::VocabularyType::randomForIndexBuilding();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex(
@@ -138,7 +138,7 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeLocalVocab) {
-  auto type = ad_utility::VocabularyType::random();
+  auto type = ad_utility::VocabularyType::randomForIndexBuilding();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex("materializeLocalVocab",
@@ -229,7 +229,7 @@ TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
   constexpr size_t batchSize = 65'536;
   constexpr size_t numEntries = batchSize + 1'000;
 
-  auto type = ad_utility::VocabularyType::random();
+  auto type = ad_utility::VocabularyType::randomForIndexBuilding();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex(
