@@ -8,6 +8,8 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/match.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include <string_view>
@@ -22,6 +24,7 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/json.h"
 
 using namespace qlever;
 using namespace testing;
@@ -51,6 +54,73 @@ class CountingMemoryResource : public ql::pmr::memory_resource {
     return this == &other;
   }
 };
+
+// The turtle data used by the tests for the filtered vocabulary export below:
+// one triple whose subject and object survive the filtering, and one whose
+// subject and object are excluded from the blob (they contain `dropped`, which
+// is what the regexes below match).
+constexpr std::string_view filterTestData =
+    "<keptSubject> <filterPredicate> \"kept literal\".\n"
+    "<droppedSubject> <filterPredicate> \"dropped literal\".";
+
+// The name under which the tests below pin the query result that contains both
+// a kept and an excluded vocabulary entry.
+constexpr std::string_view filterPinName = "filterPin";
+
+// The query that returns the pinned result (see `filterPinName`) of a blob.
+constexpr std::string_view filterPinQuery =
+    "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-filterPin {}}";
+
+// Build a small index (see `filterTestData`) with the given vocabulary `type`
+// at the `basename`, and return the corresponding `IndexBuilderConfig`. The
+// turtle input file is deleted again immediately after the index was built.
+IndexBuilderConfig buildFilterTestIndex(const std::string& basename,
+                                        ad_utility::VocabularyType type) {
+  std::string sourceFilename = absl::StrCat(basename, ".ttl");
+  {
+    auto ofs = ad_utility::makeOfstream(sourceFilename);
+    ofs << filterTestData;
+  }
+  absl::Cleanup cleanup = [&sourceFilename] {
+    ad_utility::deleteFile(sourceFilename);
+  };
+  IndexBuilderConfig config;
+  config.inputFiles_.push_back(
+      {sourceFilename, Filetype::Turtle, std::nullopt});
+  config.baseName_ = basename;
+  config.vocabType_ = type;
+  Qlever::buildIndex(config);
+  return config;
+}
+
+// Return the vocabulary index of the unique vocabulary entry of `qlever` that
+// contains the `substring`.
+uint64_t vocabIndexOfEntryContaining(const Qlever& qlever,
+                                     std::string_view substring) {
+  std::optional<uint64_t> result;
+  const auto& vocabulary = qlever.indexAndViewsSnapshot()->index_.getVocab();
+  for (const IndexAndWord& entry : vocabulary.scanAll()) {
+    if (absl::StrContains(entry.word_, substring)) {
+      EXPECT_FALSE(result.has_value()) << entry.word_;
+      result = entry.index_;
+    }
+  }
+  EXPECT_TRUE(result.has_value()) << substring;
+  return result.value_or(0);
+}
+
+// Return the index metadata JSON that is stored at the beginning of the
+// `compressedBlob` (see `NamedCachedQueryBlobManager::serialize`).
+nlohmann::json metadataFromBlob(ql::span<const char> compressedBlob) {
+  auto uncompressed = Manager::decompressBlob(compressedBlob, {});
+  ad_utility::serialization::ByteBufferReadSerializerT<true,
+                                                       ql::span<const char>>
+      reader{ql::span<const char>{uncompressed}};
+  Manager::skipAndVerifyBlobHeader(reader);
+  std::string metadataJson;
+  reader >> metadataJson;
+  return nlohmann::json::parse(metadataJson);
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -418,4 +488,145 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
       "SELECT ?s2 ?geo2 WHERE { SERVICE ql:cached-result-with-name-geoPin {} }",
       ad_utility::MediaType::tsv);
   EXPECT_THAT(cachedRes, HasSubstr("<s1>"));
+}
+
+// _____________________________________________________________________________
+// Test a round trip of a blob from which some of the vocabulary entries were
+// excluded, for each of the source vocabulary types that supports the
+// filtering. The pinned query result references both a kept and an excluded
+// entry, so that the preservation of the original vocabulary indices is
+// actually exercised: the kept entries have to resolve to their original
+// strings, the excluded ones to `placeholderForMissingVocabIndex`.
+TEST(NamedCachedQueryBlobManager, blobWithExcludedVocabularyEntries) {
+  using ad_utility::VocabularyType;
+  for (const auto& [sourceType, expectedBlobType] :
+       std::vector<std::pair<VocabularyType, VocabularyType>>{
+           {VocabularyType::InMemoryUncompressed,
+            VocabularyType::InMemoryUncompressedWithHoles},
+           {VocabularyType::OnDiskUncompressed,
+            VocabularyType::InMemoryUncompressedWithHoles},
+           {VocabularyType::InMemoryCompressed,
+            VocabularyType::InMemoryCompressedWithHoles},
+           {VocabularyType::OnDiskCompressed,
+            VocabularyType::InMemoryCompressedWithHoles}}) {
+    std::string basename =
+        absl::StrCat(gtestCurrentTestName(), ".", sourceType.toString());
+    auto sourceConfig = buildFilterTestIndex(basename, sourceType);
+
+    uint64_t droppedSubjectIndex = 0;
+    uint64_t droppedObjectIndex = 0;
+    uint64_t keptSubjectIndex = 0;
+    const std::vector<char> compressedBlob =
+        [&sourceConfig, &droppedSubjectIndex, &droppedObjectIndex,
+         &keptSubjectIndex]() {
+          Qlever source{EngineConfig{sourceConfig}};
+          source.queryAndPinResultWithName(
+              std::string{filterPinName},
+              "SELECT ?s ?o WHERE { ?s <filterPredicate> ?o }");
+          droppedSubjectIndex =
+              vocabIndexOfEntryContaining(source, "droppedSubject");
+          droppedObjectIndex =
+              vocabIndexOfEntryContaining(source, "dropped literal");
+          keptSubjectIndex = vocabIndexOfEntryContaining(source, "keptSubject");
+          BlobSerializationConfig config;
+          // The regexes are matched against the complete entry, hence the
+          // leading and trailing `.*`. This excludes the IRI
+          // `<droppedSubject>` as well as the literal `"dropped literal"`.
+          config.excludedEntryRegexes_ = {".*dropped.*"};
+          return source.serializeVocabAndNamedCacheToCompressedBlob(config);
+        }();
+
+    // The type of the vocabulary in the blob is recorded in its metadata JSON,
+    // so that the reading side does not need to know about the filtering.
+    EXPECT_EQ(metadataFromBlob(compressedBlob)["vocabulary-type"],
+              expectedBlobType.toString());
+
+    Qlever target{EngineConfig{}, /*skipLoading=*/true};
+    EXPECT_NO_THROW(
+        target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob));
+    auto result =
+        target.query(std::string{filterPinQuery}, ad_utility::MediaType::tsv);
+    // The kept entries resolve to their original strings, and in particular the
+    // kept subject kept its original vocabulary index (which is larger than the
+    // index of the dropped subject, so the surviving vocabulary has a hole).
+    EXPECT_GT(keptSubjectIndex, droppedSubjectIndex);
+    EXPECT_THAT(result, HasSubstr("<keptSubject>\t\"kept literal\""));
+    // The excluded entries resolve to the placeholder for their original index.
+    EXPECT_THAT(
+        result,
+        HasSubstr(ad_utility::vocabulary::placeholderForMissingVocabIndex(
+            droppedSubjectIndex)));
+    EXPECT_THAT(
+        result,
+        HasSubstr(ad_utility::vocabulary::placeholderForMissingVocabIndex(
+            droppedObjectIndex)));
+  }
+}
+
+// _____________________________________________________________________________
+// Test that a blob written with a list of regexes that matches no vocabulary
+// entry at all is functionally equivalent to (though not byte-identical with)
+// the unfiltered blob, and that an empty list of regexes produces a blob in the
+// original format (i.e. with the original vocabulary type).
+TEST(NamedCachedQueryBlobManager, blobWithRegexesThatMatchNothing) {
+  std::string basename = gtestCurrentTestName();
+  auto sourceConfig = buildFilterTestIndex(
+      basename, ad_utility::VocabularyType::InMemoryUncompressed);
+
+  std::vector<char> unfilteredBlob;
+  std::vector<char> filteredBlob;
+  {
+    Qlever source{EngineConfig{sourceConfig}};
+    source.queryAndPinResultWithName(
+        std::string{filterPinName},
+        "SELECT ?s ?o WHERE { ?s <filterPredicate> ?o }");
+    unfilteredBlob = source.serializeVocabAndNamedCacheToCompressedBlob();
+    BlobSerializationConfig config;
+    config.excludedEntryRegexes_ = {"thisMatchesNoVocabularyEntry"};
+    filteredBlob = source.serializeVocabAndNamedCacheToCompressedBlob(config);
+  }
+
+  // An empty list of regexes leaves the format (and hence the vocabulary type
+  // in the metadata JSON) untouched, a non-empty list switches to a vocabulary
+  // with holes, so the two blobs are not byte-identical.
+  EXPECT_EQ(metadataFromBlob(unfilteredBlob)["vocabulary-type"],
+            ad_utility::VocabularyType::InMemoryUncompressed.toString());
+  EXPECT_EQ(
+      metadataFromBlob(filteredBlob)["vocabulary-type"],
+      ad_utility::VocabularyType::InMemoryUncompressedWithHoles.toString());
+  EXPECT_NE(unfilteredBlob, filteredBlob);
+
+  // Both blobs are functionally equivalent: no entry was excluded, so all
+  // strings resolve to their original values.
+  std::string expected =
+      "?s\t?o\n<droppedSubject>\t\"dropped literal\"\n<keptSubject>\t\"kept "
+      "literal\"\n";
+  for (const std::vector<char>& blob : {unfilteredBlob, filteredBlob}) {
+    Qlever target{EngineConfig{}, /*skipLoading=*/true};
+    EXPECT_NO_THROW(
+        target.deserializeVocabAndNamedCacheFromCompressedBlob(blob));
+    EXPECT_EQ(
+        target.query(std::string{filterPinQuery}, ad_utility::MediaType::tsv),
+        expected);
+  }
+}
+
+// _____________________________________________________________________________
+// Test that excluding vocabulary entries from a blob is rejected with a
+// descriptive message if the source vocabulary is a geo-split vocabulary (whose
+// marker-encoded indices cannot be represented by a vocabulary with holes).
+TEST(NamedCachedQueryBlobManager, blobWithExcludedEntriesRejectsGeoSplitVocab) {
+  std::string basename = gtestCurrentTestName();
+  auto sourceConfig = buildFilterTestIndex(
+      basename, ad_utility::VocabularyType::OnDiskCompressedGeoSplit);
+
+  Qlever source{EngineConfig{sourceConfig}};
+  source.queryAndPinResultWithName(
+      std::string{filterPinName},
+      "SELECT ?s ?o WHERE { ?s <filterPredicate> ?o }");
+  BlobSerializationConfig config;
+  config.excludedEntryRegexes_ = {".*dropped.*"};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      source.serializeVocabAndNamedCacheToCompressedBlob(config),
+      HasSubstr("on-disk-compressed-geo-split"));
 }

@@ -554,10 +554,13 @@ class Qlever {
   // `NamedResultCache` of this instance into a single, self-contained,
   // ZSTD-compressed blob that can later be loaded via
   // `deserializeVocabAndNamedCacheFromCompressedBlob` (e.g. by a different
-  // process, without needing access to the on-disk index). For details see
+  // process, without needing access to the on-disk index). Via the `config`,
+  // vocabulary entries that are not needed in the blob can be excluded from it
+  // (see `BlobSerializationConfig`). For details see
   // `NamedCachedQueryBlobManager::serialize`.
-  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob() const {
-    return blobManager_.serialize(*this);
+  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob(
+      const BlobSerializationConfig& config = {}) const {
+    return blobManager_.serialize(*this, config);
   }
 
   // Load a blob previously written by

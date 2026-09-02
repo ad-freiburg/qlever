@@ -331,6 +331,16 @@ class IndexImpl {
     vocab_.writeAsZeroCopyBlob(serializer);
   }
 
+  // Return the vocabulary implementation that actually holds the words of the
+  // RDF vocabulary, i.e. the vocabulary below the wrapping `UnicodeVocabulary`
+  // (typically a `PolymorphicVocabulary`, see
+  // `detail::UnderlyingVocabRdfsVocabulary`). Used by
+  // `NamedCachedQueryBlobManager::serialize` to build a filtered copy of the
+  // vocabulary for a blob (see `buildFilteredVocabulary`).
+  const auto& getUnderlyingVocabulary() const {
+    return vocab_.getUnderlyingVocabulary();
+  }
+
   // Get the configuration JSON (index metadata) of this `IndexImpl`.
   const nlohmann::json& configurationJson() const { return configurationJson_; }
 
