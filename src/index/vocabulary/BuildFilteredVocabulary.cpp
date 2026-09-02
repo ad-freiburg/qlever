@@ -11,11 +11,11 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
-#include <re2/re2.h>
 
-#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include "backports/algorithm.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
@@ -24,6 +24,7 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/Log.h"
+#include "util/RegexSet.h"
 #include "util/TypeTraits.h"
 
 namespace {
@@ -34,27 +35,6 @@ struct NumKeptAndDropped {
   size_t numKept_ = 0;
   size_t numDropped_ = 0;
 };
-
-// Compile each of the `regexes` into an `RE2` object. Throw a descriptive
-// exception for a string that is not a valid regular expression.
-std::vector<std::unique_ptr<re2::RE2>> compileRegexes(
-    const std::vector<std::string>& regexes) {
-  std::vector<std::unique_ptr<re2::RE2>> compiledRegexes;
-  for (const std::string& regex : regexes) {
-    // `RE2` does not throw for an invalid pattern but stores an error state,
-    // which we turn into a user-readable exception here.
-    auto compiledRegex = std::make_unique<re2::RE2>(regex, re2::RE2::Quiet);
-    if (!compiledRegex->ok()) {
-      throw std::runtime_error{absl::StrCat(
-          "The regex \"", regex,
-          "\" for excluding vocabulary entries is not a valid regular "
-          "expression (as understood by Google's RE2 library): ",
-          compiledRegex->error())};
-    }
-    compiledRegexes.push_back(std::move(compiledRegex));
-  }
-  return compiledRegexes;
-}
 
 // Determine the `VocabularyType` of the filtered vocabulary from the type of
 // the source `vocabulary`: an uncompressed source yields an uncompressed
@@ -85,7 +65,13 @@ ad_utility::VocabularyType targetVocabularyType(
           AD_THROW(
               "Filtering a vocabulary that already is a vocabulary with holes "
               "(vocabulary type \"in-memory-uncompressed-with-holes\" or "
-              "\"in-memory-compressed-with-holes\") is not supported");
+              "\"in-memory-compressed-with-holes\") is not supported. NOTE: "
+              "This is not an inherent restriction, as the entries of such a "
+              "vocabulary can be scanned together with their (non-contiguous) "
+              "indices just like those of any other vocabulary, so that "
+              "filtering them would simply yield a vocabulary with more holes. "
+              "It is deliberately not implemented (and hence also not tested), "
+              "because there currently is no use case for it.");
         } else {
           static_assert(
               ad_utility::SameAsAny<T, SplitGeoVocabulary<CompressedVocabulary<
@@ -102,22 +88,18 @@ ad_utility::VocabularyType targetVocabularyType(
       vocabulary.getUnderlyingVocabulary());
 }
 
-// Write all entries of `vocabulary` that do not match any of the `regexes` to
-// the `wordWriter`, keeping their original vocabulary indices, and `finish` the
+// Write all entries of `vocabulary` that match none of the `regexes` to the
+// `wordWriter`, keeping their original vocabulary indices, and `finish` the
 // `wordWriter`. Return the number of kept and dropped entries.
 template <typename WordWriter>
-NumKeptAndDropped writeSurvivingEntries(
-    const PolymorphicVocabulary& vocabulary,
-    const std::vector<std::unique_ptr<re2::RE2>>& regexes,
-    WordWriter& wordWriter) {
+NumKeptAndDropped writeSurvivingEntries(const PolymorphicVocabulary& vocabulary,
+                                        const ad_utility::RegexSet& regexes,
+                                        WordWriter& wordWriter) {
   NumKeptAndDropped result;
   // NOTE: `entry.word_` is only valid until the range is advanced (see
   // `IndexAndWord`), so it is consumed immediately inside the loop.
   for (const IndexAndWord& entry : vocabulary.scanAll()) {
-    bool isExcluded = ql::ranges::any_of(regexes, [&entry](const auto& regex) {
-      return re2::RE2::FullMatch(entry.word_, *regex);
-    });
-    if (isExcluded) {
+    if (regexes.matchesAny(entry.word_)) {
       ++result.numDropped_;
       continue;
     }
@@ -126,6 +108,49 @@ NumKeptAndDropped writeSurvivingEntries(
   }
   wordWriter.finish();
   return result;
+}
+
+// Build the filtered vocabulary at `temporaryBasename` using the `WordWriter`
+// of the given `Vocabulary` (which is one of the two vocabularies with holes),
+// and delete all the files that were written again. Return the filtered
+// vocabulary together with the number of kept and dropped entries.
+//
+// NOTE: Both of the possible vocabulary types load all their contents into
+// memory in `open`, so the temporary files can be (and are) deleted as soon as
+// the vocabulary is opened. This also happens if an exception is thrown.
+template <typename Vocabulary>
+std::pair<PolymorphicVocabulary, NumKeptAndDropped> buildAndDeleteFiles(
+    const PolymorphicVocabulary& vocabulary,
+    const ad_utility::RegexSet& regexes, const std::string& temporaryBasename,
+    ad_utility::VocabularyType type) {
+  // The names of the files that the `WordWriter` below creates, filled as soon
+  // as that writer exists (which is what knows the suffixes).
+  std::vector<std::string> temporaryFilenames;
+  // NOTE: This is deliberately declared before the scope of the `wordWriter`
+  // below, so that the files are deleted only after that writer has been
+  // destroyed. The destructor of a `WordWriter` writes the remaining buffers to
+  // disk if `finish` was not called, which is exactly what happens when an
+  // exception is thrown.
+  absl::Cleanup deleteTemporaryFiles = [&temporaryFilenames]() {
+    for (const std::string& filename : temporaryFilenames) {
+      // Do not warn if the file does not exist: if an exception was thrown,
+      // some of the files may never have been created.
+      ad_utility::deleteFile(filename, false);
+    }
+  };
+
+  NumKeptAndDropped numKeptAndDropped;
+  {
+    typename Vocabulary::WordWriter wordWriter{temporaryBasename};
+    for (std::string_view suffix : wordWriter.fileSuffixes()) {
+      temporaryFilenames.push_back(absl::StrCat(temporaryBasename, suffix));
+    }
+    numKeptAndDropped = writeSurvivingEntries(vocabulary, regexes, wordWriter);
+  }
+
+  PolymorphicVocabulary result;
+  result.open(temporaryBasename, type);
+  return {std::move(result), numKeptAndDropped};
 }
 }  // namespace
 
@@ -137,56 +162,26 @@ FilteredVocabulary buildFilteredVocabulary(
   AD_CONTRACT_CHECK(
       !excludedEntryRegexes.empty(),
       "`buildFilteredVocabulary` requires a non-empty list of regexes");
-  auto regexes = compileRegexes(excludedEntryRegexes);
+  ad_utility::RegexSet regexes{excludedEntryRegexes,
+                               "for excluding vocabulary entries"};
   auto type = targetVocabularyType(vocabulary);
-  bool isCompressed =
-      type == ad_utility::VocabularyType::InMemoryCompressedWithHoles;
 
-  // The names of the files that the `WordWriter`s below create. For the
-  // compressed case, the suffixes are those that `CompressedVocabulary` (see
-  // its `wordsSuffix` and `decodersSuffix`) and the underlying
-  // `VocabularyInMemoryBinSearch` append to the basename that is passed to
-  // `open`.
-  std::vector<std::string> temporaryFilenames;
-  if (isCompressed) {
-    temporaryFilenames = {absl::StrCat(temporaryBasename, ".words"),
-                          absl::StrCat(temporaryBasename, ".words.ids"),
-                          absl::StrCat(temporaryBasename, ".codebooks")};
-  } else {
-    temporaryFilenames = {temporaryBasename,
-                          absl::StrCat(temporaryBasename, ".ids")};
-  }
-  // Both of the possible vocabulary types load all their contents into memory
-  // in `open`, so the temporary files can be (and are) deleted again as soon as
-  // the vocabulary is opened. This also happens if an exception is thrown.
-  absl::Cleanup deleteTemporaryFiles = [&temporaryFilenames]() {
-    for (const std::string& filename : temporaryFilenames) {
-      // Do not warn if the file does not exist: if an exception was thrown,
-      // some of the files may never have been created.
-      ad_utility::deleteFile(filename, false);
-    }
-  };
+  // NOTE: `CompressedVocabulary::makeDiskWriterPtr` cannot be used here,
+  // because the `WordWriter` of a vocabulary with holes does not implement the
+  // `WordWriterBase` interface (its `operator()` takes the index of the word
+  // instead of the `isExternal` flag).
+  using CompressedWithHoles = CompressedVocabulary<VocabularyInMemoryBinSearch>;
+  auto [filteredVocabulary, numKeptAndDropped] =
+      type == ad_utility::VocabularyType::InMemoryCompressedWithHoles
+          ? buildAndDeleteFiles<CompressedWithHoles>(vocabulary, regexes,
+                                                     temporaryBasename, type)
+          : buildAndDeleteFiles<VocabularyInMemoryBinSearch>(
+                vocabulary, regexes, temporaryBasename, type);
 
-  NumKeptAndDropped numKeptAndDropped;
-  if (isCompressed) {
-    // NOTE: `CompressedVocabulary::makeDiskWriterPtr` cannot be used here,
-    // because the `WordWriter` of a vocabulary with holes does not implement
-    // the `WordWriterBase` interface (its `operator()` takes the index of the
-    // word instead of the `isExternal` flag).
-    CompressedVocabulary<VocabularyInMemoryBinSearch>::WordWriter wordWriter{
-        temporaryFilenames.at(0), temporaryFilenames.at(2)};
-    numKeptAndDropped = writeSurvivingEntries(vocabulary, regexes, wordWriter);
-  } else {
-    VocabularyInMemoryBinSearch::WordWriter wordWriter{temporaryBasename};
-    numKeptAndDropped = writeSurvivingEntries(vocabulary, regexes, wordWriter);
-  }
-
-  FilteredVocabulary result{PolymorphicVocabulary{}, type};
-  result.vocabulary_.open(temporaryBasename, type);
   AD_LOG_INFO << "Built a filtered vocabulary of type " << type.toString()
               << " with " << numKeptAndDropped.numKept_ << " entries, dropped "
               << numKeptAndDropped.numDropped_
               << " entries that matched one of the " << regexes.size()
               << " given regexes" << std::endl;
-  return result;
+  return FilteredVocabulary{std::move(filteredVocabulary), type};
 }

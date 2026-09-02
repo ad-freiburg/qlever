@@ -27,10 +27,11 @@ struct FilteredVocabulary {
 };
 
 // Build an in-memory copy of `vocabulary` that contains all its entries except
-// those that match any of the regexes in `excludedEntryRegexes` (matched via
-// `RE2::FullMatch`, like the regexes for `IndexImpl::setBlankNodeIriRegexes`).
-// In contrast to those, the regexes here are matched against every vocabulary
-// entry, not only against the IRIs, so that literals can be excluded as well;
+// those that match any of the regexes in `excludedEntryRegexes` (matched as a
+// full match via `ad_utility::RegexSet`, like the regexes for
+// `IndexImpl::setBlankNodeIriRegexes`). In contrast to those, the regexes here
+// are matched against every vocabulary entry, not only against the IRIs, so
+// that literals can be excluded as well;
 // to exclude only IRIs, let the regex start with `<` and end with `>`. The
 // surviving entries keep their original vocabulary indices, so that `Id`s that
 // refer to them stay valid; the result therefore is a vocabulary with holes
@@ -43,18 +44,19 @@ struct FilteredVocabulary {
 // (`ad_utility::VocabularyType::InMemoryUncompressedWithHoles`) otherwise. The
 // `temporaryBasename` is used for the intermediate on-disk representation of
 // the result (the vocabulary implementations can only be built via a
-// `WordWriter` that writes to disk); all files that are created there are
-// deleted again before returning (also if an exception is thrown), because both
-// of the possible result types load everything into memory when they are
-// opened.
+// `WordWriter` that writes to disk); all files that are created there (which
+// the `WordWriter` reports via `fileSuffixes`) are deleted again before
+// returning (also if an exception is thrown), because both of the possible
+// result types load everything into memory when they are opened.
 //
 // Throw if `vocabulary` is a `SplitVocabulary` (i.e. a vocabulary of type
 // `on-disk-compressed-geo-split`): its marker-encoded indices are not ascending
 // in the order of the (sorted) words, which a vocabulary with holes requires,
 // and its precomputed `GeometryInfo` cannot be represented by any of the
-// possible result types. Also throw if `vocabulary` already is a vocabulary
-// with holes, and if `excludedEntryRegexes` contains a string that is not a
-// valid regular expression.
+// possible result types. Also throw if `excludedEntryRegexes` contains a string
+// that is not a valid regular expression, and if `vocabulary` already is a
+// vocabulary with holes (which is not an inherent restriction, but simply has
+// no use case yet, see the exception message).
 //
 // PRECONDITION: `excludedEntryRegexes` must not be empty; the caller has to
 // handle that case (in which the complete vocabulary survives and hence nothing

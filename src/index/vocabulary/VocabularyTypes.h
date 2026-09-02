@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
@@ -328,6 +329,82 @@ class WordAndIndex {
       : wordAndIndex_{std::in_place, std::string{word}, index} {}
 };
 
+// The filename suffixes that a `WordWriter` appends to the base filename of the
+// vocabulary in order to obtain the names of all the files that it writes (see
+// `WordWriterBase::fileSuffixes`). The suffixes have to be owned, because a
+// `WordWriter` that delegates to other `WordWriter`s composes its suffixes at
+// runtime from the suffixes of those (see `addPrefixed`). A `WordWriter` whose
+// suffixes are fixed string literals does not need this class, but can simply
+// return a `span` over a `static constexpr` array.
+class FileSuffixes {
+ private:
+  std::vector<std::string> suffixes_;
+  // Views into the `suffixes_`, so that they can be handed out as a `span` of
+  // `string_view`s. Recomputed whenever `suffixes_` is modified, which
+  // invalidates them.
+  std::vector<std::string_view> views_;
+
+ public:
+  // Construct an empty list of suffixes, to be filled via `addPrefixed` and
+  // `add` below.
+  FileSuffixes() = default;
+
+  // Construct from a fixed list of suffixes.
+  FileSuffixes(std::initializer_list<std::string_view> suffixes)
+      : suffixes_{suffixes.begin(), suffixes.end()} {
+    updateViews();
+  }
+
+  // The copy and move operations have to be written manually, because the
+  // implicitly generated ones would leave `views_` pointing into the strings of
+  // the source object.
+  FileSuffixes(const FileSuffixes& other) : suffixes_{other.suffixes_} {
+    updateViews();
+  }
+  FileSuffixes(FileSuffixes&& other) noexcept
+      : suffixes_{std::move(other.suffixes_)} {
+    updateViews();
+    other.updateViews();
+  }
+  FileSuffixes& operator=(FileSuffixes other) {
+    suffixes_ = std::move(other.suffixes_);
+    updateViews();
+    return *this;
+  }
+  ~FileSuffixes() = default;
+
+  // Add all the `suffixes` of an underlying `WordWriter` that writes its files
+  // with the base filename of this `WordWriter` plus the given `prefix`.
+  void addPrefixed(std::string_view prefix,
+                   ql::span<const std::string_view> suffixes) {
+    // NOTE: The prefixed suffixes are materialized before they are appended,
+    // because the `suffixes` may be views into the storage of this very object
+    // (which appending to `suffixes_` would invalidate).
+    std::vector<std::string> prefixedSuffixes;
+    prefixedSuffixes.reserve(suffixes.size());
+    for (std::string_view suffix : suffixes) {
+      prefixedSuffixes.push_back(absl::StrCat(prefix, suffix));
+    }
+    suffixes_.insert(suffixes_.end(),
+                     std::make_move_iterator(prefixedSuffixes.begin()),
+                     std::make_move_iterator(prefixedSuffixes.end()));
+    updateViews();
+  }
+
+  // Add a single suffix.
+  void add(std::string_view suffix) {
+    suffixes_.emplace_back(suffix);
+    updateViews();
+  }
+
+  // All the suffixes, for `WordWriterBase::fileSuffixes`.
+  ql::span<const std::string_view> asSpan() const { return views_; }
+
+ private:
+  // Recompute the `views_` from the `suffixes_`.
+  void updateViews() { views_.assign(suffixes_.begin(), suffixes_.end()); }
+};
+
 // A common base class for the `WordWriter` types of different vocabulary
 // implementations. It has to be called for each of the words (in the correct
 // order).
@@ -379,6 +456,16 @@ class WordWriterBase {
   // Access to a `readableName` of the vocabulary that is written. Some
   // implementations use it to customize log messages.
   virtual std::string& readableName() { return readableName_; }
+
+  // Return the suffixes that have to be appended to the base filename of the
+  // vocabulary (the `filename` that was used to create this `WordWriter`) in
+  // order to obtain the names of all the files that this `WordWriter` writes.
+  // They are exactly the files that the corresponding `open` of the vocabulary
+  // reads. The suffix of the file that is stored under the base filename itself
+  // (which most vocabularies have) is the empty string.
+  //
+  // NOTE: The returned `span` is valid for as long as this `WordWriter` lives.
+  virtual ql::span<const std::string_view> fileSuffixes() const = 0;
 
  private:
   // The base classes have to implement the actual logic for `finish` here.

@@ -5,7 +5,6 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
-#include <re2/re2.h>
 
 #include <cstdlib>
 #include <ctime>
@@ -318,10 +317,8 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
   // - `<http://ex/apple` only matches a prefix of `<http://ex/apple>` (the
   //   closing `>` is missing), so with *full* match it converts nothing. With a
   //   partial match it would have wrongly converted `<http://ex/apple>`.
-  std::vector<std::unique_ptr<re2::RE2>> blankNodeIriRegexes;
-  for (const char* pattern : {"<http://ex/bn_.*>", "<http://ex/apple"}) {
-    blankNodeIriRegexes.push_back(std::make_unique<re2::RE2>(pattern));
-  }
+  ad_utility::RegexSet blankNodeIriRegexes{
+      {"<http://ex/bn_.*>", "<http://ex/apple"}, "for the test"};
   mergeVocabulary(
       basePath, 1,
       [](std::string_view a, bool, std::string_view b, bool) {

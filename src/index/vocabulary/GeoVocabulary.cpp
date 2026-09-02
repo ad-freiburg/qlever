@@ -49,6 +49,9 @@ GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
                                          const std::string& filename)
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"} {
+  fileSuffixes_.addPrefixed("", underlyingWordWriter_->fileSuffixes());
+  fileSuffixes_.add(geoInfoSuffix);
+
   // Initialize geo info file with header
   geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
 }
