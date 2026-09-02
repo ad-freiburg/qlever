@@ -194,7 +194,11 @@ class GeoCellGrid {
             geoVocabMarkerBit + ((last + 1) << numPositionBits())};
   }
 
-  bool operator==(const GeoCellGrid&) const = default;
+  // NOTE: Written out because a defaulted comparison is not available in the
+  // C++17 build.
+  bool operator==(const GeoCellGrid& other) const {
+    return level_ == other.level_ && scheme_.value() == other.scheme_.value();
+  }
 
  private:
   // Coordinate convention of the private helpers: `u` and `v` are normalized
