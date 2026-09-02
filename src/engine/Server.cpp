@@ -39,6 +39,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/QueryEventLog.h"
+#include "util/ResourceMonitor.h"
 #include "util/TimeTracer.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
@@ -58,7 +59,8 @@ using ad_utility::MediaType;
 Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
-    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader)
+    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
+    std::shared_ptr<ad_utility::RebuildTracker> rebuildTracker)
     : qlever_(config),
       numThreads_(numThreads),
       port_(port),
@@ -67,7 +69,10 @@ Server::Server(
       queryThreadPool_{numThreads},
       rebuildIndexStrategy_(config.rebuildIndexStrategy_),
       keepPreviousIndexDirs_(config.keepPreviousIndexDirs_),
-      metricsReader_(std::move(metricsReader)) {
+      metricsReader_(std::move(metricsReader)),
+      rebuildTracker_(rebuildTracker
+                          ? std::move(rebuildTracker)
+                          : std::make_shared<ad_utility::RebuildTracker>()) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   initializeServerMetrics(config.memoryLimit_);
@@ -100,7 +105,7 @@ void Server::initializeServerMetrics(
       },
       [this]() -> int64_t { return cache().getMaxSize().getBytes(); },
       [this]() -> int64_t {
-        return static_cast<int64_t>(rebuildInProgress_.load());
+        return static_cast<int64_t>(rebuildTracker_->poll().has_value());
       },
       memoryLimit);
   metrics_->registerCallbacks();
@@ -1603,10 +1608,12 @@ Awaitable<std::optional<qlever::IndexSwapConfig>>
 Server::rebuildIndexUnlessInProgress(
     std::optional<std::string> rebuildTmpDir,
     std::optional<std::string> rebuildPreviousIndexDir) {
-  if (rebuildInProgress_.exchange(true)) {
+  // The rebuild counts as running until this goes out of scope, which happens
+  // whether the rebuild succeeds, throws, or is cancelled.
+  auto runningRebuild = rebuildTracker_->tryBegin();
+  if (!runningRebuild.has_value()) {
     co_return std::nullopt;
   }
-  absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
   co_return co_await rebuildIndex(std::move(rebuildTmpDir),
                                   std::move(rebuildPreviousIndexDir));
 }
@@ -1631,7 +1638,7 @@ void Server::triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
   // The authoritative check is the guard in `rebuildIndexUnlessInProgress`,
   // which is shared with the `cmd=rebuild-index` HTTP request, so that a
   // manual and an automatic rebuild can never run concurrently.
-  if (rebuildInProgress_.load()) {
+  if (rebuildTracker_->poll().has_value()) {
     return;
   }
   AD_LOG_INFO << "Triggering an automatic index rebuild, the number of delta "

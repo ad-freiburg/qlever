@@ -126,7 +126,7 @@ IndexSwapConfig makeIndexSwapConfig(const std::string& currentBaseName,
   // for why.
   //
   // NOTE: The check-then-use is not atomic; this is fine because swaps of the
-  // same index are serialized (rebuilds via `Server::rebuildInProgress_`, and
+  // same index are serialized (rebuilds via `Server::rebuildTracker_`, and
   // `qlever-upgrade-index` is a manually run standalone binary).
   auto uniquify = [&naming](const std::string& directory) -> std::string {
     if (!fs::exists(directory)) {

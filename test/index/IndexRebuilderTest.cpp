@@ -20,6 +20,7 @@
 #include <fstream>
 #include <future>
 #include <iterator>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -41,6 +42,7 @@
 // emsdk 6.0.2's clang backend, see `src/engine/CMakeLists.txt`), so the
 // server-integration test below is compiled out there.
 #ifndef __EMSCRIPTEN__
+#include "engine/RebuildTracker.h"
 #include "engine/Server.h"
 #endif
 #include "global/Constants.h"
@@ -871,7 +873,15 @@ TEST(IndexRebuilder, serverIntegration) {
   // `serverIntegrationKeepPreviousIndexDirs` below.
   config.keepPreviousIndexDirs_ = qlever::KeepPreviousIndexDirs::All;
   constexpr std::string_view accessToken = "accessToken";
-  Server server{4321, 1, std::string{accessToken}, config};
+  // Numbers the rebuilds for the `rebuild_id` column of the resource-usage
+  // log. The test polls it in place of the `ResourceMonitor`.
+  auto rebuildTracker = std::make_shared<ad_utility::RebuildTracker>();
+  Server server{4321,          1,     std::string{accessToken},
+                config,        false, nullptr,
+                rebuildTracker};
+
+  // No rebuild has run yet.
+  EXPECT_FALSE(rebuildTracker->poll().has_value());
 
   // Create a GET request that triggers a rebuild of the index. The
   // `additionalParameters` are appended to the URL as they are, and the access
@@ -929,6 +939,15 @@ TEST(IndexRebuilder, serverIntegration) {
   EXPECT_EQ(response1.base().result(), boost::beast::http::status::ok);
   EXPECT_EQ(response2.base().result(),
             boost::beast::http::status::too_many_requests);
+  // Both rebuilds are over, so no number is reported any more.
+  EXPECT_FALSE(rebuildTracker->poll().has_value());
+  // The rebuild that ran took the number 1, and the rejected one took none
+  // because it was turned away before a number was given out. So the next
+  // rebuild gets the number 2.
+  {
+    auto runningRebuild = rebuildTracker->tryBegin();
+    EXPECT_THAT(rebuildTracker->poll(), ::testing::Optional(2u));
+  }
 
   // With the default parameters, the old index was moved to a
   // `previous.<datetime>` directory, the new index took over the base name of
@@ -965,6 +984,10 @@ TEST(IndexRebuilder, serverIntegration) {
 
   auto request6 = makeRebuildRequest("&rebuild-tmp-dir=..%2Fother");
   expectRequestFailsWith(request6, ::testing::HasSubstr("not a subdirectory"));
+
+  // These three rebuilds threw after they had started, so only the guard
+  // cleared the number. Without it the log would report a rebuild forever.
+  EXPECT_FALSE(rebuildTracker->poll().has_value());
 
   threadPool.join();
 }
@@ -1067,7 +1090,7 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
   // be set if a rebuild was started.
   performUpdate("INSERT DATA { <d> <e> <f> . <g> <h> <i> . }");
   EXPECT_EQ(numDeltaTriples(), 2);
-  EXPECT_FALSE(server.server().rebuildInProgress_.load());
+  EXPECT_FALSE(server.server().rebuildTracker_->poll().has_value());
   EXPECT_TRUE(dirsWithPrefix("previous.").empty());
 
   // The third delta triple reaches the threshold and triggers a rebuild in
@@ -1076,13 +1099,13 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
   // zero) and the old index appearing in a `previous.<datetime>` directory.
   performUpdate("INSERT DATA { <j> <k> <l> . }");
   auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(2);
-  while (
-      (numDeltaTriples() != 0 || server.server().rebuildInProgress_.load()) &&
-      std::chrono::steady_clock::now() < deadline) {
+  while ((numDeltaTriples() != 0 ||
+          server.server().rebuildTracker_->poll().has_value()) &&
+         std::chrono::steady_clock::now() < deadline) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
   EXPECT_EQ(numDeltaTriples(), 0);
-  EXPECT_FALSE(server.server().rebuildInProgress_.load());
+  EXPECT_FALSE(server.server().rebuildTracker_->poll().has_value());
   EXPECT_EQ(dirsWithPrefix("previous.").size(), 1u);
   EXPECT_TRUE(ql::filesystem::exists(indexName + ".meta-data.json"));
 
@@ -1107,7 +1130,7 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
         std::exchange(server.server().rebuildIndexStrategy_, std::nullopt);
     server.server().triggerRebuildIfStrategySaysSo(hugeCount, 1);
     server.server().rebuildIndexStrategy_ = strategy;
-    server.server().rebuildInProgress_.store(true);
+    auto runningRebuild = server.server().rebuildTracker_->tryBegin();
     server.server().triggerRebuildIfStrategySaysSo(hugeCount, 1);
     EXPECT_THAT(logStream.str(),
                 ::testing::Not(::testing::HasSubstr("Triggering")));
@@ -1120,7 +1143,7 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
         logStream.str(),
         ::testing::HasSubstr("Automatic index rebuild skipped, another rebuild "
                              "started concurrently"));
-    server.server().rebuildInProgress_.store(false);
+    runningRebuild.reset();
 
     Server::logAutomaticRebuildFailure(
         std::make_exception_ptr(std::runtime_error{"boom"}));
