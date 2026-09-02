@@ -32,7 +32,7 @@ TEST(Permutation, fileNames) {
 
 // _____________________________________________________________________________
 TEST(Permutation, logRegistrationCanBeDisabled) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   std::string basename = gtestCurrentTestName();
   // Build an index on disk. The `Index` object itself is not used, but it has
   // to be kept alive while the permutations below are loaded.
