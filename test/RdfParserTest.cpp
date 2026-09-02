@@ -386,6 +386,19 @@ TEST(RdfParserTest, blankNodePropertyList) {
     ASSERT_EQ(p.triples_, exp);
     ASSERT_EQ(p.getPosition(), blankNodeL.size());
 
+    blankNodeL = "[\n\tp:p2 p:ob2 ;\n\tp:p3 p:ob3\n]";
+    exp = {{"_:g_5_1", iri("<http://example.org/p2>"),
+            iri("<http://example.org/ob2>")},
+           {"_:g_5_1", iri("<http://example.org/p3>"),
+            iri("<http://example.org/ob3>")},
+           {iri("<s>"), iri("<p1>"), "_:g_5_1"}};
+    p.prefixMap_["p"] = iri("<http://example.org/>");
+    p.triples_.clear();
+    p.setInputStream(blankNodeL);
+    ASSERT_TRUE(p.object());
+    ASSERT_EQ(p.triples_, exp);
+    ASSERT_EQ(p.getPosition(), blankNodeL.size());
+
     blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
     p.setInputStream(blankNodeL);
     ASSERT_THROW(p.blankNodePropertyList(),
@@ -827,11 +840,32 @@ TEST(RdfParserTest, collection) {
   };
   runCommonTests(checkParseResult<Re2Parser, &Re2Parser::collection, 22>);
   runCommonTests(checkParseResult<CtreParser, &CtreParser::collection, 22>);
+
+  auto testPrefixedNames = [](auto p) {
+    auto first = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>");
+    auto rest = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>");
+    auto nil = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
+    p.prefixMap_["p"] = iri("<http://example.org/>");
+
+    string collection = "(p:a p:b)";
+    std::vector<TurtleTriple> exp = {
+        {"_:g_22_0", first, iri("<http://example.org/a>")},
+        {"_:g_22_0", rest, "_:g_22_1"},
+        {"_:g_22_1", first, iri("<http://example.org/b>")},
+        {"_:g_22_1", rest, nil}};
+    p.setInputStream(collection);
+    p.setBlankNodePrefixOnlyForTesting(22);
+    ASSERT_TRUE(p.collection());
+    ASSERT_EQ(p.triples_, exp);
+    ASSERT_EQ(p.getPosition(), collection.size());
+  };
+  testPrefixedNames(re2Parser());
+  testPrefixedNames(ctreParser());
 }
 
 // Test the parsing of an IRI reference.
 TEST(RdfParserTest, iriref) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   // Run test for given parser.
   auto runTestsForParser = [](auto parser) {
     std::string iriref_1 = "<fine>";
@@ -1234,7 +1268,10 @@ TEST(RdfParserTest, betterErrorMessageOnMultilineLiteralError) {
 
 // Test that the parallel parser's destructor can be run quickly and without
 // blocking, even when there are still lots of blocks in the pipeline that are
-// currently being parsed.
+// currently being parsed. Draining the pipeline would take on the order of
+// seconds, so the bound below still proves the point but is generous enough
+// for a loaded CI runner (20ms were not, see the frequent spurious failures in
+// August 2026).
 TEST(RdfParserTest, stopParsingOnOutsideFailure) {
 #ifdef _QLEVER_NO_TIMING_TESTS
   GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
@@ -1265,7 +1302,7 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
       }();
       timer.cont();
     }
-    EXPECT_LE(timer.msecs(), 20ms);
+    EXPECT_LE(timer.msecs(), 200ms);
   };
   const std::string input = []() {
     std::string singleBlock = "<subject> <predicate> <object> . \n ";
@@ -1386,6 +1423,44 @@ TEST(RdfParserTest, multifileParser) {
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
   };
   forAllMultifileParsers(impl);
+}
+
+// _____________________________________________________________________________
+// The `ascii-prefixes-only` setting selects the relaxed `TokenizerCtre` for all
+// input files of the `RdfMultifileParser`. We detect which tokenizer was
+// actually used via a prefixed name with an escape sequence, which the standard
+// compliant `Tokenizer` handles, but the relaxed parsing mode does not. NOTE:
+// This is a property of `pnameLnRelaxed` (which bypasses the token regexes),
+// not of the CTRE regexes themselves. If the relaxed mode ever learns to handle
+// escape sequences (see the TODO in the `prefixedName` test above), this test
+// has to be adapted together with that one.
+TEST(RdfParserTest, multifileParserSelectsTokenizer) {
+  std::string filename = gtestCurrentTestName() + ".ttl";
+  ad_utility::makeOfstream(filename)
+      << R"(@prefix wd: <www.wikidata.org/> . wd:esc\,aped <y> <z> .)";
+  absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
+
+  auto parse = [&filename](bool useRelaxedParsing) {
+    std::vector<qlever::InputFileSpecification> specs;
+    specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt, false);
+    RdfMultifileParser parser{
+        ad_utility::InputRangeTypeErased{std::move(specs)}, encodedIriManager(),
+        DEFAULT_PARSER_BUFFER_SIZE, useRelaxedParsing};
+    std::vector<TurtleTriple> result;
+    while (auto batch = parser.getBatch()) {
+      ql::ranges::copy(batch.value(), std::back_inserter(result));
+    }
+    return result;
+  };
+
+  // The standard-compliant tokenizer unescapes the `\,` correctly.
+  EXPECT_THAT(parse(false),
+              ::testing::ElementsAre(TurtleTriple{
+                  iri("<www.wikidata.org/esc,aped>"), iri("<y>"), iri("<z>"),
+                  qlever::specialIds().at(DEFAULT_GRAPH_IRI)}));
+
+  // The relaxed tokenizer does not support escape sequences in prefixed names.
+  EXPECT_ANY_THROW(parse(true));
 }
 
 // _____________________________________________________________________________

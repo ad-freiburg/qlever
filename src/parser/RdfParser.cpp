@@ -277,8 +277,6 @@ template <class T>
 bool TurtleParser<T>::object() {
   // these produce a single object that becomes part of a triple
   // check blank Node first because _: also could look like a prefix
-  // TODO<joka921> Currently collections and blankNodePropertyLists do not work
-  // on dblp when using the relaxed parser. Is this fixable?
   if (blankNode() || literal() || iri() || collection() ||
       blankNodePropertyList()) {
     emitTriple();
@@ -903,14 +901,23 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   // is ok
   tok_.skipWhitespaceAndComments();
   auto view = tok_.view();
-  auto pos = view.find(':');
-  if (pos == std::string::npos) {
+  // Characters that can be part of neither the prefix nor the local name of a
+  // prefixed name, assuming that no escape sequences are used (which is
+  // exactly the assumption that makes this parsing "relaxed"). They are used
+  // below to determine where the prefix and the local name end. Note that the
+  // `:` (the last of the `prefixDelimiters`) terminates the prefix, but may
+  // legally occur inside a local name, hence it is not part of the
+  // `localNameDelimiters`.
+  constexpr std::string_view prefixDelimiters = " \t\r\n,;[]():";
+  constexpr std::string_view localNameDelimiters =
+      prefixDelimiters.substr(0, prefixDelimiters.size() - 1);
+  // If anything but a `:` comes first, this is not a prefixed name, but for
+  // example the `[` of a blank node property list.
+  auto pos = view.find_first_of(prefixDelimiters);
+  if (pos == std::string::npos || view[pos] != ':') {
     return false;
   }
-  // these can also be part of a collection etc.
-  // find any character that can end a pnameLn when assuming that no
-  // escape sequences were used
-  auto posEnd = view.find_first_of(" \t\r\n,;", pos);
+  auto posEnd = view.find_first_of(localNameDelimiters, pos + 1);
   if (posEnd == std::string::npos) {
     // make tests work
     posEnd = view.size();
@@ -1392,8 +1399,11 @@ void RdfMultifileParser::parseFileAndPushBatches(
     const qlever::InputFileSpecification& file,
     ad_utility::MemorySize bufferSize) {
   try {
-    auto parser =
-        makeSingleRdfParser<Tokenizer>(file, &encodedIriManager(), bufferSize);
+    auto parser = useRelaxedParsing_
+                      ? makeSingleRdfParser<TokenizerCtre>(
+                            file, &encodedIriManager(), bufferSize)
+                      : makeSingleRdfParser<Tokenizer>(
+                            file, &encodedIriManager(), bufferSize);
     while (auto batch = parser->getBatch()) {
       bool active = finishedBatchQueue_.push(std::move(batch.value()));
       if (!active) {
@@ -1410,8 +1420,8 @@ void RdfMultifileParser::parseFileAndPushBatches(
 RdfMultifileParser::RdfMultifileParser(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     const EncodedIriManager* encodedIriManager,
-    ad_utility::MemorySize bufferSize)
-    : RdfParserBase(encodedIriManager) {
+    ad_utility::MemorySize bufferSize, bool useRelaxedParsing)
+    : RdfParserBase(encodedIriManager), useRelaxedParsing_{useRelaxedParsing} {
   // Feed all the input files to the `parsingQueue_`.
   auto makeParsers = [files = std::move(files), bufferSize, this]() mutable {
     for (auto& file : files) {
