@@ -5,6 +5,7 @@
 #ifndef QLEVER_VOCABULARYTESTHELPERS_H
 #define QLEVER_VOCABULARYTESTHELPERS_H
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include <array>
@@ -335,6 +336,54 @@ void assertVocabularyMatchesContiguousIndices(
     const Vocab& vocab, std::initializer_list<std::string_view> expectedWords) {
   assertVocabularyMatchesAtIndices(
       vocab, ql::views::iota(size_t{0}, expectedWords.size()), expectedWords);
+}
+
+// Test `endIndex()` and `getPositionOfWord()` of a vocabulary with "holes"
+// (see `VocabularyInMemoryBinSearch`) that contains `words.at(i)` at the
+// vocabulary index `indices.at(i)`. The `words` must be sorted, the `indices`
+// ascending, and both must be non-empty. Each entry of `wordsNotContained`
+// pairs a word that the vocabulary does not contain with the vocabulary index
+// of the first word that is greater than it.
+template <typename Vocab>
+void testEndIndexAndGetPositionOfWord(
+    const Vocab& vocab, ql::span<const std::string> words,
+    ql::span<const uint64_t> indices,
+    const std::vector<std::pair<std::string, uint64_t>>& wordsNotContained) {
+  using Pair = std::pair<uint64_t, uint64_t>;
+  ASSERT_EQ(words.size(), indices.size());
+  ASSERT_FALSE(words.empty());
+  auto getPositionOfWord = [&vocab](std::string_view word) {
+    return vocab.getPositionOfWord(word, ql::ranges::less{});
+  };
+
+  // The "one past the end" index is one larger than the largest contained
+  // index, and NOT `size()`.
+  ASSERT_EQ(vocab.endIndex(), indices.back() + 1);
+  ASSERT_NE(vocab.endIndex(), vocab.size());
+
+  // A word that is contained yields the half-open range consisting of exactly
+  // its (non-contiguous) vocabulary index. This also has to work across the
+  // boundaries of the blocks that a vocabulary may internally use.
+  for (const auto& [word, index] : ::ranges::views::zip(words, indices)) {
+    EXPECT_EQ(getPositionOfWord(word), (Pair{index, index + 1}))
+        << "for the word \"" << word << '"';
+  }
+
+  // A word that is not contained yields the empty range at the index of the
+  // first word that is greater than it.
+  for (const auto& [word, expectedIndex] : wordsNotContained) {
+    EXPECT_EQ(getPositionOfWord(word), (Pair{expectedIndex, expectedIndex}))
+        << "for the word \"" << word << '"';
+  }
+
+  // A word that is greater than all contained words yields the empty range at
+  // `endIndex()`. Using `size()` here would be a bug, because `size()` is in
+  // general much smaller than the largest contained index, so such a word
+  // would be reported as sorting before words that are actually smaller.
+  auto wordAfterAll = absl::StrCat(words.back(), "x");
+  EXPECT_EQ(getPositionOfWord(wordAfterAll),
+            (Pair{vocab.endIndex(), vocab.endIndex()}));
+  EXPECT_GT(getPositionOfWord(wordAfterAll).first, indices.back());
 }
 
 // Assert that `lookupResult[i]` equals `vocab[indices[i]]`, for all positions
