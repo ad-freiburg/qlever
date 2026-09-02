@@ -29,6 +29,12 @@ std::vector<MaterializedViewJoinReplacement>
 QueryPatternCache::makeJoinReplacementIndexScans(
     QueryExecutionContext* qec,
     const parsedQuery::BasicGraphPattern& triples) const {
+  // We do not allow `triples` to contain more than 64 triples, because we use a
+  // 64-bit bitmask for them. This is not a problem, because `QueryPlanner` does
+  // not allow graph patterns with more than 64 triples anyway.
+  AD_CONTRACT_CHECK(triples._triples.size() <= 64,
+                    "At most 64 triples allowed at the moment.");
+
   std::vector<MaterializedViewJoinReplacement> result;
 
   // All triples of the form `anything <iri> ?variable` where `<iri>` is covered
@@ -110,6 +116,15 @@ void QueryPatternCache::makeScansFromChainCandidates(
         if (it == simpleChainCache_.end()) {
           continue;
         }
+        // A degenerate chain (`?a <p1> ?b . ?b <p2> ?a` or
+        // `?a <p1> ?b . ?b <p2> ?b`) would require adding a filter on top of
+        // the view's `IndexScan`, which is not supported.
+        if (right.s_ == right.o_ ||
+            (left.s_.isVariable() &&
+             left.s_.getVariable() == right.o_.getVariable())) {
+          continue;
+        }
+
         for (const auto& chainInfo : *(it->second)) {
           // If the subject of the chain is fixed, but the subject is not the
           // first column of the view, rewriting cannot be applied.
@@ -123,7 +138,8 @@ void QueryPatternCache::makeScansFromChainCandidates(
           result.push_back(
               {makeScanForSingleChain(qec, chainInfo, left.s_, varLeft,
                                       right.o_.getVariable()),
-               {tripleIdxLeft, tripleIdxRight}});
+               (uint64_t{1} << tripleIdxLeft) |
+                   (uint64_t{1} << tripleIdxRight)});
         }
       }
     }
@@ -196,7 +212,7 @@ void QueryPatternCache::makeScansFromStarCandidates(
       if (ql::ranges::includes(queryPredicates,
                                starInfo.arms_ | ql::views::keys)) {
         parsedQuery::MaterializedViewQuery::RequestedColumns cols;
-        std::vector<size_t> coveredTriples;
+        uint64_t coveredTriples = 0;
 
         // The subject must be read.
         cols.insert({starInfo.subject_, subject});
@@ -206,13 +222,13 @@ void QueryPatternCache::makeScansFromStarCandidates(
           size_t idx = predicateToTripleIdx.at(predicate);
           auto queryObject = triples._triples.at(idx).o_;
           cols.insert({object, queryObject});
-          coveredTriples.push_back(idx);
+          coveredTriples |= (uint64_t{1} << idx);
         }
 
         // Construct the `MaterializedViewJoinReplacement`, in particular the
         // `IndexScan`.
-        result.push_back({makeScanForStar(qec, view, std::move(cols)),
-                          std::move(coveredTriples)});
+        result.push_back(
+            {makeScanForStar(qec, view, std::move(cols)), coveredTriples});
       }
     }
   }
@@ -382,10 +398,13 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
     if (!cacheKeyAndCol.has_value()) {
       return false;
     }
+    // NOTE: `ByCacheKeyInfo` is an aggregate, and `make_shared` initializes
+    // with parentheses, which only works for aggregates since C++20. The
+    // explicit `ByCacheKeyInfo{...}` is therefore required for C++17.
     auto [it, inserted] = byCacheKey_.insert(
         {std::move(cacheKeyAndCol.value().cacheKey_),
-         std::make_shared<ByCacheKeyInfo>(
-             view, std::move(cacheKeyAndCol.value().columnMapping_))});
+         std::make_shared<ByCacheKeyInfo>(ByCacheKeyInfo{
+             view, std::move(cacheKeyAndCol.value().columnMapping_)})});
     // If `inserted` is `false` because the entry already belongs to `view`
     // itself (its "full" and "without invariants" cache keys coincide, e.g.
     // because the view has no `BIND` to strip), this is expected and not a
