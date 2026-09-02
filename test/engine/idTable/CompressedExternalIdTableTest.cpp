@@ -18,6 +18,8 @@
 #include "util/ConstexprUtils.h"
 
 using ad_utility::source_location;
+using ad_utility::compressedExternalIdTable::blocksizeForMemory;
+using ad_utility::compressedExternalIdTable::memoryForBlocksize;
 using namespace ad_utility::memory_literals;
 
 namespace {
@@ -245,7 +247,7 @@ TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
   std::string filename = "idTableCompressedSorter.cornerCases.dat";
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   ad_utility::CompressedExternalIdTable<0> writer{
-      filename, NUM_COLS, ad_utility::memoryForBlocksize(blockSize, NUM_COLS),
+      filename, NUM_COLS, memoryForBlocksize(blockSize, NUM_COLS),
       ad_utility::testing::makeAllocator()};
 
   // Push exactly 10 rows. After the 10th row, one full block is written and
@@ -415,8 +417,8 @@ TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
 TEST(CompressedExternalIdTable, blocksizeAndMemoryAreInverses) {
   for (size_t numColumns : {1u, 2u, 3u, 7u}) {
     for (size_t blocksize : {1u, 2u, 6u, 1000u}) {
-      auto memory = ad_utility::memoryForBlocksize(blocksize, numColumns);
-      EXPECT_EQ(ad_utility::blocksizeForMemory(memory, numColumns), blocksize);
+      auto memory = memoryForBlocksize(blocksize, numColumns);
+      EXPECT_EQ(blocksizeForMemory(memory, numColumns), blocksize);
     }
   }
 }
@@ -491,7 +493,7 @@ void testCompressedExternalIdTablePushBlock(
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   // Choose the memory limit such that exactly 6 rows fit into a single block.
   constexpr size_t blocksize = 6;
-  auto memory = ad_utility::memoryForBlocksize(blocksize, NUM_COLS);
+  auto memory = memoryForBlocksize(blocksize, NUM_COLS);
 
   std::string filename =
       absl::StrCat(gtestCurrentTestName(), ".", NumStaticCols, ".dat");
@@ -528,7 +530,7 @@ TEST(CompressedExternalIdTable, pushBlockEqualsRowWisePush) {
            {1, 17}, {2, 17}, {3, 100}, {10, 100}, {64, 500}}) {
     SCOPED_TRACE(
         absl::StrCat("blocksize = ", blocksize, ", numRows = ", numRows));
-    auto memory = ad_utility::memoryForBlocksize(blocksize, NUM_COLS);
+    auto memory = memoryForBlocksize(blocksize, NUM_COLS);
     IdTable table = createRandomlyFilledIdTable(numRows, NUM_COLS);
     // Test the static as well as the dynamic instantiation of the sorter.
     testPushBlockEqualsRowWisePush<NUM_COLS>(table, memory);
@@ -542,7 +544,7 @@ TEST(CompressedExternalIdTable, pushBlockBlockBoundaries) {
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   // Choose the memory limit such that exactly 8 rows fit into a single block.
   constexpr size_t blocksize = 8;
-  auto memory = ad_utility::memoryForBlocksize(blocksize, NUM_COLS);
+  auto memory = memoryForBlocksize(blocksize, NUM_COLS);
 
   std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
   absl::Cleanup cleanup = [&filename] {
@@ -580,7 +582,7 @@ TEST(CompressedExternalIdTable, pushBlockMixedWithSingleRowPushes) {
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   // Choose the memory limit such that exactly 5 rows fit into a single block.
   constexpr size_t blocksize = 5;
-  auto memory = ad_utility::memoryForBlocksize(blocksize, NUM_COLS);
+  auto memory = memoryForBlocksize(blocksize, NUM_COLS);
 
   std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
   absl::Cleanup cleanup = [&filename] {
@@ -637,7 +639,7 @@ TEST(CompressedExternalIdTable, pushEmptyBlockIsNoOp) {
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   // Choose the memory limit such that exactly 4 rows fit into a single block.
   constexpr size_t blocksize = 4;
-  auto memory = ad_utility::memoryForBlocksize(blocksize, NUM_COLS);
+  auto memory = memoryForBlocksize(blocksize, NUM_COLS);
 
   std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
   absl::Cleanup cleanup = [&filename] {
@@ -701,7 +703,7 @@ TEST(CompressedExternalIdTable, pushBlockCreatesSameBlocksAsRowWisePush) {
     auto trace = generateLocationTrace(l);
     SCOPED_TRACE(
         absl::StrCat("blocksize = ", blocksize, ", numRows = ", numRows));
-    auto memory = ad_utility::memoryForBlocksize(blocksize, NUM_COLS);
+    auto memory = memoryForBlocksize(blocksize, NUM_COLS);
     // Each time `blocksize` rows have accumulated, a block is written to disk.
     // A possible remainder becomes one additional block.
     size_t expectedNumBlocks = (numRows + blocksize - 1) / blocksize;

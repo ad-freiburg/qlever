@@ -326,7 +326,12 @@ struct PushBlockCallback {
   }
 };
 
-// The amount of memory that a `CompressedExternalIdTableBase` (see below) with
+// The conversion between the memory limit and the number of rows per block of
+// a `CompressedExternalIdTableBase` (see below). These functions have rather
+// general names, but are tied to that class, hence the dedicated namespace.
+namespace compressedExternalIdTable {
+
+// The amount of memory that a `CompressedExternalIdTableBase` with
 // `numColumns` columns requires per row of its block size. The factor of two is
 // there because we store two blocks at the same time: One that is currently
 // being sorted and written to disk in the background, and one that is used to
@@ -335,18 +340,20 @@ inline size_t blockMemoryPerRow(size_t numColumns) {
   return numColumns * sizeof(Id) * 2;
 }
 
-// The number of rows per block that a `CompressedExternalIdTableBase` (see
-// below) with `numColumns` columns uses for the given `memory` limit.
+// The number of rows per block that a `CompressedExternalIdTableBase` with
+// `numColumns` columns uses for the given `memory` limit.
 inline size_t blocksizeForMemory(MemorySize memory, size_t numColumns) {
   return memory.getBytes() / blockMemoryPerRow(numColumns);
 }
 
 // The inverse of `blocksizeForMemory`: the memory limit for which a
-// `CompressedExternalIdTableBase` (see below) with `numColumns` columns uses
-// exactly `blocksize` rows per block.
+// `CompressedExternalIdTableBase` with `numColumns` columns uses exactly
+// `blocksize` rows per block.
 inline MemorySize memoryForBlocksize(size_t blocksize, size_t numColumns) {
   return MemorySize::bytes(blocksize * blockMemoryPerRow(numColumns));
 }
+
+}  // namespace compressedExternalIdTable
 
 // The common base implementation of `CompressedExternalIdTable` and
 // `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
@@ -377,7 +384,8 @@ CPP_class_template(size_t NumStaticCols,
   MemorySize memory_;
 
   // The number of rows per block in the first phase.
-  size_t blocksize_{blocksizeForMemory(memory_, numColumns_)};
+  size_t blocksize_{
+      compressedExternalIdTable::blocksizeForMemory(memory_, numColumns_)};
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
