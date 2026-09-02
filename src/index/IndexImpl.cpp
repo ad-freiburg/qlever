@@ -29,6 +29,7 @@
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
+#include "index/IndexFormatConverter.h"
 #include "index/IndexFormatVersion.h"
 #include "index/TripleComponentConversions.h"
 #include "index/VocabularyMerger.h"
@@ -104,7 +105,8 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
   return std::make_unique<RdfMultifileParser>(
-      std::move(files), &encodedIriManager(), parserBufferSize());
+      std::move(files), &encodedIriManager(), parserBufferSize(),
+      onlyAsciiTurtlePrefixes_);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -1161,6 +1163,11 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (persistUpdatesOnDisk) {
     setFilenamesForPersistentUpdates(true);
   }
+
+  // Only set at the very end, so that an index that failed to load (for
+  // example, because it has an incompatible format) does not count as loaded
+  // and the destructor does not log that it was unloaded.
+  wasLoadedFromDisk_ = true;
 }
 
 // _____________________________________________________________________________
@@ -1406,12 +1413,35 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
             << ", Date = " << indexFormatVersion.date_.toStringAndType().first
             << ")." << std::endl;
       } else {
+        // If the index is in exactly the format that the
+        // `qlever-upgrade-index` binary upgrades from, throw one dedicated
+        // message instead of logging the generic advice below, so that the
+        // upgrade option is not buried among the generic alternatives.
+        using namespace qlever::indexFormatConverter;
+        if (indexFormatVersion == sourceVersion &&
+            currentVersion == targetVersion) {
+          throw std::runtime_error{absl::StrCat(
+              "The index format changed on ",
+              targetVersion.date_.toStringAndType().first,
+              " (PR = ", targetVersion.prNumber_,
+              "), but your index uses the previous format\n\nWe do our best "
+              "to keep index format changes rare, but sometimes they are "
+              "unavoidable. Either use an older version of QLever, or rebuild "
+              "the index from scratch with the version of QLever you are "
+              "currently using, or upgrade your index with the following "
+              "command. Upgrading your index is more than 10 times faster "
+              "than rebuilding it from scratch, and the old index is "
+              "preserved in a subdirectory of your index directory in case "
+              "something goes wrong.\n\nqlever upgrade-index ",
+              std::string(onDiskBase_.size(), ' '),
+              "   (if you use the qlever CLI)\n", "qlever-upgrade-index ",
+              onDiskBase_, "   (if the qlever-* binaries are in your PATH)\n")};
+        }
         AD_LOG_ERROR
             << "The index is too old for this version of QLever. "
-               "We recommend that you rebuild the index and start the "
-               "server with the current master. Alternatively start the "
-               "engine with a version of QLever that is compatible with "
-               "this index (PR = "
+               "Either rebuild the index from scratch with the version of "
+               "QLever you are currently using, or use an older version of "
+               "QLever that is compatible with this index (PR = "
             << indexFormatVersion.prNumber_
             << ", Date = " << indexFormatVersion.date_.toStringAndType().first
             << ")." << std::endl;
@@ -1465,7 +1495,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   } else {
     AD_LOG_ERROR
         << "Key \"locale\" is missing in the metadata. This is probably "
-           "and old index build that is no longer supported by QLever. "
+           "an old index build that is no longer supported by QLever. "
            "Please rebuild your index\n";
     throw std::runtime_error(
         "Missing required key \"locale\" in index build's metadata");
@@ -1634,8 +1664,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
-                << "\"" << std::endl;
+                << "\" "
+                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+                << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN

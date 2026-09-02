@@ -18,9 +18,15 @@ Index::Index(Index&&) noexcept = default;
 // See
 // https://stackoverflow.com/questions/13414652/forward-declaration-with-unique-ptr
 Index::~Index() {
-  if (pimpl_) {
-    AD_LOG_INFO << "Index at " << pimpl_->getOnDiskBase() << " was unloaded."
-                << std::endl;
+  // NOTE: The message is only logged for an index that was loaded from disk.
+  // It is useful when a process unloads an index and keeps running, in
+  // particular when the runtime index rebuild retires the old index as soon
+  // as the last query on it has finished (see `Qlever::swapInRebuiltIndex`).
+  // For an index that was merely built (`qlever-index`), it would be
+  // confusing, because that index was never loaded in the first place.
+  if (pimpl_ && pimpl_->wasLoadedFromDisk()) {
+    AD_LOG_INFO << "Index with basename \"" << pimpl_->getOnDiskBase()
+                << "\" was unloaded" << std::endl;
   }
 }
 
