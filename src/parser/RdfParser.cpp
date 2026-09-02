@@ -1280,7 +1280,10 @@ std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
       // first error.
       parallelParser_.finish();
       parallelParser_.waitUntilFinished();
-      auto errors = std::move(*errorMessages_.wlock());
+      // NOTE: Copy the error messages instead of moving them. With concurrent
+      // calls to `getBatch`, the queue rethrows its exception to every caller,
+      // so every caller ends up in this catch block and has to see the errors.
+      auto errors = *errorMessages_.rlock();
       const auto& firstError =
           ql::ranges::min_element(errors, {}, ad_utility::first);
       AD_CORRECTNESS_CHECK(firstError != errors.end());
