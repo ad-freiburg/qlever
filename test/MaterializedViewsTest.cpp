@@ -1512,7 +1512,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
         viewScan("bindView", "?s2", "?o2", "?_ql_materialized_view_o", 3,
                  AC{{3, V{"?bind"}}});
     qpExpect(qlv(), bindThroughSpatialJoin,
-             h::spatialJoin(
+             h::spatialJoinFilterSubstitute(
                  100, -1, V{"?o"}, V{"?o2"}, std::nullopt,
                  PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
                  SpatialJoinType::WITHIN_DIST, std::nullopt,
@@ -1868,7 +1868,7 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
   {
     auto plannedQuery = qlv.parseAndPlanQuery(spatialJoinQuery);
     auto& qet = plannedQuery.queryExecutionTree();
-    auto sjMatcher = h::spatialJoin(
+    auto sjMatcher = h::spatialJoinFilterSubstitute(
         -1, -1, V{"?geometry1"}, V{"?geometry2"}, std::nullopt,
         PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
         SpatialJoinType::INTERSECTS, std::nullopt,
