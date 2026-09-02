@@ -7,16 +7,9 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-// Tests for the materialized views themselves: writing, loading, deleting,
-// configuration, columns, scanning, server integration and `BIND` substitution.
-// Rewriting a query to use a view is tested in
-// `MaterializedViewsPatternRewriteTest.cpp` and
-// `MaterializedViewsCacheKeyRewriteTest.cpp`.
-
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
-#include <chrono>
 #include <functional>
 #include <string_view>
 
