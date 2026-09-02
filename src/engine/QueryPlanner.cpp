@@ -1,13 +1,18 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2015 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025        Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/QueryPlanner.h"
 
+#include <absl/numeric/bits.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
@@ -2697,8 +2702,8 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
 
   // The `MaterializedViewsManager` provides `IndexScan` instances for all the
   // subsets of `triples` it can rewrite. The individual results do not cover
-  // all items of `triples`, instead each has a vector of triple indices it
-  // covers.
+  // all items of `triples`, instead each has a bitmask of the triple indices
+  // it covers (matching `_idsOfIncludedNodes`'s representation).
   auto scans = _qec->materializedViewsManager().makeJoinReplacementIndexScans(
       _qec, triples);
   plans.reserve(triples._triples.size());
@@ -2709,14 +2714,13 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
     auto plan = makeSubtreePlan<IndexScan>(scan);
     // This is equivalent to a join between the covered triples, so we must mark
     // all included nodes.
-    for (auto tripleIdx : coveredTriples) {
-      plan._idsOfIncludedNodes |= (1ULL << tripleIdx);
-    }
+    plan._idsOfIncludedNodes |= coveredTriples;
+    size_t numCoveredTriples = absl::popcount(coveredTriples);
     // Empty vectors of replacement plans for smaller numbers of triples.
-    for (size_t i = plans.size(); i < coveredTriples.size(); ++i) {
+    for (size_t i = plans.size(); i < numCoveredTriples; ++i) {
       plans.push_back({});
     }
-    plans.at(coveredTriples.size() - 1).push_back(std::move(plan));
+    plans.at(numCoveredTriples - 1).push_back(std::move(plan));
   }
   return plans;
 }
