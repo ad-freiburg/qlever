@@ -12,6 +12,7 @@
 
 #include "engine/QueryPlanner.h"
 
+#include <absl/numeric/bits.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
