@@ -1585,13 +1585,6 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   dpTab.push_back(std::move(connectedComponent));
   size_t numSeeds = findUniqueNodeIds(dpTab.back(), false);
 
-  if (numSeeds < 2) {
-    // Apply filter substitutes also in cases with less than two seeds
-    // (currently used for `SpatialJoin` with a fixed-value side).
-    applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(dpTab.back(),
-                                                            filters);
-  }
-
   for (size_t k = 2; k <= numSeeds; ++k) {
     AD_LOG_TRACE << "Producing plans that unite " << k << " triples."
                  << std::endl;
@@ -1623,8 +1616,10 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     checkCancellation();
   }
   auto& result = dpTab.back();
-  // A full-cover replacement plan lands directly in the final row, so, as in
-  // the `numSeeds < 2` case above, apply enforced filter substitutes here too.
+  // Apply enforced filter substitutes (currently `SpatialJoin` with a
+  // fixed-value side). Both a connected component with a single seed and a
+  // full-cover replacement plan land in the final row without passing through
+  // a DP round that may apply substitutes, so they are handled here.
   applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(result, filters);
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
                                                                      filters);
