@@ -29,6 +29,12 @@ std::vector<MaterializedViewJoinReplacement>
 QueryPatternCache::makeJoinReplacementIndexScans(
     QueryExecutionContext* qec,
     const parsedQuery::BasicGraphPattern& triples) const {
+  // We do not allow `triples` to contain more than 64 triples, because we use a
+  // 64-bit bitmask for them. This is not a problem, because `QueryPlanner` does
+  // not allow graph patterns with more than 64 triples anyway.
+  AD_CONTRACT_CHECK(triples._triples.size() <= 64,
+                    "At most 64 triples allowed at the moment.");
+
   std::vector<MaterializedViewJoinReplacement> result;
 
   // All triples of the form `anything <iri> ?variable` where `<iri>` is covered
@@ -109,7 +115,8 @@ static bool isExistentialObject(const TripleComponent& component,
 // `?s rdf:type <SomeClass>`, see `ChainInfo::restrictions_`) has an exact
 // counterpart among the query's `triples`, with the view's chain variables
 // translated to the query's corresponding components. The indices of the
-// matched query triples are appended to `coveredTriples` (they are covered by
+// matched query triples are added to the `coveredTriples` bitmask (they are
+// covered by
 // the view scan just like the two chain triples). Returns `false` if any
 // restriction has no counterpart; the view must not be used for the query
 // then, because it only contains the rows satisfying the restrictions.
@@ -117,7 +124,7 @@ static bool chainRestrictionsCoveredByQuery(
     const ChainInfo& chainInfo, const TripleComponent& querySubject,
     const Variable& queryChain, const Variable& queryObject,
     const parsedQuery::BasicGraphPattern& triples,
-    std::vector<size_t>& coveredTriples) {
+    uint64_t& coveredTriples) {
   for (const auto& restriction : chainInfo.restrictions_) {
     // Translate the restriction's subject (one of the view's three chain
     // variables, enforced by `analyzeSimpleChain`) to the query's side.
@@ -154,16 +161,15 @@ static bool chainRestrictionsCoveredByQuery(
     // above), but let it be evaluated separately (a cheap existence check)
     // instead of covering it.
     if (mappedSubject.isVariable()) {
-      coveredTriples.push_back(std::distance(triples._triples.begin(), it));
+      size_t idx = std::distance(triples._triples.begin(), it);
+      coveredTriples |= (uint64_t{1} << idx);
     }
   }
   // Duplicate restrictions in the view's query would match the same query
   // triple twice; the number of covered triples determines the plan's round
   // in the query planner's dynamic programming table, so it must be exact.
-  ql::ranges::sort(coveredTriples);
-  coveredTriples.erase(
-      std::unique(coveredTriples.begin(), coveredTriples.end()),
-      coveredTriples.end());
+  // Setting a bit twice is idempotent, so the bitmask needs no explicit
+  // deduplication.
   return true;
 }
 
@@ -216,7 +222,8 @@ void QueryPatternCache::makeScansFromChainCandidates(
           }
           // If the view was built with restriction triples, the query must
           // contain matching triples, which the scan then also covers.
-          std::vector<size_t> coveredTriples{tripleIdxLeft, tripleIdxRight};
+          uint64_t coveredTriples = (uint64_t{1} << tripleIdxLeft) |
+                                    (uint64_t{1} << tripleIdxRight);
           if (!chainRestrictionsCoveredByQuery(chainInfo, left.s_, varLeft,
                                                right.o_.getVariable(), triples,
                                                coveredTriples)) {
@@ -227,7 +234,7 @@ void QueryPatternCache::makeScansFromChainCandidates(
           result.push_back(
               {makeScanForSingleChain(qec, chainInfo, left.s_, varLeft,
                                       right.o_.getVariable()),
-               std::move(coveredTriples)});
+               coveredTriples});
         }
       }
     }
@@ -300,7 +307,7 @@ void QueryPatternCache::makeScansFromStarCandidates(
       if (ql::ranges::includes(queryPredicates,
                                starInfo.arms_ | ql::views::keys)) {
         parsedQuery::MaterializedViewQuery::RequestedColumns cols;
-        std::vector<size_t> coveredTriples;
+        uint64_t coveredTriples = 0;
 
         // The subject must be read.
         cols.insert({starInfo.subject_, subject});
@@ -310,13 +317,13 @@ void QueryPatternCache::makeScansFromStarCandidates(
           size_t idx = predicateToTripleIdx.at(predicate);
           auto queryObject = triples._triples.at(idx).o_;
           cols.insert({object, queryObject});
-          coveredTriples.push_back(idx);
+          coveredTriples |= (uint64_t{1} << idx);
         }
 
         // Construct the `MaterializedViewJoinReplacement`, in particular the
         // `IndexScan`.
-        result.push_back({makeScanForStar(qec, view, std::move(cols)),
-                          std::move(coveredTriples)});
+        result.push_back(
+            {makeScanForStar(qec, view, std::move(cols)), coveredTriples});
       }
     }
   }

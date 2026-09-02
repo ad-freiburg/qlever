@@ -687,6 +687,16 @@ TEST(ServerTest, handleHttpRequest) {
       http::verb::get, "/",
       {{http::field::authorization, "correct_token_wrong_format"}}));
   EXPECT_THAT(response, StatusIs(http::status::bad_request));
+
+  // A `timeout` above the server default without a valid access token is
+  // rejected before the query runs: `HttpError` -> forbidden.
+  response = server.handleHttpRequest(makePostRequest(
+      "/?timeout=60s", "application/sparql-query", "ASK { ?s ?p ?o }"));
+  EXPECT_THAT(response, StatusIs(http::status::forbidden));
+  EXPECT_THAT(
+      responseBodyToString(std::move(response.body())),
+      testing::HasSubstr("User submitted timeout was higher than what is "
+                         "currently allowed by this instance (30s)"));
 }
 
 // _____________________________________________________________________________
