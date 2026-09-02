@@ -36,9 +36,9 @@ void TensorIndexQuery::addParameter(const SparqlTriple& triple) {
             "maximum "
             "number of nearest neighbors)");
     maxResults_ = object.getInt();
-  } else if (predString == "numNeighbors") {
+  } else if (predString == "nNeighbors") {
     throwIf(!object.isInt(),
-            "The parameter `<numNeighbours>` expects an integer (the "
+            "The parameter `<nNeighbors>` expects an integer (the "
             "number "
             "nearest neighbors in the tree)");
     nNeighbors_ = object.getInt();
@@ -135,7 +135,7 @@ void TensorIndexQuery::addParameter(const SparqlTriple& triple) {
     throw TensorIndexException(absl::StrCat(
         "Unsupported argument ", predString,
         " in tensor search; supported arguments are: `<left>`, `<right>`, "
-        "`<numNearestNeighbors>`, `<searchK>`, `<kIVF>`, "
+        "`<nNeighbors>`, `<searchK>`, `<kIVF>`, "
         "`<algo>`, `<distance>`, `<payload>`, and "
         "`<experimentalRightCacheName>`"));
   }

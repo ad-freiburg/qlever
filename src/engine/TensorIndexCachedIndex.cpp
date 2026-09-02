@@ -202,15 +202,15 @@ std::vector<TensorIndexCachedIndex::FaissResult> TensorIndexCachedIndex::findNN(
       [&](const auto& idx) -> void {
         using T = std::decay_t<decltype(idx)>;
         if (config_.searchK_.has_value()) {
-          AD_LOG_INFO << "Using " << config_.searchK_.value();
+          AD_LOG_DEBUG << "Using " << config_.searchK_.value();
           if constexpr (std::is_same_v<T,
                                        std::shared_ptr<faiss::IndexIVFFlat>>) {
-            AD_LOG_INFO << "; Setting nprobe to " << config_.searchK_.value()
+            AD_LOG_DEBUG << "; Setting nprobe to " << config_.searchK_.value()
                         << "\n";
             idx->nprobe = config_.searchK_.value();
           } else if constexpr (std::is_same_v<
                                    T, std::shared_ptr<faiss::IndexHNSWFlat>>) {
-            AD_LOG_INFO << "; Setting efSearch to " << config_.searchK_.value()
+            AD_LOG_DEBUG << "; Setting efSearch to " << config_.searchK_.value()
                         << "\n";
             idx->hnsw.efSearch = config_.searchK_.value();
           } else {
