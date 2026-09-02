@@ -2574,13 +2574,13 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)jcs;
   (void)leftSideTransitivePath;
-  return {std::nullopt, std::nullopt};
+  return TransitivePathJoinCols();
 #else
   // If there are more than two pairs of join columns, we have a graph
   // variable. In that case, we compute the full transitive hull (followed by a
   // multi-column join).
   if (jcs.size() > 2) {
-    return {};
+    return TransitivePathJoinCols();
   }
 
   // The index in `jcs` of the transitive path side and the other side.
@@ -2613,8 +2613,8 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
       return TransitivePathJoinCols(std::make_tuple(transitiveColA, otherColA));
     }
     // Bind two regular columns at once.
-    return {std::make_tuple(transitiveColA, otherColA),
-            std::make_tuple(transitiveColB, otherColB)};
+    return TransitivePathJoinCols(std::make_tuple(transitiveColA, otherColA),
+                                  std::make_tuple(transitiveColB, otherColB));
   }
   AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
   AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
@@ -2652,13 +2652,13 @@ auto QueryPlanner::createJoinWithTransitivePath(
   // Get all columns that can be joined with each other. May either be zero, one
   // or two pairs.
   auto joinCols = getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
-  if (!joinCols.startCols.has_value()) {
+  if (!joinCols.startCols_.has_value()) {
     // There were no columns found on which a transitive path can be bound to.
     return std::nullopt;
   }
 
   // An unbound transitive path has at most two columns we can bind to.
-  const auto& [firstColTransPath, firstColOther] = joinCols.startCols.value();
+  const auto& [firstColTransPath, firstColOther] = joinCols.startCols_.value();
   AD_CONTRACT_CHECK(firstColTransPath <= 1);
 
   // The left or right side is a transitive path and its join column corresponds
@@ -2668,9 +2668,9 @@ auto QueryPlanner::createJoinWithTransitivePath(
     auto secondSide = std::optional<decltype(firstSide)>();
 
     // Assign the targeet side if given.
-    if (joinCols.targetCols.has_value()) {
+    if (joinCols.targetCols_.has_value()) {
       const auto& [secondColTransPath, secondColOther] =
-          joinCols.targetCols.value();
+          joinCols.targetCols_.value();
       AD_CONTRACT_CHECK(secondColTransPath <= 1 &&
                         secondColTransPath != firstColTransPath);
       secondSide = std::pair{otherTree, secondColOther};

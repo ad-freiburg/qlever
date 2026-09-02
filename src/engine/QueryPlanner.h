@@ -420,12 +420,12 @@ class QueryPlanner {
   // sides' columns exist, the start side's must also exist.
   struct TransitivePathJoinCols {
     using T = std::tuple<size_t, size_t>;
-    const std::optional<T> startCols;
-    const std::optional<T> targetCols;
+    const std::optional<T> startCols_;
+    const std::optional<T> targetCols_;
 
     TransitivePathJoinCols() = default;
-    explicit TransitivePathJoinCols(T p) : startCols(p) {}
-    TransitivePathJoinCols(T p, T s) : startCols(p), targetCols(s) {}
+    explicit TransitivePathJoinCols(T p) : startCols_(p) {}
+    TransitivePathJoinCols(T p, T s) : startCols_(p), targetCols_(s) {}
   };
 
   // Return two pairs of join columns (the first from the transitive path
