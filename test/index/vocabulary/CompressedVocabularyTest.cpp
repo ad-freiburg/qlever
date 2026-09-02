@@ -257,9 +257,10 @@ static_assert(std::is_same_v<
               CompressedVocabularyWithHoles::DiskWriterWithExplicitIndices>);
 
 // The words of the vocabulary with holes that the tests below use, sorted (as
-// the underlying vocabulary requires sorted input at write time). NOTE: The
-// numbers have a fixed width (so that the words are sorted also for more than
-// ten words), and each word ends in a letter (so that the tests for
+// the underlying vocabulary requires sorted input at write time).
+//
+// NOTE: The numbers have a fixed width (so that the words are sorted also for
+// more than ten words), and each word ends in a letter (so that the tests for
 // `lower_bound` and `upper_bound` can make a word slightly larger or smaller
 // without hitting one of the neighbouring words).
 std::vector<std::string> wordsWithHoles() {

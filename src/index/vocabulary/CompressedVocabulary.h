@@ -256,6 +256,7 @@ CPP_template(typename UnderlyingVocabulary,
 
   /// Allows the incremental writing of the words to disk. Uses `WordWriter` of
   /// the underlying vocabulary.
+  //
   // NOTE: This class is a template with the `UnderlyingVocab` defaulted to the
   // `UnderlyingVocabulary` of the enclosing class (it is never instantiated
   // with anything else). This is necessary because its member functions don't
