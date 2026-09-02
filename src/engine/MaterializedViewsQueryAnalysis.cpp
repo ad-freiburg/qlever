@@ -71,20 +71,22 @@ std::optional<std::vector<size_t>> connectedOrder(
 }  // namespace
 
 // _____________________________________________________________________________
-PatternMatcherLimits PatternMatcherLimits::perViewShare(size_t numViews) const {
-  AD_CORRECTNESS_CHECK(numViews > 0);
-  constexpr size_t minNumAssignmentsPerView = 1'000;
-  constexpr size_t minNumReplacementPlansPerView = 15;
-  return {
-      std::max(minNumAssignmentsPerView, numAssignments_ / numViews),
-      std::max(minNumReplacementPlansPerView, numReplacementPlans_ / numViews)};
-}
-
-// _____________________________________________________________________________
 PatternMatcherLimits PatternMatcherLimits::requestBounded(
     PatternMatcherLimits requestedAmount) const {
   return {std::min(numAssignments_, requestedAmount.numAssignments_),
           std::min(numReplacementPlans_, requestedAmount.numReplacementPlans_)};
+}
+
+// _____________________________________________________________________________
+PatternMatcherLimits PatternMatcherLimits::nextViewShare(
+    size_t viewsLeft) const {
+  AD_CORRECTNESS_CHECK(viewsLeft > 0);
+  constexpr size_t minNumAssignmentsPerView = 1'000;
+  constexpr size_t minNumReplacementPlansPerView = 15;
+  return requestBounded(
+      {std::max(minNumAssignmentsPerView, numAssignments_ / viewsLeft),
+       std::max(minNumReplacementPlansPerView,
+                numReplacementPlans_ / viewsLeft)});
 }
 
 // _____________________________________________________________________________
@@ -214,23 +216,32 @@ QueryPatternCache::makeJoinReplacementIndexScans(
                        candidateViews.end());
 
   // Match all `candidateViews` against the query, using a shared pool of limits
-  // across them.
+  // across them. Each view's share is recomputed from the budget still
+  // `remaining` and the number of views left to process.
   PatternMatcherLimits remaining{totalNumAssignments, totalNumReplacementPlans};
-  const PatternMatcherLimits share =
-      remaining.perViewShare(candidateViews.size());
+  bool truncatedByNumAssignments = false;
+  bool truncatedByNumReplacementPlans = false;
+  size_t numViewsLeft = candidateViews.size();
   for (const auto& [name, view] : candidateViews) {
     if (remaining.isExhausted()) {
       break;
     }
-    remaining.subtract(PatternMatcher::findReplacementPlans(
-                           patterns_.at(view), triples, triplesByPredicate, qec,
-                           remaining.requestBounded(share), result)
-                           .used_);
+    auto report = PatternMatcher::findReplacementPlans(
+        patterns_.at(view), triples, triplesByPredicate, qec,
+        remaining.nextViewShare(numViewsLeft), result);
+    remaining.subtract(report.used_);
+    truncatedByNumAssignments |=
+        report.status_ ==
+        PatternMatcher::MatchStatus::TruncatedByNumAssignments;
+    truncatedByNumReplacementPlans |=
+        report.status_ ==
+        PatternMatcher::MatchStatus::TruncatedByNumReplacementPlans;
+    --numViewsLeft;
   }
-  if (remaining.isExhausted()) {
+  if (truncatedByNumAssignments || truncatedByNumReplacementPlans) {
     AD_LOG_WARN
         << "Pattern matching for materialized views hit the `"
-        << (remaining.numAssignments_ == 0
+        << (truncatedByNumAssignments
                 ? "materialized-view-pattern-match-num-assignments"
                 : "materialized-view-pattern-match-num-replacement-plans")
         << "` cap; some applicable rewrites may have been missed for this "

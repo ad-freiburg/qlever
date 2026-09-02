@@ -49,10 +49,6 @@ struct PatternMatcherLimits {
   size_t numAssignments_;
   size_t numReplacementPlans_;
 
-  // A fixed, floored share of these limits, so the limits apply per query
-  // rather than per (view, query) pair.
-  PatternMatcherLimits perViewShare(size_t numViews) const;
-
   bool isExhausted() const {
     return numAssignments_ == 0 || numReplacementPlans_ == 0;
   }
@@ -60,6 +56,9 @@ struct PatternMatcherLimits {
   // Limit a given `requestedAmount` to at most all that is available.
   PatternMatcherLimits requestBounded(
       PatternMatcherLimits requestedAmount) const;
+
+  // The budget to offer the next of `viewsLeft` views.
+  PatternMatcherLimits nextViewShare(size_t viewsLeft) const;
 
   void subtract(PatternMatcherLimits used);
 };
