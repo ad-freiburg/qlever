@@ -13,7 +13,7 @@
 
 #include "util/Log.h"
 
-namespace exceptionLogging {
+namespace ad_utility::exceptionLogging {
 
 // ___________________________________________________________________________
 void logErrorWithHighlighting(
@@ -36,4 +36,4 @@ void logErrorWithHighlighting(
   }
 }
 
-}  // namespace exceptionLogging
+}  // namespace ad_utility::exceptionLogging

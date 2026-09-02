@@ -15,7 +15,7 @@
 
 #include "util/ParseException.h"
 
-namespace exceptionLogging {
+namespace ad_utility::exceptionLogging {
 
 // Log `errorMsg`. If `metadata` is present, additionally try to log the
 // query with the offending clause highlighted (see
@@ -25,6 +25,6 @@ namespace exceptionLogging {
 void logErrorWithHighlighting(std::string& errorMsg,
                               const std::optional<ExceptionMetadata>& metadata);
 
-}  // namespace exceptionLogging
+}  // namespace ad_utility::exceptionLogging
 
 #endif  // QLEVER_SRC_UTIL_EXCEPTIONLOGGING_H

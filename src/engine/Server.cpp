@@ -1391,8 +1391,8 @@ CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
     co_return co_await send(std::move(resp));
   }
   if (exceptionErrorMsg) {
-    exceptionLogging::logErrorWithHighlighting(exceptionErrorMsg.value(),
-                                               metadata);
+    ad_utility::exceptionLogging::logErrorWithHighlighting(
+        exceptionErrorMsg.value(), metadata);
     auto errorResponseJson = responseJson::composeError(
         operationString, exceptionErrorMsg.value(), requestTimer, metadata);
     if (plannedQuery.has_value()) {
