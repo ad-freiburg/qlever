@@ -589,8 +589,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   using WorkerResult = BuildPartialVocabulariesResult::WorkerResult;
   BuildPartialVocabulariesResult result;
   {
-    ad_utility::TaskQueue<> workerPool{NUM_PARALLEL_ITEM_MAPS,
-                                       NUM_PARALLEL_ITEM_MAPS};
+    ad_utility::TaskQueue<> workerPool{1, NUM_PARALLEL_ITEM_MAPS};
     std::vector<std::future<WorkerResult>> futures;
     for (size_t workerIdx : ad_utility::integerRange(NUM_PARALLEL_ITEM_MAPS)) {
       futures.push_back(
