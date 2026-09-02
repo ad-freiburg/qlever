@@ -61,14 +61,15 @@ class ServerForTesting {
   std::unique_ptr<Server> server_;
 
  public:
-  explicit ServerForTesting(size_t numThreads, std::string accessToken,
-                            const qlever::EngineConfig& config,
-                            bool noAccessCheck = false,
-                            std::shared_ptr<ad_utility::metrics::MetricsReader>
-                                metricsReader = nullptr)
-      : server_{std::make_unique<Server>(4321, numThreads,
-                                         std::move(accessToken), config,
-                                         noAccessCheck, metricsReader)} {}
+  explicit ServerForTesting(
+      size_t numThreads, std::string accessToken,
+      const qlever::EngineConfig& config, bool noAccessCheck = false,
+      std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader =
+          nullptr,
+      std::shared_ptr<ad_utility::RebuildTracker> rebuildTracker = nullptr)
+      : server_{std::make_unique<Server>(
+            4321, numThreads, std::move(accessToken), config, noAccessCheck,
+            std::move(metricsReader), std::move(rebuildTracker))} {}
 
   // Accessors for the `Server` and `DeltaTriples`.
   Server& server() { return *server_; }
