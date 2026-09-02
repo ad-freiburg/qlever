@@ -427,14 +427,15 @@ Awaitable<nlohmann::json> Server::processWriteMaterializedView(
       queryThreadPool_,
       [name, query, requestTimer, cancellationHandle, timeLimit,
        this]() mutable {
-        qlever().writeMaterializedView(
+        return qlever().writeMaterializedView(
             name, std::move(query.query_), query.datasetClauses_,
             std::move(cancellationHandle), timeLimit, requestTimer);
       },
       cancellationHandle);
-  co_await std::move(coroutine);
+  auto warnings = co_await std::move(coroutine);
 
-  co_return nlohmann::json{{"materialized-view-written", name}};
+  co_return nlohmann::json{{"materialized-view-written", name},
+                           {"warnings", warnings}};
 }
 
 // _____________________________________________________________________________

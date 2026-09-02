@@ -252,6 +252,56 @@ TEST_F(MaterializedViewsTest, ParserConfigChecks) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, PatternRewriteWarnings) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  MaterializedViewsManager manager{testIndexBase_};
+
+  // Write a view for `query` and return the warnings collected while doing
+  // so, checking that each of them was also logged via `AD_LOG_WARN`.
+  auto writeAndGetWarnings = [&](std::string viewName, std::string query,
+                                 ad_utility::source_location location =
+                                     AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(location);
+    clearLog();
+    auto plan = qlv().parseAndPlanQuery(std::move(query));
+    auto warnings = manager.writeViewToDisk(std::move(viewName), plan);
+    for (const auto& warning : warnings) {
+      EXPECT_THAT(log_.str(), ::testing::HasSubstr(warning));
+    }
+    return warnings;
+  };
+
+  // Blank node label.
+  EXPECT_THAT(writeAndGetWarnings("blankNodeView",
+                                  "SELECT * { ?s ?p _:b1 . _:b1 <p2> ?o }"),
+              ::testing::ElementsAre(::testing::HasSubstr("blank nodes")));
+
+  // `[ ... ]` shorthand.
+  EXPECT_THAT(
+      writeAndGetWarnings("shorthandView", "SELECT * { ?s ?p [ <p2> ?o ] }"),
+      ::testing::ElementsAre(::testing::HasSubstr("shorthand")));
+
+  // Simple sequence property path (`/`).
+  EXPECT_THAT(
+      writeAndGetWarnings("seqPathView", "SELECT * { ?s <p1>/<p2> ?o }"),
+      ::testing::ElementsAre(::testing::HasSubstr("property path")));
+
+  // Simple inverse property path (`^`).
+  EXPECT_THAT(writeAndGetWarnings("invPathView", "SELECT * { ?s ^<p1> ?o }"),
+              ::testing::ElementsAre(::testing::HasSubstr("property path")));
+
+  // Alternative paths (`|`) cannot be rewritten as a chain of simple triples,
+  // so no warning fires for them.
+  EXPECT_THAT(
+      writeAndGetWarnings("altPathView", "SELECT * { ?s <p1>|<p2> ?o }"),
+      ::testing::IsEmpty());
+
+  // A plain query without any of the above gets no warnings.
+  EXPECT_THAT(writeAndGetWarnings("plainView", simpleWriteQuery_),
+              ::testing::IsEmpty());
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
   // Simple materialized view for testing the checks when querying.
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);

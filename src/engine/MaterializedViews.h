@@ -105,6 +105,12 @@ class MaterializedViewWriter {
   // subquery.
   void throwIfLimitOffset() const;
 
+  // Called from the constructor. Warns (via `AD_LOG_WARN` and
+  // `parsedQuery_.warnings()`) if the query uses blank nodes/`[ ... ]` or a
+  // `/`/`^`-only property path, both of which block pattern-based query
+  // rewriting even though avoiding them is easy.
+  void warnAboutPatternRewriteObstacles();
+
   // Get the base filename for the view's permutation and metadata files. This
   // name is the result of concatenating `onDiskBase` and `name`.
   std::string getFilenameBase() const;
@@ -159,6 +165,12 @@ class MaterializedViewWriter {
   // Actually computes, permutes and if needed externally sorts the query result
   // and writes the view (SPO permutation and metadata) to disk.
   void computeResultAndWritePermutation() const;
+
+  // Return the warnings collected by `warnAboutPatternRewriteObstacles` while
+  // validating the query used to write this view.
+  const std::vector<std::string>& warnings() const {
+    return parsedQuery_.warnings();
+  }
 
   friend MaterializedViewsManager;
 };
@@ -466,7 +478,10 @@ class MaterializedViewsManager {
   // The `memoryLimit` and `allocator` are used only for sorting the
   // permutation if the query result is not correctly sorted already. The
   // `plannedQuery` is executed with the normal query memory limit.
-  void writeViewToDisk(
+  //
+  // Returns warnings about constructs in the query that block pattern-based
+  // rewriting (blank nodes/`[ ... ]`, simple `/`/`^`-only property paths).
+  std::vector<std::string> writeViewToDisk(
       std::string name, const qlever::PlannedQuery& plannedQuery,
       ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
       ad_utility::AllocatorWithLimit<Id> allocator =
