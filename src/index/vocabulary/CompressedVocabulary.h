@@ -12,6 +12,7 @@
 #include "index/vocabulary/PrefixHeuristic.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "index/vocabulary/WordBlockBuffer.h"
 #include "util/FsstCompressor.h"
 #include "util/InputRangeUtils.h"
 #include "util/OverloadCallOperator.h"
@@ -268,8 +269,13 @@ CPP_template(typename UnderlyingVocabulary,
   template <typename UnderlyingVocab = UnderlyingVocabulary>
   class DiskWriterFromUncompressedWords : public WordWriterBase {
    private:
-    std::vector<std::string> wordBuffer_;
-    std::vector<bool> isExternalBuffer_;
+    // The capacities of the queues below. They also bound the number of blocks
+    // that are in flight at the same time, and thus the number of buffers that
+    // the `bufferPool_` has to keep for reuse.
+    static constexpr size_t writeQueueSize_ = 5;
+    static constexpr size_t compressQueueSize_ = 10;
+    static constexpr size_t numCompressThreads_ = 10;
+
     std::vector<typename CompressionWrapper::Decoder> decoders_;
     typename UnderlyingVocab::WordWriter underlyingWriter_;
     std::string filenameDecoders_;
@@ -277,15 +283,24 @@ CPP_template(typename UnderlyingVocabulary,
     ad_utility::MemorySize compressedSize_ = bytes(0);
     size_t numBlocks_ = 0u;
     size_t numBlocksLargerWhenCompressed_ = 0u;
+    // The buffer for the block that is currently being filled, and the pool
+    // that the buffers of already written blocks are returned to. Note: The
+    // pool has to be declared before the queues and the thread below, such that
+    // it is destroyed only after all the tasks that use it have finished.
+    ad_utility::vocabulary::WordBlockBufferPool bufferPool_{
+        writeQueueSize_ + compressQueueSize_ + numCompressThreads_ + 1};
+    ad_utility::vocabulary::WordBlockBufferPool::Ptr wordBuffer_ =
+        bufferPool_.acquire();
     ad_utility::data_structures::OrderedThreadSafeQueue<std::function<void()>>
-        writeQueue_{5};
+        writeQueue_{writeQueueSize_};
     ad_utility::JThread writeThread_{[this] {
       while (auto opt = writeQueue_.pop()) {
         opt.value()();
       }
     }};
     std::atomic<size_t> queueIndex_ = 0;
-    ad_utility::TaskQueue<false> compressQueue_{10, 10};
+    ad_utility::TaskQueue<false> compressQueue_{compressQueueSize_,
+                                                numCompressThreads_};
     uint64_t counter_ = 0;
 
    public:
@@ -295,12 +310,14 @@ CPP_template(typename UnderlyingVocabulary,
         : underlyingWriter_{filenameWords},
           filenameDecoders_{filenameDecoders} {}
 
-    /// Compress the `uncompressedWord` and write it to disk.
+    /// Compress the `uncompressedWord` and write it to disk. Note: The word is
+    /// only copied into the buffer for the current block here, the actual
+    /// compression and writing happens once the block is full (see
+    /// `finishBlock`).
     uint64_t operator()(std::string_view uncompressedWord,
                         bool isExternal) override {
-      wordBuffer_.emplace_back(uncompressedWord);
-      isExternalBuffer_.push_back(isExternal);
-      if (wordBuffer_.size() == NumWordsPerBlock) {
+      wordBuffer_->push(uncompressedWord, isExternal);
+      if (wordBuffer_->size() == NumWordsPerBlock) {
         finishBlock();
       }
       return counter_++;
@@ -354,9 +371,12 @@ CPP_template(typename UnderlyingVocabulary,
         const DiskWriterFromUncompressedWords&) = delete;
 
    private:
-    // Compress a complete block and write it to the underlying vocabulary.
+    // Compress a complete block and write it to the underlying vocabulary. The
+    // buffer of the block is passed on to the compressing and writing tasks and
+    // returned to the `bufferPool_` afterwards, so that its memory can be
+    // reused for a later block.
     void finishBlock() {
-      if (wordBuffer_.empty()) {
+      if (wordBuffer_->empty()) {
         return;
       }
 
@@ -365,39 +385,51 @@ CPP_template(typename UnderlyingVocabulary,
             words.begin(), words.end(), bytes(0),
             [](auto x, std::string_view v) { return x + bytes(v.size()); });
       };
-      auto uncompressedSize = getSize(wordBuffer_);
+      auto uncompressedSize = wordBuffer_->totalWordBytes();
       uncompressedSize_ += uncompressedSize;
 
-      auto compressAndWrite = [uncompressedSize, words = std::move(wordBuffer_),
-                               this, idx = queueIndex_++,
-                               isExternalBuffer =
-                                   std::move(isExternalBuffer_)]() mutable {
-        auto bulkResult = CompressionWrapper::compressAll(words);
+      auto compressAndWrite = [uncompressedSize,
+                               wordBuffer = std::exchange(
+                                   wordBuffer_, bufferPool_.acquire()),
+                               this, idx = queueIndex_++]() mutable {
+        auto bulkResult = CompressionWrapper::compressAll(wordBuffer->words());
         writeQueue_.push(std::pair{
-            idx, [uncompressedSize, bulkResult = std::move(bulkResult), this,
-                  isExternalBuffer = std::move(isExternalBuffer)]() {
+            idx, [uncompressedSize, bulkResult = std::move(bulkResult),
+                  wordBuffer = std::move(wordBuffer), this]() mutable {
               auto& [buffer, views, decoder] = bulkResult;
               auto compressedSize = getSize(views);
               compressedSize_ += compressedSize;
               ++numBlocks_;
               numBlocksLargerWhenCompressed_ +=
                   static_cast<size_t>(compressedSize > uncompressedSize);
-              size_t i = 0;
-              for (auto& word : views) {
-                if constexpr (std::is_invocable_v<decltype(underlyingWriter_),
-                                                  decltype(word), bool>) {
-                  underlyingWriter_(word, isExternalBuffer.at(i));
-                  ++i;
-                } else {
-                  underlyingWriter_(word);
-                }
-              }
+              writeWordsToUnderlyingWriter(views, *wordBuffer);
               decoders_.emplace_back(decoder);
+              bufferPool_.release(std::move(wordBuffer));
             }});
       };
       compressQueue_.push(std::move(compressAndWrite));
-      wordBuffer_.clear();
-      isExternalBuffer_.clear();
+    }
+
+    // Write the compressed `words` to the underlying writer, together with the
+    // `isExternal` flags that are stored in the `wordBuffer` (the latter are
+    // only used by those underlying vocabularies that support them).
+    template <typename Words>
+    void writeWordsToUnderlyingWriter(
+        const Words& words,
+        [[maybe_unused]] const ad_utility::vocabulary::WordBlockBuffer&
+            wordBuffer) {
+      using Word = decltype(*words.begin());
+      if constexpr (std::is_invocable_v<decltype(underlyingWriter_), Word,
+                                        bool>) {
+        AD_CORRECTNESS_CHECK(words.size() == wordBuffer.size());
+        for (size_t i = 0; i < words.size(); ++i) {
+          underlyingWriter_(words[i], wordBuffer.isExternal(i));
+        }
+      } else {
+        for (const auto& word : words) {
+          underlyingWriter_(word);
+        }
+      }
     }
   };
   // A writer for a `CompressedVocabulary` whose `UnderlyingVocabulary` supports
