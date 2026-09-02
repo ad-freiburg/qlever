@@ -8,6 +8,7 @@
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/TypeTraits.h"
@@ -20,13 +21,24 @@
 // Forward declaration for concepts below.
 class PolymorphicVocabulary;
 
-// Only the `SplitVocabulary` currently needs a special handling for
+// The `SplitVocabulary` and the vocabularies with "holes" (see
+// `VocabularyInMemoryBinSearch`) currently need a special handling for
 // `getPositionOfWord` (this includes the `PolymorphicVocabulary` which may
-// dynamically hold a `SplitVocabulary`)
+// dynamically hold one of those). For a vocabulary with holes, the generic
+// implementation would use `size()` as the "one past the end" index, which
+// because of the holes is in general much smaller than the largest index that
+// the vocabulary contains, so such a vocabulary provides its own
+// `getPositionOfWord`.
+// Note: This concept is related to, but broader than, the
+// `CompressedVocabulary::underlyingHasHoles` constant (see
+// `CompressedVocabulary.h`), which only states that the underlying vocabulary
+// of a `CompressedVocabulary` has holes. In particular, the `SplitVocabulary`
+// needs a special `getPositionOfWord` for a completely different reason.
 template <typename T>
 CPP_concept HasSpecialGetPositionOfWord =
-    std::is_same_v<T, PolymorphicVocabulary> ||
-    ad_utility::isInstantiation<T, SplitVocabulary>;
+    ad_utility::isInstantiation<T, SplitVocabulary> ||
+    ad_utility::SameAsAny<T, PolymorphicVocabulary, VocabularyInMemoryBinSearch,
+                          CompressedVocabulary<VocabularyInMemoryBinSearch>>;
 
 // As a safeguard for the future: Concept that a vocabulary does NOT require a
 // special handling for `getPositionOfWord`. Note that `CompressedVocabulary`
@@ -55,13 +67,16 @@ CPP_concept MaybeProvidesGeometryInfo =
 // implementation will never provide precomputed `GeometryInfo` via a
 // `getGeoInfo` method. A vocabulary class should only be added if it can be
 // GUARANTEED that this will be the case.
-// Note: Currently, this concept is identical with `HasDefaultGetPositionOfWord`
-// by coincidence. However, both concepts are semantically different.
+// Note: This concept is very similar to `HasDefaultGetPositionOfWord`, but the
+// two are semantically different (a vocabulary with holes needs a special
+// `getPositionOfWord`, but still never provides geometry information).
 template <typename T>
 CPP_concept NeverProvidesGeometryInfo =
     ad_utility::SameAsAny<T, VocabularyInMemory, VocabularyInternalExternal,
+                          VocabularyInMemoryBinSearch,
                           CompressedVocabulary<VocabularyInMemory>,
-                          CompressedVocabulary<VocabularyInternalExternal>>;
+                          CompressedVocabulary<VocabularyInternalExternal>,
+                          CompressedVocabulary<VocabularyInMemoryBinSearch>>;
 
 // A variadic version of `NeverProvidesGeometryInfo` that guarantees the
 // semantics of the named concept for all of its template parameters `Ts...`.
@@ -72,7 +87,8 @@ CPP_concept AllNeverProvideGeometryInfo =
 // A vocabulary implementation supports "zero-copy" (de)serialization if it (or,
 // recursively, its underlying vocabulary) provides a static
 // `fromZeroCopyDeserializer` factory. This currently holds for
-// `VocabularyInMemory` and for a `CompressedVocabulary` that wraps a
+// `VocabularyInMemory`, for `VocabularyInMemoryBinSearch` (the in-memory
+// vocabulary with holes), and for a `CompressedVocabulary` that wraps a
 // zero-copy-capable vocabulary, but not for the disk-backed
 // (`VocabularyInternalExternal`, `VocabularyOnDisk`) or split
 // (`SplitVocabulary`) vocabularies, which cannot be represented as a single
