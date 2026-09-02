@@ -611,9 +611,9 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Server::Awaitable<Server::ProcessCommandsResult> Server::processCommands(
+    Server::Awaitable<std::optional<Server::ResponseT>> Server::processCommands(
         const SharedIndexAndView& indexAndViews,
-        const ParamValueMap& parameters, const SparqlOperation& operation,
+        const ParamValueMap& parameters, SparqlOperation& operation,
         bool accessTokenOk, const ad_utility::Timer& requestTimer,
         RequestT& request) {
   using namespace ad_utility::httpUtils;
@@ -643,59 +643,55 @@ CPP_template_def(typename RequestT)(
     return composeCacheStats(cache, namedResultCache);
   };
 
-  ProcessCommandsResult result;
+  std::optional<ResponseT> result;
   if (commandIs("stats")) {
-    result.response_ = jsonResponse(composeIndexStats(index));
+    result = jsonResponse(composeIndexStats(index));
   } else if (commandIs("cache-stats")) {
-    result.response_ = jsonResponse(cacheStats());
+    result = jsonResponse(cacheStats());
   } else if (commandIs("clear-cache")) {
     cache().clearUnpinnedOnly();
-    result.response_ = jsonResponse(cacheStats());
+    result = jsonResponse(cacheStats());
   } else if (commandIs("clear-cache-complete")) {
     cache().clearAll();
-    result.response_ = jsonResponse(cacheStats());
+    result = jsonResponse(cacheStats());
   } else if (commandIs("clear-named-cache")) {
     namedResultCache().clear();
-    result.response_ = jsonResponse(cacheStats());
+    result = jsonResponse(cacheStats());
   } else if (commandIs("clear-delta-triples")) {
     auto countAfterClear = co_await processClearDeltaTriples();
-    result.response_ = jsonResponse(json(countAfterClear));
+    result = jsonResponse(json(countAfterClear));
   } else if (commandIs("vacuum-delta-triples")) {
     auto vacuumStats = co_await processVacuumDeltaTriples(
         checkParameter("timeout", std::nullopt), accessTokenOk);
-    result.response_ = jsonResponse(vacuumStats);
+    result = jsonResponse(vacuumStats);
   } else if (commandIs("get-settings")) {
-    result.response_ =
-        jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
+    result = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
   } else if (commandIs("get-index-id")) {
-    result.response_ =
+    result =
         createOkResponse(index.getIndexId(), request, MediaType::textPlain);
   } else if (commandIs("dump-active-queries")) {
     auto activeQueries = nlohmann::json::object();
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
       activeQueries[nlohmann::json(key)] = std::move(value);
     }
-    result.response_ = jsonResponse(activeQueries);
+    result = jsonResponse(activeQueries);
   } else if (commandIs("rebuild-index")) {
-    result.response_ = co_await processRebuildIndex(parameters, request);
+    result = co_await processRebuildIndex(parameters, request);
   } else if (commandIs("write-materialized-view")) {
     auto materializedViewStats = co_await processWriteMaterializedView(
         parameters, operation, accessTokenOk, requestTimer);
-    result.response_ = jsonResponse(materializedViewStats);
-    // Flag that this command already consumed the query operation, so
-    // `process()` doesn't also try to run it as a regular query.
-    result.consumedQueryOperation_ = true;
+    result = jsonResponse(materializedViewStats);
+    // Prevent regular query processing by removing the query from the request.
+    operation = None{};
   } else if (commandIs("load-materialized-view")) {
-    result.response_ =
+    result =
         jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
-    // Flag that this command already consumed the query operation, so
-    // `process()` doesn't also try to run it as a regular query.
-    result.consumedQueryOperation_ = true;
+    // Prevent regular query processing by removing the query from the request.
+    operation = None{};
   } else if (commandIs("delete-materialized-view")) {
-    result.response_ = jsonResponse(processDeleteMaterializedView(parameters));
-    // Flag that this command already consumed the query operation, so
-    // `process()` doesn't also try to run it as a regular query.
-    result.consumedQueryOperation_ = true;
+    result = jsonResponse(processDeleteMaterializedView(parameters));
+    // Prevent regular query processing by removing the query from the request.
+    operation = None{};
   }
   co_return result;
 }
@@ -755,7 +751,7 @@ CPP_template_def(typename RequestT, typename SendT)(
       };
 
   auto jsonResponse = makeJsonResponse(request);
-  std::optional<http::response<streamable_body>> response;
+  std::optional<ResponseT> response;
 
   // Process all URL parameters known to QLever. If there is more than one,
   // QLever processes all of them, but only returns the result from the last
@@ -764,10 +760,9 @@ CPP_template_def(typename RequestT, typename SendT)(
   //
   // Some parameters require that "access-token" is set correctly. If not, that
   // parameter is ignored.
-  auto commandResult = co_await processCommands(
-      indexAndViews, parameters, parsedHttpRequest.operation_, accessTokenOk,
-      requestTimer, request);
-  response = std::move(commandResult.response_);
+  response = co_await processCommands(indexAndViews, parameters,
+                                      parsedHttpRequest.operation_,
+                                      accessTokenOk, requestTimer, request);
 
   // Ping with or without message.
   if (parsedHttpRequest.path_ == "/ping") {
@@ -937,9 +932,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   };
 
   co_return co_await processOperation(
-      commandResult.consumedQueryOperation_
-          ? None{}
-          : std::move(parsedHttpRequest.operation_),
+      std::move(parsedHttpRequest.operation_),
       ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
                                        visitNone},
       requestTimer, request, send, plannedQuery);
