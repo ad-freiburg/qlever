@@ -444,8 +444,10 @@ class Server {
 
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Throw an `HttpError` (403 Forbidden) if
-  /// the change is not allowed; `handleHttpRequest` catches it and turns it
-  /// into the actual HTTP response. Return the new timeout otherwise.
+  /// the change is not allowed. For queries and updates, `processOperation`
+  /// catches it and builds the standard JSON error response. On the `cmd=`
+  /// paths it unwinds to `handleHttpRequest`, which builds a plain-text
+  /// response. Return the new timeout otherwise.
   TimeLimit verifyUserSubmittedQueryTimeout(
       std::optional<std::string_view> userTimeout, bool accessTokenOk) const;
 
