@@ -30,35 +30,39 @@ class LocalVocabContext;
 // vocabulary because we only have to look up the position once per
 // `LocalVocabEntry`, and all subsequent comparisons are cheap.
 //
-// WARNING: The order that `positionInVocab()` and `compareThreeWay()` implement
-// is the order in which the index scans emit their `Id`s (call it the
-// *internal* order, see `ValueId::compareThreeWay`). Without a secondary
-// vocabulary (see `index/vocabulary/SecondaryVocabulary.h`) that order
-// coincides with the semantic (that is, by string value) order, except for the
-// encoded IRIs
-// (see `LocalVocabContext::encodeAsId`), which are ordered by their encoding
-// (a pre-existing deviation that is tracked separately, see the note at
-// `compareThreeWay` below). As soon as an index has such a vocabulary, the two
-// orders differ much more fundamentally: a word of the secondary vocabulary is
-// positioned after *all* words of the main vocabulary, no matter what it is. An
-// entry whose word is stored in the secondary vocabulary therefore compares
-// greater than every word of the main vocabulary, and greater than every entry
-// that is contained in neither vocabulary — even if its string value is
-// smaller. Both `compareThreeWay()` and the `Id` comparison then deviate
-// *silently* from the semantics that SPARQL requires, which breaks all kinds of
-// semantic comparisons (`FILTER`, `ORDER BY`, the range filters and
-// prefilters), see the detailed note at
-// `valueIdComparators::detail::compareIdsImpl`.
+// WARNING: There are two different orders on the words of an index, and this
+// class exposes both of them as two explicitly named comparisons:
 //
-// This is deliberate for now: nothing but a unit test can currently create a
-// secondary vocabulary (see `IndexImpl::setSecondaryVocabForTesting`), so no
-// query is affected. It has to be fixed *before* anything else creates one,
-// most likely by keeping the position in the main vocabulary (which is what a
-// semantic comparison needs, and which can always be computed from the word)
-// separately from the position in the internal order, and by exposing the two
-// orders as two explicitly named comparisons instead of a single
-// `compareThreeWay`.
-// TODO<joka921> Do that in a follow-up PR.
+// 1. The *internal* order (`positionInVocab()` and `compareThreeWay()`) is the
+//    order in which the index scans emit their `Id`s (see
+//    `ValueId::compareThreeWay`). It is what the comparison of two `Id`s
+//    implements, and hence what everything that has to agree with the order of
+//    the index scans (`Join`, `Distinct`, `GroupBy`, the merging of delta
+//    triples into a scan, etc.) has to use.
+// 2. The *semantic* order (`compareThreeWaySemantically()`) compares the words
+//    by their string value, using the collation of the vocabulary of the index.
+//    It is what SPARQL requires for `FILTER`, `ORDER BY`, the range filters,
+//    and the prefilters. NOTE: `valueIdComparators`, which implements those,
+//    does not use it yet, but still compares the `Id`s themselves (that is,
+//    the internal order), which is only semantically correct as long as the
+//    index has no secondary vocabulary; see the detailed note at
+//    `valueIdComparators::detail::compareIdsImpl`.
+//
+// The two orders coincide as long as the index has no secondary vocabulary (see
+// `index/vocabulary/SecondaryVocabulary.h`). As soon as it has one, they differ
+// fundamentally: a word of the secondary vocabulary is positioned after *all*
+// words of the main vocabulary, no matter what it is (which is exactly what
+// makes such words mergeable into a scan of the main index). An entry whose
+// word is stored in the secondary vocabulary therefore is *internally* greater
+// than every word of the main vocabulary, and greater than every entry that is
+// contained in neither vocabulary — even if its string value is smaller.
+//
+// NOTE: There is one deviation of the internal from the semantic order that
+// exists independently of the secondary vocabulary: an encoded IRI (see
+// `LocalVocabContext::encodeAsId`) is internally ordered by its encoding and
+// not by its string value. That deviation is pre-existing and tracked
+// separately, see issue #2448 and the note at
+// `valueIdComparators::detail::compareIdsImpl`.
 class alignas(16) LocalVocabEntry
     : public ad_utility::triple_component::LiteralOrIri {
  public:
@@ -80,8 +84,8 @@ class alignas(16) LocalVocabEntry
   // the first *larger* word in the vocabulary. Note that the position may also
   // be in the secondary vocabulary of the index, in which case it is an `Id` of
   // type `Datatype::SecondaryVocabIndex` — see the warning in the class comment
-  // above for why that makes this position currently unsuitable for semantic
-  // comparisons.
+  // above for why that makes this position unsuitable for semantic
+  // comparisons, which have to use `compareThreeWaySemantically` instead.
   // Note: we store the cache as three separate atomics to avoid mutexes. The
   // downside is, that in parallel code multiple threads might look up the
   // position concurrently, which wastes a bit of resources. However, we don't
@@ -199,15 +203,15 @@ class alignas(16) LocalVocabEntry
 
   // Compare two entries in the internal order (see the warning in the class
   // comment above; in particular this is NOT a semantic comparison as soon as
-  // the index has a secondary vocabulary). If the index has such a secondary
-  // vocabulary, then this first compares the positions in the vocabularies (see
-  // `positionInVocab()`) and only falls back to the comparison of the strings
-  // if those positions are equal. Comparing the strings alone would then not be
-  // a valid strict weak ordering: a word that is stored in the secondary
-  // vocabulary of the index is positioned after all words of the main
-  // vocabulary, so comparing it to a word that is in neither vocabulary has to
-  // yield the same result as comparing the corresponding `Id`s, which are
-  // compared by their positions.
+  // the index has a secondary vocabulary, use `compareThreeWaySemantically`
+  // below for that). If the index has such a secondary vocabulary, then this
+  // first compares the positions in the vocabularies (see `positionInVocab()`)
+  // and only falls back to the comparison of the strings if those positions are
+  // equal. Comparing the strings alone would then not be a valid strict weak
+  // ordering: a word that is stored in the secondary vocabulary of the index is
+  // positioned after all words of the main vocabulary, so comparing it to a
+  // word that is in neither vocabulary has to yield the same result as
+  // comparing the corresponding `Id`s, which are compared by their positions.
   //
   // If the index has no secondary vocabulary, then the comparison of the
   // strings alone already yields the same result as the comparison of the
@@ -227,6 +231,15 @@ class alignas(16) LocalVocabEntry
   // below never looks up the position, no matter which vocabularies exist.
   ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
+
+  // Semantically (that is, by string value) compare this entry to `rhs`. In
+  // contrast to `compareThreeWay` above, this NEVER looks at the position in
+  // the vocabularies, but always compares the string values with the collation
+  // of the vocabulary at the `TOTAL` level, which is exactly the semantics that
+  // SPARQL requires. The two comparisons only differ if the index has a
+  // secondary vocabulary; see the class comment above for the details.
+  ql::strong_ordering compareThreeWaySemantically(
+      const LocalVocabEntry& rhs) const;
 
   // Two entries are equal if and only if their string representations are, so
   // forward to the base class instead of going through `compareThreeWay`, which
@@ -256,6 +269,18 @@ class alignas(16) LocalVocabEntry
  private:
   // The expensive case of looking up the position in vocab.
   PositionInVocab positionInVocabExpensiveCase() const;
+
+  // Check that this entry and `rhs` belong to the same index. This is a
+  // precondition of both comparisons above, because entries of different
+  // indices are not comparable at all. NOTE: The check is only performed if the
+  // expensive checks are enabled, hence the `[[maybe_unused]]`.
+  void checkSameContext([[maybe_unused]] const LocalVocabEntry& rhs) const {
+    AD_EXPENSIVE_CHECK(
+        context_ == rhs.context_,
+        "Contexts of LocalVocabEntries have to be identical. If this is not "
+        "the case this means that stale entries associated with an old index "
+        "are falsely carried over somewhere.");
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_LOCALVOCABENTRY_H

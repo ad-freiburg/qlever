@@ -534,13 +534,13 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 // This is deliberate for now: nothing but a unit test can currently create a
 // secondary vocabulary (see `IndexImpl::setSecondaryVocabForTesting`), so no
 // query is affected. It has to be fixed *before* anything else creates one.
-// The fix requires the semantically correct position of each word of the
-// secondary vocabulary within the main vocabulary, which the secondary
-// vocabulary will store, and it will most likely mean that this function must
-// not use
-// `ValueId::compareThreeWay` (the internal order) for the string types, but a
-// separate, explicitly semantic comparison.
-// TODO<joka921> Implement that comparison in a follow-up PR.
+// That separate, explicitly semantic comparison now exists (see
+// `LocalVocabContext::compareIdsSemantically` and
+// `LocalVocabEntry::compareThreeWaySemantically`), but this function does not
+// use it yet: for the string types it still uses `ValueId::compareThreeWay`,
+// which is the internal order.
+// TODO<joka921> Make this function (and the range filters above) use the
+// semantic comparison in a follow-up PR.
 //
 // NOTE: The secondary vocabulary is not the only source of semantic
 // incorrectness here, it is only the one that this comment is about. Two

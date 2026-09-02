@@ -39,3 +39,33 @@ std::optional<SecondaryVocabIndex> SecondaryVocabulary::getId(
   }
   return SecondaryVocabIndex::make(static_cast<uint64_t>(it - words_.begin()));
 }
+
+// _____________________________________________________________________________
+void SecondaryVocabulary::setMainVocabComparator(
+    const TripleComponentComparator& comparator) {
+  mainVocabComparator_ = &comparator;
+}
+
+// _____________________________________________________________________________
+int SecondaryVocabulary::compareWordTo(SecondaryVocabIndex index,
+                                       std::string_view word) const {
+  return mainVocabComparator().compare((*this)[index], word,
+                                       LocaleManager::Level::TOTAL);
+}
+
+// _____________________________________________________________________________
+int SecondaryVocabulary::compareWords(SecondaryVocabIndex a,
+                                      SecondaryVocabIndex b) const {
+  return compareWordTo(a, (*this)[b]);
+}
+
+// _____________________________________________________________________________
+const TripleComponentComparator& SecondaryVocabulary::mainVocabComparator()
+    const {
+  AD_CONTRACT_CHECK(
+      mainVocabComparator_ != nullptr,
+      "A `SecondaryVocabulary` can only compare its words semantically once "
+      "the comparator of the vocabulary of the main index has been set, see "
+      "`SecondaryVocabulary::setMainVocabComparator`");
+  return *mainVocabComparator_;
+}
