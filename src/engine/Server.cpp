@@ -227,33 +227,27 @@ void Server::run() {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename SendT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    net::awaitable<std::optional<Server::TimeLimit>> Server::
-        verifyUserSubmittedQueryTimeout(
-            std::optional<std::string_view> userTimeout, bool accessTokenOk,
-            const RequestT& request, SendT& send) const {
+Server::TimeLimit Server::verifyUserSubmittedQueryTimeout(
+    std::optional<std::string_view> userTimeout, bool accessTokenOk) const {
   auto defaultTimeout =
       getRuntimeParameter<&RuntimeParameters::defaultQueryTimeout_>();
-  // TODO<GCC12> Use the monadic operations for std::optional
   if (userTimeout.has_value()) {
     auto timeoutCandidate =
         ad_utility::ParseableDuration<TimeLimit>::fromString(
             userTimeout.value());
     if (timeoutCandidate > defaultTimeout && !accessTokenOk) {
-      co_await send(ad_utility::httpUtils::createForbiddenResponse(
-          absl::StrCat("User submitted timeout was higher than what is "
-                       "currently allowed by "
-                       "this instance (",
-                       defaultTimeout.toString(),
-                       "). Please use a valid-access token to override this "
-                       "server configuration."),
-          request));
-      co_return std::nullopt;
+      throw HttpError(
+          boost::beast::http::status::forbidden,
+          absl::StrCat(
+              "User submitted timeout was higher than what is currently "
+              "allowed by this instance (",
+              defaultTimeout.toString(),
+              "). Please use a valid-access token to override this server "
+              "configuration."));
     }
-    co_return timeoutCandidate;
+    return timeoutCandidate;
   }
-  co_return std::chrono::duration_cast<TimeLimit>(
+  return std::chrono::duration_cast<TimeLimit>(
       decltype(defaultTimeout)::DurationType{defaultTimeout});
 }
 
@@ -381,21 +375,12 @@ Awaitable<DeltaTriplesCount> Server::processClearDeltaTriples() {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename SendT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<std::optional<nlohmann::json>> Server::processVacuumDeltaTriples(
-        std::optional<std::string_view> userTimeout, bool accessTokenOk,
-        const RequestT& request, SendT& send) {
+Awaitable<nlohmann::json> Server::processVacuumDeltaTriples(
+    std::optional<std::string_view> userTimeout, bool accessTokenOk) {
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  std::optional<TimeLimit> timeLimit = co_await verifyUserSubmittedQueryTimeout(
-      userTimeout, accessTokenOk, request, send);
-  if (!timeLimit.has_value()) {
-    // If the optional is empty, this indicates an error response has been
-    // sent to the client already. We can stop here.
-    co_return std::nullopt;
-  }
-  auto cancelTimeoutOnDestruction =
-      cancelAfterDeadline(handle, timeLimit.value());
+  TimeLimit timeLimit =
+      verifyUserSubmittedQueryTimeout(userTimeout, accessTokenOk);
+  auto cancelTimeoutOnDestruction = cancelAfterDeadline(handle, timeLimit);
 
   auto coroutine = computeInNewThread(
       updateThreadPool_,
@@ -404,14 +389,9 @@ CPP_template_def(typename RequestT, typename SendT)(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename SendT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<std::optional<nlohmann::json>> Server::
-        processWriteMaterializedView(const ParamValueMap& parameters,
-                                     const SparqlOperation& operation,
-                                     bool accessTokenOk,
-                                     const ad_utility::Timer& requestTimer,
-                                     const RequestT& request, SendT& send) {
+Awaitable<nlohmann::json> Server::processWriteMaterializedView(
+    const ParamValueMap& parameters, const SparqlOperation& operation,
+    bool accessTokenOk, const ad_utility::Timer& requestTimer) {
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Writing");
   AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
@@ -432,15 +412,10 @@ CPP_template_def(typename RequestT, typename SendT)(
       operation);
 
   // Extract time limit.
-  auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
-      ad_utility::url_parser::checkParameter(parameters, "timeout",
-                                             std::nullopt),
-      accessTokenOk, request, send);
-  if (!timeLimit.has_value()) {
-    // If the optional is empty, this indicates an error response has been
-    // sent to the client already. We can stop here.
-    co_return std::nullopt;
-  }
+  auto timeLimit =
+      verifyUserSubmittedQueryTimeout(ad_utility::url_parser::checkParameter(
+                                          parameters, "timeout", std::nullopt),
+                                      accessTokenOk);
 
   // Call `Qlever::writeMaterializedView` with the extracted parameters. This
   // assumes that the access token has already been checked. Note that storing
@@ -454,7 +429,7 @@ CPP_template_def(typename RequestT, typename SendT)(
        this]() mutable {
         qlever().writeMaterializedView(
             name, std::move(query.query_), query.datasetClauses_,
-            std::move(cancellationHandle), timeLimit.value(), requestTimer);
+            std::move(cancellationHandle), timeLimit, requestTimer);
       },
       cancellationHandle);
   co_await std::move(coroutine);
@@ -634,13 +609,13 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename SendT)(
+CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Server::Awaitable<Server::ProcessCommandsResult> Server::processCommands(
         const SharedIndexAndView& indexAndViews,
         const ParamValueMap& parameters, const SparqlOperation& operation,
         bool accessTokenOk, const ad_utility::Timer& requestTimer,
-        RequestT& request, SendT& send) {
+        RequestT& request) {
   using namespace ad_utility::httpUtils;
   using namespace responseJson;
   using namespace serverProcessHelpers;
@@ -687,15 +662,8 @@ CPP_template_def(typename RequestT, typename SendT)(
     result.response_ = jsonResponse(json(countAfterClear));
   } else if (commandIs("vacuum-delta-triples")) {
     auto vacuumStats = co_await processVacuumDeltaTriples(
-        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
-    // An empty optional means that the user-submitted timeout was rejected
-    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
-    // error response to the client. We can stop here.
-    if (!vacuumStats.has_value()) {
-      result.stop_ = true;
-      co_return result;
-    }
-    result.response_ = jsonResponse(vacuumStats.value());
+        checkParameter("timeout", std::nullopt), accessTokenOk);
+    result.response_ = jsonResponse(vacuumStats);
   } else if (commandIs("get-settings")) {
     result.response_ =
         jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
@@ -712,15 +680,8 @@ CPP_template_def(typename RequestT, typename SendT)(
     result.response_ = co_await processRebuildIndex(parameters, request);
   } else if (commandIs("write-materialized-view")) {
     auto materializedViewStats = co_await processWriteMaterializedView(
-        parameters, operation, accessTokenOk, requestTimer, request, send);
-    // An empty optional means that the user-submitted timeout was rejected
-    // by `verifyUserSubmittedQueryTimeout()`, which has then already sent an
-    // error response to the client. We can stop here.
-    if (!materializedViewStats.has_value()) {
-      result.stop_ = true;
-      co_return result;
-    }
-    result.response_ = jsonResponse(materializedViewStats.value());
+        parameters, operation, accessTokenOk, requestTimer);
+    result.response_ = jsonResponse(materializedViewStats);
     // Flag that this command already consumed the query operation, so
     // `process()` doesn't also try to run it as a regular query.
     result.consumedQueryOperation_ = true;
@@ -805,10 +766,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   // parameter is ignored.
   auto commandResult = co_await processCommands(
       indexAndViews, parameters, parsedHttpRequest.operation_, accessTokenOk,
-      requestTimer, request, send);
-  if (commandResult.stop_) {
-    co_return;
-  }
+      requestTimer, request);
   response = std::move(commandResult.response_);
 
   // Ping with or without message.
@@ -850,13 +808,8 @@ CPP_template_def(typename RequestT, typename SendT)(
           const std::string operationString,
           std::function<bool(const ParsedQuery&)> expectedOperation,
           const std::string msg, SharedTimeTracer tracer) -> Awaitable<void> {
-    auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
-        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
-    if (!timeLimit.has_value()) {
-      // If the optional is empty, this indicates an error response has been
-      // sent to the client already. We can stop here.
-      co_return;
-    }
+    auto timeLimit = verifyUserSubmittedQueryTimeout(
+        checkParameter("timeout", std::nullopt), accessTokenOk);
     // Empty when the header is absent.
     std::string_view clientIp = request.base()["X-Real-IP"];
     ad_utility::websocket::MessageSender messageSender =
@@ -869,9 +822,9 @@ CPP_template_def(typename RequestT, typename SendT)(
     // Workaround for a GCC 15/16 bug: the hidden object of a by-value
     // structured binding is not destroyed when the coroutine frame is
     // destroyed while suspended (gcc.gnu.org bug 124584).
-    auto preparedOp = prepareOperation(
-        operationName, operationString, std::move(messageSender), parameters,
-        timeLimit.value(), accessTokenOk, clientIp);
+    auto preparedOp = prepareOperation(operationName, operationString,
+                                       std::move(messageSender), parameters,
+                                       timeLimit, accessTokenOk, clientIp);
     auto& [makeQec, cancellationHandle, cancelTimeoutOnDestruction] =
         preparedOp;
     try {
@@ -883,7 +836,7 @@ CPP_template_def(typename RequestT, typename SendT)(
         metrics_->startedSparqlOperations_->Add(1, {OperationType::update});
         co_await processUpdate(std::move(makeQec), std::move(operations),
                                requestTimer, tracer, cancellationHandle,
-                               std::move(request), send, timeLimit.value(),
+                               std::move(request), send, timeLimit,
                                plannedQuery);
       } else {
         AD_CORRECTNESS_CHECK(operations.size() == 1);
@@ -896,7 +849,7 @@ CPP_template_def(typename RequestT, typename SendT)(
         auto qecPtr = makeQec(indexAndViews);
         co_await processQuery(parameters, std::move(query), requestTimer,
                               cancellationHandle, *qecPtr, std::move(request),
-                              send, timeLimit.value(), plannedQuery);
+                              send, timeLimit, plannedQuery);
       }
       queryStatus->store(OK);
       co_return;
@@ -1571,7 +1524,7 @@ Server::createMessageSender<Server::StringBodyRequest>(
     const StringBodyRequest&, std::string_view, std::string_view);
 
 // _____________________________________________________________________________
-Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
+Awaitable<qlever::IndexSwapConfig> Server::rebuildIndex(
     std::optional<std::string> rebuildTmpDir,
     std::optional<std::string> rebuildPreviousIndexDir) {
   // There is no mechanism to actually cancel the handle.
@@ -1680,11 +1633,12 @@ CPP_template_def(typename RequestT)(
         "Another rebuild is currently in progress!",
         http::status::too_many_requests, request, MediaType::textPlain);
   }
-  co_return createJsonResponse(config->successResponseAsJson(), request);
+  co_return createJsonResponse(responseJson::composeRebuildSuccess(*config),
+                               request);
 }
 
 // _____________________________________________________________________________
-Awaitable<std::optional<qlever::IndexRebuildConfig>>
+Awaitable<std::optional<qlever::IndexSwapConfig>>
 Server::rebuildIndexUnlessInProgress(
     std::optional<std::string> rebuildTmpDir,
     std::optional<std::string> rebuildPreviousIndexDir) {
