@@ -8,6 +8,7 @@
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/functional/function_ref.h>
 #include <absl/strings/str_split.h>
 #include <absl/time/time.h>
@@ -148,6 +149,24 @@ Variable Visitor::blankNodeToInternalVariable(std::string_view blankNode) {
   AD_CONTRACT_CHECK(ql::starts_with(blankNode, "_:"));
   return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
                                blankNode.substr(2))};
+}
+
+// _____________________________________________________________________________
+void Visitor::checkBlankNodeLabelIsNotReusedAcrossBasicGraphPatterns(
+    const std::string& label, const antlr4::ParserRuleContext* ctx) {
+  // If the label was already used in the current basic graph pattern, then this
+  // is a legal repetition and there is nothing to do. Otherwise it must not
+  // have been used anywhere else in the query before.
+  if (blankNodeLabelsInCurrentBasicGraphPattern_.insert(label).second &&
+      !allBlankNodeLabels_.insert(label).second) {
+    reportError(
+        ctx,
+        absl::StrCat("The blank node label \"", label,
+                     "\" may not be used in more than one basic graph "
+                     "pattern. Consistently replace that label by a variable "
+                     "if you want the occurrences to match, or by distinct "
+                     "variables or blank node labels if not."));
+  }
 }
 
 // _____________________________________________________________________________
@@ -370,6 +389,10 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   // The prologue (BASE and PREFIX declarations)  only affects the internal
   // state of the visitor.
   visit(ctx->prologue());
+  // The definitions of named subqueries also only affect the internal state.
+  // They are visited in the order in which they appear, so a definition can
+  // `INCLUDE` previously defined named subqueries.
+  visitVector(ctx->namedSubqueryDefinition());
   auto query =
       visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
                                     ctx->describeQuery(), ctx->askQuery());
@@ -400,6 +423,8 @@ void SparqlQleverVisitor::resetStateForMultipleUpdates() {
   prologueString_ = {};
   parsedQuery_ = {};
   treatBlankNodesAs_ = TreatBlankNodesAs::InternalVariables;
+  allBlankNodeLabels_.clear();
+  blankNodeLabelsInCurrentBasicGraphPattern_.clear();
 }
 
 // ____________________________________________________________________________________
@@ -652,6 +677,7 @@ GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
   }
 
   auto expression = visitExpressionPimpl(ctx->expression());
+  throwIfContainsAggregate(ctx, expression, "BIND");
   warnOrThrowIfUnboundVariables(ctx, expression, "BIND");
   addVisibleVariable(target);
   return GraphPatternOperation{Bind{std::move(expression), std::move(target)}};
@@ -1117,6 +1143,10 @@ void Visitor::selectExistsVariables(SparqlFilter& filter) const {
 GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   GraphPattern pattern;
 
+  // The triples inside a group belong to a basic graph pattern of their own,
+  // no matter which basic graph pattern was active in the enclosing scope.
+  blankNodeLabelsInCurrentBasicGraphPattern_.clear();
+
   // The following code makes sure that the variables from outside the graph
   // pattern are NOT visible inside the graph pattern, but the variables from
   // the graph pattern are visible outside the graph pattern.
@@ -1141,6 +1171,11 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
     return pattern;
   }
   AD_CORRECTNESS_CHECK(ctx->groupGraphPatternSub());
+  // If the body of the group is exactly one `INCLUDE`, the group becomes a
+  // copy of the pattern of the corresponding named subquery.
+  if (auto* includeCtx = getSoleIncludeClause(ctx->groupGraphPatternSub())) {
+    return visitSoleInclude(includeCtx, ctx);
+  }
   auto [subOps, filters] = visit(ctx->groupGraphPatternSub());
   pattern._graphPatterns = std::move(subOps);
   for (auto& filter : filters) {
@@ -1192,8 +1227,14 @@ Visitor::OperationsAndFilters Visitor::visit(
 
 Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
     Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx) {
-  return {visit(ctx->graphPatternNotTriples()),
-          visitOptional(ctx->triplesBlock())};
+  auto operationOrFilter = visit(ctx->graphPatternNotTriples());
+  // A `FILTER` is part of the surrounding basic graph pattern, everything else
+  // (`OPTIONAL`, `GRAPH`, `UNION`, `BIND`, ...) ends it, so the triples that
+  // follow belong to a new basic graph pattern.
+  if (!std::holds_alternative<SparqlFilter>(operationOrFilter)) {
+    blankNodeLabelsInCurrentBasicGraphPattern_.clear();
+  }
+  return {std::move(operationOrFilter), visitOptional(ctx->triplesBlock())};
 }
 
 // ____________________________________________________________________________________
@@ -1229,7 +1270,8 @@ Visitor::OperationOrFilter Visitor::visit(
   return visitAlternative<std::variant<GraphPatternOperation, SparqlFilter>>(
       ctx->filterR(), ctx->optionalGraphPattern(), ctx->minusGraphPattern(),
       ctx->bind(), ctx->inlineData(), ctx->groupOrUnionGraphPattern(),
-      ctx->graphGraphPattern(), ctx->serviceGraphPattern());
+      ctx->graphGraphPattern(), ctx->serviceGraphPattern(),
+      ctx->includeClause());
 }
 
 // ____________________________________________________________________________________
@@ -1582,6 +1624,143 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+template <typename Ctx>
+auto Visitor::visitInFreshQueryContext(Ctx* ctx)
+    -> FreshQueryContextResult<
+        decltype(std::declval<SparqlQleverVisitor&>().visit(ctx))> {
+  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
+  auto variablesBackup = std::exchange(visibleVariables_, {});
+  // The visited group starts a basic graph pattern of its own, but the basic
+  // graph pattern of the outer query continues afterwards (an `EXISTS` is part
+  // of a `FILTER`, which does not end it), so its blank node labels must be
+  // restored as well.
+  auto blankNodeLabelsBackup =
+      std::exchange(blankNodeLabelsInCurrentBasicGraphPattern_, {});
+  // The restoring assignments are moves and cannot throw, so the cleanup
+  // is safe also during stack unwinding.
+  static_assert(std::is_nothrow_move_assignable_v<ParsedQuery>);
+  static_assert(std::is_nothrow_move_assignable_v<std::vector<Variable>>);
+  static_assert(std::is_nothrow_move_assignable_v<
+                decltype(blankNodeLabelsInCurrentBasicGraphPattern_)>);
+  absl::Cleanup restoreBackups{
+      [this, &queryBackup, &variablesBackup, &blankNodeLabelsBackup]() {
+        parsedQuery_ = std::move(queryBackup);
+        visibleVariables_ = std::move(variablesBackup);
+        blankNodeLabelsInCurrentBasicGraphPattern_ =
+            std::move(blankNodeLabelsBackup);
+      }};
+  auto result = visit(ctx);
+  // NOTE: The following moves happen before `restoreBackups` runs, which then
+  // assigns the backups over the moved-from members.
+  return {std::move(result), std::move(parsedQuery_),
+          std::move(visibleVariables_)};
+}
+
+// ____________________________________________________________________________________
+void Visitor::visit(Parser::NamedSubqueryDefinitionContext* ctx) {
+  auto name = ctx->NAMED_SUBQUERY_NAME()->getText();
+  // The second alternative of the grammar rule matches Blazegraph's syntax
+  // for named subqueries, where the name comes after the body. It exists only
+  // so that we can report the following informative error for it.
+  if (ctx->NAMED_SUBQUERY_NAME()->getSymbol()->getTokenIndex() >
+      ctx->AS()->getSymbol()->getTokenIndex()) {
+    reportError(
+        ctx,
+        absl::StrCat("QLever expects the name of a named subquery before its "
+                     "body, that is, `WITH ",
+                     name, " AS { ... }`. The reverse order `WITH { ... } AS ",
+                     name, "`, as used by Blazegraph, is not supported"));
+  }
+  // The pattern of a named subquery is parsed in a clean environment: it sees
+  // no variables from the outside, and its variables only become visible via
+  // the SELECT clause of the subquery around an `INCLUDE`.
+  auto freshContextResult = visitInFreshQueryContext(ctx->groupGraphPattern());
+  auto [it, isNewName] = namedSubqueries_.emplace(
+      std::move(name),
+      NamedSubquery{std::move(freshContextResult.result_),
+                    std::move(freshContextResult.visibleVariables_)});
+  if (!isNewName) {
+    reportError(ctx, absl::StrCat("The named subquery \"", it->first,
+                                  "\" is defined more than once"));
+  }
+}
+
+// ____________________________________________________________________________________
+GraphPatternOperation Visitor::visit(Parser::IncludeClauseContext* ctx) {
+  // A valid `INCLUDE` (as the entire body of a subquery) is expanded in
+  // `visit(GroupGraphPatternContext*)` and never reaches this function.
+  reportError(
+      ctx, absl::StrCat(
+               "An INCLUDE must be the entire body of a subquery, whose SELECT "
+               "clause lists the variables of the named subquery that become "
+               "visible, for example `{ SELECT ?x (?y AS ?z) WHERE { INCLUDE ",
+               ctx->NAMED_SUBQUERY_NAME()->getText(), " } }`"));
+}
+
+// ____________________________________________________________________________________
+Parser::IncludeClauseContext* Visitor::getSoleIncludeClause(
+    Parser::GroupGraphPatternSubContext* ctx) {
+  const auto& operations = ctx->graphPatternNotTriplesAndMaybeTriples();
+  if (ctx->triplesBlock() != nullptr || operations.size() != 1 ||
+      operations[0]->triplesBlock() != nullptr) {
+    return nullptr;
+  }
+  return operations[0]->graphPatternNotTriples()->includeClause();
+}
+
+// ____________________________________________________________________________________
+ParsedQuery::GraphPattern Visitor::visitSoleInclude(
+    Parser::IncludeClauseContext* includeCtx,
+    Parser::GroupGraphPatternContext* ctx) {
+  const auto name = includeCtx->NAMED_SUBQUERY_NAME()->getText();
+  // The body of a `SERVICE` is sent to the remote endpoint as the original
+  // query text, where the definition of the named subquery does not exist.
+  for (auto* parent = ctx->parent; parent != nullptr; parent = parent->parent) {
+    if (dynamic_cast<Parser::ServiceGraphPatternContext*>(parent) != nullptr) {
+      reportError(
+          includeCtx,
+          absl::StrCat("`INCLUDE ", name,
+                       "` is not supported inside SERVICE, because the body "
+                       "of a SERVICE is evaluated by the remote endpoint, "
+                       "which does not know the named subquery"));
+    }
+  }
+  // The group must be the body of a subquery. The `visit` call reports the
+  // error for a misplaced `INCLUDE` and does not return.
+  auto* whereClause = dynamic_cast<Parser::WhereClauseContext*>(ctx->parent);
+  auto* subSelect =
+      whereClause == nullptr
+          ? nullptr
+          : dynamic_cast<Parser::SubSelectContext*>(whereClause->parent);
+  if (subSelect == nullptr) {
+    visit(includeCtx);
+  }
+  // The subquery must make explicit which variables of the pattern it uses.
+  if (subSelect->selectClause()->asterisk != nullptr) {
+    reportError(
+        includeCtx,
+        absl::StrCat("The subquery around `INCLUDE ", name,
+                     "` must list the variables that become visible, `SELECT "
+                     "*` is not allowed here"));
+  }
+  auto it = namedSubqueries_.find(name);
+  if (it == namedSubqueries_.end()) {
+    reportError(
+        includeCtx,
+        absl::StrCat("The named subquery \"", name,
+                     "\" is not defined. Named subqueries must be defined "
+                     "before the query body via `WITH ",
+                     name, " AS { ... }`"));
+  }
+  const auto& [pattern, visibleVariables] = it->second;
+  ql::ranges::for_each(visibleVariables, [this](const Variable& variable) {
+    addVisibleVariable(variable);
+  });
+  // Deliberately copy the stored pattern, it can be included multiple times.
+  return pattern;
+}
+
+// ____________________________________________________________________________________
 Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
@@ -1600,18 +1779,16 @@ Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
 GroupKey Visitor::visit(Parser::GroupConditionContext* ctx) {
   if (ctx->var() && !ctx->expression()) {
     return Variable{ctx->var()->getText()};
-  } else if (ctx->builtInCall() || ctx->functionCall()) {
-    // builtInCall and functionCall are both also an Expression
-    return (ctx->builtInCall() ? visitExpressionPimpl(ctx->builtInCall())
-                               : visitExpressionPimpl(ctx->functionCall()));
+  }
+  // `builtInCall` and `functionCall` are both also an `Expression`.
+  auto expr = ctx->builtInCall()    ? visitExpressionPimpl(ctx->builtInCall())
+              : ctx->functionCall() ? visitExpressionPimpl(ctx->functionCall())
+                                    : visitExpressionPimpl(ctx->expression());
+  throwIfContainsAggregate(ctx, expr, "GROUP BY");
+  if (ctx->AS() && ctx->var()) {
+    return Alias{std::move(expr), visit(ctx->var())};
   } else {
-    AD_CORRECTNESS_CHECK(ctx->expression());
-    auto expr = visitExpressionPimpl(ctx->expression());
-    if (ctx->AS() && ctx->var()) {
-      return Alias{std::move(expr), visit(ctx->var())};
-    } else {
-      return expr;
-    }
+    return expr;
   }
 }
 
@@ -1774,12 +1951,27 @@ void Visitor::warnOrThrowIfUnboundVariables(
 }
 
 // ____________________________________________________________________________________
+void Visitor::throwIfContainsAggregate(const antlr4::ParserRuleContext* ctx,
+                                       const SparqlExpressionPimpl& expression,
+                                       std::string_view clauseName) {
+  if (expression.containsAggregate()) {
+    reportError(
+        ctx,
+        absl::StrCat("Aggregate functions are not allowed in a ", clauseName,
+                     " clause, they may only be used in SELECT, HAVING, "
+                     "and ORDER BY clauses."));
+  }
+}
+
+// ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
   // NOTE: We cannot add a warning or throw an exception if the FILTER
   // expression contains unbound variables, because the variables of the FILTER
   // might be bound after the filter appears in the query (which is perfectly
   // legal).
-  return SparqlFilter{visitExpressionPimpl(ctx->constraint())};
+  auto expression = visitExpressionPimpl(ctx->constraint());
+  throwIfContainsAggregate(ctx, expression, "FILTER");
+  return SparqlFilter{std::move(expression)};
 }
 
 // ____________________________________________________________________________________
@@ -2882,16 +3074,10 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
                                    bool negate) {
   // The argument of 'EXISTS` is a `GroupGraphPattern` that is independent from
   // the rest of the query (except for the `FROM` and `FROM NAMED` clauses,
-  // which also apply to the argument of `EXISTS`). We therefore have to back up
-  // and restore all global state when parsing `EXISTS`.
-  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
-  auto visibleVariablesBackup = std::move(visibleVariables_);
-  visibleVariables_.clear();
-
-  // Parse the argument of `EXISTS`.
-  auto group = visit(pattern);
-  ParsedQuery argumentOfExists =
-      std::exchange(parsedQuery_, std::move(queryBackup));
+  // which also apply to the argument of `EXISTS`). It is therefore parsed in a
+  // fresh query context.
+  auto freshContextResult = visitInFreshQueryContext(pattern);
+  ParsedQuery argumentOfExists = std::move(freshContextResult.parsedQuery_);
   SelectClause& selectClause = argumentOfExists.selectClause();
   // Even though we set the `SELECT` clause to `*`, we will limit the visible
   // variables to a potentially smaller subset when finishing the parsing of the
@@ -2901,15 +3087,14 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
   // they don't have a proper hierarchy of dependent variables. Because of that,
   // we need to manually add all variables that are visible after parsing the
   // body of `EXISTS`.
-  for (const Variable& variable : visibleVariables_) {
+  for (const Variable& variable : freshContextResult.visibleVariables_) {
     selectClause.addVisibleVariable(variable);
   }
-  argumentOfExists._rootGraphPattern = std::move(group);
+  argumentOfExists._rootGraphPattern = std::move(freshContextResult.result_);
 
   // The argument of `EXISTS` inherits the `FROM` and `FROM NAMED` clauses from
   // the outer query.
   argumentOfExists.datasetClauses_ = activeDatasetClauses_;
-  visibleVariables_ = std::move(visibleVariablesBackup);
   auto exists = std::make_unique<sparqlExpression::ExistsExpression>(
       std::move(argumentOfExists));
 
@@ -3076,17 +3261,22 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
     return newBlankNodeOrVariable();
   } else {
     AD_CORRECTNESS_CHECK(ctx->BLANK_NODE_LABEL());
+    const std::string label = ctx->BLANK_NODE_LABEL()->getText();
     if (mode == TreatBlankNodesAs::BlankNodes) {
+      // In this mode the label denotes an actual blank node in the data that is
+      // constructed or inserted, not a variable, so the scoping rule for basic
+      // graph patterns doesn't apply here. Repeating a label is in fact the
+      // only way to refer to the same blank node twice.
+      //
       // Strip `_:` prefix from string.
       constexpr size_t length = std::string_view{"_:"}.length();
-      const std::string label =
-          ctx->BLANK_NODE_LABEL()->getText().substr(length);
       // `False` means the blank node is not automatically generated, but
       // explicitly specified in the query.
-      return BlankNode{false, label};
+      return BlankNode{false, label.substr(length)};
     } else {
       AD_CORRECTNESS_CHECK(mode == TreatBlankNodesAs::InternalVariables);
-      return blankNodeToInternalVariable(ctx->BLANK_NODE_LABEL()->getText());
+      checkBlankNodeLabelIsNotReusedAcrossBasicGraphPatterns(label, ctx);
+      return blankNodeToInternalVariable(label);
     }
   }
 }
