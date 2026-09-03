@@ -110,12 +110,23 @@ The supervisor's constraint is critical: **a heavy multi-threaded query must nev
 
 ### How the Elastic Controller Solves This:
 1. **Single-Core by Default:** The export pipeline is fundamentally designed to achieve **8M–15M triples/sec on a SINGLE CPU core**.
-2. **Dynamic Work-Stealing Pool:** If and only if the server query queue is completely empty:
-   - The export coordinator registers an *elastic lease* with the server's `TaskScheduler`.
-   - Secondary worker threads help decompress and format background chunk morsels.
-3. **Instant Preemptive Yield:** The moment any new incoming HTTP request arrives at the server:
-   - Worker threads immediately finish their current 64KB morsel (<500 microseconds) and return to the main thread pool.
-   - The export coordinator drops back to strict single-core execution with zero interruption or state loss.
+2. **Morsel-Driven Task Granularity (200–500 μs Atomic Units):**
+   - Work is partitioned into discrete, self-contained units called **Morsels** (e.g. a 64 KB vector chunk or 4,096 rows).
+   - A single CPU core processes one morsel in approximately **200 to 500 microseconds**.
+3. **Atomic Token Lease Protocol (`TaskScheduler`):**
+   - While the server request queue is empty, the export coordinator leases helper tokens from the global server `TaskScheduler` (e.g. up to $N-1$ helper threads on an $N$-core system).
+4. **Preemptive Core-Yielding Mechanism on New Query Arrival:**
+   - **Step 1 (Ingress Notification):** The instant a new HTTP request hits the server’s socket accept queue, `Server::handleRequest` increments the priority request counter (`priorityQueueDepth.fetch_add(1)`).
+   - **Step 2 (Cooperative Boundary Check):** At the completion of each atomic morsel, helper threads execute a single branchless atomic check:
+     ```cpp
+     if (scheduler.priorityQueueDepth() > 0 || !leaseActive_) {
+       // Instantly surrender core back to global server pool
+       return;
+     }
+     ```
+   - **Step 3 (Immediate Thread Surrender in <1 ms):** Because morsels are strictly bounded to 200–500 μs, all helper threads cleanly exit and return to the global pool in **less than 1 millisecond**.
+   - **Step 4 (Zero Query Disruption):** The primary export coordinator continues running uninterrupted on its dedicated single core. The newly arrived interactive query immediately receives the full set of CPU cores without waiting.
+   - **Step 5 (Dynamic Scale-Out Recovery):** Once the interactive query completes and the queue returns to 0, helper threads can once again assist with morsel formatting.
 
 ---
 
