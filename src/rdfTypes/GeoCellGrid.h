@@ -224,6 +224,11 @@ class GeoCellGrid {
     return {(lng + 180.0) / 360.0, (lat + 90.0) / 180.0};
   }
 
+  // Merge those of the given ranges that overlap or are adjacent, so that the
+  // result is non-overlapping. The ranges must be ascending; a scheme that
+  // does not produce them in that order has to sort them first.
+  static CellRanges mergeRanges(const CellRanges& ranges);
+
   // Cell assignment and cover computation of the `Flat` scheme, on
   // normalized coordinates in `[0, 1]`.
   CellIndex flatCell(double u1, double v1, double u2, double v2) const;

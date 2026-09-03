@@ -130,9 +130,12 @@ GeoCellGrid::CellRanges GeoCellGrid::coveringCellRanges(double minLng,
   // The sentinel cell can hold a geometry that intersects any rectangle, so
   // its range is part of every cover, independently of the scheme.
   ranges.emplace_back(sentinelCell(), sentinelCell());
-  // Sort and merge into ascending, non-overlapping ranges (adjacent ranges
-  // are merged as well).
-  ql::ranges::sort(ranges);
+  return mergeRanges(ranges);
+}
+
+// ____________________________________________________________________________
+GeoCellGrid::CellRanges GeoCellGrid::mergeRanges(const CellRanges& ranges) {
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(ranges));
   CellRanges merged;
   merged.reserve(ranges.size());
   for (const auto& range : ranges) {
