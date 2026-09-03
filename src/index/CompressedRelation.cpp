@@ -1822,18 +1822,6 @@ CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
 }
 
 // _____________________________________________________________________________
-ql::span<const CompressedBlockMetadata>
-CompressedRelationReader::ScanSpecAndBlocks::getBlockMetadataSpan() const {
-  // ScanSpecAndBlocks must contain exactly one BlockMetadataRange to be
-  // accessible as a span.
-  AD_CONTRACT_CHECK(blockMetadata_.size() == 1);
-  // `ql::span` object requires contiguous range.
-  static_assert(ql::ranges::contiguous_range<BlockMetadataRange>);
-  const auto& blockMetadataRange = blockMetadata_.front();
-  return ql::span(blockMetadataRange.begin(), blockMetadataRange.end());
-}
-
-// _____________________________________________________________________________
 void CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
     ql::span<const CompressedBlockMetadata> blocks, size_t firstFreeColIndex) {
   checkBlockMetadataInvariantOrderAndUniquenessImpl(blocks);

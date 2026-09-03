@@ -202,6 +202,8 @@ addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
 addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
 
+addLinkAndDiscoverTestNoLibs(CowChunkedVectorTest)
+
 addLinkAndDiscoverTest(RebuildIndexStrategyTest qlever_util)
 
 addLinkAndDiscoverTest(KeepPreviousIndexDirsTest qlever)
