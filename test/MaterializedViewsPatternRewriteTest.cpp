@@ -137,15 +137,16 @@ TEST_F(MaterializedViewsPatternRewriteTest, starRewrite) {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
   const std::string onDiskBase = gtestCurrentTestName();
-  const std::string generalPatternTtl =
-      " <gp2s> <p1> <gp2s> . \n"
-      " <gp2s> <p2> <gp2a> . \n"
-      " <gp2s> <p3> <gp2b> . \n"
-      " <gp2s> <p9> <gp2c> . \n"
-      " <gp3s> <p1> <gp3a> . \n"
-      " <gp3s> <p2> <gp3a> . \n"
-      " <gp3s> <p3> <gp3b> . \n"
-      " <gp3s> <p9> <gp3c> . \n";
+  const std::string generalPatternTtl = R"(
+      <gp2s> <p1> <gp2s> .
+      <gp2s> <p2> <gp2a> .
+      <gp2s> <p3> <gp2b> .
+      <gp2s> <p9> <gp2c> .
+      <gp3s> <p1> <gp3a> .
+      <gp3s> <p2> <gp3a> .
+      <gp3s> <p3> <gp3b> .
+      <gp3s> <p9> <gp3c> .
+  )";
   materializedViewsTestHelpers::makeTestIndex(onDiskBase, generalPatternTtl);
   auto cleanUp = absl::Cleanup(
       [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });

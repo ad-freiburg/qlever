@@ -89,8 +89,9 @@ bool PatternMatcher::tryAssignment(const TripleComponent& viewSide,
     // User query contains a fixed value in this position. Prune invalid
     // fixed-value configurations.
 
-    // A payload column (index > 2) bound to a fixed value is always illegal,
-    // regardless of what else is assigned.
+    // A payload column (index > 2) bound to a fixed value is never a valid
+    // assignment because views do not support it, regardless of what else is
+    // assigned.
     size_t col = viewCols_.at(viewVar).columnIndex_;
     if (col > 2) {
       return false;
@@ -202,7 +203,7 @@ void PatternMatcher::extendMatch(size_t edgeIdx) {
   // For this edge, iterate all user query triples that have the edge's
   // predicate.
   const auto& edge = edges[edgeIdx];
-  ad_utility::forEachSetBit(candidatesByEdge_[edgeIdx], [&](size_t tripleIdx) {
+  ad_utility::forEachSetBit(candidatesByEdge_[edgeIdx], [&](uint8_t tripleIdx) {
     if (isTripleCovered(tripleIdx)) {
       return true;
     }
