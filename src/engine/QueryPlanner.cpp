@@ -1855,20 +1855,6 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
   TextLimitVec textLimitVec(textLimits.begin(), textLimits.end());
   std::optional<ReplacementPlans> replacementPlans;
-  // A forced filter substitute (currently only a `SpatialJoin` with a
-  // fixed-value side) unconditionally replaces the raw scan of the triple it
-  // attaches to as early as the first DP round (see `applyFiltersIfPossible`).
-  // This changes that scan's cache key, so a later join of it with the rest of
-  // the component no longer matches an unfiltered materialized view's cache
-  // key -- the cache-key based rewriting that `useGreedyPlanning` below
-  // otherwise relies on can then no longer find such a view on its own, even
-  // under dynamic programming. So replacement plans must also be computed
-  // (and applied via `runDynamicProgrammingOnConnectedComponent`'s own
-  // `replacementPlans[k - 1]` injection) whenever a forced substitute is
-  // present, not just for a component that is planned greedily.
-  bool hasForcedFilterSubstitute =
-      ql::ranges::any_of(filtersAndOptSubstitutes,
-                         [](const auto& f) { return f.forceSubstitution_; });
   for (auto& component : components | ql::views::values) {
     std::vector<const SubtreePlan*> g;
     uint64_t coveredNodes = 0;
@@ -1886,24 +1872,29 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
           << std::endl;
     }
 
-    // Pattern-based replacement plans are usually only needed for a component
-    // that is planned greedily: under dynamic programming a
+    // Pattern-based replacement plans are needed regardless of whether this
+    // component is planned greedily: under dynamic programming a
     // `QueryExecutionTree` is built for every subset of the component's
-    // triples, so the cache-key based rewriting in
-    // `QueryExecutionTree::readFromMaterializedView` already finds every
-    // materialized view that covers such a subset. Finding the patterns is a
-    // search, so it is done at most once and only if it is needed -- except
-    // when a forced filter substitute is present (see
-    // `hasForcedFilterSubstitute` above), where they are also needed under
-    // dynamic programming.
-    bool needsReplacementPlans = useGreedyPlanning || hasForcedFilterSubstitute;
-    if (needsReplacementPlans && !replacementPlans.has_value()) {
+    // triples, but the cache-key based rewriting in
+    // `QueryExecutionTree::readFromMaterializedView` only finds a
+    // materialized view that covers such a subset if the subset's own join
+    // tree happens to have the exact same shape as the one the view's query
+    // was planned with (e.g. the same join order) -- which need not hold, for
+    // example for a self-loop or duplicate-object star arm the view can cover
+    // but that (unlike simpler patterns) is not guaranteed to be planned the
+    // same way both times. It is also not enough for a component with a
+    // forced filter substitute (currently only a `SpatialJoin` with a
+    // fixed-value side): the substitute unconditionally replaces the raw scan
+    // of the triple it attaches to as early as the first DP round (see
+    // `applyFiltersIfPossible`), which changes that scan's cache key before a
+    // later join of it with the rest of the component ever gets a chance to
+    // match an unfiltered view. So the patterns are always searched for (at
+    // most once per call, across all of this query's components).
+    if (!replacementPlans.has_value()) {
       replacementPlans = makeReplacementPlans();
     }
     auto [applicableReplacementPlans, hasApplicableReplacementPlans] =
-        needsReplacementPlans ? findApplicableReplacementPlans(
-                                    replacementPlans.value(), coveredNodes)
-                              : std::pair<ReplacementPlans, bool>{};
+        findApplicableReplacementPlans(replacementPlans.value(), coveredNodes);
 
     auto impl = useGreedyPlanning
                     ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
