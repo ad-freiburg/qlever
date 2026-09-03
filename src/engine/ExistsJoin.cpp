@@ -12,6 +12,7 @@
 #include "engine/Sort.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/ChunkedForLoop.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -80,6 +81,26 @@ std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
   }
   // We add one column to `left_`, but do not change the order of the rows.
   return left_->resultSortedOn();
+}
+
+// ____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left child. Also refuse if `right_`
+  // happens to use the `BIND`'s target variable for one of its own columns:
+  // `right_`'s variables are not visible outside the `EXISTS`, so this is
+  // legal SPARQL, but after the push down `ExistsJoin` would treat it as a
+  // join column shared with `left_`, which can change the Boolean result.
+  if (right_->isVariableCovered(bind._target)) {
+    return std::nullopt;
+  }
+  auto newLeft = QueryExecutionTree::makeTreeWithBindColumn(left_, bind);
+  if (!newLeft.has_value()) {
+    return std::nullopt;
+  }
+  return ad_utility::makeExecutionTree<ExistsJoin>(getExecutionContext(),
+                                                   std::move(newLeft.value()),
+                                                   right_, existsVariable_);
 }
 
 // ____________________________________________________________________________

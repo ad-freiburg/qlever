@@ -3267,7 +3267,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
             &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
       // Consider pushing down the `BIND` into the subtree.
       auto pushedDownPlan =
-          a._qet->getRootOperation()->makeTreeWithBindColumn(v);
+          QueryExecutionTree::makeTreeWithBindColumn(a._qet, v);
       if (pushedDownPlan.has_value()) {
         // We can replace this `BIND` with a plan that contains an additional
         // scan column with equivalent values, for example from a materialized
