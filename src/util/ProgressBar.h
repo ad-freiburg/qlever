@@ -275,11 +275,6 @@ class ConcurrentProgressBar {
   // steps locally and report them in larger batches.
   void add(size_t numSteps) {
     std::lock_guard lock{countMutex_};
-    // The timer is only started with the first reported step, such that a long
-    // startup time before the first step is processed (for example, an input
-    // generator that takes a while to produce its first triple) does not
-    // distort the reported average speed.
-    timer_.cont();
     numStepsProcessed_ += numSteps;
   }
 
@@ -317,10 +312,7 @@ class ConcurrentProgressBar {
                       "`ConcurrentProgressBar::getFinalProgressString()` "
                       "should only be called once after the computation has "
                       "finished");
-    {
-      std::lock_guard lock{countMutex_};
-      timer_.stop();
-    }
+    timer_.stop();
     finished_ = true;
     std::unique_lock displayLock{displayMutex_};
     return getProgressStringImpl(true);
@@ -336,11 +328,9 @@ class ConcurrentProgressBar {
   // the `\r` overwrites all of it and no leftover characters remain.
   std::string getProgressStringImpl(bool isFinal) {
     size_t numStepsProcessed;
-    double secondsElapsed;
     {
       std::lock_guard lock{countMutex_};
       numStepsProcessed = numStepsProcessed_;
-      secondsElapsed = Timer::toSeconds(timer_.value());
     }
     // If the total is known, also show it and the percentage. A total of zero
     // steps is trivially complete.
@@ -360,7 +350,7 @@ class ConcurrentProgressBar {
         displayStringPrefix_, withThousandSeparators(numStepsProcessed),
         totalAndPercentage, " [average speed ",
         getSpeedDescription_(static_cast<double>(numStepsProcessed) /
-                             std::max(secondsElapsed, 0.001)),
+                             std::max(Timer::toSeconds(timer_.value()), 0.001)),
         "]");
     bool reuseLine = displayUpdateOptions_ == ProgressBar::ReuseLine;
     if (reuseLine) {
@@ -382,9 +372,8 @@ class ConcurrentProgressBar {
   // See `ProgressBar::DisplayUpdateOptions`.
   DisplayUpdateOptions displayUpdateOptions_;
 
-  // Timer that is started with the first call to `add` (see there). Protected
-  // by `countMutex_`.
-  Timer timer_{Timer::Stopped};
+  // Timer that is started as soon as this progress bar is created.
+  Timer timer_{Timer::Started};
   // Finished yet or not.
   bool finished_ = false;
   // The total number of units that have been processed so far. Protected by

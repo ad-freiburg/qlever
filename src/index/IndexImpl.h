@@ -61,50 +61,6 @@ using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
 using SecondPermutation = SortByOSP;
 using ThirdPermutation = SortByPSO;
 
-// Return type of `IndexImpl::buildPartialVocabularies`.
-struct BuildPartialVocabulariesResult {
-  using TripleVec =
-      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // The triples and partial vocabularies that a single worker thread has
-  // created. The workers work completely independently of each other, so each
-  // of them has its own `idTriples_`.
-  struct WorkerResult {
-    // The i-th entry is the actual number of triples of the i-th partial
-    // vocabulary of this worker. It might be slightly different from the
-    // specified `batchSize` because of internally added triples. The triples
-    // appear in `idTriples_` in exactly this order.
-    std::vector<size_t> numTriplesPerPartialVocab_;
-    std::unique_ptr<TripleVec> idTriples_;
-  };
-  // One entry per worker, in the order of the worker indices.
-  std::vector<WorkerResult> workerResults_;
-
-  // The suffix of the filenames of the `partialVocabIdx`-th partial vocabulary
-  // of the worker with index `workerIdx`. The partial vocabularies are named
-  // after the worker that created them, so that the workers don't need a shared
-  // counter for the filenames.
-  static std::string partialVocabularySuffix(size_t workerIdx,
-                                             size_t partialVocabIdx) {
-    return absl::StrCat(workerIdx, ".", partialVocabIdx);
-  }
-
-  // The suffixes of all partial vocabularies that were written, in the order in
-  // which the corresponding triples are stored (that is, first all the partial
-  // vocabularies of the first worker, then those of the second worker, etc.).
-  std::vector<std::string> partialVocabularySuffixes() const {
-    std::vector<std::string> suffixes;
-    for (size_t workerIdx = 0; workerIdx < workerResults_.size(); ++workerIdx) {
-      const auto& numTriples =
-          workerResults_[workerIdx].numTriplesPerPartialVocab_;
-      for (size_t partialVocabIdx = 0; partialVocabIdx < numTriples.size();
-           ++partialVocabIdx) {
-        suffixes.push_back(partialVocabularySuffix(workerIdx, partialVocabIdx));
-      }
-    }
-    return suffixes;
-  }
-};
-
 // Data produced after parsing: vocabulary metadata and unsorted ID triples.
 struct IndexBuilderDataAsExternalVector {
   ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
