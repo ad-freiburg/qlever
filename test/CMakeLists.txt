@@ -360,8 +360,6 @@ addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
 
 addLinkAndDiscoverTest(ParseExceptionTest sparqlParser engine)
 
-addLinkAndDiscoverTest(ExceptionLoggingTest)
-
 addLinkAndDiscoverTest(TransparentFunctorsTest)
 
 addLinkAndDiscoverTest(SelectClauseTest sparqlParser engine)

@@ -11,7 +11,7 @@ qlever_target_link_libraries(stringUtils)
 # The error handling for the ANTLR-generated parsers. This has to be separate
 # from `qlever_util`, because `rdfTypes` (which `qlever_util` depends on) needs
 # it, and a single library would therefore be a cyclic dependency.
-add_library(antlrErrorHandling antlr/ANTLRErrorHandling.cpp antlr/GenerateAntlrExceptionMetadata.cpp ParseException.cpp ExceptionLogging.cpp)
+add_library(antlrErrorHandling antlr/ANTLRErrorHandling.cpp antlr/GenerateAntlrExceptionMetadata.cpp ParseException.cpp)
 qlever_target_link_libraries(antlrErrorHandling stringUtils antlr4_umbrella)
 
 # The general-purpose utilities. Everything in here may depend on `rdfTypes`,

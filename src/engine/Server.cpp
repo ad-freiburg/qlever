@@ -36,8 +36,8 @@
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
-#include "util/ExceptionLogging.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/ParseException.h"
 #include "util/ParseableDuration.h"
 #include "util/QueryEventLog.h"
 #include "util/TimeTracer.h"
@@ -1391,8 +1391,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
     co_return co_await send(std::move(resp));
   }
   if (exceptionErrorMsg) {
-    ad_utility::exceptionLogging::logErrorWithHighlighting(
-        exceptionErrorMsg.value(), metadata);
+    logErrorAndHighlightedMetadata(exceptionErrorMsg.value(), metadata);
     auto errorResponseJson = responseJson::composeError(
         operationString, exceptionErrorMsg.value(), requestTimer, metadata);
     if (plannedQuery.has_value()) {
