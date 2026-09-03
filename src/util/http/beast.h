@@ -5,25 +5,13 @@
 #ifndef QLEVER_SRC_UTIL_HTTP_BEAST_H
 #define QLEVER_SRC_UTIL_HTTP_BEAST_H
 
-// A convenience header that includes Boost::Asio and Boost::Beast,
-// and defines several constants to make Boost::Asio compile
-// with coroutine support on G++/libstdc++ and clang++/libc++
-// (TODO<joka921> Figure out, why Boost currently is not able, to deduce
-// these automatically.
+// A convenience header that includes Boost::Asio and Boost::Beast, and defines
+// the few constants that Boost::Asio doesn't deduce automatically (see below).
 
 // Without explicitly including the `<utility>` header, an error occurs when
 // compiling the `boost::asio` code included below with gcc 12. We hope and
 // expect that this will go away with future version of `boost::asio`.
-#include <coroutine>
 #include <utility>
-
-// libc++ needs <experimental/coroutine>, libstdc++ needs <coroutine>
-#ifndef BOOST_ASIO_HAS_CO_AWAIT
-#define BOOST_ASIO_HAS_CO_AWAIT
-#endif
-#ifndef BOOST_ASIO_HAS_STD_COROUTINE
-#define BOOST_ASIO_HAS_STD_COROUTINE
-#endif
 
 // Needed for libc++ in C++20 mode, because std::result_of was removed.
 #ifndef BOOST_ASIO_HAS_STD_INVOKE_RESULT
