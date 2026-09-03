@@ -3007,6 +3007,27 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, testDistributiveJoinInUnionWithMultipleJoinColumns) {
+  // Make sure that the optimization is enabled, so that this test actually
+  // tests something.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  // Both children of the `UNION` have the variables `?s` and `?o` in common
+  // with the `?s <P31> ?o` triple, so the join has two join columns. The
+  // optimization previously only handled a single join column.
+  auto scan = h::IndexScanFromStrings("?s", "<P31>", "?o");
+  h::expectWithGivenBudgets(
+      "SELECT * WHERE { ?s <P31> ?o . "
+      "{ ?s <P279> ?o } UNION { ?s <P280> ?o } }",
+      h::Union(h::MultiColumnJoin(
+                   scan, h::IndexScanFromStrings("?s", "<P279>", "?o")),
+               h::MultiColumnJoin(
+                   scan, h::IndexScanFromStrings("?s", "<P280>", "?o"))),
+      ad_utility::testing::getQec(), {4, 16, 64'000'000});
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionDoesntExplode) {
   // Make sure that this is enabled for this test to actually test something.
   auto cleanup =
