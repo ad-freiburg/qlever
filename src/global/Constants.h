@@ -1,8 +1,13 @@
-// Copyright 2023 - 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchhold@gmail.com> [2014 - 2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2014 - 2026 The QLever Authors, in particular:
+//
+// 2014 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+// 2014 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_GLOBAL_CONSTANTS_H
 #define QLEVER_SRC_GLOBAL_CONSTANTS_H
@@ -88,6 +93,13 @@ constexpr inline std::string_view contains_word = "contains-word";
 }  // namespace string_constants::detail
 constexpr inline std::string_view CONTAINS_WORD_PREDICATE =
     makeQleverInternalIriConst<string_constants::detail::contains_word>();
+
+// Whether `predicate` is one of the full-text pseudo-predicates, which are
+// rewritten into dedicated text operations rather than plain index scans.
+constexpr bool isFullTextPseudoPredicate(std::string_view predicate) {
+  return predicate == CONTAINS_ENTITY_PREDICATE ||
+         predicate == CONTAINS_WORD_PREDICATE;
+}
 
 namespace string_constants::detail {
 constexpr inline std::string_view text = "text";

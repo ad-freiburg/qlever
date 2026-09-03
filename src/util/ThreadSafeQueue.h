@@ -16,6 +16,7 @@
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
+#include "util/NoCopyNoMove.h"
 #include "util/jthread.h"
 
 namespace ad_utility::data_structures {
@@ -26,8 +27,11 @@ namespace ad_utility::data_structures {
 // elements that were already in the queue can be popped. Furthermore, any
 // producers can push an exception to the queue; after that, no more elements
 // can be pushed, and each call to `pop` will rethrow the exception.
+//
+// The queue may neither be copied nor moved, because the producer and consumer
+// threads refer to it by reference.
 template <typename T>
-class ThreadSafeQueue {
+class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
   std::exception_ptr pushedException_;
   std::queue<T> queue_;
   std::mutex mutex_;
@@ -42,12 +46,6 @@ class ThreadSafeQueue {
 
   // Return the maximal size of the queue.
   size_t maxSize() const { return maxSize_; }
-
-  // We can neither copy nor move this class
-  ThreadSafeQueue(const ThreadSafeQueue&) = delete;
-  const ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
-  ThreadSafeQueue(ThreadSafeQueue&&) = delete;
-  const ThreadSafeQueue& operator=(ThreadSafeQueue&&) = delete;
 
   // Push an element into the queue. Block until there is free space in the
   // queue or until finish() was called. Return false if finish()
@@ -148,8 +146,11 @@ class ThreadSafeQueue {
 // Note that great care has to be taken that all the indices will be pushed
 // eventually by some thread, and that for each thread individually the
 // indices are increasing, otherwise the queue will lead to a deadlock.
+//
+// The queue may neither be copied nor moved, because the producer and consumer
+// threads refer to it by reference.
 template <typename T>
-class OrderedThreadSafeQueue {
+class OrderedThreadSafeQueue : public ad_utility::NoCopyNoMove {
  private:
   std::mutex mutex_;
   std::condition_variable cv_;
@@ -162,13 +163,6 @@ class OrderedThreadSafeQueue {
   // Construct from the maximal queue size (see `ThreadSafeQueue` for
   // details).
   explicit OrderedThreadSafeQueue(size_t maxSize) : queue_{maxSize} {}
-
-  // We can neither copy nor move this class
-  OrderedThreadSafeQueue(const OrderedThreadSafeQueue&) = delete;
-  const OrderedThreadSafeQueue& operator=(const OrderedThreadSafeQueue&) =
-      delete;
-  OrderedThreadSafeQueue(OrderedThreadSafeQueue&&) = delete;
-  const OrderedThreadSafeQueue& operator=(OrderedThreadSafeQueue&&) = delete;
 
   // Push the `value` to the queue that is associated with the `index`. This
   // call blocks, until `push` has been called for all indices in `[0, ...,

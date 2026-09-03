@@ -41,7 +41,8 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 void Permutation::loadFromDisk(
     const std::string& onDiskBase, bool loadInternalPermutation,
     Type permutationType,
-    ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns) {
+    ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns,
+    bool logRegistration) {
   onDiskBase_ = onDiskBase;
   permutationType_ = permutationType;
   if (loadInternalPermutation) {
@@ -49,7 +50,8 @@ void Permutation::loadFromDisk(
     internalPermutation_ =
         std::make_unique<Permutation>(permutation_, allocator_);
     internalPermutation_->loadFromDisk(
-        absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false);
+        absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false,
+        Type::NORMAL, {}, logRegistration);
     internalPermutation_->permutationType_ = Type::INTERNAL;
   }
   possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
@@ -70,8 +72,10 @@ void Permutation::loadFromDisk(
   // internal permutations always use it.
   bool useGraphPostProcessing = permutationType != Type::MATERIALIZED_VIEW;
   reader_.emplace(allocator_, std::move(file), useGraphPostProcessing);
-  AD_LOG_INFO << "Registered " << readableName_
-              << " permutation: " << meta_.statistics() << std::endl;
+  if (logRegistration) {
+    AD_LOG_INFO << "Registered " << readableName_
+                << " permutation: " << meta_.statistics() << std::endl;
+  }
   isLoaded_ = true;
 }
 

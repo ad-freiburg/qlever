@@ -14,6 +14,7 @@
 #include "index/TextScoringEnum.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Simple8bCode.h"
 #include "util/TransparentFunctors.h"
 
@@ -328,7 +329,7 @@ void readGapComprList(OutputIterator iterator, size_t nofElements, off_t from,
  *        to write the encoded vector to a file.
  */
 template <typename T>
-class FrequencyEncode {
+class FrequencyEncode : public ad_utility::NoCopyNoMove {
  public:
   using TypedMap = ad_utility::HashMap<T, size_t>;
   using TypedVector = std::vector<T>;
@@ -350,10 +351,6 @@ class FrequencyEncode {
   }
 
   FrequencyEncode() = delete;
-  FrequencyEncode(const FrequencyEncode&) = delete;
-  FrequencyEncode& operator=(const FrequencyEncode&) = delete;
-  FrequencyEncode(FrequencyEncode&&) = delete;
-  FrequencyEncode& operator=(FrequencyEncode&&) = delete;
 
   void writeToFile(ad_utility::File& out, off_t& currentOffset);
 
@@ -383,7 +380,7 @@ FrequencyEncode(View&& view)
  *        a file.
  */
 template <typename T>
-class GapEncode {
+class GapEncode : public ad_utility::NoCopyNoMove {
   static_assert(std::is_arithmetic_v<T>);
 
  public:
@@ -403,10 +400,6 @@ class GapEncode {
   }
 
   GapEncode() = delete;
-  GapEncode(const GapEncode&) = delete;
-  GapEncode& operator=(const GapEncode&) = delete;
-  GapEncode(GapEncode&&) = delete;
-  GapEncode& operator=(GapEncode&&) = delete;
 
   void writeToFile(ad_utility::File& out, off_t& currentOffset);
 

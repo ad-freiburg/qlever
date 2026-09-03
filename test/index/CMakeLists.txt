@@ -4,6 +4,7 @@ addLinkAndDiscoverTest(ScanSpecificationTest index)
 addLinkAndDiscoverTestNoLibs(KeyOrderTest)
 addLinkAndDiscoverTestNoLibs(EncodedIriManagerTest vocabulary)
 addLinkAndDiscoverTest(GraphNameManagerTest index)
+addLinkAndDiscoverTest(IndexFormatConverterTest index engine)
 # When the `server` library is not built (Emscripten, see
 # `src/engine/CMakeLists.txt`), the server-integration test is compiled out
 # via `#ifndef __EMSCRIPTEN__` in the test file and all other tests still run.
@@ -12,5 +13,6 @@ if (TARGET server)
 else ()
     addLinkAndDiscoverTest(IndexRebuilderTest index)
 endif ()
+addLinkAndDiscoverTest(IndexSwapTest index)
 addLinkAndDiscoverTest(InputFileSpecificationTest sparqlParser index)
 addLinkAndDiscoverTest(VocabularyMergerImplTest index)

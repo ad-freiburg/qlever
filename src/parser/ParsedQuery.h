@@ -259,6 +259,11 @@ class ParsedQuery {
   // The limit controls the maximum number of bindings exported by
   // `ExportQueryExecutionTrees`. Do nothing if `sendLimit` is `std::nullopt`.
   void updateExportLimit(std::optional<uint64_t> sendLimit);
+
+  // Return true if this query performs a GROUP BY, either explicitly (a
+  // `GROUP BY` clause is present) or implicitly (no `GROUP BY` clause, but an
+  // aggregating expression is used in the `SELECT` clause).
+  [[nodiscard]] bool isAggregatingQuery() const;
 };
 
 #endif  // QLEVER_SRC_PARSER_PARSEDQUERY_H

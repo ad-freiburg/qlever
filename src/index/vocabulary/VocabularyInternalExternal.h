@@ -149,7 +149,7 @@ class VocabularyInternalExternal {
   }
   uint64_t iteratorToIndex(
       ql::ranges::iterator_t<VocabularyInMemoryBinSearch> it) const {
-    return internalVocab_.indices().at(it - internalVocab_.begin());
+    return internalVocab_.indexAtPosition(it - internalVocab_.begin());
   }
 
   // Generic serialization support.

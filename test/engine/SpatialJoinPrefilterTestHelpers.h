@@ -24,8 +24,8 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
-#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -190,8 +190,7 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      SweeperDistResult& resultDists,
                                      double withinDist) {
   using enum SpatialJoinType::Enum;
-  sj::SweeperCfg cfg =
-      SpatialJoinAlgorithms::libspatialjoinSweeperConfig(1, 1_GB);
+  sj::SweeperCfg cfg = LibspatialjoinAlgorithm::sweeperConfig(1, 1_GB);
   cfg.withinDist = withinDist;
   auto joinTypeVal = libSJConfig.joinType_;
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
@@ -243,14 +242,17 @@ inline void runParsingAndSweeper(
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
-  // Build `SpatialJoinAlgorithms` instance from spatial join operation
+  // Build `LibspatialjoinAlgorithm` instance from spatial join operation
   auto prepared = spatialJoin->onlyForTestingGetPrepareJoin();
-  SpatialJoinAlgorithms sjAlgo{qec, prepared, config, spatialJoin};
+  auto [bbLeft, bbRight] =
+      spatialJoin->onlyForTestingGetLibspatialjoinBoundingBoxCols();
+  LibspatialjoinAlgorithm sjAlgo{qec,         prepared, config,
+                                 spatialJoin, bbLeft,   bbRight};
 
   // The regular implementation can also be tested instead of this mock version,
   // but then only limited information is available.
   if (useRegularImplementation) {
-    auto result = sjAlgo.LibspatialjoinAlgorithm();
+    auto result = sjAlgo.run();
     auto varToCol = spatialJoin->computeVariableToColumnMap();
     auto leftCol = varToCol.at(varLeft).columnIndex_;
     auto rightCol = varToCol.at(varRight).columnIndex_;
@@ -284,9 +286,9 @@ inline void runParsingAndSweeper(
   // Run first parsing step (left side)
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
         numThreadsLeft] =
-      sjAlgo.libspatialjoinParse(
-          false, {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
-          sweeper, 1, std::nullopt);
+      sjAlgo.parse(false,
+                   {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
+                   sweeper, 1, std::nullopt);
   // Due to problems in `Sweeper` when a side is empty, we don't use
   // `sweeper.setFilterBox(box);` here.
 
@@ -297,7 +299,7 @@ inline void runParsingAndSweeper(
   }
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
         numThreadsRight] =
-      sjAlgo.libspatialjoinParse(
+      sjAlgo.parse(
           true, {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt},
           sweeper, 1, prefilterBox);
 

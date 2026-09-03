@@ -1509,3 +1509,40 @@ TEST(CompressedBlockMetadata, invariantChecks) {
   blocks.front().lastTriple_ = {V(1), V(2), V(3), V(16)};
   EXPECT_TRUE(CompressedBlockMetadata::checkInvariantsForSortedBlocks(blocks));
 }
+
+namespace {
+// Write a small permutation to `filename` with the given `showProgressBar` and
+// return the log output that was produced while doing so.
+std::string writePermutationAndCaptureLog(const std::string& filename,
+                                          bool showProgressBar) {
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  auto generator = []() -> cppcoro::generator<IdTableStatic<0>> {
+    IdTableStatic<0> buffer{4, ad_utility::testing::makeAllocator()};
+    for (int64_t i = 0; i < 10; ++i) {
+      buffer.push_back(std::vector{V(0), V(i), V(i + 1), V(0)});
+    }
+    co_yield buffer;
+  };
+  CompressedRelationWriter::WriterAndCallback writerAndCallback{
+      std::make_unique<CompressedRelationWriter>(
+          4, ad_utility::File{filename, "w"}, 16_B),
+      [](ql::span<const CompressedRelationMetadata>) {}};
+  CompressedRelationWriter::createPermutation(
+      std::move(writerAndCallback),
+      ad_utility::InputRangeTypeErased{generator()},
+      qlever::KeyOrder{0, 1, 2, 3}, {}, showProgressBar);
+  return logStream.str();
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, showProgressBarCanBeDisabled) {
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  // With `showProgressBar` set to `true`, the progress bar is written.
+  EXPECT_THAT(writePermutationAndCaptureLog(filename, true),
+              ::testing::HasSubstr("Triples sorted"));
+  // With `showProgressBar` set to `false`, the writer stays silent.
+  EXPECT_THAT(writePermutationAndCaptureLog(filename, false),
+              ::testing::Not(::testing::HasSubstr("Triples sorted")));
+}

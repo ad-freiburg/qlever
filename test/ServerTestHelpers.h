@@ -7,14 +7,19 @@
 #ifndef QLEVER_TEST_SERVERTESTHELPERS_H_
 #define QLEVER_TEST_SERVERTESTHELPERS_H_
 
+#include <absl/strings/str_cat.h>
+
+#include <boost/asio/awaitable.hpp>
 #include <boost/beast/http.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "backports/filesystem.h"
 #include "engine/Server.h"
 #include "libqlever/Qlever.h"
+#include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/metrics/Metrics.h"
 
@@ -35,6 +40,17 @@ inline std::string responseBodyToString(
   return absl::StrJoin(respWithCommonIterators.begin(),
                        respWithCommonIterators.end(), "");
 }
+
+// Expect that calling `fn()` throws with a message stating that `actionName`
+// requires a valid access token.
+inline auto expectRequiresValidAccessToken =
+    [](std::string_view actionName, auto fn,
+       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+      auto trace = generateLocationTrace(l);
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          fn(), testing::HasSubstr(absl::StrCat(
+                    actionName, " requires a valid access token")));
+    };
 
 // Test the HTTP request processing of the `Server` class. The underlying
 // `Server` lives for the whole lifetime of this object, so multiple operations
@@ -67,30 +83,74 @@ class ServerForTesting {
     return server_->indexAndViewsSnapshot()->index_.deltaTriplesManager();
   }
 
+  // Access the `Index` of the underlying `Server`, e.g. to inspect the KB or
+  // text description after setting it via `?index-description=` or
+  // `?text-description=`.
+  const Index& getIndex() const {
+    return server_->indexAndViewsSnapshot()->index_;
+  }
+
   // Forwards to `Server::configureQueryEventLog`.
   void configureQueryEventLog(const ql::filesystem::path& path) {
     server_->configureQueryEventLog(path);
+  }
+
+  // Call `Server::process` on `request`, using a `MockSend` to capture the
+  // response it would have sent instead of actually sending it, and return
+  // that captured response. Static (rather than requiring a
+  // `ServerForTesting` instance, which owns its own `io_context`) so it can
+  // also be reused by the `IndexRebuilder` server-integration tests, which
+  // cannot use the instance method below because it creates a fresh
+  // `io_context` per request (see `serverIntegrationKeepPreviousIndexDirs`
+  // in `IndexRebuilderTest.cpp` for why that is unsafe there).
+  static boost::asio::awaitable<ResT> process(Server& server, ReqT& request) {
+    Server::MockSend mockSend;
+    co_await server.process(request, mockSend);
+    co_return std::move(mockSend.response_);
   }
 
   // Apply `Server::process` on the given request and return the
   // `http::response`. A fresh `io_context` and `QueryHub` are created per
   // request, but the `Server` itself is reused across calls.
   ResT process(const ReqT& request) {
+    return runOnFreshIoContext(request, [](Server* server, ReqT& request) {
+      return ServerForTesting::process(*server, request);
+    });
+  }
+
+  // Apply `Server::handleHttpRequest` on the given request and return the
+  // captured `http::response`. Unlike `process()`, this goes through the
+  // same entry point `Server::run()` uses, including the OPTIONS preflight
+  // shortcut, CORS headers, and the exception-to-HTTP-error translation. A
+  // fresh `io_context` and `QueryHub` are created per request, but the
+  // `Server` itself is reused across calls.
+  ResT handleHttpRequest(const ReqT& request) {
+    return runOnFreshIoContext(
+        request,
+        [](Server* server, ReqT& request) -> boost::asio::awaitable<ResT> {
+          Server::MockSend mockSend;
+          co_await server->handleHttpRequest(std::move(request), mockSend);
+          co_return std::move(mockSend.response_);
+        });
+  }
+
+ private:
+  // Run `fn(server, request)` (which must return an `awaitable<ResT>`) to
+  // completion on a fresh `io_context`, with `queryHub_` set up beforehand,
+  // and return the result. Shared by `process()` and `handleHttpRequest()`,
+  // which only differ in which `Server` method `fn` calls.
+  template <typename Fn>
+  ResT runOnFreshIoContext(const ReqT& request, Fn fn) {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [](auto request, Server* server,
-           auto& io) -> boost::asio::awaitable<ResT> {
+        [](auto request, Server* server, auto& io,
+           auto fn) -> boost::asio::awaitable<ResT> {
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(
               io.get_executor());
           server->queryHub_ = queryHub;
-
-          auto result =
-              co_await server
-                  ->template onlyForTestingProcess<decltype(request), ResT>(
-                      request);
-          co_return result;
-        }(request, server_.get(), io),
+          co_return co_await fn(server, request);
+        }(request, server_.get(), io, fn),
         boost::asio::use_future);
     io.run();
     return fut.get();

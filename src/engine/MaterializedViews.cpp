@@ -54,6 +54,8 @@ MaterializedViewWriter::MaterializedViewWriter(
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
+  throwIfLimitOffset();
+
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
@@ -61,6 +63,64 @@ MaterializedViewWriter::MaterializedViewWriter(
   columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
       columnNamesAndPermutation | ql::views::values);
   numAddEmptyColumns_ = numAddEmptyColumns;
+
+  throwIfOrderByInconsistentWithViewOrder();
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::throwIfLimitOffset() const {
+  if (!parsedQuery_._limitOffset.isUnconstrained()) {
+    throw MaterializedViewConfigException(
+        "The query to write a materialized view may not contain a `LIMIT` or "
+        "`OFFSET` clause as this might produce unintended results because the "
+        "view is sorted after query execution. If you are aware of this and "
+        "want to forcefully apply a `LIMIT` or `OFFSET`, use an explicit "
+        "subquery.");
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
+  const auto& orderBy = parsedQuery_._orderBy;
+  // No particular sorting is fine.
+  if (orderBy.empty()) {
+    return;
+  }
+
+  // An explicit `ORDER BY` is always rejected.
+  if (parsedQuery_._isInternalSort == IsInternalSort::False) {
+    throw MaterializedViewConfigException(
+        "The query to write a materialized view may not contain an `ORDER BY` "
+        "clause. A view is always stored in the internal order of its first "
+        "three columns, so the `ORDER BY` clause's sorting would be silently "
+        "dropped.");
+  }
+
+  // The user has explicitly written `INTERNAL SORT BY`. This is fine if the
+  // sorting is a prefix of the view's SPO sorting.
+  auto isConsistentWithViewOrder = [&]() {
+    // Sort keys beyond the view's columns cannot correspond to view columns,
+    // so their requested order could not be guaranteed.
+    if (orderBy.size() > columnPermutation_.size()) {
+      return false;
+    }
+    // Check prefix.
+    return ql::ranges::all_of(
+        ::ranges::views::zip(orderBy, columnPermutation_),
+        [this](const auto& pair) {
+          auto [order, target] = pair;
+          auto col = qet_->getVariableColumnOrNullopt(order.variable_);
+          return !order.isDescending_ && col == target;
+        });
+  };
+
+  if (!isConsistentWithViewOrder()) {
+    throw MaterializedViewConfigException(
+        "The `INTERNAL SORT BY` clause of the query to write a materialized "
+        "view must be a prefix of the view's columns in their `SELECT`ed "
+        "order, because a view is always stored sorted by these columns; any "
+        "other order would be silently discarded.");
+  }
 }
 
 // _____________________________________________________________________________
@@ -84,7 +144,7 @@ void MaterializedViewsManager::writeViewToDisk(
 // _____________________________________________________________________________
 std::string MaterializedView::getFilenameBase(std::string_view onDiskBase,
                                               std::string_view name) {
-  return absl::StrCat(onDiskBase, ".view.", name);
+  return materializedViewFilenameBase(onDiskBase, name);
 }
 
 // _____________________________________________________________________________
@@ -116,6 +176,11 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
   // Add dummy columns such that the view has at least four columns in total.
   uint8_t numAddEmptyCols = 0;
+  if (numCols < 1) {
+    throw MaterializedViewConfigException{
+        "A query to write a materialized view needs to select at least one "
+        "column."};
+  }
   if (numCols < 4) {
     AD_LOG_INFO << "The query to write the materialized view \"" << name_
                 << "\" selects only " << numCols << " column(s), "
@@ -556,11 +621,9 @@ bool MaterializedViewsManager::hasLoadedViews() const {
 // _____________________________________________________________________________
 std::vector<ql::filesystem::path> MaterializedViewsManager::viewFilesOnDisk(
     const ql::filesystem::path& onDiskBase) {
-  // View files are named `<base>.view.<name>...`. Reuse the canonical filename
-  // builder so the `.view.` infix is not duplicated here, and let the shared
-  // helper enumerate the matching files in the directory of `onDiskBase`.
-  std::string suffix = MaterializedView::getFilenameBase("", "");
-  return qlever::util::filesWithBaseNameAndSuffix(onDiskBase, suffix);
+  // View files are named `<base>.view.<name>...`, so let the shared helper
+  // enumerate the files with that infix in the directory of `onDiskBase`.
+  return qlever::util::filesWithBaseNameAndSuffix(onDiskBase, VIEW_FILE_INFIX);
 }
 
 // _____________________________________________________________________________

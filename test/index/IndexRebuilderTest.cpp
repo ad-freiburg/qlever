@@ -110,7 +110,7 @@ void deleteVocabFiles(const std::string& vocabBasename,
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeEmptyLocalVocab) {
-  auto type = ad_utility::VocabularyType::random();
+  auto type = ad_utility::VocabularyType::randomForIndexBuilding();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex(
@@ -136,7 +136,7 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeLocalVocab) {
-  auto type = ad_utility::VocabularyType::random();
+  auto type = ad_utility::VocabularyType::randomForIndexBuilding();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex("materializeLocalVocab",
@@ -227,7 +227,7 @@ TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
   constexpr size_t batchSize = 65'536;
   constexpr size_t numEntries = batchSize + 1'000;
 
-  auto type = ad_utility::VocabularyType::random();
+  auto type = ad_utility::VocabularyType::randomForIndexBuilding();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex(
@@ -884,16 +884,16 @@ TEST(IndexRebuilder, serverIntegration) {
         withAccessToken ? absl::StrCat("&access-token=", accessToken) : ""));
   };
 
-  // Create the coroutine that lets the `server` process the given `request`.
-  auto makeTask = [&server](auto& request) {
-    return server.template onlyForTestingProcess<
-        std::decay_t<decltype(request)>, ad_utility::httpUtils::ResponseT>(
-        request);
+  // Create the coroutine that lets the `server` process the given `request`
+  // and returns the response that would have been sent.
+  auto makeTask = [&server](serverTestHelpers::ReqT& request) {
+    return serverTestHelpers::ServerForTesting::process(server, request);
   };
 
   // Perform the given `request` on the `threadPool` and return a future for the
   // response.
-  auto performRequest = [&threadPool, &makeTask](auto& request) {
+  auto performRequest = [&threadPool,
+                         &makeTask](serverTestHelpers::ReqT& request) {
     return net::co_spawn(threadPool, makeTask(request), net::use_future);
   };
 
@@ -902,15 +902,15 @@ TEST(IndexRebuilder, serverIntegration) {
   // The exception must not be handed out of the coroutine (in particular not
   // via `net::use_future` + `AD_EXPECT_THROW_WITH_MESSAGE`), see
   // `AsioTestHelpers.h` for the reason.
-  auto expectRequestFailsWith = [&threadPool, &makeTask](
-                                    auto& request, const auto& matcher,
-                                    ad_utility::source_location location =
-                                        AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(location);
-    EXPECT_THAT(ad_utility::testing::getErrorMessageOfCoroutine(
-                    threadPool, makeTask(request)),
-                ::testing::Optional(matcher));
-  };
+  auto expectRequestFailsWith =
+      [&threadPool, &makeTask](
+          serverTestHelpers::ReqT& request, const auto& matcher,
+          ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(location);
+        EXPECT_THAT(ad_utility::testing::getErrorMessageOfCoroutine(
+                        threadPool, makeTask(request)),
+                    ::testing::Optional(matcher));
+      };
 
   // Without access token this operation is not allowed!
   auto request0 = makeRebuildRequest("", false);
@@ -971,7 +971,7 @@ TEST(IndexRebuilder, serverIntegration) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   cleanDirsWithPrefix("droppedState.");
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
@@ -1006,14 +1006,11 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
       "/?cmd=rebuild-index&access-token=accessToken"
       "&rebuild-tmp-dir=droppedState.tmp"
       "&rebuild-previous-index-dir=droppedState.old");
-  using ResT = ad_utility::httpUtils::ResponseT;
-  auto response =
-      net::co_spawn(
-          threadPool,
-          server.onlyForTestingProcess<std::decay_t<decltype(request)>, ResT>(
-              request),
-          net::use_future)
-          .get();
+  auto response = net::co_spawn(threadPool,
+                                serverTestHelpers::ServerForTesting::process(
+                                    server, request),
+                                net::use_future)
+                      .get();
   EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
 
   EXPECT_THAT(logStream.str(),
@@ -1160,12 +1157,11 @@ TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs) {
   // final coroutine resumption can still be inside the signal on that
   // context's scheduler event; the thread sanitizer reports this as a race
   // between `pthread_cond_signal` and `pthread_cond_destroy`.
-  auto performRequest = [&server, &threadPool](auto& request) {
+  auto performRequest = [&server,
+                         &threadPool](serverTestHelpers::ReqT& request) {
     return net::co_spawn(
                threadPool,
-               server.onlyForTestingProcess<std::decay_t<decltype(request)>,
-                                            ad_utility::httpUtils::ResponseT>(
-                   request),
+               serverTestHelpers::ServerForTesting::process(server, request),
                net::use_future)
         .get();
   };

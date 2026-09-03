@@ -5,7 +5,11 @@
 #include <gtest/gtest.h>
 
 #include "./QueryRewriteUtilTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
+#include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
+#include "engine/SpatialJoin.h"
+#include "engine/Values.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/data/SparqlFilter.h"
@@ -13,6 +17,20 @@
 namespace {
 
 using namespace queryRewriteUtilTestHelpers;
+
+using Literal = ad_utility::triple_component::Literal;
+
+// Helper wrapping `rewriteFilterToSpatialJoin` with a test
+// `QueryExecutionContext` and a trivial internal-variable generator, so that
+// individual test cases can call it with just a `SparqlFilter`.
+std::shared_ptr<SpatialJoin> rewrite(const SparqlFilter& filter) {
+  size_t count = 0;
+  auto* qec = ad_utility::testing::getQec();
+  auto generateUniqueVarName = [&count] {
+    return Variable{absl::StrCat("?_test_internal_", count++)};
+  };
+  return rewriteFilterToSpatialJoin(filter, qec, generateUniqueVarName);
+}
 
 // _____________________________________________________________________________
 TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParameters) {
@@ -64,8 +82,6 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
   checkGeoDistanceFilter(getGeoDistanceFilter(*expr6), std::nullopt, 10);
 }
 
-//______________________________________________________________________________
-
 // _____________________________________________________________________________
 TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   auto [expr1, exp1] = makeDe9imRelation();
@@ -90,19 +106,35 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   checkDe9imRelationCall(
       getDe9imRelationExpressionParameters(*variablePatternPtr), std::nullopt);
 
-  // The left argument must be a variable; a constant is rejected.
+  // A constant left argument.
   auto nonVarLeftPtr = makeDe9imRelationExpression(
       getExpr(ValueId::makeFromInt(42)), getExpr(V{"?b"}),
       getExpr(Literal::literalWithoutQuotes("T*T***T**")));
+  De9imRelationCall nonVarLeftExp{
+      {DE9IM, TripleComponent{ValueId::makeFromInt(42)}, V{"?b"}},
+      parseDe9imFilterString("T*T***T**").value()};
   checkDe9imRelationCall(getDe9imRelationExpressionParameters(*nonVarLeftPtr),
-                         std::nullopt);
+                         nonVarLeftExp);
 
-  // The right argument must be a variable; a constant is rejected.
+  // A constant right argument.
   auto nonVarRightPtr = makeDe9imRelationExpression(
       getExpr(V{"?a"}), getExpr(ValueId::makeFromInt(42)),
       getExpr(Literal::literalWithoutQuotes("T*T***T**")));
+  De9imRelationCall nonVarRightExp{
+      {DE9IM, V{"?a"}, TripleComponent{ValueId::makeFromInt(42)}},
+      parseDe9imFilterString("T*T***T**").value()};
   checkDe9imRelationCall(getDe9imRelationExpressionParameters(*nonVarRightPtr),
-                         std::nullopt);
+                         nonVarRightExp);
+
+  // An unsupported expression type (neither a variable, `IdExpression`, nor
+  // `StringLiteralExpression`) as an argument is rejected. This also covers
+  // `IriExpression`, since no GeoSPARQL predicate supported here operates on
+  // IRIs.
+  auto unsupportedArgPtr = makeDe9imRelationExpression(
+      makePowExpression(getExpr(V{"?a"}), getExpr(V{"?c"})), getExpr(V{"?b"}),
+      getExpr(Literal::literalWithoutQuotes("T*T***T**")));
+  checkDe9imRelationCall(
+      getDe9imRelationExpressionParameters(*unsupportedArgPtr), std::nullopt);
 
   // A syntactically valid pattern that could still match disjoint geometries
   // is rejected, because `geof:relate` currently only supports patterns that
@@ -115,7 +147,7 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
 }
 
 // _____________________________________________________________________________
-TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
+TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoin) {
   auto D = &ValueId::makeFromDouble;
 
   // Construct `FILTER(geof:metricDistance(?a, ?b) <= 10.0)`
@@ -127,22 +159,25 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
                             "metricDistance>(?a, ?b) <= 10.0"}};
 
   // Convert to `SpatialJoinConfiguration`
-  auto sjConf = rewriteFilterToSpatialJoinConfig(filter);
-  ASSERT_TRUE(sjConf.has_value());
-  ASSERT_EQ(sjConf.value().left_, V{"?a"});
-  ASSERT_EQ(sjConf.value().right_, V{"?b"});
-  ASSERT_EQ(sjConf.value().joinType_, WITHIN_DIST);
-  std::visit([](const auto& task) { ASSERT_EQ(task.maxDist_, 10.0); },
-             sjConf.value().task_);
+  auto sj = rewrite(filter);
+  ASSERT_NE(sj, nullptr);
+  const auto& sjConf = sj->onlyForTestingGetConfig();
+  EXPECT_EQ(sjConf.left_, V{"?a"});
+  EXPECT_EQ(sjConf.right_, V{"?b"});
+  EXPECT_EQ(sjConf.getJoinType(), WITHIN_DIST);
+  EXPECT_EQ(sj->getMaxDist(), 10.0);
+  // Both sides are variables, so no child is prebuilt.
+  EXPECT_EQ(sj->onlyForTestingGetLeftChild(), nullptr);
+  EXPECT_EQ(sj->onlyForTestingGetRightChild(), nullptr);
 
-  // Unrelated `FILTER(math:pow(?a, ?b) <= 10.0)` results in `std::nullopt`
+  // Unrelated `FILTER(math:pow(?a, ?b) <= 10.0)` results in `nullptr`
   auto [unrelExpr, unrelCall] = makeUnrelated();
   auto unrelExprSharedPtr =
       makeLessEqualSharedPtr(std::move(unrelExpr), D(10.0));
   SparqlFilter unrelFilter{SparqlExpressionPimpl{
       std::move(unrelExprSharedPtr),
       "<http://www.w3.org/2005/xpath-functions/math#pow>(?a, ?b) <= 10.0"}};
-  ASSERT_FALSE(rewriteFilterToSpatialJoinConfig(unrelFilter).has_value());
+  EXPECT_EQ(rewrite(unrelFilter), nullptr);
 
   // Construct `FILTER(geof:relate(?a, ?b, "T*T***T**"))`
   auto [de9imExpr, de9imCall] = makeDe9imRelation();
@@ -152,17 +187,74 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
                             "<http://www.opengis.net/def/function/geosparql/"
                             "relate>(?a, ?b, \"T*T***T**\")"}};
 
-  auto de9imSjConf = rewriteFilterToSpatialJoinConfig(de9imFilter);
-  ASSERT_TRUE(de9imSjConf.has_value());
-  ASSERT_EQ(de9imSjConf.value().left_, V{"?a"});
-  ASSERT_EQ(de9imSjConf.value().right_, V{"?b"});
-  ASSERT_EQ(de9imSjConf.value().joinType_, DE9IM);
-  const auto& de9imTask =
-      std::get<LibSpatialJoinConfig>(de9imSjConf.value().task_);
-  ASSERT_EQ(de9imTask.de9imFilter_, parseDe9imFilterString("T*T***T**"));
+  auto de9imSj = rewrite(de9imFilter);
+  ASSERT_NE(de9imSj, nullptr);
+  const auto& de9imSjConf = de9imSj->onlyForTestingGetConfig();
+  EXPECT_EQ(de9imSjConf.left_, V{"?a"});
+  EXPECT_EQ(de9imSjConf.right_, V{"?b"});
+  EXPECT_EQ(de9imSjConf.getJoinType(), DE9IM);
+  const auto& de9imTask = std::get<LibSpatialJoinConfig>(de9imSjConf.task_);
+  EXPECT_EQ(de9imTask.de9imFilter_, parseDe9imFilterString("T*T***T**"));
 }
 
-// TODO<ullingerc> #2140: Add tests for `getGeoFunctionExpressionParameters` +
-// `rewriteFilterToSpatialJoinConfig` for geo relation functions
+// _____________________________________________________________________________
+TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinWithFixedValue) {
+  auto D = &ValueId::makeFromDouble;
+  auto point = ValueId::makeFromGeoPoint({1, 1});
+
+  // `FILTER(geof:metricDistance(?a, <fixed point>) <= 10.0)`: the right-hand
+  // side is a fixed value, so it must be resolved to a fresh internal
+  // variable together with a one-row `VALUES` tree binding it.
+  auto distExpr = makeMetricDistExpression(getExpr(V{"?a"}), getExpr(point));
+  auto exprSharedPtr = makeLessEqualSharedPtr(std::move(distExpr), D(10.0));
+  SparqlFilter filter{
+      SparqlExpressionPimpl{std::move(exprSharedPtr),
+                            "<http://www.opengis.net/def/function/geosparql/"
+                            "metricDistance>(?a, <fixed point>) <= 10.0"}};
+
+  auto sj = rewrite(filter);
+  ASSERT_NE(sj, nullptr);
+  const auto& sjConf = sj->onlyForTestingGetConfig();
+  EXPECT_EQ(sjConf.left_, V{"?a"});
+  EXPECT_NE(sjConf.right_, V{"?a"});
+  EXPECT_EQ(sj->onlyForTestingGetLeftChild(), nullptr);
+  ASSERT_NE(sj->onlyForTestingGetRightChild(), nullptr);
+
+  // The prebuilt child is a one-row `VALUES` clause binding `sjConf.right_`
+  // to the fixed point.
+  const auto* values = dynamic_cast<const Values*>(
+      sj->onlyForTestingGetRightChild()->getRootOperation().get());
+  ASSERT_NE(values, nullptr);
+  EXPECT_EQ(values->getResultWidth(), 1u);
+
+  // Both sides fixed: nothing to join on, so this is left to ordinary
+  // `FILTER` evaluation.
+  auto bothFixedExpr = makeMetricDistExpression(getExpr(point), getExpr(point));
+  auto bothFixedSharedPtr =
+      makeLessEqualSharedPtr(std::move(bothFixedExpr), D(10.0));
+  SparqlFilter bothFixedFilter{SparqlExpressionPimpl{
+      std::move(bothFixedSharedPtr),
+      "<http://www.opengis.net/def/function/geosparql/"
+      "metricDistance>(<fixed point>, <fixed point>) <= 10.0"}};
+  EXPECT_EQ(rewrite(bothFixedFilter), nullptr);
+}
+
+// _____________________________________________________________________________
+TEST(QueryRewriteUtilTest, GetGeoFunctionExpressionParametersWithFixedValue) {
+  // A fixed IRI operand is rejected: no GeoSPARQL predicate supported here
+  // operates on IRIs (only variables, `ValueId`s, and string/WKT literals).
+  auto iriPtr = makeGeoRelationExpression<INTERSECTS>(
+      getExpr(V{"?a"}),
+      getExpr(Iri::fromIrirefWithoutBrackets("http://example.com/geom")));
+  checkGeoFunctionCall(getGeoFunctionExpressionParameters(*iriPtr),
+                       std::nullopt);
+
+  // An unsupported expression type (neither a variable, `IdExpression`, nor
+  // `StringLiteralExpression`) as an argument is rejected.
+  auto unsupportedArgPtr = makeGeoRelationExpression<INTERSECTS>(
+      makePowExpression(getExpr(V{"?a"}), getExpr(V{"?c"})), getExpr(V{"?b"}));
+  checkGeoFunctionCall(getGeoFunctionExpressionParameters(*unsupportedArgPtr),
+                       std::nullopt);
+}
 
 }  // namespace

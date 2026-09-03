@@ -754,6 +754,16 @@ set(LOGLEVEL DEBUG CACHE STRING
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_compile_definitions(LOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
+# The `AD_LOG_...` macros have two implementations, see `src/util/Log.h`. By
+# default, the branching logger is used, which doesn't evaluate the arguments of
+# a suppressed log message, but introduces a branch at every call site. The
+# branchless logger always evaluates its arguments, but is friendlier to
+# coverage measurements, because the branch lives in `Log.h` instead of in each
+# of the hundreds of call sites. It is used for the coverage build.
+option(BRANCHLESS_LOGGING "Use the coverage-friendly branchless implementation of the `AD_LOG_...` macros" OFF)
+if (BRANCHLESS_LOGGING)
+    add_compile_definitions(QLEVER_BRANCHLESS_LOGGING)
+endif ()
 
 ##################################################
 # Warnings about incorrect combination of CMake variables
@@ -851,6 +861,9 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     if (USE_PRECOMPILED_HEADERS)
         target_precompile_headers(qlever-server REUSE_FROM engine)
     endif()
+
+    add_executable(qlever-upgrade-index src/IndexUpgraderMain.cpp)
+    qlever_target_link_libraries(qlever-upgrade-index index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
@@ -866,6 +879,7 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     install(TARGETS
         qlever-index
         qlever-server
+        qlever-upgrade-index
         RUNTIME DESTINATION bin
     )
 endif()
@@ -947,6 +961,7 @@ set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/ad-freiburg/qlever")
 
 set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/packages")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_STRIP_FILES YES)
 
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 

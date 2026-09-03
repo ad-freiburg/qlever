@@ -165,6 +165,10 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
           "`<maxDistance>` option only if `<joinType>` is set to "
           "`<within-dist>`.");
 
+  throwIf(joinType_ == SpatialJoinType::WITHIN_DIST && !maxDist_.has_value(),
+          "The join type `<within-dist>` requires the `<maxDistance>` "
+          "parameter to be set.");
+
   throwIf(joinType_ == SpatialJoinType::DE9IM && !de9imFilter_.has_value(),
           "The join type `<de9im>` requires the `<de9imFilter>` parameter to "
           "be set.");
@@ -247,7 +251,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
 
   return SpatialJoinConfiguration{
       task, left_.value(), right_.value(), distanceVariable_,
-      pv,   algo,          joinType,       rightCacheName_};
+      pv,   algo,          rightCacheName_};
 }
 
 // ____________________________________________________________________________
