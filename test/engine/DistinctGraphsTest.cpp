@@ -19,10 +19,9 @@
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "gmock/gmock.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"
-
-#include "index/ConstantsIndexBuilding.h"
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getChildren) {
