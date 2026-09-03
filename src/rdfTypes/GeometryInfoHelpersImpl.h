@@ -165,6 +165,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
       case NONE:
         // Set actual CRS type to unsupported as wkt type is invalid.
         projCrs = CRSType::UNSUPPORTED;
+        crsType = CRSType::UNSUPPORTED;
         break;
       default:
         break;
@@ -476,7 +477,7 @@ struct ParseGeoPointOrWktVisitor {
   ParseResult operator()(const GeoPoint& point,
                          CRSType projCrs = defaultCrs) const {
     return ParseResult{geoPointToUtilPoint(point, projCrs), WKTType::POINT,
-                       projCrs, CRSType::WGS84};
+                       projCrs, defaultCrs};
   }
 
   ParseResult operator()(const std::string& wkt,

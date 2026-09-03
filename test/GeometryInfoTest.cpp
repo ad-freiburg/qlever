@@ -686,8 +686,8 @@ TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
 
   // Test for `GeoPoint`.
   EXPECT_THAT(parseGeoPointOrWkt(GeoPoint{1, 2}),
-              parseResultNear(ParseResult{DPoint(2, 1), POINT, defaultCrs,
-                                          CRSType::WGS84}));
+              parseResultNear(
+                  ParseResult{DPoint(2, 1), POINT, defaultCrs, defaultCrs}));
 
   // Explicit test for a real-world WKT string.
   EXPECT_THAT(parseGeoPointOrWkt(std::string{litSmallRealWorldPolygon1}),
@@ -788,20 +788,14 @@ TEST(GeometryInfoTest, GeometryN) {
   }
 }
 
-// Mock projection for `ProjectionVisitor` unit test below.
-struct TwiceProjection {
-  DPoint operator()(const DPoint& p) const {
-    return {2 * p.getX(), 2 * p.getY()};
-  }
-};
-
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, ProjectionVisitor) {
   using namespace ad_utility::detail;
 
-  EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
-              parseResultNear(ParseResult{
-                  std::nullopt, NONE, CRSType::WEB_MERCATOR, CRSType::CRS84}));
+  EXPECT_THAT(
+      projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
+      parseResultNear(ParseResult{std::nullopt, NONE, CRSType::WEB_MERCATOR,
+                                  CRSType::UNSUPPORTED}));
   EXPECT_EQ(projectWebMerc(std::optional<ParsedWkt>{}), std::nullopt);
   EXPECT_THAT(
       projectWebMerc(GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
