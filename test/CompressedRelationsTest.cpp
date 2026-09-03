@@ -2,12 +2,14 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <thread>
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "global/Constants.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
@@ -31,6 +33,25 @@ Id V(int64_t index) {
 }
 
 auto I = &Id::makeFromInt;
+
+// Compute the distinct graph IDs contained in the SPO permutation of `index`,
+// mirroring the access pattern used by `DistinctGraphs::computeResult()`
+// (`src/engine/DistinctGraphs.cpp`), but starting from a plain `Index` instead
+// of an `Operation`.
+ad_utility::HashSet<Id::T> computeUniqueGraphIdsForIndex(
+    const Index& index,
+    ad_utility::SharedCancellationHandle cancellationHandle = std::make_shared<
+        ad_utility::SharedCancellationHandle::element_type>()) {
+  const auto& permutation =
+      index.getImpl().getPermutation(Permutation::Enum::SPO);
+  auto snapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  auto scanSpecAndBlocks = permutation.getScanSpecAndBlocks(
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt}, *snapshot);
+  const auto& ltpb = permutation.getLocatedTriplesForPermutation(*snapshot);
+  return permutation.reader().computeUniqueGraphIds(scanSpecAndBlocks, ltpb,
+                                                    cancellationHandle);
+}
 
 // Retrieve the corresponding `BlockMetadataRanges` value for the
 // given`CompressedBlockMetadata` vector
@@ -1270,6 +1291,83 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
     EXPECT_THAT(blocks.at(0).graphInfo_,
                 Optional(UnorderedElementsAre(V(0), V(1))));
   }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, computeUniqueGraphIdsAcrossMultipleBlocks) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> <b> <g1> . <c> <p> <d> <g2> . <e> <p> <f> <g1> . <g> <p> <h> "
+      "<g2> ."};
+  config.indexType = qlever::Filetype::NQuad;
+  auto index = ad_utility::testing::makeTestIndex(
+      "computeUniqueGraphIdsAcrossMultipleBlocks", config);
+  auto getId = ad_utility::testing::makeGetId(index);
+
+  auto graphIds = computeUniqueGraphIdsForIndex(index);
+  EXPECT_THAT(graphIds, ::testing::UnorderedElementsAre(
+                            getId("<g1>").getBits(), getId("<g2>").getBits()));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, computeUniqueGraphIdsIncludesDefaultGraph) {
+  auto index = ad_utility::testing::makeTestIndex(
+      "computeUniqueGraphIdsIncludesDefaultGraph",
+      "<x> <p> <y> . <x> <p2> <z> .");
+  auto defaultGraphId = toValueId(
+      TripleComponent{
+          ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)},
+      index.getImpl());
+  ASSERT_TRUE(defaultGraphId.has_value());
+
+  auto graphIds = computeUniqueGraphIdsForIndex(index);
+  EXPECT_THAT(graphIds,
+              ::testing::UnorderedElementsAre(defaultGraphId->getBits()));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, computeUniqueGraphIdsHandlesGraphInfoOverflow) {
+  std::string nquads;
+  std::vector<std::string> expectedGraphs;
+  for (size_t i = 0; i < 2 * MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA; ++i) {
+    std::string graph = absl::StrCat("<g", i, ">");
+    absl::StrAppend(&nquads, "<a> <p> <o", i, "> ", graph, " .\n");
+    expectedGraphs.push_back(graph);
+  }
+  ad_utility::testing::TestIndexConfig config{nquads};
+  config.indexType = qlever::Filetype::NQuad;
+  config.blocksizePermutations = 1_MB;
+  auto index = ad_utility::testing::makeTestIndex(
+      "computeUniqueGraphIdsHandlesGraphInfoOverflow", config);
+  auto getId = ad_utility::testing::makeGetId(index);
+
+  std::vector<Id::T> expectedIds;
+  for (const auto& graph : expectedGraphs) {
+    expectedIds.push_back(getId(graph).getBits());
+  }
+
+  auto graphIds = computeUniqueGraphIdsForIndex(index);
+  EXPECT_THAT(graphIds, ::testing::UnorderedElementsAreArray(expectedIds));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, computeUniqueGraphIdsOnEmptyIndex) {
+  auto index = ad_utility::testing::makeTestIndex(
+      "computeUniqueGraphIdsOnEmptyIndex", "");
+
+  auto graphIds = computeUniqueGraphIdsForIndex(index);
+  EXPECT_THAT(graphIds, ::testing::IsEmpty());
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, computeUniqueGraphIdsRespectsCancellation) {
+  auto index = ad_utility::testing::makeTestIndex(
+      "computeUniqueGraphIdsRespectsCancellation", "<x> <p> <y> .");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
+
+  EXPECT_THROW(computeUniqueGraphIdsForIndex(index, cancellationHandle),
+               ad_utility::CancellationException);
 }
 
 // Test the correct setting of the metadata for the contained graphs.
