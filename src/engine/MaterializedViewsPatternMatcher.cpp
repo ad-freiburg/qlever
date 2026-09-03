@@ -38,29 +38,32 @@ PatternMatcher::PatternMatcher(
     Limits limits, std::vector<MaterializedViewJoinReplacement>& result)
     : pattern_{pattern},
       triples_{triples},
+      candidatesByEdge_{
+          buildCandidatesByEdge(pattern, triplesByPredicate, status_)},
       qec_{qec},
       viewCols_{pattern.view_->variableToColumnMap()},
       limits_{limits},
       numAssignmentsRemaining_{limits.numAssignments_},
       numReplacementPlansRemaining_{limits.numReplacementPlans_},
-      result_{result} {
-  buildCandidatesByEdge(pattern, triplesByPredicate);
-}
+      result_{result} {}
 
 // _____________________________________________________________________________
-void PatternMatcher::buildCandidatesByEdge(
-    const ViewPattern& pattern, const TriplesByPredicate& triplesByPredicate) {
-  candidatesByEdge_.reserve(pattern.edges_.size());
+std::vector<uint64_t> PatternMatcher::buildCandidatesByEdge(
+    const ViewPattern& pattern, const TriplesByPredicate& triplesByPredicate,
+    std::optional<MatchStatus>& status) {
+  std::vector<uint64_t> candidatesByEdge;
+  candidatesByEdge.reserve(pattern.edges_.size());
   for (const auto& edge : pattern.edges_) {
     auto candidates = ad_utility::findOptional(triplesByPredicate, edge.p_);
     if (!candidates.has_value()) {
-      // No embedding can possibly exist; leave `candidatesByEdge_` as-is,
-      // it's never read once `status_` is `Skipped`.
-      status_ = MatchStatus::Skipped;
-      return;
+      // No embedding can possibly exist; the returned vector is incomplete,
+      // but it's never read once `status` is `Skipped`.
+      status = MatchStatus::Skipped;
+      return candidatesByEdge;
     }
-    candidatesByEdge_.push_back(candidates.value());
+    candidatesByEdge.push_back(candidates.value());
   }
+  return candidatesByEdge;
 }
 
 // _____________________________________________________________________________

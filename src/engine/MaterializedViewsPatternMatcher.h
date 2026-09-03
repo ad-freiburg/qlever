@@ -70,6 +70,11 @@ class PatternMatcher {
 
   const ViewPattern& pattern_;
   const parsedQuery::BasicGraphPattern& triples_;
+
+  // `status_` is `nullopt` until the search is finished. Must be declared
+  // before `candidatesByEdge_`: its constructor passes `status_` to
+  // `buildCandidatesByEdge`, which may set it.
+  std::optional<MatchStatus> status_;
   // Per pattern edge, a bitmask of the triple indices sharing that edge's
   // predicate.
   std::vector<uint64_t> candidatesByEdge_;
@@ -82,9 +87,6 @@ class PatternMatcher {
   size_t numAssignmentsRemaining_;
   size_t numReplacementPlansRemaining_;
 
-  // `status_` is `nullopt` until the search is finished.
-  std::optional<MatchStatus> status_;
-
   std::vector<MaterializedViewJoinReplacement>& result_;
 
   // Current candidate assignment: maps view variables to the query-side node
@@ -93,10 +95,13 @@ class PatternMatcher {
   // Bitmask of the query triples used by the current assignment so far.
   uint64_t coveredTriples_ = 0;
 
-  // Fills `candidatesByEdge_`: for each edge, a bitmask containing the indices
-  // of triples sharing the edge's predicate.
-  void buildCandidatesByEdge(const ViewPattern& pattern,
-                             const TriplesByPredicate& triplesByPredicate);
+  // For each edge, builds a bitmask containing the indices of triples
+  // sharing the edge's predicate. If some edge's predicate does not appear
+  // in the query at all, no mapping can possibly exist: `status` is set to
+  // `Skipped`.
+  static std::vector<uint64_t> buildCandidatesByEdge(
+      const ViewPattern& pattern, const TriplesByPredicate& triplesByPredicate,
+      std::optional<MatchStatus>& status);
 
   // Tries to match `viewSide` against `queryNode`. Returns `true` if the
   // assignment was made (or on equality for fixed components).
