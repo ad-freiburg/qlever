@@ -37,7 +37,7 @@ GeoCellGrid::CellIndex GeoCellGrid::sentinelCell() const {
 uint64_t GeoCellGrid::gridCoordinate(double normalized) const {
   // The number of cells per dimension is at most 2^31, so the conversion to
   // `double` (exact up to 2^53) is lossless.
-  double numCells = static_cast<double>(numCellsPerDimension());
+  auto numCells = static_cast<double>(numCellsPerDimension());
   double raw = std::floor(normalized * numCells);
   return static_cast<uint64_t>(std::clamp(raw, 0.0, numCells - 1.0));
 }
@@ -104,7 +104,8 @@ GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromWktLiteral(
 void GeoCellGrid::flatCover(double u1, double v1, double u2, double v2,
                             CellRanges& ranges) const {
   auto [x1, y1, x2, y2] = gridBox(u1, v1, u2, v2);
-  ranges.reserve(ranges.size() + (y2 - y1 + 1));
+  // One range per row, plus one for the sentinel appended by the caller.
+  ranges.reserve(ranges.size() + (y2 - y1 + 1) + 1);
   for (uint64_t y = y1; y <= y2; ++y) {
     ranges.emplace_back((y << level_) | x1, (y << level_) | x2);
   }
@@ -131,6 +132,7 @@ GeoCellGrid::CellRanges GeoCellGrid::coveringCellRanges(double minLng,
   // are merged as well).
   ql::ranges::sort(ranges);
   CellRanges merged;
+  merged.reserve(ranges.size());
   for (const auto& range : ranges) {
     if (!merged.empty() && range.first <= merged.back().second + 1) {
       merged.back().second = std::max(merged.back().second, range.second);

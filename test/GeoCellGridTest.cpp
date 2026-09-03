@@ -126,6 +126,13 @@ TEST(GeoCellGrid, annotateIndexRoundtrip) {
   // The annotated index has the documented bit layout, with the cell index
   // above the position.
   EXPECT_EQ(annotated, (uint64_t{5} << grid.numPositionBits()) | 7);
+
+  // A cell index above the sentinel or a position that does not fit are
+  // caught by the expensive checks.
+  if (ad_utility::areExpensiveChecksEnabled) {
+    EXPECT_ANY_THROW(grid.annotateIndex(grid.sentinelCell() + 1, 0));
+    EXPECT_ANY_THROW(grid.annotateIndex(0, grid.maxNumWords()));
+  }
 }
 
 // Test `vocabIndexRangeForCells` for a range of regular cells and for the
@@ -151,6 +158,10 @@ TEST(GeoCellGrid, vocabIndexRangeForCells) {
   EXPECT_GT(sUpper, sLower);
   EXPECT_EQ(sUpper, GeoCellGrid::geoVocabMarkerBit +
                         ((grid.sentinelCell() + 1) << grid.numPositionBits()));
+
+  // The range must be ascending and end at the sentinel cell at the latest.
+  EXPECT_ANY_THROW(grid.vocabIndexRangeForCells(5, 3));
+  EXPECT_ANY_THROW(grid.vocabIndexRangeForCells(0, grid.sentinelCell() + 1));
 }
 
 // Test `coveringCellRanges` on a 4 x 4 grid, where the covers are easy to

@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "global/ValueId.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/EnumWithStrings.h"
@@ -139,9 +140,10 @@ class GeoCellGrid {
   CellIndex cellIndexFromWktLiteral(std::string_view wktLiteral) const;
 
   // Combine a cell index and a position into an annotated vocabulary index
-  // and take it apart again. The position must be smaller than
-  // `maxNumWords()`.
+  // and take it apart again. The cell index must be at most `sentinelCell()`
+  // and the position must be smaller than `maxNumWords()`.
   uint64_t annotateIndex(CellIndex cellIndex, uint64_t position) const {
+    AD_EXPENSIVE_CHECK(cellIndex <= sentinelCell());
     AD_EXPENSIVE_CHECK(position < maxNumWords());
     return (cellIndex << numPositionBits()) | position;
   }
@@ -190,15 +192,12 @@ class GeoCellGrid {
   // and only used in comparisons.
   std::pair<uint64_t, uint64_t> vocabIndexRangeForCells(CellIndex first,
                                                         CellIndex last) const {
+    AD_CONTRACT_CHECK(first <= last && last <= sentinelCell());
     return {geoVocabMarkerBit + (first << numPositionBits()),
             geoVocabMarkerBit + ((last + 1) << numPositionBits())};
   }
 
-  // NOTE: Written out because a defaulted comparison is not available in the
-  // C++17 build.
-  bool operator==(const GeoCellGrid& other) const {
-    return level_ == other.level_ && scheme_.value() == other.scheme_.value();
-  }
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GeoCellGrid, level_, scheme_)
 
  private:
   // Coordinate convention of the private helpers: `u` and `v` are normalized
@@ -208,10 +207,10 @@ class GeoCellGrid {
   // The integer grid coordinates of the two corners of a normalized
   // rectangle.
   struct GridBox {
-    uint64_t x1;
-    uint64_t y1;
-    uint64_t x2;
-    uint64_t y2;
+    uint64_t x1_;
+    uint64_t y1_;
+    uint64_t x2_;
+    uint64_t y2_;
   };
   GridBox gridBox(double u1, double v1, double u2, double v2) const;
 
