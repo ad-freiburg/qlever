@@ -38,6 +38,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "global/Constants.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
@@ -45,6 +46,7 @@
 #include "parser/SparqlTriple.h"
 #include "parser/TripleComponent.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/AllocatorWithLimit.h"
@@ -63,7 +65,7 @@ using V = Variable;
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, Basic) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   // Write a simple view.
   clearLog();
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
@@ -405,7 +407,7 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ColumnPermutation) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   MaterializedViewsManager manager{testIndexBase_};
 
   // Helper to get all column names from a view via its `VariableToColumnMap`.
@@ -543,14 +545,68 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
       manager.writeViewToDisk("Something Out!of~the.ordinary",
                               qlv().parseAndPlanQuery(simpleWriteQuery_)),
       ::testing::HasSubstr("not a valid name for a materialized view"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      manager.writeViewToDisk(
-          "testView2",
-          qlv().parseAndPlanQuery(
-              "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }")),
-      ::testing::HasSubstr(
-          "The query to write a materialized view returned a string not "
-          "contained in the index (local vocabulary entry)"));
+
+  // Helper that checks that writing a materialized view for `query` throws an
+  // exception whose message contains `expectedError`.
+  auto expectWriteViewToDiskError =
+      [&](std::string query, std::string expectedError,
+          ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(location);
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            manager.writeViewToDisk("invalidTestView",
+                                    qlv().parseAndPlanQuery(std::move(query))),
+            ::testing::HasSubstr(expectedError));
+      };
+
+  // `LocalVocabularyEntry` is rejected.
+  expectWriteViewToDiskError(
+      "SELECT * { ?s ?p ?o . BIND(\"localVocabString\" AS ?g) }",
+      "The query to write a materialized view returned a string not "
+      "contained in the index (local vocabulary entry)");
+
+  // Empty query is rejected.
+  expectWriteViewToDiskError("SELECT * { }",
+                             "needs to select at least one column");
+
+  // `LIMIT`/`OFFSET` is rejected.
+  expectWriteViewToDiskError(simpleWriteQuery_ + " LIMIT 1",
+                             "may not contain a `LIMIT` or `OFFSET` clause");
+  expectWriteViewToDiskError(simpleWriteQuery_ + " OFFSET 1",
+                             "may not contain a `LIMIT` or `OFFSET` clause");
+  expectWriteViewToDiskError(simpleWriteQuery_ + " LIMIT 5 OFFSET 10",
+                             "may not contain a `LIMIT` or `OFFSET` clause");
+
+  // An explicit `ORDER BY` clause is always rejected, because a view is
+  // always stored in the internal order of its first three columns.
+  expectWriteViewToDiskError(simpleWriteQuery_ + " ORDER BY ?p",
+                             "may not contain an `ORDER BY` clause");
+  expectWriteViewToDiskError(simpleWriteQuery_ + " ORDER BY DESC(?s)",
+                             "may not contain an `ORDER BY` clause");
+
+  // An `INTERNAL SORT BY` inconsistent with the view's SPO order is rejected.
+  expectWriteViewToDiskError(simpleWriteQuery_ + " INTERNAL SORT BY ?p",
+                             "must be a prefix of the view's columns");
+  expectWriteViewToDiskError(
+      simpleWriteQuery_ + " INTERNAL SORT BY ?doesNotExist",
+      "must be a prefix of the view's columns");
+
+  // More `INTERNAL SORT BY` keys than the view has columns.
+  expectWriteViewToDiskError(
+      "SELECT ?s ?p { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o",
+      "must be a prefix of the view's columns");
+
+  // An `INTERNAL SORT BY` that is consistent with the view's storage order
+  // (a prefix of the SELECTed columns) is allowed.
+  EXPECT_NO_THROW(manager.writeViewToDisk(
+      "testView7", qlv().parseAndPlanQuery(simpleWriteQuery_ +
+                                           " INTERNAL SORT BY ?s ?p ?o")));
+
+  // A `LIMIT` inside an explicit subquery is allowed. This is the escape
+  // hatch that the error message for a top-level `LIMIT` advertises.
+  EXPECT_NO_THROW(manager.writeViewToDisk(
+      "testView8",
+      qlv().parseAndPlanQuery(
+          "SELECT * { { SELECT * { ?s ?p ?o . BIND(1 AS ?g) } LIMIT 2 } }")));
 }
 
 // _____________________________________________________________________________
@@ -830,7 +886,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 // under Emscripten anyway (threaded server integration).
 #ifndef __EMSCRIPTEN__
 TEST_F(MaterializedViewsTest, serverIntegration) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   using namespace serverTestHelpers;
   // Config for the plain `Server` instances constructed below.
   qlever::EngineConfig config;
@@ -961,11 +1017,9 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     auto request = makePostRequest(
         "/?cmd=write-materialized-view&view-name=testViewFromHTTP3",
         "application/sparql-query", simpleWriteQuery_);
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        responseBodyAsJson(
-            makeServerForTesting(testIndexBase_).process(request)),
-        ::testing::HasSubstr("write-materialized-view requires a valid access "
-                             "token but no access token was provided"));
+    expectRequiresValidAccessToken("write-materialized-view", [&] {
+      makeServerForTesting(testIndexBase_).process(request);
+    });
   }
 
   // Test check for name of the view (missing).
@@ -1021,11 +1075,9 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   {
     auto request = makeGetRequest(
         "/?cmd=delete-materialized-view&view-name=testViewFromHTTP");
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        responseBodyAsJson(
-            makeServerForTesting(testIndexBase_).process(request)),
-        ::testing::HasSubstr("delete-materialized-view requires a valid access "
-                             "token but no access token was provided"));
+    expectRequiresValidAccessToken("delete-materialized-view", [&] {
+      makeServerForTesting(testIndexBase_).process(request);
+    });
   }
 }
 #endif  // __EMSCRIPTEN__
@@ -1462,7 +1514,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
         viewScan("bindView", "?s2", "?o2", "?_ql_materialized_view_o", 3,
                  AC{{3, V{"?bind"}}});
     qpExpect(qlv(), bindThroughSpatialJoin,
-             h::spatialJoin(
+             h::spatialJoinFilterSubstitute(
                  100, -1, V{"?o"}, V{"?o2"}, std::nullopt,
                  PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
                  SpatialJoinType::WITHIN_DIST, std::nullopt,
@@ -1818,7 +1870,7 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
   {
     auto plannedQuery = qlv.parseAndPlanQuery(spatialJoinQuery);
     auto& qet = plannedQuery.queryExecutionTree();
-    auto sjMatcher = h::spatialJoin(
+    auto sjMatcher = h::spatialJoinFilterSubstitute(
         -1, -1, V{"?geometry1"}, V{"?geometry2"}, std::nullopt,
         PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
         SpatialJoinType::INTERSECTS, std::nullopt,
@@ -1844,101 +1896,60 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
   }
 }
 
-// Example queries for testing query rewriting.
-constexpr std::string_view simpleChain = "SELECT * { ?s <p1> ?m . ?m <p2> ?o }";
-constexpr std::string_view simpleChainRenamed =
-    "SELECT * { ?b <p2> ?c . ?a <p1> ?b }";
-constexpr std::string_view simpleChainFixed =
-    "SELECT * {  <s2> <p1>/<p2> ?c . }";
-constexpr std::string_view simpleChainPlusJoin =
-    "SELECT * { ?s <p1>/<p2> ?o . ?s <p3> ?o2 }";
-constexpr std::string_view simpleChainRenamedPlusBind =
-    "SELECT ?a ?b ?c ?x { ?b <p2> ?c . ?a <p1> ?b . BIND(5 AS ?x) }";
-constexpr std::string_view simpleChainDifferentSort =
-    "SELECT ?m ?s ?o { ?s <p1> ?m . ?m <p2> ?o }";
-constexpr std::string_view overlappingChains =
-    "SELECT * { ?s <p1> ?m . ?m <p2> ?o1 . ?m <p2> ?o2 }";
-
 // _____________________________________________________________________________
-TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
-  RewriteTestParams p = GetParam();
-  auto cleanup =
-      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
-          p.queryPlanningBudget_);
-
-  // Test dataset and query.
-  const std::string chainTtl =
-      " <s1> <p1> <m2> . \n"
-      " <m1> <p2> <o1> . \n"
-      " <s2> <p1> <m2> . \n"
-      " <m2> <p2> <http://example.com/> . \n"
-      " <m2> <p3> \"abc\" . \n"
-      " <s2> <p3> <o3> . \n";
+TEST(MaterializedViewsSpatialJoinTest, FixedValueFilterOnFullyCoveredView) {
+  // A spatial `FILTER` with one fixed side, on a query fully covered by a
+  // materialized view, must still be substituted by a `SpatialJoin` even
+  // though the view scan only enters the final DP round.
   const std::string onDiskBase = gtestCurrentTestName();
-  const std::string viewName = "testViewChain";
+  const std::string viewName = "geoms";
 
-  // Initialized libqlever.
-  materializedViewsTestHelpers::makeTestIndex(onDiskBase, chainTtl);
+  // Pad with non-joining triples so the view-based plan is cheaper than the
+  // standard plan.
+  std::string ttl{geoTtl};
+  for (size_t i = 0; i < 500; ++i) {
+    absl::StrAppend(&ttl, "<pad", i, "> geo:hasGeometry <nowkt", i, "> .\n");
+    absl::StrAppend(&ttl, "<nogeom", i, "> geo:asWKT \"POINT(", i % 10, " ",
+                    i / 10, ")\"^^geo:wktLiteral .\n");
+  }
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, ttl);
   auto cleanUp = absl::Cleanup(
       [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
   qlever::EngineConfig config;
   config.baseName_ = onDiskBase;
   qlever::Qlever qlv{config};
 
-  // Without the materialized view, a regular join is executed.
-  h::expect(std::string{simpleChain},
-            h::Join(h::IndexScanFromStrings("?s", "<p1>", "?m"),
-                    h::IndexScanFromStrings("?m", "<p2>", "?o")));
-
-  // Write a chain structure to the materialized view.
-  qlv.writeMaterializedView(viewName, p.writeQuery_);
+  qlv.writeMaterializedView(
+      viewName,
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
+      "SELECT ?osm_id ?intermediate ?geometry {\n"
+      "  ?osm_id geo:hasGeometry ?intermediate .\n"
+      "  ?intermediate geo:asWKT ?geometry .\n"
+      "}");
   qlv.loadMaterializedView(viewName);
-  auto chainView = std::bind_front(&viewScanSimple, viewName);
 
-  // With the materialized view loaded, an index scan on the view is performed
-  // instead of a regular join.
-  qpExpect(qlv, simpleChain, chainView("?s", "?m", "?o"));
-  qpExpect(qlv, simpleChainRenamed, chainView("?a", "?b", "?c"));
-  qpExpect(qlv, simpleChainFixed,
-           chainView("<s2>", "?_QLever_internal_variable_qp_0", "?c"));
-  qpExpect(qlv, simpleChainPlusJoin,
-           h::Join(chainView("?s", "?_QLever_internal_variable_qp_0", "?o"),
-                   h::IndexScanFromStrings("?s", "<p3>", "?o2")));
-
-  // If the view is sorted such that the subject of the chain is not the first
-  // column, rewriting cannot be applied with a fixed subject.
-  qlv.writeMaterializedView(viewName, std::string{simpleChainDifferentSort});
-  qlv.loadMaterializedView(viewName);
-  qpExpect(qlv, simpleChainFixed,
-           h::Join(h::IndexScanFromStrings("<s2>", "<p1>",
-                                           "?_QLever_internal_variable_qp_0"),
-                   h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
-                                           "<p2>", "?c")));
-
-  // Test overlapping view plans: the rewriting can be applied but the remaining
-  // triple must be joined normally.
-  auto firstRewritten = h::Join(chainView("?m", "?s", "?o1"),
-                                h::IndexScanFromStrings("?m", "<p2>", "?o2"));
-  auto secondRewritten = h::Join(chainView("?m", "?s", "?o2"),
-                                 h::IndexScanFromStrings("?m", "<p2>", "?o1"));
-  qpExpect(qlv, overlappingChains,
-           ::testing::AnyOf(firstRewritten, secondRewritten));
+  const std::string query = R"qy(
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    SELECT * {
+      ?osm_id geo:hasGeometry ?intermediate .
+      ?intermediate geo:asWKT ?geometry .
+      FILTER (geof:metricDistance(
+        "POINT(1 1)"^^geo:wktLiteral, ?geometry) <= 500)
+    }
+  )qy";
+  // The fixed side becomes the first internal variable.
+  V internalVar{absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 0)};
+  auto valuesPoint = h::ValuesClause(
+      absl::StrCat("VALUES (", internalVar.name(),
+                   ") { (G:", GeoPoint{1, 1}.toStringRepresentation(), ") }"));
+  qpExpect(qlv, query,
+           h::spatialJoinFilterSubstitute(
+               500, -1, internalVar, V{"?geometry"}, std::nullopt,
+               PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+               SpatialJoinType::WITHIN_DIST, std::nullopt, valuesPoint,
+               viewScan(viewName, "?osm_id", "?intermediate", "?geometry", 3)));
 }
-
-// _____________________________________________________________________________
-INSTANTIATE_TEST_SUITE_P(
-    MaterializedViewsTest, MaterializedViewsChainRewriteTest,
-    ::testing::Values(
-        // Default case.
-        RewriteTestParams{std::string{simpleChain}, 1500},
-
-        // Default query for writing the materialized view, but forced greedy
-        // planning.
-        RewriteTestParams{std::string{simpleChain}, 1},
-
-        // An additional `BIND` is ignored and the view can still be used for
-        // query rewriting. Also uses a different sorting.
-        RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
