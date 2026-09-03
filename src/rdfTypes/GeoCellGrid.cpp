@@ -35,6 +35,8 @@ GeoCellGrid::CellIndex GeoCellGrid::sentinelCell() const {
 
 // ____________________________________________________________________________
 uint64_t GeoCellGrid::gridCoordinate(double normalized) const {
+  AD_CONTRACT_CHECK(!std::isnan(normalized));
+
   // The number of cells per dimension is at most 2^31, so the conversion to
   // `double` (exact up to 2^53) is lossless.
   auto numCells = static_cast<double>(numCellsPerDimension());

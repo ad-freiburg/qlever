@@ -215,7 +215,8 @@ class GeoCellGrid {
   GridBox gridBox(double u1, double v1, double u2, double v2) const;
 
   // Integer grid coordinates of a normalized coordinate in `[0, 1]`, clamped
-  // to `[0, 2^level - 1]`.
+  // to `[0, 2^level - 1]`. Must not be called with `NaN`, which would trigger
+  // an `AD_CONTRACT_CHECK` failure.
   uint64_t gridCoordinate(double normalized) const;
 
   // Map a longitude and a latitude to normalized coordinates in `[0, 1]`.

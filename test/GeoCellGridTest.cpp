@@ -10,6 +10,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <random>
 
 #include "index/vocabulary/SplitVocabulary.h"
@@ -87,6 +88,11 @@ TEST(GeoCellGrid, cellIndexFromPoint) {
   // The boundary values are clamped into the valid grid range.
   EXPECT_EQ(grid.cellIndexFromPoint(180.0, 90.0), 3u);
   EXPECT_EQ(grid.cellIndexFromPoint(-180.0, -90.0), 0u);
+
+  // NaN is rejected, the clamping would not catch it.
+  double nan = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_ANY_THROW(grid.cellIndexFromPoint(nan, 0.0));
+  EXPECT_ANY_THROW(grid.cellIndexFromPoint(0.0, nan));
 
   // Spot check on a fine grid against the closed formula.
   GeoCellGrid fine{10};
