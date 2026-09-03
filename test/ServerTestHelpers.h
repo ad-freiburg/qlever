@@ -7,15 +7,19 @@
 #ifndef QLEVER_TEST_SERVERTESTHELPERS_H_
 #define QLEVER_TEST_SERVERTESTHELPERS_H_
 
+#include <absl/strings/str_cat.h>
+
 #include <boost/asio/awaitable.hpp>
 #include <boost/beast/http.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "backports/filesystem.h"
 #include "engine/Server.h"
 #include "libqlever/Qlever.h"
+#include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/metrics/Metrics.h"
 
@@ -36,6 +40,17 @@ inline std::string responseBodyToString(
   return absl::StrJoin(respWithCommonIterators.begin(),
                        respWithCommonIterators.end(), "");
 }
+
+// Expect that calling `fn()` throws with a message stating that `actionName`
+// requires a valid access token.
+inline auto expectRequiresValidAccessToken =
+    [](std::string_view actionName, auto fn,
+       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+      auto trace = generateLocationTrace(l);
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          fn(), testing::HasSubstr(absl::StrCat(
+                    actionName, " requires a valid access token")));
+    };
 
 // Test the HTTP request processing of the `Server` class. The underlying
 // `Server` lives for the whole lifetime of this object, so multiple operations
@@ -66,6 +81,13 @@ class ServerForTesting {
   }
   const DeltaTriplesManager& deltaTriplesManager() const {
     return server_->indexAndViewsSnapshot()->index_.deltaTriplesManager();
+  }
+
+  // Access the `Index` of the underlying `Server`, e.g. to inspect the KB or
+  // text description after setting it via `?index-description=` or
+  // `?text-description=`.
+  const Index& getIndex() const {
+    return server_->indexAndViewsSnapshot()->index_;
   }
 
   // Forwards to `Server::configureQueryEventLog`.

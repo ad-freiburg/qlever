@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 
+#include <absl/strings/str_cat.h>
+
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -12,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -21,6 +24,7 @@
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
 #include "util/TransparentFunctors.h"
+#include "util/TypeTraits.h"
 #include "util/Views.h"
 
 // The result type for a batch of vocabulary lookups.
@@ -137,9 +141,91 @@ struct StringVectorVocabBatchLookupData
 // single-word `operator[]` lookups one after another.
 namespace ad_utility::vocabulary {
 
+// Return the placeholder that is reported for a vocabulary index that is not
+// contained in a vocabulary with "holes" (see `VocabularyInMemoryBinSearch`).
+// This happens when such a vocabulary was created by excluding some of the
+// entries of a larger vocabulary, but an `Id` that refers to an excluded entry
+// is still looked up.
+inline std::string placeholderForMissingVocabIndex(uint64_t index) {
+  return absl::StrCat("<qlever-excluded-vocab-entry-", index, ">");
+}
+
+namespace detail {
+// The implementation of `replaceOptionalByPlaceholderOnExport` below. The
+// primary template covers all vocabularies that don't declare the
+// corresponding member, the partial specialization those that do.
+template <typename Vocab, typename = void>
+struct ReplaceOptionalByPlaceholderOnExportImpl : std::false_type {};
+
+template <typename Vocab>
+struct ReplaceOptionalByPlaceholderOnExportImpl<
+    Vocab, std::void_t<decltype(Vocab::replaceOptionalByPlaceholderOnExport)>>
+    : std::bool_constant<Vocab::replaceOptionalByPlaceholderOnExport> {};
+}  // namespace detail
+
+// Whether the `Vocab` has opted in to reporting a word that it doesn't contain
+// (that is, its `operator[]` returns `std::nullopt`) as
+// `placeholderForMissingVocabIndex` when the words are exported, instead of
+// throwing. A vocabulary opts in by declaring
+// `static constexpr bool replaceOptionalByPlaceholderOnExport = true;`. The
+// default is `false`, because silently reporting a word that is not the one
+// that was asked for is only correct for vocabularies that are deliberately
+// created with holes (see `VocabularyInMemoryBinSearch`).
+template <typename Vocab>
+constexpr bool replaceOptionalByPlaceholderOnExport =
+    detail::ReplaceOptionalByPlaceholderOnExportImpl<Vocab>::value;
+
+// Return `vocab[index]` as a `std::string`. If the `operator[]` of `vocab`
+// returns a `std::optional` (which is the case for vocabularies with holes, see
+// `VocabularyInMemoryBinSearch`) that is `std::nullopt`, then return
+// `placeholderForMissingVocabIndex(index)` if the `vocab` has opted in to this
+// behavior via `replaceOptionalByPlaceholderOnExport` (see above), and throw
+// otherwise.
+template <typename Vocab>
+std::string wordAsStringOrPlaceholder(const Vocab& vocab, uint64_t index) {
+  decltype(auto) word = vocab[index];
+  if constexpr (ad_utility::similarToInstantiation<decltype(word),
+                                                   std::optional>) {
+    if (!word.has_value()) {
+      if constexpr (replaceOptionalByPlaceholderOnExport<Vocab>) {
+        return placeholderForMissingVocabIndex(index);
+      } else {
+        AD_THROW(absl::StrCat(
+            "The index ", index,
+            " is not contained in the vocabulary. If the vocabulary is "
+            "deliberately built with such holes, then it has to declare "
+            "`static constexpr bool replaceOptionalByPlaceholderOnExport = "
+            "true;` to report a placeholder for the missing word instead."));
+      }
+    }
+    return std::string{word.value()};
+  } else {
+    return std::string{std::move(word)};
+  }
+}
+
+// The implementation of `getPositionOfWord` (see `VocabularyConstraints.h`)
+// for a vocabulary with "holes" (see `VocabularyInMemoryBinSearch`): binary
+// search for the `word` and return the range of vocabulary indices at which it
+// is stored, or the empty range at the index at which it would be stored if it
+// is not contained. Note that the "one past the end" index has to be passed in
+// as `endIndex` and must not be `vocab.size()`: because of the holes, the
+// largest vocabulary index that is contained is in general much larger than
+// the number of words, so using `vocab.size()` would report a word that sorts
+// after all contained words as if it sorted somewhere in the middle.
+template <typename Vocab, typename InternalStringType, typename Comparator>
+std::pair<uint64_t, uint64_t> getPositionOfWordInVocabWithHoles(
+    const Vocab& vocab, const InternalStringType& word, Comparator comparator,
+    uint64_t endIndex) {
+  return vocab.lower_bound(word, std::move(comparator))
+      .positionOfWord(word)
+      .value_or(std::pair<uint64_t, uint64_t>{endIndex, endIndex});
+}
+
 // Sequential fallback for `lookupBatch`: look up each index individually via
 // `vocab[idx]`, returning one `string_view` per index. Works for any vocabulary
-// whose `operator[]` yields something convertible to `std::string`.
+// whose `operator[]` yields something convertible to `std::string`, or a
+// `std::optional` thereof (see `wordAsStringOrPlaceholder`).
 template <typename Vocab>
 VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
                                              ql::span<const size_t> indices) {
@@ -151,8 +237,9 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
   // contained strings.
 
   std::vector<std::string> words = ::ranges::to<std::vector<std::string>>(
-      indices | ql::views::transform(
-                    [&vocab](size_t idx) { return std::string{vocab[idx]}; }));
+      indices | ql::views::transform([&vocab](size_t idx) {
+        return wordAsStringOrPlaceholder(vocab, idx);
+      }));
 
   auto data = std::make_shared<StringVectorVocabBatchLookupData>();
   data->buffer() = std::move(words);
