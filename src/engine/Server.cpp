@@ -920,8 +920,8 @@ CPP_template_def(typename RequestT, typename SendT)(
   // one. In particular, if there is a "query" parameter, it will be processed
   // last and its result returned.
   //
-  // Some parameters require that "access-token" is set correctly. If not, that
-  // parameter is ignored.
+  // Some parameters require that "access-token" is set correctly. If not, an
+  // `HttpError` with status 403 Forbidden is thrown.
   auto commandResult = co_await processCommands(
       indexAndViews, parameters, parsedHttpRequest.operation_, accessTokenOk,
       requestTimer, request);
@@ -953,6 +953,15 @@ CPP_template_def(typename RequestT, typename SendT)(
   if (auto updatedSettings =
           processSetRuntimeParameters(parameters, accessTokenOk)) {
     response = jsonResponse(updatedSettings.value());
+  }
+
+  // `write-materialized-view` uses `operation` as the view-defining query and
+  // already executes it inside `processCommands`; `load-materialized-view`
+  // and `delete-materialized-view` don't take a query at all but reuse the
+  // same result type. Clear `operation_` for all three so the code below
+  // doesn't also run it as a regular query and overwrite `response`.
+  if (commandResult.consumedQueryOperation_) {
+    parsedHttpRequest.operation_ = None{};
   }
 
   co_return co_await processSparqlOperation(
