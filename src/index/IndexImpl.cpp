@@ -619,7 +619,15 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
         *workerResult.idTriples_);
   }
 
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+  // NOTE: Assign to a local variable first (instead of streaming the call
+  // directly into `AD_LOG_INFO`), because `getFinalProgressString` locks the
+  // progress bar's internal `displayMutex_`. If it were evaluated as part of
+  // the `AD_LOG_INFO` expression, that lock would be acquired while the
+  // logging mutex is already held, which is the reverse of the order used by
+  // `ConcurrentProgressBar::update()` (which holds `displayMutex_` while
+  // logging) and can lead to a lock-order inversion.
+  std::string finalProgressString = progressBar.getFinalProgressString();
+  AD_LOG_INFO << finalProgressString << std::flush;
   size_t numTriplesTotal = ::ranges::accumulate(
       result.workerResults_, size_t{0}, {},
       [](const auto& workerResult) { return workerResult.idTriples_->size(); });

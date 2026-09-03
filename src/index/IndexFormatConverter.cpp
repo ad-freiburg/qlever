@@ -606,7 +606,13 @@ void convertPermutations(const std::string& oldBasename,
     writeMetaData(newMetaB, filenameForPermutation(newBasename, *permutationB,
                                                    isInternal));
   }
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+  // NOTE: Assign to a local variable first, see the analogous comment in
+  // `IndexImpl::buildPartialVocabularies` for why streaming the call directly
+  // into `AD_LOG_INFO` would risk a lock-order inversion with
+  // `progressCallbackFor`'s use of `ConcurrentProgressBar::update()` above
+  // (the two permutations of a pair are converted concurrently).
+  std::string finalProgressString = progressBar.getFinalProgressString();
+  AD_LOG_INFO << finalProgressString << std::flush;
 }
 
 // Convert the patterns of the index with the base name `oldBasename` (if it has
@@ -657,7 +663,10 @@ void convertMaterializedView(const std::string& oldBasename,
   auto newMetaData = writePermutation(
       newFilename, getNumColumns(oldPermutation),
       scanAndConvertIds(oldPermutation, progressCallbackFor(progressBar)));
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+  // NOTE: See the comment on the analogous call above for why this is not
+  // streamed directly into `AD_LOG_INFO`.
+  std::string finalProgressString = progressBar.getFinalProgressString();
+  AD_LOG_INFO << finalProgressString << std::flush;
   newMetaData.setName(newViewBasename);
   verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
                              newFilename);
