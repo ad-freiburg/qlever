@@ -611,9 +611,9 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Server::Awaitable<std::optional<Server::ResponseT>> Server::processCommands(
+    Server::Awaitable<Server::ProcessCommandsResult> Server::processCommands(
         const SharedIndexAndView& indexAndViews,
-        const ParamValueMap& parameters, SparqlOperation& operation,
+        const ParamValueMap& parameters, const SparqlOperation& operation,
         bool accessTokenOk, const ad_utility::Timer& requestTimer,
         RequestT& request) {
   using namespace ad_utility::httpUtils;
@@ -643,57 +643,68 @@ CPP_template_def(typename RequestT)(
     return composeCacheStats(cache, namedResultCache);
   };
 
-  std::optional<ResponseT> response;
-  if (commandIs("stats")) {
-    response = jsonResponse(composeIndexStats(index));
+  if (!checkParameter("cmd", std::nullopt).has_value()) {
+    // No `cmd=` URL parameter at all, so there is nothing to do here.
+    co_return ProcessCommandsResult{};
+  } else if (commandIs("stats")) {
+    co_return ProcessCommandsResult{jsonResponse(composeIndexStats(index))};
   } else if (commandIs("cache-stats")) {
-    response = jsonResponse(cacheStats());
+    co_return ProcessCommandsResult{jsonResponse(cacheStats())};
   } else if (commandIs("clear-cache")) {
     cache().clearUnpinnedOnly();
-    response = jsonResponse(cacheStats());
+    co_return ProcessCommandsResult{jsonResponse(cacheStats())};
   } else if (commandIs("clear-cache-complete")) {
     cache().clearAll();
-    response = jsonResponse(cacheStats());
+    co_return ProcessCommandsResult{jsonResponse(cacheStats())};
   } else if (commandIs("clear-named-cache")) {
     namedResultCache().clear();
-    response = jsonResponse(cacheStats());
+    co_return ProcessCommandsResult{jsonResponse(cacheStats())};
   } else if (commandIs("clear-delta-triples")) {
     auto countAfterClear = co_await processClearDeltaTriples();
-    response = jsonResponse(json(countAfterClear));
+    co_return ProcessCommandsResult{jsonResponse(json(countAfterClear))};
   } else if (commandIs("vacuum-delta-triples")) {
     auto vacuumStats = co_await processVacuumDeltaTriples(
         checkParameter("timeout", std::nullopt), accessTokenOk);
-    response = jsonResponse(vacuumStats);
+    co_return ProcessCommandsResult{jsonResponse(vacuumStats)};
   } else if (commandIs("get-settings")) {
-    response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
+    co_return ProcessCommandsResult{
+        jsonResponse(json(globalRuntimeParameters.rlock()->toMap()))};
   } else if (commandIs("get-index-id")) {
-    response =
-        createOkResponse(index.getIndexId(), request, MediaType::textPlain);
+    co_return ProcessCommandsResult{
+        createOkResponse(index.getIndexId(), request, MediaType::textPlain)};
   } else if (commandIs("dump-active-queries")) {
     auto activeQueries = nlohmann::json::object();
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
       activeQueries[nlohmann::json(key)] = std::move(value);
     }
-    response = jsonResponse(activeQueries);
+    co_return ProcessCommandsResult{jsonResponse(activeQueries)};
   } else if (commandIs("rebuild-index")) {
-    response = co_await processRebuildIndex(parameters, request);
+    co_return ProcessCommandsResult{
+        co_await processRebuildIndex(parameters, request)};
   } else if (commandIs("write-materialized-view")) {
     auto materializedViewStats = co_await processWriteMaterializedView(
         parameters, operation, accessTokenOk, requestTimer);
-    response = jsonResponse(materializedViewStats);
-    // Prevent regular query processing by removing the query from the request.
-    operation = None{};
+    // Flag that this command already consumed the query operation, so
+    // `process()` doesn't also try to run it as a regular query.
+    co_return ProcessCommandsResult{jsonResponse(materializedViewStats), true};
   } else if (commandIs("load-materialized-view")) {
-    response =
-        jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
-    // Prevent regular query processing by removing the query from the request.
-    operation = None{};
+    // Flag that this command already consumed the query operation, so
+    // `process()` doesn't also try to run it as a regular query.
+    co_return ProcessCommandsResult{
+        jsonResponse(processLoadMaterializedView(parameters, indexAndViews)),
+        true};
   } else if (commandIs("delete-materialized-view")) {
-    response = jsonResponse(processDeleteMaterializedView(parameters));
-    // Prevent regular query processing by removing the query from the request.
-    operation = None{};
+    // Flag that this command already consumed the query operation, so
+    // `process()` doesn't also try to run it as a regular query.
+    co_return ProcessCommandsResult{
+        jsonResponse(processDeleteMaterializedView(parameters)), true};
+  } else {
+    // `cmd` is set but didn't match any of the commands above.
+    throw HttpError(boost::beast::http::status::bad_request,
+                    absl::StrCat("Unknown value \"",
+                                 checkParameter("cmd", std::nullopt).value(),
+                                 "\" for parameter \"cmd\""));
   }
-  co_return response;
 }
 
 // _____________________________________________________________________________
@@ -760,9 +771,10 @@ CPP_template_def(typename RequestT, typename SendT)(
   //
   // Some parameters require that "access-token" is set correctly. If not, that
   // parameter is ignored.
-  response = co_await processCommands(indexAndViews, parameters,
-                                      parsedHttpRequest.operation_,
-                                      accessTokenOk, requestTimer, request);
+  auto commandResult = co_await processCommands(
+      indexAndViews, parameters, parsedHttpRequest.operation_, accessTokenOk,
+      requestTimer, request);
+  response = std::move(commandResult.response_);
 
   // Ping with or without message.
   if (parsedHttpRequest.path_ == "/ping") {
@@ -931,8 +943,17 @@ CPP_template_def(typename RequestT, typename SendT)(
     return send(createNotFoundResponse("Unknown path", std::move(request)));
   };
 
+  // Workaround for a GCC 11 bug: a ternary that decides between `None{}` and
+  // the moved-from `operation` crashes the build when written directly in
+  // `processOperation`'s argument list below, so it is assigned to a plain
+  // variable here instead.
+  SparqlOperation operationToProcess =
+      commandResult.consumedQueryOperation_
+          ? None{}
+          : std::move(parsedHttpRequest.operation_);
+
   co_return co_await processOperation(
-      std::move(parsedHttpRequest.operation_),
+      std::move(operationToProcess),
       ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
                                        visitNone},
       requestTimer, request, send, plannedQuery);
