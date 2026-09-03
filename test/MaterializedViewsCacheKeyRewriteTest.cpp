@@ -231,12 +231,12 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewriteFixedFirstColumn) {
       viewScan("subjectView", "?s", "?m", "?o1", 4, {{3, V{"?o2"}}});
 
   // The user query is the view query.
-  qpExpect(qlv(), subjectViewQuery, subjectView);
+  qpExpect<false>(qlv(), subjectViewQuery, subjectView);
 
   // The user query is the view query plus an unrelated triple. Under dynamic
   // programming a `QueryExecutionTree` is built for every subset of the query's
   // triples, so the subset that matches the view is found.
-  qpExpect(qlv(), R"(
+  qpExpect<false>(qlv(), R"(
     SELECT * {
       ?s <p1> ?o1 .
       ?s <p3> ?m .
@@ -244,10 +244,12 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewriteFixedFirstColumn) {
       ?m <p4> ?x .
     }
   )",
-           h::Join(h::Sort(subjectView),
-                   h::IndexScanFromStrings("?m", "<p4>", "?x")));
+                  h::Join(h::Sort(subjectView),
+                          h::IndexScanFromStrings("?m", "<p4>", "?x")));
 
-  // The first column is fixed in the user query.
+  // The first column is fixed in the user query. This rewrite is cache-key
+  // based and therefore, unlike pattern-based rewriting, only applies under
+  // dynamic programming (see `QueryPlanner::fillDpTab`).
   const std::string fixedSubjectQuery = R"(
     SELECT * {
       <s2> <p1> ?o1 .
@@ -255,8 +257,9 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewriteFixedFirstColumn) {
       ?m <p2> ?o2 .
     }
   )";
-  qpExpect(qlv(), fixedSubjectQuery,
-           viewScan("subjectView", "<s2>", "?m", "?o1", 3, {{3, V{"?o2"}}}));
+  qpExpect<false>(
+      qlv(), fixedSubjectQuery,
+      viewScan("subjectView", "<s2>", "?m", "?o1", 3, {{3, V{"?o2"}}}));
   expectSameResultWithoutRewriting(fixedSubjectQuery, "?o1 ?m ?o2");
 
   // The same for a value for which the view holds no row at all.
@@ -317,13 +320,13 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewriteFixedFirstColumn) {
       ?m <p4> <http://example.com/> .
     }
   )";
-  qpExpect(qlv(), fixedObjectQuery, fixedObjectView);
+  qpExpect<false>(qlv(), fixedObjectQuery, fixedObjectView);
   expectSameResultWithoutRewriting(fixedObjectQuery, "?s ?m ?o2");
 
   // The fixed first column plus an unrelated triple.
   // No `Sort` is needed for the join: with the first column fixed, the scan on
   // the view is sorted by its second column, which is `?s` here.
-  qpExpect(
+  qpExpect<false>(
       qlv(), R"(
     SELECT * {
       ?s <p3> ?m .
@@ -375,24 +378,10 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest,
         qlv().unloadMaterializedView("unsupportedView");
       };
 
-  // A `LIMIT` makes the view an arbitrary subset of its query's rows, so the
-  // rows of that subset for one value of the first column are not the rows of
-  // the restricted query.
-  expectFixedFirstColumnUnsupported(
-      R"(
-        SELECT ?s ?m ?o1 ?o2 {
-          ?s <p1> ?o1 .
-          ?s <p3> ?m .
-          ?m <p2> ?o2 .
-        } LIMIT 1
-      )",
-      R"(
-        SELECT * {
-          <s2> <p1> ?o1 .
-          <s2> <p3> ?m .
-          ?m <p2> ?o2 .
-        } LIMIT 1
-      )");
+  // NOTE: A view whose query has a `LIMIT`/`OFFSET` (which would make it an
+  // arbitrary subset of its query's rows, and thus unsuitable for this
+  // rewrite) can no longer be written at all (`throwIfLimitOffset` in
+  // `MaterializedViews.cpp`), so that case is no longer reachable here.
 
   // The variable of the first column occurs outside of the view's triples, so
   // it cannot simply be substituted.
