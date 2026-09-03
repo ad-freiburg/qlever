@@ -500,6 +500,38 @@ endif ()
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 
+# The `mold` linker (2.30, as shipped by Ubuntu 24.04, up to 2.42, the current
+# release) produces broken exception-handling metadata for GCC's hot/cold split
+# functions: an exception thrown from a block that GCC moved into the cold
+# partition (`-freorder-blocks-and-partition`, on by default from `-O2`) cannot
+# be unwound, so `__cxa_throw` finds no handler and calls `std::terminate`. In a
+# coroutine that means the implicit
+# `catch (...) { promise.unhandled_exception(); }` that every coroutine body is
+# wrapped in never runs, turning an ordinary exception into a crash. Relinking
+# the very same object files with GNU ld, gold or bfd works, and so does
+# disabling the partitioning, which is what we do here.
+#
+# Whether a given `throw` ends up in the cold partition depends on inlining and
+# layout heuristics, so unrelated changes make this come and go; it is not
+# specific to any one GCC version (GCC 14 splits these functions just as GCC 13
+# does). Observed in `MaterializedViewsTest`s `serverIntegration`, which
+# aborted in the Release Docker build with GCC 13.3 and mold 2.30 on x86-64.
+#
+# Ask the compiler driver which linker it would actually use, so that a
+# `-fuse-ld=mold` arriving through any of the flag variables above is caught.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    separate_arguments(QLEVER_LINKER_PROBE_FLAGS NATIVE_COMMAND
+            "${CMAKE_CXX_FLAGS} ${CMAKE_EXE_LINKER_FLAGS}")
+    execute_process(
+            COMMAND ${CMAKE_CXX_COMPILER} ${QLEVER_LINKER_PROBE_FLAGS} -Wl,--version
+            OUTPUT_VARIABLE QLEVER_LINKER_VERSION
+            ERROR_VARIABLE QLEVER_LINKER_VERSION)
+    if (QLEVER_LINKER_VERSION MATCHES "mold")
+        message(STATUS "Linking with mold, which mislinks the exception tables of GCC's cold partitions; adding -fno-reorder-blocks-and-partition")
+        add_compile_options(-fno-reorder-blocks-and-partition)
+    endif ()
+endif ()
+
 
 if (${PERFTOOLS_PROFILER})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lprofiler")
