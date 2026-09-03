@@ -335,6 +335,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
   static const UnaryFuncTable unaryInternalFuncs{
       {"envelopeLowerLeft", &makeEnvelopeLowerLeftExpression},
       {"envelopeUpperRight", &makeEnvelopeUpperRightExpression},
+      {"parsedGeometry", &makeParsedGeometryExpression},
       {"isGeoPoint", &makeIsGeoPointExpression},
       {"isEncodedIri", &makeIsEncodedIriExpression},
       {"toEpoch", &makeToEpochExpression},

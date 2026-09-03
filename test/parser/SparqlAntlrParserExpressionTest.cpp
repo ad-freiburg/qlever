@@ -345,6 +345,8 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeEnvelopeLowerLeftExpression));
   expectFunctionCall(absl::StrCat(ql, "envelopeUpperRight>(?x)"),
                      matchUnary(&makeEnvelopeUpperRightExpression));
+  expectFunctionCall(absl::StrCat(ql, "parsedGeometry>(?x)"),
+                     matchUnary(&makeParsedGeometryExpression));
   expectFunctionCall(
       absl::StrCat(ql,
                    "prefix-match>(?x, \"Prefix\""

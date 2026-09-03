@@ -1565,6 +1565,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkEnvelopeLL = testUnaryExpression<&makeEnvelopeLowerLeftExpression>;
   auto checkEnvelopeUR = testUnaryExpression<&makeEnvelopeUpperRightExpression>;
   auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
+  auto checkParsedGeometry = testUnaryExpression<&makeParsedGeometryExpression>;
 
   auto p = GeoPoint(26.8, 24.3);
   auto v = ValueId::makeFromGeoPoint(p);
@@ -1612,6 +1613,11 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkEnvelopeUR(IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
                                          geoLit("LINESTRING(2 4, 8 8)")},
                   Ids{U, U, GP({4, 2}), GP({8, 8})});
+  // `ql:parsedGeometry` is not yet implemented and thus always `UNDEF` when
+  // computed ad hoc (i.e. without a precomputed `GeoVocabulary` entry).
+  checkParsedGeometry(IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
+                                             geoLit("LINESTRING(2 4, 8 8)")},
+                      Ids{U, U, U, U});
 
   auto sfGeoType = [](std::string_view type) {
     return lit(absl::StrCat("http://www.opengis.net/ont/sf#", type),

@@ -356,6 +356,19 @@ class WktNumGeometries {
   }
 };
 
+// Get the offset of the parsed geometry representation of a WKT literal (not
+// yet implemented, currently always `UNDEF`).
+class WktParsedGeometry {
+ public:
+  ValueId operator()(
+      const std::optional<ParsedGeometry>& parsedGeometry) const {
+    if (!parsedGeometry.has_value() || parsedGeometry.value().offset() == -1) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromInt(parsedGeometry.value().offset());
+  }
+};
+
 // Compute the area of a WKT geometry.
 class WktArea {
  public:
