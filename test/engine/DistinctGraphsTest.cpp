@@ -22,6 +22,8 @@
 #include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"
 
+#include "index/ConstantsIndexBuilding.h"
+
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getChildren) {
   auto* qec = ad_utility::testing::getQec();
@@ -85,6 +87,26 @@ TEST(DistinctGraphs, getCostEstimate) {
 
     EXPECT_EQ(dg.getCostEstimate(), 0u);
   }
+}
+
+// _____________________________________________________________________________
+TEST(DistinctGraphs, getSizeEstimateDefault) {
+  auto* qec = ad_utility::testing::getQec();
+  DistinctGraphs dg{qec, Variable{"?g"}};
+
+  EXPECT_EQ(dg.getSizeEstimate(), MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA);
+}
+
+// _____________________________________________________________________________
+TEST(DistinctGraphs, getSizeEstimateComputed) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> <b> <g1> . <c> <p> <d> <g2> . <e> <p> <f> <g3> ."};
+  config.indexType = qlever::Filetype::NQuad;
+  auto* qec = ad_utility::testing::getQec(config);
+  DistinctGraphs dg{qec, Variable{"?g"}};
+
+  dg.getResult();
+  EXPECT_EQ(dg.getSizeEstimate(), 3u);
 }
 
 // _____________________________________________________________________________
