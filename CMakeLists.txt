@@ -501,21 +501,29 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 
 # The `mold` linker (2.30, as shipped by Ubuntu 24.04, up to 2.42, the current
-# release) produces broken exception-handling metadata for GCC's hot/cold split
-# functions: an exception thrown from a block that GCC moved into the cold
-# partition (`-freorder-blocks-and-partition`, on by default from `-O2`) cannot
-# be unwound, so `__cxa_throw` finds no handler and calls `std::terminate`. In a
-# coroutine that means the implicit
+# release) puts zero-length FDEs into the `.eh_frame_hdr` binary search table
+# that the runtime unwinder uses to locate unwind information. GCC emits such
+# FDEs for the cold partitions it creates with `-freorder-blocks-and-partition`
+# (on by default from `-O2`) whenever a split function's cold half ends up
+# empty. Being zero bytes long, they share their address with whatever function
+# follows them, and when they sort after that function's real FDE, the
+# unwinder's "last entry <= pc" search returns one of them. It then finds no
+# unwind information at all, `_Unwind_RaiseException` fails outright and
+# `__cxa_throw` calls `std::terminate`. In a coroutine that means the implicit
 # `catch (...) { promise.unhandled_exception(); }` that every coroutine body is
-# wrapped in never runs, turning an ordinary exception into a crash. Relinking
-# the very same object files with GNU ld, gold or bfd works, and so does
-# disabling the partitioning, which is what we do here.
+# wrapped in never runs, turning an ordinary exception into a crash.
 #
-# Whether a given `throw` ends up in the cold partition depends on inlining and
-# layout heuristics, so unrelated changes make this come and go; it is not
-# specific to any one GCC version (GCC 14 splits these functions just as GCC 13
-# does). Observed in `MaterializedViewsTest`s `serverIntegration`, which
-# aborted in the Release Docker build with GCC 13.3 and mold 2.30 on x86-64.
+# GNU ld and gold drop zero-length FDEs from that table, so relinking the very
+# same object files with them works. Disabling the partitioning also works,
+# because then GCC emits no empty cold partitions for mold to index, and that is
+# what we do here.
+#
+# Because this needs an address collision, unrelated changes make it come and
+# go, and it is not specific to any one GCC version. Observed in
+# `MaterializedViewsTest`s `serverIntegration`, which aborted in the Release
+# Docker build with GCC 13.3 and mold 2.30 on x86-64: three empty cold
+# partitions of Boost.Beast's `mp_with_index_impl::call` had landed on the
+# address of the lambda that throws.
 #
 # Ask the compiler driver which linker it would actually use, so that a
 # `-fuse-ld=mold` arriving through any of the flag variables above is caught.
@@ -527,7 +535,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
             OUTPUT_VARIABLE QLEVER_LINKER_VERSION
             ERROR_VARIABLE QLEVER_LINKER_VERSION)
     if (QLEVER_LINKER_VERSION MATCHES "mold")
-        message(STATUS "Linking with mold, which mislinks the exception tables of GCC's cold partitions; adding -fno-reorder-blocks-and-partition")
+        message(STATUS "Linking with mold, whose .eh_frame_hdr breaks unwinding through GCC's cold partitions; adding -fno-reorder-blocks-and-partition")
         add_compile_options(-fno-reorder-blocks-and-partition)
     endif ()
 endif ()
