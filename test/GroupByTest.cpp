@@ -3435,6 +3435,100 @@ TEST(GroupBy, CoalesceWithAggregatesOfOptionalValues) {
 }
 
 // _____________________________________________________________________________
+// An aggregate that is wrapped inside a `COALESCE` used to make an implicit
+// `GROUP BY` (no `GROUP BY` variables) over an empty input fail, because the
+// `COALESCE` returned an empty vector (the evaluation context has size zero)
+// where `GroupBy` requires a constant.
+TEST(GroupBy, CoalesceWithAggregateOnEmptyImplicitGroup) {
+  auto* qec = getQec();
+  Variable o{"?o"};
+  Id U = Id::makeUndefined();
+
+  // Build `SELECT (COALESCE(makeChildren()...) AS ?c) WHERE { ... }` without a
+  // `GROUP BY` over an input with zero rows.
+  auto makeGroupBy = [qec, &o](const auto& makeChildren, bool inputIsLazy) {
+    std::vector<IdTable> idTables;
+    idTables.push_back(IdTable{1, qec->getAllocator()});
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(idTables), std::vector<std::optional<Variable>>{o},
+        inputIsLazy);
+    return GroupByImpl{
+        qec,
+        {},
+        {Alias{SparqlExpressionPimpl{makeCoalesceExpression(makeChildren()),
+                                     "coalesce"},
+               Variable{"?c"}}},
+        std::move(subtree)};
+  };
+
+  // Check the value of that `COALESCE` for both the fully materialized and the
+  // lazy code path (the latter goes through `processEmptyImplicitGroup`).
+  auto expectCoalesce = [qec, &makeGroupBy](const auto& makeChildren,
+                                            Id expected,
+                                            ad_utility::source_location l =
+                                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto expectedTable = makeIdTableFromVector({{expected}});
+
+    // The two runs below compute the same subtree, so the cache has to be
+    // cleared in between, else the second run reuses the (materialized)
+    // result of the first one.
+    qec->getQueryTreeCache().clearAll();
+    EXPECT_EQ(makeGroupBy(makeChildren, false)
+                  .computeResultOnlyForTesting(false)
+                  .idTableView(),
+              expectedTable);
+
+    qec->getQueryTreeCache().clearAll();
+    auto groupBy = makeGroupBy(makeChildren, true);
+    auto result = groupBy.computeResultOnlyForTesting(true);
+    ASSERT_FALSE(result.isFullyMaterialized());
+    std::vector<IdTable> tables;
+    for (auto& [idTable, localVocab] : result.idTables()) {
+      tables.push_back(std::move(idTable));
+    }
+    ASSERT_EQ(tables.size(), 1);
+    EXPECT_EQ(tables.at(0), expectedTable);
+  };
+
+  auto sum = [&o]() {
+    return std::make_unique<SumExpression>(
+        false, std::make_unique<VariableExpression>(o));
+  };
+  auto min = [&o]() {
+    return std::make_unique<MinExpression>(
+        false, std::make_unique<VariableExpression>(o));
+  };
+  auto max = [&o]() {
+    return std::make_unique<MaxExpression>(
+        false, std::make_unique<VariableExpression>(o));
+  };
+  auto constant = [](Id id) {
+    return [id]() { return std::make_unique<IdExpression>(id); };
+  };
+  // Turn a set of factories for the individual children into a factory for the
+  // whole vector of children (which has to be created anew for each `GroupBy`).
+  auto children = [](auto... makeChild) {
+    return [makeChild...]() {
+      std::vector<SparqlExpression::Ptr> result;
+      (result.push_back(makeChild()), ...);
+      return result;
+    };
+  };
+
+  // `SUM` of the empty group is `0`, so the first child already binds the
+  // result.
+  expectCoalesce(children(sum, constant(I(1))), I(0));
+  // `MIN` and `MAX` of the empty group are UNDEF, so the fallback is used.
+  expectCoalesce(children(min, constant(I(1))), I(1));
+  expectCoalesce(children(max, constant(I(1))), I(1));
+  // If all the children are unbound, the result is UNDEF.
+  expectCoalesce(children(min, max), U);
+  // A `COALESCE` without any children is always UNDEF.
+  expectCoalesce(children(), U);
+}
+
+// _____________________________________________________________________________
 TEST(GroupBy, BlankNodeInGroupBy) {
   auto* qec = getQec();
   Variable o{"?o"};
