@@ -2143,7 +2143,7 @@ void IndexImpl::setPrefixesForEncodedValues(
 
 // _____________________________________________________________________________
 void IndexImpl::setBlankNodeIriRegexes(
-    const std::vector<std::string>& blankNodeIriRegexes) {
+    std::vector<std::string> blankNodeIriRegexes) {
   ql::ranges::for_each(blankNodeIriRegexes, [](const std::string& regex) {
     // The regexes are matched against the full IRI text (including the angle
     // brackets), so each of them has to describe an IRI and must therefore
@@ -2157,8 +2157,9 @@ void IndexImpl::setBlankNodeIriRegexes(
   });
   // The compilation of the regexes (which also reports those that are not valid
   // regular expressions) is done by `ad_utility::RegexSet`.
-  blankNodeIriRegexes_ = ad_utility::RegexSet{
-      blankNodeIriRegexes, "passed to `--iri-as-blank-node-regexes`"};
+  blankNodeIriRegexes_ =
+      ad_utility::RegexSet{std::move(blankNodeIriRegexes),
+                           "passed to `--iri-as-blank-node-regexes`"};
 }
 
 // _____________________________________________________________________________

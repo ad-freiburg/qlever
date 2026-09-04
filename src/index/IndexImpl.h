@@ -378,8 +378,7 @@ class IndexImpl {
   // full IRI and must therefore start with `<`; a regex that violates this or
   // is not a valid regular expression is reported with a user-readable
   // exception. See `TripleComponentWithIndex::isBlankNode`.
-  void setBlankNodeIriRegexes(
-      const std::vector<std::string>& blankNodeIriRegexes);
+  void setBlankNodeIriRegexes(std::vector<std::string> blankNodeIriRegexes);
   const ad_utility::RegexSet& getBlankNodeIriRegexes() const {
     return blankNodeIriRegexes_;
   }
