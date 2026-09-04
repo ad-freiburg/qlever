@@ -501,29 +501,15 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 
 # The `mold` linker (2.30, as shipped by Ubuntu 24.04, up to 2.42, the current
-# release) puts zero-length FDEs into the `.eh_frame_hdr` binary search table
-# that the runtime unwinder uses to locate unwind information. GCC emits such
-# FDEs for the cold partitions it creates with `-freorder-blocks-and-partition`
-# (on by default from `-O2`) whenever a split function's cold half ends up
-# empty. Being zero bytes long, they share their address with whatever function
-# follows them, and when they sort after that function's real FDE, the
-# unwinder's "last entry <= pc" search returns one of them. It then finds no
-# unwind information at all, `_Unwind_RaiseException` fails outright and
-# `__cxa_throw` calls `std::terminate`. In a coroutine that means the implicit
-# `catch (...) { promise.unhandled_exception(); }` that every coroutine body is
-# wrapped in never runs, turning an ordinary exception into a crash.
-#
-# GNU ld and gold drop zero-length FDEs from that table, so relinking the very
-# same object files with them works. Disabling the partitioning also works,
-# because then GCC emits no empty cold partitions for mold to index, and that is
-# what we do here.
-#
-# Because this needs an address collision, unrelated changes make it come and
-# go, and it is not specific to any one GCC version. Observed in
-# `MaterializedViewsTest`s `serverIntegration`, which aborted in the Release
-# Docker build with GCC 13.3 and mold 2.30 on x86-64: three empty cold
-# partitions of Boost.Beast's `mp_with_index_impl::call` had landed on the
-# address of the lambda that throws.
+# release) indexes zero-length FDEs in `.eh_frame_hdr`, which makes the runtime
+# unwinder miss the unwind information of whatever function shares their
+# address: an exception thrown there terminates the process instead of being
+# caught, and in a coroutine even the implicit `catch (...)` around the body
+# never runs. GCC produces those zero-length FDEs for the empty cold partitions
+# of `-freorder-blocks-and-partition` (on by default from `-O2`), so turning the
+# partitioning off leaves mold nothing to mis-index. GNU ld and gold are not
+# affected. See https://github.com/rui314/mold/issues/1648. Observed as an abort
+# in `MaterializedViewsTest`s `serverIntegration` in the Release Docker build.
 #
 # Ask the compiler driver which linker it would actually use, so that a
 # `-fuse-ld=mold` arriving through any of the flag variables above is caught.
