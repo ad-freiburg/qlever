@@ -51,7 +51,7 @@ enum class LimitOffsetHandling {
   FULL
 };
 
-class Operation {
+class Operation : public std::enable_shared_from_this<Operation> {
  private:
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using Milliseconds = std::chrono::milliseconds;
