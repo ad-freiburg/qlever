@@ -72,15 +72,17 @@ bool RegexSet::matchesAny(std::string_view word) const {
   }
   re2::RE2::Set::ErrorInfo errorInfo{re2::RE2::Set::kNoError};
   bool result = impl_->set_.Match(word, nullptr, &errorInfo);
-  // A failed match may also mean that the matching itself failed (for example
-  // because the automaton ran out of memory), which we must not silently report
-  // as "no match".
+  // A failed match may also mean that the matching itself failed, which we must
+  // not silently report as "no match". Of the error kinds of `RE2::Set` (see
+  // `re2/set.h`) only `kOutOfMemory` can occur here: `kNotCompiled` is
+  // impossible because the constructor always compiles the automaton, and
+  // `kInconsistent` is only reported when `Match` is passed a vector for the
+  // indices of the matching regexes, which we never do.
   bool matchingSucceeded = result || errorInfo.kind == re2::RE2::Set::kNoError;
   AD_CORRECTNESS_CHECK(matchingSucceeded, "Matching the ",
                        impl_->regexesAsStrings_.size(),
-                       " regexes against a string failed (RE2 reported the "
-                       "error kind ",
-                       static_cast<int>(errorInfo.kind), ")");
+                       " regexes against a string failed because the automaton "
+                       "of Google's RE2 library ran out of memory");
   return result;
 }
 
