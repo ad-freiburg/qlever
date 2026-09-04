@@ -54,6 +54,8 @@ constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
     ".partial-vocab.words.tmp.";
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
+constexpr inline std::string_view PARTIAL_TRIPLES_INFIX =
+    ".partial-triples.tmp.";
 
 // _________________________________________________________________
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
@@ -68,6 +70,14 @@ constexpr inline size_t NUM_PARALLEL_ITEM_MAPS = 10;
 // The number of threads that are parsing in parallel, when the parallel Turtle
 // parser is used.
 constexpr inline size_t NUM_PARALLEL_PARSER_THREADS = 8;
+
+// The maximum number of external sorters that are alive at the same time
+// during index building. The memory limit for the index build is divided by
+// this number to obtain the memory limit for each individual sorter. When the
+// three pairs of permutations are built in parallel (in the case without
+// patterns), the caller passes a larger value, because then four sorters are
+// filled at the same time.
+constexpr inline size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // Increasing the following two constants increases the RAM usage without much
 // benefit to the performance.

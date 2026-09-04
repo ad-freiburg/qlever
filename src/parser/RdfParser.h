@@ -734,6 +734,14 @@ class RdfParallelParser : public RdfParserBase {
   std::future<void> parseFuture_;
 };
 
+// Create a serial (single-threaded) parser for a single input file,
+// regardless of the `parseInParallel_` flag of `spec`. Used by the sharded
+// parsing of the index builder, where each worker thread parses one input
+// stream at a time with no further parallelism inside the stream.
+std::unique_ptr<RdfParserBase> makeSerialRdfParser(
+    qlever::InputFileSpecification spec, const EncodedIriManager* ev,
+    ad_utility::MemorySize bufferSize);
+
 // This class is an RDF parser that parses multiple files in parallel. Each
 // file is specified by an  `InputFileSpecification`.
 class RdfMultifileParser : public RdfParserBase {

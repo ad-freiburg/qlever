@@ -273,6 +273,97 @@ struct ProcessedTriple {
   ad_utility::HashMap<std::string, size_t> wordFrequencies_;
 };
 
+// Convert a single parsed `triple` into ID triples using the given `map`.
+// The result contains the processed triple itself plus, if applicable,
+// additional internal triples for its language tag and (if enabled) one
+// `ql:has-word` triple per distinct word of a text literal.
+// This is the per-triple work of `getIdMapLambdas` below; the sharded parsing
+// of the index builder uses it directly with a single map per worker.
+template <typename IndexPtr, typename TripleType>
+absl::InlinedVector<std::array<Id, NumColumnsIndexBuilding>, 3> mapTripleToIds(
+    ItemMapManager& map, IndexPtr* index, TripleType&& triple,
+    std::atomic<size_t>* numHasWordTriples) {
+  using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
+  using IdTriples = absl::InlinedVector<IdTriple, 3>;
+  // Process the given triple.
+  ProcessedTriple lt = index->processTriple(AD_FWD(triple));
+
+  // Reserve the exact number of triples we will produce. For ≤3 triples
+  // (original + language tag), this stays inline. For more (has-word
+  // triples), this allocates on the heap once.
+  IdTriples result;
+  result.reserve(1 + (lt.langtag_.empty() ? 0 : 2) +
+                 lt.wordFrequencies_.size());
+
+  // First, process the original triple.
+  result.push_back(map.getId(lt.triple_));
+  static_assert(NumColumnsIndexBuilding == 4,
+                " The following lines probably have to be changed when "
+                "the number of payload columns changes");
+  // Convenience reference to the IDs of the original triple. This is safe
+  // because the `reserve` above ensures that no subsequent `push_back`
+  // will reallocate `result`.
+  auto& spoIds = result[0];
+  auto tripleGraphId = spoIds[ADDITIONAL_COLUMN_GRAPH_ID];
+
+  // Second, if there is a language tag, add the corresponding two internal
+  // triples. Give them the same graph ID as the original triple; that way,
+  // our language filter optimizations also work with named graphs.
+  //
+  // NOTE: There is similar code in `DeltaTriples::makeInternalTriples`
+  // for adding these internal triples for update triples. If you change
+  // this code, you probably also have to change that one. This should
+  // eventually be refactored, so that this code duplication is avoided.
+  if (!lt.langtag_.empty()) {
+    // Get the `Id` for the language tag, e.g., `@en`.
+    auto langTagId = map.getId(
+        TripleComponent{ad_utility::convertLangtagToEntityUri(lt.langtag_)});
+    // Get the `Id` for the special predicate, e.g., `@en@rdfs:label`.
+    const auto& iri = lt.triple_[1].tripleComponent_.getIri();
+    auto langTaggedPredId = map.getId(TripleComponent{
+        ad_utility::convertToLanguageTaggedPredicate(iri, lt.langtag_)});
+    // Add the internal triple `<subject> @language@<predicate> <object>`.
+    result.push_back(
+        IdTriple{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
+    // Add the internal triple `<object> ql:langtag <@language>`.
+    result.push_back(IdTriple{
+        spoIds[2],
+        map.getId(TripleComponent{
+            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}),
+        langTagId, tripleGraphId});
+  }
+
+  // Third, if applicable, add a `ql:has-word` triple for each distinct word
+  // in the literal. We abuse the graph ID field to store the term
+  // frequency of the word in the literal.
+  //
+  // NOTE: There is similar code in `DeltaTriples::makeInternalTriples`
+  // for adding these internal triples for update triples. If you change
+  // this code, you probably also have to change that one. This should
+  // eventually be refactored, so that this code duplication is avoided.
+  if (!lt.wordFrequencies_.empty()) {
+    auto hasWordPredId = map.getId(TripleComponent{
+        ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
+    for (const auto& [word, termFrequency] : lt.wordFrequencies_) {
+      // Add the internal triple `<literal> ql:has-word "word"`.
+      auto wordId = map.getId(TripleComponent{
+          ad_utility::triple_component::Literal::literalWithoutQuotes(word)});
+      result.push_back(
+          IdTriple{spoIds[2], hasWordPredId, wordId,
+                   Id::makeFromInt(static_cast<int64_t>(termFrequency))});
+    }
+    // Update the counter for the number of `ql:has-word` triples. Relaxed
+    // ordering is fine because this counter is only read after all threads
+    // have finished (for a log message).
+    if (numHasWordTriples != nullptr) {
+      numHasWordTriples->fetch_add(lt.wordFrequencies_.size(),
+                                   std::memory_order_relaxed);
+    }
+  }
+
+  return result;
+}
+
 /**
  * @brief Get the tuple of lambda functions that is needed for the String-> Id
  * step of the Index building Pipeline
@@ -326,93 +417,13 @@ auto getIdMapLambdas(
   // For a given `ItemMapManager` (specified via its index in `itemMaps`),
   // return a lambda that takes a single parsed `triple` and returns
   // `IdTriples`, which contains a processed version of the triple plus
-  // additional internal triples if applicable.
-  //
-  // TODO: This lambda has become quite large and complex. Better refactor it
-  // into a separate function.
+  // additional internal triples if applicable. The actual work is done by
+  // `mapTripleToIds` above, which is also used by the sharded parsing.
   const auto itemMapLamdaCreator = [&itemMaps, index,
                                     numHasWordTriples](const size_t itemIndex) {
     return [&map = *itemMaps[itemIndex], index, numHasWordTriples](
                QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& triple) {
-      // Process the given triple.
-      ProcessedTriple lt = index->processTriple(AD_FWD(triple));
-
-      // Reserve the exact number of triples we will produce. For ≤3 triples
-      // (original + language tag), this stays inline. For more (has-word
-      // triples), this allocates on the heap once.
-      IdTriples result;
-      result.reserve(1 + (lt.langtag_.empty() ? 0 : 2) +
-                     lt.wordFrequencies_.size());
-
-      // First, process the original triple.
-      result.push_back(map.getId(lt.triple_));
-      static_assert(NumColumnsIndexBuilding == 4,
-                    " The following lines probably have to be changed when "
-                    "the number of payload columns changes");
-      // Convenience reference to the IDs of the original triple. This is safe
-      // because the `reserve` above ensures that no subsequent `push_back`
-      // will reallocate `result`.
-      auto& spoIds = result[0];
-      auto tripleGraphId = spoIds[ADDITIONAL_COLUMN_GRAPH_ID];
-
-      // Second, if there is a language tag, add the corresponding two internal
-      // triples. Give them the same graph ID as the original triple; that way,
-      // our language filter optimizations also work with named graphs.
-      //
-      // NOTE: There is similar code in `DeltaTriples::makeInternalTriples`
-      // for adding these internal triples for update triples. If you change
-      // this code, you probably also have to change that one. This should
-      // eventually be refactored, so that this code duplication is avoided.
-      if (!lt.langtag_.empty()) {
-        // Get the `Id` for the language tag, e.g., `@en`.
-        auto langTagId = map.getId(TripleComponent{
-            ad_utility::convertLangtagToEntityUri(lt.langtag_)});
-        // Get the `Id` for the special predicate, e.g., `@en@rdfs:label`.
-        const auto& iri = lt.triple_[1].tripleComponent_.getIri();
-        auto langTaggedPredId = map.getId(TripleComponent{
-            ad_utility::convertToLanguageTaggedPredicate(iri, lt.langtag_)});
-        // Add the internal triple `<subject> @language@<predicate> <object>`.
-        result.push_back(
-            IdTriple{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
-        // Add the internal triple `<object> ql:langtag <@language>`.
-        result.push_back(IdTriple{
-            spoIds[2],
-            map.getId(
-                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                    LANGUAGE_PREDICATE)}),
-            langTagId, tripleGraphId});
-      }
-
-      // Third, if applicable, add a `ql:has-word` triple for each distinct word
-      // in the literal. We abuse the graph ID field to store the term
-      // frequency of the word in the literal.
-      //
-      // NOTE: There is similar code in `DeltaTriples::makeInternalTriples`
-      // for adding these internal triples for update triples. If you change
-      // this code, you probably also have to change that one. This should
-      // eventually be refactored, so that this code duplication is avoided.
-      if (!lt.wordFrequencies_.empty()) {
-        auto hasWordPredId = map.getId(TripleComponent{
-            ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
-        for (const auto& [word, termFrequency] : lt.wordFrequencies_) {
-          // Add the internal triple `<literal> ql:has-word "word"`.
-          auto wordId = map.getId(TripleComponent{
-              ad_utility::triple_component::Literal::literalWithoutQuotes(
-                  word)});
-          result.push_back(
-              IdTriple{spoIds[2], hasWordPredId, wordId,
-                       Id::makeFromInt(static_cast<int64_t>(termFrequency))});
-        }
-        // Update the counter for the number of `ql:has-word` triples. Relaxed
-        // ordering is fine because this counter is only read after all threads
-        // have finished (for a log message).
-        if (numHasWordTriples != nullptr) {
-          numHasWordTriples->fetch_add(lt.wordFrequencies_.size(),
-                                       std::memory_order_relaxed);
-        }
-      }
-
-      return result;
+      return mapTripleToIds(map, index, AD_FWD(triple), numHasWordTriples);
     };
   };
 

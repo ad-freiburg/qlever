@@ -194,6 +194,10 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
+  // NOTE: `NonNegative` instead of plain `size_t`, so that the `validate`
+  // overload for `std::optional` (in namespace `ad_utility`) is found via
+  // ADL on all supported boost versions.
+  std::optional<ad_utility::NonNegative> parseParallelism;
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 1;
 
@@ -285,6 +289,18 @@ int main(int argc, char** argv) {
       "among non-encoded IRIs is correct, but the order between encoded "
       "and non-encoded IRIs is not");
 
+  add("encode-as-id-wide",
+      po::value(&config.widePrefixesForIdEncodedIris_)
+          ->composing()
+          ->multitoken(),
+      "Same as `--encode-as-id`, but the digits are stored as a plain binary "
+      "number, which fits longer digit sequences (17 instead of 13 decimal "
+      "digits), at the price of a much smaller prefix budget (at most 4 "
+      "prefixes) and of the order among the affected IRIs being the numeric "
+      "order of the digit sequences, not the lexical order. Digit sequences "
+      "with leading zeros are not encoded. Useful for prefixes whose IRIs "
+      "have more than 13 digits.");
+
   add("iri-as-blank-node-regexes",
       po::value(&config.blankNodeIriRegexes_)->composing()->multitoken(),
       "Space-separated list of regexes. An IRI that is fully matched by one of "
@@ -308,6 +324,12 @@ int main(int argc, char** argv) {
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
+  add("parse-parallelism", po::value(&parseParallelism),
+      "If set, parse the input with this many independent worker threads, "
+      "each of which parses one input stream at a time and writes its own "
+      "partial vocabularies. Recommended on machines with many cores when "
+      "there are enough input files of similar size. If not set, the default "
+      "parsing pipeline is used.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),
@@ -367,6 +389,9 @@ int main(int argc, char** argv) {
     }
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);
+    if (parseParallelism.has_value()) {
+      config.parseParallelism_ = parseParallelism.value();
+    }
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
     config.validate();

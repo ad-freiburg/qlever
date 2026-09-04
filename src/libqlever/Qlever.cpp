@@ -125,6 +125,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   if (config.parserBufferSize_.has_value()) {
     index.parserBufferSize() = config.parserBufferSize_.value();
   }
+  if (config.parseParallelism_.has_value()) {
+    index.getImpl().parseParallelism() = config.parseParallelism_.value();
+  }
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
@@ -143,7 +146,8 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
-  index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
+  index.getImpl().setPrefixesForEncodedValues(
+      config.prefixesForIdEncodedIris_, config.widePrefixesForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(config.blankNodeIriRegexes_);
 
   // Build text index if requested (various options).

@@ -1342,6 +1342,14 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
 }
 
 // _____________________________________________________________________________
+std::unique_ptr<RdfParserBase> makeSerialRdfParser(
+    qlever::InputFileSpecification spec, const EncodedIriManager* ev,
+    ad_utility::MemorySize bufferSize) {
+  spec.parseInParallel_ = false;
+  return makeSingleRdfParser<Tokenizer>(spec, ev, bufferSize);
+}
+
+// _____________________________________________________________________________
 void RdfMultifileParser::parseFileAndPushBatches(
     const qlever::InputFileSpecification& file,
     ad_utility::MemorySize bufferSize) {

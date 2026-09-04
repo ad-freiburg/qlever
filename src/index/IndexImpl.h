@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -67,7 +68,11 @@ struct BuildPartialVocabulariesResult {
   // belongs to the i-th partial vocabulary. It might be slightly different
   // from the specified `batchSize` because of internally added triples.
   std::vector<size_t> numTriplesPerPartialVocab_;
-  std::unique_ptr<TripleVec> idTriples_;
+  // The ID triples of the i-th partial vocabulary, expressed in its local
+  // IDs. One file per partial vocabulary, so that the writers of the parsing
+  // phase need no coordination and the correspondence between triples and
+  // partial vocabularies is structural instead of positional.
+  std::vector<std::unique_ptr<TripleVec>> idTriples_;
 };
 
 // Data produced after parsing: vocabulary metadata and unsorted ID triples.
@@ -84,6 +89,13 @@ struct FirstPermutationSorterAndInternalTriplesAsPso {
   SorterPtr firstPermutationSorter_;
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding>>
       internalTriplesPso_;
+  // When all six permutations are built without patterns, the sorters for the
+  // second and third pair of permutations are filled directly during the
+  // conversion of the triples to global IDs. The three pairs of permutations
+  // then have no data dependencies on each other and are built in parallel
+  // (see `IndexImpl::createFromFiles`). Both pointers are `nullptr` otherwise.
+  SorterPtr secondPermutationSorter_;
+  SorterPtr thirdPermutationSorter_;
 };
 // Vocabulary metadata and ID triples sorted by the first permutation.
 struct IndexBuilderDataAsFirstPermutationSorter {
@@ -109,6 +121,10 @@ class IndexImpl {
   bool onlyAsciiTurtlePrefixes_ = false;
   // Note: `std::nullopt` means `not specified by the user`.
   std::optional<bool> useParallelParser_ = std::nullopt;
+  // If > 0, the first pass of the index build uses the sharded parsing with
+  // this many worker threads instead of the default pipeline (see
+  // `buildPartialVocabulariesSharded`).
+  size_t parseParallelism_ = 0;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
@@ -365,9 +381,10 @@ class IndexImpl {
   }
 
   // Set the prefixes of the IRIs that will be encoded directly into
-  // the `Id`; see `EncodedIriManager` for details.
+  // the `Id` (narrow and wide layout); see `EncodedIriManager` for details.
   void setPrefixesForEncodedValues(
-      std::vector<std::string> prefixesWithoutAngleBrackets);
+      std::vector<std::string> prefixesWithoutAngleBrackets,
+      std::vector<std::string> widePrefixesWithoutAngleBrackets = {});
 
   // Set the regexes for IRIs that should be treated as blank nodes during index
   // building. Each entry is an `RE2` regex; an IRI that is fully matched by any
@@ -548,6 +565,7 @@ class IndexImpl {
   }
 
   ad_utility::MemorySize& parserBufferSize() { return parserBufferSize_; }
+  size_t& parseParallelism() { return parseParallelism_; }
   const ad_utility::MemorySize& parserBufferSize() const {
     return parserBufferSize_;
   }
@@ -644,7 +662,7 @@ class IndexImpl {
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
-      std::shared_ptr<RdfParserBase> parser);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
 
   // Parse all triples from `parser` in batches of `linesPerPartial`, write one
   // partial vocabulary file per batch, and return the accumulated ID triples
@@ -653,9 +671,21 @@ class IndexImpl {
   BuildPartialVocabulariesResult buildPartialVocabularies(
       std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
 
+  // Alternative to `buildPartialVocabularies` (chosen via
+  // `--parse-parallelism`, see `parseParallelism_`): `numWorkers` independent
+  // worker threads, each of which takes the next input stream from `files`,
+  // parses it serially, converts the triples to IDs using its own map, and
+  // writes its own partial vocabularies. There are no shared queues between
+  // the workers, so this scales to machines with many cores, provided there
+  // are enough input streams of similar size.
+  BuildPartialVocabulariesResult buildPartialVocabulariesSharded(
+      std::vector<qlever::InputFileSpecification> files, size_t linesPerPartial,
+      size_t numWorkers);
+
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(
-      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t linesPerPartial);
 
   // Create a task that writes a partial vocabulary given by `items` to disk and
   // adds the corresponding triples in `localIds` to the provided
@@ -673,8 +703,8 @@ class IndexImpl {
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
       ItemMapArray items,
       std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-      ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr)
-      const;
+      ad_utility::Synchronized<std::vector<std::unique_ptr<TripleVec>>>*
+          partialTriplesPtr) const;
 
   // Return a Turtle parser that parses the given files. The parser will be
   // configured to either parse in parallel or not (per input file), and to
@@ -686,7 +716,8 @@ class IndexImpl {
 
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
-      TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
+      std::vector<std::unique_ptr<TripleVec>>& data,
+      const std::vector<size_t>& actualLinesPerPartial,
       Func isQLeverInternalTriple);
 
   // Helper function to get the filename for a given permutation.
@@ -875,6 +906,12 @@ class IndexImpl {
   void writeConfiguration() const;
   void readConfiguration();
 
+  // Serializes the updates to `configurationJson_` (and the subsequent calls
+  // to `writeConfiguration`) from the functions that create the pairs of
+  // permutations, which run on parallel threads when the index is built
+  // without patterns.
+  mutable std::mutex configurationJsonMutex_;
+
   // initialize the index-build-time settings for the vocabulary
   void readIndexBuilderSettingsFromFile();
 
@@ -945,17 +982,22 @@ class IndexImpl {
 
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique
-  // for each call during one index build.
+  // for each call during one index build. The memory limit of the index build
+  // is divided by `numActiveSorters`, the maximum number of sorters that are
+  // alive at the same time in the calling configuration.
   template <typename Comparator, size_t N = NumColumnsIndexBuilding>
   ExternalSorter<Comparator, N> makeSorter(
-      std::string_view permutationName) const;
+      std::string_view permutationName,
+      size_t numActiveSorters = NUM_EXTERNAL_SORTERS_AT_SAME_TIME) const;
   // Same as the same function, but return a `unique_ptr`.
   template <typename Comparator, size_t N = NumColumnsIndexBuilding>
   std::unique_ptr<ExternalSorter<Comparator, N>> makeSorterPtr(
-      std::string_view permutationName) const;
+      std::string_view permutationName,
+      size_t numActiveSorters = NUM_EXTERNAL_SORTERS_AT_SAME_TIME) const;
   // The common implementation of the above two functions.
   template <typename Comparator, size_t N, bool returnPtr>
-  auto makeSorterImpl(std::string_view permutationName) const;
+  auto makeSorterImpl(std::string_view permutationName,
+                      size_t numActiveSorters) const;
 
   // Aliases for the three functions above that should be consistently used.
   // They assert that the order of the permutations as communicated by the

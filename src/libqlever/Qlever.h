@@ -150,6 +150,22 @@ struct IndexBuilderConfig : CommonConfig {
   // limitations regarding the correctness of FILTER and ORDER BY.
   std::vector<std::string> prefixesForIdEncodedIris_;
 
+  // Same as `prefixesForIdEncodedIris_`, but for the wide layout of the
+  // encoding, which fits longer digit sequences (17 instead of 13 decimal
+  // digits by default), but allows only very few prefixes (4 by default) and
+  // does not encode digit sequences with leading zeros. See
+  // `EncodedIriManager` for details.
+  std::vector<std::string> widePrefixesForIdEncodedIris_;
+
+  // If set, the first pass of the index build (parsing the input and
+  // converting the triples to IDs of the partial vocabularies) uses this many
+  // independent worker threads, each of which processes one input stream at a
+  // time. This scales to machines with many cores, provided there are enough
+  // input streams of similar size; each worker needs some memory for its
+  // vocabulary map and triple buffer. If unset, the default parsing pipeline
+  // is used.
+  std::optional<size_t> parseParallelism_;
+
   // The remaining members of this class, are only relevant if a full-text
   // index is built in addition to the RDF index. By default, no fulltext index
   // is built. The full-text index enables efficient keyword search in text
