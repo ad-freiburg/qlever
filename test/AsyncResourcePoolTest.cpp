@@ -13,10 +13,13 @@
 #include <algorithm>
 #include <atomic>
 #include <boost/asio/as_tuple.hpp>
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <cstddef>
 #include <functional>
@@ -206,7 +209,10 @@ ASYNC_TEST(AsyncResourcePool, cancelWakesUpTheWaiters) {
         ioContext,
         [&semaphore, &numCancelled]() -> net::awaitable<void> {
           auto [errorCode, permit] = co_await acquire<void>(semaphore);
-          EXPECT_TRUE(errorCode);
+          // NOTE: The channel that holds the resources reports the
+          // channel-specific `channel_cancelled`, which the pool translates
+          // into the canonical `operation_aborted`.
+          EXPECT_EQ(errorCode, net::error::operation_aborted);
           EXPECT_FALSE(permit.isValid());
           ++numCancelled;
         },
@@ -298,12 +304,44 @@ ASYNC_TEST(AsyncResourcePool, asyncWithResourceReportsACancelledAcquisition) {
   };
   asyncWithResource(semaphore, work,
                     [&completed](const boost::system::error_code& errorCode) {
-                      EXPECT_TRUE(errorCode);
+                      EXPECT_EQ(errorCode, net::error::operation_aborted);
                       completed.store(true);
                     });
   semaphore.cancel();
   co_await yieldUntil(ioContext, [&completed] { return completed.load(); });
   EXPECT_FALSE(workWasRun.load());
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(AsyncResourcePool,
+           asyncWithResourceCompletesOnTheAssociatedExecutor) {
+  // The `work` completes outside of the strand that the completion token is
+  // bound to, but the completion handler still has to run on that strand.
+  Semaphore semaphore{ioContext.get_executor(), 1};
+  auto strand = net::make_strand(ioContext);
+
+  // A `work` that completes via a plain `post` to the `ioContext` and hence
+  // never on the `strand`. Like most asynchronous operations it ignores the
+  // executor that is associated with its completion token.
+  auto work = [&ioContext](auto&& completionHandler) {
+    net::post(ioContext, [handler = AD_FWD(completionHandler)]() mutable {
+      std::move(handler)();
+    });
+  };
+
+  std::atomic<bool> completed{false};
+  std::atomic<bool> ranOnStrand{false};
+  asyncWithResource(
+      semaphore, work,
+      net::bind_executor(
+          strand, [&strand, &completed,
+                   &ranOnStrand](const boost::system::error_code& errorCode) {
+            EXPECT_FALSE(errorCode);
+            ranOnStrand.store(strand.running_in_this_thread());
+            completed.store(true);
+          }));
+  co_await yieldUntil(ioContext, [&completed] { return completed.load(); });
+  EXPECT_TRUE(ranOnStrand.load());
 }
 
 // _____________________________________________________________________________

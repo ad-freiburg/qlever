@@ -14,6 +14,8 @@
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/bind_executor.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/experimental/channel_error.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/system/error_code.hpp>
@@ -259,8 +261,10 @@ class AsyncResourcePool {
       auto& resources = impl->resources_;
       resources.async_receive(
           [impl = std::move(impl), handler = AD_FWD(handler), handlerExecutor](
-              const boost::system::error_code& errorCode,
+              const boost::system::error_code& channelErrorCode,
               std::optional<StoredType> resource) mutable {
+            boost::system::error_code errorCode =
+                translateErrorCode(channelErrorCode);
             Handle handle;
             if (!errorCode) {
               AD_CORRECTNESS_CHECK(resource.has_value());
@@ -294,6 +298,20 @@ class AsyncResourcePool {
   }
 
  private:
+  // Translate the error code of the underlying channel into the error code
+  // that this class documents. A cancelled `async_receive` reports the
+  // channel-specific `channel_cancelled`, but the channel is an implementation
+  // detail of this class, so this is reported as the canonical Asio
+  // `operation_aborted`, see `asyncAcquire` and `cancel` above. All other
+  // error codes are passed through unchanged.
+  static boost::system::error_code translateErrorCode(
+      const boost::system::error_code& errorCode) noexcept {
+    if (errorCode == net::experimental::error::channel_cancelled) {
+      return net::error::operation_aborted;
+    }
+    return errorCode;
+  }
+
   // Return the `resource` that is held by the `impl` (if any). The channel is
   // concurrent, so this sends the resource right away and never waits, which
   // makes it callable from anywhere, in particular from a destructor.
@@ -335,6 +353,10 @@ class AsyncResourcePool {
 // if the token has none), so a `work` that does actual computation has to
 // schedule that computation onto an executor of its own.
 //
+// NOTE: The completion handler always runs on that same executor, no matter on
+// which thread the `work` completes. This may be initiated from any thread and
+// any executor.
+//
 // NOTE: Use this whenever a resource is scoped to exactly one asynchronous
 // operation. A caller that has to continue as soon as the resource was
 // *acquired* (and not when the work is done) has to use
@@ -350,13 +372,27 @@ auto asyncWithResource(AsyncResourcePool<ResourceType> pool, Work work,
     auto handlerExecutor =
         net::get_associated_executor(handler, pool.defaultHandlerExecutor());
     pool.asyncAcquire(net::bind_executor(
-        handlerExecutor, [work = std::move(work), handler = AD_FWD(handler)](
-                             const boost::system::error_code& errorCode,
-                             typename Pool::Handle handle) mutable {
+        handlerExecutor,
+        [work = std::move(work), handler = AD_FWD(handler), handlerExecutor](
+            const boost::system::error_code& errorCode,
+            typename Pool::Handle handle) mutable {
+          // NOTE: This runs on the `handlerExecutor` already, because it is
+          // bound to it, so the error path may call the `handler` directly.
           if (errorCode) {
             std::move(handler)(errorCode);
             return;
           }
+          // Complete the whole operation successfully. IMPORTANT: The `work`
+          // completes on whichever thread it happens to complete on and
+          // typically ignores the executor that is associated with its
+          // completion token, so the `handler` has to be posted onto the
+          // `handlerExecutor` explicitly, see the NOTE above.
+          auto complete = [handlerExecutor](auto&& handler) mutable {
+            net::post(net::bind_executor(
+                handlerExecutor, [handler = AD_FWD(handler)]() mutable {
+                  std::move(handler)(boost::system::error_code{});
+                }));
+          };
           // NOTE: The `handle` is moved into the completion handler of the
           // `work` and the resource is hence returned to the pool as soon as
           // that handler has run.
@@ -368,16 +404,19 @@ auto asyncWithResource(AsyncResourcePool<ResourceType> pool, Work work,
             auto handlePtr =
                 std::make_unique<typename Pool::Handle>(std::move(handle));
             auto& resource = handlePtr->get();
-            std::move(work)(resource, [handlePtr = std::move(handlePtr),
-                                       handler = std::move(handler)]() mutable {
-              handlePtr->release();
-              std::move(handler)(boost::system::error_code{});
-            });
+            std::move(work)(
+                resource,
+                [handlePtr = std::move(handlePtr), handler = std::move(handler),
+                 complete = std::move(complete)]() mutable {
+                  handlePtr->release();
+                  complete(std::move(handler));
+                });
           } else {
             std::move(work)([handle = std::move(handle),
-                             handler = std::move(handler)]() mutable {
+                             handler = std::move(handler),
+                             complete = std::move(complete)]() mutable {
               handle.release();
-              std::move(handler)(boost::system::error_code{});
+              complete(std::move(handler));
             });
           }
         }));
