@@ -482,6 +482,26 @@ TEST(SparqlExpression, multiplyExpressionWithVariable) {
                           sparqlExpressionResultMatcher(expected)));
 }
 
+// _____________________________________________________________________________
+TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
+  V<Id> ints{{I(1), I(-2), I(3)}, alloc};
+  V<Id> doubles{{D(0.5), D(2.0), D(-1.5)}, alloc};
+
+  // Vector-vector: Int/Int, Int/Double, Double/Double.
+  testPlus(V<Id>{{I(2), I(-4), I(6)}, alloc}, ints, ints);
+  testPlus(V<Id>{{D(1.5), D(0.0), D(1.5)}, alloc}, ints, doubles);
+  testPlus(V<Id>{{D(1.0), D(4.0), D(-3.0)}, alloc}, doubles, doubles);
+
+  // Vector-constant and constant-vector. `testPlus` is commutative, so each
+  // call checks both operand orders.
+  testPlus(V<Id>{{I(3), I(0), I(5)}, alloc}, ints, I(2));
+  testPlus(V<Id>{{D(2.5), D(4.0), D(0.5)}, alloc}, doubles, D(2.0));
+
+  // Exercise the MakeNumericExpression -> NumericIdWrapper fast-path mapping.
+  testMultiply(V<Id>{{I(2), I(-4), I(6)}, alloc}, ints, I(2));
+  testMultiply(V<Id>{{D(0.5), D(-4.0), D(-4.5)}, alloc}, ints, doubles);
+}
+
 // _____________________________________________________________________________________
 TEST(SparqlExpression, arithmeticOperators) {
   // Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
