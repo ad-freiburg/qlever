@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "index/DeltaTriples.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Owns all OTEL instruments and deregisters observable callbacks on
@@ -42,26 +43,33 @@ class ServerMetrics {
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> httpErrors_;
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryQueryTotal_;
 
-  ServerMetrics(absl::AnyInvocable<int64_t() const> getDeltaTriples,
+  ServerMetrics(absl::AnyInvocable<DeltaTriplesCount() const> getDeltaTriples,
                 absl::AnyInvocable<int64_t() const> getMemoryLeft,
                 absl::AnyInvocable<int64_t() const> getCacheUsed,
                 absl::AnyInvocable<int64_t() const> getCacheLimit,
                 absl::AnyInvocable<int64_t() const> getRebuildInProgress,
-                std::optional<ad_utility::MemorySize> maxMem);
+                std::optional<ad_utility::MemorySize> maxMem,
+                absl::AnyInvocable<int64_t() const> getNumTriplesIndex);
   void registerCallbacks();
 
  private:
   template <absl::AnyInvocable<int64_t() const> ServerMetrics::*Getter>
   static void observeCallback(opentelemetry::metrics::ObserverResult result,
                               void* state);
+  static void deltaTriplesCallback(
+      opentelemetry::metrics::ObserverResult result, void* state);
   static void observe(opentelemetry::metrics::ObserverResult result,
                       int64_t value);
+  static void observe(opentelemetry::metrics::ObserverResult result,
+                      int64_t value, const std::string& label,
+                      const std::string& labelValue);
 
-  absl::AnyInvocable<int64_t() const> getDeltaTriples_;
+  absl::AnyInvocable<DeltaTriplesCount() const> getDeltaTriples_;
   absl::AnyInvocable<int64_t() const> getMemoryLeft_;
   absl::AnyInvocable<int64_t() const> getCacheUsed_;
   absl::AnyInvocable<int64_t() const> getCacheLimit_;
   absl::AnyInvocable<int64_t() const> getRebuildInProgress_;
+  absl::AnyInvocable<int64_t() const> getNumTriplesIndex_;
 
   // Observable instruments: SDK invokes callbacks on scrape; RemoveCallback
   // in ~ServerMetrics() blocks until any in-flight callback returns.
@@ -75,6 +83,8 @@ class ServerMetrics {
       memoryCacheLimit_;
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
       rebuildInProgressMetric_;
+  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
+      numTriplesIndex_;
 };
 
 #endif  // QLEVER_SRC_UTIL_METRICS_SERVERMETRICS_H
