@@ -1585,13 +1585,6 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   dpTab.push_back(std::move(connectedComponent));
   size_t numSeeds = findUniqueNodeIds(dpTab.back(), false);
 
-  if (numSeeds < 2) {
-    // Apply filter substitutes also in cases with less than two seeds
-    // (currently used for `SpatialJoin` with a fixed-value side).
-    applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(dpTab.back(),
-                                                            filters);
-  }
-
   for (size_t k = 2; k <= numSeeds; ++k) {
     AD_LOG_TRACE << "Producing plans that unite " << k << " triples."
                  << std::endl;
@@ -1623,6 +1616,11 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     checkCancellation();
   }
   auto& result = dpTab.back();
+  // Apply enforced filter substitutes (currently `SpatialJoin` with a
+  // fixed-value side). Both a connected component with a single seed and a
+  // full-cover replacement plan land in the final row without passing through
+  // a DP round that may apply substitutes, so they are handled here.
+  applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(result, filters);
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
                                                                      filters);
   applyTextLimitsIfPossible(result, textLimits, true);
@@ -1960,18 +1958,6 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
       result.at(0), filtersAndOptSubstitutes);
   applyTextLimitsIfPossible(result.at(0), textLimitVec, true);
   return result;
-}
-
-// _____________________________________________________________________________
-bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
-  auto it = _nodeMap.find(i);
-  if (it == _nodeMap.end()) {
-    return false;
-  }
-  const auto& triple = it->second->triple_;
-  auto predicate = triple.getSimplePredicate();
-  return predicate == CONTAINS_ENTITY_PREDICATE ||
-         predicate == CONTAINS_WORD_PREDICATE;
 }
 
 // _____________________________________________________________________________
@@ -2363,6 +2349,12 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(opt.value()));
   }
 
+  // Test if one of `a` or `b` is a union whose children can each have the joins
+  // applied individually. This works for any number of join columns.
+  for (SubtreePlan& plan : applyJoinDistributivelyToUnion(a, b, jcs)) {
+    candidates.push_back(std::move(plan));
+  }
+
   if (jcs.size() >= 2) {
     // If there are two or more join columns use a multiColumnJoin.
     SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
@@ -2379,12 +2371,6 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   // loading the full has-predicate predicate.
   if (auto opt = createJoinWithHasPredicateScan(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
-  }
-
-  // Test if one of `a` or `b` is a union whose children can each have the joins
-  // applied individually.
-  for (SubtreePlan& plan : applyJoinDistributivelyToUnion(a, b, jcs)) {
-    candidates.push_back(std::move(plan));
   }
 
   // "NORMAL" CASE:
@@ -2504,7 +2490,7 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
 auto QueryPlanner::applyJoinDistributivelyToUnion(
     const SubtreePlan& a, const SubtreePlan& b,
     const JoinColumns& jcs) const -> std::vector<SubtreePlan> {
-  AD_CORRECTNESS_CHECK(jcs.size() == 1);
+  AD_CORRECTNESS_CHECK(!jcs.empty());
   AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
                        b.type == SubtreePlan::BASIC);
   std::vector<SubtreePlan> candidates{};
