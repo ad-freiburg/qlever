@@ -98,15 +98,12 @@ void testFileSuffixes(
   auto trace = generateLocationTrace(loc, VocabularyType{type}.toString());
   EmptyDirectory directory = directoryFor(type);
 
-  PolymorphicVocabulary vocabulary;
-  vocabulary.resetToType(VocabularyType{type});
-  EXPECT_EQ(vocabulary.fileSuffixes(), expectedSuffixes);
-  // The static overload has to agree with the non-static one.
   EXPECT_EQ(PolymorphicVocabulary::fileSuffixes(VocabularyType{type}),
             expectedSuffixes);
 
   {
-    auto writer = vocabulary.makeDiskWriterPtr(directory.baseFilename());
+    auto writer = PolymorphicVocabulary::makeDiskWriterPtr(
+        directory.baseFilename(), VocabularyType{type});
     for (const std::string& word : testWords()) {
       (*writer)(word, true);
     }

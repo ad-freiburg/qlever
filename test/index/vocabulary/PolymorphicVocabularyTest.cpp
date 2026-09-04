@@ -28,10 +28,10 @@ bool isWithHoles(VocabularyType::Enum vocabType) {
          vocabType == VocabularyType::Enum::InMemoryCompressedWithHoles;
 }
 
-// Delete all the files that a vocabulary of the given `type` with the given
-// base `filename` consists of.
-void deleteVocabFiles(VocabularyType type, const std::string& filename) {
-  vocabulary_test::deleteVocabularyFiles(
+// An `absl::Cleanup` that deletes all the files that a vocabulary of the given
+// `type` with the given base `filename` consists of.
+auto vocabFileCleanup(VocabularyType type, const std::string& filename) {
+  return vocabulary_test::makeVocabFileCleanup(
       filename, PolymorphicVocabulary::fileSuffixes(type));
 }
 
@@ -70,9 +70,7 @@ void testForVocabTypeWithHoles(VocabularyType::Enum vocabType) {
   VocabularyType type{vocabType};
   std::string filename =
       absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
-  absl::Cleanup cleanup = [&type, &filename] {
-    deleteVocabFiles(type, filename);
-  };
+  auto cleanup = vocabFileCleanup(type, filename);
 
   // The `WordWriterBase` interface cannot express the explicit indices that a
   // vocabulary with holes requires.
@@ -132,9 +130,7 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   VocabularyType type{vocabType};
   std::string filename =
       absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
-  absl::Cleanup cleanup = [&type, &filename] {
-    deleteVocabFiles(type, filename);
-  };
+  auto cleanup = vocabFileCleanup(type, filename);
 
   auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
   auto& writer = *writerPtr;
@@ -214,12 +210,8 @@ TEST(PolymorphicVocabulary, basicTests) {
 TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
   for (auto vocabType : VocabularyType::all()) {
     auto [temporaryFile, cleanup] = ad_utility::testing::filenameForTesting();
-    // NOTE: A structured binding must not be captured by a lambda in C++17,
-    // hence the copy into an ordinary local variable.
     std::string filename = temporaryFile.string();
-    absl::Cleanup deleteFiles = [vocabType, &filename] {
-      deleteVocabFiles(VocabularyType{vocabType}, filename);
-    };
+    auto deleteFiles = vocabFileCleanup(VocabularyType{vocabType}, filename);
     PolymorphicVocabulary vocab;
     setupVocab(vocab, vocabType, filename);
 
@@ -236,12 +228,8 @@ TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
 TEST(PolymorphicVocabulary, lookupBatchesStreamedMatchesIndividualLookups) {
   for (auto vocabType : VocabularyType::all()) {
     auto [temporaryFile, cleanup] = ad_utility::testing::filenameForTesting();
-    // NOTE: A structured binding must not be captured by a lambda in C++17,
-    // hence the copy into an ordinary local variable.
     std::string filename = temporaryFile.string();
-    absl::Cleanup deleteFiles = [vocabType, &filename] {
-      deleteVocabFiles(VocabularyType{vocabType}, filename);
-    };
+    auto deleteFiles = vocabFileCleanup(VocabularyType{vocabType}, filename);
     PolymorphicVocabulary vocab;
     setupVocab(vocab, vocabType, filename);
 

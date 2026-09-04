@@ -176,9 +176,7 @@ TEST(VocabularyOnDisk, EmptyVocabulary) {
 TEST(VocabularyOnDisk, ReadLegacyMmapVectorOffsetsFormat) {
   std::string vocabFilename = "vocabularyOnDisk.legacyMmapFormat";
   std::string offsetsFilename = vocabFilename + ".offsets";
-  absl::Cleanup cleanup{[&vocabFilename]() {
-    deleteVocabularyFiles<VocabularyOnDisk>(vocabFilename);
-  }};
+  auto cleanup = makeVocabFileCleanup<VocabularyOnDisk>(vocabFilename);
 
   const std::array<std::string_view, 7> words{
       "alpha",

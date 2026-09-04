@@ -112,14 +112,6 @@ FileSuffixes PolymorphicVocabulary::fileSuffixes(VocabularyType type) {
 }
 
 // _____________________________________________________________________________
-FileSuffixes PolymorphicVocabulary::fileSuffixes() const {
-  // NOTE: `fileSuffixes` is a static member function, which can also be called
-  // via an object of the respective type.
-  return std::visit([](const auto& vocab) { return vocab.fileSuffixes(); },
-                    vocab_);
-}
-
-// _____________________________________________________________________________
 void PolymorphicVocabulary::resetToType(VocabularyType type) {
   close();
   // The names of the enum values are the same as the type aliases for the

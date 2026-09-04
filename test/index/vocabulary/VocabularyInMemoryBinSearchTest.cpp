@@ -202,9 +202,7 @@ std::vector<std::pair<uint64_t, std::string>> expectedIndicesAndWords() {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, positionOfIndexAndAccessOperator) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] {
-    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
-  };
+  auto cleanup = makeVocabFileCleanup<VocabularyInMemoryBinSearch>(filename);
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 
@@ -233,9 +231,7 @@ TEST(VocabularyInMemoryBinSearch, positionOfIndexAndAccessOperator) {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, endIndexAndGetPositionOfWord) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] {
-    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
-  };
+  auto cleanup = makeVocabFileCleanup<VocabularyInMemoryBinSearch>(filename);
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 
@@ -253,9 +249,7 @@ TEST(VocabularyInMemoryBinSearch, endIndexAndGetPositionOfWord) {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, scanAll) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] {
-    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
-  };
+  auto cleanup = makeVocabFileCleanup<VocabularyInMemoryBinSearch>(filename);
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 
@@ -271,9 +265,7 @@ TEST(VocabularyInMemoryBinSearch, scanAll) {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, lookupBatch) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] {
-    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
-  };
+  auto cleanup = makeVocabFileCleanup<VocabularyInMemoryBinSearch>(filename);
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 
@@ -303,9 +295,7 @@ TEST(VocabularyInMemoryBinSearch, lookupBatch) {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, genericSerialization) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] {
-    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
-  };
+  auto cleanup = makeVocabFileCleanup<VocabularyInMemoryBinSearch>(filename);
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 
@@ -328,9 +318,7 @@ TEST(VocabularyInMemoryBinSearch, genericSerialization) {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, zeroCopyDeserialization) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] {
-    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
-  };
+  auto cleanup = makeVocabFileCleanup<VocabularyInMemoryBinSearch>(filename);
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 

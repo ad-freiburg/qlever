@@ -5,6 +5,7 @@
 #ifndef QLEVER_VOCABULARYTESTHELPERS_H
 #define QLEVER_VOCABULARYTESTHELPERS_H
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
@@ -458,6 +459,23 @@ inline void deleteVocabularyFiles(const std::string& filename,
 template <typename Vocabulary>
 void deleteVocabularyFiles(const std::string& filename) {
   deleteVocabularyFiles(filename, Vocabulary::fileSuffixes());
+}
+
+// Return an `absl::Cleanup` that deletes all the files that a vocabulary with
+// the given base `filename` and the given `suffixes` consists of (see
+// `deleteVocabularyFiles` above). The arguments are copied into the returned
+// object, which therefore stays valid independently of them.
+inline auto makeVocabFileCleanup(std::string filename, FileSuffixes suffixes) {
+  return absl::Cleanup{
+      [filename = std::move(filename), suffixes = std::move(suffixes)] {
+        deleteVocabularyFiles(filename, suffixes);
+      }};
+}
+
+// Same as above, for a vocabulary of the given (statically known) type.
+template <typename Vocabulary>
+auto makeVocabFileCleanup(std::string filename) {
+  return makeVocabFileCleanup(std::move(filename), Vocabulary::fileSuffixes());
 }
 
 }  // namespace vocabulary_test
