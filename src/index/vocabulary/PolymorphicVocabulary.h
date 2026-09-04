@@ -79,6 +79,35 @@ class PolymorphicVocabulary {
   // `VocabularyType` has already been set via `resetToType` above.
   void open(const std::string& filename);
 
+  // Forward the geo cell grid to the currently active vocabulary if it is a
+  // `SplitVocabulary` (which forwards it to its `GeoVocabulary`); no-op
+  // otherwise.
+  void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
+    std::visit(
+        [&grid](auto& vocab) {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
+            vocab.setGeoCellGrid(grid);
+          }
+        },
+        vocab_);
+  }
+
+  // The geo cell grid of an underlying `GeoVocabulary`, or `std::nullopt` if
+  // the active vocabulary is not a `SplitVocabulary` holding one with a grid.
+  std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
+    return std::visit(
+        [](const auto& vocab) -> std::optional<ad_utility::GeoCellGrid> {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
+            return vocab.getGeoCellGrid();
+          } else {
+            return std::nullopt;
+          }
+        },
+        vocab_);
+  }
+
   // Close the vocabulary s.t. it consumes no more RAM.
   void close();
 

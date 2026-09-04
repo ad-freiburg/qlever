@@ -475,4 +475,66 @@ TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
   wordWriter2.reset();
 }
 
+// Test that the cell-annotated indices of a `GeoVocabulary` with a geo cell
+// grid pass correctly through a `SplitGeoVocabulary`: they carry the marker
+// bit, exceed the size of the geo vocabulary by construction, and the
+// past-the-end bounds come from `GeoVocabulary::endIndex`.
+TEST(SplitVocabulary, cellAnnotatedIndicesThroughSplitVocabulary) {
+  using SGV = SplitGeoVocabulary<VocabularyInMemory>;
+  ad_utility::GeoCellGrid grid{2};
+  const std::string fn = "geocellsplitvocab-test.dat";
+  auto wkt = [](std::string_view content) {
+    return absl::StrCat("\"", content, "\"", GEO_LITERAL_SUFFIX);
+  };
+
+  std::string iri = "<http://example.org/a>";
+  std::string wkt3 = wkt("POINT(170 -80)");   // cell 3
+  std::string wkt12 = wkt("POINT(-170 80)");  // cell 12
+
+  // The comparator orders all non-WKT words first, then the WKT literals by
+  // cell index. Here it is written by hand, in a follow-up change the
+  // `TripleComponentComparator` produces this order.
+  auto comparator = [&grid](std::string_view a, std::string_view b) {
+    auto key = [&grid](std::string_view w) {
+      bool isWkt = ad_utility::isWktLiteral(w);
+      return std::tuple{isWkt, isWkt ? grid.cellIndexFromWktLiteral(w) : 0, w};
+    };
+    return key(a) < key(b);
+  };
+
+  // Write the words in the comparator's order.
+  {
+    SGV writeVocab;
+    writeVocab.setGeoCellGrid(grid);
+    auto ww = writeVocab.makeDiskWriterPtr(fn);
+    ww->readableName() = "test";
+    EXPECT_EQ((*ww)(iri, false), 0u);
+    EXPECT_EQ((*ww)(wkt3, false), SGV::addMarker(grid.annotateIndex(3, 0), 1));
+    EXPECT_EQ((*ww)(wkt12, false),
+              SGV::addMarker(grid.annotateIndex(12, 1), 1));
+    ww->finish();
+  }
+
+  SGV vocab;
+  vocab.setGeoCellGrid(grid);
+  vocab.open(fn);
+
+  // Retrieval by marked, cell-annotated index.
+  EXPECT_EQ(vocab[SGV::addMarker(grid.annotateIndex(3, 0), 1)], wkt3);
+  EXPECT_EQ(vocab[SGV::addMarker(grid.annotateIndex(12, 1), 1)], wkt12);
+  EXPECT_EQ(vocab[0], iri);
+
+  // Exact lookup returns the annotated index and its successor as bounds.
+  auto [lo3, hi3] = vocab.getPositionOfWord(wkt3, comparator);
+  EXPECT_EQ(lo3, SGV::addMarker(grid.annotateIndex(3, 0), 1));
+  EXPECT_EQ(hi3, lo3 + 1);
+
+  // A WKT literal that is not in the vocabulary and larger than all entries
+  // gets past-the-end bounds that are larger than every valid index.
+  std::string wktMissing = wkt("NOTAGEOMETRY");  // sentinel cell
+  auto [loM, hiM] = vocab.getPositionOfWord(wktMissing, comparator);
+  EXPECT_EQ(loM, hiM);
+  EXPECT_GT(loM, SGV::addMarker(grid.annotateIndex(12, 1), 1));
+}
+
 }  // namespace
