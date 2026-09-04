@@ -19,34 +19,49 @@
 
 namespace ad_utility {
 
-// The compiled automaton for all the patterns of a `RegexSet`. `ANCHOR_BOTH`
-// makes the matching a full match (as for `RE2::FullMatch`), and `Quiet`
-// suppresses the logging of `RE2` for invalid patterns, which we report as
-// exceptions instead (see `throwCompilationError`).
+// All the state of a `RegexSet`. `ANCHOR_BOTH` makes the matching a full match
+// (as for `RE2::FullMatch`), and `Quiet` suppresses the logging of `RE2` for
+// invalid regexes, which we report as exceptions instead (see the constructor
+// of `RegexSet`).
 struct RegexSet::Impl {
+  std::vector<std::string> regexesAsStrings_;
   re2::RE2::Set set_{re2::RE2::Quiet, re2::RE2::ANCHOR_BOTH};
+
+  explicit Impl(std::vector<std::string> regexesAsStrings)
+      : regexesAsStrings_{std::move(regexesAsStrings)} {}
 };
 
 // _____________________________________________________________________________
-RegexSet::RegexSet(std::vector<std::string> patterns,
-                   std::string_view description)
-    : patterns_{std::move(patterns)} {
-  if (patterns_.empty()) {
+RegexSet::RegexSet(std::vector<std::string> regexesAsStrings,
+                   std::string_view description) {
+  if (regexesAsStrings.empty()) {
     return;
   }
-  auto impl = std::make_shared<Impl>();
-  // NOTE: `RE2::Set` reports an invalid pattern by returning a negative index
-  // from `Add`, and a failure to compile all the patterns into a single
-  // automaton by returning `false` from `Compile`. In both cases we compile the
-  // patterns one by one to obtain a message that names the offending pattern.
-  for (const std::string& pattern : patterns_) {
-    if (impl->set_.Add(pattern, nullptr) < 0) {
-      throwCompilationError(description);
+  auto impl = std::make_shared<Impl>(std::move(regexesAsStrings));
+  // NOTE: `RE2::Set::Add` does not throw for a regex that is not valid, but
+  // returns a negative index and stores a descriptive message in its second
+  // argument, which we turn into a user-readable exception here.
+  for (const std::string& regex : impl->regexesAsStrings_) {
+    std::string error;
+    if (impl->set_.Add(regex, &error) < 0) {
+      throw std::runtime_error{absl::StrCat(
+          "The regex \"", regex, "\" ", description,
+          " is not a valid regular expression (as understood by Google's RE2 "
+          "library): ",
+          error)};
     }
   }
-  if (!impl->set_.Compile()) {
-    throwCompilationError(description);
-  }
+  // NOTE: Each of the regexes has been accepted by `Add` above, so compiling
+  // them into a single automaton can only fail if that automaton exceeds the
+  // memory budget of `RE2`, which in practice requires an absurd number of (or
+  // absurdly complex) regexes.
+  bool compilationSucceeded = impl->set_.Compile();
+  AD_CORRECTNESS_CHECK(compilationSucceeded, "The ",
+                       impl->regexesAsStrings_.size(), " regexes ", description,
+                       " are each a valid regular expression, but they could "
+                       "not be compiled into a single automaton (as understood "
+                       "by Google's RE2 library). Try using fewer or simpler "
+                       "regexes");
   impl_ = std::move(impl);
 }
 
@@ -60,37 +75,19 @@ bool RegexSet::matchesAny(std::string_view word) const {
   // A failed match may also mean that the matching itself failed (for example
   // because the automaton ran out of memory), which we must not silently report
   // as "no match".
-  if (!result && errorInfo.kind != re2::RE2::Set::kNoError) {
-    AD_THROW(absl::StrCat("Matching the ", patterns_.size(),
-                          " regexes against a string failed (RE2 reported the "
-                          "error kind ",
-                          static_cast<int>(errorInfo.kind), ")"));
-  }
+  bool matchingSucceeded = result || errorInfo.kind == re2::RE2::Set::kNoError;
+  AD_CORRECTNESS_CHECK(matchingSucceeded, "Matching the ",
+                       impl_->regexesAsStrings_.size(),
+                       " regexes against a string failed (RE2 reported the "
+                       "error kind ",
+                       static_cast<int>(errorInfo.kind), ")");
   return result;
 }
 
 // _____________________________________________________________________________
-void RegexSet::throwCompilationError(std::string_view description) const {
-  for (const std::string& pattern : patterns_) {
-    // `RE2` does not throw for an invalid pattern but stores an error state,
-    // which we turn into a user-readable exception here.
-    re2::RE2 singleRegex{pattern, re2::RE2::Quiet};
-    if (!singleRegex.ok()) {
-      throw std::runtime_error{absl::StrCat(
-          "The regex \"", pattern, "\" ", description,
-          " is not a valid regular expression (as understood by Google's RE2 "
-          "library): ",
-          singleRegex.error())};
-    }
-  }
-  // Each of the patterns is valid on its own, so only their combination could
-  // not be compiled (which in practice only happens when RE2 runs out of
-  // memory).
-  throw std::runtime_error{absl::StrCat(
-      "The ", patterns_.size(), " regexes ", description,
-      " are each a valid regular expression, but they could not be compiled "
-      "into a single automaton (as understood by Google's RE2 library). Try "
-      "using fewer or simpler regexes.")};
+const std::vector<std::string>& RegexSet::regexesAsStrings() const {
+  static const std::vector<std::string> emptyRegexes;
+  return impl_ ? impl_->regexesAsStrings_ : emptyRegexes;
 }
 
 }  // namespace ad_utility
