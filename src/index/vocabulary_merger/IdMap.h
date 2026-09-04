@@ -42,8 +42,10 @@ namespace ad_utility::vocabulary_merger {
 struct IdMapEntry {
   // NOTE: The local index deliberately is a plain index and not an `Id`. Inside
   // a partial vocabulary a word is always a `VocabIndex`, so the datatype bits
-  // of an `Id` would carry no information, but computing them for each of the
-  // (very many) entries would cost time in the vocabulary merger.
+  // of an `Id` would carry no information. Adding them is cheap, but
+  // `Id::makeFromVocabIndex` also checks that the index fits into the available
+  // bits, and that check for each of the (very many) entries would cost
+  // measurable time in the vocabulary merger.
   uint64_t localIndex_;
   Id globalId_;
 

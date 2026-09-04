@@ -16,7 +16,7 @@
 #include <vector>
 
 #include "../../util/IdTestHelpers.h"
-#include "index/vocabulary_merger/MergePipeline.h"
+#include "index/vocabulary_merger/VocabularyWriter.h"
 
 using namespace ad_utility::vocabulary_merger;
 using ad_utility::vocabulary_merger::detail::QueuedIdMapBatch;

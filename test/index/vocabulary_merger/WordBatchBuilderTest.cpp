@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
-#include "index/vocabulary_merger/MergePipeline.h"
+#include "index/vocabulary_merger/WordBatchBuilder.h"
 
 using namespace ad_utility::vocabulary_merger;
 using ad_utility::vocabulary_merger::detail::idMapEntryBatchSize;

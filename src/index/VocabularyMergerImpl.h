@@ -223,14 +223,13 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 }
 
 // _____________________________________________________________________
-inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+inline ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
     const std::string& filename) {
   auto vec = getIdMapFromFile(filename);
-  ad_utility::HashMap<Id, Id> map;
+  ad_utility::HashMap<VocabIndex, Id> map;
   map.reserve(vec.size());
   for (const auto& entry : vec) {
-    map.emplace(Id::makeFromVocabIndex(VocabIndex::make(entry.localIndex_)),
-                entry.globalId_);
+    map.emplace(VocabIndex::make(entry.localIndex_), entry.globalId_);
   }
   return map;
 }

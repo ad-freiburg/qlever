@@ -92,7 +92,7 @@ class IdMapBatchWriter {
 
   // Write all the entries of the `batch` to their respective ID maps.
   void writeBatch(const IdMapBatch& batch) {
-    AD_LOG_TIMING << "Start writing a batch of ID map entries\n";
+    AD_LOG_TRACE << "Start writing a batch of ID map entries\n";
     const auto& globalIds = batch.globalIds_;
     const auto& queuedEntries = batch.queuedEntries_;
     for (size_t i = 0; i < queuedEntries.numEntries_; ++i) {

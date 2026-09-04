@@ -22,6 +22,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/MergePipeline.h"
+#include "index/vocabulary_merger/WordBatchBuilder.h"
 #include "util/File.h"
 
 using namespace ad_utility::vocabulary_merger;

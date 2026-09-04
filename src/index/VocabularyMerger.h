@@ -20,6 +20,7 @@
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/MergePipeline.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
+#include "index/vocabulary_merger/WordBatchBuilder.h"
 #include "index/vocabulary_merger/WordCallbacks.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
@@ -83,8 +84,11 @@ auto mergeVocabulary(
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
 
-// ____________________________________________________________________________
-ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+// Read the partial ID map from the given file (see `IdMapWriter`) into a hash
+// map. NOTE: The keys are plain `VocabIndex`es, because inside a partial
+// vocabulary a word is always a `VocabIndex`. The values are full `Id`s,
+// because a merged word may also become a blank node (see `isBlankNode`).
+ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
     const std::string& filename);
 
 /**

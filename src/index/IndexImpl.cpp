@@ -773,7 +773,7 @@ auto IndexImpl::convertPartialToGlobalIds(
     IdTableStatic<NumColumnsIndexBuilding> triples_;
     IdTableStatic<NumColumnsIndexBuilding> internalTriples_;
   };
-  using Map = ad_utility::HashMap<Id, Id>;
+  using Map = ad_utility::HashMap<VocabIndex, Id>;
 
   ad_utility::TaskQueue<true> lookupQueue(30, 10,
                                           "looking up local to global IDs");
@@ -785,16 +785,13 @@ auto IndexImpl::convertPartialToGlobalIds(
   // For all triple elements find their mapping from partial to global ids.
   auto transformTriple = [](Buffer::row_reference& curTriple, auto& idMap) {
     for (auto& id : curTriple) {
-      // TODO<joka92> Since the mapping only maps `VocabIndex->VocabIndex`,
-      // probably the mapping should also be defined as `HashMap<VocabIndex,
-      // VocabIndex>` instead of `HashMap<Id, Id>`
       if (id.getDatatype() != Datatype::VocabIndex) {
         // Check that all the internal, special IDs which we have introduced
         // for performance reasons are eliminated.
         AD_CORRECTNESS_CHECK(id.getDatatype() != Datatype::Undefined);
         continue;
       }
-      auto iterator = idMap.find(id);
+      auto iterator = idMap.find(id.getVocabIndex());
       AD_CORRECTNESS_CHECK(iterator != idMap.end());
       id = iterator->second;
     }
