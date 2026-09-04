@@ -17,7 +17,7 @@ using namespace vocabulary_test;
 
 // Create a `Vocab` with the given `words` by writing it to the file with the
 // name of the current test and reading it back. The caller has to delete that
-// file again, for which `vocabularyCleanup` below is used.
+// file again, for which `getFileCleanup` below is used.
 auto createVocabulary(const std::vector<std::string>& words) {
   auto filename = gtestCurrentTestName();
   {
@@ -36,35 +36,38 @@ auto createVocabulary(const std::vector<std::string>& words) {
   return v;
 }
 
-// An `absl::Cleanup` that deletes the file that `createVocabulary` above
-// writes.
-auto vocabularyCleanup() {
-  return makeVocabFileCleanup<Vocab>(gtestCurrentTestName());
+// An `absl::Cleanup` that deletes the file that a `Vocab` with the given base
+// `filename` consists of.
+auto getFileCleanup(const std::string& filename) {
+  return makeVocabFileCleanup<Vocab>(filename);
 }
 
+// Same as above, for the file that `createVocabulary` above writes.
+auto getFileCleanup() { return getFileCleanup(gtestCurrentTestName()); }
+
 TEST(VocabularyInMemory, UpperLowerBound) {
-  auto cleanup = vocabularyCleanup();
+  auto cleanup = getFileCleanup();
   testUpperAndLowerBoundWithStdLess(createVocabulary);
 }
 
 TEST(VocabularyInMemory, UpperLowerBoundAlternativeComparator) {
-  auto cleanup = vocabularyCleanup();
+  auto cleanup = getFileCleanup();
   testUpperAndLowerBoundWithNumericComparator(createVocabulary);
 }
 
 TEST(VocabularyInMemory, AccessOperator) {
-  auto cleanup = vocabularyCleanup();
+  auto cleanup = getFileCleanup();
   testAccessOperatorForUnorderedVocabulary(createVocabulary);
 }
 
 TEST(VocabularyInMemory, ReadAndWriteFromFile) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
-  auto cleanup = vocabularyCleanup();
+  auto cleanup = getFileCleanup();
   const auto vocab = createVocabulary(words);
   const std::string vocabularyFilename =
       absl::StrCat(gtestCurrentTestName(), ".copy");
-  auto copyCleanup = makeVocabFileCleanup<Vocab>(vocabularyFilename);
+  auto copyCleanup = getFileCleanup(vocabularyFilename);
   vocab.writeToFile(vocabularyFilename);
 
   Vocab readVocab;
@@ -75,7 +78,7 @@ TEST(VocabularyInMemory, ReadAndWriteFromFile) {
 TEST(VocabularyInMemory, WriteAndReadWithSerializer) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
-  auto cleanup = vocabularyCleanup();
+  auto cleanup = getFileCleanup();
   const auto vocab = createVocabulary(words);
 
   // Write using serializer.
@@ -92,7 +95,7 @@ TEST(VocabularyInMemory, WriteAndReadWithSerializer) {
 }
 
 TEST(VocabularyInMemory, EmptyVocabulary) {
-  auto cleanup = vocabularyCleanup();
+  auto cleanup = getFileCleanup();
   testEmptyVocabulary(createVocabulary);
 }
 
@@ -101,7 +104,7 @@ TEST(VocabularyInMemory, ScanAll) {
   // `scanAll` uses the generic `operator[]` fallback here and must yield all
   // words in order.
   const std::vector<std::string> words{"alpha", "delta", "beta", "42", "0"};
-  auto cleanup = vocabularyCleanup();
+  auto cleanup = getFileCleanup();
   const auto vocab = createVocabulary(words);
   EXPECT_THAT(scanAllToVector(vocab.scanAll()),
               ::testing::ElementsAreArray(words));
@@ -109,7 +112,7 @@ TEST(VocabularyInMemory, ScanAll) {
 
 // _____________________________________________________________________________
 TEST(VocabularyInMemory, ScanAllEmptyVocabulary) {
-  auto cleanup = vocabularyCleanup();
+  auto cleanup = getFileCleanup();
   const auto vocab = createVocabulary({});
   EXPECT_TRUE(scanAllToVector(vocab.scanAll()).empty());
 }
@@ -118,7 +121,7 @@ TEST(VocabularyInMemory, ScanAllEmptyVocabulary) {
 TEST(VocabularyInMemory, ZeroCopyDeserialization) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
-  auto cleanup = vocabularyCleanup();
+  auto cleanup = getFileCleanup();
   const auto vocab = createVocabulary(words);
 
   ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
@@ -134,7 +137,7 @@ TEST(VocabularyInMemory, ZeroCopyDeserialization) {
 // _____________________________________________________________________________
 TEST(VocabularyInMemory, WordWriterDestructorBehavior) {
   const std::string filename = gtestCurrentTestName();
-  auto cleanup = makeVocabFileCleanup<Vocab>(filename);
+  auto cleanup = getFileCleanup(filename);
   Vocab v;
   {
     auto writerPtr = v.makeDiskWriterPtr(filename);

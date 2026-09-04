@@ -63,9 +63,14 @@ const VocabularyType geoSplitVocabType{
 
 // An `absl::Cleanup` that deletes all the files that an `RdfsVocabulary` of the
 // given `type` with the given base `filename` consists of.
-auto vocabFileCleanup(VocabularyType type, const std::string& filename) {
+auto getFileCleanup(VocabularyType type, const std::string& filename) {
   return vocabulary_test::makeVocabFileCleanup(
       filename, PolymorphicVocabulary::fileSuffixes(type));
+}
+
+// Same as above, for a `TwoSplitVocabulary`, which most of the tests below use.
+auto getFileCleanup(const std::string& filename) {
+  return vocabulary_test::makeVocabFileCleanup<TwoSplitVocabulary>(filename);
 }
 
 // _____________________________________________________________________________
@@ -147,8 +152,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   ASSERT_EQ(sv.getMarkerForWord("\"abc\""), 1);
 
   const std::string filename = gtestCurrentTestName();
-  auto cleanup =
-      vocabulary_test::makeVocabFileCleanup<TwoSplitVocabulary>(filename);
+  auto cleanup = getFileCleanup(filename);
   auto ww = sv.makeDiskWriterPtr(filename);
   ASSERT_EQ((*ww)("\"\"", true), sv.addMarker(0, 0));
   ASSERT_EQ((*ww)("\"abc\"", true), sv.addMarker(0, 1));
@@ -306,7 +310,7 @@ TEST(Vocabulary, SplitVocabularyItemAt) {
   RdfsVocabulary v;
   v.resetToType(geoSplitVocabType);
   const std::string filename = gtestCurrentTestName();
-  auto cleanup = vocabFileCleanup(geoSplitVocabType, filename);
+  auto cleanup = getFileCleanup(geoSplitVocabType, filename);
   v.createFromSet(s, filename);
 
   ASSERT_EQ(v[VocabIndex::make(0)], "a");
@@ -336,7 +340,7 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(geoSplitVocabType);
   const std::string filename = gtestCurrentTestName();
-  auto cleanup = vocabFileCleanup(geoSplitVocabType, filename);
+  auto cleanup = getFileCleanup(geoSplitVocabType, filename);
   auto wordCallback = vocabulary.makeWordWriterPtr(filename);
   ASSERT_TRUE(vocabulary.isGeoInfoAvailable());
 
@@ -446,8 +450,7 @@ TEST(Vocabulary, SplitVocabularyScanAll) {
   // `scanAll` must still enumerate all of them.
   TwoSplitVocabulary sv;
   const std::string filename = gtestCurrentTestName();
-  auto cleanup =
-      vocabulary_test::makeVocabFileCleanup<TwoSplitVocabulary>(filename);
+  auto cleanup = getFileCleanup(filename);
   auto ww = sv.makeDiskWriterPtr(filename);
   (*ww)("\"\"", true);
   (*ww)("\"abc\"", true);
@@ -477,8 +480,7 @@ TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
   // Create a `SplitVocabulary::WordWriter` and destruct it without a call to
   // `finish()`.
   const std::string filename1 = absl::StrCat(gtestCurrentTestName(), ".1");
-  auto cleanup1 =
-      vocabulary_test::makeVocabFileCleanup<TwoSplitVocabulary>(filename1);
+  auto cleanup1 = getFileCleanup(filename1);
   TwoSplitVocabulary sv1;
   auto wordWriter1 = sv1.makeDiskWriterPtr(filename1);
   (*wordWriter1)("\"abc\"", true);
@@ -488,8 +490,7 @@ TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
   // Create a `SplitVocabulary::WordWriter` and destruct it after an explicit
   // call to `finish()`.
   const std::string filename2 = absl::StrCat(gtestCurrentTestName(), ".2");
-  auto cleanup2 =
-      vocabulary_test::makeVocabFileCleanup<TwoSplitVocabulary>(filename2);
+  auto cleanup2 = getFileCleanup(filename2);
   TwoSplitVocabulary sv2;
   auto wordWriter2 = sv2.makeDiskWriterPtr(filename2);
   (*wordWriter2)("\"abc\"", true);

@@ -30,7 +30,7 @@ bool isWithHoles(VocabularyType::Enum vocabType) {
 
 // An `absl::Cleanup` that deletes all the files that a vocabulary of the given
 // `type` with the given base `filename` consists of.
-auto vocabFileCleanup(VocabularyType type, const std::string& filename) {
+auto getFileCleanup(VocabularyType type, const std::string& filename) {
   return vocabulary_test::makeVocabFileCleanup(
       filename, PolymorphicVocabulary::fileSuffixes(type));
 }
@@ -70,7 +70,7 @@ void testForVocabTypeWithHoles(VocabularyType::Enum vocabType) {
   VocabularyType type{vocabType};
   std::string filename =
       absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
-  auto cleanup = vocabFileCleanup(type, filename);
+  auto cleanup = getFileCleanup(type, filename);
 
   // The `WordWriterBase` interface cannot express the explicit indices that a
   // vocabulary with holes requires.
@@ -130,7 +130,7 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   VocabularyType type{vocabType};
   std::string filename =
       absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
-  auto cleanup = vocabFileCleanup(type, filename);
+  auto cleanup = getFileCleanup(type, filename);
 
   auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
   auto& writer = *writerPtr;
@@ -211,7 +211,7 @@ TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
   for (auto vocabType : VocabularyType::all()) {
     auto [temporaryFile, cleanup] = ad_utility::testing::filenameForTesting();
     std::string filename = temporaryFile.string();
-    auto deleteFiles = vocabFileCleanup(VocabularyType{vocabType}, filename);
+    auto deleteFiles = getFileCleanup(VocabularyType{vocabType}, filename);
     PolymorphicVocabulary vocab;
     setupVocab(vocab, vocabType, filename);
 
@@ -229,7 +229,7 @@ TEST(PolymorphicVocabulary, lookupBatchesStreamedMatchesIndividualLookups) {
   for (auto vocabType : VocabularyType::all()) {
     auto [temporaryFile, cleanup] = ad_utility::testing::filenameForTesting();
     std::string filename = temporaryFile.string();
-    auto deleteFiles = vocabFileCleanup(VocabularyType{vocabType}, filename);
+    auto deleteFiles = getFileCleanup(VocabularyType{vocabType}, filename);
     PolymorphicVocabulary vocab;
     setupVocab(vocab, vocabType, filename);
 

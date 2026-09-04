@@ -34,7 +34,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   static std::string filename() {
     return absl::StrCat(gtestCurrentTestName(), ".dat");
   }
-  static auto fileCleanup() {
+  static auto getFileCleanup() {
     return vocabulary_test::makeVocabFileCleanup<GeoVocabulary<T>>(filename());
   }
 
@@ -45,7 +45,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   // vocabulary implementation is used.
   void testGeoVocabulary() {
     using GV = GeoVocabulary<T>;
-    auto cleanup = fileCleanup();
+    auto cleanup = getFileCleanup();
     GV geoVocab;
     const std::string fn = filename();
     auto ww = geoVocab.makeDiskWriterPtr(fn);
@@ -140,7 +140,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   // `lookupBatch` must yield exactly the same strings as looking each index up
   // individually via `operator[]`.
   void testLookupBatch() {
-    auto cleanup = fileCleanup();
+    auto cleanup = getFileCleanup();
     auto geoVocab = setupGeoVocab();
     std::array<size_t, 5> indices{2, 0, 3, 1, 0};
     auto result = geoVocab.lookupBatch(indices);
@@ -151,7 +151,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   // `lookupBatchesStreamed` must yield, for each batch, exactly the same
   // strings as the individual `operator[]` lookups for that batch's indices.
   void testLookupBatchesStreamed() {
-    auto cleanup = fileCleanup();
+    auto cleanup = getFileCleanup();
     auto geoVocab = setupGeoVocab();
 
     std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}, {0, 0}};
@@ -170,7 +170,7 @@ TYPED_TEST_SUITE(GeoVocabularyUnderlyingVocabTypedTest,
 
 // An `absl::Cleanup` that deletes all the files that an `RdfsVocabulary` of the
 // given `type` with the given base `filename` consists of.
-auto vocabFileCleanup(VocabularyType type, const std::string& filename) {
+auto getFileCleanup(VocabularyType type, const std::string& filename) {
   return vocabulary_test::makeVocabFileCleanup(
       filename, PolymorphicVocabulary::fileSuffixes(type));
 }
@@ -198,7 +198,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
 
   // Generate test vocabulary
   const std::string filename = absl::StrCat(gtestCurrentTestName(), ".geo");
-  auto cleanup = vocabFileCleanup(geoSplitVocabType, filename);
+  auto cleanup = getFileCleanup(geoSplitVocabType, filename);
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(geoSplitVocabType);
   ASSERT_TRUE(vocabulary.isGeoInfoAvailable());
@@ -228,7 +228,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   // `GeoVocabulary`
   const std::string nonGeoFilename =
       absl::StrCat(gtestCurrentTestName(), ".nonGeo");
-  auto nonGeoCleanup = vocabFileCleanup(nonGeoVocabType, nonGeoFilename);
+  auto nonGeoCleanup = getFileCleanup(nonGeoVocabType, nonGeoFilename);
   RdfsVocabulary nonGeoVocab;
   nonGeoVocab.resetToType(nonGeoVocabType);
   ASSERT_FALSE(nonGeoVocab.isGeoInfoAvailable());
@@ -246,7 +246,7 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
 
   // Generate test vocabulary
   const std::string filename = absl::StrCat(gtestCurrentTestName(), ".geo");
-  auto cleanup = vocabFileCleanup(geoSplitVocabType, filename);
+  auto cleanup = getFileCleanup(geoSplitVocabType, filename);
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(geoSplitVocabType);
   auto wordCallback = vocabulary.makeWordWriterPtr(filename);

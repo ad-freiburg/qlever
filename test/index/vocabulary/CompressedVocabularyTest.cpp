@@ -264,6 +264,13 @@ static_assert(std::is_same_v<
               CompressedVocabularyWithHoles::WordWriter,
               CompressedVocabularyWithHoles::DiskWriterWithExplicitIndices>);
 
+// An `absl::Cleanup` that deletes all the files that a
+// `CompressedVocabularyWithHoles` with the given base `filename` consists of.
+auto getFileCleanup(const std::string& filename) {
+  return vocabulary_test::makeVocabFileCleanup<CompressedVocabularyWithHoles>(
+      filename);
+}
+
 // The words of the vocabulary with holes that the tests below use, sorted (as
 // the underlying vocabulary requires sorted input at write time).
 //
@@ -326,7 +333,7 @@ std::vector<std::pair<uint64_t, std::string>> expectedIndicesAndWords() {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, accessOperator) {
   std::string filename = gtestCurrentTestName();
-  auto cleanup = makeVocabFileCleanup<CompressedVocabularyWithHoles>(filename);
+  auto cleanup = getFileCleanup(filename);
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
   auto vocab = createVocabularyWithHoles(filename, words, indices);
@@ -349,7 +356,7 @@ TEST(CompressedVocabularyWithHoles, accessOperator) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, lowerAndUpperBound) {
   std::string filename = gtestCurrentTestName();
-  auto cleanup = makeVocabFileCleanup<CompressedVocabularyWithHoles>(filename);
+  auto cleanup = getFileCleanup(filename);
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
   // `lower_bound` and `upper_bound` have to report the vocabulary indices (and
@@ -362,7 +369,7 @@ TEST(CompressedVocabularyWithHoles, lowerAndUpperBound) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, endIndexAndGetPositionOfWord) {
   std::string filename = gtestCurrentTestName();
-  auto cleanup = makeVocabFileCleanup<CompressedVocabularyWithHoles>(filename);
+  auto cleanup = getFileCleanup(filename);
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
   auto vocab = createVocabularyWithHoles(filename, words, indices);
@@ -382,7 +389,7 @@ TEST(CompressedVocabularyWithHoles, endIndexAndGetPositionOfWord) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, scanAll) {
   std::string filename = gtestCurrentTestName();
-  auto cleanup = makeVocabFileCleanup<CompressedVocabularyWithHoles>(filename);
+  auto cleanup = getFileCleanup(filename);
   auto vocab =
       createVocabularyWithHoles(filename, wordsWithHoles(), indicesWithHoles());
 
@@ -393,7 +400,7 @@ TEST(CompressedVocabularyWithHoles, scanAll) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, serialization) {
   std::string filename = gtestCurrentTestName();
-  auto cleanup = makeVocabFileCleanup<CompressedVocabularyWithHoles>(filename);
+  auto cleanup = getFileCleanup(filename);
   auto vocab =
       createVocabularyWithHoles(filename, wordsWithHoles(), indicesWithHoles());
 
@@ -434,7 +441,7 @@ TEST(CompressedVocabularyWithHoles, makeDiskWriterPtrThrows) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, addWordAfterFinishThrows) {
   std::string filename = gtestCurrentTestName();
-  auto cleanup = makeVocabFileCleanup<CompressedVocabularyWithHoles>(filename);
+  auto cleanup = getFileCleanup(filename);
   CompressedVocabularyWithHoles::WordWriter writer{filename};
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
@@ -458,7 +465,7 @@ TEST(CompressedVocabularyWithHoles, addWordAfterFinishThrows) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, nonAscendingIndicesThrow) {
   std::string filename = gtestCurrentTestName();
-  auto cleanup = makeVocabFileCleanup<CompressedVocabularyWithHoles>(filename);
+  auto cleanup = getFileCleanup(filename);
   CompressedVocabularyWithHoles::WordWriter writer{filename};
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
