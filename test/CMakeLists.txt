@@ -129,6 +129,12 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
+# The directory with the test data that is checked in (currently only an index
+# in the previous index format, see `data/oldIndexFormat/README.md`). Tests must
+# only read from this directory; anything they write belongs into their working
+# directory.
+add_compile_definitions(QLEVER_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+
 add_subdirectory(engine)
 add_subdirectory(parser)
 add_subdirectory(index)
@@ -368,6 +374,8 @@ addLinkAndDiscoverTest(LocalVocabTest engine)
 
 addLinkAndDiscoverTest(LocalVocabEntryTest index)
 
+addLinkAndDiscoverTest(SecondaryVocabularyTest index engine sparqlParser)
+
 addLinkAndDiscoverTest(ValuesTest engine)
 
 addLinkAndDiscoverTest(ServiceTest engine)
@@ -388,6 +396,8 @@ addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
 
 addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
+
+addLinkAndDiscoverTestNoLibs(NoCopyNoMoveTest)
 
 addLinkAndDiscoverTestSerial(TimerTest)
 
@@ -523,7 +533,7 @@ addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
 
-addLinkAndDiscoverTest(ValueGetterTest engine)
+addLinkAndDiscoverTest(ValueGetterTest engine index)
 
 addLinkAndDiscoverTest(LruCacheTest)
 
@@ -534,6 +544,8 @@ addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 addLinkAndDiscoverTest(TripleSerializerTest)
 
 addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
+
+addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
 
 addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 
@@ -554,7 +566,7 @@ else ()
     addLinkAndDiscoverTest(MaterializedViewsTest qlever engine)
 endif ()
 
-addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine)
+addLinkAndDiscoverTest(MaterializedViewsPatternRewriteTest qlever engine)
 
 addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 

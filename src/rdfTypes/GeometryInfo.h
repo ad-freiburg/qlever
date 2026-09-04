@@ -8,9 +8,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <string_view>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
+#include "global/Constants.h"
 #include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
@@ -259,6 +262,13 @@ class GeometryInfo {
 // For the disk serialization we require that a `GeometryInfo` is trivially
 // copyable.
 static_assert(std::is_trivially_copyable_v<GeometryInfo>);
+
+// Return true iff `word` is a WKT literal (with quotes and datatype suffix).
+// This is the criterion by which the `SplitGeoVocabulary` routes words into
+// the geo vocabulary (see `GeoSplitFunc`).
+inline bool isWktLiteral(std::string_view word) {
+  return ql::starts_with(word, "\"") && ql::ends_with(word, GEO_LITERAL_SUFFIX);
+}
 
 }  // namespace ad_utility
 

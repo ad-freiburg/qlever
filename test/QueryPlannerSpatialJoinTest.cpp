@@ -11,6 +11,7 @@
 #include "QueryPlannerTestHelpers.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
+#include "global/Constants.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SpatialQuery.h"
@@ -536,7 +537,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "SELECT * WHERE {"
       "?x <p> ?y ."
       "SERVICE spatialSearch: {"
-      "  _:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "  _:config1 spatialSearch:algorithm spatialSearch:s2 ;"
       "    spatialSearch:left ?y ;"
       "    spatialSearch:right ?b ;"
       "    spatialSearch:numNearestNeighbors 5 ; "
@@ -544,7 +545,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "  { ?ab <p1> ?b } "
       "}"
       "SERVICE spatialSearch: {"
-      "  _:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "  _:config2 spatialSearch:algorithm spatialSearch:s2 ;"
       "    spatialSearch:left ?y ;"
       "    spatialSearch:right ?c ;"
       "    spatialSearch:numNearestNeighbors 5 ; "
@@ -910,6 +911,22 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
           "The algorithm `<libspatialjoin>` supports the "
           "`<maxDistance>` option only if `<joinType>` is set to "
           "`<within-dist>`"));
+  // `<within-dist>` join type requires the `<maxDistance>` parameter.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+                "spatialSearch:joinType <within-dist> ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr("`<within-dist>` requires the `<maxDistance>` "
+                           "parameter"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1395,51 +1412,6 @@ TEST(QueryPlanner, FilterIsNotRewritten) {
       "SELECT * WHERE {"
       "?a <p> ?b ."
       "?x <p> ?y ."
-      "FILTER(geof:distance(\"POINT(50. "
-      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b) <= 0.5)"
-      " }",
-      ::testing::AnyOf(
-          h::Filter(
-              "geof:distance(\"POINT(50. "
-              "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, "
-              "?b) <= 0.5",
-              h::CartesianProductJoin(scan("?x", "<p>", "?y"),
-                                      scan("?a", "<p>", "?b"))),
-          h::CartesianProductJoin(
-              scan("?x", "<p>", "?y"),
-              h::Filter(
-                  "geof:distance(\"POINT(50. "
-                  "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, "
-                  "?b) <= 0.5",
-                  scan("?a", "<p>", "?b")))));
-
-  h::expect(
-      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
-      "SELECT * WHERE {"
-      "?a <p> ?b ."
-      "?x <p> ?y ."
-      "FILTER(geof:distance(?b, \"POINT(50. "
-      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>) <= 0.5)"
-      " }",
-      ::testing::AnyOf(
-          h::Filter("geof:distance(?b, \"POINT(50. "
-                    "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
-                    ") <= 0.5",
-                    h::CartesianProductJoin(scan("?x", "<p>", "?y"),
-                                            scan("?a", "<p>", "?b"))),
-          h::CartesianProductJoin(
-              scan("?x", "<p>", "?y"),
-              h::Filter(
-                  "geof:distance(?b, \"POINT(50. "
-                  "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
-                  ") <= 0.5",
-                  scan("?a", "<p>", "?b")))));
-
-  h::expect(
-      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
-      "SELECT * WHERE {"
-      "?a <p> ?b ."
-      "?x <p> ?y ."
       "FILTER(geof:distance(?b, ?y, ?a) <= 0.5)"
       " }",
       h::Filter("geof:distance(?b, ?y, ?a) <= 0.5",
@@ -1478,26 +1450,6 @@ TEST(QueryPlanner, FilterIsNotRewritten) {
       h::Filter("geof:distance(?y, ?b) <= \"abc\"",
                 h::CartesianProductJoin(scan("?x", "<p>", "?y"),
                                         scan("?a", "<p>", "?b"))));
-
-  h::expect(
-      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
-      "SELECT * WHERE {"
-      "?a <p> ?b ."
-      "FILTER(geof:sfContains(?b, \"POINT(50.0 50.0)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>)) . }",
-      h::Filter("geof:sfContains(?b, \"POINT(50.0 50.0)\""
-                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>)",
-                scan("?a", "<p>", "?b")));
-
-  h::expect(
-      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
-      "SELECT * WHERE {"
-      "?a <p> ?b ."
-      "FILTER(geof:sfContains(\"POINT(50.0 50.0)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b)) . }",
-      h::Filter("geof:sfContains(\"POINT(50.0 50.0)\""
-                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b)",
-                scan("?a", "<p>", "?b")));
 
   // `geof:relate` requires a fixed string literal as its third argument: if
   // it is a variable instead, the filter is not rewritten into a spatial
@@ -1635,6 +1587,160 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
                 "FILTER geof:sfContains(?b, ?b) . }",
                 ::testing::_),
       ::testing::HasSubstr("Variable ?b on both sides"));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinFromFilterWithFixedValue) {
+  auto scan = h::IndexScanFromStrings;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  using enum SpatialJoinType::Enum;
+  // The filter substitutes are seeded exactly once per planning (in
+  // `fillDpTab`), and the queries below contain no other construct that
+  // generates an internal variable, so the fixed side is bound to the first
+  // internal variable.
+  Var internalVar{
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 0)};
+
+  // Fixed values during `FILTER` rewriting are replaced by a single-row
+  // `VALUES`. Construct matchers for this.
+  auto valuesForLiteral = [&internalVar](const std::string& literal) {
+    return h::ValuesClause(
+        absl::StrCat("VALUES (", internalVar.name(), ") { (", literal, ") }"));
+  };
+  std::string point =
+      "\"POINT(1 1)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  auto valuesPoint = valuesForLiteral(
+      absl::StrCat("G:", GeoPoint{1, 1}.toStringRepresentation()));
+  std::string line =
+      "\"LINESTRING(0 0, 1 1)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  auto valuesLine = valuesForLiteral(line);
+
+  // `geof:sfIntersects` with a fixed geometry on the right side.
+  h::expect(absl::StrCat("PREFIX geof: "
+                         "<http://www.opengis.net/def/function/geosparql/> "
+                         "SELECT * WHERE {"
+                         "?a <p> ?b ."
+                         "FILTER(geof:sfIntersects(?b, ",
+                         point, ")) }"),
+            h::spatialJoinFilterSubstitute(
+                -1, -1, Var{"?b"}, internalVar, std::nullopt,
+                PayloadVariables::all(), algo, INTERSECTS, std::nullopt,
+                scan("?a", "<p>", "?b"), valuesPoint));
+
+  // Non-point fixed geometry.
+  h::expect(
+      absl::StrCat(
+          "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+          "SELECT * WHERE {"
+          "?a <p> ?b ."
+          "FILTER(geof:sfCrosses(?b, ",
+          line, ")) }"),
+      h::spatialJoinFilterSubstitute(
+          -1, -1, Var{"?b"}, internalVar, std::nullopt, PayloadVariables::all(),
+          algo, CROSSES, std::nullopt, scan("?a", "<p>", "?b"), valuesLine));
+
+  // `geof:metricDistance(...) <= constant` with a fixed geometry on the
+  // left side.
+  h::expect(absl::StrCat("PREFIX geof: "
+                         "<http://www.opengis.net/def/function/geosparql/> "
+                         "SELECT * WHERE {"
+                         "?a <p> ?b ."
+                         "FILTER(geof:metricDistance(",
+                         point, ", ?b) <= 500) }"),
+            h::spatialJoinFilterSubstitute(
+                500, -1, internalVar, Var{"?b"}, std::nullopt,
+                PayloadVariables::all(), algo, WITHIN_DIST, std::nullopt,
+                valuesPoint, scan("?a", "<p>", "?b")));
+
+  // Same fixed-value substitution, but with an unrelated triple `?x <p> ?y`
+  // elsewhere in the query. That triple forms its own connected component,
+  // so the two components are combined via a `CartesianProductJoin` above
+  // the substitute.
+  h::expect(absl::StrCat("PREFIX geof: "
+                         "<http://www.opengis.net/def/function/geosparql/> "
+                         "SELECT * WHERE {"
+                         "?a <p> ?b ."
+                         "?x <p> ?y ."
+                         "FILTER(geof:distance(",
+                         point, ", ?b) <= 0.5) }"),
+            h::CartesianProductJoin(
+                scan("?x", "<p>", "?y"),
+                h::spatialJoinFilterSubstitute(
+                    500, -1, internalVar, Var{"?b"}, std::nullopt,
+                    PayloadVariables::all(), algo, WITHIN_DIST, std::nullopt,
+                    valuesPoint, scan("?a", "<p>", "?b"))));
+  // Same but on the right side.
+  h::expect(absl::StrCat("PREFIX geof: "
+                         "<http://www.opengis.net/def/function/geosparql/> "
+                         "SELECT * WHERE {"
+                         "?a <p> ?b ."
+                         "?x <p> ?y ."
+                         "FILTER(geof:distance(?b, ",
+                         point, ") <= 0.5) }"),
+            h::CartesianProductJoin(
+                scan("?x", "<p>", "?y"),
+                h::spatialJoinFilterSubstitute(
+                    500, -1, Var{"?b"}, internalVar, std::nullopt,
+                    PayloadVariables::all(), algo, WITHIN_DIST, std::nullopt,
+                    scan("?a", "<p>", "?b"), valuesPoint)));
+
+  // Both sides fixed: there is nothing left to join on, so the ordinary
+  // `FILTER` remains instead of being substituted by a `SpatialJoin`.
+  h::expect(absl::StrCat("PREFIX geof: "
+                         "<http://www.opengis.net/def/function/geosparql/> "
+                         "SELECT * WHERE {"
+                         "?a <p> ?b ."
+                         "FILTER(geof:sfIntersects(",
+                         point, ", ", point, ")) }"),
+            h::Filter("sfIntersects", scan("?a", "<p>", "?b")));
+
+  // Rewriting with a fixed side under greedy query planning.
+  h::expectGreedy(
+      absl::StrCat("PREFIX geof: "
+                   "<http://www.opengis.net/def/function/geosparql/> "
+                   "SELECT * WHERE {"
+                   "?a <p> ?b ."
+                   "FILTER(geof:sfIntersects(?b, ",
+                   point, ")) }"),
+      h::spatialJoinFilterSubstitute(-1, -1, Var{"?b"}, internalVar,
+                                     std::nullopt, PayloadVariables::all(),
+                                     algo, INTERSECTS, std::nullopt,
+                                     scan("?a", "<p>", "?b"), valuesPoint));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, FilterWithoutForcedSubstituteInSingleSeedComponent) {
+  auto scan = h::IndexScanFromStrings;
+  // A substitute without a fixed side has no child yet, so its substitution
+  // cannot be forced. In a component with a single seed, such a substitute
+  // could never be completed and must therefore not be applied at all; the
+  // ordinary `FILTER` has to remain. This is checked on a non-empty index:
+  // an incomplete `SpatialJoin` has a dummy cost estimate of 1, so on an
+  // empty index it would lose the plan selection by accident even if it were
+  // wrongly applied.
+  auto* qec = ad_utility::testing::getQec(
+      "<x1> <p> \"POINT(1 1)\"^^<http://www.opengis.net/ont/geosparql#"
+      "wktLiteral> . <x2> <p> \"POINT(2 2)\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral> . <x3> <p> \"POINT(3 3)\"^^<http://"
+      "www.opengis.net/ont/geosparql#wktLiteral> .");
+
+  // The second variable of the filter is not bound anywhere in the query.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfIntersects(?b, ?nowhere)) }",
+      h::Filter("geof:sfIntersects(?b, ?nowhere)", scan("?a", "<p>", "?b")),
+      qec);
+
+  // Both variables of the filter are bound by the same single triple.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfIntersects(?b, ?a)) }",
+      h::Filter("geof:sfIntersects(?b, ?a)", scan("?a", "<p>", "?b")), qec);
 }
 
 // _____________________________________________________________________________
