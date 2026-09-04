@@ -248,7 +248,7 @@ TEST(QueryStatus, toStringFallbackForUnknownValue) {
 
 // _____________________________________________________________________________
 
-// The two operation kinds as they appear in the `type` field of a start event.
+// The operation type is written as "query" or "update" in the `start` event.
 TEST(QueryOperation, toString) {
   EXPECT_EQ(ad_utility::websocket::toString(QueryOperation::QUERY), "query");
   EXPECT_EQ(ad_utility::websocket::toString(QueryOperation::UPDATE), "update");

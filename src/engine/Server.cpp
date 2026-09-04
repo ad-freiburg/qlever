@@ -626,10 +626,9 @@ CPP_template_def(typename RequestT, typename SendT)(
     auto timeLimit = verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk);
     using ad_utility::websocket::QueryOperation;
-    // Whether this operation is an update and not a query. This has to be
-    // determined before the call to `createMessageSender` below, because that
-    // call registers the operation and thereby writes the `start` event of the
-    // query event log, which records the operation type.
+    // An operation is an update if all of its parts are updates. We need it
+    // here because `createMessageSender` below already writes the `start`
+    // event, which contains the operation type.
     const bool isUpdateOperation =
         ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause);
     // Empty when the header is absent.

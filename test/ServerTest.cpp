@@ -964,8 +964,8 @@ TEST(ServerTest, gspPostCreateNewGraph) {
 
 // _____________________________________________________________________________
 namespace {
-// Run `runRequests(server)` against a fresh server whose query event log is a
-// temporary file, and return the lines that were logged.
+// Runs `runRequests` on a fresh server that writes its query event log to a
+// temporary file, and returns the lines that were logged.
 template <typename Func>
 std::vector<std::string> runWithEventLog(Func runRequests) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
@@ -1028,9 +1028,9 @@ TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
 }
 
 // _____________________________________________________________________________
-// An update is labelled `"type":"update"` on its `start` event. The kind is
-// taken from the parsed operations, which is why it has to be determined
-// before the query is registered (the `start` event is written there).
+// An update is written as `"type":"update"` in its `start` event. The type
+// comes from the parsed operations, so it has to be known before the operation
+// is registered, because that is when the `start` event is written.
 TEST(ServerTest, queryEventLogRecordsUpdateOperation) {
   auto events = parseEventLog(runWithEventLog([](auto& server) {
     // Updates are only accepted with a valid access token.
@@ -1057,9 +1057,9 @@ TEST(ServerTest, queryEventLogRecordsUpdateOperation) {
 }
 
 // _____________________________________________________________________________
-// A client-supplied `Query-Id` takes the other branch of `Server::getQueryId`
-// (`uniqueIdFromString` instead of `uniqueId`), which must report the operation
-// kind just the same. The id is also what the client sees, so pin it too.
+// When the client sends its own `Query-Id`, `Server::getQueryId` takes a
+// different path. It has to report the operation type there as well, and it
+// has to use the id that the client sent.
 TEST(ServerTest, queryEventLogRecordsOperationForCustomQueryId) {
   auto events = parseEventLog(runWithEventLog([](auto& server) {
     auto request =
@@ -1077,14 +1077,15 @@ TEST(ServerTest, queryEventLogRecordsOperationForCustomQueryId) {
 }
 
 // _____________________________________________________________________________
-// Graph store requests carry no SPARQL text, so the operation kind can only
-// come from the parsed operations: a `PUT` becomes two updates (`DROP SILENT`
-// plus `INSERT DATA`), a `GET` becomes a single `CONSTRUCT`. Both run under a
-// single query id, so either way there is exactly one start/end pair.
+// A graph store request is logged with the type of the SPARQL that it is
+// translated into. A `PUT` becomes two updates and is logged as
+// `"type":"update"`, a `GET` becomes a single `CONSTRUCT` and is logged as
+// `"type":"query"`. Both use a single query id, so each request writes exactly
+// one `start` and one `end` event.
 TEST(ServerTest, queryEventLogRecordsGraphStoreOperation) {
   {
-    // `PUT` needs an access token and expands to two update operations.
-    // Writing to a new graph answers 201, not 200.
+    // A `PUT` needs an access token and becomes two update operations.
+    // Writing to a graph that did not exist before answers 201, not 200.
     auto events = parseEventLog(runWithEventLog([](auto& server) {
       auto put =
           makeRequest(http::verb::put, "/?graph=foo",
@@ -1095,15 +1096,15 @@ TEST(ServerTest, queryEventLogRecordsGraphStoreOperation) {
     }));
     ASSERT_EQ(events.size(), 2u);
     EXPECT_EQ(events.front().at("type").get<std::string>(), "update");
-    // Not SPARQL text: graph store bodies can be huge, so the logged
-    // operation is a truncated description.
+    // The logged operation is not SPARQL. Request bodies can be very large,
+    // so only a shortened description is logged.
     EXPECT_THAT(events.front().at("query").get<std::string>(),
                 ::testing::StartsWith("Graph Store PUT Operation"));
     // The event status is the query outcome, not the HTTP code.
     EXPECT_EQ(events.back().at("status").get<std::string>(), "ok");
   }
   {
-    // `GET` needs no token and expands to a single `CONSTRUCT`.
+    // A `GET` needs no access token and becomes a single `CONSTRUCT` query.
     auto events = parseEventLog(runWithEventLog([](auto& server) {
       EXPECT_THAT(server.process(makeGetRequest("/?default")),
                   StatusIs(http::status::ok));
@@ -1138,12 +1139,13 @@ TEST(ServerTest, queryEventLogRecordsFailedStatus) {
 }
 
 // _____________________________________________________________________________
-// An operation that does not even parse is never registered, so it produces no
-// events at all (not even a `start`). This is the boundary of the log: parsing
-// happens before the query id exists, execution failures after it.
+// An operation that cannot be parsed writes no events at all, not even a
+// `start`. Parsing happens before the operation is registered, so such an
+// operation never gets a query id. Operations that fail later, during
+// execution, do get one and are logged with status "failed".
 TEST(ServerTest, queryEventLogIgnoresUnparsableOperations) {
   auto lines = runWithEventLog([](auto& server) {
-    // Not a query at all.
+    // This is not a valid SPARQL query.
     server.process(makePostRequest("/", "application/sparql-query", "Foo"));
     // A query sent to the update endpoint fails while parsing as an update.
     server.process(

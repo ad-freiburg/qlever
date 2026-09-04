@@ -17,9 +17,7 @@
 #include "parser/GraphPatternAnalysis.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
-#include "parser/TripleComponent.h"
-#include "rdfTypes/Variable.h"
-#include "util/StringPairHashMap.h"
+#include "util/HashMap.h"
 
 // Forward declarations to prevent cyclic dependencies.
 class MaterializedView;
@@ -30,31 +28,39 @@ namespace materializedViewsQueryAnalysis {
 
 using ViewPtr = std::shared_ptr<const MaterializedView>;
 using graphPatternAnalysis::BasicGraphPatternsInvariantTo;
-using VariableToTripleIndices =
-    ad_utility::HashMap<Variable, std::vector<size_t>>;
 
-// Key and value types of the cache for simple chains, that is queries of the
-// form `?s <p1> ?m . ?m <p2> ?o`.
-using ChainedPredicates = ad_utility::detail::StringPair;
-using ChainedPredicatesForLookup = ad_utility::detail::StringViewPair;
-struct ChainInfo {
-  Variable subject_;
-  Variable chain_;
-  Variable object_;
+// An edge of a view's join pattern graph: a triple whose predicate has
+// already been resolved to a simple IRI (see `buildPatternEdges`).
+using PatternEdge = SparqlTripleBase<std::string>;
+
+// The join pattern of a view: its triples, viewed as edges of a small labeled
+// graph over the view's variables. Rewriting looks for a subgraph isomorphism
+// from this graph into the triples of the user's query.
+struct ViewPattern {
+  std::vector<PatternEdge> edges_;
   ViewPtr view_;
 };
-using SimpleChainCache =
-    ad_utility::StringPairHashMap<std::shared_ptr<std::vector<ChainInfo>>>;
 
-// Types required to store cached join star patterns extracted from views. That
-// is, queries of the form `?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> ?o3 ...`.
-// The `StarInfo` holds the subject variable shared between all arms of the star
-// and the `StarArm` for each of them. The `StarArm` stores the predicate IRI
-// and object variable.
-using StarArm = std::pair<std::string, Variable>;
-struct StarInfo {
-  Variable subject_;
-  std::vector<StarArm> arms_;
+// Map from predicate IRI to a bitmask of the triple indices.
+using TriplesByPredicate = ad_utility::HashMap<std::string_view, uint64_t>;
+
+// Limits bookkeeping for `PatternMatcher::findReplacementPlans`.
+struct PatternMatcherLimits {
+  size_t numAssignments_;
+  size_t numReplacementPlans_;
+
+  bool isExhausted() const {
+    return numAssignments_ == 0 || numReplacementPlans_ == 0;
+  }
+
+  // Limit a given `requestedAmount` to at most all that is available.
+  PatternMatcherLimits requestBounded(
+      PatternMatcherLimits requestedAmount) const;
+
+  // The budget to offer the next of `viewsLeft` views.
+  PatternMatcherLimits nextViewShare(size_t viewsLeft) const;
+
+  void subtract(PatternMatcherLimits used);
 };
 
 struct ByCacheKeyInfo {
@@ -77,15 +83,12 @@ struct MaterializedViewJoinReplacement {
 // of an existing materialized view.
 class QueryPatternCache {
  private:
-  // Simple chains can be found by direct access into a hash map.
-  SimpleChainCache simpleChainCache_;
-
-  // Cache for predicates appearing in a materialized view. The `ViewPtr`s are
-  // kept sorted.
+  // Predicates appearing in each view's pattern, for quickly ruling out views
+  // that share no predicate with the query.
   ad_utility::HashMap<std::string, std::vector<ViewPtr>> predicateInView_;
 
-  // All star patterns extracted from materialized views.
-  ad_utility::HashMap<ViewPtr, StarInfo> starCache_;
+  // All patterns extracted from materialized views.
+  ad_utility::HashMap<ViewPtr, ViewPattern> patterns_;
 
   ad_utility::HashMap<std::string, ByCacheKeyInfoPtr> byCacheKey_;
 
@@ -108,59 +111,14 @@ class QueryPatternCache {
       QueryExecutionContext* qec,
       const parsedQuery::BasicGraphPattern& triples) const;
 
-  // Construct an `IndexScan` for a single chain join given the necessary
-  // information from both the materialized view and the user's query.
-  std::shared_ptr<IndexScan> makeScanForSingleChain(
-      QueryExecutionContext* qec, ChainInfo cached, TripleComponent subject,
-      std::optional<Variable> chain, Variable object) const;
-
-  // Construct an `IndexScan` for a star join given the `RequestedColumns`
-  // object that maps the columns of the materialized view to the subject and
-  // object variable names from the user query. This assumes that the `starView`
-  // represents the appropriate star join.
-  std::shared_ptr<IndexScan> makeScanForStar(
-      QueryExecutionContext* qec, ViewPtr starView,
-      parsedQuery::MaterializedViewQuery::RequestedColumns columns) const;
-
   ByCacheKeyInfoPtr lookupByCacheKey(const std::string& cacheKey) const;
 
  private:
-  // Helper for `analyzeView`, that checks for a simple chain. It returns `true`
-  // iff a simple chain `a->b` is present.
-  // NOTE: This function only checks one direction, so it should also be called
-  // with `a` and `b` switched if it returns `false`.
-  bool analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
-                          const SparqlTriple& b);
-
-  // Helper for `analyzeView`, that checks for a join star of arbitrary size.
-  // A star requires all triples to share the same subject variable with
-  // distinct simple IRI predicates and distinct variable objects.
-  //
-  // This function assumes that the query used for writing the `view` consists
-  // of exactly one `BasicGraphPattern` with at least two triples and optionally
-  // some invariant `BIND` statements. The argument `triples` is required to
-  // contain the parsed triples from the `BasicGraphPattern` in `view`.
-  //
-  // Using `triples`, the function checks if the view represents a join star. If
-  // yes, it adds the `view` to the cache for join stars. The function returns
-  // `true` iff the view contains a star.
-  bool analyzeJoinStar(ViewPtr view, const std::vector<SparqlTriple>& triples);
-
-  // Given potential left and right sides of simple chains, check for available
-  // replacement index scans, construct them and insert them into the `result`
-  // vector.
-  void makeScansFromChainCandidates(
-      QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
-      std::vector<MaterializedViewJoinReplacement>& result,
-      const VariableToTripleIndices& chainLeft,
-      const VariableToTripleIndices& chainRight) const;
-
-  // Given triples grouped by subject, check for available star join replacement
-  // index scans, construct them and insert them into the `result` vector.
-  void makeScansFromStarCandidates(
-      QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
-      std::vector<MaterializedViewJoinReplacement>& result,
-      const VariableToTripleIndices& starCandidates) const;
+  // Helper for `analyzeView`: build the view as a graph for pattern-based
+  // rewriting and check it is connected. `nullopt` if the view is not
+  // eligible.
+  static std::optional<std::vector<PatternEdge>> buildPatternEdges(
+      const ViewPtr& view, const std::vector<SparqlTriple>& triples);
 };
 
 // Helper that filters the graph patterns of a parsed query using
@@ -170,18 +128,12 @@ std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
     const ParsedQuery& parsed);
 
 // Human-readable explanation why a query is not eligible for pattern-based
-// (star/chain) rewriting, as returned by `getTriplesForPatternRewrite`.
+// rewriting, as returned by `getTriplesForPatternRewrite`.
 using RewriteIgnoreReason = std::string;
 
-// Helper for `QueryPatternCache::analyzeView` that extracts the triples of a
-// view's defining query's single `BasicGraphPattern` for further (star/chain)
-// pattern analysis, provided the query even has a shape that pattern-based
-// rewriting could apply to: no aggregation, no top-level
-// `FILTER`/`VALUES`/`DISTINCT`/`REDUCED`/`LIMIT`/`OFFSET` or
-// `FROM`/`FROM NAMED` that would restrict the on-disk rows, and exactly one
-// `BasicGraphPattern` with at least one triple (after skipping invariant
-// patterns like `BIND`). If `parsed` does not have such a shape, a
-// `RewriteIgnoreReason` explaining why is returned instead.
+// Helper for `QueryPatternCache::analyzeView`: extracts the triples of a
+// view's defining query for pattern analysis, or a `RewriteIgnoreReason` if
+// the query's shape doesn't support pattern-based rewriting.
 std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed);
 

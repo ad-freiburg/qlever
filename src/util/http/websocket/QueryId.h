@@ -75,7 +75,7 @@ inline std::string_view toString(QueryStatus s) noexcept {
   return "unknown";
 }
 
-// Which kind of SPARQL operation a query ID was registered for.
+// Says whether a registered operation is a query or an update.
 enum class QueryOperation { QUERY, UPDATE };
 
 inline std::string_view toString(QueryOperation op) noexcept {
@@ -214,8 +214,8 @@ class QueryRegistry {
   //
   // `id`: the id representation of the potential candidate.
   // `query`: the string representation of the associated SPARQL query.
-  // `operationType`: whether a query or an update is registered; recorded as
-  //     `type` on the `start` event.
+  // `operationType`: Whether this is a query or an update. It is written to
+  //     the `type` field of the `start` event.
   // `clientIp`: the client's IP, empty when unknown.
   //
   // Returns a `std::optional<OwningQueryId>` wrapping the passed string if it

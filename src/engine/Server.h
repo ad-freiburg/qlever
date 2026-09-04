@@ -417,9 +417,8 @@ class Server {
   ///
   /// \param request The HTTP request to extract the id from.
   /// \param query A string representation of the query to register an id for.
-  /// \param operationType Whether the registered operation is a query or an
-  ///        update. This is recorded as the `type` field of the `start` event
-  ///        in the query event log.
+  /// \param operationType Whether this is a query or an update. It is written
+  ///        to the `type` field of the `start` event in the query event log.
   ///
   /// \return An OwningQueryId object. It removes itself from the registry
   ///         on destruction.
