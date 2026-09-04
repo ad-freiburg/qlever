@@ -706,10 +706,10 @@ class IndexImpl {
       ad_utility::Synchronized<std::vector<std::unique_ptr<TripleVec>>>*
           partialTriplesPtr) const;
 
-  // Return a Turtle parser that parses the given file. The parser will be
-  // configured to either parse in parallel or not, and to either use the
-  // CTRE-based relaxed parser or not, depending on the settings of the
-  // corresponding member variables.
+  // Return a Turtle parser that parses the given files. The parser will be
+  // configured to either parse in parallel or not (per input file), and to
+  // either use the CTRE-based relaxed parser or not (via the
+  // `ascii-prefixes-only` setting, see `onlyAsciiTurtlePrefixes_`).
   std::unique_ptr<RdfParserBase> makeRdfParser(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
       const;

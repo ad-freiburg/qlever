@@ -104,7 +104,8 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
   return std::make_unique<RdfMultifileParser>(
-      std::move(files), &encodedIriManager(), parserBufferSize());
+      std::move(files), &encodedIriManager(), parserBufferSize(),
+      onlyAsciiTurtlePrefixes_);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -1150,6 +1151,14 @@ auto liftCallback(Callback callback) {
   return [callback = std::move(callback)](const auto& block) mutable {
     ql::ranges::for_each(block, callback);
   };
+}
+
+// Callbacks that already work on complete blocks are used as they are. Pushing
+// a complete block into an external sorter is much more efficient than pushing
+// its rows one by one, because the `IdTable`s are stored column-based.
+template <typename Table>
+auto liftCallback(ad_utility::PushBlockCallback<Table> callback) {
+  return callback;
 }
 }  // namespace
 
@@ -2245,7 +2254,7 @@ CPP_template_def(typename... NextSorter)(requires(
       };
   size_t numPredicates =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
-                            nextSorter.makePushCallback()..., countTriples,
+                            nextSorter.makePushBlockCallback()..., countTriples,
                             determineNextAvailableInternalGraph);
   std::lock_guard lock{configurationJsonMutex_};
   configurationJson_["num-predicates"] =
@@ -2293,7 +2302,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     };
     size_t numSubjects = createPermutationPair(
         numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-        nextSorter.makePushCallback()..., pushTripleToPatterns);
+        nextSorter.makePushBlockCallback()..., pushTripleToPatterns);
     patternCreator.finish();
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
@@ -2305,7 +2314,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     // are built in parallel, see `createFromFiles`).
     size_t numSubjects =
         createPermutationPair(numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-                              nextSorter.makePushCallback()...);
+                              nextSorter.makePushBlockCallback()...);
     std::lock_guard lock{configurationJsonMutex_};
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
@@ -2324,7 +2333,7 @@ CPP_template_def(typename... NextSorter)(
   // have no fourth argument.
   size_t numObjects =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
-                            nextSorter.makePushCallback()...);
+                            nextSorter.makePushBlockCallback()...);
   std::lock_guard lock{configurationJsonMutex_};
   configurationJson_["num-objects"] =
       NumNormalAndInternal::fromNormal(numObjects);
