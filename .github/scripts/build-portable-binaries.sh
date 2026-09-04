@@ -12,11 +12,15 @@
 #
 # Prerequisites: cmake >= 3.27, gcc, conan 2.x, libjemalloc-dev.
 #
-# Usage: build-portable-binaries.sh [<build-dir>]   (default: build-portable)
+# Usage: build-portable-binaries.sh [<build-dir>]
+# (default: build-portable; a relative path is taken relative to the repo)
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-BUILD_DIR="$REPO_DIR/${1:-build-portable}"
+case "${1:-build-portable}" in
+    /*) BUILD_DIR="$1" ;;
+    *) BUILD_DIR="$REPO_DIR/${1:-build-portable}" ;;
+esac
 STATIC_LIBS="$BUILD_DIR/static-libs"
 DIST_DIR="$BUILD_DIR/dist"
 NUM_THREADS=$(nproc)
@@ -33,9 +37,20 @@ GCC="${CC:-gcc}"
 # `-static-libstdc++`, and because QLever's CMake links jemalloc by name.
 mkdir -p "$STATIC_LIBS"
 MULTIARCH_LIBDIR="/usr/lib/$($GCC -print-multiarch)"
-ln -sf "$MULTIARCH_LIBDIR/libjemalloc.a" "$STATIC_LIBS/libjemalloc.a"
-ln -sf "$($GCC -print-file-name=libgomp.a)" "$STATIC_LIBS/libgomp.a"
-ln -sf "$($GCC -print-file-name=libstdc++.a)" "$STATIC_LIBS/libstdc++.a"
+# Fail early with a clear message if an archive is missing (`gcc
+# -print-file-name` returns the bare name in that case, which would otherwise
+# become a dangling symlink and a confusing linker error much later).
+link_static_lib() {
+    local source="$1" name="$2"
+    if [ ! -f "$source" ]; then
+        echo "ERROR: static library $name not found (looked at $source)"
+        exit 1
+    fi
+    ln -sf "$source" "$STATIC_LIBS/$name"
+}
+link_static_lib "$MULTIARCH_LIBDIR/libjemalloc.a" libjemalloc.a
+link_static_lib "$($GCC -print-file-name=libgomp.a)" libgomp.a
+link_static_lib "$($GCC -print-file-name=libstdc++.a)" libstdc++.a
 
 # Build the third-party libraries as static libraries via conan (using the
 # repo's `conanfile.txt`; all used recipes default to static). The option
@@ -51,6 +66,7 @@ conan install "$REPO_DIR" -pr:b=default -of=. \
 
 cmake -B "$BUILD_DIR" -S "$REPO_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
+    -DLOGLEVEL=INFO \
     -DCMAKE_TOOLCHAIN_FILE="$BUILD_DIR/conan_toolchain.cmake" \
     -DCMAKE_POLICY_DEFAULT_CMP0091=NEW \
     -DUSE_PARALLEL=true \
@@ -64,8 +80,11 @@ cmake --build "$BUILD_DIR" --target qlever-index qlever-server -- -j "$NUM_THREA
 # librt, and libresolv are part of glibc and may appear as separate
 # libraries, depending on the glibc version).
 for binary in qlever-index qlever-server; do
-    if ldd "$BUILD_DIR/$binary" \
-            | grep -vE 'linux-vdso|ld-linux|lib(c|m|pthread|dl|rt|resolv)\.so'; then
+    # Capture first: a failing `ldd` inside the `if` condition would otherwise
+    # silently pass the check.
+    dependencies=$(ldd "$BUILD_DIR/$binary")
+    if grep -vE 'linux-vdso|ld-linux|lib(c|m|pthread|dl|rt|resolv)\.so' \
+            <<< "$dependencies"; then
         echo "ERROR: $binary has dynamic dependencies beyond glibc (see above)"
         exit 1
     fi
