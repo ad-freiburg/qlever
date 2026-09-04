@@ -4,6 +4,7 @@
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_format.h>
 #include <gmock/gmock.h>
 #include <re2/re2.h>
 
@@ -32,7 +33,7 @@
 using namespace ad_utility::vocabulary_merger;
 namespace {
 // equality operator used in this test
-bool vocabTestCompare(const IdMap& a, const std::vector<std::pair<Id, Id>>& b) {
+bool vocabTestCompare(const IdMap& a, const IdMap& b) {
   if (a.size() != b.size()) {
     return false;
   }
@@ -83,7 +84,7 @@ class MergeVocabularyTest : public ::testing::Test {
 
   // two std::vectors where we store the expected mapping
   // form partial to global ids;
-  using Mapping = std::vector<std::pair<Id, Id>>;
+  using Mapping = IdMap;
   Mapping _expMapping0;
   Mapping _expMapping1;
 
@@ -159,7 +160,7 @@ class MergeVocabularyTest : public ::testing::Test {
             if (mapping) {
               if (w.isBlankNode({})) {
                 mapping->emplace_back(
-                    V(localIdx),
+                    localIdx,
                     Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));
               } else {
                 using GeoVocab = SplitGeoVocabulary<
@@ -167,7 +168,7 @@ class MergeVocabularyTest : public ::testing::Test {
                 if (GeoVocab::getMarkerForWord(w.iriOrLiteral()) == 1) {
                   globalId = GeoVocab::addMarker(globalId, 1);
                 }
-                mapping->emplace_back(V(localIdx), V(globalId));
+                mapping->emplace_back(localIdx, V(globalId));
               }
             }
             localIdx++;
@@ -259,9 +260,24 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 
 // _____________________________________________________________________________
 TEST(MergeVocabulary, mergeVocabularyAssertion) {
+  // The order of the merged words is only checked if the expensive checks are
+  // enabled.
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP();
+  }
   auto callback = [](const auto&, bool) { return uint64_t{0}; };
 
   std::string basePath = gtestCurrentTestName();
+  std::vector<std::string> filenames;
+  for (size_t i = 0; i < 2; ++i) {
+    filenames.push_back(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, i));
+    filenames.push_back(absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, i));
+  }
+  absl::Cleanup cleanup = [&filenames] {
+    for (const auto& filename : filenames) {
+      ad_utility::deleteFile(filename, false);
+    }
+  };
 
   // Intentionally in wrong order, so that the merge detects a violated order.
   std::array<std::string_view, 3> unorderedWords{"\"c\"", "\"b\"", "\"a\""};
@@ -343,12 +359,12 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
     return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(index));
   };
   IdMap idMap = getIdMapFromFile(idMapFile);
-  EXPECT_THAT(idMap, ::testing::ElementsAreArray(std::vector<std::pair<Id, Id>>{
-                         {V(0), V(0)},     // "bn_lit"
-                         {V(1), V(1)},     // <http://ex/apple>
-                         {V(2), BN(0)},    // <http://ex/bn_1>
-                         {V(3), BN(1)},    // <http://ex/bn_2>
-                         {V(4), V(2)}}));  // <http://ex/cherry>
+  EXPECT_THAT(idMap, ::testing::ElementsAreArray(
+                         IdMap{{0, V(0)},     // "bn_lit"
+                               {1, V(1)},     // <http://ex/apple>
+                               {2, BN(0)},    // <http://ex/bn_1>
+                               {3, BN(1)},    // <http://ex/bn_2>
+                               {4, V(2)}}));  // <http://ex/cherry>
 }
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {
@@ -412,4 +428,130 @@ TEST(VocabularyGeneratorTest, createInternalMappingFirstWordDuplicates) {
   EXPECT_EQ(0u, res[99]);
   EXPECT_EQ(1u, res[3]);
   EXPECT_EQ(1u, res[55]);
+}
+
+// _____________________________________________________________________________
+// Merge words that occur in *every* partial vocabulary, such that the
+// occurrences of a single word are spread over two consecutive batches of ID
+// map entries. The global ID of such a word is only known after the first of
+// those batches has been written, so this exercises the handover of that ID
+// from one batch to the next.
+TEST(MergeVocabulary, duplicateWordsAcrossBatchBoundaries) {
+  // The entries are currently written in batches of 100000. Three partial
+  // vocabularies with the same 120000 words yield 360000 entries, so we get
+  // several batches, and as 100000 is not divisible by three, the occurrences
+  // of a word are indeed split by a batch boundary.
+  static constexpr size_t numWords = 120'000;
+  static constexpr size_t numFiles = 3;
+  std::string basePath = absl::StrCat(gtestCurrentTestName(), "-");
+  std::vector<std::string> filenames;
+  for (size_t i = 0; i < numFiles; ++i) {
+    filenames.push_back(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, i));
+    filenames.push_back(absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, i));
+  }
+  absl::Cleanup cleanup = [&filenames] {
+    for (const auto& filename : filenames) {
+      ad_utility::deleteFile(filename, false);
+    }
+  };
+
+  // Each of the partial vocabularies contains all the words (zero-padded, such
+  // that their lexicographic order is the same as the order of their indices),
+  // with the local index `i` for the `i`-th word.
+  std::vector<std::string> words;
+  for (size_t i = 0; i < numWords; ++i) {
+    words.push_back(absl::StrFormat("\"word%08d\"", i));
+  }
+  for (size_t i = 0; i < numFiles; ++i) {
+    writePartialVocabularyFile(
+        absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, i), words);
+  }
+
+  size_t numWordsInCallback = 0;
+  auto wordCallback = [&numWordsInCallback](std::string_view,
+                                            bool) -> uint64_t {
+    return numWordsInCallback++;
+  };
+  auto result = mergeVocabulary(
+      basePath, numFiles,
+      [](std::string_view a, bool, std::string_view b, bool) {
+        return std::less{}(a, b);
+      },
+      wordCallback, 1_GB);
+  // Each word is written to the vocabulary exactly once.
+  EXPECT_EQ(numWordsInCallback, numWords);
+  EXPECT_EQ(result.numWordsTotal(), numWords);
+
+  // In each of the partial vocabularies, the word with local index `j` is the
+  // word with global id `j`.
+  IdMap expected;
+  for (size_t j = 0; j < numWords; ++j) {
+    expected.emplace_back(j, V(j));
+  }
+  for (size_t f = 0; f < numFiles; ++f) {
+    EXPECT_THAT(
+        getIdMapFromFile(absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, f)),
+        ::testing::ElementsAreArray(expected));
+  }
+}
+
+// _____________________________________________________________________________
+// Merge a number of words that is large enough for the ID map entries to be
+// handed to the asynchronous writer in several batches, and check that all the
+// entries arrive in the correct ID map, in the correct order.
+TEST(MergeVocabulary, manyWordsWithSeveralIdMapBatches) {
+  // The entries are currently written in batches of 100000, so this leads to
+  // several batches, of which the last one is only partially filled.
+  static constexpr size_t numWords = 250'000;
+  std::string basePath = absl::StrCat(gtestCurrentTestName(), "-");
+  std::vector<std::string> filenames;
+  for (size_t i = 0; i < 2; ++i) {
+    filenames.push_back(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, i));
+    filenames.push_back(absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, i));
+  }
+  absl::Cleanup cleanup = [&filenames] {
+    for (const auto& filename : filenames) {
+      ad_utility::deleteFile(filename, false);
+    }
+  };
+
+  // The `i`-th word (in sorted order) goes to the partial vocabulary
+  // `i % 2`. The words are zero-padded, such that their lexicographic order is
+  // the same as the order of their indices.
+  std::array<std::vector<std::string>, 2> words;
+  for (size_t i = 0; i < numWords; ++i) {
+    words.at(i % 2).push_back(absl::StrFormat("\"word%08d\"", i));
+  }
+  writePartialVocabularyFile(
+      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0), words[0]);
+  writePartialVocabularyFile(
+      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1), words[1]);
+
+  // All the words are distinct, so they simply get the vocabulary indices
+  // `0, 1, ...` in sorted order.
+  size_t numWordsInCallback = 0;
+  auto wordCallback = [&numWordsInCallback](std::string_view,
+                                            bool) -> uint64_t {
+    return numWordsInCallback++;
+  };
+  auto result = mergeVocabulary(
+      basePath, 2,
+      [](std::string_view a, bool, std::string_view b, bool) {
+        return std::less{}(a, b);
+      },
+      wordCallback, 1_GB);
+  EXPECT_EQ(numWordsInCallback, numWords);
+  EXPECT_EQ(result.numWordsTotal(), numWords);
+
+  // In the partial vocabulary `f`, the word with local id `j` is the word with
+  // global id `2 * j + f`.
+  for (size_t f = 0; f < 2; ++f) {
+    IdMap expected;
+    for (size_t j = 0; j < words.at(f).size(); ++j) {
+      expected.emplace_back(j, V(2 * j + f));
+    }
+    EXPECT_THAT(
+        getIdMapFromFile(absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, f)),
+        ::testing::ElementsAreArray(expected));
+  }
 }

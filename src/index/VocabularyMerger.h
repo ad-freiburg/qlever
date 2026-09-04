@@ -6,169 +6,43 @@
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
 #include <memory>
-#include <optional>
 #include <string>
-#include <utility>
 #include <vector>
 
-#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/vocabulary/Vocabulary.h"
+#include "index/vocabulary_merger/IdMap.h"
+#include "index/vocabulary_merger/MergePipeline.h"
+#include "index/vocabulary_merger/VocabularyMetaData.h"
+#include "index/vocabulary_merger/WordBatchBuilder.h"
+#include "index/vocabulary_merger/WordCallbacks.h"
 #include "util/HashMap.h"
-#include "util/ProgressBar.h"
-#include "util/Serializer/FileSerializer.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializePair.h"
 #include "util/Serializer/SerializeVector.h"
-#include "util/TypeTraits.h"
-
-// Writes pairs of (partial ID, global ID) incrementally to a file.
-class IdMapWriter {
- private:
-  std::string filename_;
-  using Serializer = ad_utility::serialization::VectorIncrementalSerializer<
-      std::pair<Id, Id>, ad_utility::serialization::FileWriteSerializer>;
-  std::unique_ptr<Serializer> serializer_;
-
- public:
-  explicit IdMapWriter(const std::string& filename) : filename_(filename) {
-    serializer_ = std::make_unique<Serializer>(filename);
-  }
-
-  void push_back(const std::pair<Id, Id>& pair) { serializer_->push(pair); }
-};
-
-// Get a vector of pairs of (partial ID, global ID) deserialized from a file
-// that has previously been written using the `IdMapWriter` class above.
-using IdMap = std::vector<std::pair<Id, Id>>;
-inline IdMap getIdMapFromFile(const std::string& filename) {
-  IdMap idMap;
-  ad_utility::serialization::FileReadSerializer serializer(filename);
-  serializer >> idMap;
-  return idMap;
-}
 
 using TripleVec =
     ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
 
+// The vocabulary merger. It merges the partial vocabularies that the index
+// builder has written to disk into the final (sorted and duplicate-free)
+// vocabulary, and writes one partial ID map per partial vocabulary, which maps
+// the local index of each word to the global ID that the merged vocabulary
+// assigns to it.
+//
+// This header is the public interface of the vocabulary merger. The individual
+// stages of the merging are implemented in `src/index/vocabulary_merger/`; of
+// those, only `VocabularyMetaData` (the return type of `mergeVocabulary`), the
+// concepts for its callbacks, and the `IdMap` types are part of the public
+// interface, and all of them are made available by this header.
 namespace ad_utility::vocabulary_merger {
-// Concept for a callback that can be called with a `string_view` and a `bool`.
-// If the `bool` is true, then the word is to be stored in the external
-// vocabulary else in the internal vocabulary.
-template <typename T>
-CPP_concept WordCallback =
-    ad_utility::InvocableWithExactReturnType<T, uint64_t, std::string_view,
-                                             bool>;
-// Concept for a callable that compares two `string_view`s with respective
-// `isExternal` flags.
-template <typename T>
-CPP_concept WordComparator =
-    ranges::predicate<T, std::string_view, bool, std::string_view, bool>;
 
-// The result of a call to `mergeVocabulary` (see below).
-struct VocabularyMetaData {
-  // This struct is used to incrementally construct the range of IDs that
-  // correspond to a given prefix. To use it, all the words from the
-  // vocabulary must be passed to the member function `addIfWordMatches` in
-  // sorted order. After that, the range `[begin(), end())` is the range of
-  // all the words that start with the prefix.
-  struct IdRangeForPrefix {
-    explicit IdRangeForPrefix(std::string prefix)
-        : prefix_{std::move(prefix)} {}
-    // Check if `word` starts with the `prefix_`. If so, `wordIndex`
-    // will become part of the range that this struct represents. The function
-    // returns `true` in this case, else `false`. For this to work, all the
-    // words that start with the `prefix_` have to be passed in consecutively
-    // and their indices have to be consecutive and ascending.
-    bool addIfWordMatches(std::string_view word, size_t wordIndex) {
-      if (!ql::starts_with(word, prefix_)) {
-        return false;
-      }
-      if (!beginWasSeen_) {
-        begin_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
-        beginWasSeen_ = true;
-      }
-      end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1));
-      return true;
-    }
-
-    Id begin() const { return begin_; }
-    Id end() const { return end_; }
-
-    // Return true if the `id` belongs to this range.
-    bool contains(Id id) const { return begin_ <= id && id < end_; }
-
-   private:
-    Id begin_ = Id::makeUndefined();
-    Id end_ = Id::makeUndefined();
-    std::string prefix_;
-    bool beginWasSeen_ = false;
-  };
-
- public:
-  // This function has to be called for every *DISTINCT* word (IRI or literal,
-  // not blank nodes) and the index, which is assigned to this word by the merge
-  // procedure. It automatically updates the various prefix ranges, the total
-  // number of words, and the mapping of the special IDs.
-  void addWord(std::string_view word, size_t wordIndex) {
-    ++numWordsTotal_;
-    if (langTaggedPredicates_.addIfWordMatches(word, wordIndex)) {
-      return;
-    }
-    if (internalEntities_.addIfWordMatches(word, wordIndex)) {
-      if (globalSpecialIds_->contains(word)) {
-        specialIdMapping_[std::string{word}] =
-            Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
-      }
-    }
-  }
-
-  // Return the index of the next blank node and increment the internal counter
-  // of blank nodes. This has to be called for every distinct blank node that
-  // is encountered.
-  size_t getNextBlankNodeIndex() {
-    auto res = numBlankNodesTotal_;
-    ++numBlankNodesTotal_;
-    return res;
-  }
-
-  // The mapping from the `qlever::specialIds` to their actual IDs.
-  // This is created on the fly by the calls to `addWord`.
-  const auto& specialIdMapping() const { return specialIdMapping_; }
-  // The prefix range for the `@en@<predicate` style predicates.
-  const auto& langTaggedPredicates() const { return langTaggedPredicates_; }
-  // The prefix range for the internal IRIs in the `ql:` namespace.
-  const auto& internalEntities() const { return internalEntities_; }
-  // The number of words for which `addWord()` has been called. Needs to return
-  // a reference to be used in combination with a `ProgressBar`.
-  const size_t& numWordsTotal() const { return numWordsTotal_; }
-
-  // Return true iff the `id` belongs to one of the two ranges that contain
-  // the internal IDs that were added by QLever and were not part of the
-  // input.
-  bool isQleverInternalId(Id id) const {
-    return internalEntities_.contains(id) || langTaggedPredicates_.contains(id);
-  }
-
- private:
-  // The number of distinct words (size of the created vocabulary).
-  size_t numWordsTotal_ = 0;
-  // The number of distinct blank nodes that were found and immediately
-  // converted to an ID without becoming part of the vocabulary.
-  size_t numBlankNodesTotal_ = 0;
-  IdRangeForPrefix langTaggedPredicates_{
-      std::string{ad_utility::languageTaggedPredicatePrefix}};
-  IdRangeForPrefix internalEntities_{
-      std::string{QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET}};
-
-  ad_utility::HashMap<std::string, Id> specialIdMapping_;
-  const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ =
-      &qlever::specialIds();
-};
 // _______________________________________________________________
 // Merge the partial vocabularies in the  binary files
 // `basename + PARTIAL_VOCAB_WORDS_INFIX + to_string(i)`
@@ -181,6 +55,27 @@ struct VocabularyMetaData {
 // compiled regexes; IRIs that are fully matched by any of them are treated as
 // blank nodes (see `TripleComponentWithIndex::isBlankNode`). The regexes are
 // compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
+//
+// The merging is organized as a pipeline of four threads, which communicate
+// via task queues, such that all of them can work concurrently:
+//
+// 1. The thread that calls `mergeVocabulary` obtains the merged words in
+//    sorted order and eliminates the duplicates (a word typically occurs in
+//    many of the partial vocabularies). It collects the distinct words as well
+//    as the entries for the partial ID maps in batches (see
+//    `detail::WordBatchBuilder`) and hands each batch to the second thread.
+// 2. The `wordWriterQueue_`'s thread writes the distinct words of a batch to
+//    the vocabulary (via the `wordCallback`) and thereby determines their
+//    global IDs (see `detail::VocabularyWriter`).
+// 3. The `idMapWriterQueue_`'s thread writes the entries of the partial ID
+//    maps (which only now know their global IDs) to the ID maps (see
+//    `detail::IdMapBatchWriter`).
+// 4. The `mergedWordsDestructionQueue_`'s thread destroys the merged words of
+//    a batch (which involves freeing one string per word) once they have been
+//    written to the vocabulary.
+//
+// The last three of those stages are owned by the
+// `detail::VocabularyMergePipeline`.
 template <typename W, typename C>
 auto mergeVocabulary(
     const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
@@ -189,98 +84,11 @@ auto mergeVocabulary(
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
 
-// A helper class that implements the `mergeVocabulary` function (see
-// above). Everything in this class is private and only the
-// `mergeVocabulary` function is a friend.
-class VocabularyMerger {
- private:
-  // private data members
-
-  // The result (mostly metadata) which we'll return.
-  VocabularyMetaData metaData_;
-  std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
-  // Whether `lastTripleComponent_` is a blank node. Cached here so that
-  // `isBlankNode` (which may run a set of regexes) is evaluated only once per
-  // distinct word.
-  bool lastTripleComponentIsBlankNode_ = false;
-  // we will store pairs of <partialId, globalId>
-  std::vector<IdMapWriter> idMaps_;
-
-  // Friend declaration for the publicly available function.
-  template <typename W, typename C>
-  friend auto mergeVocabulary(
-      const std::string& basename, size_t numFiles, W comparator,
-      C& wordCallback, ad_utility::MemorySize memoryToUse,
-      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
-      -> CPP_ret(VocabularyMetaData)(
-          requires WordComparator<W>&& WordCallback<C>);
-  VocabularyMerger() = default;
-
-  // _______________________________________________________________
-  // The function that performs the actual merge. See the static global
-  // `mergeVocabulary` function for details.
-  template <typename W, typename C>
-  auto mergeVocabulary(
-      const std::string& basename, size_t numFiles, W comparator,
-      C& wordCallback, ad_utility::MemorySize memoryToUse,
-      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
-      -> CPP_ret(VocabularyMetaData)(
-          requires WordComparator<W>&& WordCallback<C>);
-
-  // Helper `struct` for a word from a partial vocabulary.
-  struct QueueWord {
-    QueueWord() = default;
-    QueueWord(TripleComponentWithIndex&& v, size_t file)
-        : entry_(std::move(v)), partialFileId_(file) {}
-    TripleComponentWithIndex entry_;  // the word, its local ID and the
-                                      // information if it will be externalized
-    size_t partialFileId_;  // from which partial vocabulary did this word come
-
-    [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
-    [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
-
-    [[nodiscard]] const std::string& iriOrLiteral() const {
-      return entry_.iriOrLiteral();
-    }
-
-    [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
-
-    [[nodiscard]] const auto& id() const { return entry_.index_; }
-  };
-
-  struct SizeOfQueueWord {
-    ad_utility::MemorySize operator()(const QueueWord& q) const {
-      return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
-                                           q.entry_.iriOrLiteral().size());
-    }
-  };
-  constexpr static SizeOfQueueWord sizeOfQueueWord{};
-
-  // Write the queue words in the buffer to their corresponding `idMaps`.
-  // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
-  // across multiple calls).
-  // clang-format off
-    CPP_template(typename C, typename L)(
-      requires WordCallback<C> CPP_and ranges::predicate<
-          L, TripleComponentWithIndex, TripleComponentWithIndex>)
-      // clang-format on
-      void writeQueueWordsToIdMap(
-          std::vector<QueueWord>& buffer, C& wordCallback, const L& lessThan,
-          const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes,
-          ad_utility::ProgressBar& progressBar);
-
-  // Close all associated files and file-based vectors and reset all internal
-  // variables.
-  void clear() {
-    metaData_ = VocabularyMetaData{};
-    lastTripleComponent_ = std::nullopt;
-    lastTripleComponentIsBlankNode_ = false;
-    idMaps_.clear();
-  }
-};
-
-// ____________________________________________________________________________
-ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+// Read the partial ID map from the given file (see `IdMapWriter`) into a hash
+// map. NOTE: The keys are plain `VocabIndex`es, because inside a partial
+// vocabulary a word is always a `VocabIndex`. The values are full `Id`s,
+// because a merged word may also become a blank node (see `isBlankNode`).
+ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
     const std::string& filename);
 
 /**
