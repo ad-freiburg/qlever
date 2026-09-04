@@ -60,7 +60,7 @@ void writeVocabWithHoles(VocabularyType::Enum vocabType,
   } else {
     ASSERT_EQ(vocabType, VocabularyType::Enum::InMemoryCompressedWithHoles);
     CompressedVocabulary<VocabularyInMemoryBinSearch>::WordWriter writer{
-        absl::StrCat(filename, ".words"), absl::StrCat(filename, ".codebooks")};
+        filename};
     writeWords(writer);
   }
 }

@@ -293,6 +293,9 @@ class SplitVocabulary {
   class WordWriter : public WordWriterBase {
    private:
     UnderlyingWordWriterPtrsArray underlyingWordWriters_;
+    // The files of all the underlying writers, each prefixed with the suffix
+    // that `splitFilenameFunction_` appends for the respective vocabulary.
+    FileSuffixes fileSuffixes_{};
 
    public:
     // Construct a WordWriter for each vocabulary in the given array. Determine
@@ -308,6 +311,11 @@ class SplitVocabulary {
     void finishImpl() override;
 
     ~WordWriter() override;
+
+    // ______________________________________________________________________
+    ql::span<const std::string_view> fileSuffixes() const override {
+      return fileSuffixes_.asSpan();
+    }
   };
 
   // Construct a SplitVocabulary::WordWriter that creates WordWriters on all
