@@ -355,13 +355,8 @@ TEST(GeoCellGrid, unknownSchemeIsDefendedAgainst) {
   EXPECT_THROW(grid.cellIndexFromWktLiteral(wkt("POINT(90 45)")),
                ad_utility::Exception);
 
-  // `coveringCellRanges` has no `AD_FAIL()`: an unhandled scheme contributes
-  // no regular cell ranges, but the scheme-independent sentinel range is
-  // always part of the cover.
-  using P = std::pair<uint64_t, uint64_t>;
-  EXPECT_THAT(
-      grid.coveringCellRanges(-10.0, -10.0, 10.0, 10.0),
-      ::testing::ElementsAre(P{grid.sentinelCell(), grid.sentinelCell()}));
+  EXPECT_THROW(grid.coveringCellRanges(-10.0, -10.0, 10.0, 10.0),
+               ad_utility::Exception);
 }
 
 }  // namespace

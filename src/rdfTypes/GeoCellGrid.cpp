@@ -126,6 +126,8 @@ GeoCellGrid::CellRanges GeoCellGrid::coveringCellRanges(double minLng,
     case GeoCellGridScheme::Enum::Flat:
       flatCover(u1, v1, u2, v2, ranges);
       break;
+    default:
+      AD_FAIL();
   }
   // The sentinel cell can hold a geometry that intersects any rectangle, so
   // its range is part of every cover, independently of the scheme.
