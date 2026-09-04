@@ -26,7 +26,13 @@ void testAdder(ad_utility::AddCombinedRowToIdTable& adder,
                IdTable& expectedResult,
                std::vector<size_t> expectedNumUndefined, size_t numJoinColumns,
                bool keepJoinColumns) {
-  auto numUndefined = adder.numUndefinedPerColumn();
+  // `numUndefinedPerColumn()` returns a `qlever::Allocator`-backed vector;
+  // copy it into a plain `std::vector<size_t>` so it can be compared with
+  // `expectedNumUndefined` below (vectors with different allocator types are
+  // not comparable via `operator==`).
+  const auto& numUndefinedRef = adder.numUndefinedPerColumn();
+  std::vector<size_t> numUndefined(numUndefinedRef.begin(),
+                                   numUndefinedRef.end());
   auto result = std::move(adder).resultTable();
   if (!keepJoinColumns) {
     for ([[maybe_unused]] auto i : ad_utility::integerRange(numJoinColumns)) {

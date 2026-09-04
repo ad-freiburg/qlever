@@ -10,6 +10,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/Allocator.h"
 #include "util/VectorWithMemoryLimit.h"
 
 class Minus : public Operation {
@@ -17,7 +18,7 @@ class Minus : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
-  std::vector<float> _multiplicities;
+  std::vector<float, qlever::Allocator<float>> _multiplicities;
   std::vector<std::array<ColumnIndex, 2>> _matchedColumns;
 
   enum class RowComparison { EQUAL, LEFT_SMALLER, RIGHT_SMALLER };
