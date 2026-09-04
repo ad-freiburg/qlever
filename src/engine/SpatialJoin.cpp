@@ -836,7 +836,8 @@ std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
   return std::make_unique<SpatialJoin>(
       _executionContext, config_,
       childLeft_ ? std::optional{childLeft_->clone()} : std::nullopt,
-      childRight_ ? std::optional{childRight_->clone()} : std::nullopt);
+      childRight_ ? std::optional{childRight_->clone()} : std::nullopt,
+      substitutesFilterOp_);
 }
 
 // _____________________________________________________________________________
@@ -848,7 +849,8 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
         auto& left = newChildren.at(0);
         auto& right = newChildren.at(1);
         return ad_utility::makeExecutionTree<SpatialJoin>(
-            _executionContext, config_, std::move(left), std::move(right));
+            _executionContext, config_, std::move(left), std::move(right),
+            substitutesFilterOp_);
       });
 }
 
@@ -935,7 +937,8 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
   return std::make_shared<SpatialJoin>(
       _executionContext, config_,
       // Potentially unchanged child retrieved with `value_or`.
-      left.value_or(childLeft_), right.value_or(childRight_));
+      left.value_or(childLeft_), right.value_or(childRight_),
+      substitutesFilterOp_);
 }
 
 // ____________________________________________________________________________

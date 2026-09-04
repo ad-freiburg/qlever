@@ -2,9 +2,11 @@
 //
 // 2015 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
 // 2018 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025        Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-//
+
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
@@ -124,8 +126,6 @@ class QueryPlanner {
     // Checks for id and order independent equality
     bool isSimilar(const TripleGraph& other) const;
     std::string asString() const;
-
-    bool isTextNode(size_t i) const;
 
     vector<vector<size_t>> _adjLists;
     ad_utility::HashMap<size_t, Node*> _nodeMap;
@@ -757,28 +757,6 @@ class QueryPlanner {
       const std::vector<SubtreePlan>& lastRow) const;
   static size_t findSmallestExecutionTree(
       const std::vector<SubtreePlan>& lastRow);
-
-  // The geometry variables of the query's `SpatialJoin`s (empty for queries
-  // without spatial joins). Collected when spatial join plans are created,
-  // BEFORE the dynamic programming over the triples runs.
-  std::set<Variable> spatialJoinPrefilterVariables_;
-
-  // Remember the geometry variables of `spatialJoin` in
-  // `spatialJoinPrefilterVariables_`.
-  void registerSpatialJoinForPrefilterPreference(const Operation& spatialJoin);
-
-  // Return true iff `tree` contains an index scan whose first sort column is
-  // `variable`, with only prefilter-forwarding operations (`Sort`, `Join`)
-  // between the root and that scan, so that the runtime block prefilter of a
-  // spatial join on `variable` can prune the scan's blocks (see
-  // `SpatialJoin::applyRuntimeGeoBlockPrefilter`). For each variable in
-  // `spatialJoinPrefilterVariables_`, this is an additional pruning dimension
-  // (like the result order): the cheapest such plan is kept alongside the
-  // cheapest plan overall, and `findCheapestExecutionTree` prefers complete
-  // spatial joins with such children.
-  static bool hasPrefilterableGeoScan(const QueryExecutionTree& tree,
-                                      const Variable& variable);
-
   static size_t findUniqueNodeIds(
       const std::vector<SubtreePlan>& connectedComponent,
       bool allowReplacementPlans = false);
