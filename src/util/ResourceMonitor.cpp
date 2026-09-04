@@ -8,22 +8,37 @@
 
 #include "util/ResourceMonitor.h"
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
+#include <absl/strings/str_join.h>
+#include <absl/strings/str_split.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
 
+#include <algorithm>
+#include <array>
+#include <charconv>
+#include <fstream>
+#include <string_view>
+#include <type_traits>
+
+#include "backports/StartsWithAndEndsWith.h"
+#include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/Timer.h"
+#include "util/TypeTraits.h"
 
 // The readings use platform-specific APIs.
 // `getrusage` (CPU time) is shared by both linux and macOS.
 #if defined(__APPLE__)
+#include <libproc.h>
 #include <mach/mach.h>
 #include <sys/resource.h>
+#include <unistd.h>
 #elif defined(__linux__)
 #include <sys/resource.h>
 #include <unistd.h>
-
-#include <fstream>
 #endif
 
 namespace ad_utility::resource_monitor {
@@ -83,32 +98,174 @@ std::optional<double> cpuTimeSeconds() {
 }
 
 // _____________________________________________________________________________
-std::optional<double> CpuPercentTracker::update(
-    std::optional<double> cpuSeconds, double elapsed) {
+std::optional<double> RateTracker::update(std::optional<double> value,
+                                          double elapsed) {
   // Keep the old baseline on a failed reading, so the next value averages
   // over the whole gap rather than jumping.
-  if (!cpuSeconds.has_value()) {
+  if (!value.has_value()) {
     return std::nullopt;
   }
-  std::optional<double> percent;
-  if (lastCpuSeconds_.has_value() && elapsed > lastElapsed_) {
-    percent =
-        (*cpuSeconds - *lastCpuSeconds_) / (elapsed - lastElapsed_) * 100.0;
+  std::optional<double> rate;
+  if (lastValue_.has_value() && elapsed > lastElapsed_) {
+    rate = (value.value() - lastValue_.value()) / (elapsed - lastElapsed_);
   }
-  lastCpuSeconds_ = cpuSeconds;
+  lastValue_ = value;
   lastElapsed_ = elapsed;
-  return percent;
+  return rate;
 }
 
 // _____________________________________________________________________________
-std::string formatTsvRow(double elapsed, int64_t timestampMs,
-                         std::optional<uint64_t> rss,
-                         std::optional<double> cpuPercent) {
-  return absl::StrFormat("%.1f\t%d\t%s\t%s\n", elapsed, timestampMs,
-                         rss.has_value() ? std::to_string(rss.value()) : "",
-                         cpuPercent.has_value()
-                             ? absl::StrFormat("%.1f", cpuPercent.value())
-                             : "");
+DiskIoBytes currentDiskIoBytes() {
+#if defined(__APPLE__)
+  // Not `getrusage`'s `ru_inblock`/`ru_oublock`: macOS leaves those at zero.
+  rusage_info_current info;
+  if (proc_pid_rusage(getpid(), RUSAGE_INFO_CURRENT,
+                      reinterpret_cast<rusage_info_t*>(&info)) != 0) {
+    return {};
+  }
+  return DiskIoBytes{info.ri_diskio_bytesread, info.ri_diskio_byteswritten};
+#elif defined(__linux__)
+  std::ifstream procIo{"/proc/self/io"};
+  return diskIoBytesFromProcIo(procIo);
+#else
+  return {};
+#endif
+}
+
+#if defined(__linux__)
+// _____________________________________________________________________________
+DiskIoBytes diskIoBytesFromProcIo(std::istream& procIo) {
+  // `/proc/self/io` is a list of `key: value` lines whose set has grown
+  // across kernel versions, so scan for the two keys instead of counting lines.
+  DiskIoBytes bytes;
+  std::string key;
+  uint64_t value;
+
+  while (procIo >> key >> value) {
+    if (key == "read_bytes:") {
+      bytes.numBytesRead_ = value;
+    } else if (key == "write_bytes:") {
+      bytes.numBytesWritten_ = value;
+    }
+  }
+
+  return bytes;
+}
+#endif
+
+// _____________________________________________________________________________
+std::optional<double> ioStallSeconds() {
+#if defined(__linux__)
+  std::ifstream pressure{"/proc/pressure/io"};
+  return ioStallSecondsFromPressure(pressure);
+#else
+  return std::nullopt;
+#endif
+}
+
+#if defined(__linux__)
+// _____________________________________________________________________________
+std::optional<double> ioStallSecondsFromPressure(std::istream& pressure) {
+  // `/proc/pressure/io` reports how much time tasks lost waiting for disk
+  // I/O. It always has these two lines:
+  //
+  //   some avg10=1.45 avg60=0.64 avg300=0.35 total=23634153
+  //   full avg10=0.00 avg60=0.26 avg300=0.26 total=22059793
+  //
+  // `some` counts the time during which at least one task was stalled on I/O,
+  // `full` only the time during which every runnable task was stalled. As the
+  // example shows, `full` stops moving as soon as anything else can run, so
+  // `some` is the line that reflects the stall. This function reads `some`.
+  //
+  // The `avg` fields are ready-made percentages over the last 10, 60 and 300
+  // seconds, which do not match our sampling interval. This function instead
+  // takes `total`, the raw counter in microseconds, and scales it to seconds.
+  //
+  // The parsing below therefore looks for the line starting with `some ` and
+  // then for the token starting with `total=`.
+  constexpr std::string_view totalPrefix = "total=";
+  std::string line;
+  while (std::getline(pressure, line)) {
+    if (!ql::starts_with(line, "some ")) continue;
+    for (std::string_view token :
+         absl::StrSplit(line, ' ', absl::SkipEmpty())) {
+      if (!ql::starts_with(token, totalPrefix)) continue;
+      token.remove_prefix(totalPrefix.size());
+      uint64_t microseconds{};
+      const char* end = token.data() + token.size();
+      auto [ptr, ec] = std::from_chars(token.data(), end, microseconds);
+      if (ec != std::errc() || ptr != end) {
+        return std::nullopt;
+      }
+      return static_cast<double>(microseconds) * 1e-6;
+    }
+    return std::nullopt;  // A `some` line with no `total=` token.
+  }
+  return std::nullopt;  // No file, or no `some` line.
+}
+#endif
+
+namespace {
+// One TSV cell: an integer, a double, or either wrapped in an `optional`,
+// where a missing value becomes an empty cell.
+// _____________________________________________________________________________
+template <typename T>
+std::string formatCell(const T& value) {
+  if constexpr (similarToInstantiation<T, std::optional>) {
+    return value.has_value() ? formatCell(value.value()) : std::string{};
+  } else if constexpr (std::is_floating_point_v<T>) {
+    return absl::StrFormat("%.1f", value);
+  } else {
+    static_assert(std::is_integral_v<T>,
+                  "A TSV cell must be an integer, a double or an optional of "
+                  "one of those.");
+    return std::to_string(value);
+  }
+}
+}  // namespace
+
+// _____________________________________________________________________________
+std::string formatTsvRow(const Sample& sample) {
+  const std::array tsvCells{formatCell(sample.elapsedSeconds_),
+                            formatCell(sample.timestampMs_),
+                            formatCell(sample.rssBytes_),
+                            formatCell(sample.cpuPercent_),
+                            formatCell(sample.bytesReadPerSecond_),
+                            formatCell(sample.bytesWrittenPerSecond_),
+                            formatCell(sample.ioStallPercent_)};
+  return absl::StrJoin(tsvCells, "\t") + "\n";
+}
+
+// _____________________________________________________________________________
+bool rotateLogIfHeaderOutdated(const ql::filesystem::path& path) {
+  std::string firstLine;
+  {
+    std::ifstream existingFile{path};
+    std::getline(existingFile, firstLine);
+  }
+  if (firstLine == tsvHeader) {
+    return false;
+  }
+  // Name the archive `<name_without_extension>.<rotation_time>.tsv`
+  auto rotated =
+      path.parent_path() /
+      absl::StrCat(path.stem().string(), ".",
+                   absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, absl::Now(),
+                                    absl::UTCTimeZone()),
+                   path.extension().string());
+  ql::error_code renameEc;
+  ql::filesystem::rename(path, rotated, renameEc);
+  if (renameEc) {
+    AD_LOG_WARN << "ResourceMonitor: could not move the resource-usage "
+                   "log of an older format out of the way. Writing a second "
+                   "header line and appending rows in the current format to it."
+                << std::endl;
+  } else {
+    AD_LOG_INFO << "ResourceMonitor: moved the resource-usage log of an "
+                   "older format to \""
+                << rotated.string() << "\"" << std::endl;
+  }
+  return true;
 }
 
 }  // namespace ad_utility::resource_monitor
@@ -138,9 +295,18 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
   // Decide about the header before opening: truncating destroys the
   // old file size. A missing file or failed stat also gets a header.
   ql::error_code ec;
-  auto oldSize = fs::file_size(path, ec);
+  const auto oldSize = fs::file_size(path, ec);
   bool writeHeader = mode == Mode::Truncate || ec || oldSize == 0;
-  auto openMode = mode == Mode::Truncate ? std::ios::trunc : std::ios::app;
+  const auto openMode =
+      mode == Mode::Truncate ? std::ios::trunc : std::ios::app;
+
+  // A file that is appended to may come from a QLever version with a different
+  // TSV format, in which case it is moved aside instead of being mixed with
+  // rows in the current format.
+  if (!writeHeader && resource_monitor::rotateLogIfHeaderOutdated(path)) {
+    writeHeader = true;
+  }
+
   stream_.open(path, std::ios::out | openMode);
   if (!stream_.is_open()) {
     AD_LOG_WARN << "ResourceMonitor: failed to open the output file; "
@@ -149,7 +315,7 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
     return;
   }
   if (writeHeader) {
-    stream_ << "elapsed_s\ttimestamp_ms\trss\tcpu_percent\n" << std::flush;
+    stream_ << resource_monitor::tsvHeader << "\n" << std::flush;
   }
   // Spawn last: the thread uses the stream right away. An exception
   // escaping a thread would terminate the process, so catch everything.
@@ -176,23 +342,34 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
 }
 
 // _____________________________________________________________________________
-void ResourceMonitor::setReadersForTesting(
-    resource_monitor::RssReader rssReader,
-    resource_monitor::CpuReader cpuReader) {
+void ResourceMonitor::setReadersForTesting(resource_monitor::Readers readers) {
   AD_CONTRACT_CHECK(!started_,
                     "The readers must be swapped before `start` is called, "
                     "otherwise this would race the sampling thread.");
-  rssReader_ = std::move(rssReader);
-  cpuReader_ = std::move(cpuReader);
+  readers_ = std::move(readers);
 }
 
 // _____________________________________________________________________________
 void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
-  Timer timer{Timer::Started};
-  resource_monitor::CpuPercentTracker cpuTracker{cpuReader_()};
+  const Timer timer{Timer::Started};
+  resource_monitor::RateTracker cpuTracker{readers_.cpuReader_()};
+  resource_monitor::RateTracker ioStallTracker{readers_.ioStallReader_()};
+  const auto initialDiskIo = readers_.diskIoReader_();
+  resource_monitor::RateTracker bytesReadTracker{initialDiskIo.numBytesRead_};
+  resource_monitor::RateTracker bytesWrittenTracker{
+      initialDiskIo.numBytesWritten_};
 
-  // Absolute deadlines keep the ticks on a steady grid, no matter how
-  // long each sample takes.
+  // Cpu time and I/O stall are in seconds, so their rate is a fraction of
+  // the wall clock; the log stores it as a percentage.
+  auto toPercent = [](std::optional<double> rate) -> std::optional<double> {
+    if (!rate.has_value()) {
+      return std::nullopt;
+    }
+    return rate.value() * 100.0;
+  };
+
+  // Absolute deadlines keep the ticks on a steady grid, so the time a sample
+  // takes does not delay the next one.
   auto deadline = std::chrono::steady_clock::now() + interval;
   std::unique_lock lock{mutex_};
   while (!stopRequested_) {
@@ -200,13 +377,35 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
                                   [this] { return stopRequested_; })) {
       break;  // Woken by the destructor, not the timeout.
     }
-    deadline += interval;
-    double elapsed = Timer::toSeconds(timer.value());
-    auto rss = rssReader_();
-    auto cpuPercent = cpuTracker.update(cpuReader_(), elapsed);
-    stream_ << resource_monitor::formatTsvRow(
-        elapsed, epochMillis(std::chrono::system_clock::now()), rss,
-        cpuPercent);
+    // If one tick took longer than the interval, the next deadline lies in the
+    // past and waiting for it would not sleep. Move it up to now, so the
+    // missed ticks are skipped instead of all firing at once.
+    deadline = std::max(deadline + interval, std::chrono::steady_clock::now());
+    const double elapsed = Timer::toSeconds(timer.value());
+
+    const auto [numBytesRead, numBytesWritten] = readers_.diskIoReader_();
+
+    // `ioStallReader_` counts the total time during which at least one task
+    // was stalled on I/O, so its rate is a fraction between 0 and 1 and the
+    // percentage cannot exceed 100. The reading and the elapsed clock are
+    // taken at slightly different instants, so a tick can compute a value
+    // slightly above 100, which the clamp brings back down.
+    std::optional<double> ioStallPercent{
+        toPercent(ioStallTracker.update(readers_.ioStallReader_(), elapsed))};
+    if (ioStallPercent.has_value()) {
+      ioStallPercent = std::clamp(ioStallPercent.value(), 0.0, 100.0);
+    }
+    resource_monitor::Sample sample{};
+    sample.elapsedSeconds_ = elapsed;
+    sample.timestampMs_ = epochMillis(std::chrono::system_clock::now());
+    sample.rssBytes_ = readers_.rssReader_();
+    sample.cpuPercent_ =
+        toPercent(cpuTracker.update(readers_.cpuReader_(), elapsed));
+    sample.bytesReadPerSecond_ = bytesReadTracker.update(numBytesRead, elapsed);
+    sample.bytesWrittenPerSecond_ =
+        bytesWrittenTracker.update(numBytesWritten, elapsed);
+    sample.ioStallPercent_ = ioStallPercent;
+    stream_ << resource_monitor::formatTsvRow(sample);
     stream_.flush();
     if (stream_.fail()) {
       AD_LOG_WARN << "ResourceMonitor: writing to the output file failed; "
