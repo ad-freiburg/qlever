@@ -2,7 +2,7 @@
 //
 // 2021 - 2025 Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>, UFR
 // 2021 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
-// 2021 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -14,6 +14,9 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
+
+// This file contains expressions for extracting data from a `GeometryInfo`
+// object.
 
 namespace sparqlExpression {
 namespace detail {

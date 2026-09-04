@@ -2,7 +2,7 @@
 //
 // 2021 - 2025 Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>, UFR
 // 2021 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
-// 2021 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -18,6 +18,11 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
+
+// This file contains geometry utility expressions and the geometric relation
+// expressions (`geof:distance`, `geof:sfIntersects`, etc.). Expressions
+// extracting information from a `GeometryInfo` such as `geof:centroid` can be
+// found in `GeometryInfoExpression.cpp`.
 
 namespace sparqlExpression {
 namespace detail {
