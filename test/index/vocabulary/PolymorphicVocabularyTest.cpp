@@ -28,13 +28,11 @@ bool isWithHoles(VocabularyType::Enum vocabType) {
          vocabType == VocabularyType::Enum::InMemoryCompressedWithHoles;
 }
 
-// Delete all the files that the writers of the vocabularies with holes create
-// in addition to the file with the given basename. Do not warn about files that
-// were never created.
-void deleteAuxiliaryVocabFiles(const std::string& filename) {
-  for (const auto& suffix : {".ids", ".words", ".words.ids", ".codebooks"}) {
-    ad_utility::deleteFile(absl::StrCat(filename, suffix), false);
-  }
+// Delete all the files that a vocabulary of the given `type` with the given
+// base `filename` consists of.
+void deleteVocabFiles(VocabularyType type, const std::string& filename) {
+  vocabulary_test::deleteVocabularyFiles(
+      filename, PolymorphicVocabulary::fileSuffixes(type));
 }
 
 // Write the `vocabulary_test::defaultTestWords` with the given (non-contiguous)
@@ -72,9 +70,8 @@ void testForVocabTypeWithHoles(VocabularyType::Enum vocabType) {
   VocabularyType type{vocabType};
   std::string filename =
       absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
-  absl::Cleanup cleanup = [&filename] {
-    ad_utility::deleteFile(filename, false);
-    deleteAuxiliaryVocabFiles(filename);
+  absl::Cleanup cleanup = [&type, &filename] {
+    deleteVocabFiles(type, filename);
   };
 
   // The `WordWriterBase` interface cannot express the explicit indices that a
@@ -135,6 +132,9 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   VocabularyType type{vocabType};
   std::string filename =
       absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
+  absl::Cleanup cleanup = [&type, &filename] {
+    deleteVocabFiles(type, filename);
+  };
 
   auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
   auto& writer = *writerPtr;
@@ -198,11 +198,6 @@ void setupVocab(PolymorphicVocabulary& vocab, VocabularyType::Enum vocabType,
     vocabulary_test::writeWordsAndFinish(*writerPtr);
   }
   vocab.open(filename, type);
-  if (isWithHoles(vocabType)) {
-    // The vocabularies with holes load all their contents into RAM in `open`,
-    // so the files that are not deleted by the caller can be deleted here.
-    deleteAuxiliaryVocabFiles(filename);
-  }
 }
 }  // namespace
 
@@ -218,9 +213,15 @@ TEST(PolymorphicVocabulary, basicTests) {
 // `VocabularyType`.
 TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
   for (auto vocabType : VocabularyType::all()) {
-    auto [filename, cleanup] = ad_utility::testing::filenameForTesting();
+    auto [temporaryFile, cleanup] = ad_utility::testing::filenameForTesting();
+    // NOTE: A structured binding must not be captured by a lambda in C++17,
+    // hence the copy into an ordinary local variable.
+    std::string filename = temporaryFile.string();
+    absl::Cleanup deleteFiles = [vocabType, &filename] {
+      deleteVocabFiles(VocabularyType{vocabType}, filename);
+    };
     PolymorphicVocabulary vocab;
-    setupVocab(vocab, vocabType, filename.string());
+    setupVocab(vocab, vocabType, filename);
 
     std::array<size_t, 6> indices{2, 0, 3, 1, 1, 0};
     auto result = vocab.lookupBatch(indices);
@@ -234,9 +235,15 @@ TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
 // `VocabularyType`.
 TEST(PolymorphicVocabulary, lookupBatchesStreamedMatchesIndividualLookups) {
   for (auto vocabType : VocabularyType::all()) {
-    auto [filename, cleanup] = ad_utility::testing::filenameForTesting();
+    auto [temporaryFile, cleanup] = ad_utility::testing::filenameForTesting();
+    // NOTE: A structured binding must not be captured by a lambda in C++17,
+    // hence the copy into an ordinary local variable.
+    std::string filename = temporaryFile.string();
+    absl::Cleanup deleteFiles = [vocabType, &filename] {
+      deleteVocabFiles(VocabularyType{vocabType}, filename);
+    };
     PolymorphicVocabulary vocab;
-    setupVocab(vocab, vocabType, filename.string());
+    setupVocab(vocab, vocabType, filename);
 
     std::vector<std::vector<size_t>> batches{{2, 0}, {1}, {0, 3, 1}};
     // `VocabLookupInput` takes ownership of the batches, so keep a copy to

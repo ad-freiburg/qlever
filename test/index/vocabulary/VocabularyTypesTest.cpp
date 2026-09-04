@@ -6,7 +6,6 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/functional/function_ref.h>
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "../../util/GTestHelpers.h"
@@ -29,7 +28,6 @@ class WordWriterThrowing : public WordWriterBase {
   WordWriterThrowing()
       : caller_{[]() { throw std::runtime_error("Constructor failed"); }} {}
   uint64_t operator()(std::string_view, bool) override { return 0; }
-  ql::span<const std::string_view> fileSuffixes() const override { return {}; }
   void finishImpl() override {}
 };
 
@@ -38,86 +36,9 @@ class WordWriterNoFinish : public WordWriterBase {
  public:
   WordWriterNoFinish() {}
   uint64_t operator()(std::string_view, bool) override { return 0; }
-  ql::span<const std::string_view> fileSuffixes() const override { return {}; }
   void finishImpl() override {}
 };
 }  // namespace
-
-// _____________________________________________________________________________
-// A default-constructed `FileSuffixes` is empty, and `add` appends single
-// suffixes in the order in which they are added.
-TEST(FileSuffixes, defaultConstructedAndAdd) {
-  FileSuffixes suffixes;
-  EXPECT_THAT(suffixes.asSpan(), ::testing::ElementsAre());
-  suffixes.add("");
-  suffixes.add(".ids");
-  EXPECT_THAT(suffixes.asSpan(), ::testing::ElementsAre("", ".ids"));
-}
-
-// _____________________________________________________________________________
-// A `FileSuffixes` can also be constructed from a fixed list of suffixes.
-TEST(FileSuffixes, constructFromInitializerList) {
-  FileSuffixes suffixes{"", ".offsets"};
-  EXPECT_THAT(suffixes.asSpan(), ::testing::ElementsAre("", ".offsets"));
-}
-
-// _____________________________________________________________________________
-// `addPrefixed` prepends the given prefix to each of the added suffixes. This
-// is how a `WordWriter` that delegates to other `WordWriter`s composes its own
-// suffixes.
-TEST(FileSuffixes, addPrefixed) {
-  FileSuffixes underlying{"", ".offsets"};
-  FileSuffixes suffixes;
-  suffixes.addPrefixed(".internal", underlying.asSpan());
-  suffixes.addPrefixed(".external", underlying.asSpan());
-  suffixes.add(".codebooks");
-  EXPECT_THAT(
-      suffixes.asSpan(),
-      ::testing::ElementsAre(".internal", ".internal.offsets", ".external",
-                             ".external.offsets", ".codebooks"));
-}
-
-// _____________________________________________________________________________
-// `addPrefixed` also works if the added suffixes are the suffixes of the very
-// object that is added to (which the implementation has to materialize before
-// appending, because appending invalidates them).
-TEST(FileSuffixes, addPrefixedFromSelf) {
-  FileSuffixes suffixes{"", ".ids"};
-  suffixes.addPrefixed(".words", suffixes.asSpan());
-  EXPECT_THAT(suffixes.asSpan(),
-              ::testing::ElementsAre("", ".ids", ".words", ".words.ids"));
-}
-
-// _____________________________________________________________________________
-// The copy and move operations of `FileSuffixes` are written manually (because
-// the views have to be recomputed), so test that they work as expected.
-TEST(FileSuffixes, copyAndMove) {
-  FileSuffixes suffixes{"", ".ids"};
-
-  // Copy construction, including the case where the source is modified
-  // afterwards (which must not affect the copy).
-  FileSuffixes copy{suffixes};
-  suffixes.add(".codebooks");
-  EXPECT_THAT(copy.asSpan(), ::testing::ElementsAre("", ".ids"));
-  EXPECT_THAT(suffixes.asSpan(),
-              ::testing::ElementsAre("", ".ids", ".codebooks"));
-
-  // Copy assignment.
-  FileSuffixes assigned;
-  assigned = copy;
-  EXPECT_THAT(assigned.asSpan(), ::testing::ElementsAre("", ".ids"));
-
-  // Move construction leaves the moved-from object in a valid (empty) state.
-  FileSuffixes moved{std::move(copy)};
-  EXPECT_THAT(moved.asSpan(), ::testing::ElementsAre("", ".ids"));
-  EXPECT_THAT(copy.asSpan(),  // NOLINT(bugprone-use-after-move)
-              ::testing::ElementsAre());
-
-  // Move assignment.
-  FileSuffixes moveAssigned;
-  moveAssigned = std::move(moved);
-  EXPECT_THAT(moveAssigned.asSpan(), ::testing::ElementsAre("", ".ids"));
-}
 
 // _____________________________________________________________________________
 TEST(VocabularyTypes, verifyWordWriterBaseDestructorBehavesAsExpected) {

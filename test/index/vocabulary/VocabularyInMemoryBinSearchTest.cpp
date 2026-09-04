@@ -28,9 +28,11 @@ class VocabularyCreator {
  public:
   explicit VocabularyCreator(std::string filename)
       : vocabFilename_{filename + suffix} {
-    ad_utility::deleteFile(vocabFilename_, false);
+    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(vocabFilename_);
   }
-  ~VocabularyCreator() { ad_utility::deleteFile(vocabFilename_); }
+  ~VocabularyCreator() {
+    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(vocabFilename_);
+  }
 
   // Create and return a `VocabularyInMemoryBinSearch` from words and ids.
   // `words` and `ids` must have the same size. If `ids` is `nullopt`, then
@@ -175,13 +177,6 @@ VocabularyInMemoryBinSearch createVocabularyWithIndices(
   return vocabulary;
 }
 
-// Delete the two files (words and indices) that a `WordWriter` for the given
-// `filename` creates. Do not warn about files that were never created.
-void deleteVocabularyFiles(const std::string& filename) {
-  ad_utility::deleteFile(filename, false);
-  ad_utility::deleteFile(filename + ".ids", false);
-}
-
 // Check that the two vocabularies contain exactly the same words with exactly
 // the same vocabulary indices.
 template <typename Vocab1, typename Vocab2>
@@ -207,7 +202,9 @@ std::vector<std::pair<uint64_t, std::string>> expectedIndicesAndWords() {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, positionOfIndexAndAccessOperator) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  absl::Cleanup cleanup = [&filename] {
+    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
+  };
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 
@@ -236,7 +233,9 @@ TEST(VocabularyInMemoryBinSearch, positionOfIndexAndAccessOperator) {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, endIndexAndGetPositionOfWord) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  absl::Cleanup cleanup = [&filename] {
+    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
+  };
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 
@@ -254,7 +253,9 @@ TEST(VocabularyInMemoryBinSearch, endIndexAndGetPositionOfWord) {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, scanAll) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  absl::Cleanup cleanup = [&filename] {
+    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
+  };
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 
@@ -270,7 +271,9 @@ TEST(VocabularyInMemoryBinSearch, scanAll) {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, lookupBatch) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  absl::Cleanup cleanup = [&filename] {
+    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
+  };
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 
@@ -300,7 +303,9 @@ TEST(VocabularyInMemoryBinSearch, lookupBatch) {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, genericSerialization) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  absl::Cleanup cleanup = [&filename] {
+    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
+  };
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 
@@ -323,7 +328,9 @@ TEST(VocabularyInMemoryBinSearch, genericSerialization) {
 // _____________________________________________________________________________
 TEST(VocabularyInMemoryBinSearch, zeroCopyDeserialization) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  absl::Cleanup cleanup = [&filename] {
+    deleteVocabularyFiles<VocabularyInMemoryBinSearch>(filename);
+  };
   auto vocab =
       createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
 

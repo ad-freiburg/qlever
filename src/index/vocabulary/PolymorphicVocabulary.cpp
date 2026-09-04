@@ -90,6 +90,36 @@ std::unique_ptr<WordWriterBase> PolymorphicVocabulary::makeDiskWriterPtr(
 }
 
 // _____________________________________________________________________________
+FileSuffixes PolymorphicVocabulary::fileSuffixes(VocabularyType type) {
+  // The names of the enum values are the same as the type aliases for the
+  // implementations, so we can shorten the following code using a macro.
+#undef AD_CASE
+#define AD_CASE(vocabType)              \
+  case VocabularyType::Enum::vocabType: \
+    return vocabType::fileSuffixes()
+
+  switch (type.value()) {
+    AD_CASE(InMemoryUncompressed);
+    AD_CASE(OnDiskUncompressed);
+    AD_CASE(InMemoryCompressed);
+    AD_CASE(OnDiskCompressed);
+    AD_CASE(OnDiskCompressedGeoSplit);
+    AD_CASE(InMemoryUncompressedWithHoles);
+    AD_CASE(InMemoryCompressedWithHoles);
+    default:
+      AD_FAIL();
+  }
+}
+
+// _____________________________________________________________________________
+FileSuffixes PolymorphicVocabulary::fileSuffixes() const {
+  // NOTE: `fileSuffixes` is a static member function, which can also be called
+  // via an object of the respective type.
+  return std::visit([](const auto& vocab) { return vocab.fileSuffixes(); },
+                    vocab_);
+}
+
+// _____________________________________________________________________________
 void PolymorphicVocabulary::resetToType(VocabularyType type) {
   close();
   // The names of the enum values are the same as the type aliases for the

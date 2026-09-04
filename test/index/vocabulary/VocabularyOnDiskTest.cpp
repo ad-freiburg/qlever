@@ -34,7 +34,7 @@ class VocabularyCreator {
  public:
   explicit VocabularyCreator(std::string filename)
       : vocabFilename_{std::move(filename)} {
-    ad_utility::deleteFile(vocabFilename_, false);
+    deleteVocabularyFiles<VocabularyOnDisk>(vocabFilename_);
   }
   // Move-only: a moved-from creator has an empty filename and deletes nothing.
   VocabularyCreator(VocabularyCreator&& other) noexcept
@@ -46,7 +46,7 @@ class VocabularyCreator {
 
   ~VocabularyCreator() {
     if (!vocabFilename_.empty()) {
-      ad_utility::deleteFile(vocabFilename_);
+      deleteVocabularyFiles<VocabularyOnDisk>(vocabFilename_);
     }
   }
 
@@ -176,9 +176,8 @@ TEST(VocabularyOnDisk, EmptyVocabulary) {
 TEST(VocabularyOnDisk, ReadLegacyMmapVectorOffsetsFormat) {
   std::string vocabFilename = "vocabularyOnDisk.legacyMmapFormat";
   std::string offsetsFilename = vocabFilename + ".offsets";
-  absl::Cleanup cleanup{[&]() {
-    ad_utility::deleteFile(vocabFilename);
-    ad_utility::deleteFile(offsetsFilename);
+  absl::Cleanup cleanup{[&vocabFilename]() {
+    deleteVocabularyFiles<VocabularyOnDisk>(vocabFilename);
   }};
 
   const std::array<std::string_view, 7> words{

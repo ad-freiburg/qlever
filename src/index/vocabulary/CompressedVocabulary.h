@@ -276,7 +276,6 @@ CPP_template(typename UnderlyingVocabulary,
     std::vector<typename CompressionWrapper::Decoder> decoders_;
     typename UnderlyingVocab::WordWriter underlyingWriter_;
     std::string filenameDecoders_;
-    FileSuffixes fileSuffixes_{};
     ad_utility::MemorySize uncompressedSize_ = bytes(0);
     ad_utility::MemorySize compressedSize_ = bytes(0);
     size_t numBlocks_ = 0u;
@@ -298,16 +297,7 @@ CPP_template(typename UnderlyingVocabulary,
     /// `wordsSuffix` and `decodersSuffix`.
     explicit DiskWriterFromUncompressedWords(const std::string& filename)
         : underlyingWriter_{absl::StrCat(filename, wordsSuffix)},
-          filenameDecoders_{absl::StrCat(filename, decodersSuffix)} {
-      fileSuffixes_.addPrefixed(wordsSuffix, underlyingWriter_.fileSuffixes());
-      fileSuffixes_.add(decodersSuffix);
-    }
-
-    /// The files of the underlying writer (which writes to the base filename
-    /// plus `wordsSuffix`) plus the file for the codebooks.
-    ql::span<const std::string_view> fileSuffixes() const override {
-      return fileSuffixes_.asSpan();
-    }
+          filenameDecoders_{absl::StrCat(filename, decodersSuffix)} {}
 
     /// Compress the `uncompressedWord` and write it to disk.
     uint64_t operator()(std::string_view uncompressedWord,
@@ -429,7 +419,6 @@ CPP_template(typename UnderlyingVocabulary,
     std::vector<typename CompressionWrapper::Decoder> decoders_;
     typename UnderlyingVocabulary::WordWriter underlyingWriter_;
     std::string filenameDecoders_;
-    FileSuffixes fileSuffixes_{};
     bool finishWasCalled_ = false;
     // The index of the word that was added last, `nullopt` if no word has been
     // added yet.
@@ -441,10 +430,7 @@ CPP_template(typename UnderlyingVocabulary,
     // `wordsSuffix` and `decodersSuffix`.
     explicit DiskWriterWithExplicitIndices(const std::string& filename)
         : underlyingWriter_{absl::StrCat(filename, wordsSuffix)},
-          filenameDecoders_{absl::StrCat(filename, decodersSuffix)} {
-      fileSuffixes_.addPrefixed(wordsSuffix, underlyingWriter_.fileSuffixes());
-      fileSuffixes_.add(decodersSuffix);
-    }
+          filenameDecoders_{absl::StrCat(filename, decodersSuffix)} {}
 
     // This type can neither be copied nor moved (the user-declared destructor
     // below suppresses the implicit move operations). It is always used
@@ -478,13 +464,6 @@ CPP_template(typename UnderlyingVocabulary,
         finishBlock();
       }
       return idx;
-    }
-
-    // The files of the underlying writer (which writes to the base filename
-    // plus `wordsSuffix`) plus the file for the codebooks. This class does not
-    // inherit from `WordWriterBase`, but mirrors its `fileSuffixes` interface.
-    ql::span<const std::string_view> fileSuffixes() const {
-      return fileSuffixes_.asSpan();
     }
 
     // Write the last (partial) block and the decoders to disk. Calling this
@@ -529,6 +508,16 @@ CPP_template(typename UnderlyingVocabulary,
   using WordWriter =
       std::conditional_t<underlyingHasHoles, DiskWriterWithExplicitIndices,
                          DiskWriterFromUncompressedWords<>>;
+
+  // The files of the underlying vocabulary, which is stored under the base
+  // filename plus `wordsSuffix`, plus the file for the codebooks.
+  static FileSuffixes fileSuffixes() {
+    FileSuffixes suffixes;
+    addFileSuffixesWithPrefix(suffixes, wordsSuffix,
+                              UnderlyingVocabulary::fileSuffixes());
+    suffixes.emplace_back(decodersSuffix);
+    return suffixes;
+  }
 
   // Return a `unique_ptr<DiskWriterFromUncompressedWords>` that can be used to
   // create the vocabulary. For an underlying vocabulary with holes this throws,

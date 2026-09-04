@@ -5,7 +5,6 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 #define QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 
-#include <array>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -71,19 +70,16 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
 
     ~WordWriter() override;
 
-    // The words are stored under the base filename itself, the IDs and offsets
-    // in an additional file (see `offsetSuffix_`).
-    ql::span<const std::string_view> fileSuffixes() const override {
-      return fileSuffixes_;
-    }
-
    private:
-    static constexpr std::array<std::string_view, 2> fileSuffixes_{
-        "", offsetSuffix_};
-
     // Finish the writing. After this no more calls to `operator()` are allowed.
     void finishImpl() override;
   };
+
+  // The words are stored under the base filename itself, the IDs and offsets
+  // in an additional file (see `offsetSuffix_`).
+  static FileSuffixes fileSuffixes() {
+    return {"", std::string{offsetSuffix_}};
+  }
 
   // Open the vocabulary from file. It must have been previously written to
   // this file via a `WordWriter`.

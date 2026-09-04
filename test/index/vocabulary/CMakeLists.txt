@@ -20,4 +20,4 @@ addLinkAndDiscoverTest(SplitVocabularyTest vocabulary)
 
 addLinkAndDiscoverTestNoLibs(VocabularyTypesTest)
 
-addLinkAndDiscoverTest(WordWriterFileSuffixesTest vocabulary sparqlParser qlever_util)
+addLinkAndDiscoverTest(VocabularyFileSuffixesTest vocabulary sparqlParser qlever_util)

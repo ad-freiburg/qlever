@@ -5,7 +5,6 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
 
-#include <array>
 #include <string>
 #include <string_view>
 
@@ -118,17 +117,12 @@ class VocabularyInMemory
       }
     }
 
-    // All the words are written to a single file, which is stored under the
-    // base filename itself.
-    ql::span<const std::string_view> fileSuffixes() const override {
-      return fileSuffixes_;
-    }
-
    private:
-    static constexpr std::array<std::string_view, 1> fileSuffixes_{""};
-
     void finishImpl() override { writer_.finish(); }
   };
+
+  // All the words are stored in a single file under the base filename itself.
+  static FileSuffixes fileSuffixes() { return {""}; }
 
   // Return a `unique_ptr<WordWriter>` that directly writes the words to the
   // given `filename`. The words are not materialized in RAM, but the vocabulary

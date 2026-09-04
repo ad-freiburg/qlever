@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include "../../util/GTestHelpers.h"
+#include "VocabularyTestHelpers.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
@@ -69,69 +69,86 @@ class EmptyDirectory {
   }
 };
 
-// Copy the suffixes of the given `wordWriter` into a `vector`. This is
-// necessary because the `span` that `fileSuffixes` returns is only valid for as
-// long as the `wordWriter` lives.
-template <typename WordWriter>
-std::vector<std::string> copySuffixes(const WordWriter& wordWriter) {
-  std::vector<std::string> suffixes;
-  for (std::string_view suffix : wordWriter.fileSuffixes()) {
-    suffixes.emplace_back(suffix);
-  }
-  return suffixes;
+// A fresh empty directory for a vocabulary of the given `type`.
+EmptyDirectory directoryFor(VocabularyType::Enum type) {
+  return EmptyDirectory{absl::StrCat(gtestCurrentTestName(), ".",
+                                     VocabularyType{type}.toString(), ".dir")};
 }
 
-// Check that the `filenames` are exactly the `baseFilename` plus each of the
-// `suffixes`. `UnorderedElementsAreArray` also detects duplicate suffixes,
-// because then there would be fewer files than suffixes.
+// Check that the files in the given `directory` are exactly its base filename
+// plus each of the `suffixes`. `UnorderedElementsAreArray` also detects
+// duplicate suffixes, because then there would be fewer files than suffixes.
 void expectFilesAreBaseFilenamePlusSuffixes(
-    const std::vector<std::string>& filenames, const std::string& baseFilename,
-    const std::vector<std::string>& suffixes,
+    const EmptyDirectory& directory, const FileSuffixes& suffixes,
     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(loc);
-  std::vector<std::string> expectedFiles;
-  for (const std::string& suffix : suffixes) {
-    expectedFiles.push_back(absl::StrCat(baseFilename, suffix));
-  }
-  EXPECT_THAT(filenames, ::testing::UnorderedElementsAreArray(expectedFiles));
+  EXPECT_THAT(
+      directory.filenames(),
+      ::testing::UnorderedElementsAreArray(vocabulary_test::vocabularyFilenames(
+          directory.baseFilename(), suffixes)));
 }
 
-// Write the `testWords()` with a `WordWriter` for a vocabulary of the given
-// `type` into a fresh empty directory, and check that the suffixes that the
-// `WordWriter` announces via `fileSuffixes` are the `expectedSuffixes`, and
-// that the files that were actually created are exactly the base filename plus
-// those suffixes.
+// Write the `testWords()` with a vocabulary of the given `type` into a fresh
+// empty directory, and check that the suffixes that the vocabulary announces
+// via `fileSuffixes` are the `expectedSuffixes`, and that the files that were
+// actually created are exactly the base filename plus those suffixes.
 void testFileSuffixes(
-    VocabularyType::Enum type, const std::vector<std::string>& expectedSuffixes,
+    VocabularyType::Enum type, const FileSuffixes& expectedSuffixes,
     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(loc, VocabularyType{type}.toString());
-  EmptyDirectory directory{absl::StrCat(
-      gtestCurrentTestName(), ".", VocabularyType{type}.toString(), ".dir")};
-  std::string filename = directory.baseFilename();
-  std::vector<std::string> suffixes;
+  EmptyDirectory directory = directoryFor(type);
+
+  PolymorphicVocabulary vocabulary;
+  vocabulary.resetToType(VocabularyType{type});
+  EXPECT_EQ(vocabulary.fileSuffixes(), expectedSuffixes);
+  // The static overload has to agree with the non-static one.
+  EXPECT_EQ(PolymorphicVocabulary::fileSuffixes(VocabularyType{type}),
+            expectedSuffixes);
+
   {
-    auto writer = PolymorphicVocabulary::makeDiskWriterPtr(
-        filename, VocabularyType{type});
-    suffixes = copySuffixes(*writer);
+    auto writer = vocabulary.makeDiskWriterPtr(directory.baseFilename());
     for (const std::string& word : testWords()) {
       (*writer)(word, true);
     }
     writer->finish();
   }
-  EXPECT_THAT(suffixes, ::testing::ElementsAreArray(expectedSuffixes));
-  expectFilesAreBaseFilenamePlusSuffixes(directory.filenames(), filename,
-                                         suffixes);
+  expectFilesAreBaseFilenamePlusSuffixes(directory, expectedSuffixes);
+}
+
+// Same as above, for one of the vocabularies with holes. Their `WordWriter`s
+// take an explicit index for each word and hence cannot be obtained via
+// `PolymorphicVocabulary::makeDiskWriterPtr` (which throws for those types).
+template <typename Vocabulary>
+void testFileSuffixesWithHoles(
+    VocabularyType::Enum type, const FileSuffixes& expectedSuffixes,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc, VocabularyType{type}.toString());
+  EmptyDirectory directory = directoryFor(type);
+
+  EXPECT_EQ(Vocabulary::fileSuffixes(), expectedSuffixes);
+  EXPECT_EQ(PolymorphicVocabulary::fileSuffixes(VocabularyType{type}),
+            expectedSuffixes);
+
+  {
+    typename Vocabulary::WordWriter writer{directory.baseFilename()};
+    for (size_t i = 0; i < testWords().size(); ++i) {
+      // The indices deliberately have holes.
+      writer(testWords().at(i), 3 * i + 1);
+    }
+    writer.finish();
+  }
+  expectFilesAreBaseFilenamePlusSuffixes(directory, expectedSuffixes);
 }
 
 }  // namespace
 
 // _____________________________________________________________________________
 // For each of the vocabulary types that can be used for index building, the
-// files that its `WordWriter` creates are exactly the ones that it announces
-// via `fileSuffixes`. The expected suffixes are also pinned down explicitly,
-// such that a change to any of them (which would make previously built indices
-// unreadable) is noticed.
-TEST(WordWriterFileSuffixes, allVocabularyTypesForIndexBuilding) {
+// files that are actually created are exactly the ones that the vocabulary
+// announces via `fileSuffixes`. The expected suffixes are also pinned down
+// explicitly, such that a change to any of them (which would make previously
+// built indices unreadable) is noticed.
+TEST(VocabularyFileSuffixes, allVocabularyTypesForIndexBuilding) {
   using Enum = VocabularyType::Enum;
   testFileSuffixes(Enum::InMemoryUncompressed, {""});
   // NOTE: The internal vocabulary of a `VocabularyInternalExternal` is a
@@ -162,49 +179,16 @@ TEST(WordWriterFileSuffixes, allVocabularyTypesForIndexBuilding) {
 }
 
 // _____________________________________________________________________________
-// The `WordWriter`s of the vocabularies with holes do not inherit from
-// `WordWriterBase` (they require explicit indices, which that interface cannot
-// express), but they mirror its `fileSuffixes` interface, so test them
-// separately.
-TEST(WordWriterFileSuffixes, vocabulariesWithHoles) {
-  // The indices deliberately have holes.
-  const std::vector<uint64_t> indices{3, 7, 8, 20};
-  ASSERT_EQ(indices.size(), testWords().size());
+// The same for the vocabularies with holes, which cannot be built word by word
+// and hence need a slightly different setup (see `testFileSuffixesWithHoles`).
+TEST(VocabularyFileSuffixes, vocabulariesWithHoles) {
+  using Enum = VocabularyType::Enum;
+  testFileSuffixesWithHoles<VocabularyInMemoryBinSearch>(
+      Enum::InMemoryUncompressedWithHoles, {"", ".ids"});
+  testFileSuffixesWithHoles<CompressedVocabularyWithHoles>(
+      Enum::InMemoryCompressedWithHoles,
+      {".words", ".words.ids", ".codebooks"});
 
-  {
-    EmptyDirectory directory{
-        absl::StrCat(gtestCurrentTestName(), ".binSearch.dir")};
-    std::string filename = directory.baseFilename();
-    std::vector<std::string> suffixes;
-    {
-      VocabularyInMemoryBinSearch::WordWriter writer{filename};
-      suffixes = copySuffixes(writer);
-      for (size_t i = 0; i < testWords().size(); ++i) {
-        writer(testWords().at(i), indices.at(i));
-      }
-      writer.finish();
-    }
-    EXPECT_THAT(suffixes, ::testing::ElementsAre("", ".ids"));
-    expectFilesAreBaseFilenamePlusSuffixes(directory.filenames(), filename,
-                                           suffixes);
-  }
-
-  {
-    EmptyDirectory directory{
-        absl::StrCat(gtestCurrentTestName(), ".compressed.dir")};
-    std::string filename = directory.baseFilename();
-    std::vector<std::string> suffixes;
-    {
-      CompressedVocabularyWithHoles::WordWriter writer{filename};
-      suffixes = copySuffixes(writer);
-      for (size_t i = 0; i < testWords().size(); ++i) {
-        writer(testWords().at(i), indices.at(i));
-      }
-      writer.finish();
-    }
-    EXPECT_THAT(suffixes,
-                ::testing::ElementsAre(".words", ".words.ids", ".codebooks"));
-    expectFilesAreBaseFilenamePlusSuffixes(directory.filenames(), filename,
-                                           suffixes);
-  }
+  // Together with the test above, all the vocabulary types are covered.
+  EXPECT_EQ(VocabularyType::all().size(), 7u);
 }
