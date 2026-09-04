@@ -27,10 +27,10 @@
 namespace ad_utility::vocabulary_merger {
 // _________________________________________________________________
 template <typename W, typename C>
-auto mergeVocabulary(
-    const std::string& basename, size_t numFiles, W comparator,
-    C& internalWordCallback, ad_utility::MemorySize memoryToUse,
-    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
+auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
+                     C& internalWordCallback,
+                     ad_utility::MemorySize memoryToUse,
+                     const ad_utility::RegexSet& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   VocabularyMerger merger;
@@ -44,7 +44,7 @@ template <typename W, typename C>
 auto VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
     ad_utility::MemorySize memoryToUse,
-    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
+    const ad_utility::RegexSet& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
@@ -111,10 +111,10 @@ CPP_template_def(typename C, typename L)(
     requires WordCallback<C> CPP_and_def
         ranges::predicate<L, TripleComponentWithIndex,
                           TripleComponentWithIndex>) void VocabularyMerger::
-    writeQueueWordsToIdMap(
-        std::vector<QueueWord>& buffer, C& wordCallback, const L& lessThan,
-        const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes,
-        ad_utility::ProgressBar& progressBar) {
+    writeQueueWordsToIdMap(std::vector<QueueWord>& buffer, C& wordCallback,
+                           const L& lessThan,
+                           const ad_utility::RegexSet& blankNodeIriRegexes,
+                           ad_utility::ProgressBar& progressBar) {
   AD_LOG_TIMING << "Start writing a batch of merged words\n";
 
   // Iterate (avoid duplicates).

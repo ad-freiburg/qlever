@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 
+#include <array>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -32,6 +33,11 @@ class VocabularyInMemoryBinSearch
   using Words = CompactVectorOfStrings<CharType>;
   using Indices = std::vector<uint64_t>;
   using IndicesView = ql::span<const uint64_t>;
+
+  // This suffix is appended to the base filename in order to get the name of
+  // the file in which the (because of the holes, explicit) indices of the words
+  // are stored. The words themselves are stored under the base filename itself.
+  static constexpr std::string_view idsSuffix = ".ids";
 
   // The holes of this vocabulary are deliberate: such a vocabulary is created
   // by excluding some of the entries of a larger vocabulary, and is used in
@@ -168,6 +174,17 @@ class VocabularyInMemoryBinSearch
     // Finish writing and dump all contents that still reside in buffers to
     // disk.
     void finish();
+
+    // The suffixes of the files that this `WordWriter` writes. This class does
+    // not inherit from `WordWriterBase` (see `makeDiskWriterPtr` below), but
+    // mirrors its `fileSuffixes` interface.
+    static ql::span<const std::string_view> fileSuffixes() {
+      return fileSuffixes_;
+    }
+
+   private:
+    static constexpr std::array<std::string_view, 2> fileSuffixes_{"",
+                                                                   idsSuffix};
   };
 
   // A vocabulary with holes cannot be written via the `WordWriterBase`

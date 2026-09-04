@@ -65,12 +65,17 @@ SplitVocabulary<SF, SFN, S...>::WordWriter::WordWriter(
     const std::string& filename) {
   // Init all underlying word writers
   auto vocabFilenames = splitFilenameFunction_(filename);
+  // The suffixes that `splitFilenameFunction_` appends for each of the
+  // underlying vocabularies, obtained by applying it to an empty base filename.
+  auto vocabSuffixes = splitFilenameFunction_("");
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
     underlyingWordWriters_[i] = std::visit(
         [&](auto& vocab) -> AnyUnderlyingWordWriterPtr {
           return vocab.makeDiskWriterPtr(vocabFilenames[i]);
         },
         underlyingVocabularies[i]);
+    fileSuffixes_.addPrefixed(vocabSuffixes[i],
+                              underlyingWordWriters_[i]->fileSuffixes());
   }
 }
 

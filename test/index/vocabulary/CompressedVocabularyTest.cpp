@@ -281,24 +281,28 @@ std::vector<uint64_t> indicesWithHoles() {
   return indices;
 }
 
-// Delete the three files that the `DiskWriterWithExplicitIndices` for the given
+// Delete the files that the `DiskWriterWithExplicitIndices` for the given
 // `filename` creates. Do not warn about files that were never created.
 void deleteVocabularyFiles(const std::string& filename) {
-  for (const auto& suffix : {".words", ".words.ids", ".codebooks"}) {
-    ad_utility::deleteFile(absl::StrCat(filename, suffix), false);
+  std::string wordsFilename =
+      absl::StrCat(filename, CompressedVocabularyWithHoles::wordsSuffix);
+  for (std::string_view suffix :
+       VocabularyInMemoryBinSearch::WordWriter::fileSuffixes()) {
+    ad_utility::deleteFile(absl::StrCat(wordsFilename, suffix), false);
   }
+  ad_utility::deleteFile(
+      absl::StrCat(filename, CompressedVocabularyWithHoles::decodersSuffix),
+      false);
 }
 
 // Create a `CompressedVocabularyWithHoles` with the given `words` and
-// `indices`, using the `DiskWriterWithExplicitIndices`. The suffixes of the two
-// filenames are the ones that `CompressedVocabulary::open` expects.
+// `indices`, using the `DiskWriterWithExplicitIndices`.
 CompressedVocabularyWithHoles createVocabularyWithHoles(
     const std::string& filename, const std::vector<std::string>& words,
     const std::vector<uint64_t>& indices) {
   AD_CORRECTNESS_CHECK(words.size() == indices.size());
   {
-    CompressedVocabularyWithHoles::WordWriter writer{
-        absl::StrCat(filename, ".words"), absl::StrCat(filename, ".codebooks")};
+    CompressedVocabularyWithHoles::WordWriter writer{filename};
     for (size_t i = 0; i < words.size(); ++i) {
       EXPECT_EQ(writer(words.at(i), indices.at(i)), indices.at(i));
     }
@@ -437,8 +441,7 @@ TEST(CompressedVocabularyWithHoles, makeDiskWriterPtrThrows) {
 TEST(CompressedVocabularyWithHoles, addWordAfterFinishThrows) {
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
-  CompressedVocabularyWithHoles::WordWriter writer{
-      absl::StrCat(filename, ".words"), absl::StrCat(filename, ".codebooks")};
+  CompressedVocabularyWithHoles::WordWriter writer{filename};
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
   EXPECT_EQ(writer(words.at(0), indices.at(0)), indices.at(0));
@@ -462,8 +465,7 @@ TEST(CompressedVocabularyWithHoles, addWordAfterFinishThrows) {
 TEST(CompressedVocabularyWithHoles, nonAscendingIndicesThrow) {
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
-  CompressedVocabularyWithHoles::WordWriter writer{
-      absl::StrCat(filename, ".words"), absl::StrCat(filename, ".codebooks")};
+  CompressedVocabularyWithHoles::WordWriter writer{filename};
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
   // Write one word more than a single block holds, such that the check for

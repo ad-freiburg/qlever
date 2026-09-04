@@ -9,7 +9,6 @@
 
 #include <absl/time/time.h>
 #include <gtest/gtest_prod.h>
-#include <re2/re2.h>
 
 #include <functional>
 #include <memory>
@@ -46,6 +45,7 @@
 #include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/RegexSet.h"
 #include "util/TransparentFunctors.h"
 #include "util/json.h"
 
@@ -200,7 +200,7 @@ class IndexImpl {
   // Compiled regexes for IRIs that should be treated as blank nodes during
   // index building (only relevant during index building). Set (and compiled
   // from their string representation) via `setBlankNodeIriRegexes`.
-  std::vector<std::unique_ptr<re2::RE2>> blankNodeIriRegexes_;
+  ad_utility::RegexSet blankNodeIriRegexes_;
 
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
@@ -380,7 +380,7 @@ class IndexImpl {
   // exception. See `TripleComponentWithIndex::isBlankNode`.
   void setBlankNodeIriRegexes(
       const std::vector<std::string>& blankNodeIriRegexes);
-  const std::vector<std::unique_ptr<re2::RE2>>& getBlankNodeIriRegexes() const {
+  const ad_utility::RegexSet& getBlankNodeIriRegexes() const {
     return blankNodeIriRegexes_;
   }
 
