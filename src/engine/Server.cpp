@@ -37,6 +37,7 @@
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/ParseException.h"
 #include "util/ParseableDuration.h"
 #include "util/QueryEventLog.h"
 #include "util/TimeTracer.h"
@@ -1406,22 +1407,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
     co_return co_await send(std::move(resp));
   }
   if (exceptionErrorMsg) {
-    AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
-    if (metadata) {
-      // The `coloredError()` message might fail because of the
-      // different Unicode handling of QLever and ANTLR. Make sure to
-      // detect this case so that we can fix it if it happens.
-      try {
-        AD_LOG_ERROR << metadata.value().coloredError() << std::endl;
-      } catch (const std::exception& e) {
-        exceptionErrorMsg.value().append(absl::StrCat(
-            " Highlighting an error for the command line log failed: ",
-            e.what()));
-        AD_LOG_ERROR << "Failed to highlight error in operation. " << e.what()
-                     << std::endl;
-        AD_LOG_ERROR << metadata.value().query_ << std::endl;
-      }
-    }
+    logErrorAndHighlightedMetadata(exceptionErrorMsg.value(), metadata);
     auto errorResponseJson = responseJson::composeError(
         operationString, exceptionErrorMsg.value(), requestTimer, metadata);
     if (plannedQuery.has_value()) {
