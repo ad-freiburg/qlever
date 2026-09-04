@@ -15,6 +15,7 @@
 #include <string>
 
 #include "util/Exception.h"
+#include "util/Log.h"
 #include "util/StringUtils.h"
 #include "util/Timer.h"
 
@@ -224,7 +225,7 @@ class ProgressBar {
 // for (auto& thread : threads) {
 //   thread.join();
 // }
-// AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+// progressBar.logFinalProgressString();
 //
 class ConcurrentProgressBar {
  public:
@@ -316,6 +317,21 @@ class ConcurrentProgressBar {
     finished_ = true;
     std::unique_lock displayLock{displayMutex_};
     return getProgressStringImpl(true);
+  }
+
+  // Convenience function that logs the result of `getFinalProgressString()`
+  // via `AD_LOG_INFO`.
+  //
+  // NOTE: The string is composed and assigned to a local variable first,
+  // instead of streaming the call to `getFinalProgressString()` directly into
+  // `AD_LOG_INFO`, because `getFinalProgressString()` locks `displayMutex_`.
+  // If it were evaluated as part of the `AD_LOG_INFO` expression, that lock
+  // would be acquired while the logging mutex is already held, which is the
+  // reverse of the order used by `update()` above (which holds `displayMutex_`
+  // while logging) and can lead to a lock-order inversion.
+  void logFinalProgressString() {
+    std::string finalProgressString = getFinalProgressString();
+    AD_LOG_INFO << finalProgressString << std::flush;
   }
 
  private:

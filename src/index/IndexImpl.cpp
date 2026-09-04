@@ -558,8 +558,8 @@ IndexImpl::runPartialVocabularyWorker(
     }
     auto filenameSuffix =
         BuildPartialVocabulariesResult::partialVocabularySuffix(
-            workerIdx, workerResult.numTriplesPerPartialVocab_.size());
-    workerResult.numTriplesPerPartialVocab_.push_back(localWriter.size());
+            workerIdx, workerResult.numTriplesPerBatch_.size());
+    workerResult.numTriplesPerBatch_.push_back(localWriter.size());
     writePartialVocabulary(filenameSuffix, std::move(itemMap).moveMap(),
                            std::move(localWriter), *workerResult.idTriples_);
   }
@@ -612,22 +612,14 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   // (which every `ItemMapManager` adds to its map).
   if (result.partialVocabularySuffixes().empty()) {
     auto& workerResult = result.workerResults_.at(0);
-    workerResult.numTriplesPerPartialVocab_.push_back(0);
+    workerResult.numTriplesPerBatch_.push_back(0);
     writePartialVocabulary(
         BuildPartialVocabulariesResult::partialVocabularySuffix(0, 0),
         ItemMapManager{0, &vocab_.getCaseComparator(), itemAlloc}.moveMap(), {},
         *workerResult.idTriples_);
   }
 
-  // NOTE: Assign to a local variable first (instead of streaming the call
-  // directly into `AD_LOG_INFO`), because `getFinalProgressString` locks the
-  // progress bar's internal `displayMutex_`. If it were evaluated as part of
-  // the `AD_LOG_INFO` expression, that lock would be acquired while the
-  // logging mutex is already held, which is the reverse of the order used by
-  // `ConcurrentProgressBar::update()` (which holds `displayMutex_` while
-  // logging) and can lead to a lock-order inversion.
-  std::string finalProgressString = progressBar.getFinalProgressString();
-  AD_LOG_INFO << finalProgressString << std::flush;
+  progressBar.logFinalProgressString();
   size_t numTriplesTotal = ::ranges::accumulate(
       result.workerResults_, size_t{0}, {},
       [](const auto& workerResult) { return workerResult.idTriples_->size(); });
@@ -833,7 +825,7 @@ auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
   for (auto& workerResult : data.workerResults_) {
     auto triplesGenerator = workerResult.idTriples_->getRows();
     auto it = triplesGenerator.begin();
-    for (size_t numTriples : workerResult.numTriplesPerPartialVocab_) {
+    for (size_t numTriples : workerResult.numTriplesPerBatch_) {
       AD_CORRECTNESS_CHECK(mappingIt != mappings.end());
       auto idMap = std::make_shared<Map>(std::move(*mappingIt));
 

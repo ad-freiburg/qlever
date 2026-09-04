@@ -35,6 +35,7 @@
 #include "util/HashMap.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 // An IRI or literal together with its index in the global vocabulary. This is
 // used during vocabulary merging.
@@ -381,11 +382,14 @@ struct BuildPartialVocabulariesResult {
   // created. The workers work completely independently of each other, so each
   // of them has its own `idTriples_`.
   struct WorkerResult {
-    // The i-th entry is the actual number of triples of the i-th partial
-    // vocabulary of this worker. It might be slightly different from the
-    // specified `batchSize` because of internally added triples. The triples
-    // appear in `idTriples_` in exactly this order.
-    std::vector<size_t> numTriplesPerPartialVocab_;
+    // The i-th entry is the actual number of triples in the i-th batch of
+    // this worker (a batch consists of a partial vocabulary and the triples
+    // that were mapped using it). It might be slightly different from the
+    // specified `batchSize` because of internally added triples. The first
+    // `numTriplesPerBatch_[0]` rows of `idTriples_` are the triples of the
+    // first batch, the next `numTriplesPerBatch_[1]` rows are the triples of
+    // the second batch, and so on.
+    std::vector<size_t> numTriplesPerBatch_;
     std::unique_ptr<TripleVec> idTriples_;
   };
   // One entry per worker, in the order of the worker indices.
@@ -405,11 +409,11 @@ struct BuildPartialVocabulariesResult {
   // vocabularies of the first worker, then those of the second worker, etc.).
   std::vector<std::string> partialVocabularySuffixes() const {
     std::vector<std::string> suffixes;
-    for (size_t workerIdx = 0; workerIdx < workerResults_.size(); ++workerIdx) {
-      const auto& numTriples =
-          workerResults_[workerIdx].numTriplesPerPartialVocab_;
-      for (size_t partialVocabIdx = 0; partialVocabIdx < numTriples.size();
-           ++partialVocabIdx) {
+    for (size_t workerIdx : ad_utility::integerRange(workerResults_.size())) {
+      const auto& numTriplesPerBatch =
+          workerResults_[workerIdx].numTriplesPerBatch_;
+      for (size_t partialVocabIdx :
+           ad_utility::integerRange(numTriplesPerBatch.size())) {
         suffixes.push_back(partialVocabularySuffix(workerIdx, partialVocabIdx));
       }
     }
