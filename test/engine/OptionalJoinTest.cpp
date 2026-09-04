@@ -19,6 +19,7 @@
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
+#include "engine/Bind.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
@@ -1346,6 +1347,61 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInput) {
   using Vars = std::vector<std::optional<Variable>>;
   auto* qec = ad_utility::testing::getQec();
   auto left = makeOptionalJoinThatIsResortedOnLimit(qec, 10, 5);
+  // Matches every value of `?a` in `left`, so that no row of the result may
+  // contain an UNDEF.
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector({{0, 7},
+                             {1, 7},
+                             {2, 7},
+                             {3, 7},
+                             {4, 7},
+                             {5, 7},
+                             {6, 7},
+                             {7, 7},
+                             {8, 7},
+                             {9, 7}}),
+      Vars{Var{"?a"}, Var{"?d"}}, false, std::vector<ColumnIndex>{0});
+
+  OptionalJoin optionalJoin{qec, std::move(left), std::move(right)};
+  // The limit is small enough to make the left input of the inner
+  // `OptionalJoin` smaller than its right input.
+  optionalJoin.applyLimitOffset({3});
+
+  EXPECT_TRUE(
+      optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy({0}));
+
+  qec->getQueryTreeCache().clearAll();
+  // Required because the children apply their `LIMIT` externally, which updates
+  // their runtime information.
+  optionalJoin.createRuntimeInfoFromEstimates(
+      optionalJoin.getRuntimeInfoPointer());
+  auto result = optionalJoin.computeResultOnlyForTesting();
+  for (const auto& row : result.idTableView()) {
+    for (const Id& id : row) {
+      EXPECT_NE(id, Id::makeUndefined());
+    }
+  }
+}
+
+// _____________________________________________________________________________
+// Same as the test above, but with a `Bind` between this operation and the
+// inner `OptionalJoin`, as in the query of issue #3241. `Bind` forwards the
+// sort order claim of its child tree, which is cached, so this checks that
+// applying a limit invalidates the cached claim (otherwise the repair reads a
+// stale "sorted" claim and restores nothing).
+TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  auto* qec = ad_utility::testing::getQec();
+  auto left = ad_utility::makeExecutionTree<Bind>(
+      qec, makeOptionalJoinThatIsResortedOnLimit(qec, 10, 5),
+      parsedQuery::Bind{
+          sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+              Var{"?b"}),
+          Var{"?e"}});
+  // Fill the cached sort order claims, like query planning does.
+  (void)left->resultSortedOn();
   // Matches every value of `?a` in `left`, so that no row of the result may
   // contain an UNDEF.
   auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
