@@ -838,6 +838,21 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
+TEST(QueryPlanner, TransitivePathBindBoth) {
+  auto scan = h::IndexScanFromStrings;
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p>+ ?y."
+      "?x <p> ?y }",
+      h::transitivePath(
+          left, right, 1, std::numeric_limits<size_t>::max(),
+          scan("?x", "<p>", "?y"), scan("?x", "<p>", "?y"),
+          scan(internalVar(0), "<p>", internalVar(1), {Permutation::PSO})),
+      ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>. <x1> <p> <x2>"));
+}
+
 TEST(QueryPlanner, PathSearchSingleTarget) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
@@ -3229,7 +3244,7 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
             AllOf(h::IndexScanFromStrings("?a", "?b", "?c"),
                   hasLimit({std::nullopt, 3})));
   // Last offset should only be applied by exporter since VALUES does not
-  // handle OFFSET
+  // support OFFSET natively
   h::expect(
       "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
       "} OFFSET 1 } OFFSET 2 } OFFSET 5",
@@ -3238,8 +3253,8 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
 
   h::expect("SELECT * { SELECT * { ?a ?b ?c } LIMIT 2 } LIMIT 1",
             AllOf(h::IndexScanFromStrings("?a", "?b", "?c"), hasLimit({1})));
-  // Last limit should only be applied by exporter since VALUES does not handle
-  // OFFSET
+  // Last limit should only be applied by exporter since VALUES does not support
+  // OFFSET natively
   h::expect(
       "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
       "} LIMIT 3 } LIMIT 2 } LIMIT 1",
@@ -3914,18 +3929,18 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                   {Variable{"?g"}}, {3})))),
           h::IndexScanFromStrings("?g", "<b>", "?g2")),
       qec, {16, 64'000'000});
-  // Double bind is currently not supported
-  h::expect("SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
-            h::MultiColumnJoin(
-                h::Sort(h::transitivePath(
-                    left, right1, 1, std::numeric_limits<size_t>::max(),
-                    // The sort is because of missing graph permutations.
-                    h::Sort(h::IndexScanFromStrings(
-                        "?_QLever_internal_variable_qp_0", "<a>",
-                        "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                        {Variable{"?g"}}, {3})))),
-                h::IndexScanFromStrings("?s", "<b>", "?o")),
-            qec);
+  // This tests double binding (both columns at once).
+  h::expect(
+      "SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
+
+      h::transitivePath(left, right1, 1, std::numeric_limits<size_t>::max(),
+                        h::IndexScanFromStrings("?s", "<b>", "?o"),
+                        h::IndexScanFromStrings("?s", "<b>", "?o"),
+                        h::Sort(h::IndexScanFromStrings(
+                            "?_QLever_internal_variable_qp_0", "<a>",
+                            "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                            {Variable{"?g"}}, {3}))),
+      qec);
 
   TransitivePathSide right2{std::nullopt, 1, Variable{"?g"}, 1};
   h::expect("SELECT * { { GRAPH ?g { ?s <a>+ ?g } ?s <b> ?s2 } . ?g <b> ?g2 }",

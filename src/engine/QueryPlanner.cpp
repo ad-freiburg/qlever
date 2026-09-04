@@ -2559,19 +2559,19 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
 }
 
 // _____________________________________________________________________________
-std::optional<std::tuple<size_t, size_t>>
+QueryPlanner::TransitivePathJoinCols
 QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
                                               bool leftSideTransitivePath) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)jcs;
   (void)leftSideTransitivePath;
-  return std::nullopt;
+  return TransitivePathJoinCols();
 #else
   // If there are more than two pairs of join columns, we have a graph
   // variable. In that case, we compute the full transitive hull (followed by a
   // multi-column join).
   if (jcs.size() > 2) {
-    return std::nullopt;
+    return TransitivePathJoinCols();
   }
 
   // The index in `jcs` of the transitive path side and the other side.
@@ -2586,9 +2586,9 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
     size_t transitiveCol = jcs[0][transitivePathIndex];
     size_t otherCol = jcs[0][otherIndex];
     if (transitiveCol >= graphColIndex) {
-      return std::nullopt;
+      return {};
     }
-    return std::make_tuple(transitiveCol, otherCol);
+    return TransitivePathJoinCols(std::make_tuple(transitiveCol, otherCol));
   }
 
   // At this point, we know that we have exactly two pairs of join columns,
@@ -2601,14 +2601,15 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   size_t otherColB = jcs[1][otherIndex];
   if (transitiveColA < graphColIndex) {
     if (transitiveColB == graphColIndex) {
-      return std::make_tuple(transitiveColA, otherColA);
+      return TransitivePathJoinCols(std::make_tuple(transitiveColA, otherColA));
     }
-    // We currently don't support binding two regular columns at once
-    return std::nullopt;
+    // Bind two regular columns at once.
+    return TransitivePathJoinCols(std::make_tuple(transitiveColA, otherColA),
+                                  std::make_tuple(transitiveColB, otherColB));
   }
   AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
   AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
-  return std::make_tuple(transitiveColB, otherColB);
+  return TransitivePathJoinCols(std::make_tuple(transitiveColB, otherColB));
 #endif
 }
 
@@ -2639,25 +2640,39 @@ auto QueryPlanner::createJoinWithTransitivePath(
   }
 
   // Do not bind the side of a path twice and don't bind on graph variable.
+  // Get all columns that can be joined with each other. May either be zero, one
+  // or two pairs.
   auto joinCols = getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
-  if (!joinCols.has_value()) {
+  if (!joinCols.startCols_.has_value()) {
+    // There were no columns found on which a transitive path can be bound to.
     return std::nullopt;
   }
 
   // An unbound transitive path has at most two columns we can bind to.
-  const auto& [thisCol, otherCol] = joinCols.value();
-  AD_CONTRACT_CHECK(thisCol <= 1);
+  const auto& [firstColTransPath, firstColOther] = joinCols.startCols_.value();
+  AD_CONTRACT_CHECK(firstColTransPath <= 1);
 
   // The left or right side is a transitive path and its join column corresponds
   // to the left side of its input.
   SubtreePlan plan = [&]() {
-    if (thisCol == 0) {
-      return makeSubtreePlan(
-          transPathOperation->bindLeftSide(otherTree, otherCol));
-    } else {
-      return makeSubtreePlan(
-          transPathOperation->bindRightSide(otherTree, otherCol));
+    auto firstSide = std::pair{otherTree, firstColOther};
+    auto secondSide = std::optional<decltype(firstSide)>();
+
+    // Assign the targeet side if given.
+    if (joinCols.targetCols_.has_value()) {
+      const auto& [secondColTransPath, secondColOther] =
+          joinCols.targetCols_.value();
+      AD_CONTRACT_CHECK(secondColTransPath <= 1 &&
+                        secondColTransPath != firstColTransPath);
+      secondSide = std::pair{otherTree, secondColOther};
     }
+
+    if (firstColTransPath == 1) {
+      return makeSubtreePlan(
+          transPathOperation->bindSides(secondSide, firstSide));
+    }
+    return makeSubtreePlan(
+        transPathOperation->bindSides(firstSide, secondSide));
   }();
   mergeSubtreePlanIds(plan, a, b);
   return plan;
