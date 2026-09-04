@@ -2144,31 +2144,21 @@ void IndexImpl::setPrefixesForEncodedValues(
 // _____________________________________________________________________________
 void IndexImpl::setBlankNodeIriRegexes(
     const std::vector<std::string>& blankNodeIriRegexes) {
-  std::vector<std::unique_ptr<re2::RE2>> compiledRegexes;
-  ql::ranges::for_each(
-      blankNodeIriRegexes, [&compiledRegexes](const std::string& regex) {
-        // The regexes are matched against the full IRI text (including the
-        // angle brackets), so each of them has to describe an IRI and must
-        // therefore start with `<`.
-        if (!ql::starts_with(regex, '<')) {
-          throw std::runtime_error{absl::StrCat(
-              "A regex for treating IRIs as blank nodes has to match a full "
-              "IRI and must therefore start with `<`, but got: ",
-              regex)};
-        }
-        // `RE2` does not throw for an invalid pattern but stores an error
-        // state, which we turn into a user-readable exception here.
-        auto compiledRegex = std::make_unique<re2::RE2>(regex, re2::RE2::Quiet);
-        if (!compiledRegex->ok()) {
-          throw std::runtime_error{absl::StrCat(
-              "The regex \"", regex,
-              "\" passed to `--iri-as-blank-node-regexes` is not a valid "
-              "regular expression (as understood by Google's RE2 library): ",
-              compiledRegex->error())};
-        }
-        compiledRegexes.push_back(std::move(compiledRegex));
-      });
-  blankNodeIriRegexes_ = std::move(compiledRegexes);
+  ql::ranges::for_each(blankNodeIriRegexes, [](const std::string& regex) {
+    // The regexes are matched against the full IRI text (including the angle
+    // brackets), so each of them has to describe an IRI and must therefore
+    // start with `<`.
+    if (!ql::starts_with(regex, '<')) {
+      throw std::runtime_error{absl::StrCat(
+          "A regex for treating IRIs as blank nodes has to match a full "
+          "IRI and must therefore start with `<`, but got: ",
+          regex)};
+    }
+  });
+  // The compilation of the regexes (which also reports those that are not valid
+  // regular expressions) is done by `ad_utility::RegexSet`.
+  blankNodeIriRegexes_ = ad_utility::RegexSet{
+      blankNodeIriRegexes, "passed to `--iri-as-blank-node-regexes`"};
 }
 
 // _____________________________________________________________________________
