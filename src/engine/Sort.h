@@ -46,6 +46,12 @@ class Sort : public Operation {
     return sortColumnIndices_;
   }
 
+  // Forward prefilters to the subtree. `Sort` is row-preserving, so a
+  // prefilter that is correct for the input is correct for the output.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      const std::vector<PrefilterVariablePair>& prefilters) const override;
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();

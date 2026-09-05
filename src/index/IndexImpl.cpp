@@ -1,7 +1,13 @@
-// Copyright 2014 - 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014-2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2014 - 2026 The QLever Authors, in particular:
+//
+// 2014 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2014 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/IndexImpl.h"
 
@@ -410,6 +416,20 @@ void IndexImpl::createFromFiles(
 
   readIndexBuilderSettingsFromFile();
 
+  // Configure the geo cell grid for WKT literal IDs (must happen after
+  // `setLocale` inside `readIndexBuilderSettingsFromFile`, which recreates
+  // the comparator, and before any parsing, which already sorts partial
+  // vocabularies).
+  if (geoCellGridLevelForIndexBuilding_ > 0) {
+    AD_CONTRACT_CHECK(
+        vocabularyTypeForIndexBuilding_.value() ==
+            ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit,
+        "A geo cell grid requires the vocabulary type "
+        "`on-disk-compressed-geo-split`");
+    vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
+        geoCellGridLevelForIndexBuilding_, geoCellGridSchemeForIndexBuilding_});
+  }
+
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(makeRdfParser(std::move(files)));
 
@@ -645,17 +665,25 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
+    // The merger applies the geo cell order (relevant only when a geo cell
+    // grid is configured) itself via per-word `geoSortKeyFn` values, so the
+    // string predicate is the purely lexicographic one.
     auto sortPred = [&cmp = vocab_.getCaseComparator()](
                         std::string_view a, bool aIsExternal,
                         std::string_view b, bool bIsExternal) {
-      return cmp.isLessInTotalWithExternalFlag(a, aIsExternal, b, bIsExternal);
+      return cmp.isLessInTotalWithExternalFlagLexicographic(a, aIsExternal, b,
+                                                            bIsExternal);
     };
+    auto geoSortKeyFn =
+        [&cmp = vocab_.getCaseComparator()](std::string_view word) {
+          return cmp.geoSortKey(word);
+        };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, partialVocabSuffixes, sortPred, wordCallback,
-        memoryLimitIndexBuilding(), blankNodeIriRegexes_);
+        memoryLimitIndexBuilding(), blankNodeIriRegexes_, geoSortKeyFn);
     wordCallback.finish();
     return mergedVocabMeta;
   }();
@@ -1724,15 +1752,21 @@ void IndexImpl::writePartialVocabulary(
 
   auto vec = [&]() {
     ad_utility::TimeBlockAndLog l{"vocab map to vector"};
-    return vocabMapsToVector(items);
+    // Precompute the geo sort key of each word here, so that sorting below
+    // never has to parse a WKT literal per comparison.
+    return vocabMapsToVector(
+        items, [&c = vocab_.getCaseComparator()](std::string_view word) {
+          return c.geoSortKey(word);
+        });
   }();
   {
     ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
     sortVocabVector(
         &vec,
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
-          return c.isLessInTotalWithExternalFlag(
-              a.first, a.second.isExternal(), b.first, b.second.isExternal());
+          return c.isLessInTotalWithExternalFlagAndGeoSortKeys(
+              a.word_, a.idAndFlag_.isExternal(), a.geoSortKey_, b.word_,
+              b.idAndFlag_.isExternal(), b.geoSortKey_);
         },
         true);
   }
@@ -1747,7 +1781,7 @@ void IndexImpl::writePartialVocabulary(
     ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
     vec.erase(std::unique(vec.begin(), vec.end(),
                           [](const auto& a, const auto& b) {
-                            return a.second.id() == b.second.id();
+                            return a.idAndFlag_.id() == b.idAndFlag_.id();
                           }),
               vec.end());
   }

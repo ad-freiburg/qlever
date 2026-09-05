@@ -1,6 +1,11 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 The QLever Authors, in particular:
+//
+// 2015 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_INDEXSCAN_H
 #define QLEVER_SRC_ENGINE_INDEXSCAN_H
@@ -31,6 +36,11 @@ class IndexScan final : public Operation {
   Graphs graphsToFilter_;
   ScanSpecAndBlocks scanSpecAndBlocks_;
   bool scanSpecAndBlocksIsPrefiltered_;
+  // If this scan is a prefiltered copy (see
+  // `makeCopyWithPrefilteredScanSpecAndBlocks`), the total number of rows of
+  // the blocks of the original, unprefiltered scan. Used for runtime
+  // statistics (e.g. the geo prefilter funnel of the spatial join).
+  std::optional<uint64_t> numBlockRowsBeforePrefilter_ = std::nullopt;
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
@@ -259,6 +269,13 @@ class IndexScan final : public Operation {
   // returns `false` if prefiltered `BlockMetadataRanges` are contained.
   bool resultDoesMatchCacheKey() const override;
 
+ public:
+  // See `numBlockRowsBeforePrefilter_` above; `nullopt` if this scan was not
+  // prefiltered.
+  const std::optional<uint64_t>& numBlockRowsBeforePrefilter() const {
+    return numBlockRowsBeforePrefilter_;
+  }
+
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // Return a new `QueryExecutionTree` with prefiltered `scanSpecAndBlocks`. If
@@ -322,7 +339,6 @@ class IndexScan final : public Operation {
     };
   }
 
- public:
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;

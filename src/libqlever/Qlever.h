@@ -119,6 +119,15 @@ struct IndexBuilderConfig : CommonConfig {
   ad_utility::VocabularyType vocabType_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
+  // Level of the geo cell grid for WKT literal IDs (see `GeoCellGrid`), 0 =
+  // disabled. Values > 0 require the `OnDiskCompressedGeoSplit` vocabulary
+  // type and enable the geo cell prefilter for spatial joins.
+  size_t geoCellGridLevel_ = 0;
+
+  // Cell assignment scheme of the geo cell grid: "flat", "flat-4-shifts",
+  // "hierarchical", or "hierarchical-3-shifts" (see `GeoCellGridScheme`).
+  std::string geoCellGridScheme_ = "flat";
+
   // If set to true, then certain temporary files which are created while
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;

@@ -1,9 +1,14 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchhold@gmail.com>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Björn Buchhold <buchhold@gmail.com>, UFR
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2025 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/Vocabulary.h"
 
@@ -44,6 +49,12 @@ template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
   vocabulary_.close();
   vocabulary_.open(fileName);
+
+  // If an underlying `GeoVocabulary` was built with a geo cell grid (stored
+  // in its `.geocells` file), the word comparator must apply the
+  // corresponding order for WKT literals, otherwise binary searches in the
+  // geo vocabulary would be inconsistent with its on-disk order.
+  setGeoCellGrid(getGeoCellGrid());
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.

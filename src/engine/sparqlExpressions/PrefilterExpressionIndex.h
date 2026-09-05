@@ -20,6 +20,7 @@
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelation.h"
 #include "index/vocabulary/Vocabulary.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "util/Iterators.h"
 
 // NOTE: The prefiltering needs the vocabulary of the index (and not only the
@@ -272,6 +273,35 @@ class IsInExpression : public PrefilterExpression {
   explicit IsInExpression(std::vector<IdOrLocalVocabEntry> referenceValues,
                           bool isNegated = false)
       : isNegated_(isNegated), referenceValues_(std::move(referenceValues)) {}
+
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+
+ private:
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
+                                   const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
+};
+
+// Prefilter for spatial distance filters and joins: given a geographic query
+// rectangle, keep exactly the blocks that can contain a geometry whose
+// bounding box intersects the rectangle. WKT literals are prefiltered via the
+// geo cell bits of their vocabulary indices (see `GeoCellGrid`; on an index
+// without a grid the whole WKT region of the vocabulary is kept), `GeoPoint`s
+// via the latitude band of the rectangle (their IDs are ordered by latitude
+// first). Values of all other datatypes cannot be geometries that satisfy a
+// spatial condition and are pruned (blocks with mixed datatypes are always
+// kept by the surrounding framework).
+class GeoRectangleExpression : public PrefilterExpression {
+ private:
+  ad_utility::GeoRectangle rectangle_;
+
+ public:
+  explicit GeoRectangleExpression(const ad_utility::GeoRectangle& rectangle)
+      : rectangle_(rectangle) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;

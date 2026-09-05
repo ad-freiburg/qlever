@@ -1,8 +1,12 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2014 - 2026 The QLever Authors, in particular:
+//
+// 2014 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
@@ -187,6 +191,16 @@ class IndexImpl {
   // The vocabulary type that is used (only relevant during index building).
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
+
+  // The level of the geo cell grid for WKT literal IDs, 0 = disabled (only
+  // relevant during index building; at query time the grid is read from the
+  // geo vocabulary's `.geocells` file).
+  uint8_t geoCellGridLevelForIndexBuilding_ = 0;
+
+  // The cell assignment scheme of the geo cell grid (only relevant during
+  // index building and if the level above is > 0).
+  ad_utility::GeoCellGridScheme geoCellGridSchemeForIndexBuilding_ =
+      ad_utility::GeoCellGridScheme::Flat;
 
   // Compiled regexes for IRIs that should be treated as blank nodes during
   // index building (only relevant during index building). Set (and compiled
@@ -378,6 +392,23 @@ class IndexImpl {
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
     vocabularyTypeForIndexBuilding_ = type;
     configurationJson_["vocabulary-type"] = type;
+  }
+
+  // Set the level of the geo cell grid used to order and annotate the IDs of
+  // WKT literals (see `GeoCellGrid`), which enables the geo cell prefilter
+  // for spatial joins. 0 (the default) disables the grid. Values > 0 require
+  // the `OnDiskCompressedGeoSplit` vocabulary type.
+  void setGeoCellGridLevelForIndexBuilding(uint8_t level) {
+    geoCellGridLevelForIndexBuilding_ = level;
+    configurationJson_["geo-cell-grid-level"] = level;
+  }
+
+  // Set the cell assignment scheme of the geo cell grid (see
+  // `GeoCellGridScheme`). Only relevant if the grid level is > 0.
+  void setGeoCellGridSchemeForIndexBuilding(
+      ad_utility::GeoCellGridScheme scheme) {
+    geoCellGridSchemeForIndexBuilding_ = scheme;
+    configurationJson_["geo-cell-grid-scheme"] = std::string{scheme.toString()};
   }
 
   // __________________________________________________________________________

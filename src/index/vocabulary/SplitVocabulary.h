@@ -1,6 +1,12 @@
-// Copyright 2025 University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
@@ -18,6 +24,7 @@
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
@@ -177,7 +184,13 @@ class SplitVocabulary {
     // Retrieve the word from the indicated underlying vocabulary
     return std::visit(
         [&unmarkedIdx](auto& vocab) {
-          AD_CORRECTNESS_CHECK(unmarkedIdx < vocab.size());
+          // A `GeoVocabulary` with a geo cell grid uses cell-annotated
+          // indices that exceed its size by construction; it checks the
+          // decoded position itself.
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (!ad_utility::isInstantiation<T, GeoVocabulary>) {
+            AD_CORRECTNESS_CHECK(unmarkedIdx < vocab.size());
+          }
           // TODO<ullingerc>: How to handle if the different underlying
           // vocabularies return different types (std::string / std::string_view
           // / ...) on their operator[] implementations? A variant will probably
@@ -260,10 +273,21 @@ class SplitVocabulary {
                    word, comparator, marker)
                    .positionOfWord(word);
     if (!pos.has_value()) {
-      auto end =
-          addMarker(std::visit([](auto& v) -> uint64_t { return v.size(); },
-                               underlying_[marker]),
-                    marker);
+      // The word is larger than all words of its vocabulary, so return its
+      // past-the-end index. For a `GeoVocabulary` with cell-annotated indices
+      // this is not simply the size (see `GeoVocabulary::endIndex`).
+      auto end = addMarker(
+          std::visit(
+              [](auto& v) -> uint64_t {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+                  return v.endIndex();
+                } else {
+                  return v.size();
+                }
+              },
+              underlying_[marker]),
+          marker);
       return {end, end};
     }
     return pos.value();
@@ -327,6 +351,40 @@ class SplitVocabulary {
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   static bool isGeoInfoAvailable();
 
+  // Forward the geo cell grid to any underlying `GeoVocabulary` (see there).
+  // No-op if there is none.
+  void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
+    for (auto& vocab : underlying_) {
+      std::visit(
+          [&grid](auto& v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+              v.setGeoCellGrid(grid);
+            }
+          },
+          vocab);
+    }
+  }
+
+  // The geo cell grid of an underlying `GeoVocabulary`, if there is one and
+  // it has a grid.
+  std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
+    std::optional<ad_utility::GeoCellGrid> result = std::nullopt;
+    for (const auto& vocab : underlying_) {
+      std::visit(
+          [&result](const auto& v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+              if (v.getGeoCellGrid().has_value()) {
+                result = v.getGeoCellGrid();
+              }
+            }
+          },
+          vocab);
+    }
+    return result;
+  }
+
   // Generic serialization support.
   AD_SERIALIZE_FRIEND_FUNCTION(SplitVocabulary) {
     (void)serializer;
@@ -340,7 +398,10 @@ class SplitVocabulary {
 namespace detail::splitVocabulary {
 
 // Split function for Well-Known Text Literals: All words are written to
-// vocabulary 0 except WKT literals, which go to vocabulary 1.
+// vocabulary 0 except WKT literals, which go to vocabulary 1. The criterion is
+// shared with the geo-cell-aware word order of the `TripleComponentComparator`
+// (see `ad_utility::isWktLiteral`), so exactly the words that sort into the
+// WKT region also get routed into the geo vocabulary.
 struct GeoSplitFunc {
   uint8_t operator()(std::string_view word) const {
     return ad_utility::isWktLiteral(word);

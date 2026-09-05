@@ -17,6 +17,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -745,6 +746,17 @@ uint64_t Operation::getSizeEstimate() {
   } else {
     return getSizeEstimateBeforeLimit();
   }
+}
+
+// _____________________________________________________________________________
+std::vector<Operation::PrefilterVariablePair> Operation::clonePrefilters(
+    const std::vector<PrefilterVariablePair>& prefilters) {
+  std::vector<PrefilterVariablePair> result;
+  result.reserve(prefilters.size());
+  for (const auto& [expression, variable] : prefilters) {
+    result.emplace_back(expression->clone(), variable);
+  }
+  return result;
 }
 
 // _____________________________________________________________________________

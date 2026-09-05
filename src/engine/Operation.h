@@ -1,7 +1,12 @@
-// Copyright 2015 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>    [2015 - 2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2018 - 2024]
+// Copyright 2015 - 2024 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2018 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_OPERATION_H
 #define QLEVER_SRC_ENGINE_OPERATION_H
@@ -118,6 +123,13 @@ class Operation {
  public:
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
+
+  // Deep-copy a vector of prefilter pairs (the contained
+  // `PrefilterExpression`s are owned via `unique_ptr`). Used by operations
+  // that forward prefilters to more than one child or need to retain the
+  // original pairs.
+  static std::vector<PrefilterVariablePair> clonePrefilters(
+      const std::vector<PrefilterVariablePair>& prefilters);
 
   // Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
@@ -289,6 +301,13 @@ class Operation {
 
   std::shared_ptr<RuntimeInformation> getRuntimeInfoPointer() {
     return _runtimeInfo;
+  }
+
+  // The root of the runtime information tree this operation belongs to.
+  // Needed when an operation replaces a child tree at execution time and has
+  // to wire the replacement's runtime information into the tree.
+  std::shared_ptr<const RuntimeInformation> rootRuntimeInfo() const {
+    return _rootRuntimeInfo;
   }
 
   RuntimeInformationWholeQuery& getRuntimeInfoWholeQuery() {

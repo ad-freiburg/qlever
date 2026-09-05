@@ -1,6 +1,11 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 The QLever Authors, in particular:
+//
+// 2022 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_TEST_UTIL_INDEXTESTHELPERS_H
 #define QLEVER_TEST_UTIL_INDEXTESTHELPERS_H
@@ -74,6 +79,12 @@ struct TestIndexConfig {
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
   qlever::Filetype indexType = qlever::Filetype::Turtle;
   std::optional<VocabularyType> vocabularyType = std::nullopt;
+  // Level of the geo cell grid for WKT literal IDs (requires the geo-split
+  // vocabulary type), see `GeoCellGrid`. 0 = no grid.
+  uint8_t geoCellGridLevel = 0;
+  // Cell assignment scheme of the geo cell grid.
+  ad_utility::GeoCellGridScheme geoCellGridScheme =
+      ad_utility::GeoCellGridScheme::Flat;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
   // If true, add `ql:has-word` triples for each word in each literal during
@@ -98,13 +109,13 @@ struct TestIndexConfig {
   // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
-    return H::combine(std::move(h), c.turtleInput, c.loadAllPermutations,
-                      c.usePatterns, c.usePrefixCompression,
-                      c.blocksizePermutations, c.createTextIndex,
-                      c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-                      c.parserBufferSize, c.scoringMetric, c.bAndKParam,
-                      c.indexType, c.encodedPrefixesWithoutAngleBrackets,
-                      c.addHasWordTriples, c.secondaryVocabWords);
+    return H::combine(
+        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
+        c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
+        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
+        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
+        c.encodedPrefixesWithoutAngleBrackets, c.addHasWordTriples,
+        c.secondaryVocabWords, c.geoCellGridLevel, c.geoCellGridScheme);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
@@ -112,7 +123,7 @@ struct TestIndexConfig {
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
       scoringMetric, bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, addHasWordTriples,
-      secondaryVocabWords)
+      secondaryVocabWords, geoCellGridLevel, geoCellGridScheme)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.
