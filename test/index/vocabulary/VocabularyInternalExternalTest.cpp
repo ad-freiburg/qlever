@@ -27,9 +27,11 @@ class VocabularyCreator {
  public:
   explicit VocabularyCreator(const std::string& filename)
       : vocabFilename_{filename + suffix} {
-    ad_utility::deleteFile(vocabFilename_, false);
+    deleteVocabularyFiles<VocabularyInternalExternal>(vocabFilename_);
   }
-  ~VocabularyCreator() { ad_utility::deleteFile(vocabFilename_); }
+  ~VocabularyCreator() {
+    deleteVocabularyFiles<VocabularyInternalExternal>(vocabFilename_);
+  }
 
   // Create and return a `VocabularyInternalExternal` from the given words.
   auto createVocabularyImpl(const std::vector<std::string>& words) {

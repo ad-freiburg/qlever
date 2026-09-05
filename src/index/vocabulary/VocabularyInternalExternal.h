@@ -27,6 +27,11 @@ class VocabularyInternalExternal {
   VocabularyOnDisk externalVocab_;
 
  public:
+  // These suffixes are appended to the base filename in order to get the base
+  // filenames of the internal and the external vocabulary.
+  static constexpr std::string_view internalSuffix = ".internal";
+  static constexpr std::string_view externalSuffix = ".external";
+
   /// Construct an empty vocabulary
   VocabularyInternalExternal() = default;
 
@@ -132,6 +137,17 @@ class VocabularyInternalExternal {
     // Finish writing.
     void finishImpl() override;
   };
+
+  // The files of the internal and the external vocabulary, which are stored
+  // under the base filename plus `internalSuffix`/`externalSuffix`.
+  static FileSuffixes fileSuffixes() {
+    FileSuffixes suffixes;
+    addFileSuffixesWithPrefix(suffixes, internalSuffix,
+                              VocabularyInMemoryBinSearch::fileSuffixes());
+    addFileSuffixesWithPrefix(suffixes, externalSuffix,
+                              VocabularyOnDisk::fileSuffixes());
+    return suffixes;
+  }
 
   // Return a `unique_ptr<WordWriter>` that writes to the given `filename`.
   static auto makeDiskWriterPtr(const std::string& filename) {

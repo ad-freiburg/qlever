@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include "../../GeometryInfoTestHelpers.h"
@@ -28,6 +29,15 @@ using GeoVocabularyUnderlyingVocabTypes =
 template <typename T>
 class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
  public:
+  // The base filename of the `GeoVocabulary` that the tests below write, and an
+  // `absl::Cleanup` that deletes all the files of that vocabulary.
+  static std::string filename() {
+    return absl::StrCat(gtestCurrentTestName(), ".dat");
+  }
+  static auto getFileCleanup() {
+    return vocabulary_test::makeVocabFileCleanup<GeoVocabulary<T>>(filename());
+  }
+
   // A function to test that a `GeoVocabulary` can correctly insert and
   // lookup literals and precompute geometry information. This test is
   // generic on the type of the underlying vocabulary, because the
@@ -35,8 +45,9 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   // vocabulary implementation is used.
   void testGeoVocabulary() {
     using GV = GeoVocabulary<T>;
+    auto cleanup = getFileCleanup();
     GV geoVocab;
-    const std::string fn = "geovocab-test1.dat";
+    const std::string fn = filename();
     auto ww = geoVocab.makeDiskWriterPtr(fn);
     ww->readableName() = "test";
 
@@ -103,8 +114,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   // Build a `GeoVocabulary` on disk , fill it with a small set of WKT literals.
   GeoVocabulary<T> setupGeoVocab() {
     GeoVocabulary<T> geoVocab;
-    const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
-    auto ww = geoVocab.makeDiskWriterPtr(filename);
+    auto ww = geoVocab.makeDiskWriterPtr(filename());
     ww->readableName() = "test";
     std::vector<std::string> testLiterals{
         "\"LINESTRING(1 1, 2 2, 3 3)\""
@@ -122,7 +132,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
       EXPECT_EQ(static_cast<uint64_t>(i), (*ww)(literal, true));
     }
     ww->finish();
-    geoVocab.open(filename);
+    geoVocab.open(filename());
     EXPECT_GE(geoVocab.size(), 4u);
     return geoVocab;
   }
@@ -130,6 +140,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   // `lookupBatch` must yield exactly the same strings as looking each index up
   // individually via `operator[]`.
   void testLookupBatch() {
+    auto cleanup = getFileCleanup();
     auto geoVocab = setupGeoVocab();
     std::array<size_t, 5> indices{2, 0, 3, 1, 0};
     auto result = geoVocab.lookupBatch(indices);
@@ -140,6 +151,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
   // `lookupBatchesStreamed` must yield, for each batch, exactly the same
   // strings as the individual `operator[]` lookups for that batch's indices.
   void testLookupBatchesStreamed() {
+    auto cleanup = getFileCleanup();
     auto geoVocab = setupGeoVocab();
 
     std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}, {0, 0}};
@@ -155,6 +167,13 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
 
 TYPED_TEST_SUITE(GeoVocabularyUnderlyingVocabTypedTest,
                  GeoVocabularyUnderlyingVocabTypes);
+
+// An `absl::Cleanup` that deletes all the files that an `RdfsVocabulary` of the
+// given `type` with the given base `filename` consists of.
+auto getFileCleanup(VocabularyType type, const std::string& filename) {
+  return vocabulary_test::makeVocabFileCleanup(
+      filename, PolymorphicVocabulary::fileSuffixes(type));
+}
 
 // _____________________________________________________________________________
 TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, TypedTest) {
@@ -178,10 +197,12 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   const VocabularyType nonGeoVocabType{VocabularyType::Enum::OnDiskCompressed};
 
   // Generate test vocabulary
+  const std::string filename = absl::StrCat(gtestCurrentTestName(), ".geo");
+  auto cleanup = getFileCleanup(geoSplitVocabType, filename);
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(geoSplitVocabType);
   ASSERT_TRUE(vocabulary.isGeoInfoAvailable());
-  auto wordCallback = vocabulary.makeWordWriterPtr("geoVocabTest.dat");
+  auto wordCallback = vocabulary.makeWordWriterPtr(filename);
   auto nonGeoIdx = (*wordCallback)("<http://example.com/abc>", true);
   static constexpr std::string_view exampleGeoLit =
       "\"LINESTRING(2 2, 4 "
@@ -190,7 +211,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   wordCallback->finish();
 
   // Load test vocabulary and try to retrieve precomputed `GeometryInfo`
-  vocabulary.readFromFile("geoVocabTest.dat");
+  vocabulary.readFromFile(filename);
   ASSERT_TRUE(vocabulary.isGeoInfoAvailable());
   ASSERT_FALSE(vocabulary.getGeoInfo(VocabIndex::make(nonGeoIdx)).has_value());
   auto gi = vocabulary.getGeoInfo(VocabIndex::make(geoIdx));
@@ -205,13 +226,16 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
 
   // Cannot get `GeometryInfo` from `PolymorphicVocabulary` with no underlying
   // `GeoVocabulary`
+  const std::string nonGeoFilename =
+      absl::StrCat(gtestCurrentTestName(), ".nonGeo");
+  auto nonGeoCleanup = getFileCleanup(nonGeoVocabType, nonGeoFilename);
   RdfsVocabulary nonGeoVocab;
   nonGeoVocab.resetToType(nonGeoVocabType);
   ASSERT_FALSE(nonGeoVocab.isGeoInfoAvailable());
-  auto ngWordCallback = vocabulary.makeWordWriterPtr("nonGeoVocabTest.dat");
+  auto ngWordCallback = nonGeoVocab.makeWordWriterPtr(nonGeoFilename);
   (*ngWordCallback)("<http://example.com/abc>", true);
   ngWordCallback->finish();
-  nonGeoVocab.readFromFile("nonGeoVocabTest.dat");
+  nonGeoVocab.readFromFile(nonGeoFilename);
   ASSERT_FALSE(nonGeoVocab.getGeoInfo(VocabIndex::make(0)).has_value());
 }
 
@@ -221,25 +245,29 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
       VocabularyType::Enum::OnDiskCompressedGeoSplit};
 
   // Generate test vocabulary
+  const std::string filename = absl::StrCat(gtestCurrentTestName(), ".geo");
+  auto cleanup = getFileCleanup(geoSplitVocabType, filename);
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(geoSplitVocabType);
-  auto wordCallback = vocabulary.makeWordWriterPtr("geoVocabTest2.dat");
+  auto wordCallback = vocabulary.makeWordWriterPtr(filename);
   (*wordCallback)("\"test\"@en", true);
   wordCallback->finish();
 
   // Overwrite the geoinfo file with an invalid header
+  const std::string geometryFilename = absl::StrCat(filename, ".geometry");
   ad_utility::File geoInfoFile{
-      AnyGeoVocab::getGeoInfoFilename("geoVocabTest2.dat.geometry"), "w"};
+      AnyGeoVocab::getGeoInfoFilename(geometryFilename), "w"};
   uint64_t fakeHeader = 0;
   geoInfoFile.write(&fakeHeader, 8);
   geoInfoFile.close();
 
   // Opening the vocabulary should throw an exception
   AD_EXPECT_THROW_WITH_MESSAGE(
-      vocabulary.readFromFile("geoVocabTest2.dat"),
+      vocabulary.readFromFile(filename),
       ::testing::HasSubstr(
-          "The geometry info version of geoVocabTest2.dat.geometry.geoinfo is "
-          "0, which is incompatible"));
+          absl::StrCat("The geometry info version of ",
+                       AnyGeoVocab::getGeoInfoFilename(geometryFilename),
+                       " is 0, which is incompatible")));
 }
 
 // _____________________________________________________________________________
@@ -250,18 +278,20 @@ TEST(GeoVocabularyTest, WordWriterDestructor) {
 
   // Create a `GeoVocabulary::WordWriter` and destruct it without a call to
   // `finish()`.
+  const std::string filename1 = absl::StrCat(gtestCurrentTestName(), ".1");
+  auto cleanup1 = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename1);
   AnyGeoVocab sv1;
-  auto wordWriter1 =
-      sv1.makeDiskWriterPtr("GeoVocabularyWordWriterDestructor1.dat");
+  auto wordWriter1 = sv1.makeDiskWriterPtr(filename1);
   (*wordWriter1)(lit, true);
   ASSERT_FALSE(wordWriter1->finishWasCalled());
   wordWriter1.reset();
 
   // Create a `GeoVocabulary::WordWriter` and destruct it after an explicit
   // call to `finish()`.
+  const std::string filename2 = absl::StrCat(gtestCurrentTestName(), ".2");
+  auto cleanup2 = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename2);
   AnyGeoVocab sv2;
-  auto wordWriter2 =
-      sv2.makeDiskWriterPtr("GeoVocabularyWordWriterDestructor2.dat");
+  auto wordWriter2 = sv2.makeDiskWriterPtr(filename2);
   (*wordWriter2)(lit, true);
   wordWriter2->finish();
   ASSERT_TRUE(wordWriter2->finishWasCalled());

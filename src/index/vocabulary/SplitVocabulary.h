@@ -15,6 +15,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/functional.h"
+#include "backports/type_traits.h"
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -310,6 +311,25 @@ class SplitVocabulary {
 
     ~WordWriter() override;
   };
+
+  // The files of all the underlying vocabularies, each prefixed with the suffix
+  // that `splitFilenameFunction_` appends for the respective vocabulary.
+  static FileSuffixes fileSuffixes() {
+    // The suffixes that `splitFilenameFunction_` appends for each of the
+    // underlying vocabularies, obtained by applying it to an empty base
+    // filename.
+    auto vocabSuffixes = splitFilenameFunction_("");
+    FileSuffixes suffixes;
+    uint8_t i = 0;
+    auto addOne = [&suffixes, &vocabSuffixes, &i](auto vocabulary) {
+      using Vocabulary = typename decltype(vocabulary)::type;
+      addFileSuffixesWithPrefix(suffixes, vocabSuffixes.at(i),
+                                Vocabulary::fileSuffixes());
+      ++i;
+    };
+    (addOne(ql::type_identity<UnderlyingVocabularies>{}), ...);
+    return suffixes;
+  }
 
   // Construct a SplitVocabulary::WordWriter that creates WordWriters on all
   // underlying vocabularies and calls the appropriate one depending on the
