@@ -350,7 +350,8 @@ class Operation {
  private:
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
-  // way.
+  // way. An implementation that pushes the `LIMIT`/`OFFSET` into a child has to
+  // repair the child afterwards, see the caution note on `applyLimitOffset`.
   virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
     // By default, do nothing. The `LIMIT`/`OFFSET` will be applied externally
     // after the computation of the result. Make sure to also override
@@ -368,6 +369,28 @@ class Operation {
   // `LIMIT`/`OFFSET` will not be replaced, but the new `LIMIT`/`OFFSET` will be
   // applied additionally after the previous `LIMIT`s/`OFFSET`s. This might
   // happen e.g. for nested subqueries.
+  //
+  // CAUTION: This mutates the operation and, via `onLimitOffsetChanged`,
+  // possibly its whole subtree. It is typically called on a plan that is
+  // already complete, so callers have to be aware of two side effects:
+  //
+  // 1. `getSizeEstimate()` becomes smaller. Operations that pick their
+  //    algorithm based on the size estimates of their children may thus pick a
+  //    different one than they would have during query planning, and with it a
+  //    different sort order (see
+  //    `OptionalJoin::isIndexNestedLoopJoinSuitable`). Every operation that
+  //    relies on a property of a subtree it applied a limit to therefore has to
+  //    restore that property afterwards. For a required sort order that means
+  //    calling `QueryExecutionTree::createSortedTree` again; it is a no-op if
+  //    the order still matches. As the change may originate arbitrarily deep in
+  //    the subtree, the sort order has to be re-read rather than reasoned
+  //    about. See `OptionalJoin` and `Union` for examples.
+  // 2. `isDistinctBy()` starts to report `true` for a limit of at most one row,
+  //    which `QueryExecutionTree::createDistinctTree` bases its decisions on.
+  //
+  // Repairing is only possible while the plan is still being assembled. Calling
+  // this during result computation is therefore safe only for operations that
+  // neither require nor report a sort order (see `CartesianProductJoin`).
   void applyLimitOffset(const LimitOffsetClause& limitOffsetClause);
 
   // Create and return the runtime information wrt the size and cost estimates

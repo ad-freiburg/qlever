@@ -113,6 +113,11 @@ class Union : public Operation {
  private:
   void onLimitOffsetChanged(const LimitOffsetClause&) override;
 
+  // The columns that the subtree with index `subtreeIndex` has to be sorted on,
+  // such that merging the two subtrees yields a result that is sorted according
+  // to `targetOrder_`. Only meaningful if `targetOrder_` is not empty.
+  std::vector<ColumnIndex> sortOrderForSubtree(size_t subtreeIndex) const;
+
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
   std::unique_ptr<Operation> cloneImpl() const override;
