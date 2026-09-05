@@ -108,6 +108,11 @@ class RdfParserBase {
 
   // Main access method to the parser. Return the next batch of triples, or
   // `nullopt` if the parser is exhausted.
+  //
+  // NOTE: The parsers that are used for the index building (currently only the
+  // `RdfMultifileParser`) have to support concurrent calls to this function,
+  // because the index builder pulls the batches from several threads (see
+  // `IndexImpl::buildPartialVocabularies`).
   virtual std::optional<std::vector<TurtleTriple>> getBatch() = 0;
 
  protected:
