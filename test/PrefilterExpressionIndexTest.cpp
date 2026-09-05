@@ -870,6 +870,28 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
                        b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
 }
 
+// The range of the prefix is computed on the PRIMARY level of the collation,
+// where strings that differ only in case are equal. `REGEX` relies on this when
+// it drops the `i` flag before deriving the prefix (see
+// `getConstantRegexForPrefiltering`), so pin the property down here: a prefix
+// in a different case selects the same blocks.
+//______________________________________________________________________________
+TEST_F(PrefilterExpressionOnMetadataTest, prefixRegexPrefixRangesIgnoreCase) {
+  // The vocabulary of the test index contains "Berlin", "Düsseldorf",
+  // "Hamburg (Altona)", "Stuttgart" and similar values.
+  for (const auto& [prefix, sameIgnoringCase] :
+       std::vector<std::pair<std::string, std::string>>{
+           {"Ber", "ber"},
+           {"Ber", "BER"},
+           {"Hamburg Alt", "hamburg alt"},
+           {"Düssel", "düssel"}}) {
+    ASSERT_EQ(toVec(prefixRegex(L(prefix), false)
+                        ->evaluate(indexImpl, blocksRegexTest, 2)),
+              toVec(prefixRegex(L(sameIgnoringCase), false)
+                        ->evaluate(indexImpl, blocksRegexTest, 2)));
+  }
+}
+
 // Test IsDatatype Expressions
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {

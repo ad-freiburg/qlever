@@ -511,6 +511,40 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                        pr(notExpr(prefixRegex(L("\"de\""))), varX));
   evalAndEqualityCheck(regexSparql(varX, L("\"^prefix\"")),
                        pr(prefixRegex(L("\"prefix\"")), varX));
+  // A prefix regex followed by other regex syntax still prefilters on the
+  // guaranteed literal prefix (here `prefix`).
+  evalAndEqualityCheck(regexSparql(varX, L("\"^prefix[0-9]\"")),
+                       pr(prefixRegex(L("\"prefix\"")), varX));
+  // A regex that is not anchored at the start, or that has a top-level
+  // alternation, cannot be prefiltered.
+  evalAndEqualityCheck(regexSparql(varX, L("\"prefix\"")));
+  evalAndEqualityCheck(regexSparql(varX, L("\"^prefix|other\"")));
+  // Constant flags are taken into account for the prefiltering. Flags that
+  // don't affect the meaning of the prefix are simply ignored...
+  evalAndEqualityCheck(regexSparqlWithFlags(varX, L("\"^prefix\""), L("\"\"")),
+                       pr(prefixRegex(L("\"prefix\"")), varX));
+  evalAndEqualityCheck(
+      regexSparqlWithFlags(varX, L("\"^prefix\""), L("\"sU\"")),
+      pr(prefixRegex(L("\"prefix\"")), varX));
+  // ... whereas the `m` flag makes `^` match after every newline, so that a
+  // prefilter would be unsound...
+  evalAndEqualityCheck(
+      regexSparqlWithFlags(varX, L("\"^prefix\""), L("\"m\"")));
+  evalAndEqualityCheck(
+      regexSparqlWithFlags(varX, L("\"^prefix\""), L("\"im\"")));
+  // ... and the `i` flag is dropped before the prefix is derived (see
+  // `getConstantRegexForPrefiltering`), so the prefix is the one of the regex
+  // as written, including its case. The prefix range of the prefilter ignores
+  // case anyway, which is exactly what makes this sound.
+  evalAndEqualityCheck(regexSparqlWithFlags(varX, L("\"^PreFix\""), L("\"i\"")),
+                       pr(prefixRegex(L("\"PreFix\"")), varX));
+  evalAndEqualityCheck(
+      regexSparqlWithFlags(varX, L("\"^prefix[0-9]\""), L("\"iU\"")),
+      pr(prefixRegex(L("\"prefix\"")), varX));
+  // Flags that are not known at query planning time also disable the
+  // prefiltering (invalid constant flags are rejected at construction time, see
+  // `RegexExpression, invalidConstruction`).
+  evalAndEqualityCheck(regexSparqlWithFlags(varX, L("\"^prefix\""), varY));
   // It is currently not possible to prefilter expressions involving STR(?var),
   // since we not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and
   // so on. The current prefilter expressions do not consider this matching
@@ -518,8 +552,21 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(strStartsSprql(strSprql(varX), L("\"Bob\"")));
   evalAndEqualityCheck(regexSparql(strSprql(varX), L("\"^Bob\"")));
   evalAndEqualityCheck(strStartsSprql(strSprql(L("\"\"")), L("\"Bob\"")));
-  evalAndEqualityCheck(notSprqlExpr(regexSparql(varX, L("\"^prefix\""))),
+  // A negated `REGEX` is not prefiltered at all: the range of the prefix is
+  // computed on the PRIMARY level of the collation and hence also contains
+  // values that the regex does not match (e.g. "ÄBC" for the prefix "abc").
+  // Those values satisfy the negated `REGEX`, so their blocks must not be
+  // dropped. See `RegexExpression::getPrefilterExpressionForMetadata`.
+  evalAndEqualityCheck(notSprqlExpr(regexSparql(varX, L("\"^prefix\""))));
+  // The dedicated `ql:prefix-match` function is prefiltered in the same way as
+  // `STRSTARTS` (note that its argument is a plain prefix, not a regex).
+  evalAndEqualityCheck(prefixMatchSparql(varX, L("\"prefix\"")),
+                       pr(prefixRegex(L("\"prefix\"")), varX));
+  evalAndEqualityCheck(notSprqlExpr(prefixMatchSparql(varX, L("\"prefix\""))),
                        pr(notExpr(prefixRegex(L("\"prefix\""))), varX));
+  // As for `STRSTARTS` and `REGEX`, `ql:prefix-match` on `STR(?var)` cannot be
+  // prefiltered.
+  evalAndEqualityCheck(prefixMatchSparql(strSprql(varX), L("\"Bob\"")));
   evalAndEqualityCheck(strStartsSprql(varX, IntId(33)));
   evalAndEqualityCheck(strStartsSprql(DoubleId(0.001), varY));
   evalAndEqualityCheck(strStartsSprql(varX, varY));
