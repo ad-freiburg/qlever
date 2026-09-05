@@ -114,6 +114,8 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
 
 // _____________________________________________________________________________
 void Qlever::buildIndex(IndexBuilderConfig config) {
+  // Reject invalid configurations early and with an informative error message.
+  config.validate();
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Set memory limit and parser buffer size if specified.
@@ -142,7 +144,8 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
-  index.getImpl().setBlankNodeIriRegexes(config.blankNodeIriRegexes_);
+  index.getImpl().setBlankNodeIriRegexes(
+      std::move(config.blankNodeIriRegexes_));
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
@@ -380,6 +383,16 @@ PlannedQuery Qlever::parseAndPlanQuery(
 
 // ___________________________________________________________________________
 void IndexBuilderConfig::validate() const {
+  // NOTE: The vocabulary types with "holes" (see `VocabularyInMemoryBinSearch`)
+  // cannot be built word by word and hence must not be used for index building.
+  // They are accepted by the command-line parser (which knows all vocabulary
+  // types), so we have to reject them explicitly here.
+  if (!vocabType_.isSupportedForIndexBuilding()) {
+    throw std::invalid_argument(absl::StrCat(
+        "The vocabulary type \"", vocabType_.toString(),
+        "\" cannot be used for index building, the supported types are ",
+        ad_utility::VocabularyType::getListOfValuesForIndexBuilding()));
+  }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");
   }

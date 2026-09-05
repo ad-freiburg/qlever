@@ -173,6 +173,8 @@ addLinkAndDiscoverTest(VariableCounterTest sparqlParser engine)
 
 addLinkAndDiscoverTest(StringUtilsTest qlever_util)
 
+addLinkAndDiscoverTest(RegexSetTest qlever_util)
+
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
 
 addLinkAndDiscoverTest(CryptographicHashUtilsTest qlever_util)
@@ -397,6 +399,8 @@ addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
 
 addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
+addLinkAndDiscoverTestNoLibs(NoCopyNoMoveTest)
+
 addLinkAndDiscoverTestSerial(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
@@ -481,6 +485,8 @@ if (EMSCRIPTEN)
     set_source_files_properties(AsioHelpersTest.cpp PROPERTIES COMPILE_OPTIONS "-O1")
 endif ()
 
+addLinkAndDiscoverTest(AsyncResourcePoolTest)
+
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
 addLinkAndDiscoverTest(WebSocketSessionTest http)
@@ -543,6 +549,8 @@ addLinkAndDiscoverTest(TripleSerializerTest)
 
 addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
 
+addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
+
 addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 
 addLinkAndDiscoverTest(HttpErrorTest engine)
@@ -562,7 +570,7 @@ else ()
     addLinkAndDiscoverTest(MaterializedViewsTest qlever engine)
 endif ()
 
-addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine)
+addLinkAndDiscoverTest(MaterializedViewsPatternRewriteTest qlever engine)
 
 addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 
