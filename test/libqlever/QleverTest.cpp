@@ -362,6 +362,48 @@ TEST(LibQlever, disableCaching) {
 }
 
 // _____________________________________________________________________________
+// The runtime parameter `memory-for-queries` mirrors and controls the memory
+// limit of the engine's allocator.
+TEST(LibQlever, memoryForQueriesRuntimeParameter) {
+  using namespace ad_utility::memory_literals;
+  EngineConfig ec = buildTestIndex("<s> <p> <o>.");
+  ec.memoryLimit_ = 50_MB;
+  Qlever engine{ec};
+  // Detach the parameter from the engine again before the engine dies, so
+  // that no later test can fire the update action into a destroyed instance.
+  absl::Cleanup cleanup = [] {
+    auto runtimeParameters = globalRuntimeParameters.wlock();
+    runtimeParameters->memoryForQueries_.clearOnUpdateAction();
+    runtimeParameters->memoryForQueries_.set(DEFAULT_MEM_FOR_QUERIES);
+  };
+
+  // Constructing the engine has synced the parameter to the configured limit.
+  EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
+            50_MB);
+  EXPECT_EQ(engine.allocator().memoryLimit(), 50_MB);
+
+  // Increasing the limit always works.
+  setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(100_MB);
+  EXPECT_EQ(engine.allocator().memoryLimit(), 100_MB);
+
+  // Decreasing works as long as the freed part is currently unused, i.e. not
+  // below the 32 MB allocated here (plus what the engine itself has
+  // allocated).
+  Id* chunk = engine.allocator().allocate(4'000'000);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(20_MB),
+      HasSubstr("Cannot reduce the memory limit"));
+  // The rejected decrease left both the parameter and the limit unchanged.
+  EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
+            100_MB);
+  EXPECT_EQ(engine.allocator().memoryLimit(), 100_MB);
+
+  engine.allocator().deallocate(chunk, 4'000'000);
+  setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(20_MB);
+  EXPECT_EQ(engine.allocator().memoryLimit(), 20_MB);
+}
+
+// _____________________________________________________________________________
 TEST(LibQlever, externallySpecifiedValues) {
   EngineConfig ec = buildTestIndex("<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .");
   // Caching must be disabled for externally specified values.
