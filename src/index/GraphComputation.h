@@ -55,6 +55,28 @@ inline bool hasOnlyOneGraph(const std::optional<std::vector<Id>>& graphs) {
   return graphs.has_value() && graphs->size() == 1;
 }
 
+// Return true iff the sorted `block` contains two consecutive rows that agree
+// on the columns `0`, `1`, and `2`, that is, on the actual triple of S, P, and
+// O. The graph column and all additional payload columns are ignored. As an
+// `IdTable` is column-based, scan the three contiguous columns in a single
+// pass instead of iterating row-wise via the row proxies.
+inline bool hasDuplicateTriples(const IdTable& block) {
+  AD_CORRECTNESS_CHECK(block.numColumns() >= 3);
+  ql::span<const Id> col0 = block.getColumn(0);
+  ql::span<const Id> col1 = block.getColumn(1);
+  ql::span<const Id> col2 = block.getColumn(2);
+  // Note: The condition `i + 1 < numRows` also correctly handles the cases of
+  // zero and one row without any underflow.
+  size_t numRows = block.numRows();
+  for (size_t i = 0; i + 1 < numRows; ++i) {
+    if (col0[i] == col0[i + 1] && col1[i] == col1[i + 1] &&
+        col2[i] == col2[i + 1]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Find out whether the sorted `block` contains duplicates and whether it
 // contains only a few distinct graphs such that we can store this information
 // in the block metadata.
@@ -63,14 +85,7 @@ inline std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
   AD_CORRECTNESS_CHECK(block.numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
   // Return true iff the block contains duplicates when only considering the
   // actual triple of S, P, and O.
-  auto hasDuplicates = [&block]() {
-    using C = ColumnIndex;
-    auto withoutGraphAndAdditionalPayload =
-        block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}})
-            .asStaticView<3>();
-    return ql::ranges::adjacent_find(withoutGraphAndAdditionalPayload) !=
-           ql::ranges::end(withoutGraphAndAdditionalPayload);
-  };
+  auto hasDuplicates = [&block]() { return hasDuplicateTriples(block); };
 
   auto graphs =
       computeDistinctGraphs(block.getColumn(ADDITIONAL_COLUMN_GRAPH_ID));
