@@ -19,11 +19,11 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "index/vocabulary_merger/Concepts.h"
 #include "index/vocabulary_merger/IdMapBatch.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
 #include "index/vocabulary_merger/VocabularyWriter.h"
 #include "index/vocabulary_merger/WordBatch.h"
-#include "index/vocabulary_merger/WordCallbacks.h"
 #include "util/TaskQueue.h"
 
 // The asynchronous part of the merging pipeline of the vocabulary merger (see
@@ -63,8 +63,13 @@ class VocabularyMergePipeline {
 
   // Asynchronously process a single `batch` of merged words: write its
   // distinct words to the vocabulary (via the `wordCallback` and the
-  // `blankNodeIriRegexes`), then write its ID map entries and destroy the
+  // `blankNodeIriRegexes`), then write its index mappings and destroy the
   // merged words that it was created from. Block if the pipeline is busy.
+  //
+  // NOTE: The `wordCallback` and the `blankNodeIriRegexes` are captured *by
+  // reference* into the asynchronous task, so both of them have to stay alive
+  // (and must not be modified from the outside) until `finish()` has
+  // returned.
   CPP_template(typename C)(requires WordCallback<C>) void push(
       WordBatch batch, C& wordCallback,
       const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes);
@@ -83,7 +88,7 @@ CPP_template_def(typename C)(
   wordWriterQueue_.push([this, batch = std::move(batch), &wordCallback,
                          &blankNodeIriRegexes]() mutable {
     auto idMapBatch = vocabularyWriter_.writeWordsToVocabulary(
-        batch.uniqueWords_, std::move(batch.queuedIdMapBatch_), wordCallback,
+        batch.uniqueWords_, std::move(batch.localIdxMappings_), wordCallback,
         blankNodeIriRegexes);
 
     // The merged words are no longer needed. Their destruction (which involves

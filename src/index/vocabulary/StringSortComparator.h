@@ -273,11 +273,16 @@ class TripleComponentComparatorImpl {
     return cmp;
   }
 
-  // Total comparison, using the "is external" flags as a tiebreaker. The
-  // direction of the tiebreaker (external before non-external) is arbitrary:
-  // downstream the merge ORs the flag across all duplicates of the same word
-  // (see `VocabularyMergerImpl.h`), so the order of duplicates does not affect
-  // the final result, only the deterministic shape of the sort.
+  // Total comparison, using the "is external" flags as a tiebreaker. This is
+  // used for sorting a single partial vocabulary (see
+  // `IndexImpl::createWritePartialVocabularyTask`), where a word can occur
+  // several times (once per `ItemMapArray` shard, which are per thread and not
+  // per word) with different flags, of which only the first survives the
+  // subsequent `std::unique`. The direction of the tiebreaker (external before
+  // non-external) hence is not arbitrary: it guarantees that the surviving
+  // occurrence is external if any of them is. NOTE: The vocabulary merger does
+  // not need this, as it explicitly ORs the flags of all duplicates of a word
+  // (see `WordBatchBuilder` in `index/vocabulary_merger/WordBatchBuilder.h`).
   bool isLessInTotalWithExternalFlag(std::string_view a, bool aIsExternal,
                                      std::string_view b,
                                      bool bIsExternal) const {

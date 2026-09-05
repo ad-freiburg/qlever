@@ -19,10 +19,10 @@
 #include "backports/concepts.h"
 #include "global/Id.h"
 #include "index/IndexBuilderTypes.h"
+#include "index/vocabulary_merger/Concepts.h"
 #include "index/vocabulary_merger/IdMapBatch.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
 #include "index/vocabulary_merger/WordBatch.h"
-#include "index/vocabulary_merger/WordCallbacks.h"
 #include "util/Log.h"
 #include "util/ProgressBar.h"
 
@@ -48,12 +48,12 @@ class VocabularyWriter {
 
  public:
   // Write the `uniqueWords` to the vocabulary and return the ID map batch that
-  // consists of the `queuedEntries` together with the global IDs of those
+  // consists of the `localIdxMappings` together with the global IDs of those
   // words (which is then complete and can be handed on to the third stage).
   CPP_template(typename C)(requires WordCallback<C>) IdMapBatch
       writeWordsToVocabulary(
           const std::vector<UniqueWord>& uniqueWords,
-          QueuedIdMapBatch queuedEntries, C& wordCallback,
+          LocalIdxToBatchMappings localIdxMappings, C& wordCallback,
           const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes);
 
   // The metadata, which is complete as soon as all the batches have been
@@ -69,7 +69,7 @@ class VocabularyWriter {
 CPP_template_def(typename C)(requires WordCallback<C>)
     IdMapBatch VocabularyWriter::writeWordsToVocabulary(
         const std::vector<UniqueWord>& uniqueWords,
-        QueuedIdMapBatch queuedEntries, C& wordCallback,
+        LocalIdxToBatchMappings localIdxMappings, C& wordCallback,
         const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes) {
   AD_LOG_TRACE << "Start writing a batch of merged words\n";
 
@@ -92,7 +92,7 @@ CPP_template_def(typename C)(requires WordCallback<C>)
       AD_LOG_INFO << progressBar_.getProgressString() << std::flush;
     }
   }
-  return IdMapBatch{std::move(queuedEntries), std::move(globalIds)};
+  return IdMapBatch{std::move(localIdxMappings), std::move(globalIds)};
 }
 
 // _____________________________________________________________________________

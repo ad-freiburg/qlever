@@ -19,8 +19,8 @@
 #include "index/vocabulary_merger/VocabularyWriter.h"
 
 using namespace ad_utility::vocabulary_merger;
-using ad_utility::vocabulary_merger::detail::QueuedIdMapBatch;
-using ad_utility::vocabulary_merger::detail::QueuedIdMapEntry;
+using ad_utility::vocabulary_merger::detail::LocalIdxToBatchMapping;
+using ad_utility::vocabulary_merger::detail::LocalIdxToBatchMappings;
 using ad_utility::vocabulary_merger::detail::UniqueWord;
 using ad_utility::vocabulary_merger::detail::VocabularyWriter;
 using ::testing::Pair;
@@ -53,13 +53,14 @@ TEST(VocabularyWriter, writeWordsAndBlankNodes) {
                                       UniqueWord{"_:blank", false},
                                       UniqueWord{"<http://ex/bn_1>", false},
                                       UniqueWord{"<http://ex/other>", true}};
-  // A single ID map entry, which refers to the last of the words.
-  QueuedIdMapBatch queuedEntries;
-  queuedEntries.entries_.push_back(QueuedIdMapEntry{2, 3, 17});
-  queuedEntries.numEntries_ = 1;
+  // A single index mapping, which refers to the last of the words.
+  LocalIdxToBatchMappings localIdxMappings;
+  localIdxMappings.mappings_.push_back(LocalIdxToBatchMapping{2, 3, 17});
+  localIdxMappings.numMappings_ = 1;
 
-  auto batch = writer.writeWordsToVocabulary(
-      uniqueWords, std::move(queuedEntries), wordCallback, blankNodeIriRegexes);
+  auto batch =
+      writer.writeWordsToVocabulary(uniqueWords, std::move(localIdxMappings),
+                                    wordCallback, blankNodeIriRegexes);
 
   // The two blank nodes were not written to the vocabulary, the `isExternal`
   // flag was passed on.
@@ -68,11 +69,12 @@ TEST(VocabularyWriter, writeWordsAndBlankNodes) {
   // Each of the words gets exactly one global ID, in the order of the words.
   EXPECT_THAT(batch.globalIds_,
               ::testing::ElementsAre(V(0), BN(0), BN(1), V(1)));
-  // The queued entries are passed through unchanged.
-  ASSERT_EQ(batch.queuedEntries_.numEntries_, 1u);
-  EXPECT_EQ(batch.queuedEntries_.entries_[0].partialFileId_, 2u);
-  EXPECT_EQ(batch.queuedEntries_.entries_[0].indexOfWordInBatch_, 3u);
-  EXPECT_EQ(batch.queuedEntries_.entries_[0].localIndex_, 17u);
+  // The index mappings are passed through unchanged.
+  ASSERT_EQ(batch.localIdxMappings_.numMappings_, 1u);
+  const auto& mapping = batch.localIdxMappings_.mappings_[0];
+  EXPECT_EQ(mapping.partialVocabularyIndex_, 2u);
+  EXPECT_EQ(mapping.indexOfWordInBatch_, 3u);
+  EXPECT_EQ(mapping.indexOfWordInPartialVocabulary_, 17u);
   // Only the words that were actually added to the vocabulary are counted.
   EXPECT_EQ(writer.metaData().numWordsTotal(), 2u);
 }
@@ -90,12 +92,12 @@ TEST(VocabularyWriter, stateIsCarriedOverBetweenBatches) {
 
   auto firstBatch = writer.writeWordsToVocabulary(
       {UniqueWord{"\"a\"", false}, UniqueWord{"_:x", false}},
-      QueuedIdMapBatch{}, wordCallback, noRegexes);
+      LocalIdxToBatchMappings{}, wordCallback, noRegexes);
   EXPECT_THAT(firstBatch.globalIds_, ::testing::ElementsAre(V(0), BN(0)));
 
   auto secondBatch = writer.writeWordsToVocabulary(
       {UniqueWord{"\"b\"", false}, UniqueWord{"_:y", false}},
-      QueuedIdMapBatch{}, wordCallback, noRegexes);
+      LocalIdxToBatchMappings{}, wordCallback, noRegexes);
   EXPECT_THAT(secondBatch.globalIds_, ::testing::ElementsAre(V(1), BN(1)));
 
   EXPECT_EQ(writer.metaData().numWordsTotal(), 2u);
@@ -110,7 +112,7 @@ TEST(VocabularyWriter, emptyBatch) {
     return 0;
   };
   std::vector<std::unique_ptr<re2::RE2>> noRegexes;
-  auto batch = writer.writeWordsToVocabulary({}, QueuedIdMapBatch{},
+  auto batch = writer.writeWordsToVocabulary({}, LocalIdxToBatchMappings{},
                                              wordCallback, noRegexes);
   EXPECT_THAT(batch.globalIds_, ::testing::IsEmpty());
   EXPECT_EQ(writer.metaData().numWordsTotal(), 0u);

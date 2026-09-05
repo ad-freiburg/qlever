@@ -230,10 +230,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
     TripleComponentComparator comparator;
     res = mergeVocabulary(
         _basePath, 2,
-        [&comparator](std::string_view a, bool aIsExternal, std::string_view b,
-                      bool bIsExternal) {
-          return comparator.isLessInTotalWithExternalFlag(a, aIsExternal, b,
-                                                          bIsExternal);
+        [&comparator](std::string_view a, std::string_view b) {
+          return comparator(a, b, TripleComponentComparator::Level::TOTAL);
         },
         internalVocabularyAction, 1_GB);
   }
@@ -289,7 +287,7 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       mergeVocabulary(
           basePath, 2,
-          [](std::string_view a, bool, std::string_view b, bool) {
+          [](std::string_view a, std::string_view b) {
             return std::less{}(a, b);
           },
           callback, 1_GB),
@@ -340,9 +338,7 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
   }
   mergeVocabulary(
       basePath, 1,
-      [](std::string_view a, bool, std::string_view b, bool) {
-        return std::less{}(a, b);
-      },
+      [](std::string_view a, std::string_view b) { return std::less{}(a, b); },
       wordCallback, 1_GB, blankNodeIriRegexes);
 
   // Only the two `bn_` IRIs became blank nodes; the two other IRIs and the
@@ -474,9 +470,7 @@ TEST(MergeVocabulary, duplicateWordsAcrossBatchBoundaries) {
   };
   auto result = mergeVocabulary(
       basePath, numFiles,
-      [](std::string_view a, bool, std::string_view b, bool) {
-        return std::less{}(a, b);
-      },
+      [](std::string_view a, std::string_view b) { return std::less{}(a, b); },
       wordCallback, 1_GB);
   // Each word is written to the vocabulary exactly once.
   EXPECT_EQ(numWordsInCallback, numWords);
@@ -536,9 +530,7 @@ TEST(MergeVocabulary, manyWordsWithSeveralIdMapBatches) {
   };
   auto result = mergeVocabulary(
       basePath, 2,
-      [](std::string_view a, bool, std::string_view b, bool) {
-        return std::less{}(a, b);
-      },
+      [](std::string_view a, std::string_view b) { return std::less{}(a, b); },
       wordCallback, 1_GB);
   EXPECT_EQ(numWordsInCallback, numWords);
   EXPECT_EQ(result.numWordsTotal(), numWords);

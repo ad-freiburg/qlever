@@ -59,14 +59,13 @@ struct SizeOfQueueWord {
 };
 inline constexpr SizeOfQueueWord sizeOfQueueWord{};
 
-// A word that occurs in the merged vocabulary for the first time, together
-// with the information whether it is to be externalized.
+// A unique word from the merged vocabulary (after deduplication between
+// partial vocabularies has been performed) together with the information
+// whether the word is to be externalized. NOTE: The word is stored in a
+// non-owning `string_view` for performance reasons, so the pipeline has to
+// keep all the words alive. The only exception is the first word of a batch,
+// see `WordBatch::carriedOverWord_`.
 struct UniqueWord {
-  // NOTE: This typically is a view into one of the `mergedWordBuffers_` of the
-  // `WordBatch` that this word belongs to. Those buffers are deliberately
-  // kept alive until the batch has been written to the vocabulary, such that
-  // the merging thread never has to copy or move a single word. The only
-  // exception is the first word of a batch, see `WordBatch::carriedOverWord_`.
   std::string_view word_;
   bool isExternal_;
 };
@@ -75,7 +74,7 @@ struct UniqueWord {
 // thread that writes the words to the vocabulary.
 struct WordBatch {
   std::vector<UniqueWord> uniqueWords_;
-  QueuedIdMapBatch queuedIdMapBatch_;
+  LocalIdxToBatchMappings localIdxMappings_;
   // The buffers of merged words that back the `string_view`s of the
   // `uniqueWords_` (see there).
   std::vector<std::vector<QueueWord>> mergedWordBuffers_;
@@ -95,7 +94,7 @@ struct WordBatch {
 template <typename T>
 CPP_concept WordBatchCallback = std::is_invocable_v<const T&, WordBatch>;
 
-// The number of ID map entries (which is the same as the number of merged
+// The number of index mappings (which is the same as the number of merged
 // words) that are collected in a single batch. A single buffer of merged
 // words only contains a rather small number of words (currently 100), which
 // would be much too fine-grained for a task queue.

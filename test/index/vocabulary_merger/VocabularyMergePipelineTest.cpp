@@ -34,10 +34,10 @@ using ad_utility::vocabulary_merger::detail::WordBatchBuilder;
 namespace {
 auto V = ad_utility::testing::VocabId;
 
-// A `WordComparator` that simply compares the words lexicographically and
-// ignores the `isExternal` flags.
-constexpr auto lessThan = [](std::string_view a, bool, std::string_view b,
-                             bool) { return std::less<>{}(a, b); };
+// A `WordComparator` that simply compares the words lexicographically.
+constexpr auto lessThan = [](std::string_view a, std::string_view b) {
+  return std::less<>{}(a, b);
+};
 
 // Create the `QueueWord` for the occurrence of `word` with the given
 // `localIndex` in the partial vocabulary `partialFileId`.

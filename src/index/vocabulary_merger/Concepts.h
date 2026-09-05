@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_WORDCALLBACKS_H
-#define QLEVER_SRC_INDEX_VOCABULARY_MERGER_WORDCALLBACKS_H
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_CONCEPTS_H
+#define QLEVER_SRC_INDEX_VOCABULARY_MERGER_CONCEPTS_H
 
 #include <cstdint>
 #include <string_view>
@@ -25,11 +25,11 @@ template <typename T>
 CPP_concept WordCallback =
     ad_utility::InvocableWithExactReturnType<T, uint64_t, std::string_view,
                                              bool>;
-// Concept for a callable that compares two `string_view`s with respective
-// `isExternal` flags.
+// Concept for a callable that compares two words (represented as
+// `string_view`s) according to the order of the merged vocabulary.
 template <typename T>
 CPP_concept WordComparator =
-    ranges::predicate<T, std::string_view, bool, std::string_view, bool>;
+    ranges::predicate<T, std::string_view, std::string_view>;
 }  // namespace ad_utility::vocabulary_merger
 
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_MERGER_WORDCALLBACKS_H
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_MERGER_CONCEPTS_H

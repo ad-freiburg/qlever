@@ -12,11 +12,13 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <string>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary_merger/IdMap.h"
@@ -26,42 +28,44 @@
 #include "util/Views.h"
 
 // The intermediate stages of the vocabulary merger (see
-// `index/VocabularyMerger.h`) that deal with the ID map entries while their
-// global IDs are not yet known. They also never look at the words themselves,
-// but only at the indices of the words within their batch.
+// `index/VocabularyMerger.h`) that deal with the mapping from local indices
+// (local to a partial vocabulary) to the index in a merged batch of words, for
+// which the global ID is not yet known.
 namespace ad_utility::vocabulary_merger::detail {
 
-// A single entry of one of the partial ID maps, as it is created by the
-// merging thread. NOTE: At that point, the global ID of the corresponding
-// word is not yet known (it is only determined when the word is written to
-// the vocabulary), so the entry instead stores the index of the word within
-// its batch (see `IdMapBatch::globalIds_`).
-struct QueuedIdMapEntry {
-  uint32_t partialFileId_;
+// A mapping from an `indexOfWordInPartialVocabulary_` (an index of a word in
+// the `partialVocabularyIndex_`-th partial vocabulary) to the corresponding
+// index of the word in a merged batch (`indexOfWordInBatch_`) of words (for
+// which the global IDs are not yet known).
+//
+// NOTE: The declaration order deliberately deviates from the logical order of
+// the members, such that the struct is exactly 16 and not 24 bytes large.
+// There is one such mapping per merged word, and they are written scattered
+// over all the partial ID maps, so both the memory footprint and the cache
+// pressure of this struct matter.
+struct LocalIdxToBatchMapping {
+  uint32_t partialVocabularyIndex_;
   uint32_t indexOfWordInBatch_;
-  uint64_t localIndex_;
+  uint64_t indexOfWordInPartialVocabulary_;
+};
+static_assert(sizeof(LocalIdxToBatchMapping) == 16,
+              "The members of a `LocalIdxToBatchMapping` have to be declared "
+              "such that no padding is required, see the comment above");
+
+// All the `LocalIdxToBatchMapping`s for a single batch of merged words. NOTE:
+// We deliberately do not use a plain vector with `push_back`, but a plain
+// array with a manual index for maximal performance (the `push_back` overhead
+// was measurable on the hot path).
+struct LocalIdxToBatchMappings {
+  ad_utility::UninitializedVector<LocalIdxToBatchMapping> mappings_;
+  size_t numMappings_ = 0;
 };
 
-// All the ID map entries of a single batch, before the global IDs that they
-// refer to are known. This is what the merging thread produces (see
-// `WordBatchBuilder`) and what the vocabulary writer consumes.
-struct QueuedIdMapBatch {
-  // The entries. NOTE: The vector is allocated (but not initialized) in
-  // advance, and only the first `numEntries_` of its elements are valid, see
-  // `WordBatchBuilder::startNewBatch`.
-  ad_utility::UninitializedVector<QueuedIdMapEntry> entries_;
-  size_t numEntries_ = 0;
-};
-
-// A complete batch of ID map entries: the queued entries, together with the
-// global IDs that they refer to. This is what the vocabulary writer produces
-// (it is the stage that determines the global IDs, see `VocabularyWriter`) and
-// what the `IdMapBatchWriter` below consumes.
+// The index mappings for a complete merged batch of words. `globalIds_` stores
+// the global IDs for the words in this batch,
+// `LocalIdxToBatchMapping::indexOfWordInBatch_` is an index into `globalIds_`.
 struct IdMapBatch {
-  QueuedIdMapBatch queuedEntries_;
-  // The global IDs of the distinct words of the batch. The
-  // `indexOfWordInBatch_` of each of the `queuedEntries_` is an index into
-  // this vector.
+  LocalIdxToBatchMappings localIdxMappings_;
   std::vector<Id> globalIds_;
 };
 
@@ -73,40 +77,48 @@ struct IdMapBatch {
 // `idMapWriterQueue_` of the `VocabularyMergePipeline`.
 class IdMapBatchWriter {
  private:
-  // The ID maps, one per partial vocabulary.
-  std::vector<IdMapWriter> idMaps_;
+  // The ID map writers, one per partial vocabulary.
+  std::vector<IdMapWriter> idMapWriters_;
 
  public:
   // Create the ID map for each of the `numFiles` partial vocabularies. The
   // filenames are `basename + PARTIAL_VOCAB_IDMAP_INFIX + i`.
   IdMapBatchWriter(const std::string& basename, size_t numFiles) {
     // The index of the partial vocabulary is stored in a `uint32_t` for each of
-    // the (very many) ID map entries, see `QueuedIdMapEntry`.
+    // the (very many) mappings, see `LocalIdxToBatchMapping`.
     AD_CORRECTNESS_CHECK(numFiles <= std::numeric_limits<uint32_t>::max());
-    idMaps_.reserve(numFiles);
-    for (size_t i : ad_utility::integerRange(numFiles)) {
-      idMaps_.emplace_back(
-          absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
-    }
+    // NOTE: We deliberately use the range constructor of `std::vector` and not
+    // `::ranges::to_vector`. The latter goes via `std::vector::assign`, which
+    // requires the elements to be assignable, which an `IdMapWriter`
+    // deliberately is not (see `index/vocabulary_merger/IdMap.h`).
+    auto writers = ad_utility::integerRange(numFiles) |
+                   ql::views::transform([&basename](size_t i) {
+                     return IdMapWriter{
+                         absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i)};
+                   });
+    idMapWriters_ = std::vector<IdMapWriter>(ql::ranges::begin(writers),
+                                             ql::ranges::end(writers));
   }
 
-  // Write all the entries of the `batch` to their respective ID maps.
+  // Write all the mappings of the `batch` to their respective ID maps.
   void writeBatch(const IdMapBatch& batch) {
     AD_LOG_TRACE << "Start writing a batch of ID map entries\n";
     const auto& globalIds = batch.globalIds_;
-    const auto& queuedEntries = batch.queuedEntries_;
-    for (size_t i = 0; i < queuedEntries.numEntries_; ++i) {
-      const auto& entry = queuedEntries.entries_[i];
-      idMaps_[entry.partialFileId_].push_back(
-          IdMapEntry{entry.localIndex_, globalIds[entry.indexOfWordInBatch_]});
+    const auto& localIdxMappings = batch.localIdxMappings_;
+    for (size_t i = 0; i < localIdxMappings.numMappings_; ++i) {
+      const auto& mapping = localIdxMappings.mappings_[i];
+      idMapWriters_[mapping.partialVocabularyIndex_].push_back(
+          IdMapEntry{mapping.indexOfWordInPartialVocabulary_,
+                     globalIds[mapping.indexOfWordInBatch_]});
     }
   }
 
   // Flush and close all the ID maps. After this, no more batches may be
-  // written.
+  // written. NOTE: This is also done implicitly by the destructor, because the
+  // destructor of an `IdMapWriter` calls its `finish()`.
   void finish() {
-    for (auto& idMap : idMaps_) {
-      idMap.finish();
+    for (auto& idMapWriter : idMapWriters_) {
+      idMapWriter.finish();
     }
   }
 };

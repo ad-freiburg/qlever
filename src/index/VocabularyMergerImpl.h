@@ -37,8 +37,7 @@ auto mergeVocabulary(
   // IRI or literal.
   auto lessThanForQueue = [&comparator](const QueueWord& p1,
                                         const QueueWord& p2) {
-    return comparator(p1.iriOrLiteral(), p1.isExternal(), p2.iriOrLiteral(),
-                      p2.isExternal());
+    return comparator(p1.iriOrLiteral(), p2.iriOrLiteral());
   };
 
   // Open and prepare all the input files.

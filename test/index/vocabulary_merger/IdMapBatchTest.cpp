@@ -23,30 +23,30 @@
 using namespace ad_utility::vocabulary_merger;
 using ad_utility::vocabulary_merger::detail::IdMapBatch;
 using ad_utility::vocabulary_merger::detail::IdMapBatchWriter;
-using ad_utility::vocabulary_merger::detail::QueuedIdMapBatch;
-using ad_utility::vocabulary_merger::detail::QueuedIdMapEntry;
+using ad_utility::vocabulary_merger::detail::LocalIdxToBatchMapping;
+using ad_utility::vocabulary_merger::detail::LocalIdxToBatchMappings;
 
 namespace {
 auto V = ad_utility::testing::VocabId;
 
-// Create an `IdMapBatch` from the given `entries` and `globalIds`. In contrast
-// to the `WordBatchBuilder` (which allocates the entries in advance), the
-// `numEntries_` here is simply the size of the `entries`.
-IdMapBatch makeBatch(const std::vector<QueuedIdMapEntry>& entries,
+// Create an `IdMapBatch` from the given `mappings` and `globalIds`. In
+// contrast to the `WordBatchBuilder` (which allocates the mappings in
+// advance), the `numMappings_` here is simply the size of the `mappings`.
+IdMapBatch makeBatch(const std::vector<LocalIdxToBatchMapping>& mappings,
                      const std::vector<Id>& globalIds) {
-  QueuedIdMapBatch queuedEntries;
-  queuedEntries.entries_.insert(queuedEntries.entries_.end(), entries.begin(),
-                                entries.end());
-  queuedEntries.numEntries_ = entries.size();
-  return IdMapBatch{std::move(queuedEntries), globalIds};
+  LocalIdxToBatchMappings localIdxMappings;
+  localIdxMappings.mappings_.insert(localIdxMappings.mappings_.end(),
+                                    mappings.begin(), mappings.end());
+  localIdxMappings.numMappings_ = mappings.size();
+  return IdMapBatch{std::move(localIdxMappings), globalIds};
 }
 }  // namespace
 
 // _____________________________________________________________________________
-// The `IdMapBatchWriter` distributes the entries of its batches over one ID map
-// per partial vocabulary, resolves the `indexOfWordInBatch_` of each entry via
-// the `globalIds_` of its batch, and keeps the order in which the entries were
-// pushed.
+// The `IdMapBatchWriter` distributes the mappings of its batches over one ID
+// map per partial vocabulary, resolves the `indexOfWordInBatch_` of each
+// mapping via the `globalIds_` of its batch, and keeps the order in which the
+// mappings were pushed.
 TEST(IdMapBatchWriter, writeSeveralBatches) {
   static constexpr size_t numFiles = 3;
   std::string basename = absl::StrCat(gtestCurrentTestName(), "-");
@@ -65,16 +65,16 @@ TEST(IdMapBatchWriter, writeSeveralBatches) {
     // The first batch has two distinct words with the global IDs `10` and
     // `11`. The first word occurs in the partial vocabularies `0` and `2`, the
     // second one only in `0`.
-    writer.writeBatch(
-        makeBatch({QueuedIdMapEntry{0, 0, 7}, QueuedIdMapEntry{2, 0, 8},
-                   QueuedIdMapEntry{0, 1, 9}},
-                  {V(10), V(11)}));
+    writer.writeBatch(makeBatch(
+        {LocalIdxToBatchMapping{0, 0, 7}, LocalIdxToBatchMapping{2, 0, 8},
+         LocalIdxToBatchMapping{0, 1, 9}},
+        {V(10), V(11)}));
     // The second batch has a single word with the global ID `12`, which occurs
     // in all three partial vocabularies.
-    writer.writeBatch(
-        makeBatch({QueuedIdMapEntry{0, 0, 100}, QueuedIdMapEntry{1, 0, 101},
-                   QueuedIdMapEntry{2, 0, 102}},
-                  {V(12)}));
+    writer.writeBatch(makeBatch(
+        {LocalIdxToBatchMapping{0, 0, 100}, LocalIdxToBatchMapping{1, 0, 101},
+         LocalIdxToBatchMapping{2, 0, 102}},
+        {V(12)}));
     writer.finish();
   }
 
@@ -103,19 +103,19 @@ TEST(IdMapBatchWriter, noBatches) {
 }
 
 // _____________________________________________________________________________
-// Only the first `numEntries_` of the `entries_` of a batch are valid; the
+// Only the first `numMappings_` of the `mappings_` of a batch are valid; the
 // remaining (uninitialized) ones must not be written.
-TEST(IdMapBatchWriter, onlyValidEntriesAreWritten) {
+TEST(IdMapBatchWriter, onlyValidMappingsAreWritten) {
   std::string basename = absl::StrCat(gtestCurrentTestName(), "-");
   std::string filename = absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, 0);
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename, false);
   };
 
-  auto batch = makeBatch({QueuedIdMapEntry{0, 0, 42}}, {V(43)});
-  // Allocate (but do not initialize) space for many more entries, exactly as
+  auto batch = makeBatch({LocalIdxToBatchMapping{0, 0, 42}}, {V(43)});
+  // Allocate (but do not initialize) space for many more mappings, exactly as
   // the `WordBatchBuilder` does.
-  batch.queuedEntries_.entries_.resize(1000);
+  batch.localIdxMappings_.mappings_.resize(1000);
   {
     IdMapBatchWriter writer{basename, 1};
     writer.writeBatch(batch);

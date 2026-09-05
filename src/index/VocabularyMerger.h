@@ -17,11 +17,11 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/vocabulary/Vocabulary.h"
+#include "index/vocabulary_merger/Concepts.h"
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/MergePipeline.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
 #include "index/vocabulary_merger/WordBatchBuilder.h"
-#include "index/vocabulary_merger/WordCallbacks.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializePair.h"
@@ -62,13 +62,13 @@ namespace ad_utility::vocabulary_merger {
 // 1. The thread that calls `mergeVocabulary` obtains the merged words in
 //    sorted order and eliminates the duplicates (a word typically occurs in
 //    many of the partial vocabularies). It collects the distinct words as well
-//    as the entries for the partial ID maps in batches (see
+//    as the index mappings for the partial ID maps in batches (see
 //    `detail::WordBatchBuilder`) and hands each batch to the second thread.
 // 2. The `wordWriterQueue_`'s thread writes the distinct words of a batch to
 //    the vocabulary (via the `wordCallback`) and thereby determines their
 //    global IDs (see `detail::VocabularyWriter`).
 // 3. The `idMapWriterQueue_`'s thread writes the entries of the partial ID
-//    maps (which only now know their global IDs) to the ID maps (see
+//    maps (which only now know their global IDs) to those maps (see
 //    `detail::IdMapBatchWriter`).
 // 4. The `mergedWordsDestructionQueue_`'s thread destroys the merged words of
 //    a batch (which involves freeing one string per word) once they have been

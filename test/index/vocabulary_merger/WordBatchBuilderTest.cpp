@@ -28,14 +28,14 @@ using ad_utility::vocabulary_merger::detail::WordBatchBuilder;
 using ::testing::Pair;
 
 namespace {
-// An ID map entry of a batch, in the order `(partial vocabulary, index of the
-// word within the batch, local index of the word)`.
-using Entry = std::array<uint64_t, 3>;
+// An index mapping of a batch, in the order `(partial vocabulary, index of the
+// word within the batch, index of the word in the partial vocabulary)`.
+using Mapping = std::array<uint64_t, 3>;
 
-// A `WordComparator` that simply compares the words lexicographically and
-// ignores the `isExternal` flags.
-constexpr auto lessThan = [](std::string_view a, bool, std::string_view b,
-                             bool) { return std::less<>{}(a, b); };
+// A `WordComparator` that simply compares the words lexicographically.
+constexpr auto lessThan = [](std::string_view a, std::string_view b) {
+  return std::less<>{}(a, b);
+};
 
 // Create the `QueueWord` for the occurrence of `word` with the given
 // `localIndex` in the partial vocabulary `partialFileId`.
@@ -55,14 +55,15 @@ std::vector<std::pair<std::string, bool>> wordsOf(const WordBatch& batch) {
   return result;
 }
 
-// The valid ID map entries of a `batch`.
-std::vector<Entry> entriesOf(const WordBatch& batch) {
-  std::vector<Entry> result;
-  const auto& queuedIdMapBatch = batch.queuedIdMapBatch_;
-  for (size_t i = 0; i < queuedIdMapBatch.numEntries_; ++i) {
-    const auto& entry = queuedIdMapBatch.entries_[i];
-    result.push_back(Entry{entry.partialFileId_, entry.indexOfWordInBatch_,
-                           entry.localIndex_});
+// The valid index mappings of a `batch`.
+std::vector<Mapping> mappingsOf(const WordBatch& batch) {
+  std::vector<Mapping> result;
+  const auto& localIdxMappings = batch.localIdxMappings_;
+  for (size_t i = 0; i < localIdxMappings.numMappings_; ++i) {
+    const auto& mapping = localIdxMappings.mappings_[i];
+    result.push_back(Mapping{mapping.partialVocabularyIndex_,
+                             mapping.indexOfWordInBatch_,
+                             mapping.indexOfWordInPartialVocabulary_});
   }
   return result;
 }
@@ -75,8 +76,8 @@ std::string fillWord(size_t i) { return absl::StrFormat("\"word%08d\"", i); }
 
 // _____________________________________________________________________________
 // The duplicates are eliminated, and each occurrence of a word yields one ID
-// map entry that refers to the distinct word it belongs to.
-TEST(WordBatchBuilder, deduplicationAndEntries) {
+// index mapping that refers to the distinct word it belongs to.
+TEST(WordBatchBuilder, deduplicationAndMappings) {
   std::vector<WordBatch> batches;
   auto collect = [&batches](WordBatch batch) {
     batches.push_back(std::move(batch));
@@ -95,9 +96,9 @@ TEST(WordBatchBuilder, deduplicationAndEntries) {
   EXPECT_THAT(
       wordsOf(batches[0]),
       ::testing::ElementsAre(Pair("\"a\"", false), Pair("\"b\"", false)));
-  EXPECT_THAT(
-      entriesOf(batches[0]),
-      ::testing::ElementsAre(Entry{0, 0, 0}, Entry{0, 1, 1}, Entry{1, 1, 0}));
+  EXPECT_THAT(mappingsOf(batches[0]),
+              ::testing::ElementsAre(Mapping{0, 0, 0}, Mapping{0, 1, 1},
+                                     Mapping{1, 1, 0}));
 }
 
 // _____________________________________________________________________________
@@ -136,7 +137,7 @@ TEST(WordBatchBuilder, externalizationWithinOneBatch) {
 // The same, but with the occurrences of the word split by a batch boundary.
 // The last distinct word of a batch is held back exactly for this reason, so
 // the second occurrence still has to change its `isExternal` flag, and both of
-// its ID map entries have to end up in the *second* batch.
+// its index mappings have to end up in the *second* batch.
 TEST(WordBatchBuilder, externalizationAcrossBatchBoundary) {
   std::vector<WordBatch> batches;
   auto collect = [&batches](WordBatch batch) {
@@ -159,7 +160,7 @@ TEST(WordBatchBuilder, externalizationAcrossBatchBoundary) {
   ASSERT_EQ(batches[0].uniqueWords_.size(), idMapEntryBatchSize);
   EXPECT_EQ(batches[0].uniqueWords_.back().word_,
             fillWord(idMapEntryBatchSize - 1));
-  EXPECT_EQ(entriesOf(batches[0]).size(), idMapEntryBatchSize);
+  EXPECT_EQ(mappingsOf(batches[0]).size(), idMapEntryBatchSize);
 
   // Another occurrence of the held-back word, this time marked as external.
   builder.addMergedWords({makeQueueWord("\"zzz\"", true, 1, 0)}, lessThan,
@@ -177,16 +178,16 @@ TEST(WordBatchBuilder, externalizationAcrossBatchBoundary) {
   EXPECT_THAT(wordsOf(batches[1]),
               ::testing::ElementsAre(Pair("\"zzz\"", true)));
   // Both occurrences are in the second batch and refer to its only word.
-  EXPECT_THAT(
-      entriesOf(batches[1]),
-      ::testing::ElementsAre(Entry{0, 0, idMapEntryBatchSize}, Entry{1, 0, 0}));
+  EXPECT_THAT(mappingsOf(batches[1]),
+              ::testing::ElementsAre(Mapping{0, 0, idMapEntryBatchSize},
+                                     Mapping{1, 0, 0}));
 }
 
 // _____________________________________________________________________________
 // Add enough distinct words for several batches and check the invariants that
-// the pipeline relies on: every entry of a batch refers to a word of that same
+// the pipeline relies on: every mapping of a batch refers to a word of that
 // batch, the words of the batches concatenate to the input, and every
-// occurrence yields exactly one entry.
+// occurrence yields exactly one mapping.
 TEST(WordBatchBuilder, severalBatches) {
   static constexpr size_t numWords = 5 * idMapEntryBatchSize / 2;
   std::vector<WordBatch> batches;
@@ -209,14 +210,14 @@ TEST(WordBatchBuilder, severalBatches) {
   EXPECT_GE(batches.size(), 3u);
 
   size_t numWordsSeen = 0;
-  size_t numEntriesSeen = 0;
+  size_t numMappingsSeen = 0;
   for (const auto& batch : batches) {
-    for (const auto& entry : entriesOf(batch)) {
-      // The entry refers to a word of its own batch, and to the word with the
-      // matching local index.
-      ASSERT_LT(entry[1], batch.uniqueWords_.size());
-      EXPECT_EQ(batch.uniqueWords_[entry[1]].word_, fillWord(entry[2]));
-      ++numEntriesSeen;
+    for (const auto& mapping : mappingsOf(batch)) {
+      // The mapping refers to a word of its own batch, and to the word with
+      // the matching local index.
+      ASSERT_LT(mapping[1], batch.uniqueWords_.size());
+      EXPECT_EQ(batch.uniqueWords_[mapping[1]].word_, fillWord(mapping[2]));
+      ++numMappingsSeen;
     }
     for (const auto& uniqueWord : batch.uniqueWords_) {
       EXPECT_EQ(uniqueWord.word_, fillWord(numWordsSeen));
@@ -224,7 +225,7 @@ TEST(WordBatchBuilder, severalBatches) {
     }
   }
   EXPECT_EQ(numWordsSeen, numWords);
-  EXPECT_EQ(numEntriesSeen, numWords);
+  EXPECT_EQ(numMappingsSeen, numWords);
 }
 
 // _____________________________________________________________________________
