@@ -58,6 +58,11 @@ inline IdMap getIdMapFromFile(const std::string& filename) {
 using TripleWriter = ad_utility::serialization::ZstdWriteSerializer<
     ad_utility::serialization::FileWriteSerializer>;
 
+// The counterpart of `TripleWriter` that reads those triples back (see
+// `IndexImpl::convertPartialToGlobalIds`).
+using TripleReader = ad_utility::serialization::ZstdReadSerializer<
+    ad_utility::serialization::FileReadSerializer>;
+
 namespace ad_utility::vocabulary_merger {
 // Concept for a callback that can be called with a `string_view` and a `bool`.
 // If the `bool` is true, then the word is to be stored in the external

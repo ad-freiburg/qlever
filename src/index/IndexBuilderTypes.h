@@ -19,6 +19,7 @@
 
 #include <atomic>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -378,12 +379,15 @@ struct BuildPartialVocabulariesResult {
   // writes its triples to its own file (see
   // `IndexImpl::unsortedTriplesFilename`).
   struct WorkerResult {
-    // The number of batches (a batch consists of a partial vocabulary and the
-    // triples that were mapped using it) that this worker has created. The
-    // batches are serialized to the worker's file in exactly this order, each
-    // of them prefixed with its number of triples, so that the reader doesn't
-    // need any further bookkeeping.
-    size_t numBatches_ = 0;
+    // The file to which this worker has serialized its triples.
+    std::string triplesFilename_;
+    // The suffixes of the partial vocabularies (see `partialVocabularySuffix`)
+    // that this worker has written, in the order in which the corresponding
+    // batches of triples appear in `triplesFilename_`. A batch consists of a
+    // partial vocabulary and the triples that were mapped using it; each batch
+    // is prefixed with its number of triples, so that the reader doesn't need
+    // any further bookkeeping.
+    std::vector<std::string> partialVocabularySuffixes_;
     // The total number of triples that this worker has written. Only used for
     // logging.
     size_t numTriples_ = 0;
@@ -405,11 +409,10 @@ struct BuildPartialVocabulariesResult {
   // vocabularies of the first worker, then those of the second worker, etc.).
   std::vector<std::string> partialVocabularySuffixes() const {
     std::vector<std::string> suffixes;
-    for (size_t workerIdx : ad_utility::integerRange(workerResults_.size())) {
-      for (size_t partialVocabIdx :
-           ad_utility::integerRange(workerResults_[workerIdx].numBatches_)) {
-        suffixes.push_back(partialVocabularySuffix(workerIdx, partialVocabIdx));
-      }
+    for (const auto& workerResult : workerResults_) {
+      const auto& workerSuffixes = workerResult.partialVocabularySuffixes_;
+      suffixes.insert(suffixes.end(), workerSuffixes.begin(),
+                      workerSuffixes.end());
     }
     return suffixes;
   }

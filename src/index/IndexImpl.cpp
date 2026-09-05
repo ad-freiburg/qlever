@@ -518,8 +518,9 @@ IndexImpl::runPartialVocabularyWorker(
   // The triples of all the batches of this worker are serialized to a single
   // file, one batch after the other. The file is private to this worker, so no
   // synchronization is needed.
+  workerResult.triplesFilename_ = unsortedTriplesFilename(workerIdx);
   TripleWriter idTriples{ad_utility::serialization::FileWriteSerializer{
-      unsortedTriplesFilename(workerIdx)}};
+      workerResult.triplesFilename_}};
   bool parserExhausted = false;
   while (!parserExhausted) {
     // Each worker builds its own partial vocabulary, so all the IDs may start
@@ -561,8 +562,8 @@ IndexImpl::runPartialVocabularyWorker(
     }
     auto filenameSuffix =
         BuildPartialVocabulariesResult::partialVocabularySuffix(
-            workerIdx, workerResult.numBatches_);
-    ++workerResult.numBatches_;
+            workerIdx, workerResult.partialVocabularySuffixes_.size());
+    workerResult.partialVocabularySuffixes_.push_back(filenameSuffix);
     workerResult.numTriples_ += localWriter.size();
     writePartialVocabulary(filenameSuffix, std::move(itemMap).moveMap(),
                            std::move(localWriter), idTriples);
@@ -619,13 +620,15 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   // (which every `ItemMapManager` adds to its map).
   if (result.partialVocabularySuffixes().empty()) {
     auto& workerResult = result.workerResults_.at(0);
-    ++workerResult.numBatches_;
+    auto filenameSuffix =
+        BuildPartialVocabulariesResult::partialVocabularySuffix(0, 0);
+    workerResult.partialVocabularySuffixes_.push_back(filenameSuffix);
     // The first worker hasn't written a single triple, so we can simply
     // overwrite its (empty) file.
     TripleWriter idTriples{ad_utility::serialization::FileWriteSerializer{
-        unsortedTriplesFilename(0)}};
+        workerResult.triplesFilename_}};
     writePartialVocabulary(
-        BuildPartialVocabulariesResult::partialVocabularySuffix(0, 0),
+        filenameSuffix,
         ItemMapManager{0, &vocab_.getCaseComparator(), itemAlloc}.moveMap(), {},
         idTriples);
     idTriples.close();
@@ -691,6 +694,27 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   return {std::move(mergeRes), std::move(parsedTriples)};
 }
 
+namespace {
+// Read the triples of a single batch from `triplesReader`. They were
+// serialized as a single vector (the number of triples, followed by the
+// triples themselves), so no external bookkeeping about the batch sizes is
+// needed.
+IdTableStatic<NumColumnsIndexBuilding> readTriplesOfBatch(
+    TripleReader& triplesReader) {
+  size_t numTriples;
+  triplesReader >> numTriples;
+  IdTableStatic<NumColumnsIndexBuilding> triples{
+      ad_utility::makeUnlimitedAllocator<Id>()};
+  triples.reserve(numTriples);
+  for ([[maybe_unused]] size_t idx : ad_utility::integerRange(numTriples)) {
+    IdRow triple;
+    triplesReader >> triple;
+    triples.push_back(triple);
+  }
+  return triples;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 template <typename Func>
 auto IndexImpl::convertPartialToGlobalIds(
@@ -739,40 +763,27 @@ auto IndexImpl::convertPartialToGlobalIds(
     }
   };
 
-  // Convert all the triples that the worker with index `workerIdx` has written
-  // in `buildPartialVocabularies` and push them to the sorters. The batches of
-  // a worker are processed one after the other, because they are stored one
+  // Convert all the triples that a single worker has written in
+  // `buildPartialVocabularies` and push them to the sorters. The batches of a
+  // worker are processed one after the other, because they are stored one
   // after the other in a single file. The workers themselves run concurrently.
-  auto convertTriplesOfWorker = [&](size_t workerIdx) {
-    std::string triplesFilename = unsortedTriplesFilename(workerIdx);
+  using WorkerResult = BuildPartialVocabulariesResult::WorkerResult;
+  auto convertTriplesOfWorker = [&](const WorkerResult& workerResult) {
     {
-      ad_utility::serialization::ZstdReadSerializer triplesReader{
-          ad_utility::serialization::FileReadSerializer{triplesFilename}};
-      for (size_t batchIdx : ad_utility::integerRange(
-               data.workerResults_.at(workerIdx).numBatches_)) {
+      TripleReader triplesReader{ad_utility::serialization::FileReadSerializer{
+          workerResult.triplesFilename_}};
+      for (const std::string& suffix :
+           workerResult.partialVocabularySuffixes_) {
         // The mapping from the partial IDs of this batch to the global IDs.
         // Its file is not needed anymore once the mapping has been read.
-        std::string idMapFilename = absl::StrCat(
-            onDiskBase_, PARTIAL_VOCAB_IDMAP_INFIX,
-            BuildPartialVocabulariesResult::partialVocabularySuffix(workerIdx,
-                                                                    batchIdx));
+        std::string idMapFilename =
+            absl::StrCat(onDiskBase_, PARTIAL_VOCAB_IDMAP_INFIX, suffix);
         auto idMap = ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(
             idMapFilename);
         deleteTemporaryFile(idMapFilename);
 
-        // Read the triples of this batch. They were serialized as a single
-        // vector (the number of triples, followed by the triples themselves),
-        // so no external bookkeeping about the batch sizes is needed.
-        size_t numTriples;
-        triplesReader >> numTriples;
-        Buffer triples{ad_utility::makeUnlimitedAllocator<Id>()};
-        triples.reserve(numTriples);
-        for ([[maybe_unused]] size_t idx :
-             ad_utility::integerRange(numTriples)) {
-          std::array<Id, NumColumnsIndexBuilding> triple;
-          triplesReader >> triple;
-          triples.push_back(triple);
-        }
+        Buffer triples = readTriplesOfBatch(triplesReader);
+        size_t numTriples = triples.size();
         for (auto row : triples.getColumns()) {
           transformRow(row, idMap);
         }
@@ -802,15 +813,14 @@ auto IndexImpl::convertPartialToGlobalIds(
       }
     }
     // The triples of this worker are only needed for this conversion step.
-    deleteTemporaryFile(triplesFilename);
+    deleteTemporaryFile(workerResult.triplesFilename_);
   };
 
   std::vector<std::packaged_task<void()>> tasks;
   tasks.reserve(data.workerResults_.size());
-  for (size_t workerIdx :
-       ad_utility::integerRange(data.workerResults_.size())) {
-    tasks.emplace_back([&convertTriplesOfWorker, workerIdx]() {
-      convertTriplesOfWorker(workerIdx);
+  for (const WorkerResult& workerResult : data.workerResults_) {
+    tasks.emplace_back([&convertTriplesOfWorker, &workerResult]() {
+      convertTriplesOfWorker(workerResult);
     });
   }
   // Waits for all the workers to finish, and rethrows an exception if one of
