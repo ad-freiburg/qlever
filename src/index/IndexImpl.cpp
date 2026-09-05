@@ -29,10 +29,10 @@
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
+#include "index/IndexFormatConverter.h"
 #include "index/IndexFormatVersion.h"
 #include "index/TripleComponentConversions.h"
 #include "index/VocabularyMerger.h"
-#include "parser/ParallelParseBuffer.h"
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/CachingMemoryResource.h"
 #include "util/CancellationHandle.h"
@@ -84,10 +84,8 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
     return internal(triple[0]) || internal(triple[1]) || internal(triple[2]);
   };
 
-  auto firstSorter = convertPartialToGlobalIds(
-      *indexBuilderData.parsedTriples_.idTriples_,
-      indexBuilderData.parsedTriples_.numTriplesPerPartialVocab_,
-      isQleverInternalTriple);
+  auto firstSorter = convertPartialToGlobalIds(indexBuilderData.parsedTriples_,
+                                               isQleverInternalTriple);
 
   return {std::move(indexBuilderData.vocabularyMetaData_),
           std::move(firstSorter)};
@@ -104,7 +102,8 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
   return std::make_unique<RdfMultifileParser>(
-      std::move(files), &encodedIriManager(), parserBufferSize());
+      std::move(files), &encodedIriManager(), parserBufferSize(),
+      onlyAsciiTurtlePrefixes_);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -500,206 +499,146 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 }
 
 namespace {
-// Queue type that stores batches of parsed triples that are not yet mapped to
-// IDs.
-using ParsedTripleQueue =
-    ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>;
-
 // A row with the components already mapped to IDs. NOTE: Deliberately not
 // named `IdTriple`, which is a class with a similar purpose defined in
 // `index/IdTriple.h`.
 using IdRow = std::array<Id, NumColumnsIndexBuilding>;
-
-// A batch of triples that have already been mapped to IDs by one mapper thread,
-// together with the number of input triples it was created from.
-// `numInputTriples_` is not redundant, as additional internal triples might be
-// added for language filters, text indices, etc.
-struct TransformedTripleBatch {
-  size_t numInputTriples_;
-  std::vector<IdRow> idTriples_;
-};
-
-// Queue type that stores batches of triples that have already been mapped to
-// IDs.
-using ResultTripleQueue =
-    ad_utility::data_structures::ThreadSafeQueue<TransformedTripleBatch>;
-
-// Start a single thread on `parserPool` that repeatedly calls `getBatch` and
-// pushes the parsed batches to `parsedQueue`, until the input is exhausted or
-// `parsedQueue` is closed from the consuming side. Return a lambda that waits
-// for all started tasks to finish on destruction (using `absl::Cleanup`).
-template <typename PB>
-[[nodiscard]] auto consumeParserBatches(ad_utility::TaskQueue<>& parserPool,
-                                        PB& parserBatcher,
-                                        ParsedTripleQueue& parsedQueue) {
-  return ad_utility::runProducers(parserPool, parsedQueue, [&parserBatcher]() {
-    return parserBatcher.getBatch();
-  });
-}
-
-// Start one thread per `mapper` on `transformPool`. Each thread repeatedly pops
-// a batch of parsed triples from `parsedQueue`, converts all of them to IDs
-// using its dedicated `mapper`, and pushes the result to `resultQueue`. Return
-// a lambda that waits for all started tasks to finish on destruction (using
-// `absl::Cleanup`).
-template <typename Mappers>
-[[nodiscard]] auto mapTriples(ad_utility::TaskQueue<>& transformPool,
-                              Mappers& mappers, ParsedTripleQueue& parsedQueue,
-                              ResultTripleQueue& resultQueue) {
-  // Turn a single `mapper` into a producer that pops one batch of parsed
-  // triples and maps it to a `TransformedTripleBatch`.
-  auto makeProducer = [&parsedQueue](auto& mapper) {
-    return [&mapper, &parsedQueue]() -> std::optional<TransformedTripleBatch> {
-      auto batch = parsedQueue.pop();
-      if (!batch.has_value()) {
-        return std::nullopt;
-      }
-      std::vector<IdRow> idTriples;
-      idTriples.reserve(batch->size());
-      for (auto& triple : batch.value()) {
-        auto ids = mapper(std::move(triple));
-        idTriples.insert(idTriples.end(), ids.begin(), ids.end());
-      }
-      return TransformedTripleBatch{batch->size(), std::move(idTriples)};
-    };
-  };
-  return std::apply(
-      [&transformPool, &resultQueue, &makeProducer](auto&... mapper) {
-        return ad_utility::runProducers(transformPool, resultQueue,
-                                        makeProducer(mapper)...);
-      },
-      mappers);
-}
-
 }  // namespace
+
+// _____________________________________________________________________________
+BuildPartialVocabulariesResult::WorkerResult
+IndexImpl::runPartialVocabularyWorker(
+    size_t linesPerPartial, RdfParserBase& parser, ItemAlloc itemAlloc,
+    std::atomic<size_t>* numHasWordTriples,
+    ad_utility::ConcurrentProgressBar& progressBar, size_t workerIdx) {
+  using WorkerResult = BuildPartialVocabulariesResult::WorkerResult;
+  WorkerResult workerResult{
+      {},
+      std::make_unique<TripleVec>(
+          absl::StrCat(onDiskBase_, ".unsorted-triples.", workerIdx, ".dat"),
+          2_MB * NumColumnsIndexBuilding, allocator_)};
+  bool parserExhausted = false;
+  while (!parserExhausted) {
+    // Each worker builds its own partial vocabulary, so all the IDs may start
+    // at zero.
+    ItemMapManager itemMap{0, &vocab_.getCaseComparator(), itemAlloc};
+    // This `reserve` is an initial size that stays the same during the whole
+    // index building (the map grows if a batch contains more distinct words).
+    // That's why we use the `CachingMemoryResource` as an underlying memory
+    // pool for the allocator of the hash map to make the allocation and
+    // deallocation of these hash maps (that are newly created for each batch)
+    // much cheaper (see `CachingMemoryResource.h`). Note: The division is
+    // deliberate. Reserving space for all the words that a batch could
+    // possibly contain would mean that the memory reserved upfront grows with
+    // the number of workers.
+    itemMap.map_.map_.reserve(5 * linesPerPartial / NUM_PARALLEL_ITEM_MAPS);
+    std::vector<IdRow> localWriter;
+    size_t numInputTriples = 0;
+    while (numInputTriples < linesPerPartial) {
+      auto batch = parser.getBatch();
+      if (!batch.has_value()) {
+        parserExhausted = true;
+        break;
+      }
+      for (auto& triple : batch.value()) {
+        auto ids =
+            mapTripleToIds(std::move(triple), itemMap, this, numHasWordTriples);
+        localWriter.insert(localWriter.end(), ids.begin(), ids.end());
+      }
+      numInputTriples += batch->size();
+      progressBar.add(batch->size());
+      if (auto update = progressBar.update()) {
+        AD_LOG_INFO << update->getProgressString() << std::flush;
+      }
+    }
+    if (localWriter.empty()) {
+      // The parser is exhausted and this worker didn't get any triples for
+      // this partial vocabulary, so there is nothing to write.
+      continue;
+    }
+    auto filenameSuffix =
+        BuildPartialVocabulariesResult::partialVocabularySuffix(
+            workerIdx, workerResult.numTriplesPerBatch_.size());
+    workerResult.numTriplesPerBatch_.push_back(localWriter.size());
+    writePartialVocabulary(filenameSuffix, std::move(itemMap).moveMap(),
+                           std::move(localWriter), *workerResult.idTriples_);
+  }
+  return workerResult;
+}
 
 // _____________________________________________________________________________
 BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
-  ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
-      std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat",
-                                  2_MB * NumColumnsIndexBuilding, allocator_));
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
                  "per batch ..."
               << std::endl;
-  bool parserExhausted = false;
 
-  // we add extra triples
-  std::vector<size_t> numTriplesPerPartialVocab;
-
-  ad_utility::TaskQueue partialVocabularyWriters{3, 3};
-
-  // Show progress and statistics for the number of triples parsed, in
-  // particular, the average processing time for a batch of 10M triples (see
-  // `DEFAULT_PROGRESS_BAR_BATCH_SIZE`).
-  //
-  // NOTE: Some input generation processes (for example, `osm2rdf` for the OSM
-  // data) have a long startup time before they produce the first triple, but
-  // then produce triples fast. If we would count that startup time towards the
-  // first batch, the reported average batch processing time would be
-  // distorted. We therefore stop the timer here, and then start it when the
-  // first triple is parsed (see `numTriplesParsedTimer.cont()` below).
-  size_t numTriplesParsed = 0;
-  ad_utility::ProgressBar progressBar{numTriplesParsed, "Triples parsed: "};
-  ad_utility::Timer& numTriplesParsedTimer = progressBar.getTimer();
-  numTriplesParsedTimer.stop();
+  // Show progress and statistics for the number of triples parsed. The total
+  // number of triples is not known in advance, and the workers report their
+  // progress concurrently.
+  ad_utility::ConcurrentProgressBar progressBar{"Triples parsed: ",
+                                                std::nullopt};
 
   ad_utility::CachingMemoryResource cachingMemoryResource;
   ItemAlloc itemAlloc(&cachingMemoryResource);
   // Counter for the number of ql:has-word triples created.
   std::atomic<size_t> numHasWordTriples = 0;
 
-  // Create the thread pools once so that they are reused across all
-  // partial-vocabulary iterations. One thread parses the input into batches of
-  // triples, `NUM_PARALLEL_ITEM_MAPS` threads concurrently convert the strings
-  // in these triples to IDs, each using its own `ItemMapManager`.
-  ad_utility::TaskQueue parserPool{1, 1};
-  ad_utility::TaskQueue transformPool{NUM_PARALLEL_ITEM_MAPS,
-                                      NUM_PARALLEL_ITEM_MAPS};
+  using WorkerResult = BuildPartialVocabulariesResult::WorkerResult;
+  auto tasks = ad_utility::integerRange(NUM_PARALLEL_ITEM_MAPS) |
+               ql::views::transform([this, linesPerPartial, &parser, itemAlloc,
+                                     &numHasWordTriples,
+                                     &progressBar](size_t workerIdx) {
+                 return std::packaged_task<WorkerResult()>(
+                     [this, linesPerPartial, &parser, itemAlloc,
+                      &numHasWordTriples, &progressBar, workerIdx]() {
+                       return runPartialVocabularyWorker(
+                           linesPerPartial, *parser, itemAlloc,
+                           addHasWordTriples_ ? &numHasWordTriples : nullptr,
+                           progressBar, workerIdx);
+                     });
+               }) |
+               ::ranges::to<std::vector>();
+  // Waits for all the workers to finish, and rethrows an exception if one of
+  // them has thrown.
+  BuildPartialVocabulariesResult result{
+      ad_utility::runTasksInParallel(std::move(tasks))};
+  parser->printAndResetQueueStatistics();
 
-  while (!parserExhausted) {
-    size_t actualCurrentPartialSize = 0;
-
-    std::vector<std::array<Id, NumColumnsIndexBuilding>> localWriter;
-
-    std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS> itemArray;
-
-    {
-      // The parsed (but not yet mapped) batches are handed from the parser
-      // thread to the mapper threads via `parsedQueue`, the converted
-      // batches are handed back to this thread via `resultQueue`.
-      ParsedTripleQueue parsedQueue{NUM_PARALLEL_ITEM_MAPS};
-      ResultTripleQueue resultQueue{NUM_PARALLEL_ITEM_MAPS};
-
-      // When called, returns the next batch of triples, stopping after
-      // `linesPerPartial` triples. When the parser is exhausted, it sets
-      // `parserExhausted` to true (via the callback) and returns std::nullopt.
-      ParserBatcher parserBatcher{
-          parser, linesPerPartial,
-          [&parserExhausted]() { parserExhausted = true; }};
-
-      // The mappers that map a single triple (and the possibly added language
-      // tag triples) to IDs using the provided hash maps via `itemArray`. There
-      // is one mapper (and one map) per mapper thread.
-      auto mappers = getIdMapLambdas(
-          itemArray, linesPerPartial, &(vocab_.getCaseComparator()), this,
-          itemAlloc, addHasWordTriples_ ? &numHasWordTriples : nullptr);
-
-      // Start the background threads that parse the input and map it to ids.
-      auto parserCleanup =
-          consumeParserBatches(parserPool, parserBatcher, parsedQueue);
-      auto mapperCleanup =
-          mapTriples(transformPool, mappers, parsedQueue, resultQueue);
-
-      // Collect the mapped triples on this thread.
-      while (auto result = resultQueue.pop()) {
-        numTriplesParsedTimer.cont();
-        const auto& [numInputTriples, triples] = result.value();
-        actualCurrentPartialSize += triples.size();
-        localWriter.insert(localWriter.end(), triples.begin(), triples.end());
-        numTriplesParsed += numInputTriples;
-        if (progressBar.update()) {
-          AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-        }
-      }
-
-      parser->printAndResetQueueStatistics();
-    }
-
-    auto moveMap = [](std::optional<ItemMapManager>&& el) {
-      return std::move(el.value()).moveMap();
-    };
-    partialVocabularyWriters.push(createWritePartialVocabularyTask(
-        numTriplesParsed, numTriplesPerPartialVocab.size(),
-        actualCurrentPartialSize,
-        ad_utility::transformArray(std::move(itemArray), moveMap),
-        std::move(localWriter), &idTriples));
-    // Save the information how many triples this partial vocabulary actually
-    // deals with; we will use this later for mapping from partial to global
-    // IDs.
-    numTriplesPerPartialVocab.push_back(actualCurrentPartialSize);
+  // If the input didn't contain a single triple, we still have to write one
+  // partial vocabulary, because the vocabulary has to contain the special IDs
+  // (which every `ItemMapManager` adds to its map).
+  if (result.partialVocabularySuffixes().empty()) {
+    auto& workerResult = result.workerResults_.at(0);
+    workerResult.numTriplesPerBatch_.push_back(0);
+    writePartialVocabulary(
+        BuildPartialVocabulariesResult::partialVocabularySuffix(0, 0),
+        ItemMapManager{0, &vocab_.getCaseComparator(), itemAlloc}.moveMap(), {},
+        *workerResult.idTriples_);
   }
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-  partialVocabularyWriters.finish();
+
+  progressBar.logFinalProgressString();
+  size_t numTriplesTotal = ::ranges::accumulate(
+      result.workerResults_, size_t{0}, {},
+      [](const auto& workerResult) { return workerResult.idTriples_->size(); });
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
-              << (*idTriples.wlock())->size() << " [may contain duplicates]"
-              << std::endl;
+              << numTriplesTotal << " [may contain duplicates]" << std::endl;
   if (addHasWordTriples_) {
     AD_LOG_INFO << "Number of `ql:has-word` triples created: "
                 << numHasWordTriples.load() << std::endl;
   }
   AD_LOG_INFO << "Number of partial vocabularies created: "
-              << numTriplesPerPartialVocab.size() << std::endl;
-  return {std::move(numTriplesPerPartialVocab), std::move(*idTriples.wlock())};
+              << result.partialVocabularySuffixes().size() << std::endl;
+  return result;
 }
 
 // _____________________________________________________________________________
 IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
   auto parsedTriples = buildPartialVocabularies(parser, linesPerPartial);
-  const auto numPartialVocabs = parsedTriples.numTriplesPerPartialVocab_.size();
+  const auto partialVocabSuffixes = parsedTriples.partialVocabularySuffixes();
 
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
@@ -715,7 +654,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numPartialVocabs, sortPred, wordCallback,
+        onDiskBase_, partialVocabSuffixes, sortPred, wordCallback,
         memoryLimitIndexBuilding(), blankNodeIriRegexes_);
     wordCallback.finish();
     return mergedVocabMeta;
@@ -729,9 +668,9 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
               << mergeRes.numWordsTotal() - sizeInternalVocabulary << std::endl;
 
   AD_LOG_DEBUG << "Removing temporary files ..." << std::endl;
-  for (size_t n = 0; n < numPartialVocabs; ++n) {
+  for (const auto& suffix : partialVocabSuffixes) {
     deleteTemporaryFile(
-        absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, n));
+        absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, suffix));
   }
 
   AD_LOG_DEBUG << "Triples per partial vocabulary: " << linesPerPartial
@@ -742,12 +681,15 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
 // _____________________________________________________________________________
 template <typename Func>
-auto IndexImpl::convertPartialToGlobalIds(
-    TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
-    Func isQLeverInternalTriple)
+auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
+                                          Func isQLeverInternalTriple)
     -> FirstPermutationSorterAndInternalTriplesAsPso {
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
               << std::endl;
+
+  // The filename suffixes of the partial vocabularies, in the order in which
+  // the corresponding triples are stored.
+  const auto partialVocabSuffixes = data.partialVocabularySuffixes();
 
   // Iterate over all partial vocabularies.
   auto resultPtr =
@@ -763,10 +705,6 @@ auto IndexImpl::convertPartialToGlobalIds(
       makeSorterPtr<SortByPSO, NumColumnsIndexBuilding>("internalTriples");
   auto& result = *resultPtr;
   auto& internalResult = *internalTriplesPtr;
-  auto triplesGenerator = data.getRows();
-  // static_assert(!std::is_const_v<decltype(triplesGenerator)>);
-  // static_assert(std::is_const_v<decltype(triplesGenerator)>);
-  auto it = triplesGenerator.begin();
   using Buffer = IdTableStatic<NumColumnsIndexBuilding>;
   struct Buffers {
     IdTableStatic<NumColumnsIndexBuilding> triples_;
@@ -860,14 +798,14 @@ auto IndexImpl::convertPartialToGlobalIds(
   // Return the mapping from partial to global Ids for the batch with idx
   // `nextPartialVocabulary` and increase that counter by one. Return `nullopt`
   // if there are no more partial vocabularies to read.
-  auto createNextVocab = [&nextPartialVocabulary, &actualLinesPerPartial,
+  auto createNextVocab = [&nextPartialVocabulary, &partialVocabSuffixes,
                           this]() -> std::optional<std::pair<size_t, Map>> {
     auto idx = nextPartialVocabulary.fetch_add(1, std::memory_order_relaxed);
-    if (idx >= actualLinesPerPartial.size()) {
+    if (idx >= partialVocabSuffixes.size()) {
       return std::nullopt;
     }
-    std::string filename =
-        absl::StrCat(onDiskBase_, PARTIAL_VOCAB_IDMAP_INFIX, idx);
+    std::string filename = absl::StrCat(onDiskBase_, PARTIAL_VOCAB_IDMAP_INFIX,
+                                        partialVocabSuffixes.at(idx));
     auto map =
         ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(filename);
     // Delete the temporary file in which we stored this map
@@ -881,33 +819,38 @@ auto IndexImpl::convertPartialToGlobalIds(
       ad_utility::data_structures::OrderedThreadSafeQueue<Map>>(
       10, 5, createNextVocab);
 
-  // TODO<C++23> Use `views::enumerate`.
-  size_t batchIdx = 0;
-  for (auto& mapping : mappings) {
-    auto idMap = std::make_shared<Map>(std::move(mapping));
+  // The mappings are yielded in the same order as `partialVocabSuffixes`, that
+  // is, in the order in which the triples of the individual workers are stored.
+  auto mappingIt = mappings.begin();
+  for (auto& workerResult : data.workerResults_) {
+    auto triplesGenerator = workerResult.idTriples_->getRows();
+    auto it = triplesGenerator.begin();
+    for (size_t numTriples : workerResult.numTriplesPerBatch_) {
+      AD_CORRECTNESS_CHECK(mappingIt != mappings.end());
+      auto idMap = std::make_shared<Map>(std::move(*mappingIt));
 
-    const size_t bufferSize = BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS();
-    Buffer buffer{ad_utility::makeUnlimitedAllocator<Id>()};
-    buffer.reserve(bufferSize);
-    auto pushBatch = [&buffer, &idMap, &lookupQueue, &getLookupTask,
-                      bufferSize]() {
-      lookupQueue.push(getLookupTask(std::move(buffer), idMap));
-      buffer.clear();
+      const size_t bufferSize = BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS();
+      Buffer buffer{ad_utility::makeUnlimitedAllocator<Id>()};
       buffer.reserve(bufferSize);
-    };
-    // Update the triples that belong to this partial vocabulary.
-    for ([[maybe_unused]] auto idx :
-         ad_utility::integerRange(actualLinesPerPartial[batchIdx])) {
-      buffer.push_back(*it);
-      if (buffer.size() >= bufferSize) {
+      auto pushBatch = [&buffer, &idMap, &lookupQueue, &getLookupTask,
+                        bufferSize]() {
+        lookupQueue.push(getLookupTask(std::move(buffer), idMap));
+        buffer.clear();
+        buffer.reserve(bufferSize);
+      };
+      // Update the triples that belong to this partial vocabulary.
+      for ([[maybe_unused]] auto idx : ad_utility::integerRange(numTriples)) {
+        buffer.push_back(*it);
+        if (buffer.size() >= bufferSize) {
+          pushBatch();
+        }
+        ++it;
+      }
+      if (!buffer.empty()) {
         pushBatch();
       }
-      ++it;
+      ++mappingIt;
     }
-    if (!buffer.empty()) {
-      pushBatch();
-    }
-    ++batchIdx;
   }
   lookupQueue.finish();
   writeQueue.finish();
@@ -925,6 +868,14 @@ auto liftCallback(Callback callback) {
   return [callback = std::move(callback)](const auto& block) mutable {
     ql::ranges::for_each(block, callback);
   };
+}
+
+// Callbacks that already work on complete blocks are used as they are. Pushing
+// a complete block into an external sorter is much more efficient than pushing
+// its rows one by one, because the `IdTable`s are stored column-based.
+template <typename Table>
+auto liftCallback(ad_utility::PushBlockCallback<Table> callback) {
+  return callback;
 }
 }  // namespace
 
@@ -1161,6 +1112,11 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   if (persistUpdatesOnDisk) {
     setFilenamesForPersistentUpdates(true);
   }
+
+  // Only set at the very end, so that an index that failed to load (for
+  // example, because it has an incompatible format) does not count as loaded
+  // and the destructor does not log that it was unloaded.
+  wasLoadedFromDisk_ = true;
 }
 
 // _____________________________________________________________________________
@@ -1329,8 +1285,14 @@ void IndexImpl::writeConfiguration() const {
 
 // ____________________________________________________________________________
 std::string IndexImpl::dateOfIndexBuild() const {
-  if (configurationJson_.contains(DATE_OF_INDEX_BUILD_KEY)) {
-    return configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
+  return dateOfIndexBuild(configurationJson_, onDiskBase_);
+}
+
+// ____________________________________________________________________________
+std::string IndexImpl::dateOfIndexBuild(const nlohmann::json& configurationJson,
+                                        const std::string& onDiskBase) {
+  if (configurationJson.contains(DATE_OF_INDEX_BUILD_KEY)) {
+    return configurationJson[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
   }
   // For indexes that were built before the build date was recorded in the
   // configuration, fall back to the last modification time of the
@@ -1341,7 +1303,7 @@ std::string IndexImpl::dateOfIndexBuild() const {
   // C++20), and `std::filesystem` is not available on all toolchains that
   // QLever targets.
   struct stat fileStat {};
-  auto configFilename = onDiskBase_ + CONFIGURATION_FILE;
+  auto configFilename = onDiskBase + CONFIGURATION_FILE;
   AD_CONTRACT_CHECK(stat(configFilename.c_str(), &fileStat) == 0);
   return formatIndexBuildTime(absl::FromTimeT(fileStat.st_mtime));
 }
@@ -1400,12 +1362,35 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
             << ", Date = " << indexFormatVersion.date_.toStringAndType().first
             << ")." << std::endl;
       } else {
+        // If the index is in exactly the format that the
+        // `qlever-upgrade-index` binary upgrades from, throw one dedicated
+        // message instead of logging the generic advice below, so that the
+        // upgrade option is not buried among the generic alternatives.
+        using namespace qlever::indexFormatConverter;
+        if (indexFormatVersion == sourceVersion &&
+            currentVersion == targetVersion) {
+          throw std::runtime_error{absl::StrCat(
+              "The index format changed on ",
+              targetVersion.date_.toStringAndType().first,
+              " (PR = ", targetVersion.prNumber_,
+              "), but your index uses the previous format\n\nWe do our best "
+              "to keep index format changes rare, but sometimes they are "
+              "unavoidable. Either use an older version of QLever, or rebuild "
+              "the index from scratch with the version of QLever you are "
+              "currently using, or upgrade your index with the following "
+              "command. Upgrading your index is more than 10 times faster "
+              "than rebuilding it from scratch, and the old index is "
+              "preserved in a subdirectory of your index directory in case "
+              "something goes wrong.\n\nqlever upgrade-index ",
+              std::string(onDiskBase_.size(), ' '),
+              "   (if you use the qlever CLI)\n", "qlever-upgrade-index ",
+              onDiskBase_, "   (if the qlever-* binaries are in your PATH)\n")};
+        }
         AD_LOG_ERROR
             << "The index is too old for this version of QLever. "
-               "We recommend that you rebuild the index and start the "
-               "server with the current master. Alternatively start the "
-               "engine with a version of QLever that is compatible with "
-               "this index (PR = "
+               "Either rebuild the index from scratch with the version of "
+               "QLever you are currently using, or use an older version of "
+               "QLever that is compatible with this index (PR = "
             << indexFormatVersion.prNumber_
             << ", Date = " << indexFormatVersion.date_.toStringAndType().first
             << ")." << std::endl;
@@ -1459,7 +1444,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   } else {
     AD_LOG_ERROR
         << "Key \"locale\" is missing in the metadata. This is probably "
-           "and old index build that is no longer supported by QLever. "
+           "an old index build that is no longer supported by QLever. "
            "Please rebuild your index\n";
     throw std::runtime_error(
         "Missing required key \"locale\" in index build's metadata");
@@ -1628,8 +1613,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
-                << "\"" << std::endl;
+                << "\" "
+                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+                << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
@@ -1725,76 +1711,60 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 }
 
 // ___________________________________________________________________________
-absl::AnyInvocable<void()> IndexImpl::createWritePartialVocabularyTask(
-    size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-    ItemMapArray items,
+void IndexImpl::writePartialVocabulary(
+    const std::string& filenameSuffix, ItemMapAndBuffer items,
     std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-    ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr)
-    const {
+    TripleVec& idTriples) const {
   using namespace ad_utility::vocabulary_merger;
-  AD_LOG_DEBUG << "Input triples read in this section: " << numLines
-               << std::endl;
   AD_LOG_DEBUG
       << "Triples processed, also counting internal triples added by QLever: "
-      << actualCurrentPartialSize << std::endl;
+      << localIds.size() << std::endl;
   std::string partialFilename =
-      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, numFiles);
+      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, filenameSuffix);
 
-  return [localIds = std::move(localIds), globalWritePtr,
-          items = std::move(items), vocab = &vocab_, partialFilename,
-          numFiles]() mutable {
-    auto vec = [&]() {
-      ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
-      return vocabMapsToVector(items);
-    }();
-    {
-      ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
-      sortVocabVector(
-          &vec,
-          [&c = vocab->getCaseComparator()](const auto& a, const auto& b) {
-            return c.isLessInTotalWithExternalFlag(
-                a.first, a.second.isExternal(), b.first, b.second.isExternal());
-          },
-          true);
-    }
-    auto mapping = [&]() {
-      ad_utility::TimeBlockAndLog l{"creating internal mapping"};
-      return createInternalMapping(vec);
-    }();
-    AD_LOG_TRACE << "Finished creating of Mapping vocabulary" << std::endl;
-    // since now adjacent duplicates also have the same Ids, it suffices to
-    // compare those
-    {
-      ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
-      vec.erase(std::unique(vec.begin(), vec.end(),
-                            [](const auto& a, const auto& b) {
-                              return a.second.id() == b.second.id();
-                            }),
-                vec.end());
-    }
-    // The writing to the external vector has to be done in order, to
-    // make the update from local to global ids work.
-
-    auto writeTriplesFuture = std::async(
-        std::launch::async,
-        [&globalWritePtr, &localIds, &mapping, &numFiles]() {
-          globalWritePtr->withWriteLockAndOrdered(
-              [&](auto& writerPtr) {
-                writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
-              },
-              numFiles);
-        });
-    {
-      ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
-      writePartialVocabularyToFile(vec, partialFilename);
-    }
-    AD_LOG_TRACE << "Finished writing the partial vocabulary" << std::endl;
-    vec.clear();
-    {
-      ad_utility::TimeBlockAndLog l{"writing to global file"};
-      writeTriplesFuture.get();
-    }
-  };
+  auto vec = [&]() {
+    ad_utility::TimeBlockAndLog l{"vocab map to vector"};
+    return vocabMapsToVector(items);
+  }();
+  {
+    ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
+    sortVocabVector(
+        &vec,
+        [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
+          return c.isLessInTotalWithExternalFlag(
+              a.first, a.second.isExternal(), b.first, b.second.isExternal());
+        },
+        true);
+  }
+  auto mapping = [&]() {
+    ad_utility::TimeBlockAndLog l{"creating internal mapping"};
+    return createInternalMapping(vec);
+  }();
+  AD_LOG_TRACE << "Finished creating of Mapping vocabulary" << std::endl;
+  // since now adjacent duplicates also have the same Ids, it suffices to
+  // compare those
+  {
+    ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
+    vec.erase(std::unique(vec.begin(), vec.end(),
+                          [](const auto& a, const auto& b) {
+                            return a.second.id() == b.second.id();
+                          }),
+              vec.end());
+  }
+  auto writeTriplesFuture =
+      std::async(std::launch::async, [&idTriples, &localIds, &mapping]() {
+        writeMappedIdsToExtVec(localIds, mapping, idTriples);
+      });
+  {
+    ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
+    writePartialVocabularyToFile(vec, partialFilename);
+  }
+  AD_LOG_TRACE << "Finished writing the partial vocabulary" << std::endl;
+  vec.clear();
+  {
+    ad_utility::TimeBlockAndLog l{"writing to file"};
+    writeTriplesFuture.get();
+  }
 }
 
 // ____________________________________________________________________________
@@ -1980,7 +1950,7 @@ CPP_template_def(typename... NextSorter)(requires(
       };
   size_t numPredicates =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
-                            nextSorter.makePushCallback()..., countTriples,
+                            nextSorter.makePushBlockCallback()..., countTriples,
                             determineNextAvailableInternalGraph);
   configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormal(numPredicates);
@@ -2027,7 +1997,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     };
     size_t numSubjects = createPermutationPair(
         numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-        nextSorter.makePushCallback()..., pushTripleToPatterns);
+        nextSorter.makePushBlockCallback()..., pushTripleToPatterns);
     patternCreator.finish();
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
@@ -2037,7 +2007,7 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     size_t numSubjects =
         createPermutationPair(numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-                              nextSorter.makePushCallback()...);
+                              nextSorter.makePushBlockCallback()...);
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
     writeConfiguration();
@@ -2055,7 +2025,7 @@ CPP_template_def(typename... NextSorter)(
   // have no fourth argument.
   size_t numObjects =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
-                            nextSorter.makePushCallback()...);
+                            nextSorter.makePushBlockCallback()...);
   configurationJson_["num-objects"] =
       NumNormalAndInternal::fromNormal(numObjects);
   configurationJson_["has-all-permutations"] = true;
@@ -2106,32 +2076,23 @@ void IndexImpl::setPrefixesForEncodedValues(
 
 // _____________________________________________________________________________
 void IndexImpl::setBlankNodeIriRegexes(
-    const std::vector<std::string>& blankNodeIriRegexes) {
-  std::vector<std::unique_ptr<re2::RE2>> compiledRegexes;
-  ql::ranges::for_each(
-      blankNodeIriRegexes, [&compiledRegexes](const std::string& regex) {
-        // The regexes are matched against the full IRI text (including the
-        // angle brackets), so each of them has to describe an IRI and must
-        // therefore start with `<`.
-        if (!ql::starts_with(regex, '<')) {
-          throw std::runtime_error{absl::StrCat(
-              "A regex for treating IRIs as blank nodes has to match a full "
-              "IRI and must therefore start with `<`, but got: ",
-              regex)};
-        }
-        // `RE2` does not throw for an invalid pattern but stores an error
-        // state, which we turn into a user-readable exception here.
-        auto compiledRegex = std::make_unique<re2::RE2>(regex, re2::RE2::Quiet);
-        if (!compiledRegex->ok()) {
-          throw std::runtime_error{absl::StrCat(
-              "The regex \"", regex,
-              "\" passed to `--iri-as-blank-node-regexes` is not a valid "
-              "regular expression (as understood by Google's RE2 library): ",
-              compiledRegex->error())};
-        }
-        compiledRegexes.push_back(std::move(compiledRegex));
-      });
-  blankNodeIriRegexes_ = std::move(compiledRegexes);
+    std::vector<std::string> blankNodeIriRegexes) {
+  ql::ranges::for_each(blankNodeIriRegexes, [](const std::string& regex) {
+    // The regexes are matched against the full IRI text (including the angle
+    // brackets), so each of them has to describe an IRI and must therefore
+    // start with `<`.
+    if (!ql::starts_with(regex, '<')) {
+      throw std::runtime_error{absl::StrCat(
+          "A regex for treating IRIs as blank nodes has to match a full "
+          "IRI and must therefore start with `<`, but got: ",
+          regex)};
+    }
+  });
+  // The compilation of the regexes (which also reports those that are not valid
+  // regular expressions) is done by `ad_utility::RegexSet`.
+  blankNodeIriRegexes_ =
+      ad_utility::RegexSet{std::move(blankNodeIriRegexes),
+                           "passed to `--iri-as-blank-node-regexes`"};
 }
 
 // _____________________________________________________________________________

@@ -1,11 +1,14 @@
-// Copyright 2021 - 2025
-// University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2021 - 2026 The QLever Authors, in particular:
+//
+// 2021 - 2025 Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>, UFR
+// 2021 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#include "backports/type_traits.h"
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -13,9 +16,12 @@
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
-#include "global/Constants.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
-#include "rdfTypes/GeometryInfo.h"
+
+// This file contains geometry utility expressions and the geometric relation
+// expressions (`geof:distance`, `geof:sfIntersects`, etc.). Expressions
+// extracting information from a `GeometryInfo` such as `geof:centroid` can be
+// found in `GeometryInfoExpression.cpp`.
 
 namespace sparqlExpression {
 namespace detail {
@@ -28,10 +34,6 @@ NARY_EXPRESSION(
     FV<NumericIdWrapper<ad_utility::WktLatitude, true>, GeoPointValueGetter>);
 
 NARY_EXPRESSION(
-    CentroidExpression, 1,
-    FV<ad_utility::WktCentroid, GeometryInfoValueGetter<ad_utility::Centroid>>);
-
-NARY_EXPRESSION(
     DistExpression, 2,
     FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter>);
 NARY_EXPRESSION(MetricDistExpression, 2,
@@ -41,38 +43,6 @@ NARY_EXPRESSION(
     DistWithUnitExpression, 3,
     FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter,
        GeoPointOrWktValueGetter, UnitOfMeasurementValueGetter>);
-
-NARY_EXPRESSION(
-    AreaExpression, 2,
-    FV<ad_utility::WktArea, GeometryInfoValueGetter<ad_utility::MetricArea>,
-       UnitOfMeasurementValueGetter>);
-NARY_EXPRESSION(MetricAreaExpression, 1,
-                FV<ad_utility::WktMetricArea,
-                   GeometryInfoValueGetter<ad_utility::MetricArea>>);
-
-NARY_EXPRESSION(EnvelopeExpression, 1,
-                FV<ad_utility::WktEnvelope,
-                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
-NARY_EXPRESSION(
-    EnvelopeLowerLeftExpression, 1,
-    FV<ad_utility::WktEnvelopeCorner<ad_utility::BoundingBoxCorner::LOWER_LEFT>,
-       GeometryInfoValueGetter<ad_utility::BoundingBox>>);
-NARY_EXPRESSION(EnvelopeUpperRightExpression, 1,
-                FV<ad_utility::WktEnvelopeCorner<
-                       ad_utility::BoundingBoxCorner::UPPER_RIGHT>,
-                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
-
-NARY_EXPRESSION(GeometryTypeExpression, 1,
-                FV<ad_utility::WktGeometryType,
-                   GeometryInfoValueGetter<ad_utility::GeometryType>>);
-
-NARY_EXPRESSION(
-    LengthExpression, 2,
-    FV<ad_utility::WktLength, GeometryInfoValueGetter<ad_utility::MetricLength>,
-       UnitOfMeasurementValueGetter>);
-NARY_EXPRESSION(MetricLengthExpression, 1,
-                FV<ad_utility::WktMetricLength,
-                   GeometryInfoValueGetter<ad_utility::MetricLength>>);
 
 NARY_EXPRESSION(
     GeometryNExpression, 2,
@@ -94,15 +64,6 @@ NARY_EXPRESSION(
 NARY_EXPRESSION(De9imRelationExpression, 3,
                 FV<ad_utility::WktDe9imRelation, GeoPointValueGetter,
                    GeoPointValueGetter, StringValueGetter>);
-
-template <ad_utility::BoundingCoordinate RequestedCoordinate>
-NARY_EXPRESSION(BoundingCoordinateExpression, 1,
-                FV<ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
-                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
-
-NARY_EXPRESSION(NumGeometriesExpression, 1,
-                FV<ad_utility::WktNumGeometries,
-                   GeometryInfoValueGetter<ad_utility::NumGeometries>>);
 
 }  // namespace detail
 
@@ -146,44 +107,6 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
 }
 
 // _____________________________________________________________________________
-SparqlExpression::Ptr makeAreaExpression(SparqlExpression::Ptr child1,
-                                         SparqlExpression::Ptr child2) {
-  return std::make_unique<AreaExpression>(std::move(child1), std::move(child2));
-}
-
-// _____________________________________________________________________________
-SparqlExpression::Ptr makeMetricAreaExpression(SparqlExpression::Ptr child1) {
-  return std::make_unique<MetricAreaExpression>(std::move(child1));
-}
-
-// _____________________________________________________________________________
-SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<CentroidExpression>(std::move(child));
-}
-
-// _____________________________________________________________________________
-SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<EnvelopeExpression>(std::move(child));
-}
-
-// _____________________________________________________________________________
-SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<GeometryTypeExpression>(std::move(child));
-}
-
-// _____________________________________________________________________________
-SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
-                                           SparqlExpression::Ptr child2) {
-  return std::make_unique<LengthExpression>(std::move(child1),
-                                            std::move(child2));
-}
-
-// _____________________________________________________________________________
-SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child1) {
-  return std::make_unique<MetricLengthExpression>(std::move(child1));
-}
-
-// _____________________________________________________________________________
 SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2) {
   return std::make_unique<GeometryNExpression>(std::move(child1),
@@ -213,32 +136,25 @@ SparqlExpression::Ptr makeDe9imRelationExpression(
       std::move(child1), std::move(child2), std::move(child3));
 }
 
-// _____________________________________________________________________________
-template <ad_utility::BoundingCoordinate RequestedCoordinate>
-SparqlExpression::Ptr makeBoundingCoordinateExpression(
-    SparqlExpression::Ptr child) {
-  return std::make_unique<BoundingCoordinateExpression<RequestedCoordinate>>(
-      std::move(child));
-}
-
-// _____________________________________________________________________________
-SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<NumGeometriesExpression>(std::move(child));
-}
-
-// _____________________________________________________________________________
-SparqlExpression::Ptr makeEnvelopeLowerLeftExpression(
-    SparqlExpression::Ptr child) {
-  return std::make_unique<EnvelopeLowerLeftExpression>(std::move(child));
-}
-
-// _____________________________________________________________________________
-SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
-    SparqlExpression::Ptr child) {
-  return std::make_unique<EnvelopeUpperRightExpression>(std::move(child));
-}
-
+// Helpers to extract information for `FILTER` rewriting.
 namespace {
+
+// Extract a `TripleComponent` (a variable or a fixed value) from an argument
+// expression of a geo relation or distance function. Returns `std::nullopt`
+// if `expr` is neither a variable nor a constant literal expression.
+std::optional<TripleComponent> extractGeometryOperand(
+    const SparqlExpression& expr) {
+  if (auto var = expr.getVariableOrNullopt()) {
+    return TripleComponent{std::move(var).value()};
+  }
+  if (const auto* id = dynamic_cast<const IdExpression*>(&expr)) {
+    return TripleComponent{id->value()};
+  }
+  if (const auto* lit = dynamic_cast<const StringLiteralExpression*>(&expr)) {
+    return TripleComponent{lit->value()};
+  }
+  return std::nullopt;
+}
 
 // Helper to check if `expr` is a `SparqlExpression` on the `geof:sf[Relation]`
 // function, given the templated `Relation`.
@@ -251,17 +167,18 @@ std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
     return std::nullopt;
   }
 
-  // Extract variables
-  auto p1 = geoRelExpr->children()[0]->getVariableOrNullopt();
+  // Extract variables or fixed values.
+  auto p1 = extractGeometryOperand(*geoRelExpr->children()[0]);
   if (!p1.has_value()) {
     return std::nullopt;
   }
-  auto p2 = geoRelExpr->children()[1]->getVariableOrNullopt();
+  auto p2 = extractGeometryOperand(*geoRelExpr->children()[1]);
   if (!p2.has_value()) {
     return std::nullopt;
   }
 
-  return GeoFunctionCall{Relation, p1.value(), p2.value()};
+  return GeoFunctionCall{Relation, std::move(p1).value(),
+                         std::move(p2).value()};
 }
 
 }  // namespace
@@ -303,12 +220,12 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
     return std::nullopt;
   }
 
-  // Extract variables
-  auto p1 = de9imExpr->children()[0]->getVariableOrNullopt();
+  // Extract variables or fixed values.
+  auto p1 = extractGeometryOperand(*de9imExpr->children()[0]);
   if (!p1.has_value()) {
     return std::nullopt;
   }
-  auto p2 = de9imExpr->children()[1]->getVariableOrNullopt();
+  auto p2 = extractGeometryOperand(*de9imExpr->children()[1]);
   if (!p2.has_value()) {
     return std::nullopt;
   }
@@ -325,15 +242,17 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
     return std::nullopt;
   }
 
-  return De9imRelationCall{{SpatialJoinType::DE9IM, p1.value(), p2.value()},
-                           pattern.value()};
+  return De9imRelationCall{
+      {SpatialJoinType::DE9IM, std::move(p1).value(), std::move(p2).value()},
+      pattern.value()};
 }
 
 // _____________________________________________________________________________
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr) {
   using namespace ad_utility::use_type_identity;
-  using DistArgs = std::tuple<Variable, Variable, UnitOfMeasurement>;
+  using DistArgs =
+      std::tuple<TripleComponent, TripleComponent, UnitOfMeasurement>;
 
   // Helper lambda to extract a unit of measurement from a SparqlExpression (IRI
   // or literal with xsd:anyURI datatype)
@@ -366,12 +285,12 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
       return std::nullopt;
     }
 
-    // Extract variables
-    auto p1 = distExpr->children()[0]->getVariableOrNullopt();
+    // Extract variables or fixed values.
+    auto p1 = extractGeometryOperand(*distExpr->children()[0]);
     if (!p1.has_value()) {
       return std::nullopt;
     }
-    auto p2 = distExpr->children()[1]->getVariableOrNullopt();
+    auto p2 = extractGeometryOperand(*distExpr->children()[1]);
     if (!p2.has_value()) {
       return std::nullopt;
     }
@@ -429,16 +348,3 @@ QL_INSTANTIATE_GEO_RELATION_EXPR(TOUCHES);
 QL_INSTANTIATE_GEO_RELATION_EXPR(EQUALS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(OVERLAPS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(WITHIN);
-
-// Explicit instantiations for the bounding coordinate expressions
-#ifdef QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR
-#error "Macro QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR already defined"
-#endif
-#define QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(RequestedCoordinate) \
-  template Ptr sparqlExpression::makeBoundingCoordinateExpression<   \
-      ad_utility::BoundingCoordinate::RequestedCoordinate>(Ptr)
-
-QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_X);
-QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_Y);
-QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MAX_X);
-QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MAX_Y);

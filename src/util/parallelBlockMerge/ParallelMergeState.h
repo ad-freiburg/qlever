@@ -25,7 +25,7 @@
 #include <utility>
 
 #include "backports/concepts.h"
-#include "util/AsyncSemaphore.h"
+#include "util/AsyncResourcePool.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
@@ -83,6 +83,11 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   // The strand to which the dispatch loop and the teardown are confined, see
   // the STRAND CONFINEMENT note above.
   using Strand = net::strand<net::any_io_executor>;
+  // The counting semaphore that bounds the number of chunks that are merged
+  // concurrently, and one of its permits. A resource pool without resources is
+  // exactly a counting semaphore, see `ad_utility::AsyncResourcePool`.
+  using Semaphore = ad_utility::AsyncResourcePool<void>;
+  using Permit = Semaphore::Handle;
 
  private:
   // A tag that makes the constructor unusable from the outside, such that a
@@ -101,10 +106,10 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   // from the members above.
   Strand strand_;
   Sink sink_;
-  // The counting semaphore that bounds the number of chunks that are merged
+  // The semaphore that bounds the number of chunks that are merged
   // concurrently. A chunk task is only posted once a permit could be taken out,
   // and holds that permit until it is done.
-  ad_utility::AsyncSemaphore semaphore_;
+  Semaphore semaphore_;
 
  public:
   // Create the state of a merge and start dispatching its chunks. All the work
@@ -190,7 +195,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
           // Wake up the dispatch loop if it currently waits for a free permit.
           // It sees the stop afterwards and never waits again, so the
           // cancellation does not have to be sticky, see
-          // `ad_utility::AsyncSemaphore::cancel`.
+          // `ad_utility::AsyncResourcePool::cancel`.
           //
           // NOTE: The two halves of this teardown run on different strands and
           // are hence not atomic with respect to the dispatch loop, which may
@@ -224,14 +229,14 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
    private:
     std::shared_ptr<ParallelMergeState> state_;
     size_t chunkIndex_;
-    ad_utility::AsyncSemaphore::Permit permit_;
+    Permit permit_;
     ChunkMerger<moveElements, Input, Comparator> merger_;
 
    public:
     // Construct from the `state` of the merge, the index of the chunk to merge,
     // and the `permit` that this task holds for its whole lifetime.
     ChunkTask(std::shared_ptr<ParallelMergeState> state, size_t chunkIndex,
-              ad_utility::AsyncSemaphore::Permit permit)
+              Permit permit)
         : state_{std::move(state)},
           chunkIndex_{chunkIndex},
           permit_{std::move(permit)},
@@ -345,9 +350,9 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   // `spawnChunkAndContinue` as soon as one was taken out. Do nothing if all
   // chunks were dispatched or the merge was stopped.
   //
-  // NOTE: This deliberately uses `AsyncSemaphore::asyncAcquire` and not
-  // `ad_utility::asyncWithPermit`, because the loop has to continue as soon as
-  // the permit was *acquired* and not when the chunk is done. It therefore
+  // NOTE: This deliberately uses `Semaphore::asyncAcquire` and not
+  // `ad_utility::asyncWithResource`, because the loop has to continue as soon
+  // as the permit was *acquired* and not when the chunk is done. It therefore
   // needs the permit as an explicit RAII handle that it can hand to the chunk.
   //
   // NOTE: This recursion does not accumulate stack space. Boost.Asio never
@@ -363,9 +368,9 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     }
     executeAndHandleUnlikelyMemoryError([this, chunkIndex] {
       semaphore_.asyncAcquire(net::bind_executor(
-          strand_, [self = this->shared_from_this(), chunkIndex](
-                       const boost::system::error_code& errorCode,
-                       ad_utility::AsyncSemaphore::Permit permit) {
+          strand_,
+          [self = this->shared_from_this(), chunkIndex](
+              const boost::system::error_code& errorCode, Permit permit) {
             self->spawnChunkAndContinue(errorCode, std::move(permit),
                                         chunkIndex);
           }));
@@ -385,8 +390,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   //
   // PRECONDITION: This runs on `strand_`.
   void spawnChunkAndContinue(const boost::system::error_code& errorCode,
-                             ad_utility::AsyncSemaphore::Permit permit,
-                             size_t chunkIndex) noexcept {
+                             Permit permit, size_t chunkIndex) noexcept {
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
     if (errorCode || sink_.stopRequested()) {
       return;
