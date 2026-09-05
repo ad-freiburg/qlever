@@ -209,6 +209,13 @@ struct CompressedRelationWriter::PermutationWriter {
   // column 0). Thus we need to write the remaining buffered rows and metadata.
   // This also resets counters and buffers for writing the next relation.
   void finishRelation() {
+    // The relation was already written completely by
+    // `writeCompleteSmallRelation` below, which has also already done all the
+    // bookkeeping, so there is nothing left to do.
+    if (!col0IdCurrentRelation_.has_value()) {
+      AD_CORRECTNESS_CHECK(relation_.empty() && numBlocksCurrentRel_ == 0);
+      return;
+    }
     ++numDistinctCol0_;
     if (numBlocksCurrentRel_ > 0 || static_cast<double>(relation_.numRows()) >
                                         0.8 * static_cast<double>(blocksize_)) {
@@ -228,10 +235,11 @@ struct CompressedRelationWriter::PermutationWriter {
         writeMetadata_(md1);
       }
     } else {
-      // Small relations are written in one go.
-      [[maybe_unused]] auto md1 = writer1_->addSmallRelation(
-          col0IdCurrentRelation_.value(), distinctCol1Counter_.getAndReset(),
-          relation_);
+      // Small relations are written in one go. Note: No metadata is computed
+      // or stored for them, so the distinct `col1` count is not needed here
+      // and the counter is only reset.
+      distinctCol1Counter_.reset();
+      writer1_->addSmallRelation(col0IdCurrentRelation_.value(), relation_);
       // We don't need to do anything for the twin permutation and writer2,
       // because we have set up `writer1.smallBlocksCallback_` to do that work
       // for us (see above).
@@ -320,6 +328,49 @@ struct CompressedRelationWriter::PermutationWriter {
     }
   }
 
+  // Return true if the rows `[begin, end)` of the current input block form a
+  // complete relation that has to be written as a small relation. That is the
+  // case if the relation neither has started in a previous input block (then
+  // `relation_` would be non-empty, or blocks for it would already have been
+  // written), nor may continue in the next one (then the run would extend to
+  // the end of the block), and if it is small enough. The criterion for being
+  // small is exactly the one that `finishRelation` above uses.
+  bool isCompleteSmallRelation(size_t begin, size_t end,
+                               size_t numRowsOfBlock) const {
+    return relation_.empty() && numBlocksCurrentRel_ == 0 &&
+           end < numRowsOfBlock &&
+           static_cast<double>(end - begin) <=
+               0.8 * static_cast<double>(blocksize_);
+  }
+
+  // Write the rows `[begin, end)` of `permutedCols`, which form a complete
+  // small relation (see `isCompleteSmallRelation` above), directly to
+  // `writer1_`. This bypasses the `relation_` buffer, so that the rows are
+  // copied only once (into the buffer for the small relations inside
+  // `writer1_`) instead of twice. All the bookkeeping that `finishRelation`
+  // does for a small relation is performed here as well.
+  template <typename PermutedCols>
+  void writeCompleteSmallRelation(const PermutedCols& permutedCols,
+                                  size_t begin, size_t end) {
+    AD_CORRECTNESS_CHECK(begin < end);
+    ++numDistinctCol0_;
+    // Note: The distinct `col1` IDs are deliberately not counted here, because
+    // no metadata is stored for small relations (see `addSmallRelation`). The
+    // counter cannot have been fed for this relation, but reset it anyway, so
+    // that a future relaxation of `isCompleteSmallRelation` cannot silently
+    // corrupt the count of the next large relation.
+    distinctCol1Counter_.reset();
+    writer1_->addSmallRelation(col0IdCurrentRelation_.value(), permutedCols,
+                               begin, end);
+    // We don't need to do anything for the twin permutation and writer2,
+    // because we have set up `writer1.smallBlocksCallback_` to do that work
+    // for us (see above).
+    increaseTripleCounter(end - begin);
+    // The relation is complete, so the next run of the input starts a new
+    // relation and `finishRelation` has nothing left to do for this one.
+    col0IdCurrentRelation_.reset();
+  }
+
   // ___________________________________________________________________________
   void increaseTripleCounter(size_t numTriples) {
     numTriplesProcessed_ += numTriples;
@@ -362,9 +413,12 @@ struct CompressedRelationWriter::PermutationWriter {
       }
 
       // The input is sorted by `col0`, so the block consists of consecutive
-      // runs of rows that all belong to the same relation. We handle each of
-      // these runs as a whole instead of row by row, which allows the columns
-      // to be copied contiguously (see `addRowsOfCurrentRelation` above).
+      // runs of rows that all belong to the same relation. We first determine
+      // the extent of such a run by looking at `col0` only, and then handle
+      // the run as a whole instead of row by row. That way the columns can be
+      // copied contiguously, and we often know the fate of the complete
+      // relation before touching any of its data (see
+      // `isCompleteSmallRelation` and `addRowsOfCurrentRelation` above).
       size_t runBegin = 0;
       while (runBegin < block.numRows()) {
         Id col0Id = firstCol[runBegin];
@@ -376,7 +430,13 @@ struct CompressedRelationWriter::PermutationWriter {
             ql::ranges::find_if(firstCol.begin() + runBegin, firstCol.end(),
                                 [col0Id](Id id) { return id != col0Id; }) -
             firstCol.begin();
-        addRowsOfCurrentRelation(permutedCols, runBegin, runEnd);
+        // If the complete relation is already known here, and it is small,
+        // then we can write it without buffering it in `relation_` first.
+        if (isCompleteSmallRelation(runBegin, runEnd, block.numRows())) {
+          writeCompleteSmallRelation(permutedCols, runBegin, runEnd);
+        } else {
+          addRowsOfCurrentRelation(permutedCols, runBegin, runEnd);
+        }
         runBegin = runEnd;
       }
       blockCallbackManager_.passToBlockCallbacks(std::move(block));
