@@ -34,6 +34,15 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(ParallelMergeBenchmark testUtil)
 
+    addAndLinkBenchmark(ParallelBlockMergeBenchmark testUtil engine index)
+
     addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
+
+    # A standalone benchmark for a single large external sort. It has a `main`
+    # function of its own (with a `boost::program_options` interface), so it
+    # deliberately does not use the benchmark infrastructure above.
+    add_executable(largeExternalIdTableSortBenchmark LargeExternalIdTableSortBenchmark.cpp)
+    qlever_target_link_libraries(largeExternalIdTableSortBenchmark engine index
+        Boost::program_options ${CMAKE_THREAD_LIBS_INIT})
 
 endif()
