@@ -230,7 +230,7 @@ DeltaTriplesCount DeltaTriples::getCounts() const {
 DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
                                                         bool insertion) {
   // NOTE: If this logic is ever changed, you need to also change the code
-  // in `IndexBuilderTypes.h`, the function `getIdMapLambdas` specifically,
+  // in `IndexBuilderTypes.h`, the function `mapTripleToIds` specifically,
   // which adds the same extra triples for language tags to the internal triples
   // on the initial index build.
   Triples internalTriples;
@@ -486,11 +486,14 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
 LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy()
     const {
   // Create a copy of the `LocatedTriplesState` for use as a constant
-  // snapshot.
+  // snapshot. NOTE: `LocatedTriplesState` is an aggregate, and `make_shared`
+  // initializes with parentheses, which only works for aggregates since C++20.
+  // The explicit `LocatedTriplesState{...}` is therefore required for C++17.
   return LocatedTriplesSharedState{std::make_shared<LocatedTriplesState>(
-      locatedTriples_->locatedTriplesPerBlock_,
-      locatedTriples_->internalLocatedTriplesPerBlock_,
-      localVocab_.getLifetimeExtender(), locatedTriples_->index_, getCounts())};
+      LocatedTriplesState{locatedTriples_->locatedTriplesPerBlock_,
+                          locatedTriples_->internalLocatedTriplesPerBlock_,
+                          localVocab_.getLifetimeExtender(),
+                          locatedTriples_->index_, getCounts()})};
 }
 
 // ____________________________________________________________________________

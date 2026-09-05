@@ -17,6 +17,7 @@
 #include "global/Id.h"
 #include "index/LocalVocabContext.h"
 #include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "util/BlankNodeManager.h"
 
@@ -30,23 +31,34 @@ class LocalVocabContextImpl : public LocalVocabContext {
  private:
   using BlankNodeManagerPtr = std::unique_ptr<ad_utility::BlankNodeManager>;
 
+  using SecondaryVocabularyPtr = std::shared_ptr<const SecondaryVocabulary>;
+
   const RdfsVocabulary* vocabulary_;
   const EncodedIriManager* encodedIriManager_;
   // NOTE: This is a pointer to the owning `std::unique_ptr` and not to the
   // manager itself, because the manager is only created while the index is
   // being read, long after this object has been constructed.
   const BlankNodeManagerPtr* blankNodeManager_;
+  // NOTE: This also is a pointer to the owning smart pointer, because the
+  // secondary vocabulary is only set while the index is being read, see
+  // `IndexImpl::secondaryVocab()`.
+  const SecondaryVocabularyPtr* secondaryVocab_;
 
  public:
   LocalVocabContextImpl(const RdfsVocabulary* vocabulary,
                         const EncodedIriManager* encodedIriManager,
-                        const BlankNodeManagerPtr* blankNodeManager)
+                        const BlankNodeManagerPtr* blankNodeManager,
+                        const SecondaryVocabularyPtr* secondaryVocab)
       : vocabulary_{vocabulary},
         encodedIriManager_{encodedIriManager},
-        blankNodeManager_{blankNodeManager} {}
+        blankNodeManager_{blankNodeManager},
+        secondaryVocab_{secondaryVocab} {}
 
   int compareWords(std::string_view a, std::string_view b) const override;
   VocabBounds getPositionOfWord(std::string_view word) const override;
+  bool hasSecondaryVocabulary() const override;
+  std::optional<SecondaryVocabIndex> getSecondaryVocabIndex(
+      std::string_view word) const override;
   std::optional<Id> encodeAsId(std::string_view word) const override;
   ad_utility::BlankNodeManager* getBlankNodeManager() const override;
 };

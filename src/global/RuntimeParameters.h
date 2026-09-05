@@ -23,6 +23,7 @@ struct RuntimeParameters {
   using MemorySizeParameter =
       ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using SizeT = ad_utility::detail::parameterShortNames::SizeT;
+  using String = ad_utility::detail::parameterShortNames::String;
   using SpaceSeparatedStrings =
       ad_utility::detail::parameterShortNames::SpaceSeparatedStrings;
   using DeduplicationMode = ad_utility::DeduplicationMode;
@@ -174,6 +175,10 @@ struct RuntimeParameters {
   // The maximum size of the `prefilterBox` for
   // `LibspatialjoinAlgorithm::parse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};
+  // Writable directory for the temporary files written by `SpatialJoin` when
+  // using the `libspatialjoin` algorithm. If empty (the default), the index
+  // directory is used.
+  String spatialJoinTmpDir_{"", "spatial-join-tmp-dir"};
   // Push joins into both children of unions if this leads to a cheaper
   // cost-estimate.
   Bool enableDistributiveUnion_{true, "enable-distributive-union"};
@@ -203,6 +208,17 @@ struct RuntimeParameters {
   // to substitute more expensive query plans.
   Bool enableMaterializedViewQueryRewrite_{
       true, "enable-materialized-view-query-rewrite"};
+
+  // When matching materialized views using pattern-based query rewriting, the
+  // maximum number of candidate assignments tried by the backtracking
+  // algorithm. `0` disables pattern-based rewriting.
+  SizeT materializedViewPatternMatchNumAssignments_{
+      100'000, "materialized-view-pattern-match-num-assignments"};
+
+  // When matching materialized views using pattern-based query rewriting, the
+  // maximum number of replacement plans collected.
+  SizeT materializedViewPatternMatchNumReplacementPlans_{
+      500, "materialized-view-pattern-match-num-replacement-plans"};
 
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
   // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to

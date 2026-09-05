@@ -1,13 +1,18 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2015 - 2026 The QLever Authors, in particular:
 //
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2015 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025        Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/QueryPlanner.h"
 
+#include <absl/numeric/bits.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
@@ -1589,13 +1594,6 @@ Plans QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   dpTab.push_back(std::move(connectedComponent));
   size_t numSeeds = findUniqueNodeIds(dpTab.back(), false);
 
-  if (numSeeds < 2) {
-    // Apply filter substitutes also in cases with less than two seeds
-    // (currently used for `SpatialJoin` with a fixed-value side).
-    applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(dpTab.back(),
-                                                            filters);
-  }
-
   for (size_t k = 2; k <= numSeeds; ++k) {
     AD_LOG_TRACE << "Producing plans that unite " << k << " triples."
                  << std::endl;
@@ -1627,6 +1625,11 @@ Plans QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     checkCancellation();
   }
   auto& result = dpTab.back();
+  // Apply enforced filter substitutes (currently `SpatialJoin` with a
+  // fixed-value side). Both a connected component with a single seed and a
+  // full-cover replacement plan land in the final row without passing through
+  // a DP round that may apply substitutes, so they are handled here.
+  applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(result, filters);
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
                                                                      filters);
   applyTextLimitsIfPossible(result, textLimits, true);
@@ -1968,18 +1971,6 @@ PlanRows QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
       result.at(0), filtersAndOptSubstitutes);
   applyTextLimitsIfPossible(result.at(0), textLimitVec, true);
   return result;
-}
-
-// _____________________________________________________________________________
-bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
-  auto it = _nodeMap.find(i);
-  if (it == _nodeMap.end()) {
-    return false;
-  }
-  const auto& triple = it->second->triple_;
-  auto predicate = triple.getSimplePredicate();
-  return predicate == CONTAINS_ENTITY_PREDICATE ||
-         predicate == CONTAINS_WORD_PREDICATE;
 }
 
 // _____________________________________________________________________________
@@ -2355,6 +2346,12 @@ Plans QueryPlanner::createJoinCandidates(const SubtreePlan& a,
     candidates.push_back(std::move(opt.value()));
   }
 
+  // Test if one of `a` or `b` is a union whose children can each have the joins
+  // applied individually. This works for any number of join columns.
+  for (SubtreePlan& plan : applyJoinDistributivelyToUnion(a, b, jcs)) {
+    candidates.push_back(std::move(plan));
+  }
+
   if (jcs.size() >= 2) {
     // If there are two or more join columns use a multiColumnJoin.
     SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
@@ -2371,12 +2368,6 @@ Plans QueryPlanner::createJoinCandidates(const SubtreePlan& a,
   // loading the full has-predicate predicate.
   if (auto opt = createJoinWithHasPredicateScan(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
-  }
-
-  // Test if one of `a` or `b` is a union whose children can each have the joins
-  // applied individually.
-  for (SubtreePlan& plan : applyJoinDistributivelyToUnion(a, b, jcs)) {
-    candidates.push_back(std::move(plan));
   }
 
   // "NORMAL" CASE:
@@ -2496,7 +2487,7 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
 auto QueryPlanner::applyJoinDistributivelyToUnion(
     const SubtreePlan& a, const SubtreePlan& b,
     const JoinColumns& jcs) const -> Plans {
-  AD_CORRECTNESS_CHECK(jcs.size() == 1);
+  AD_CORRECTNESS_CHECK(!jcs.empty());
   AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
                        b.type == SubtreePlan::BASIC);
   Plans candidates{allocator_};
@@ -2682,10 +2673,20 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
     return plans;
   }
 
+  // Materialized view write queries that are allowed for pattern-based
+  // rewriting are guaranteed to use no named graph. Rewriting triples inside a
+  // `GRAPH ... { ... }` clause or in a query with an active `FROM`/`FROM NAMED`
+  // clause would therefore ignore the graph restriction and generate wrong
+  // results.
+  if (activeGraphVariable_.has_value() ||
+      activeDatasetClauses_.activeDefaultGraphs().has_value()) {
+    return plans;
+  }
+
   // The `MaterializedViewsManager` provides `IndexScan` instances for all the
   // subsets of `triples` it can rewrite. The individual results do not cover
-  // all items of `triples`, instead each has a vector of triple indices it
-  // covers.
+  // all items of `triples`, instead each has a bitmask of the triple indices
+  // it covers (matching `_idsOfIncludedNodes`'s representation).
   auto scans = _qec->materializedViewsManager().makeJoinReplacementIndexScans(
       _qec, triples);
   plans.reserve(triples._triples.size());
@@ -2696,14 +2697,13 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
     auto plan = makeSubtreePlan<IndexScan>(scan);
     // This is equivalent to a join between the covered triples, so we must mark
     // all included nodes.
-    for (auto tripleIdx : coveredTriples) {
-      plan._idsOfIncludedNodes |= (1ULL << tripleIdx);
-    }
+    plan._idsOfIncludedNodes |= coveredTriples;
+    size_t numCoveredTriples = absl::popcount(coveredTriples);
     // Empty vectors of replacement plans for smaller numbers of triples.
-    for (size_t i = plans.size(); i < coveredTriples.size(); ++i) {
+    for (size_t i = plans.size(); i < numCoveredTriples; ++i) {
       plans.emplace_back(allocator_);
     }
-    plans.at(coveredTriples.size() - 1).push_back(std::move(plan));
+    plans.at(numCoveredTriples - 1).push_back(std::move(plan));
   }
   return plans;
 }
