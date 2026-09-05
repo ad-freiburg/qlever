@@ -1455,40 +1455,6 @@ std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
 }
 
 // _____________________________________________________________________________
-CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
-    Id col0Id, size_t numDistinctC1, const IdTable& relation) {
-  AD_CORRECTNESS_CHECK(!relation.empty());
-  size_t numRows = relation.numRows();
-  // Make sure that the blocks don't become too large: If the previously
-  // buffered small relations together with the new relations would exceed
-  // `1.5 * blocksize` then we start a new block for the current relation.
-  //
-  // NOTE: there are some unit tests that rely on this factor being `1.5`.
-  if (static_cast<double>(numRows + smallRelationsBuffer_.numRows()) >
-      static_cast<double>(blocksize()) * 1.5) {
-    writeBufferedRelationsToSingleBlock();
-  }
-  auto offsetInBlock = smallRelationsBuffer_.size();
-
-  // We have to keep track of the first and last `col0` of each block.
-  if (smallRelationsBuffer_.numRows() == 0) {
-    currentBlockFirstCol0_ = col0Id;
-  }
-  currentBlockLastCol0_ = col0Id;
-
-  smallRelationsBuffer_.resize(offsetInBlock + numRows);
-  for (size_t i = 0; i < relation.numColumns(); ++i) {
-    ql::ranges::copy(
-        relation.getColumn(i),
-        smallRelationsBuffer_.getColumn(i).begin() + offsetInBlock);
-  }
-  // Note: the multiplicity of the `col2` (where we set the dummy here) will
-  // be set later in `createPermutationPair`.
-  return {col0Id, numRows, computeMultiplicity(numRows, numDistinctC1),
-          multiplicityDummy, offsetInBlock};
-}
-
-// _____________________________________________________________________________
 CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
     size_t numDistinctC1) {
   AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ != 0);

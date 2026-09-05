@@ -198,6 +198,8 @@ addLinkAndDiscoverTest(PermutationTest index)
 
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
+addLinkAndDiscoverTest(GraphComputationTest index)
+
 addLinkAndDiscoverTest(IdTripleTest index)
 
 addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)

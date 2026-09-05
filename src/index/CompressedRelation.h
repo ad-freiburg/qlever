@@ -319,9 +319,6 @@ class CompressedRelationWriter {
   using SmallBlocksCallback = std::function<void(IdTable)>;
   SmallBlocksCallback smallBlocksCallback_;
 
-  // A dummy value for multiplicities that can only later be determined.
-  static constexpr float multiplicityDummy = 42.4242f;
-
  public:
   /// Create using a filename, to which the relation data will be written.
   /// If `numWriterThreads` is set, it determines the number of threads that
@@ -500,9 +497,43 @@ class CompressedRelationWriter {
                              bool invokeCallback);
 
   // Add a small relation that will be stored in a single block, possibly
-  // together with other small relations.
-  CompressedRelationMetadata addSmallRelation(Id col0Id, size_t numDistinctC1,
-                                              const IdTable& relation);
+  // together with other small relations. Only the rows `[beginIdx, endIdx)` of
+  // the `relation` are added; if `endIdx` is not specified, all rows starting
+  // at `beginIdx` are added. The `relation` may be an arbitrary kind of
+  // `IdTable`, in particular a view. That way a range of rows of a larger
+  // table can be added directly, without materializing it in an intermediate
+  // buffer first.
+  //
+  // Note: In contrast to `finishLargeRelation` this function computes no
+  // `CompressedRelationMetadata`, because no metadata is persisted for small
+  // relations. It is instead computed lazily at query time, see
+  // `CompressedRelationReader::getMetadataForSmallRelation`.
+  template <typename Table>
+  void addSmallRelation(Id col0Id, const Table& relation, size_t beginIdx = 0,
+                        std::optional<size_t> endIdx = std::nullopt) {
+    size_t end = endIdx.value_or(relation.numRows());
+    AD_CORRECTNESS_CHECK(beginIdx < end && end <= relation.numRows());
+    size_t numRows = end - beginIdx;
+    // Make sure that the blocks don't become too large: If the previously
+    // buffered small relations together with the new relations would exceed
+    // `1.5 * blocksize` then we start a new block for the current relation.
+    //
+    // NOTE: there are some unit tests that rely on this factor being `1.5`.
+    if (static_cast<double>(numRows + smallRelationsBuffer_.numRows()) >
+        static_cast<double>(blocksize()) * 1.5) {
+      writeBufferedRelationsToSingleBlock();
+    }
+    // We have to keep track of the first and last `col0` of each block.
+    if (smallRelationsBuffer_.numRows() == 0) {
+      currentBlockFirstCol0_ = col0Id;
+    }
+    currentBlockLastCol0_ = col0Id;
+
+    // Note: `insertAtEnd` appends the columns of the input contiguously, which
+    // is much faster than appending the rows one by one, because the
+    // `IdTable`s are stored column-based.
+    smallRelationsBuffer_.insertAtEnd(relation, beginIdx, end);
+  }
 
   // Add a new block for a large relation that is to be stored in multiple
   // blocks. This function may only be called if one of the following holds:
@@ -536,7 +567,8 @@ class CompressedRelationWriter {
   friend std::pair<std::vector<CompressedBlockMetadata>,
                    std::vector<CompressedRelationMetadata>>
   compressedRelationTestWriteCompressedRelations(
-      T inputs, std::string filename, ad_utility::MemorySize blocksize);
+      T inputs, std::string filename, ad_utility::MemorySize blocksize,
+      size_t inputBlockSize);
 
   // Create a `TaskQueue` for the compression and writing of blocks. The number
   // of threads is `numThreadsOverride` if set, and otherwise determined by the
