@@ -9,6 +9,7 @@
 #include <absl/functional/bind_front.h>
 
 #include "util/AsyncStream.h"
+#include "util/Forward.h"
 #include "util/Generator.h"
 #include "util/TypeTraits.h"
 #include "util/ValueSizeGetters.h"
@@ -222,13 +223,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
         MemorySize maxMemPerNode, size_t blocksize, R&& rangeOfRanges,
         ComparisonFuncT comparison) {
   AD_CORRECTNESS_CHECK(!rangeOfRanges.empty());
-  auto moveIf = [](auto& range) -> decltype(auto) {
-    if constexpr (moveElements) {
-      return std::move(range);
-    } else {
-      return range;
-    }
-  };
+  auto moveIf = ad_utility::moveIf<moveElements>;
 
   using ResultT = InputRangeTypeErased<std::vector<T>>;
 
