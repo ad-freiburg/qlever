@@ -3,6 +3,7 @@
 // 2015 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
 // 2018 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
 // 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
 // 2025        Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -872,6 +873,7 @@ auto QueryPlanner::seedWithScansAndText(
       auto plan = makeSubtreePlan<SpatialJoin>(
           _qec, config.toSpatialJoinConfiguration(), std::nullopt,
           std::nullopt);
+      registerSpatialJoinForPrefilterPreference(*plan._qet->getRootOperation());
       if (ql::starts_with(input, NEAREST_NEIGHBORS)) {
         plan._qet->getRootOperation()->addWarning(absl::StrCat(
             "The special predicate <nearest-neighbors:...> is deprecated due "
@@ -1371,6 +1373,16 @@ std::string QueryPlanner::getPruningKey(
     }
   }
 
+  // For the geometry variables of the query's spatial joins, plans that
+  // contain a scan prunable by the runtime block prefilter are kept alongside
+  // the cheapest plan with the same result order (see
+  // `hasPrefilterableGeoScan`).
+  for (const auto& variable : spatialJoinPrefilterVariables_) {
+    if (hasPrefilterableGeoScan(*plan._qet, variable)) {
+      os << " geoPrefilter: " << variable.name();
+    }
+  }
+
   os << ' ' << plan._idsOfIncludedNodes;
   os << " f: ";
   os << ' ' << plan._idsOfIncludedFilters;
@@ -1803,6 +1815,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     if (!sj) {
       plans.push_back({filterExpression, std::nullopt});
     } else {
+      registerSpatialJoinForPrefilterPreference(*sj);
       // Substitution of a `SpatialJoin` plan may be forced only if attaching
       // one more child completes it.
       bool forceSubstitution = sj->getChildren().size() == 1;
@@ -2230,6 +2243,35 @@ bool QueryPlanner::TripleGraph::isSimilar(
 // _____________________________________________________________________________
 void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
   _enablePatternTrick = enablePatternTrick;
+}
+
+// _________________________________________________________________________________
+void QueryPlanner::registerSpatialJoinForPrefilterPreference(
+    const Operation& spatialJoin) {
+  const auto& sj = dynamic_cast<const SpatialJoin&>(spatialJoin);
+  auto [left, right] = sj.getSpatialJoinVariables();
+  spatialJoinPrefilterVariables_.insert(std::move(left));
+  spatialJoinPrefilterVariables_.insert(std::move(right));
+}
+
+// _________________________________________________________________________________
+bool QueryPlanner::hasPrefilterableGeoScan(const QueryExecutionTree& tree,
+                                           const Variable& variable) {
+  const Operation* op = tree.getRootOperation().get();
+  if (const auto* scan = dynamic_cast<const IndexScan*>(op)) {
+    auto sortedVariable =
+        scan->getSortedVariableAndMetadataColumnIndexForPrefiltering();
+    return sortedVariable.has_value() &&
+           sortedVariable.value().first == variable;
+  }
+  if (dynamic_cast<const Sort*>(op) != nullptr ||
+      dynamic_cast<const Join*>(op) != nullptr) {
+    return ql::ranges::any_of(
+        std::as_const(*op).getChildren(), [&variable](const auto* child) {
+          return hasPrefilterableGeoScan(*child, variable);
+        });
+  }
+  return false;
 }
 
 // _________________________________________________________________________________
@@ -3391,6 +3433,7 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       }
       auto spatialJoin =
           std::make_shared<SpatialJoin>(qec_, config, std::nullopt, right);
+      planner_.registerSpatialJoinForPrefilterPreference(*spatialJoin);
       auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
       candidatesOut.push_back(std::move(plan));
     };

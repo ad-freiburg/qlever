@@ -1,7 +1,12 @@
-//  Copyright 2024 - 2025, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2024 - 2025 The QLever Authors, in particular:
+//
+// 2024 - 2025 Jonathan Zeller <github@Jonathan24680>, UFR
+// 2024 - 2025 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
@@ -1395,8 +1400,12 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   // sweeper; none of the values of `?b` (two invalid literals and one point
   // that is not contained in `?a`) contribute a valid geometry.
   auto details = spatialJoin->runtimeInfo().details_;
-  EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
-                             HasKeyMatching("num-geoms-parsed", Eq(3))));
+  // Of the three values of `?b` (the larger side), the point outside `?a`'s
+  // box is dropped by the prefilter; the two invalid literals survive it (they
+  // are never prefiltered) but fail to parse.
+  EXPECT_THAT(details,
+              AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
+                    HasKeyMatching("num-geoms-after-bbox-prefilter", Eq(2))));
 }
 
 }  // namespace invalidGeometries

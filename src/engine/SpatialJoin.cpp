@@ -27,14 +27,18 @@
 
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/IndexScan.h"
 #include "engine/NamedResultCache.h"
 #include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/Values.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/spatialJoinAlgorithms/BaselineAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
@@ -123,6 +127,16 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
           &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
     if (auto sjWithBoundingBoxes = sj->cloneWithBoundingBoxColumns()) {
       sj = sjWithBoundingBoxes.value();
+    }
+  }
+
+  // If the `SpatialJoin` stems from a distance filter with a fixed geometry,
+  // push a block prefilter for the padded query rectangle into the other
+  // side (see `cloneWithGeoBlockPrefilter`).
+  if (sj->isConstructed() &&
+      getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
+    if (auto sjWithPrefilter = sj->cloneWithGeoBlockPrefilter()) {
+      sj = sjWithPrefilter.value();
     }
   }
 
@@ -482,6 +496,128 @@ SpatialJoin::SwappedJoinSides SpatialJoin::getSwappedJoinSides() const {
                                       config_.right_};
 }
 
+// The bounding rectangle of all geometries in the given column, computed
+// from the `GeoPoint` encodings and the precomputed geometry info (no
+// parsing). Rows without geometry information are skipped (they cannot
+// contribute join results). Returns `std::nullopt` if no row has one.
+static std::optional<ad_utility::GeoRectangle> boundingRectangleOfColumn(
+    const IdTableView<0>& table, ColumnIndex column, const Index& index) {
+  std::optional<ad_utility::GeoRectangle> result = std::nullopt;
+  auto extend = [&result](double lng, double lat) {
+    if (!result.has_value()) {
+      result = ad_utility::GeoRectangle{lng, lat, lng, lat};
+    } else {
+      result->minLng_ = std::min(result->minLng_, lng);
+      result->minLat_ = std::min(result->minLat_, lat);
+      result->maxLng_ = std::max(result->maxLng_, lng);
+      result->maxLat_ = std::max(result->maxLat_, lat);
+    }
+  };
+  for (Id id : table.getColumn(column)) {
+    switch (id.getDatatype()) {
+      case Datatype::GeoPoint: {
+        auto point = id.getGeoPoint();
+        extend(point.getLng(), point.getLat());
+        break;
+      }
+      case Datatype::VocabIndex: {
+        auto geoInfo = index.getVocab().getGeoInfo(id.getVocabIndex());
+        if (geoInfo.has_value()) {
+          auto box = geoInfo.value().getBoundingBox();
+          extend(box.lowerLeft().getLng(), box.lowerLeft().getLat());
+          extend(box.upperRight().getLng(), box.upperRight().getLat());
+        }
+        break;
+      }
+      case Datatype::LocalVocabIndex: {
+        const auto& literalOrIri = *id.getLocalVocabIndex();
+        if (literalOrIri.isLiteral()) {
+          auto box = ad_utility::GeometryInfo::getBoundingBox(
+              literalOrIri.toStringRepresentation());
+          if (box.has_value()) {
+            extend(box.value().lowerLeft().getLng(),
+                   box.value().lowerLeft().getLat());
+            extend(box.value().upperRight().getLng(),
+                   box.value().upperRight().getLat());
+          }
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return result;
+}
+
+// ____________________________________________________________________________
+std::pair<std::shared_ptr<QueryExecutionTree>,
+          std::shared_ptr<QueryExecutionTree>>
+SpatialJoin::applyRuntimeGeoBlockPrefilter(
+    std::shared_ptr<QueryExecutionTree> childLeft,
+    std::shared_ptr<QueryExecutionTree> childRight, const Variable& varLeft,
+    const Variable& varRight,
+    std::chrono::milliseconds& timeBlockPrefilter) const {
+  // Only for libspatialjoin joins (whose semantics are box-intersection
+  // based, like the existing per-row prefilter), and only if prefiltering is
+  // enabled.
+  if (config_.algo_ != SpatialJoinAlgorithm::LIBSPATIALJOIN ||
+      std::get_if<LibSpatialJoinConfig>(&config_.task_) == nullptr ||
+      !getRuntimeParameter<
+          &RuntimeParameters::enablePrefilterOnIndexScans_>()) {
+    return {std::move(childLeft), std::move(childRight)};
+  }
+  double padding =
+      std::get<LibSpatialJoinConfig>(config_.task_).maxDist_.value_or(0.0);
+
+  // The (estimated) smaller side gets materialized (which `prepareJoin` does
+  // anyway) and provides the bounding rectangle; the other side's scan gets
+  // its blocks pruned. Avoid computing the rectangle over very large sides.
+  constexpr uint64_t maxSmallSideRows = 16'000'000;
+  auto tryPrefilter = [&](const std::shared_ptr<QueryExecutionTree>& smallChild,
+                          const Variable& smallVar,
+                          const std::shared_ptr<QueryExecutionTree>& bigChild,
+                          const Variable& bigVar)
+      -> std::optional<std::shared_ptr<QueryExecutionTree>> {
+    auto smallResult = smallChild->getResult();
+    const auto& smallTable = smallResult->idTableView();
+    if (smallTable.size() > maxSmallSideRows) {
+      return std::nullopt;
+    }
+    ad_utility::Timer timer{ad_utility::Timer::Started};
+    auto rectangle = boundingRectangleOfColumn(
+        smallTable, smallChild->getVariableColumn(smallVar),
+        getExecutionContext()->getIndex());
+    if (!rectangle.has_value()) {
+      return std::nullopt;
+    }
+    std::vector<PrefilterVariablePair> pairs;
+    pairs.emplace_back(
+        std::make_unique<prefilterExpressions::GeoRectangleExpression>(
+            ad_utility::padGeoRectangle(rectangle.value(), padding)),
+        bigVar);
+    auto prefiltered =
+        bigChild->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+            std::move(pairs));
+    timeBlockPrefilter = timer.msecs();
+    return prefiltered;
+  };
+
+  bool leftIsSmaller =
+      childLeft->getSizeEstimate() <= childRight->getSizeEstimate();
+  const auto& smallChild = leftIsSmaller ? childLeft : childRight;
+  const auto& smallVar = leftIsSmaller ? varLeft : varRight;
+  const auto& bigChild = leftIsSmaller ? childRight : childLeft;
+  const auto& bigVar = leftIsSmaller ? varRight : varLeft;
+  if (auto prefiltered = tryPrefilter(smallChild, smallVar, bigChild, bigVar)) {
+    return leftIsSmaller
+               ? std::pair{std::move(childLeft), std::move(prefiltered.value())}
+               : std::pair{std::move(prefiltered.value()),
+                           std::move(childRight)};
+  }
+  return {std::move(childLeft), std::move(childRight)};
+}
+
 // ____________________________________________________________________________
 PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
@@ -492,6 +628,60 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   auto [childLeft, childRight, joinVarLeft, joinVarRight] =
       getSwappedJoinSides();
+
+  // Prune the blocks of one side's scan using the bounding rectangle of the
+  // other (smaller) side, which is only known at execution time.
+  std::chrono::milliseconds timeBlockPrefilter{0};
+  auto originalLeft = childLeft;
+  auto originalRight = childRight;
+  std::tie(childLeft, childRight) = applyRuntimeGeoBlockPrefilter(
+      childLeft, childRight, joinVarLeft, joinVarRight, timeBlockPrefilter);
+
+  // If a side was replaced by a tree with prefiltered blocks, wire the
+  // replacement's runtime information into the tree in place of the
+  // original's, which would otherwise be shown as "not yet started" although
+  // the replacement does the actual work.
+  auto relinkRuntimeInfo =
+      [this](const std::shared_ptr<QueryExecutionTree>& original,
+             const std::shared_ptr<QueryExecutionTree>& replacement) {
+        if (original == replacement) {
+          return;
+        }
+        auto originalRti =
+            original->getRootOperation()->getRuntimeInfoPointer();
+        auto* replacementOp = replacement->getRootOperation().get();
+        replacementOp->createRuntimeInfoFromEstimates(rootRuntimeInfo());
+        for (auto& childRti : runtimeInfo().children_) {
+          if (childRti == originalRti) {
+            childRti = replacementOp->getRuntimeInfoPointer();
+          }
+        }
+      };
+  relinkRuntimeInfo(originalLeft, childLeft);
+  relinkRuntimeInfo(originalRight, childRight);
+
+  // If a side contains a block-prefiltered scan (the prefilter may have been
+  // forwarded through sorts and joins), remember the unprefiltered row total
+  // of that scan for the runtime statistics.
+  auto numRowsBeforePrefilter =
+      [](const std::shared_ptr<QueryExecutionTree>& child) {
+        auto impl = [](const QueryExecutionTree& tree,
+                       const auto& self) -> std::optional<uint64_t> {
+          const auto* scan =
+              dynamic_cast<const IndexScan*>(tree.getRootOperation().get());
+          if (scan != nullptr) {
+            return scan->numBlockRowsBeforePrefilter();
+          }
+          const auto& op = std::as_const(*tree.getRootOperation());
+          for (const QueryExecutionTree* subtree : op.getChildren()) {
+            if (auto result = self(*subtree, self)) {
+              return result;
+            }
+          }
+          return std::nullopt;
+        };
+        return impl(*child, impl);
+      };
 
   // Input tables.
   auto [idTableLeft, resultLeft] = getIdTable(childLeft);
@@ -529,7 +719,10 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    rightJoinCol,
                                    std::move(leftSelectedCols),
                                    std::move(rightSelectedCols),
-                                   numColumns};
+                                   numColumns,
+                                   numRowsBeforePrefilter(childLeft),
+                                   numRowsBeforePrefilter(childRight),
+                                   timeBlockPrefilter};
 }
 
 // ____________________________________________________________________________
@@ -745,5 +938,128 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
       _executionContext, config_,
       // Potentially unchanged child retrieved with `value_or`.
       left.value_or(childLeft_), right.value_or(childRight_),
+      substitutesFilterOp_);
+}
+
+// ____________________________________________________________________________
+std::optional<std::shared_ptr<SpatialJoin>>
+SpatialJoin::cloneWithGeoBlockPrefilter() const {
+  AD_CONTRACT_CHECK(isConstructed());
+  if (config_.algo_ != SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    return std::nullopt;
+  }
+  const auto* libConfig = std::get_if<LibSpatialJoinConfig>(&config_.task_);
+  if (libConfig == nullptr) {
+    return std::nullopt;
+  }
+  double padding = libConfig->maxDist_.value_or(0.0);
+
+  // Check whether `child` is a single-row `VALUES` that binds exactly the
+  // join variable `var` to a fixed value, and return that value.
+  auto getConstantGeometry =
+      [](const std::shared_ptr<QueryExecutionTree>& child,
+         const Variable& var) -> std::optional<TripleComponent> {
+    const auto* values =
+        dynamic_cast<const Values*>(child->getRootOperation().get());
+    if (values == nullptr) {
+      return std::nullopt;
+    }
+    const auto& parsed = values->parsedValues();
+    if (parsed._variables != std::vector<Variable>{var} ||
+        parsed._values.size() != 1 || parsed._values.at(0).size() != 1) {
+      return std::nullopt;
+    }
+    return parsed._values.at(0).at(0);
+  };
+
+  // Check whether the small side `child` is cheap to evaluate at planning
+  // time: its estimated result is small, and no intermediate result in its
+  // subtree dwarfs that result (which would indicate a plan variant that
+  // materializes far more than it returns, e.g. a full scan followed by a
+  // sort). Index scans are exempt from the check: below a join they are
+  // evaluated lazily with block skipping, so their static size estimate (the
+  // full relation) says nothing about the evaluation cost. The relative
+  // bound makes the check independent of the dataset size.
+  auto isCheapToEvaluate = [](QueryExecutionTree& child) {
+    size_t maxRows = getRuntimeParameter<
+        &RuntimeParameters::spatialJoinPlanTimePrefilterMaxRows_>();
+    auto rootEstimate = child.getSizeEstimate();
+    if (maxRows == 0 || rootEstimate > maxRows) {
+      return false;
+    }
+    constexpr size_t maxIntermediateFactor = 100;
+    size_t bound = std::max<size_t>(rootEstimate, 1) * maxIntermediateFactor;
+    auto nodesAreSmall = [&bound](QueryExecutionTree& tree,
+                                  const auto& self) -> bool {
+      auto op = tree.getRootOperation();
+      if (dynamic_cast<const IndexScan*>(op.get()) != nullptr) {
+        return true;
+      }
+      if (tree.getSizeEstimate() > bound) {
+        return false;
+      }
+      return ql::ranges::all_of(op->getChildren(),
+                                [&self](QueryExecutionTree* subtree) {
+                                  return self(*subtree, self);
+                                });
+    };
+    return nodesAreSmall(child, nodesAreSmall);
+  };
+
+  // The rectangle of the small side: from a constant geometry without any
+  // evaluation, otherwise by materializing a cheap-to-evaluate small side at
+  // planning time (the result is cached and reused when the query runs).
+  auto getRectangle =
+      [&](const std::shared_ptr<QueryExecutionTree>& child,
+          const Variable& var) -> std::optional<ad_utility::GeoRectangle> {
+    if (auto constant = getConstantGeometry(child, var)) {
+      return sparqlExpression::geoRectangleOfConstantGeometry(constant.value());
+    }
+    if (!isCheapToEvaluate(*child)) {
+      return std::nullopt;
+    }
+    auto result = child->getRootOperation()->getResult(
+        false, ComputationMode::FULLY_MATERIALIZED);
+    if (result == nullptr || !result->isFullyMaterialized()) {
+      return std::nullopt;
+    }
+    return boundingRectangleOfColumn(result->idTableView(),
+                                     child->getVariableColumn(var),
+                                     getExecutionContext()->getIndex());
+  };
+
+  // Take the rectangle from the side with the smaller size estimate and
+  // prefilter the other side (like the runtime block prefilter does).
+  bool leftIsSmaller =
+      childLeft_->getSizeEstimate() <= childRight_->getSizeEstimate();
+  std::optional<ad_utility::GeoRectangle> rectangle;
+  bool smallSideIsLeft = leftIsSmaller;
+  if (leftIsSmaller) {
+    rectangle = getRectangle(childLeft_, config_.left_);
+  } else {
+    rectangle = getRectangle(childRight_, config_.right_);
+  }
+  if (!rectangle.has_value()) {
+    return std::nullopt;
+  }
+  const auto& geometrySide = smallSideIsLeft ? childRight_ : childLeft_;
+  const Variable& geometryVariable =
+      smallSideIsLeft ? config_.right_ : config_.left_;
+
+  std::vector<PrefilterVariablePair> prefilterPairs;
+  prefilterPairs.emplace_back(
+      std::make_unique<prefilterExpressions::GeoRectangleExpression>(
+          ad_utility::padGeoRectangle(rectangle.value(), padding)),
+      geometryVariable);
+  auto newGeometrySide =
+      geometrySide->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+          std::move(prefilterPairs));
+  if (!newGeometrySide.has_value()) {
+    return std::nullopt;
+  }
+  return std::make_shared<SpatialJoin>(
+      getExecutionContext(), config_,
+      smallSideIsLeft ? childLeft_ : newGeometrySide.value(),
+      smallSideIsLeft ? newGeometrySide.value() : childRight_,
       substitutesFilterOp_);
 }

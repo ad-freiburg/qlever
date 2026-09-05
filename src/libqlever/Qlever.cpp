@@ -143,6 +143,15 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
+  AD_CONTRACT_CHECK(config.geoCellGridLevel_ <= 20,
+                    "The geo cell grid level must be at most 20");
+  index.getImpl().setGeoCellGridLevelForIndexBuilding(
+      static_cast<uint8_t>(config.geoCellGridLevel_));
+  // Throws with a message listing the supported values if the string is not
+  // a valid scheme.
+  auto geoCellGridScheme =
+      ad_utility::GeoCellGridScheme::fromString(config.geoCellGridScheme_);
+  index.getImpl().setGeoCellGridSchemeForIndexBuilding(geoCellGridScheme);
   index.getImpl().setPrefixesForEncodedValues(
       config.prefixesForIdEncodedIris_, config.widePrefixesForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(

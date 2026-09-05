@@ -24,28 +24,71 @@
 
 namespace ad_utility {
 
+// A geographic rectangle in plain degrees. In contrast to `BoundingBox` it
+// is a simple aggregate without invariants, suitable for query rectangles
+// that may cover the whole world.
+struct GeoRectangle {
+  double minLng_;
+  double minLat_;
+  double maxLng_;
+  double maxLat_;
+  bool operator==(const GeoRectangle&) const = default;
+};
+
+// Grow `rectangle` on all sides by at least `distanceMeters` (measured on the
+// earth's surface) and clamp it to the valid coordinate ranges. The result is
+// conservative: every point within `distanceMeters` of the input rectangle is
+// contained in the result. Near the poles and across the antimeridian the
+// longitude range degrades to [-180, 180].
+GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
+                             double distanceMeters);
+
 namespace detail {
-// The available schemes for the `GeoCellGrid` class below.
+// The available schemes for the `GeoCellGrid` class below. All schemes use
+// square-ish base grids of `2^level x 2^level` cells:
 //
-// NOTE: There is currently only one scheme, `Flat`, implemented below. It's a
-// simple flat grid. Future schemes may be hierarchical or have several copies
-// of the grid shifted against each other. The abstract interface of the
-// `GeoCellGrid` class below is general enough to support these future schemes.
+// - `Flat`: a single flat grid. Geometries whose bounding box crosses a cell
+//   border get the sentinel cell.
+// - `Flat4Shifts`: four flat grids, shifted against each other by half a
+//   cell in longitude and/or latitude. Every geometry with a bounding box of
+//   at most half a cell in both dimensions fits a cell of at least one of
+//   the grids; only larger geometries get the sentinel cell.
+// - `Hierarchical`: a single quadtree of depth `level` with S2-style cell
+//   indices. Every geometry is stored at the smallest enclosing cell; the
+//   root takes the role of the sentinel.
+// - `Hierarchical3Shifts`: three quadtrees, shifted against each other by a
+//   third of the domain in both dimensions (Chan's shifted quadtrees).
+//   Every geometry is contained in a cell of side length at most six times
+//   its own size in at least one of the trees, so nothing escalates more
+//   than a constant number of levels.
+//
+// NOTE: The numeric values are part of the index format (they are stored in
+// the `.geocells` file of a `GeoVocabulary`), so they must never change.
 enum class GeoCellGridSchemeEnum : uint8_t {
   Flat = 0,
+  Flat4Shifts = 1,
+  Hierarchical = 2,
+  Hierarchical3Shifts = 3,
 };
 }  // namespace detail
 
 // Wrapper around `detail::GeoCellGridSchemeEnum` that provides conversion to
-// and from the parameter value ("flat").
+// and from the parameter values ("flat", "flat-4-shifts", "hierarchical",
+// "hierarchical-3-shifts").
 class GeoCellGridScheme
     : public EnumWithStrings<GeoCellGridScheme, detail::GeoCellGridSchemeEnum> {
  public:
   using Enum = detail::GeoCellGridSchemeEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 1>
-      descriptions_{{{Enum::Flat, "flat"}}};
+  static constexpr std::array<std::pair<Enum, std::string_view>, 4>
+      descriptions_{{{Enum::Flat, "flat"},
+                     {Enum::Flat4Shifts, "flat-4-shifts"},
+                     {Enum::Hierarchical, "hierarchical"},
+                     {Enum::Hierarchical3Shifts, "hierarchical-3-shifts"}}};
   static const GeoCellGridScheme Flat;
+  static const GeoCellGridScheme Flat4Shifts;
+  static const GeoCellGridScheme Hierarchical;
+  static const GeoCellGridScheme Hierarchical3Shifts;
 
   static constexpr std::string_view typeName() {
     return "geo cell grid scheme";
@@ -100,15 +143,25 @@ class GeoCellGrid {
   // The number of grid columns or rows (the same in all schemes).
   uint64_t numCellsPerDimension() const { return uint64_t{1} << level_; }
 
-  // The number of bits occupied by a cell index.
+  // The number of bits occupied by a cell index: `2 * level + 1` for the
+  // single-grid schemes, two more for the shifted schemes (the extra bits
+  // select the grid copy).
   //
-  // NOTE: This can depend on the scheme (a scheme with several grid copies
-  // needs extra bits to select the copy), so the bit count must never be
+  // NOTE: This depends on the scheme, so the bit count must never be
   // hard-coded elsewhere.
-  uint64_t numCellBits() const { return 2 * uint64_t{level_} + 1; }
+  uint64_t numCellBits() const {
+    return 2 * uint64_t{level_} + 1 + (isShifted() ? 2 : 0);
+  }
+
+  // The largest cell index that fits into `numCellBits()` bits. Every cell
+  // index of every scheme is at most this value.
+  CellIndex maxCellIndex() const { return (uint64_t{1} << numCellBits()) - 1; }
 
   // The index of the special "sentinel" cell, which is assigned to every WKT
-  // literal that does not fit into any regular cell.
+  // literal that does not fit into any regular cell (and to literals that
+  // cannot be parsed): for the flat schemes the reserved all-ones index
+  // (`maxCellIndex()`), for the hierarchical schemes the root cell of the
+  // first quadtree copy. It is always part of `coveringCellRanges`.
   CellIndex sentinelCell() const;
 
   // The number of bits remaining for the position of a word inside the geo
@@ -121,11 +174,14 @@ class GeoCellGrid {
   // The maximum number of words the geo vocabulary can hold with this grid.
   uint64_t maxNumWords() const { return uint64_t{1} << numPositionBits(); }
 
-  // The cell index containing the point (`lng`, `lat`), with clamping.
+  // The cell index containing the point (`lng`, `lat`), with clamping. This
+  // is the cell index that `cellIndexFromBoundingBox` assigns to the
+  // degenerate bounding box consisting of just that point.
   CellIndex cellIndexFromPoint(double lng, double lat) const;
 
   // The cell index for the given bounding box: the smallest regular cell that
-  // contains it entirely, or `sentinelCell()` if no such cell exists.
+  // contains it entirely (for the shifted schemes over all grid copies), or
+  // `sentinelCell()` if no such cell exists.
   //
   // NOTE: The corners are normalized through the `GeoPoint` bit encoding, so
   // that the result is identical for a freshly parsed bounding box and for
@@ -140,10 +196,10 @@ class GeoCellGrid {
   CellIndex cellIndexFromWktLiteral(std::string_view wktLiteral) const;
 
   // Combine a cell index and a position into an annotated vocabulary index
-  // and take it apart again. The cell index must be at most `sentinelCell()`
+  // and take it apart again. The cell index must be at most `maxCellIndex()`
   // and the position must be smaller than `maxNumWords()`.
   uint64_t annotateIndex(CellIndex cellIndex, uint64_t position) const {
-    AD_EXPENSIVE_CHECK(cellIndex <= sentinelCell());
+    AD_EXPENSIVE_CHECK(cellIndex <= maxCellIndex());
     AD_EXPENSIVE_CHECK(position < maxNumWords());
     return (cellIndex << numPositionBits()) | position;
   }
@@ -192,7 +248,7 @@ class GeoCellGrid {
   // and only used in comparisons.
   std::pair<uint64_t, uint64_t> vocabIndexRangeForCells(CellIndex first,
                                                         CellIndex last) const {
-    AD_CONTRACT_CHECK(first <= last && last <= sentinelCell());
+    AD_CONTRACT_CHECK(first <= last && last <= maxCellIndex());
     return {geoVocabMarkerBit + (first << numPositionBits()),
             geoVocabMarkerBit + ((last + 1) << numPositionBits())};
   }
@@ -200,9 +256,21 @@ class GeoCellGrid {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GeoCellGrid, level_, scheme_)
 
  private:
+  // Whether the scheme uses several shifted grid copies, and whether it is
+  // hierarchical (a quadtree instead of a flat grid).
+  bool isShifted() const {
+    return scheme_ == GeoCellGridScheme::Enum::Flat4Shifts ||
+           scheme_ == GeoCellGridScheme::Enum::Hierarchical3Shifts;
+  }
+  bool isHierarchical() const {
+    return scheme_ == GeoCellGridScheme::Enum::Hierarchical ||
+           scheme_ == GeoCellGridScheme::Enum::Hierarchical3Shifts;
+  }
+
   // Coordinate convention of the private helpers: `u` and `v` are normalized
   // longitude and latitude in `[0, 1]` (as computed by `normalize`), `x` and
-  // `y` are integer grid coordinates in `[0, 2^level - 1]`.
+  // `y` are integer grid coordinates in `[0, 2^level - 1]` (leaf coordinates
+  // for the hierarchical schemes).
 
   // The integer grid coordinates of the two corners of a normalized
   // rectangle.
@@ -229,11 +297,58 @@ class GeoCellGrid {
   // does not produce them in that order has to sort them first.
   static CellRanges mergeRanges(const CellRanges& ranges);
 
-  // Cell assignment and cover computation of the `Flat` scheme, on
-  // normalized coordinates in `[0, 1]`.
+  // Cell assignment of the four schemes, on normalized coordinates in
+  // `[0, 1]`. The `hash` of the `Flat4Shifts` scheme determines the order in
+  // which the grid copies are tried (see the implementation).
   CellIndex flatCell(double u1, double v1, double u2, double v2) const;
+  CellIndex flat4ShiftsCell(double u1, double v1, double u2, double v2,
+                            uint64_t hash) const;
+  CellIndex hierarchicalCell(double u1, double v1, double u2, double v2) const;
+  CellIndex hierarchical3ShiftsCell(double u1, double v1, double u2,
+                                    double v2) const;
+
+  // The S2-style cell index (without shift bits) of the smallest cell of one
+  // (unshifted) quadtree that contains the leaf box `[x1, x2] x [y1, y2]`.
+  CellIndex hierarchicalCellOfLeafBox(uint64_t x1, uint64_t y1, uint64_t x2,
+                                      uint64_t y2) const;
+
+  // Cover computation of the four schemes, appending to `ranges` (not
+  // necessarily in ascending order).
   void flatCover(double u1, double v1, double u2, double v2,
                  CellRanges& ranges) const;
+  void flat4ShiftsCover(double u1, double v1, double u2, double v2,
+                        CellRanges& ranges) const;
+  void hierarchicalCover(double u1, double v1, double u2, double v2,
+                         CellIndex shiftPrefix, CellRanges& ranges) const;
+  void hierarchical3ShiftsCover(double u1, double v1, double u2, double v2,
+                                CellRanges& ranges) const;
+
+  // Recursive quadtree walk for the hierarchical cover, in leaf coordinates.
+  void hierarchicalCoverRecurse(uint64_t queryX1, uint64_t queryY1,
+                                uint64_t queryX2, uint64_t queryY2,
+                                uint64_t levelK, uint64_t cellX, uint64_t cellY,
+                                CellIndex shiftPrefix,
+                                CellRanges& ranges) const;
+};
+
+// A prefilter for the canonical spatial join situation: given the (padded)
+// query rectangle, it decides from a WKT literal's vocabulary index alone -
+// two bit operations and a binary search over a handful of ranges, no disk
+// access - whether the literal can be skipped because its grid cell does not
+// intersect the rectangle. Conservative: literals without cell information
+// and indices outside the WKT region are never skipped.
+class GeoCellIdPrefilter {
+  // Half-open, ascending ranges of vocabulary index payloads that must be
+  // kept (covering cells plus the "no information" cells).
+  std::vector<std::pair<uint64_t, uint64_t>> keepRanges_;
+
+ public:
+  GeoCellIdPrefilter(const GeoCellGrid& grid, double minLng, double minLat,
+                     double maxLng, double maxLat);
+
+  // Return true iff the word with the given vocabulary index payload is
+  // certainly outside the query rectangle.
+  bool canBeSkipped(uint64_t vocabIndexBits) const;
 };
 
 }  // namespace ad_utility

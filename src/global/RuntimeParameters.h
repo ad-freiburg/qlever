@@ -175,6 +175,13 @@ struct RuntimeParameters {
   // The maximum size of the `prefilterBox` for
   // `LibspatialjoinAlgorithm::parse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};
+  // The maximum estimated number of rows of a spatial join side that is
+  // materialized at query planning time to compute its bounding rectangle for
+  // block prefiltering of the other side (see
+  // `SpatialJoin::cloneWithGeoBlockPrefilter`). 0 disables the plan-time
+  // materialization.
+  SizeT spatialJoinPlanTimePrefilterMaxRows_{
+      100'000, "spatial-join-plan-time-prefilter-max-rows"};
   // Writable directory for the temporary files written by `SpatialJoin` when
   // using the `libspatialjoin` algorithm. If empty (the default), the index
   // directory is used.

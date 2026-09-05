@@ -13,7 +13,9 @@
 #include <limits>
 #include <random>
 
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
+#include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "rdfTypes/GeoCellGrid.h"
 
@@ -21,6 +23,7 @@ namespace {
 
 using ad_utility::GeoCellGrid;
 using ad_utility::GeoCellGridScheme;
+using ad_utility::GeoCellIdPrefilter;
 
 // Build a full WKT literal (with quotes and datatype suffix) from the given
 // content.
@@ -357,6 +360,305 @@ TEST(GeoCellGrid, unknownSchemeIsDefendedAgainst) {
 
   EXPECT_THROW(grid.coveringCellRanges(-10.0, -10.0, 10.0, 10.0),
                ad_utility::Exception);
+}
+
+// The following tests exercise the three schemes beyond `Flat`, the geo-cell
+// order of the `TripleComponentComparator`, the cell-annotated indices of the
+// `GeoVocabulary`, and the `GeoCellIdPrefilter`.
+
+// _____________________________________________________________________________
+TEST(GeoCellGrid, cellBitsPerScheme) {
+  EXPECT_EQ(GeoCellGrid(10, GeoCellGridScheme::Flat).numCellBits(), 21u);
+  EXPECT_EQ(GeoCellGrid(10, GeoCellGridScheme::Flat4Shifts).numCellBits(), 23u);
+  EXPECT_EQ(GeoCellGrid(10, GeoCellGridScheme::Hierarchical).numCellBits(),
+            21u);
+  EXPECT_EQ(
+      GeoCellGrid(10, GeoCellGridScheme::Hierarchical3Shifts).numCellBits(),
+      23u);
+  // The hierarchical schemes have no separate sentinel; the root of the
+  // first copy takes its role.
+  EXPECT_EQ(GeoCellGrid(10, GeoCellGridScheme::Hierarchical).sentinelCell(),
+            uint64_t{1} << 20);
+  EXPECT_EQ(GeoCellGrid(10, GeoCellGridScheme::Flat).sentinelCell(),
+            (uint64_t{1} << 21) - 1);
+}
+
+// _____________________________________________________________________________
+TEST(GeoCellGrid, hierarchicalEncoding) {
+  GeoCellGrid grid{3, GeoCellGridScheme::Hierarchical};
+  // The root is the middle of the ID space of 2 * 3 + 1 = 7 bits.
+  EXPECT_EQ(grid.sentinelCell(), 64u);
+  // A point geometry gets a leaf cell (odd cell number).
+  ad_utility::BoundingBox point{GeoPoint{10.0, 10.0}, GeoPoint{10.0, 10.0}};
+  auto leaf = grid.cellIndexFromBoundingBox(point);
+  EXPECT_EQ(leaf & 1, 1u);
+  // A geometry spanning the whole world gets the root.
+  ad_utility::BoundingBox world{GeoPoint{-90.0, -180.0}, GeoPoint{90.0, 180.0}};
+  EXPECT_EQ(grid.cellIndexFromBoundingBox(world), grid.sentinelCell());
+  // The cover of a tiny rectangle consists of one leaf (or few leaves) plus
+  // all their ancestors, root included.
+  auto ranges = grid.coveringCellRanges(10.0, 10.0, 10.1, 10.1);
+  bool containsRoot = false;
+  bool containsLeaf = false;
+  for (auto [first, last] : ranges) {
+    containsRoot |=
+        (grid.sentinelCell() >= first && grid.sentinelCell() <= last);
+    containsLeaf |= (leaf >= first && leaf <= last);
+  }
+  EXPECT_TRUE(containsRoot);
+  EXPECT_TRUE(containsLeaf);
+}
+
+// _____________________________________________________________________________
+TEST(GeoCellGrid, shiftedSchemesBoundTheSentinelPopulation) {
+  std::mt19937_64 gen{815};
+  std::uniform_real_distribution<double> lngDist{-170.0, 160.0};
+  std::uniform_real_distribution<double> latDist{-80.0, 70.0};
+
+  // Flat-4-shifts: every geometry of at most half a cell in both dimensions
+  // fits a regular cell of one of the four copies.
+  {
+    GeoCellGrid grid{5, GeoCellGridScheme::Flat4Shifts};
+    double cellLng = 360.0 / 32.0;
+    double cellLat = 180.0 / 32.0;
+    for (int i = 0; i < 3000; ++i) {
+      double lng = lngDist(gen);
+      double lat = latDist(gen);
+      ad_utility::BoundingBox box{
+          GeoPoint{lat, lng},
+          GeoPoint{lat + 0.49 * cellLat, lng + 0.49 * cellLng}};
+      EXPECT_NE(grid.cellIndexFromBoundingBox(box), grid.sentinelCell());
+    }
+  }
+
+  // Hierarchical-3-shifts: every geometry is stored at a cell of side at
+  // most ~6 times its own extent (Chan's guarantee; we allow a factor of 8
+  // for the quantization at the borders), so nothing escalates towards the
+  // root by more than a constant number of levels.
+  {
+    uint8_t level = 8;
+    GeoCellGrid grid{level, GeoCellGridScheme::Hierarchical3Shifts};
+    for (int i = 0; i < 3000; ++i) {
+      double lng = lngDist(gen);
+      double lat = latDist(gen);
+      // Extent: 1/64 of the domain, i.e. natural level 6 of 8.
+      double w = 360.0 / 64.0;
+      double h = 180.0 / 64.0;
+      ad_utility::BoundingBox box{GeoPoint{lat, lng},
+                                  GeoPoint{lat + h, lng + w}};
+      auto cell = grid.cellIndexFromBoundingBox(box);
+      // Depth below the leaves is encoded in the trailing zeros of the cell
+      // number; the stored cell has side length 2^depthBelow leaves.
+      uint64_t cellWithoutShift =
+          cell & ((uint64_t{1} << (2 * uint64_t{level} + 1)) - 1);
+      uint64_t depthBelow = 0;
+      while (((cellWithoutShift >> depthBelow) & 1) == 0) {
+        ++depthBelow;
+      }
+      AD_CORRECTNESS_CHECK(depthBelow % 2 == 0);
+      depthBelow /= 2;
+      // Natural level 6 -> stored level >= 3 (cell side <= 8x extent).
+      EXPECT_LE(depthBelow, uint64_t{5})
+          << "geometry at [" << lng << ", " << lat << "]";
+    }
+  }
+}
+
+// _____________________________________________________________________________
+TEST(GeoCellGrid, comparatorAppliesGeoCellOrder) {
+  using Level = TripleComponentComparator::Level;
+  TripleComponentComparator cmp;
+  cmp.setGeoCellGrid(GeoCellGrid{2});
+
+  // Level 2: POINT(-170 80) is in cell (3 << 2) | 0 = 12, POINT(170 -80) in
+  // cell (0 << 2) | 3 = 3.
+  std::string cell12 = wkt("POINT(-170 80)");
+  std::string cell3 = wkt("POINT(170 -80)");
+  ASSERT_LT(cmp.compareLexicographically(cell12, cell3, Level::TOTAL), 0);
+
+  // Non-WKT words have geo sort key 0, WKT literals a key ordered by cell.
+  EXPECT_EQ(cmp.geoSortKey("<http://example.org>"), 0u);
+  EXPECT_EQ(cmp.geoSortKey("\"POINT(1 1)\""), 0u);  // no datatype, not WKT
+  EXPECT_EQ(cmp.geoSortKey(cell12), (uint64_t{1} << 63) | 12);
+  EXPECT_EQ(cmp.geoSortKey(cell3), (uint64_t{1} << 63) | 3);
+
+  // WKT literals sort after all other words ...
+  EXPECT_LT(cmp.compare("<http://example.org>", cell3, Level::TOTAL), 0);
+  EXPECT_LT(cmp.compare("\"zzz\"", cell3, Level::TOTAL), 0);
+  // ... and by cell first among each other, even against the lexicographic
+  // order.
+  EXPECT_GT(cmp.compare(cell12, cell3, Level::TOTAL), 0);
+  // Within one cell the order is lexicographic.
+  std::string cell12b = wkt("POINT(-171 80)");
+  EXPECT_LT(cmp.compare(cell12, cell12b, Level::TOTAL), 0);
+
+  // The variant with precomputed keys is consistent with `compare`.
+  EXPECT_TRUE(cmp.isLessInTotalWithExternalFlagAndGeoSortKeys(
+      cell3, false, cmp.geoSortKey(cell3), cell12, false,
+      cmp.geoSortKey(cell12)));
+  EXPECT_FALSE(cmp.isLessInTotalWithExternalFlagAndGeoSortKeys(
+      cell12, false, cmp.geoSortKey(cell12), cell3, false,
+      cmp.geoSortKey(cell3)));
+
+  // Without a grid the behavior is the plain lexicographic one.
+  TripleComponentComparator plainCmp;
+  EXPECT_EQ(plainCmp.geoSortKey(cell12), 0u);
+  EXPECT_LT(plainCmp.compare(cell12, "<http://example.org>", Level::TOTAL), 0);
+  EXPECT_LT(plainCmp.compare(cell12, cell3, Level::TOTAL), 0);
+}
+
+// _____________________________________________________________________________
+TEST(GeoCellIdPrefilter, canBeSkipped) {
+  GeoCellGrid grid{2};
+  // Query box entirely inside cell (2 << 2) | 2 = 10.
+  GeoCellIdPrefilter prefilter{grid, 10.0, 10.0, 11.0, 11.0};
+
+  auto geoId = [&grid](uint64_t cell, uint64_t position) {
+    return GeoCellGrid::geoVocabMarkerBit | grid.annotateIndex(cell, position);
+  };
+
+  // Indices outside the WKT region can never be skipped.
+  EXPECT_FALSE(prefilter.canBeSkipped(42));
+  // The covered cell and the sentinel cell are kept.
+  EXPECT_FALSE(prefilter.canBeSkipped(geoId(10, 0)));
+  EXPECT_FALSE(prefilter.canBeSkipped(geoId(10, 12345)));
+  EXPECT_FALSE(prefilter.canBeSkipped(geoId(grid.sentinelCell(), 3)));
+  // All other cells are skipped.
+  EXPECT_TRUE(prefilter.canBeSkipped(geoId(0, 0)));
+  EXPECT_TRUE(prefilter.canBeSkipped(geoId(9, 7)));
+  EXPECT_TRUE(prefilter.canBeSkipped(geoId(11, 7)));
+  EXPECT_TRUE(prefilter.canBeSkipped(geoId(grid.sentinelCell() - 1, 0)));
+}
+
+// _____________________________________________________________________________
+TEST(GeoVocabulary, cellAnnotatedIndices) {
+  using GV = GeoVocabulary<VocabularyInMemory>;
+  GeoCellGrid grid{2};
+  const std::string fn = "geocellvocab-test.dat";
+
+  // Words in (cell, lexicographic) order: cell 3, cell 12 (twice), sentinel.
+  std::string w0 = wkt("POINT(170 -80)");  // cell 3
+  std::string w1 = wkt("POINT(-170 80)");  // cell 12
+  std::string w2 = wkt("POINT(-171 80)");  // cell 12
+  std::string w3 = wkt("NOTAGEOMETRY");    // sentinel (invalid)
+  std::vector<std::string> words{w0, w1, w2, w3};
+  std::vector<uint64_t> expectedIndices{
+      grid.annotateIndex(3, 0), grid.annotateIndex(12, 1),
+      grid.annotateIndex(12, 2), grid.annotateIndex(grid.sentinelCell(), 3)};
+
+  {
+    GV writeVocab;
+    writeVocab.setGeoCellGrid(grid);
+    auto ww = writeVocab.makeDiskWriterPtr(fn);
+    ww->readableName() = "test";
+    for (size_t i = 0; i < words.size(); ++i) {
+      EXPECT_EQ((*ww)(words[i], false), expectedIndices[i]);
+    }
+    ww->finish();
+  }
+
+  GV geoVocab;
+  geoVocab.open(fn);
+  ASSERT_TRUE(geoVocab.getGeoCellGrid().has_value());
+  EXPECT_EQ(geoVocab.getGeoCellGrid().value(), grid);
+  EXPECT_EQ(geoVocab.size(), words.size());
+
+  // Retrieval by annotated index.
+  for (size_t i = 0; i < words.size(); ++i) {
+    EXPECT_EQ(geoVocab[expectedIndices[i]], words[i]);
+    EXPECT_EQ(geoVocab.toPosition(expectedIndices[i]), i);
+    EXPECT_EQ(geoVocab.toAnnotatedIndex(i), expectedIndices[i]);
+  }
+  EXPECT_TRUE(geoVocab.getGeoInfo(expectedIndices[0]).has_value());
+  EXPECT_FALSE(geoVocab.getGeoInfo(expectedIndices[3]).has_value());
+
+  // The past-the-end index is larger than every valid index.
+  EXPECT_EQ(geoVocab.endIndex(),
+            grid.annotateIndex(grid.sentinelCell(), words.size()));
+
+  // `scanAll` yields the annotated indices.
+  std::vector<uint64_t> scannedIndices;
+  for (const auto& indexAndWord : geoVocab.scanAll()) {
+    scannedIndices.push_back(indexAndWord.index_);
+  }
+  EXPECT_THAT(scannedIndices, ::testing::ElementsAreArray(expectedIndices));
+
+  // Binary search with the geo-cell-aware comparator returns annotated
+  // indices.
+  TripleComponentComparator cmp;
+  cmp.setGeoCellGrid(grid);
+  auto comparator = [&cmp](const auto& a, const auto& b) {
+    return cmp(a, b, TripleComponentComparator::Level::TOTAL);
+  };
+  for (size_t i = 0; i < words.size(); ++i) {
+    auto wordAndIndex = geoVocab.lower_bound(words[i], comparator);
+    ASSERT_FALSE(wordAndIndex.isEnd());
+    EXPECT_EQ(wordAndIndex.index(), expectedIndices[i]);
+    EXPECT_EQ(wordAndIndex.word(), words[i]);
+  }
+
+  // Feeding words out of cell order must fail.
+  {
+    GV badVocab;
+    badVocab.setGeoCellGrid(grid);
+    auto ww = badVocab.makeDiskWriterPtr("geocellvocab-test-bad.dat");
+    ww->readableName() = "test";
+    (*ww)(w1, false);
+    EXPECT_ANY_THROW((*ww)(w0, false));
+    ww->finish();
+  }
+}
+
+// _____________________________________________________________________________
+TEST(GeoVocabulary, cellAnnotatedIndicesThroughSplitVocabulary) {
+  using SGV = SplitGeoVocabulary<VocabularyInMemory>;
+  GeoCellGrid grid{2};
+  const std::string fn = "geocellsplitvocab-test.dat";
+
+  std::string iri = "<http://example.org/a>";
+  std::string wkt3 = wkt("POINT(170 -80)");   // cell 3
+  std::string wkt12 = wkt("POINT(-170 80)");  // cell 12
+
+  TripleComponentComparator cmp;
+  cmp.setGeoCellGrid(grid);
+
+  {
+    SGV writeVocab;
+    writeVocab.setGeoCellGrid(grid);
+    auto ww = writeVocab.makeDiskWriterPtr(fn);
+    ww->readableName() = "test";
+    // Words in the comparator's order: all non-WKT words first, then the WKT
+    // literals by cell.
+    EXPECT_EQ((*ww)(iri, false), 0u);
+    EXPECT_EQ((*ww)(wkt3, false), SGV::addMarker(grid.annotateIndex(3, 0), 1));
+    EXPECT_EQ((*ww)(wkt12, false),
+              SGV::addMarker(grid.annotateIndex(12, 1), 1));
+    ww->finish();
+  }
+
+  SGV vocab;
+  vocab.setGeoCellGrid(grid);
+  vocab.open(fn);
+
+  auto comparator = [&cmp](const auto& a, const auto& b) {
+    return cmp(a, b, TripleComponentComparator::Level::TOTAL);
+  };
+
+  // Retrieval and exact lookup by marked, cell-annotated index.
+  EXPECT_EQ(vocab[SGV::addMarker(grid.annotateIndex(3, 0), 1)], wkt3);
+  EXPECT_EQ(vocab[SGV::addMarker(grid.annotateIndex(12, 1), 1)], wkt12);
+  EXPECT_EQ(vocab[0], iri);
+
+  auto [lo3, hi3] = vocab.getPositionOfWord(wkt3, comparator);
+  EXPECT_EQ(lo3, SGV::addMarker(grid.annotateIndex(3, 0), 1));
+  EXPECT_EQ(hi3, lo3 + 1);
+
+  // A WKT literal that is not in the vocabulary and larger than all entries
+  // gets past-the-end bounds that are larger than every valid index.
+  std::string wktMissing = wkt("NOTAGEOMETRY");  // sentinel cell
+  auto [loM, hiM] = vocab.getPositionOfWord(wktMissing, comparator);
+  EXPECT_EQ(loM, hiM);
+  EXPECT_GT(loM, SGV::addMarker(grid.annotateIndex(12, 1), 1));
 }
 
 }  // namespace

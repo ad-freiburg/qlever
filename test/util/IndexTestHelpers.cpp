@@ -1,6 +1,11 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 The QLever Authors, in particular:
+//
+// 2023 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "IndexTestHelpers.h"
 
@@ -236,6 +241,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         c.vocabularyType.has_value()
             ? c.vocabularyType.value()
             : VocabularyType::randomForIndexBuilding());
+    index.getImpl().setGeoCellGridLevelForIndexBuilding(c.geoCellGridLevel);
+    index.getImpl().setGeoCellGridSchemeForIndexBuilding(c.geoCellGridScheme);
     if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
       index.getImpl().setPrefixesForEncodedValues(
           std::move(c.encodedPrefixesWithoutAngleBrackets.value()));

@@ -1,6 +1,11 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 The QLever Authors, in particular:
+//
+// 2015 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/IndexScan.h"
 
@@ -358,6 +363,18 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   AD_CORRECTNESS_CHECK(indexScan != nullptr);
   std::tie(indexScan->sizeEstimateIsExact_, indexScan->sizeEstimate_) =
       indexScan->computeSizeEstimate();
+  // Remember the row total of the unprefiltered blocks for runtime
+  // statistics. If this scan is itself already a prefiltered copy (e.g. a
+  // plan-time prefiltered scan that is prefiltered again at runtime), keep
+  // the row total of the original, completely unprefiltered scan.
+  uint64_t numRowsBefore = 0;
+  for (const auto& blockRange : scanSpecAndBlocks_.blockMetadata_) {
+    for (const auto& block : blockRange) {
+      numRowsBefore += block.numRows_;
+    }
+  }
+  indexScan->numBlockRowsBeforePrefilter_ =
+      numBlockRowsBeforePrefilter_.value_or(numRowsBefore);
   return copy;
 }
 

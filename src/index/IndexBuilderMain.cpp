@@ -1,10 +1,14 @@
-// Copyright 2014 - 2025 University of Freiburg
-// Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2014 - 2025 The QLever Authors, in particular:
 //
+// 2014 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2014 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2014 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/functional/bind_front.h>
 
@@ -275,6 +279,18 @@ int main(int argc, char** argv) {
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
+  add("geo-cell-grid-level", po::value(&config.geoCellGridLevel_),
+      "Level L of the geo cell grid for WKT literals: the earth's surface is "
+      "divided into 2^L x 2^L cells and the grid cell of each WKT literal is "
+      "encoded into its ID, which enables the geo cell prefilter for spatial "
+      "joins. 0 (the default) disables this; values > 0 require "
+      "`--vocabulary-type on-disk-compressed-geo-split`.");
+  add("geo-cell-grid-scheme", po::value(&config.geoCellGridScheme_),
+      "The cell assignment scheme of the geo cell grid: `flat` (default), "
+      "`flat-4-shifts` (four half-shifted flat grids), `hierarchical` "
+      "(quadtree with S2-style cell IDs), or `hierarchical-3-shifts` (three "
+      "third-shifted quadtrees). Only relevant with a geo cell grid level "
+      "> 0.");
 
   add("encode-as-id",
       po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),

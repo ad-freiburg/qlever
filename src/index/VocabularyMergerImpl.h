@@ -1,6 +1,12 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2018 - 2026 The QLever Authors, in particular:
+//
+// 2018 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
@@ -31,13 +37,14 @@ auto mergeVocabulary(const std::string& basename,
                      const std::vector<std::string>& partialVocabularySuffixes,
                      W comparator, C& internalWordCallback,
                      ad_utility::MemorySize memoryToUse,
-                     const ad_utility::RegexSet& blankNodeIriRegexes)
+                     const ad_utility::RegexSet& blankNodeIriRegexes,
+                     const GeoSortKeyFn& geoSortKeyFn)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, partialVocabularySuffixes,
                                 std::move(comparator), internalWordCallback,
-                                memoryToUse, blankNodeIriRegexes);
+                                memoryToUse, blankNodeIriRegexes, geoSortKeyFn);
 }
 
 // _________________________________________________________________
@@ -46,7 +53,8 @@ auto VocabularyMerger::mergeVocabulary(
     const std::string& basename,
     const std::vector<std::string>& partialVocabularySuffixes, W comparator,
     C& wordCallback, ad_utility::MemorySize memoryToUse,
-    const ad_utility::RegexSet& blankNodeIriRegexes)
+    const ad_utility::RegexSet& blankNodeIriRegexes,
+    const GeoSortKeyFn& geoSortKeyFn)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
@@ -56,14 +64,21 @@ auto VocabularyMerger::mergeVocabulary(
     return comparator(t1.iriOrLiteral_, t1.isExternal_, t2.iriOrLiteral_,
                       t2.isExternal_);
   };
+  // The full vocabulary order: by geo sort key first (all keys are 0 when no
+  // geo cell grid is configured), lexicographically within equal keys. The
+  // keys were computed once per word when reading the partial vocabulary
+  // files below.
   auto lessThanForQueue = [&lessThan](const QueueWord& p1,
                                       const QueueWord& p2) {
+    if (p1.geoSortKey_ != p2.geoSortKey_) {
+      return p1.geoSortKey_ < p2.geoSortKey_;
+    }
     return lessThan(p1.entry_, p2.entry_);
   };
 
   // Open and prepare all infiles and file-based output vectors.
-  auto makeWordRangeFromFile = [&basename,
-                                &partialVocabularySuffixes](size_t fileIndex) {
+  auto makeWordRangeFromFile = [&basename, &partialVocabularySuffixes,
+                                &geoSortKeyFn](size_t fileIndex) {
     ad_utility::serialization::FileReadSerializer infile{
         absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX,
                      partialVocabularySuffixes.at(fileIndex))};
@@ -72,11 +87,13 @@ auto VocabularyMerger::mergeVocabulary(
 
     return ad_utility::CachingTransformInputRange{
         ad_utility::integerRange(numWords),
-        [fileIndex, infile{std::move(infile)}](
-            [[maybe_unused]] const std::size_t i) mutable {
+        [fileIndex, infile{std::move(infile)},
+         &geoSortKeyFn]([[maybe_unused]] const std::size_t i) mutable {
           TripleComponentWithIndex val;
           infile >> val;
-          return QueueWord{std::move(val), fileIndex};
+          uint64_t geoSortKey =
+              geoSortKeyFn ? geoSortKeyFn(val.iriOrLiteral_) : 0;
+          return QueueWord{std::move(val), fileIndex, geoSortKey};
         }};
   };
   std::vector<decltype(makeWordRangeFromFile(0))> generators;
@@ -128,14 +145,17 @@ CPP_template_def(typename C, typename L)(
     if (!lastTripleComponent_.has_value() ||
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
       if (lastTripleComponent_.has_value()) {
-        AD_CORRECTNESS_CHECK(lessThan(lastTripleComponent_.value(), top.entry_),
-                             "Total vocabulary order violated for ",
-                             lastTripleComponent_->iriOrLiteral(), " and ",
-                             top.iriOrLiteral());
+        AD_CORRECTNESS_CHECK(
+            lastGeoSortKey_ < top.geoSortKey_ ||
+                (lastGeoSortKey_ == top.geoSortKey_ &&
+                 lessThan(lastTripleComponent_.value(), top.entry_)),
+            "Total vocabulary order violated for ",
+            lastTripleComponent_->iriOrLiteral(), " and ", top.iriOrLiteral());
       }
       lastTripleComponent_ =
           TripleComponentWithIndex{std::move(top.iriOrLiteral()),
                                    top.isExternal(), metaData_.numWordsTotal()};
+      lastGeoSortKey_ = top.geoSortKey_;
       lastTripleComponentIsBlankNode_ =
           lastTripleComponent_.value().isBlankNode(blankNodeIriRegexes);
 
@@ -179,7 +199,8 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
   std::optional<std::string_view> lastWord;
   // This value will overflow on the first entry.
   size_t nextWordId = -1;
-  for (auto& [word, idAndExternal] : els) {
+  for (auto& [word, idAndExternal, geoSortKey] : els) {
+    (void)geoSortKey;
     auto id = idAndExternal.id();
     if (lastWord != word) {
       nextWordId++;
@@ -237,10 +258,12 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   // This is essentially a `VectorIncrementalSerializer` with a custom
   // serialization function, which the infrastructure currently does not
   // support.
-  for (const auto& [word, idAndExternal] : els) {
+  for (const auto& [word, idAndExternal, geoSortKey] : els) {
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
-    // belongs to the internal or external vocabulary.
+    // belongs to the internal or external vocabulary. The geo sort key is not
+    // written; the merge recomputes it per word.
+    (void)geoSortKey;
     serializer << word;
     serializer << idAndExternal.isExternal();
     serializer << idAndExternal.id();
@@ -252,12 +275,16 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
+inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map,
+                                 const GeoSortKeyFn& geoSortKeyFn = {}) {
   ItemVec els;
   els.resize(map.map_.size());
   using T = ItemVec::value_type;
-  ql::ranges::transform(map.map_, els.begin(),
-                        [](auto& el) -> T { return {el.first, el.second}; });
+  // Precompute the geo sort key of each word (if a grid is configured), so
+  // that sorting never has to parse a WKT literal per comparison.
+  ql::ranges::transform(map.map_, els.begin(), [&](auto& el) -> T {
+    return {el.first, el.second, geoSortKeyFn ? geoSortKeyFn(el.first) : 0};
+  });
   return els;
 }
 
