@@ -625,10 +625,18 @@ CPP_template_def(typename RequestT, typename SendT)(
              SharedTimeTracer tracer = nullptr) -> Awaitable<void> {
     auto timeLimit = verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk);
+    using ad_utility::websocket::QueryOperation;
+    // An operation is an update if all of its parts are updates. We need it
+    // here because `createMessageSender` below already writes the `start`
+    // event, which contains the operation type.
+    const bool isUpdateOperation =
+        ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause);
     // Empty when the header is absent.
     std::string_view clientIp = request.base()["X-Real-IP"];
-    ad_utility::websocket::MessageSender messageSender =
-        createMessageSender(queryHub_, request, operationString, clientIp);
+    ad_utility::websocket::MessageSender messageSender = createMessageSender(
+        queryHub_, request, operationString,
+        isUpdateOperation ? QueryOperation::UPDATE : QueryOperation::QUERY,
+        clientIp);
     // Grab the shared handle before `messageSender` is moved below.
     using enum ad_utility::websocket::QueryStatus;
     auto queryStatus = messageSender.sharedStatus();
@@ -643,7 +651,7 @@ CPP_template_def(typename RequestT, typename SendT)(
     auto& [makeQec, cancellationHandle, cancelTimeoutOnDestruction] =
         preparedOp;
     try {
-      if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
+      if (isUpdateOperation) {
         metrics_->startedSparqlOperations_->Add(1, {OperationType::update});
         AD_CORRECTNESS_CHECK(tracer != nullptr);
         co_await processUpdate(std::move(makeQec), std::move(operations),
@@ -953,14 +961,15 @@ CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     ad_utility::websocket::OwningQueryId Server::getQueryId(
         const RequestT& request, std::string_view query,
+        ad_utility::websocket::QueryOperation operationType,
         std::string_view clientIp) {
   using ad_utility::websocket::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
-    return queryRegistry_.uniqueId(query, clientIp);
+    return queryRegistry_.uniqueId(query, operationType, clientIp);
   }
-  auto queryId = queryRegistry_.uniqueIdFromString(std::string(queryIdHeader),
-                                                   query, clientIp);
+  auto queryId = queryRegistry_.uniqueIdFromString(
+      std::string(queryIdHeader), query, operationType, clientIp);
   if (!queryId) {
     throw QueryAlreadyInUseError{queryIdHeader};
   }
@@ -1022,12 +1031,14 @@ CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     ad_utility::websocket::MessageSender Server::createMessageSender(
         const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-        const RequestT& request, std::string_view operation,
+        const RequestT& request, std::string_view operationString,
+        ad_utility::websocket::QueryOperation operationType,
         std::string_view clientIp) {
   auto queryHubLock = queryHub.lock();
   AD_CORRECTNESS_CHECK(queryHubLock);
   ad_utility::websocket::MessageSender messageSender{
-      getQueryId(request, operation, clientIp), *queryHubLock};
+      getQueryId(request, operationString, operationType, clientIp),
+      *queryHubLock};
   return messageSender;
 }
 
@@ -1498,7 +1509,8 @@ bool Server::checkAccessToken(
 template ad_utility::websocket::MessageSender
 Server::createMessageSender<Server::StringBodyRequest>(
     const std::weak_ptr<ad_utility::websocket::QueryHub>&,
-    const StringBodyRequest&, std::string_view, std::string_view);
+    const StringBodyRequest&, std::string_view,
+    ad_utility::websocket::QueryOperation, std::string_view);
 
 // _____________________________________________________________________________
 Awaitable<qlever::IndexSwapConfig> Server::rebuildIndex(
