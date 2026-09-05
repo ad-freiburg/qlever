@@ -155,8 +155,10 @@ std::optional<De9imFilterString> SpatialJoin::getDe9imFilter() const {
 }
 
 // ____________________________________________________________________________
-std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
-  std::vector<QueryExecutionTree*> result;
+std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+SpatialJoin::getChildren() {
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+      result(allocator().as<QueryExecutionTree*>());
   auto addChild = [&](std::shared_ptr<QueryExecutionTree> child) {
     if (child) {
       result.push_back(child.get());

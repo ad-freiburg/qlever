@@ -50,7 +50,11 @@ class Values : virtual public Operation {
  public:
   virtual size_t getCostEstimate() override;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    return std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>(
+        allocator().as<QueryExecutionTree*>());
+  }
 
  public:
   // These two are also used by class `Service`, hence public.

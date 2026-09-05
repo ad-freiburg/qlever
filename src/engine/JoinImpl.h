@@ -71,8 +71,9 @@ class JoinImpl : public Operation {
 
   float getMultiplicity(size_t col) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {left_.get(), right_.get()};
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    return {{left_.get(), right_.get()}, allocator().as<QueryExecutionTree*>()};
   }
 
   bool columnOriginatesFromGraphOrUndef(

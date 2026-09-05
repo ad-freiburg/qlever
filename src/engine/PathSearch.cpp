@@ -118,8 +118,10 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> PathSearch::getChildren() {
-  std::vector<QueryExecutionTree*> res;
+std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+PathSearch::getChildren() {
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> res(
+      allocator().as<QueryExecutionTree*>());
   res.push_back(subtree_.get());
 
   if (sourceAndTargetTree_.has_value()) {

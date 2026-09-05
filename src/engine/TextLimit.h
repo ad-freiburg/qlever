@@ -69,8 +69,9 @@ class TextLimit : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {child_.get()};
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    return {{child_.get()}, allocator().as<QueryExecutionTree*>()};
   }
 };
 

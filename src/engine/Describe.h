@@ -34,7 +34,7 @@ class Describe : public Operation {
   const auto& getDescribe() const { return describe_; }
 
   // The following functions override those from the base class `Operation`.
-  std::vector<QueryExecutionTree*> getChildren() override;
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override;
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
