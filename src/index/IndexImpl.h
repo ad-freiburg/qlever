@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
 
+#include <absl/strings/str_cat.h>
 #include <absl/time/time.h>
 #include <gtest/gtest_prod.h>
 #include <re2/re2.h>
@@ -46,6 +47,7 @@
 #include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/ProgressBar.h"
 #include "util/TransparentFunctors.h"
 #include "util/json.h"
 
@@ -58,17 +60,6 @@ using FirstPermutation = SortBySPO;
 using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
 using SecondPermutation = SortByOSP;
 using ThirdPermutation = SortByPSO;
-
-// Return type of `IndexImpl::buildPartialVocabularies`.
-struct BuildPartialVocabulariesResult {
-  using TripleVec =
-      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // The i-th entry is the actual number of triples of the i-th batch, which
-  // belongs to the i-th partial vocabulary. It might be slightly different
-  // from the specified `batchSize` because of internally added triples.
-  std::vector<size_t> numTriplesPerPartialVocab_;
-  std::unique_ptr<TripleVec> idTriples_;
-};
 
 // Data produced after parsing: vocabulary metadata and unsorted ID triples.
 struct IndexBuilderDataAsExternalVector {
@@ -646,35 +637,39 @@ class IndexImpl {
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
       std::shared_ptr<RdfParserBase> parser);
 
-  // Parse all triples from `parser` in batches of `linesPerPartial`, write one
-  // partial vocabulary file per batch, and return the accumulated ID triples
-  // together with per-batch size information. The memory used by the item
-  // allocator is freed when this function returns.
+  // Parse all triples from `parser` using `NUM_PARALLEL_ITEM_MAPS` worker
+  // threads that work completely independently of each other. Each of them
+  // processes batches of `linesPerPartial` triples, and for each batch writes
+  // one partial vocabulary file and stores the corresponding ID triples in its
+  // own file. The memory used by the item allocator is freed when this function
+  // returns.
   BuildPartialVocabulariesResult buildPartialVocabularies(
       std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
+
+  // The work of a single worker thread spawned by `buildPartialVocabularies`:
+  // repeatedly get a batch of triples from `parser` (the parsers used for
+  // index building support concurrent calls to `getBatch`) and convert the
+  // strings in those triples to IDs using a hash map that is private to this
+  // worker. After `linesPerPartial` triples, write the resulting partial
+  // vocabulary and the corresponding triples. Both of them are private to
+  // this worker, so no synchronization with the other workers is needed.
+  BuildPartialVocabulariesResult::WorkerResult runPartialVocabularyWorker(
+      size_t linesPerPartial, RdfParserBase& parser, ItemAlloc itemAlloc,
+      std::atomic<size_t>* numHasWordTriples,
+      ad_utility::ConcurrentProgressBar& progressBar, size_t workerIdx);
 
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(
       std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
 
-  // Create a task that writes a partial vocabulary given by `items` to disk and
-  // adds the corresponding triples in `localIds` to the provided
-  // `globalWritePtr`. This is used to write the partial vocabularies in
-  // parallel while we are still parsing the input file. `numLines` indicates
-  // how many lines from the KB we have already parsed (only for logging).
-  // `numFiles` indicates how many partial vocabularies we have seen before,
-  // which is the index of the vocabulary we are going to write.
-  // `actualCurrentPartialSize` indicates how many triples belong to this
-  // partition (including extra langfilter triples). The `globalWritePtr` is
-  // shared between all tasks and is protected by a mutex internally, so the
-  // tasks can safely add their triples to it while writing their partial
-  // vocabularies to disk.
-  absl::AnyInvocable<void()> createWritePartialVocabularyTask(
-      size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      ItemMapArray items,
+  // Write the partial vocabulary given by `items` to the file
+  // `onDiskBase_ + PARTIAL_VOCAB_WORDS_INFIX + filenameSuffix` and add the
+  // corresponding triples in `localIds` to `idTriples`. Both `items` and
+  // `idTriples` belong to a single worker thread, so no locking is required.
+  void writePartialVocabulary(
+      const std::string& filenameSuffix, ItemMapAndBuffer items,
       std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-      ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr)
-      const;
+      TripleVec& idTriples) const;
 
   // Return a Turtle parser that parses the given files. The parser will be
   // configured to either parse in parallel or not (per input file), and to
@@ -686,8 +681,7 @@ class IndexImpl {
 
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
-      TripleVec& data, const std::vector<size_t>& actualLinesPerPartial,
-      Func isQLeverInternalTriple);
+      BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple);
 
   // Helper function to get the filename for a given permutation.
   std::string getFilenameForPermutation(const Permutation& permutation,

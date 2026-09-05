@@ -171,8 +171,9 @@ struct VocabularyMetaData {
 };
 // _______________________________________________________________
 // Merge the partial vocabularies in the  binary files
-// `basename + PARTIAL_VOCAB_WORDS_INFIX + to_string(i)`
-// where `0 <= i < numFiles`.
+// `basename + PARTIAL_VOCAB_WORDS_INFIX + suffix` for each `suffix` in
+// `partialVocabularySuffixes`. The mapping from the partial to the global IDs
+// is written to `basename + PARTIAL_VOCAB_IDMAP_INFIX + suffix`.
 // Return the number of total Words merged and the lower and upper bound of
 // language tagged predicates. Argument `comparator` gives the way to order
 // strings (case-sensitive or not). Argument `wordCallback`
@@ -183,8 +184,9 @@ struct VocabularyMetaData {
 // compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
 template <typename W, typename C>
 auto mergeVocabulary(
-    const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
-    ad_utility::MemorySize memoryToUse,
+    const std::string& basename,
+    const std::vector<std::string>& partialVocabularySuffixes, W comparator,
+    C& wordCallback, ad_utility::MemorySize memoryToUse,
     const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes = {})
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
@@ -209,7 +211,8 @@ class VocabularyMerger {
   // Friend declaration for the publicly available function.
   template <typename W, typename C>
   friend auto mergeVocabulary(
-      const std::string& basename, size_t numFiles, W comparator,
+      const std::string& basename,
+      const std::vector<std::string>& partialVocabularySuffixes, W comparator,
       C& wordCallback, ad_utility::MemorySize memoryToUse,
       const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
       -> CPP_ret(VocabularyMetaData)(
@@ -221,7 +224,8 @@ class VocabularyMerger {
   // `mergeVocabulary` function for details.
   template <typename W, typename C>
   auto mergeVocabulary(
-      const std::string& basename, size_t numFiles, W comparator,
+      const std::string& basename,
+      const std::vector<std::string>& partialVocabularySuffixes, W comparator,
       C& wordCallback, ad_utility::MemorySize memoryToUse,
       const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
       -> CPP_ret(VocabularyMetaData)(
@@ -302,7 +306,7 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
  */
 void writeMappedIdsToExtVec(
     const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
-    const HashMap<Id, Id>& map, std::unique_ptr<TripleVec>* writePtr);
+    const HashMap<Id, Id>& map, TripleVec& vec);
 
 /**
  * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
@@ -317,11 +321,11 @@ void writePartialVocabularyToFile(const ItemVec& els,
                                   const std::string& fileName);
 
 /**
- * @brief Take an Array of HashMaps of strings to Ids and insert all the
- * elements from all the hashMaps into a single vector No reordering or
- * deduplication is done, so result.size() == summed size of all the hash maps
+ * @brief Take a HashMap of strings to Ids and insert all its elements into a
+ * single vector. No reordering or deduplication is done, so result.size() ==
+ * size of the hash map
  */
-ItemVec vocabMapsToVector(const ItemMapArray& map);
+ItemVec vocabMapsToVector(const ItemMapAndBuffer& map);
 
 // _____________________________________________________________________________________________________________
 /**
