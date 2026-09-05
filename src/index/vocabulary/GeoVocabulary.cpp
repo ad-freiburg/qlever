@@ -66,15 +66,13 @@ void GeoVocabulary<V>::open(const std::string& filename) {
     uint64_t scheme = 0;
     if (version >= 2) {
       in >> scheme;
-      AD_CORRECTNESS_CHECK(
-          scheme <= static_cast<uint64_t>(
-                        ad_utility::GeoCellGridScheme::Hierarchical3Shifts));
+      AD_CORRECTNESS_CHECK(scheme < ad_utility::GeoCellGridScheme::numValues());
     }
     uint64_t level = 0;
     in >> level;
     grid_ = ad_utility::GeoCellGrid{
         static_cast<uint8_t>(level),
-        static_cast<ad_utility::GeoCellGridScheme>(scheme)};
+        static_cast<ad_utility::GeoCellGridScheme::Enum>(scheme)};
     in >> cellRuns_;
     AD_CORRECTNESS_CHECK(!cellRuns_.empty() || literals_.size() == 0);
   }
@@ -177,15 +175,16 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
                          "Too many WKT literals for the configured geo cell "
                          "grid, please rebuild with a smaller grid level");
     // The cell assignment must be exactly that of
-    // `GeoCellGrid::cellFromWktLiteral` (which the vocabulary order is based
-    // on). When the `GeometryInfo` is valid, its bounding box is the one that
-    // `cellFromWktLiteral` would compute, so we can reuse it; otherwise we
-    // delegate to `cellFromWktLiteral`, which can still assign a regular cell
-    // in corner cases where only parts of the `GeometryInfo` computation
-    // failed.
-    uint64_t cell = info.has_value()
-                        ? grid_->cellFromBoundingBox(info->getBoundingBox())
-                        : grid_->cellFromWktLiteral(word);
+    // `GeoCellGrid::cellIndexFromWktLiteral` (which the vocabulary order is
+    // based on). When the `GeometryInfo` is valid, its bounding box is the one
+    // that `cellIndexFromWktLiteral` would compute, so we can reuse it;
+    // otherwise we delegate to `cellIndexFromWktLiteral`, which can still
+    // assign a regular cell in corner cases where only parts of the
+    // `GeometryInfo` computation failed.
+    uint64_t cell =
+        info.has_value()
+            ? grid_->cellIndexFromBoundingBox(info->getBoundingBox())
+            : grid_->cellIndexFromWktLiteral(word);
     if (cellRuns_.empty() || cellRuns_.back().second != cell) {
       AD_CORRECTNESS_CHECK(
           cellRuns_.empty() || cellRuns_.back().second < cell,
@@ -210,7 +209,7 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
   if (grid_.has_value()) {
     ad_utility::serialization::FileWriteSerializer out{geoCellsFilename_};
     out << geoCellsVersion;
-    out << static_cast<uint64_t>(grid_->scheme());
+    out << static_cast<uint64_t>(grid_->scheme().value());
     out << uint64_t{grid_->level()};
     out << cellRuns_;
   }

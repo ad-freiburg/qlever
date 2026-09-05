@@ -25,6 +25,7 @@
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "rdfTypes/GeoCellGrid.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
@@ -399,11 +400,11 @@ namespace detail::splitVocabulary {
 // Split function for Well-Known Text Literals: All words are written to
 // vocabulary 0 except WKT literals, which go to vocabulary 1. The criterion is
 // shared with the geo-cell-aware word order of the `TripleComponentComparator`
-// (see `GeoCellGrid::isWktLiteral`), so exactly the words that sort into the
+// (see `ad_utility::isWktLiteral`), so exactly the words that sort into the
 // WKT region also get routed into the geo vocabulary.
 struct GeoSplitFunc {
   uint8_t operator()(std::string_view word) const {
-    return ad_utility::GeoCellGrid::isWktLiteral(word);
+    return ad_utility::isWktLiteral(word);
   }
 };
 

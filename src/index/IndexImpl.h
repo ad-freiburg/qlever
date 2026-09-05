@@ -418,8 +418,7 @@ class IndexImpl {
   void setGeoCellGridSchemeForIndexBuilding(
       ad_utility::GeoCellGridScheme scheme) {
     geoCellGridSchemeForIndexBuilding_ = scheme;
-    configurationJson_["geo-cell-grid-scheme"] =
-        std::string{ad_utility::toString(scheme)};
+    configurationJson_["geo-cell-grid-scheme"] = std::string{scheme.toString()};
   }
 
   // __________________________________________________________________________

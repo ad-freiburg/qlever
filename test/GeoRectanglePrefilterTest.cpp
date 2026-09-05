@@ -531,7 +531,7 @@ INSTANTIATE_TEST_SUITE_P(
                       ad_utility::GeoCellGridScheme::Hierarchical,
                       ad_utility::GeoCellGridScheme::Hierarchical3Shifts),
     [](const auto& info) {
-      std::string name{ad_utility::toString(info.param)};
+      std::string name{info.param.toString()};
       std::replace(name.begin(), name.end(), '-', '_');
       return name;
     });

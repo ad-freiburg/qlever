@@ -48,71 +48,46 @@ GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
 }
 
 // ____________________________________________________________________________
-std::string_view toString(GeoCellGridScheme scheme) {
-  using enum GeoCellGridScheme;
-  switch (scheme) {
-    case Flat:
-      return "flat";
-    case Flat4Shifts:
-      return "flat-4-shifts";
-    case Hierarchical:
-      return "hierarchical";
-    case Hierarchical3Shifts:
-      return "hierarchical-3-shifts";
-  }
-  AD_FAIL();
-}
-
-// ____________________________________________________________________________
-std::optional<GeoCellGridScheme> geoCellGridSchemeFromString(
-    std::string_view name) {
-  using enum GeoCellGridScheme;
-  for (auto scheme : {Flat, Flat4Shifts, Hierarchical, Hierarchical3Shifts}) {
-    if (name == toString(scheme)) {
-      return scheme;
-    }
-  }
-  return std::nullopt;
-}
+const GeoCellGridScheme GeoCellGridScheme::Flat{Enum::Flat};
+const GeoCellGridScheme GeoCellGridScheme::Flat4Shifts{Enum::Flat4Shifts};
+const GeoCellGridScheme GeoCellGridScheme::Hierarchical{Enum::Hierarchical};
+const GeoCellGridScheme GeoCellGridScheme::Hierarchical3Shifts{
+    Enum::Hierarchical3Shifts};
 
 // ____________________________________________________________________________
 GeoCellGrid::GeoCellGrid(uint8_t level, GeoCellGridScheme scheme)
     : level_{level}, scheme_{scheme} {
-  AD_CONTRACT_CHECK(level >= 1 && numCellBits() + 1 <= ValueId::numDataBits,
+  // The `+ 2` accounts for the marker bit of the `SplitVocabulary` and at
+  // least one bit for the position of a word; see `numPositionBits()`.
+  AD_CONTRACT_CHECK(level >= 1 && numCellBits() + 2 <= ValueId::numDataBits,
                     "Invalid level for a geo cell grid");
 }
 
 // ____________________________________________________________________________
-uint64_t GeoCellGrid::numShifts() const {
-  using enum GeoCellGridScheme;
-  switch (scheme_) {
-    case Flat:
-    case Hierarchical:
-      return 1;
-    case Flat4Shifts:
-      return 4;
-    case Hierarchical3Shifts:
-      return 3;
-  }
-  AD_FAIL();
-}
-
-// ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::sentinelCell() const {
+GeoCellGrid::CellIndex GeoCellGrid::sentinelCell() const {
   if (isHierarchical()) {
     // The root cell of the first quadtree copy.
     return uint64_t{1} << (2 * uint64_t{level_});
   }
-  return (uint64_t{1} << numCellBits()) - 1;
+  return maxCellIndex();
 }
 
 // ____________________________________________________________________________
 uint64_t GeoCellGrid::gridCoordinate(double normalized) const {
+  AD_CONTRACT_CHECK(!std::isnan(normalized));
+
   // The number of cells per dimension is at most 2^31, so the conversion to
   // `double` (exact up to 2^53) is lossless.
-  double numCells = static_cast<double>(numCellsPerDimension());
+  auto numCells = static_cast<double>(numCellsPerDimension());
   double raw = std::floor(normalized * numCells);
   return static_cast<uint64_t>(std::clamp(raw, 0.0, numCells - 1.0));
+}
+
+// ____________________________________________________________________________
+GeoCellGrid::GridBox GeoCellGrid::gridBox(double u1, double v1, double u2,
+                                          double v2) const {
+  return {gridCoordinate(u1), gridCoordinate(v1), gridCoordinate(u2),
+          gridCoordinate(v2)};
 }
 
 namespace {
@@ -125,6 +100,12 @@ uint64_t mixHash(uint64_t x) {
   x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
   x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
   return x ^ (x >> 31);
+}
+
+// The hash that `Flat4Shifts` derives from the two corners of a bounding box
+// (given as `GeoPoint` bit representations).
+uint64_t cornerHash(uint64_t lowerLeftBits, uint64_t upperRightBits) {
+  return mixHash(lowerLeftBits ^ (upperRightBits << 1));
 }
 
 // The fractional part of `x` in [0, 1).
@@ -144,19 +125,31 @@ uint64_t mortonInterleave(uint64_t x, uint64_t y, uint64_t numBits) {
 }  // namespace
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::cellFromPoint(double lng, double lat) const {
-  AD_CONTRACT_CHECK(scheme_ == GeoCellGridScheme::Flat);
-  return (gridCoordinate((lat + 90.0) / 180.0) << level_) |
-         gridCoordinate((lng + 180.0) / 360.0);
+GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromPoint(double lng,
+                                                       double lat) const {
+  auto [u, v] = normalize(lng, lat);
+  switch (scheme_.value()) {
+    case GeoCellGridScheme::Enum::Flat:
+      return (gridCoordinate(v) << level_) | gridCoordinate(u);
+    case GeoCellGridScheme::Enum::Flat4Shifts: {
+      // Same hash as `cellIndexFromBoundingBox` for the degenerate box.
+      auto bits =
+          GeoPoint{std::clamp(lat, -90.0, 90.0), std::clamp(lng, -180.0, 180.0)}
+              .toBitRepresentation();
+      return flat4ShiftsCell(u, v, u, v, cornerHash(bits, bits));
+    }
+    case GeoCellGridScheme::Enum::Hierarchical:
+      return hierarchicalCell(u, v, u, v);
+    case GeoCellGridScheme::Enum::Hierarchical3Shifts:
+      return hierarchical3ShiftsCell(u, v, u, v);
+  }
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::flatCell(double u1, double v1, double u2,
-                                        double v2) const {
-  uint64_t x1 = gridCoordinate(u1);
-  uint64_t x2 = gridCoordinate(u2);
-  uint64_t y1 = gridCoordinate(v1);
-  uint64_t y2 = gridCoordinate(v2);
+GeoCellGrid::CellIndex GeoCellGrid::flatCell(double u1, double v1, double u2,
+                                             double v2) const {
+  auto [x1, y1, x2, y2] = gridBox(u1, v1, u2, v2);
   if (x1 != x2 || y1 != y2) {
     return sentinelCell();
   }
@@ -164,8 +157,9 @@ GeoCellGrid::Cell GeoCellGrid::flatCell(double u1, double v1, double u2,
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::flat4ShiftsCell(double u1, double v1, double u2,
-                                               double v2, uint64_t hash) const {
+GeoCellGrid::CellIndex GeoCellGrid::flat4ShiftsCell(double u1, double v1,
+                                                    double u2, double v2,
+                                                    uint64_t hash) const {
   // Grid copy s = (sy << 1) | sx is shifted by half a cell in the dimensions
   // with a set bit. The shifted grid coordinate: subtract half a cell before
   // flooring, clamp at the edges (the border cells of a shifted copy are
@@ -194,10 +188,8 @@ GeoCellGrid::Cell GeoCellGrid::flat4ShiftsCell(double u1, double v1, double u2,
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::hierarchicalCellOfLeafBox(uint64_t x1,
-                                                         uint64_t y1,
-                                                         uint64_t x2,
-                                                         uint64_t y2) const {
+GeoCellGrid::CellIndex GeoCellGrid::hierarchicalCellOfLeafBox(
+    uint64_t x1, uint64_t y1, uint64_t x2, uint64_t y2) const {
   // The smallest enclosing cell is the lowest common ancestor of the two
   // corner leaves: its depth is determined by the highest differing bit of
   // the leaf coordinates.
@@ -213,23 +205,25 @@ GeoCellGrid::Cell GeoCellGrid::hierarchicalCellOfLeafBox(uint64_t x1,
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::hierarchicalCell(double u1, double v1, double u2,
-                                                double v2) const {
-  return hierarchicalCellOfLeafBox(gridCoordinate(u1), gridCoordinate(v1),
-                                   gridCoordinate(u2), gridCoordinate(v2));
+GeoCellGrid::CellIndex GeoCellGrid::hierarchicalCell(double u1, double v1,
+                                                     double u2,
+                                                     double v2) const {
+  auto [x1, y1, x2, y2] = gridBox(u1, v1, u2, v2);
+  return hierarchicalCellOfLeafBox(x1, y1, x2, y2);
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::hierarchical3ShiftsCell(double u1, double v1,
-                                                       double u2,
-                                                       double v2) const {
+GeoCellGrid::CellIndex GeoCellGrid::hierarchical3ShiftsCell(double u1,
+                                                            double v1,
+                                                            double u2,
+                                                            double v2) const {
   // Chan's shifted quadtrees: copy s is translated by s/3 of the domain in
   // both dimensions (with wrap-around; a box that wraps in a copy simply
   // does not fit a regular cell there and falls back to that copy's root).
   // Every box of size w fits a cell of size <= 6w in at least one copy. Take
   // the deepest cell over the three copies, ties broken by the smaller copy
   // index.
-  Cell bestCell = 0;
+  CellIndex bestCell = 0;
   uint64_t bestDepthBelow = 0;
   bool haveBest = false;
   for (uint64_t s = 0; s < 3; ++s) {
@@ -238,13 +232,13 @@ GeoCellGrid::Cell GeoCellGrid::hierarchical3ShiftsCell(double u1, double v1,
     double a2 = fractional(u2 + offset);
     double b1 = fractional(v1 + offset);
     double b2 = fractional(v2 + offset);
-    Cell cell;
+    CellIndex cell;
     if (a2 < a1 || b2 < b1) {
       // Wrapped around in this copy: only the root contains the box.
       cell = uint64_t{1} << (2 * uint64_t{level_});
     } else {
-      cell = hierarchicalCellOfLeafBox(gridCoordinate(a1), gridCoordinate(b1),
-                                       gridCoordinate(a2), gridCoordinate(b2));
+      auto [x1, y1, x2, y2] = gridBox(a1, b1, a2, b2);
+      cell = hierarchicalCellOfLeafBox(x1, y1, x2, y2);
     }
     // The depth below the leaves is encoded in the number of trailing zeros.
     uint64_t depthBelow = absl::countr_zero(cell);
@@ -258,7 +252,7 @@ GeoCellGrid::Cell GeoCellGrid::hierarchical3ShiftsCell(double u1, double v1,
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::cellFromBoundingBox(
+GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromBoundingBox(
     const BoundingBox& box) const {
   // Normalize the corners through the `GeoPoint` bit encoding (idempotent):
   // the precomputed bounding boxes of the `GeoVocabulary` have gone through
@@ -268,41 +262,37 @@ GeoCellGrid::Cell GeoCellGrid::cellFromBoundingBox(
   uint64_t urBits = box.upperRight().toBitRepresentation();
   auto ll = GeoPoint::fromBitRepresentation(llBits);
   auto ur = GeoPoint::fromBitRepresentation(urBits);
-  double u1 = (ll.getLng() + 180.0) / 360.0;
-  double u2 = (ur.getLng() + 180.0) / 360.0;
-  double v1 = (ll.getLat() + 90.0) / 180.0;
-  double v2 = (ur.getLat() + 90.0) / 180.0;
-  using enum GeoCellGridScheme;
-  switch (scheme_) {
-    case Flat:
+  auto [u1, v1] = normalize(ll.getLng(), ll.getLat());
+  auto [u2, v2] = normalize(ur.getLng(), ur.getLat());
+  switch (scheme_.value()) {
+    case GeoCellGridScheme::Enum::Flat:
       return flatCell(u1, v1, u2, v2);
-    case Flat4Shifts:
-      return flat4ShiftsCell(u1, v1, u2, v2, mixHash(llBits ^ (urBits << 1)));
-    case Hierarchical:
+    case GeoCellGridScheme::Enum::Flat4Shifts:
+      return flat4ShiftsCell(u1, v1, u2, v2, cornerHash(llBits, urBits));
+    case GeoCellGridScheme::Enum::Hierarchical:
       return hierarchicalCell(u1, v1, u2, v2);
-    case Hierarchical3Shifts:
+    case GeoCellGridScheme::Enum::Hierarchical3Shifts:
       return hierarchical3ShiftsCell(u1, v1, u2, v2);
   }
   AD_FAIL();
 }
 
 // ____________________________________________________________________________
-GeoCellGrid::Cell GeoCellGrid::cellFromWktLiteral(
+GeoCellGrid::CellIndex GeoCellGrid::cellIndexFromWktLiteral(
     std::string_view wktLiteral) const {
   auto box = GeometryInfo::getBoundingBox(wktLiteral);
   if (!box.has_value()) {
     return sentinelCell();
   }
-  return cellFromBoundingBox(box.value());
+  return cellIndexFromBoundingBox(box.value());
 }
 
 // ____________________________________________________________________________
 void GeoCellGrid::flatCover(double u1, double v1, double u2, double v2,
                             CellRanges& ranges) const {
-  uint64_t x1 = gridCoordinate(u1);
-  uint64_t x2 = gridCoordinate(u2);
-  uint64_t y1 = gridCoordinate(v1);
-  uint64_t y2 = gridCoordinate(v2);
+  auto [x1, y1, x2, y2] = gridBox(u1, v1, u2, v2);
+  // One range per row, plus one for the sentinel appended by the caller.
+  ranges.reserve(ranges.size() + (y2 - y1 + 1) + 1);
   for (uint64_t y = y1; y <= y2; ++y) {
     ranges.emplace_back((y << level_) | x1, (y << level_) | x2);
   }
@@ -335,7 +325,8 @@ void GeoCellGrid::flat4ShiftsCover(double u1, double v1, double u2, double v2,
 void GeoCellGrid::hierarchicalCoverRecurse(uint64_t queryX1, uint64_t queryY1,
                                            uint64_t queryX2, uint64_t queryY2,
                                            uint64_t levelK, uint64_t cellX,
-                                           uint64_t cellY, Cell shiftPrefix,
+                                           uint64_t cellY,
+                                           CellIndex shiftPrefix,
                                            CellRanges& ranges) const {
   uint64_t depthBelow = level_ - levelK;
   uint64_t firstX = cellX << depthBelow;
@@ -347,8 +338,8 @@ void GeoCellGrid::hierarchicalCoverRecurse(uint64_t queryX1, uint64_t queryY1,
     return;
   }
   uint64_t path = mortonInterleave(cellX, cellY, levelK);
-  Cell id = shiftPrefix | (path << (2 * depthBelow + 1)) |
-            (uint64_t{1} << (2 * depthBelow));
+  CellIndex id = shiftPrefix | (path << (2 * depthBelow + 1)) |
+                 (uint64_t{1} << (2 * depthBelow));
   uint64_t subtreeOffset = (uint64_t{1} << (2 * depthBelow)) - 1;
   if (firstX >= queryX1 && lastX <= queryX2 && firstY >= queryY1 &&
       lastY <= queryY2) {
@@ -371,11 +362,10 @@ void GeoCellGrid::hierarchicalCoverRecurse(uint64_t queryX1, uint64_t queryY1,
 
 // ____________________________________________________________________________
 void GeoCellGrid::hierarchicalCover(double u1, double v1, double u2, double v2,
-                                    Cell shiftPrefix,
+                                    CellIndex shiftPrefix,
                                     CellRanges& ranges) const {
-  hierarchicalCoverRecurse(gridCoordinate(u1), gridCoordinate(v1),
-                           gridCoordinate(u2), gridCoordinate(v2), 0, 0, 0,
-                           shiftPrefix, ranges);
+  auto [x1, y1, x2, y2] = gridBox(u1, v1, u2, v2);
+  hierarchicalCoverRecurse(x1, y1, x2, y2, 0, 0, 0, shiftPrefix, ranges);
 }
 
 // ____________________________________________________________________________
@@ -384,7 +374,7 @@ void GeoCellGrid::hierarchical3ShiftsCover(double u1, double v1, double u2,
                                            CellRanges& ranges) const {
   for (uint64_t s = 0; s < 3; ++s) {
     double offset = static_cast<double>(s) / 3.0;
-    Cell prefix = s << (2 * uint64_t{level_} + 1);
+    CellIndex prefix = s << (2 * uint64_t{level_} + 1);
     double a1 = fractional(u1 + offset);
     double a2 = fractional(u2 + offset);
     double b1 = fractional(v1 + offset);
@@ -411,34 +401,41 @@ GeoCellGrid::CellRanges GeoCellGrid::coveringCellRanges(double minLng,
                                                         double maxLng,
                                                         double maxLat) const {
   AD_CONTRACT_CHECK(minLng <= maxLng && minLat <= maxLat);
-  double u1 = (minLng + 180.0) / 360.0;
-  double u2 = (maxLng + 180.0) / 360.0;
-  double v1 = (minLat + 90.0) / 180.0;
-  double v2 = (maxLat + 90.0) / 180.0;
+  auto [u1, v1] = normalize(minLng, minLat);
+  auto [u2, v2] = normalize(maxLng, maxLat);
   CellRanges ranges;
-  using enum GeoCellGridScheme;
-  switch (scheme_) {
-    case Flat:
+  switch (scheme_.value()) {
+    case GeoCellGridScheme::Enum::Flat:
       flatCover(u1, v1, u2, v2, ranges);
-      ranges.emplace_back(sentinelCell(), sentinelCell());
       break;
-    case Flat4Shifts:
+    case GeoCellGridScheme::Enum::Flat4Shifts:
       flat4ShiftsCover(u1, v1, u2, v2, ranges);
-      ranges.emplace_back(sentinelCell(), sentinelCell());
       break;
-    case Hierarchical:
-      // The roots (which take the sentinel's role) are always part of the
-      // cover, because they intersect every rectangle.
+    case GeoCellGridScheme::Enum::Hierarchical:
       hierarchicalCover(u1, v1, u2, v2, 0, ranges);
       break;
-    case Hierarchical3Shifts:
+    case GeoCellGridScheme::Enum::Hierarchical3Shifts:
       hierarchical3ShiftsCover(u1, v1, u2, v2, ranges);
       break;
+    default:
+      AD_FAIL();
   }
-  // Sort and merge into ascending, non-overlapping ranges (adjacent ranges
-  // are merged as well).
-  ql::ranges::sort(ranges);
+  // The sentinel cell can hold a geometry that intersects any rectangle, so
+  // its range is part of every cover, independently of the scheme (for the
+  // hierarchical schemes, the root cells are produced by the cover anyway).
+  ranges.emplace_back(sentinelCell(), sentinelCell());
+  // Only the `Flat` scheme produces its ranges in ascending order.
+  if (scheme_ != GeoCellGridScheme::Enum::Flat) {
+    ql::ranges::sort(ranges);
+  }
+  return mergeRanges(ranges);
+}
+
+// ____________________________________________________________________________
+GeoCellGrid::CellRanges GeoCellGrid::mergeRanges(const CellRanges& ranges) {
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(ranges));
   CellRanges merged;
+  merged.reserve(ranges.size());
   for (const auto& range : ranges) {
     if (!merged.empty() && range.first <= merged.back().second + 1) {
       merged.back().second = std::max(merged.back().second, range.second);

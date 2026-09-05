@@ -320,11 +320,10 @@ class TripleComponentComparatorImpl {
   // `isLessInTotalWithExternalFlagAndGeoSortKeys` below. Without a configured
   // grid the result is always 0.
   [[nodiscard]] uint64_t geoSortKey(std::string_view word) const {
-    if (!geoCellGrid_.has_value() ||
-        !ad_utility::GeoCellGrid::isWktLiteral(word)) {
+    if (!geoCellGrid_.has_value() || !ad_utility::isWktLiteral(word)) {
       return 0;
     }
-    return (uint64_t{1} << 63) | geoCellGrid_->cellFromWktLiteral(word);
+    return (uint64_t{1} << 63) | geoCellGrid_->cellIndexFromWktLiteral(word);
   }
 
   // Equivalent to `isLessInTotalWithExternalFlag`, but with the words'
