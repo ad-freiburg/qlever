@@ -15,6 +15,7 @@
 
 using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryId;
+using ad_utility::websocket::QueryOperation;
 using ad_utility::websocket::QueryRegistry;
 using ad_utility::websocket::WebSocketSession;
 namespace net = boost::asio;
@@ -209,7 +210,8 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
 ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
   auto c = co_await createTestContainer(ioContext);
 
-  auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query");
+  auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query",
+                                                QueryOperation::QUERY);
   ASSERT_TRUE(queryId.has_value());
   auto cancellationHandle =
       c.registry_.getCancellationHandle(queryId->toQueryId());
@@ -311,7 +313,8 @@ ASYNC_TEST(WebSocketSession, verifyWrongExecutorConfigThrows) {
 ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
   auto c = co_await createTestContainer(ioContext);
 
-  auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query");
+  auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query",
+                                                QueryOperation::QUERY);
   ASSERT_TRUE(queryId.has_value());
   auto cancellationHandle =
       c.registry_.getCancellationHandle(queryId->toQueryId());
@@ -377,7 +380,8 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
 ASYNC_TEST(WebSocketSession, verifyWithoutClientActionNoCancelDoesHappen) {
   auto c = co_await createTestContainer(ioContext);
 
-  auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query");
+  auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query",
+                                                QueryOperation::QUERY);
   ASSERT_TRUE(queryId.has_value());
   auto cancellationHandle =
       c.registry_.getCancellationHandle(queryId->toQueryId());
