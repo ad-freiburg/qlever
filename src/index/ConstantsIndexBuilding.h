@@ -55,6 +55,12 @@ constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
 
+// The infix of the (compressed) files that hold the parsed triples with their
+// partial IDs, before they are sorted into the permutations. There is one such
+// file per worker thread; it is written batch by batch (one batch per partial
+// vocabulary) and read back in the same order.
+constexpr inline std::string_view UNSORTED_TRIPLES_INFIX = ".unsorted-triples.";
+
 // _________________________________________________________________
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 
@@ -83,14 +89,6 @@ constexpr inline size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 // mean higher memory consumption, whereas a too low value will impact the
 // performance negatively.
 constexpr inline size_t BLOCKSIZE_VOCABULARY_MERGING = 100;
-
-// A buffer size used during the second pass of the Index build.
-// It is not const, so we can set it to a much lower value for unit tests to
-// increase the test coverage.
-inline std::atomic<size_t>& BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() {
-  static std::atomic<size_t> value = 10'000;
-  return value;
-}
 
 // The uncompressed size in bytes of a block of a single column of the
 // permutations. If chosen too large, then we lose performance for very small

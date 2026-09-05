@@ -19,6 +19,7 @@
 
 #include <atomic>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -373,21 +374,23 @@ MappedTriples mapTripleToIds(
 
 // Return type of `IndexImpl::buildPartialVocabularies`.
 struct BuildPartialVocabulariesResult {
-  using TripleVec =
-      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // The triples and partial vocabularies that a single worker thread has
-  // created. The workers work completely independently of each other, so each
-  // of them has its own `idTriples_`.
+  // The partial vocabularies that a single worker thread has created. The
+  // workers work completely independently of each other, so each of them
+  // writes its triples to its own file (see
+  // `IndexImpl::unsortedTriplesFilename`).
   struct WorkerResult {
-    // The i-th entry is the actual number of triples in the i-th batch of
-    // this worker (a batch consists of a partial vocabulary and the triples
-    // that were mapped using it). It might be slightly different from the
-    // specified `batchSize` because of internally added triples. The first
-    // `numTriplesPerBatch_[0]` rows of `idTriples_` are the triples of the
-    // first batch, the next `numTriplesPerBatch_[1]` rows are the triples of
-    // the second batch, and so on.
-    std::vector<size_t> numTriplesPerBatch_;
-    std::unique_ptr<TripleVec> idTriples_;
+    // The file to which this worker has serialized its triples.
+    std::string triplesFilename_;
+    // The suffixes of the partial vocabularies (see `partialVocabularySuffix`)
+    // that this worker has written, in the order in which the corresponding
+    // batches of triples appear in `triplesFilename_`. A batch consists of a
+    // partial vocabulary and the triples that were mapped using it; each batch
+    // is prefixed with its number of triples, so that the reader doesn't need
+    // any further bookkeeping.
+    std::vector<std::string> partialVocabularySuffixes_;
+    // The total number of triples that this worker has written. Only used for
+    // logging.
+    size_t numTriples_ = 0;
   };
   // One entry per worker, in the order of the worker indices.
   std::vector<WorkerResult> workerResults_;
@@ -406,13 +409,10 @@ struct BuildPartialVocabulariesResult {
   // vocabularies of the first worker, then those of the second worker, etc.).
   std::vector<std::string> partialVocabularySuffixes() const {
     std::vector<std::string> suffixes;
-    for (size_t workerIdx : ad_utility::integerRange(workerResults_.size())) {
-      const auto& numTriplesPerBatch =
-          workerResults_[workerIdx].numTriplesPerBatch_;
-      for (size_t partialVocabIdx :
-           ad_utility::integerRange(numTriplesPerBatch.size())) {
-        suffixes.push_back(partialVocabularySuffix(workerIdx, partialVocabIdx));
-      }
+    for (const auto& workerResult : workerResults_) {
+      const auto& workerSuffixes = workerResult.partialVocabularySuffixes_;
+      suffixes.insert(suffixes.end(), workerSuffixes.begin(),
+                      workerSuffixes.end());
     }
     return suffixes;
   }
