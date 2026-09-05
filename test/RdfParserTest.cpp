@@ -593,6 +593,19 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       }
     }
     {
+      // Values that match the numeric grammar but exceed the representable
+      // range of `double` are kept as plain string literals without a
+      // datatype instead of failing the parse.
+      std::vector<std::string> inputs{"<a> <b> 1E999",
+                                      "<a> <b> \"1E999\"^^xsd:double",
+                                      "<a> <b> \"-2.5E-9999\"^^xsd:decimal"};
+      std::vector<TripleComponent> expectedObjects{
+          lit("\"1E999\""), lit("\"1E999\""), lit("\"-2.5E-9999\"")};
+      Parser parser{encodedIriManager()};
+      parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
+      testTripleObjects(parser, inputs, expectedObjects);
+    }
+    {
       // These all work when the datatype is double.
       std::vector<std::string> inputs{
           "<a> <b> 99999999999999999999999.0",

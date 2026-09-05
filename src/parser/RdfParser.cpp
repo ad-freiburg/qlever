@@ -373,6 +373,19 @@ void TurtleParser<T>::parseDoubleConstant(std::string_view input) {
   const char* end = input.data() + input.size();
   auto [firstNonMatching, errorCode] =
       absl::from_chars(input.data(), end, result);
+  if (firstNonMatching == end && errorCode == std::errc::result_out_of_range) {
+    // A value that matches the numeric grammar but cannot be represented as
+    // a `double` (e.g. an exponent outside the representable range). Keep it
+    // as a plain string literal instead of failing the parse.
+    AD_LOG_DEBUG << "Value " << input
+                 << " is a number outside the representable range of a "
+                    "`double`. It is treated as a plain string literal "
+                    "without datatype instead."
+                 << std::endl;
+    lastParseResult_ = TripleComponent::Literal::literalWithNormalizedContent(
+        asNormalizedStringViewUnsafe(input));
+    return;
+  }
   if (firstNonMatching != end || errorCode != std::errc{}) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as a floating point value");
