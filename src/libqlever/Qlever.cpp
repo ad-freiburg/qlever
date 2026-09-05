@@ -153,7 +153,8 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
       ad_utility::GeoCellGridScheme::fromString(config.geoCellGridScheme_);
   index.getImpl().setGeoCellGridSchemeForIndexBuilding(geoCellGridScheme);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
-  index.getImpl().setBlankNodeIriRegexes(config.blankNodeIriRegexes_);
+  index.getImpl().setBlankNodeIriRegexes(
+      std::move(config.blankNodeIriRegexes_));
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {

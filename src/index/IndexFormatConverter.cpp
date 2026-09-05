@@ -606,7 +606,7 @@ void convertPermutations(const std::string& oldBasename,
     writeMetaData(newMetaB, filenameForPermutation(newBasename, *permutationB,
                                                    isInternal));
   }
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+  progressBar.logFinalProgressString();
 }
 
 // Convert the patterns of the index with the base name `oldBasename` (if it has
@@ -657,7 +657,7 @@ void convertMaterializedView(const std::string& oldBasename,
   auto newMetaData = writePermutation(
       newFilename, getNumColumns(oldPermutation),
       scanAndConvertIds(oldPermutation, progressCallbackFor(progressBar)));
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+  progressBar.logFinalProgressString();
   newMetaData.setName(newViewBasename);
   verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
                              newFilename);

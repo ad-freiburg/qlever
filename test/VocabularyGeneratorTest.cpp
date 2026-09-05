@@ -10,7 +10,6 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
-#include <re2/re2.h>
 
 #include <cstdlib>
 #include <ctime>
@@ -211,7 +210,8 @@ class MergeVocabularyTest : public ::testing::Test {
 
 // Test for merge Vocabulary
 TEST_F(MergeVocabularyTest, mergeVocabulary) {
-  // mergeVocabulary only gets name of directory and number of files.
+  // mergeVocabulary only gets the name of the directory and the filename
+  // suffixes of the partial vocabularies.
   VocabularyMetaData res;
   std::vector<std::pair<std::string, bool>> mergeResult;
   std::vector<std::pair<std::string, bool>> geoMergeResult;
@@ -233,7 +233,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 
     TripleComponentComparator comparator;
     res = mergeVocabulary(
-        _basePath, 2,
+        _basePath, {"0", "1"},
         [&comparator](std::string_view a, bool aIsExternal, std::string_view b,
                       bool bIsExternal) {
           return comparator.isLessInTotalWithExternalFlag(a, aIsExternal, b,
@@ -277,7 +277,7 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       mergeVocabulary(
-          basePath, 2,
+          basePath, {"0", "1"},
           [](std::string_view a, bool, std::string_view b, bool) {
             return std::less{}(a, b);
           },
@@ -323,12 +323,10 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
   // - `<http://ex/apple` only matches a prefix of `<http://ex/apple>` (the
   //   closing `>` is missing), so with *full* match it converts nothing. With a
   //   partial match it would have wrongly converted `<http://ex/apple>`.
-  std::vector<std::unique_ptr<re2::RE2>> blankNodeIriRegexes;
-  for (const char* pattern : {"<http://ex/bn_.*>", "<http://ex/apple"}) {
-    blankNodeIriRegexes.push_back(std::make_unique<re2::RE2>(pattern));
-  }
+  ad_utility::RegexSet blankNodeIriRegexes{
+      {"<http://ex/bn_.*>", "<http://ex/apple"}, "for the test"};
   mergeVocabulary(
-      basePath, 1,
+      basePath, {"0"},
       [](std::string_view a, bool, std::string_view b, bool) {
         return std::less{}(a, b);
       },
