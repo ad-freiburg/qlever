@@ -2652,6 +2652,13 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, emptyGraphPattern) {
+  h::expect("SELECT ?g WHERE { GRAPH ?g {} }",
+            h::CartesianProductJoin(::testing::A<const QueryExecutionTree&>(),
+                                    h::NeutralElement()));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, WarningsOnUnboundVariables) {
   using enum ::OrderBy::AscOrDesc;
   // Unbound variable in ORDER BY.
