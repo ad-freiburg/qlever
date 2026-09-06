@@ -238,6 +238,54 @@ TEST_F(LoadTest, computeResult) {
       {{Iri("<http://mundhahs.dev/rdf/bar>"), Iri("<is-a>"), Iri("<x>")}});
 }
 
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3350: Blank
+// nodes in the loaded document used to make the `LOAD` fail with an assertion,
+// because the RDF parsers represent blank nodes as plain strings, which the
+// conversion to `Id`s rejects.
+TEST_F(LoadTest, blankNodes) {
+  auto loadWithBlankNodes = [this]() {
+    Load load{testQec, pqLoad("https://mundhahs.dev"),
+              getResultFunctionFactory(
+                  "_:b1 <p> _:b2 . _:b1 <p> <o> . [] <p> <o> .",
+                  boost::beast::http::status::ok, "text/turtle")};
+    return load.computeResultOnlyForTesting();
+  };
+  auto res = loadWithBlankNodes();
+  const auto& idTable = res.idTableView();
+  ASSERT_THAT(idTable, testing::SizeIs(3));
+
+  // All blank nodes become `Id`s of type `BlankNodeIndex` that are kept alive
+  // by the `LocalVocab` of the result.
+  auto expectIsBlankNode = [&res](Id id, ad_utility::source_location loc =
+                                             AD_CURRENT_SOURCE_LOC()) {
+    auto g = generateLocationTrace(loc);
+    ASSERT_THAT(id.getDatatype(), testing::Eq(Datatype::BlankNodeIndex));
+    EXPECT_THAT(
+        res.localVocab().isBlankNodeIndexContained(id.getBlankNodeIndex()),
+        testing::IsTrue());
+  };
+  expectIsBlankNode(idTable(0, 0));
+  expectIsBlankNode(idTable(0, 2));
+  expectIsBlankNode(idTable(1, 0));
+  expectIsBlankNode(idTable(2, 0));
+  // The predicates and the IRI object are unaffected.
+  EXPECT_THAT(idTable(0, 1).getDatatype(),
+              testing::Ne(Datatype::BlankNodeIndex));
+  EXPECT_THAT(idTable(1, 2).getDatatype(),
+              testing::Ne(Datatype::BlankNodeIndex));
+
+  // Within one `LOAD`, the same label yields the same `Id`, while different
+  // labels and the anonymous blank node `[]` yield different `Id`s.
+  EXPECT_THAT(idTable(1, 0), testing::Eq(idTable(0, 0)));
+  EXPECT_THAT(idTable(0, 2), testing::Ne(idTable(0, 0)));
+  EXPECT_THAT(idTable(2, 0), testing::Ne(idTable(0, 0)));
+  EXPECT_THAT(idTable(2, 0), testing::Ne(idTable(0, 2)));
+
+  // Blank nodes with the same label from a different `LOAD` are distinct.
+  auto res2 = loadWithBlankNodes();
+  EXPECT_THAT(res2.idTableView()(0, 0), testing::Ne(idTable(0, 0)));
+}
+
 TEST_F(LoadTest, getCacheKey) {
   {
     auto cleanup =
@@ -322,6 +370,31 @@ TEST_F(LoadTest, Integration) {
   ExecuteUpdate::executeUpdate(qec->getIndex(), parsedUpdate[0], executionTree,
                                deltaTriples, cancellationHandle);
   EXPECT_THAT(deltaTriples, deltaTriplesTestHelpers::NumTriples(2, 0, 2));
+}
+
+// The same as `Integration` above, but with blank nodes in the loaded document.
+// This is the scenario from https://github.com/ad-freiburg/qlever/issues/3350,
+// which used to respond with an HTTP 500.
+TEST_F(LoadTest, IntegrationWithBlankNodes) {
+  auto parsedUpdate = SparqlParser::parseUpdate(
+      &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
+      "LOAD <https://mundhahs.dev>");
+  ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
+  auto qec =
+      ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner qp(qec, cancellationHandle);
+  auto executionTree = qp.createExecutionTree(parsedUpdate[0]);
+  Load* load = dynamic_cast<Load*>(executionTree.getRootOperation().get());
+  ASSERT_THAT(load, testing::NotNull()) << "Root operation is not a Load";
+  load->resetGetResultFunctionForTesting(
+      getResultFunctionFactory("_:b1 <b> <c> . <d> <e> _:b1 . [] <b> <c> .",
+                               boost::beast::http::status::ok, "text/turtle"));
+  DeltaTriples deltaTriples{qec->getIndex()};
+  ExecuteUpdate::executeUpdate(qec->getIndex(), parsedUpdate[0], executionTree,
+                               deltaTriples, cancellationHandle);
+  EXPECT_THAT(deltaTriples, deltaTriplesTestHelpers::NumTriples(3, 0, 3));
 }
 
 }  // namespace

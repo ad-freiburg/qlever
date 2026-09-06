@@ -943,13 +943,13 @@ std::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
-  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  BlankNodeAdder bn{{}, {}, blankNodeManager_};
   return {visit(ctx->quadData()).toTriplesWithGraph(std::monostate{}, bn), {}};
 }
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
-  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  BlankNodeAdder bn{{}, {}, blankNodeManager_};
   auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
   auto quads = visit(ctx->quadData());
   return {{}, quads.toTriplesWithGraph(std::monostate{}, bn)};
@@ -969,7 +969,7 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   triples.forAllVariables([this](const Variable& v) { addVisibleVariable(v); });
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  BlankNodeAdder bn{{}, {}, blankNodeManager_};
   parsedQuery_._clause = parsedQuery::UpdateClause{
       GraphUpdate{{}, triples.toTriplesWithGraph(std::monostate{}, bn)}};
   return parsedQuery_;
@@ -989,7 +989,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
     if (ctx) {
       auto quads = this->visit(ctx);
       quads.forAllVariables(ensureVariableIsVisible);
-      Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+      BlankNodeAdder bn{{}, {}, blankNodeManager_};
       *target = quads.toTriplesWithGraph(defaultGraph, bn);
     }
   };

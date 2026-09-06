@@ -93,7 +93,7 @@ class GraphStoreProtocol {
   // and sets the correct graph.
   static updateClause::GraphUpdate::Triples convertTriples(
       const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
-      Quads::BlankNodeAdder& blankNodeAdder);
+      BlankNodeAdder& blankNodeAdder);
   FRIEND_TEST(GraphStoreProtocolTest, convertTriples);
 
   // Creates a `ResponseMiddleware` that sets the `Location` of the response to
@@ -139,7 +139,7 @@ class GraphStoreProtocol {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
     auto insertIntoNewGraph = mustInsertIntoNewGraph(rawRequest, graph);
     const GraphOrDefault effectiveGraph =
         insertIntoNewGraph ? generateNewGraphIri() : graph;
@@ -172,7 +172,7 @@ class GraphStoreProtocol {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{{}, std::move(convertedTriples)};
     ParsedQuery res;
@@ -221,7 +221,7 @@ class GraphStoreProtocol {
 
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery insertData;
