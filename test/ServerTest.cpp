@@ -101,25 +101,31 @@ TEST(ServerTest, getQueryId) {
   const auto req = makeGetRequest("/");
   {
     // A request with a custom query id.
-    auto queryId1 = server.getQueryId(reqWithExplicitQueryId,
-                                      "SELECT * WHERE { ?a ?b ?c }");
+    auto queryId1 =
+        server.getQueryId(reqWithExplicitQueryId, "SELECT * WHERE { ?a ?b ?c }",
+                          QueryOperation::QUERY);
     // Another request with the same custom query id. This throws an error,
     // because query id cannot be used for multiple queries at the same time.
     AD_EXPECT_THROW_WITH_MESSAGE(
-        server.getQueryId(reqWithExplicitQueryId,
-                          "SELECT * WHERE { ?a ?b ?c }"),
+        server.getQueryId(reqWithExplicitQueryId, "SELECT * WHERE { ?a ?b ?c }",
+                          QueryOperation::QUERY),
         testing::HasSubstr("Query id '100' is already in use!"));
   }
   // The custom query id can be reused, once the query is finished.
   auto queryId1 =
-      server.getQueryId(reqWithExplicitQueryId, "SELECT * WHERE { ?a ?b ?c }");
+      server.getQueryId(reqWithExplicitQueryId, "SELECT * WHERE { ?a ?b ?c }",
+                        QueryOperation::QUERY);
   // Without custom query ids, unique ids are generated.
-  auto queryId2 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
-  auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
+  auto queryId2 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }",
+                                    QueryOperation::QUERY);
+  auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }",
+                                    QueryOperation::QUERY);
 }
 
 // _____________________________________________________________________________
 TEST(ServerTest, createMessageSender) {
+  using namespace ad_utility::websocket;
+
   Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   std::string customQueryId = "100";
@@ -128,7 +134,8 @@ TEST(ServerTest, createMessageSender) {
   // The query hub is only valid once, the server has been started.
   AD_EXPECT_THROW_WITH_MESSAGE(
       server.createMessageSender(server.queryHub_, req,
-                                 "SELECT * WHERE { ?a ?b ?c }"),
+                                 "SELECT * WHERE { ?a ?b ?c }",
+                                 QueryOperation::QUERY),
       testing::HasSubstr("Assertion `queryHubLock` failed."));
   {
     // Set a dummy query hub.
@@ -138,12 +145,15 @@ TEST(ServerTest, createMessageSender) {
     server.queryHub_ = queryHub;
     // MessageSenders are created normally.
     server.createMessageSender(server.queryHub_, req,
-                               "SELECT * WHERE { ?a ?b ?c }");
+                               "SELECT * WHERE { ?a ?b ?c }",
+                               QueryOperation::QUERY);
     server.createMessageSender(server.queryHub_, req,
-                               "INSERT DATA { <foo> <bar> <baz> }");
+                               "INSERT DATA { <foo> <bar> <baz> }",
+                               QueryOperation::UPDATE);
     EXPECT_THAT(
         server.createMessageSender(server.queryHub_, reqWithExplicitQueryId,
-                                   "INSERT DATA { <foo> <bar> <baz> }"),
+                                   "INSERT DATA { <foo> <bar> <baz> }",
+                                   QueryOperation::UPDATE),
         AD_PROPERTY(ad_utility::websocket::MessageSender, getQueryId,
                     testing::Eq(ad_utility::websocket::QueryId::idFromString(
                         customQueryId))));
@@ -152,7 +162,8 @@ TEST(ServerTest, createMessageSender) {
   // senders can no longer be created.
   AD_EXPECT_THROW_WITH_MESSAGE(
       server.createMessageSender(server.queryHub_, req,
-                                 "SELECT * WHERE { ?a ?b ?c }"),
+                                 "SELECT * WHERE { ?a ?b ?c }",
+                                 QueryOperation::QUERY),
       testing::HasSubstr("Assertion `queryHubLock` failed."));
 }
 
@@ -952,11 +963,25 @@ TEST(ServerTest, gspPostCreateNewGraph) {
 }
 
 // _____________________________________________________________________________
-// Read a query-event-log file and parse each JSONL line.
 namespace {
-std::vector<json> parseEventLog(const ql::filesystem::path& path) {
+// Runs `runRequests` on a fresh server that writes its query event log to a
+// temporary file, and returns the lines that were logged.
+template <typename Func>
+std::vector<std::string> runWithEventLog(Func runRequests) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    auto serverForTesting =
+        makeServerForTesting(qec->getIndex().getOnDiskBase(), path);
+    runRequests(serverForTesting);
+  }  // server (hence log) destroyed - queue drained, file closed
+  return ad_utility::testing::readLines(path);
+}
+
+// Parse each JSONL line of a query event log.
+std::vector<json> parseEventLog(const std::vector<std::string>& lines) {
   std::vector<json> events;
-  for (const auto& line : ad_utility::testing::readLines(path)) {
+  for (const auto& line : lines) {
     events.push_back(json::parse(line));
   }
   return events;
@@ -967,26 +992,21 @@ std::vector<json> parseEventLog(const ql::filesystem::path& path) {
 // A successful query writes a `start` event carrying the X-Real-IP client IP
 // and an `end` event with status "ok".
 TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
-  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
-  auto base = qec->getIndex().getOnDiskBase();
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  {
-    auto serverForTesting = makeServerForTesting(base, path);
-
+  auto lines = runWithEventLog([](auto& server) {
     auto request = makePostRequest("/", "application/sparql-query",
                                    "SELECT * WHERE { ?a ?b ?c }");
     request.set("X-Real-IP", "10.0.0.5");
     request.set(http::field::accept, "application/sparql-results+json");
-    EXPECT_THAT(serverForTesting.process(request), StatusIs(http::status::ok));
-  }  // server (hence log) destroyed → queue drained, file closed
+    EXPECT_THAT(server.process(request), StatusIs(http::status::ok));
+  });
 
   // The TUI byte-slices the timestamp, so every line must begin with
   // `{"ts-ms":`.
-  for (const auto& line : ad_utility::testing::readLines(path)) {
+  for (const auto& line : lines) {
     EXPECT_THAT(line, ::testing::StartsWith("{\"ts-ms\":"));
   }
 
-  auto events = parseEventLog(path);
+  auto events = parseEventLog(lines);
   ASSERT_EQ(events.size(), 2u);
   const auto& start = events.front();
   const auto& end = events.back();
@@ -995,6 +1015,7 @@ TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
   EXPECT_GT(start.at("ts-ms").get<int64_t>(), 0);
   EXPECT_FALSE(start.at("qid").get<std::string>().empty());
   EXPECT_EQ(start.at("client-ip").get<std::string>(), "10.0.0.5");
+  EXPECT_EQ(start.at("type").get<std::string>(), "query");
   EXPECT_EQ(start.at("query").get<std::string>(),
             "SELECT * WHERE { ?a ?b ?c }");
 
@@ -1007,22 +1028,101 @@ TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
 }
 
 // _____________________________________________________________________________
+// An update is written as `"type":"update"` in its `start` event. The type
+// comes from the parsed operations, so it has to be known before the operation
+// is registered, because that is when the `start` event is written.
+TEST(ServerTest, queryEventLogRecordsUpdateOperation) {
+  auto events = parseEventLog(runWithEventLog([](auto& server) {
+    // Updates are only accepted with a valid access token.
+    auto request =
+        makeRequest(http::verb::post, "/",
+                    {{http::field::content_type, "application/sparql-update"},
+                     {http::field::authorization, "Bearer accessToken"}},
+                    "INSERT DATA { <a> <b> <e> }");
+    EXPECT_THAT(server.process(request), StatusIs(http::status::ok));
+  }));
+  ASSERT_EQ(events.size(), 2u);
+  const auto& start = events.front();
+  const auto& end = events.back();
+
+  EXPECT_EQ(start.at("event").get<std::string>(), "start");
+  EXPECT_EQ(start.at("type").get<std::string>(), "update");
+  EXPECT_EQ(start.at("query").get<std::string>(),
+            "INSERT DATA { <a> <b> <e> }");
+
+  EXPECT_EQ(end.at("event").get<std::string>(), "end");
+  EXPECT_EQ(end.at("status").get<std::string>(), "ok");
+  EXPECT_EQ(end.at("qid").get<std::string>(),
+            start.at("qid").get<std::string>());
+}
+
+// _____________________________________________________________________________
+// When the client sends its own `Query-Id`, `Server::getQueryId` takes a
+// different path. It has to report the operation type there as well, and it
+// has to use the id that the client sent.
+TEST(ServerTest, queryEventLogRecordsOperationForCustomQueryId) {
+  auto events = parseEventLog(runWithEventLog([](auto& server) {
+    auto request =
+        makeRequest(http::verb::post, "/",
+                    {{http::field::content_type, "application/sparql-update"},
+                     {http::field::authorization, "Bearer accessToken"}},
+                    "INSERT DATA { <a> <b> <e> }");
+    request.set("Query-Id", "100");
+    EXPECT_THAT(server.process(request), StatusIs(http::status::ok));
+  }));
+  ASSERT_EQ(events.size(), 2u);
+  EXPECT_EQ(events.front().at("qid").get<std::string>(), "100");
+  EXPECT_EQ(events.front().at("type").get<std::string>(), "update");
+  EXPECT_EQ(events.back().at("qid").get<std::string>(), "100");
+}
+
+// _____________________________________________________________________________
+// A graph store request is logged with the type of the SPARQL that it is
+// translated into. A `PUT` becomes two updates and is logged as
+// `"type":"update"`, a `GET` becomes a single `CONSTRUCT` and is logged as
+// `"type":"query"`. Both use a single query id, so each request writes exactly
+// one `start` and one `end` event.
+TEST(ServerTest, queryEventLogRecordsGraphStoreOperation) {
+  {
+    // A `PUT` needs an access token and becomes two update operations.
+    // Writing to a graph that did not exist before answers 201, not 200.
+    auto events = parseEventLog(runWithEventLog([](auto& server) {
+      auto put =
+          makeRequest(http::verb::put, "/?graph=foo",
+                      {{http::field::authorization, "Bearer accessToken"}},
+                      "<a> <b> <c> .");
+      put.set(http::field::content_type, "text/turtle");
+      EXPECT_THAT(server.process(put), StatusIs(http::status::created));
+    }));
+    ASSERT_EQ(events.size(), 2u);
+    EXPECT_EQ(events.front().at("type").get<std::string>(), "update");
+    // The logged operation is not SPARQL. Request bodies can be very large,
+    // so only a shortened description is logged.
+    EXPECT_THAT(events.front().at("query").get<std::string>(),
+                ::testing::StartsWith("Graph Store PUT Operation"));
+    // The event status is the query outcome, not the HTTP code.
+    EXPECT_EQ(events.back().at("status").get<std::string>(), "ok");
+  }
+  {
+    // A `GET` needs no access token and becomes a single `CONSTRUCT` query.
+    auto events = parseEventLog(runWithEventLog([](auto& server) {
+      EXPECT_THAT(server.process(makeGetRequest("/?default")),
+                  StatusIs(http::status::ok));
+    }));
+    ASSERT_EQ(events.size(), 2u);
+    EXPECT_EQ(events.front().at("type").get<std::string>(), "query");
+  }
+}
+
+// _____________________________________________________________________________
 // A query that fails during planning writes an `end` event with status
 // "failed". It parses (so `start` is written), then planning throws.
 TEST(ServerTest, queryEventLogRecordsFailedStatus) {
-  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
-  auto base = qec->getIndex().getOnDiskBase();
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  {
-    auto serverForTesting = makeServerForTesting(base, path);
-
-    auto request = makePostRequest(
+  auto events = parseEventLog(runWithEventLog([](auto& server) {
+    server.process(makePostRequest(
         "/", "application/sparql-query",
-        "SELECT * WHERE { ?text ql:contains-entity ?scientist }");
-    serverForTesting.process(request);
-  }
-
-  auto events = parseEventLog(path);
+        "SELECT * WHERE { ?text ql:contains-entity ?scientist }"));
+  }));
   ASSERT_EQ(events.size(), 2u);
   const auto& start = events.front();
   const auto& end = events.back();
@@ -1036,4 +1136,24 @@ TEST(ServerTest, queryEventLogRecordsFailedStatus) {
   // One end per start: same qid.
   EXPECT_EQ(end.at("qid").get<std::string>(),
             start.at("qid").get<std::string>());
+}
+
+// _____________________________________________________________________________
+// An operation that cannot be parsed writes no events at all, not even a
+// `start`. Parsing happens before the operation is registered, so such an
+// operation never gets a query id. Operations that fail later, during
+// execution, do get one and are logged with status "failed".
+TEST(ServerTest, queryEventLogIgnoresUnparsableOperations) {
+  auto lines = runWithEventLog([](auto& server) {
+    // This is not a valid SPARQL query.
+    server.process(makePostRequest("/", "application/sparql-query", "Foo"));
+    // A query sent to the update endpoint fails while parsing as an update.
+    server.process(
+        makeRequest(http::verb::post, "/",
+                    {{http::field::content_type, "application/sparql-update"},
+                     {http::field::authorization, "Bearer accessToken"}},
+                    "SELECT * WHERE { ?s ?p ?o }"));
+  });
+
+  EXPECT_THAT(lines, testing::IsEmpty());
 }
