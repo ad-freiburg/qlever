@@ -578,14 +578,15 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   }
   for (const SparqlTriple* t : entityTriples) {
     Variable currentVar = t->s_.getVariable();
-    if (!optTermForCvar.contains(currentVar)) {
+    auto termIt = optTermForCvar.find(currentVar);
+    if (termIt == optTermForCvar.end()) {
       AD_THROW(
           "Missing ql:contains-word statement. A ql:contains-entity "
           "statement always also needs corresponding ql:contains-word "
           "statement.");
     }
     addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(), currentVar,
-                                           optTermForCvar[currentVar], *t),
+                                           termIt->second, *t),
                          tg);
     numNodesInTripleGraph++;
   }
@@ -2913,7 +2914,7 @@ void QueryPlanner::QueryGraph::setupGraph(
                   ->getExternallyVisibleVariableColumns();
 
           for (auto var : filter.expression_.containedVariables()) {
-            if (varToNode.contains(*var)) {
+            if (varToNode.count(*var) > 0) {
               varsToBeConnected.push_back(var);
               AD_CORRECTNESS_CHECK(substituteVariables.contains(*var));
             }
@@ -2948,8 +2949,9 @@ void QueryPlanner::QueryGraph::setupGraph(
   // For each node move the set of adjacentNodes_ from the global hash map to
   // the node itself.
   for (const auto& node : nodes_) {
-    if (adjacentNodes.contains(node.get())) {
-      node->adjacentNodes_ = std::move(adjacentNodes.at(node.get()));
+    auto it = adjacentNodes.find(node.get());
+    if (it != adjacentNodes.end()) {
+      node->adjacentNodes_ = std::move(it->second);
     }
   }
 }
