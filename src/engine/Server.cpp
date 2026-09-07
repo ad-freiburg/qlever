@@ -460,8 +460,8 @@ nlohmann::json Server::processDeleteMaterializedView(
   // above for the same pattern), so that the view is deleted from the index
   // that is currently being served and not from a stale one that a concurrent
   // rebuild has swapped out in the meantime. Deleting from a stale manager is
-  // not unsafe (the rebuild called `MaterializedViewsManager::retireOnDiskFiles`
-  // on it, which makes `deleteView` throw), it would just needlessly fail.
+  // not unsafe (rebuild called `MaterializedViewsManager::retireOnDiskFiles` on
+  // it, which makes `deleteView` throw), it would just needlessly fail.
   qlever().deleteMaterializedView(name);
 
   return json{{"materialized-view-deleted", name}};
