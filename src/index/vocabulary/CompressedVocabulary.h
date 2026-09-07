@@ -10,6 +10,7 @@
 #include "index/vocabulary/CompressionWrappers.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/PrefixHeuristic.h"
+#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
 #include "util/InputRangeUtils.h"
@@ -48,6 +49,23 @@ CPP_template(typename UnderlyingVocabulary,
   static constexpr std::string_view wordsSuffix = ".words";
   static constexpr std::string_view decodersSuffix = ".codebooks";
 
+  // Whether the underlying vocabulary has "holes", meaning that not every index
+  // in `[0, endIndex())` has a word associated with it. This currently is the
+  // case for exactly one vocabulary, which we therefore check explicitly. Such
+  // a vocabulary needs a special handling in several places (see the uses of
+  // this constant below), in particular the vocabulary index of a word is in
+  // general different from the position (i.e. the offset into the words) at
+  // which the word is stored, and has to be translated via `positionOfIndex`.
+  static constexpr bool underlyingHasHoles =
+      std::is_same_v<UnderlyingVocabulary, VocabularyInMemoryBinSearch>;
+
+  // As a safeguard for the future: A vocabulary with holes has to report a
+  // placeholder (and not throw) for the indices that are holes, see
+  // `operator[]` below.
+  static_assert(!underlyingHasHoles ||
+                ad_utility::vocabulary::replaceOptionalByPlaceholderOnExport<
+                    UnderlyingVocabulary>);
+
  public:
   // The vocabulary is initialized using the `open()` method, the default
   // constructor leads to an empty vocabulary.
@@ -77,10 +95,35 @@ CPP_template(typename UnderlyingVocabulary,
     return result;
   }
 
-  // Get the uncompressed word at the given index.
+  // Get the uncompressed word at the given index. If the underlying vocabulary
+  // has holes (see `VocabularyInMemoryBinSearch`) and `idx` is one of those
+  // holes, return a placeholder (see `placeholderForMissingVocabIndex`).
   std::string operator[](uint64_t idx) const {
-    return compressionWrapper_.decompress(
-        toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
+    if constexpr (underlyingHasHoles) {
+      // NOTE: We deliberately translate the index to a position (which
+      // requires a binary search) exactly once, and then use that position
+      // both to look up the word and to select the decoder. Using
+      // `underlyingVocabulary_[idx]` together with `getDecoderIdx(idx)` would
+      // perform the very same binary search twice.
+      auto position = underlyingVocabulary_.positionOfIndex(idx);
+      if (!position.has_value()) {
+        return ad_utility::vocabulary::placeholderForMissingVocabIndex(idx);
+      }
+      return compressionWrapper_.decompress(
+          underlyingVocabulary_.wordAtPosition(position.value()),
+          getDecoderIdxFromPosition(position.value()));
+    } else {
+      decltype(auto) word = underlyingVocabulary_[idx];
+      // As a safeguard for the future: only a vocabulary that deliberately has
+      // holes (see `underlyingHasHoles` and
+      // `replaceOptionalByPlaceholderOnExport` in `VocabularyTypes.h`) may
+      // report a missing word via an empty optional instead of throwing, and
+      // such a vocabulary is handled by the branch above.
+      static_assert(
+          !ad_utility::similarToInstantiation<decltype(word), std::optional>);
+      return compressionWrapper_.decompress(toStringView(word),
+                                            getDecoderIdx(idx));
+    }
   }
 
   // Wrap the underlying vocabulary's `scanAll` (which reads the compressed
@@ -88,11 +131,19 @@ CPP_template(typename UnderlyingVocabulary,
   // yield `IndexAndWord` elements, so we have to apply a transformation at the
   // end.
   auto scanAll() const {
+    // NOTE: The correct decoder is selected by the position of the word, which
+    // for a vocabulary with holes is different from its vocabulary index. As
+    // the scan yields the words in order, we can simply count the yielded
+    // elements instead of translating each index to its position (which would
+    // require a binary search per word).
     return ad_utility::CachingTransformInputRange(
         underlyingVocabulary_.scanAll(),
-        [this, buffer = std::string{}](const IndexAndWord& compressed) mutable {
+        [this, buffer = std::string{},
+         position = size_t{0}](const IndexAndWord& compressed) mutable {
           const auto& [index, word] = compressed;
-          buffer = compressionWrapper_.decompress(word, getDecoderIdx(index));
+          buffer = compressionWrapper_.decompress(
+              word, getDecoderIdxFromPosition(position));
+          ++position;
           return IndexAndWord{index, buffer};
         });
   }
@@ -109,6 +160,37 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }
+
+  // Return the vocabulary index one past the largest index that is contained
+  // in this vocabulary. For an underlying vocabulary with holes (see
+  // `VocabularyInMemoryBinSearch`) this is in general much larger than
+  // `size()`, for all other vocabularies it is exactly `size()`.
+  uint64_t endIndex() const {
+    if constexpr (underlyingHasHoles) {
+      return underlyingVocabulary_.endIndex();
+    } else {
+      return size();
+    }
+  }
+
+  // Return the range of vocabulary indices at which `word` is stored, or the
+  // empty range at the index at which it would be stored if it is not
+  // contained. This is only needed (and, see `HasSpecialGetPositionOfWord` in
+  // `VocabularyConstraints.h`, only used) if the underlying vocabulary has
+  // holes, for which the generic implementation would use the wrong "one past
+  // the end" index (see `endIndex`). The `static_assert` below enforces that
+  // this function is never instantiated for any other underlying vocabulary
+  // (for which the generic implementation is correct and cheaper).
+  template <typename InternalStringType, typename Comparator>
+  std::pair<uint64_t, uint64_t> getPositionOfWord(
+      const InternalStringType& word, Comparator comparator) const {
+    static_assert(underlyingHasHoles,
+                  "`CompressedVocabulary::getPositionOfWord` is only intended "
+                  "for an underlying vocabulary with holes, see "
+                  "`HasSpecialGetPositionOfWord` in `VocabularyConstraints.h`");
+    return ad_utility::vocabulary::getPositionOfWordInVocabWithHoles(
+        *this, word, std::move(comparator), endIndex());
+  }
 
   // From a `comparator` that can compare two strings, make a new comparator,
   // that can compare a string and an `iterator` by decompressing the word that
@@ -157,7 +239,10 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
   /// Open the underlying vocabulary from a file. The vocabulary must have been
-  /// created by using a `DiskWriterFromUncompressedWords`.
+  /// created by using the `WordWriter` of this class, which is a
+  /// `DiskWriterWithExplicitIndices` if the underlying vocabulary has holes
+  /// (see `VocabularyInMemoryBinSearch`) and a
+  /// `DiskWriterFromUncompressedWords` otherwise.
   void open(const std::string& filename) {
     underlyingVocabulary_.open(absl::StrCat(filename, wordsSuffix));
     ad_utility::serialization::FileReadSerializer decoderReader(
@@ -165,18 +250,28 @@ CPP_template(typename UnderlyingVocabulary,
     std::vector<typename CompressionWrapper::Decoder> decoders;
     decoderReader >> decoders;
     compressionWrapper_ = CompressionWrapper{{std::move(decoders)}};
-    AD_CORRECTNESS_CHECK((size() == 0) || (getDecoderIdx(size()) <=
+    AD_CORRECTNESS_CHECK((size() == 0) || (getDecoderIdxFromPosition(size()) <=
                                            compressionWrapper_.numDecoders()));
   }
 
   /// Allows the incremental writing of the words to disk. Uses `WordWriter` of
   /// the underlying vocabulary.
+  //
+  // NOTE: This class is a template with the `UnderlyingVocab` defaulted to the
+  // `UnderlyingVocabulary` of the enclosing class (it is never instantiated
+  // with anything else). This is necessary because its member functions don't
+  // compile for an underlying vocabulary with holes (see
+  // `VocabularyInMemoryBinSearch`), the `WordWriter` of which requires an
+  // explicit index for each word. We therefore have to defer the instantiation
+  // of this class until its actual usage, which for a vocabulary with holes
+  // never happens (`DiskWriterWithExplicitIndices` is used instead).
+  template <typename UnderlyingVocab = UnderlyingVocabulary>
   class DiskWriterFromUncompressedWords : public WordWriterBase {
    private:
     std::vector<std::string> wordBuffer_;
     std::vector<bool> isExternalBuffer_;
     std::vector<typename CompressionWrapper::Decoder> decoders_;
-    typename UnderlyingVocabulary::WordWriter underlyingWriter_;
+    typename UnderlyingVocab::WordWriter underlyingWriter_;
     std::string filenameDecoders_;
     ad_utility::MemorySize uncompressedSize_ = bytes(0);
     ad_utility::MemorySize compressedSize_ = bytes(0);
@@ -305,14 +400,131 @@ CPP_template(typename UnderlyingVocabulary,
       isExternalBuffer_.clear();
     }
   };
-  using WordWriter = DiskWriterFromUncompressedWords;
+  // A writer for a `CompressedVocabulary` whose `UnderlyingVocabulary` supports
+  // "holes" (see `VocabularyInMemoryBinSearch`) and therefore requires an
+  // explicit index for each word. Such a vocabulary cannot be written via the
+  // `WordWriterBase` interface (which cannot express those indices), so this
+  // class deliberately does not derive from `WordWriterBase`, but mirrors the
+  // interface of `VocabularyInMemoryBinSearch::WordWriter`. It is deliberately
+  // kept simple and synchronous (no thread pool or task queue), because the
+  // filtered vocabularies that it builds are small for all current use cases.
+  class DiskWriterWithExplicitIndices {
+   private:
+    std::vector<std::string> wordBuffer_;
+    std::vector<uint64_t> indexBuffer_;
+    std::vector<typename CompressionWrapper::Decoder> decoders_;
+    typename UnderlyingVocabulary::WordWriter underlyingWriter_;
+    std::string filenameDecoders_;
+    bool finishWasCalled_ = false;
+    // The index of the word that was added last, `nullopt` if no word has been
+    // added yet.
+    std::optional<uint64_t> lastIndex_ = std::nullopt;
 
-  // Return a `unique_ptr<DiskWriter>` that can be used to create the
-  // vocabulary.
-  static auto makeDiskWriterPtr(const std::string& filename) {
-    return std::make_unique<DiskWriterFromUncompressedWords>(
-        absl::StrCat(filename, wordsSuffix),
-        absl::StrCat(filename, decodersSuffix));
+   public:
+    // Constructor.
+    explicit DiskWriterWithExplicitIndices(const std::string& filenameWords,
+                                           const std::string& filenameDecoders)
+        : underlyingWriter_{filenameWords},
+          filenameDecoders_{filenameDecoders} {}
+
+    // This type can neither be copied nor moved (the user-declared destructor
+    // below suppresses the implicit move operations). It is always used
+    // directly at the place where it is created.
+    DiskWriterWithExplicitIndices(const DiskWriterWithExplicitIndices&) =
+        delete;
+    DiskWriterWithExplicitIndices& operator=(
+        const DiskWriterWithExplicitIndices&) = delete;
+
+    // Destructor. Call `finish` if that hasn't happened yet.
+    ~DiskWriterWithExplicitIndices() {
+      ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                    "Calling `finish` from the destructor of "
+                                    "`DiskWriterWithExplicitIndices`");
+    }
+
+    // Add the `uncompressedWord` with the given vocabulary index `idx`, which
+    // must be greater than all previous indices. Return `idx`.
+    uint64_t operator()(std::string_view uncompressedWord, uint64_t idx) {
+      AD_CONTRACT_CHECK(!finishWasCalled_);
+      // Check the invariant eagerly here, and not only in the underlying
+      // writer (which only sees the words once a full block is written), such
+      // that a violation is reported at the call site that caused it.
+      AD_CONTRACT_CHECK(!lastIndex_.has_value() || lastIndex_.value() < idx,
+                        "The indices of a vocabulary with holes have to be "
+                        "added in strictly ascending order");
+      lastIndex_ = idx;
+      wordBuffer_.emplace_back(uncompressedWord);
+      indexBuffer_.push_back(idx);
+      if (wordBuffer_.size() == NumWordsPerBlock) {
+        finishBlock();
+      }
+      return idx;
+    }
+
+    // Write the last (partial) block and the decoders to disk. Calling this
+    // function multiple times has no additional effect.
+    void finish() {
+      if (finishWasCalled_) {
+        return;
+      }
+      finishWasCalled_ = true;
+      finishBlock();
+      underlyingWriter_.finish();
+      ad_utility::serialization::FileWriteSerializer decoderWriter(
+          filenameDecoders_);
+      decoderWriter << decoders_;
+    }
+
+   private:
+    // Compress the words that are currently buffered and write them, together
+    // with their explicit indices, to the underlying vocabulary.
+    void finishBlock() {
+      if (wordBuffer_.empty()) {
+        return;
+      }
+      auto bulkResult = CompressionWrapper::compressAll(wordBuffer_);
+      // NOTE: The `buffer` owns the memory that the `views` point into, so it
+      // has to be kept alive until all the words have been written.
+      auto& [buffer, views, decoder] = bulkResult;
+      (void)buffer;
+      AD_CORRECTNESS_CHECK(views.size() == indexBuffer_.size());
+      for (const auto& [word, index] :
+           ::ranges::views::zip(views, indexBuffer_)) {
+        underlyingWriter_(word, index);
+      }
+      decoders_.emplace_back(std::move(decoder));
+      wordBuffer_.clear();
+      indexBuffer_.clear();
+    }
+  };
+
+  // The `WordWriter` for an underlying vocabulary with holes has to take an
+  // explicit index for each word.
+  using WordWriter =
+      std::conditional_t<underlyingHasHoles, DiskWriterWithExplicitIndices,
+                         DiskWriterFromUncompressedWords<>>;
+
+  // Return a `unique_ptr<DiskWriterFromUncompressedWords>` that can be used to
+  // create the vocabulary. For an underlying vocabulary with holes this throws,
+  // because such a vocabulary requires an explicit index for each word (see
+  // `DiskWriterWithExplicitIndices`).
+  // NOTE: The return type is the concrete writer type (and not
+  // `std::unique_ptr<WordWriterBase>`), because some callers (e.g.
+  // `GeoVocabulary::WordWriter`) store the result as such.
+  static std::unique_ptr<DiskWriterFromUncompressedWords<>> makeDiskWriterPtr(
+      const std::string& filename) {
+    if constexpr (underlyingHasHoles) {
+      (void)filename;
+      AD_THROW(
+          "A vocabulary with holes cannot be built word by word, because the "
+          "`WordWriterBase` interface cannot express the explicit indices. "
+          "Such a vocabulary can only be created by filtering an existing "
+          "vocabulary.");
+    } else {
+      return std::make_unique<DiskWriterFromUncompressedWords<>>(
+          absl::StrCat(filename, wordsSuffix),
+          absl::StrCat(filename, decodersSuffix));
+    }
   }
 
   // Access to the underlying vocabulary.
@@ -341,14 +553,41 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
  private:
-  // Get the correct decoder for the given `idx`.
-  size_t getDecoderIdx(size_t idx) const { return idx / NumWordsPerBlock; }
+  // Get the correct decoder for the word at the given position. One decoder is
+  // created per `NumWordsPerBlock` words that are pushed to the `WordWriter`,
+  // so `position` has to be the position of the word in exactly that sequence
+  // of pushed words. Note that this is a different quantity for each of the
+  // underlying vocabularies: for a `VocabularyInMemory` it is simply the
+  // vocabulary index; for a `VocabularyInternalExternal` it is the *global*
+  // vocabulary index (all words are pushed, also those that additionally end up
+  // in the internal vocabulary); and for a vocabulary with holes (see
+  // `VocabularyInMemoryBinSearch`) it is the offset into the words, which
+  // because of the holes is smaller than the vocabulary index.
+  size_t getDecoderIdxFromPosition(size_t position) const {
+    return position / NumWordsPerBlock;
+  }
+
+  // Get the correct decoder for the given vocabulary index `idx`. For a
+  // vocabulary with holes (see `VocabularyInMemoryBinSearch`) the index has to
+  // be translated to a position first (see `getDecoderIdxFromPosition`).
+  size_t getDecoderIdx(size_t idx) const {
+    if constexpr (underlyingHasHoles) {
+      // NOTE: If `idx` is one of the holes, then there is no word to
+      // decompress at all, and no caller ever asks for a decoder in that case
+      // (`operator[]` returns the placeholder directly), so the value of the
+      // fallback is irrelevant.
+      return getDecoderIdxFromPosition(
+          underlyingVocabulary_.positionOfIndex(idx).value_or(0));
+    } else {
+      return getDecoderIdxFromPosition(idx);
+    }
+  }
 
   // Decompress the word that `it` points to. `it` is an iterator into the
   // underlying vocabulary.
   template <typename It>
   auto decompressFromIterator(It it) const {
-    auto idx = [&]() {
+    auto position = [&]() {
       if constexpr (detail::IterableVocabulary<UnderlyingVocabulary, It>) {
         return it - underlyingVocabulary_.begin();
       } else {
@@ -356,7 +595,7 @@ CPP_template(typename UnderlyingVocabulary,
       }
     }();
     return compressionWrapper_.decompress(toStringView(*it),
-                                          getDecoderIdx(idx));
+                                          getDecoderIdxFromPosition(position));
   }
 
   // ____________________________________________________
