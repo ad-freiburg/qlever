@@ -48,8 +48,8 @@ class LocalVocabContext {
   using VocabBounds = std::pair<VocabIndex, VocabIndex>;
 
   // The result of `lookupWordInVocabularies` below: either the `Id` of a word
-  // that is contained in the vocabulary of the index, or the upper and lower
-  // bound of a word that is not contained in the vocabulary.
+  // that is contained in one of the vocabularies of the index, or the bounds of
+  // the position of a word that is contained in none of them.
   using IdOrVocabBounds = std::variant<Id, VocabBounds>;
 
   virtual ~LocalVocabContext();
@@ -62,6 +62,23 @@ class LocalVocabContext {
   // Return the bounds of `word` in the vocabulary, see `VocabBounds`.
   virtual VocabBounds getPositionOfWord(std::string_view word) const = 0;
 
+  // Return true iff this index has a secondary vocabulary at all (see
+  // `index/vocabulary/SecondaryVocabulary.h`). This is the cheap check that
+  // lets `LocalVocabEntry::compareThreeWay` skip the (expensive) lookup of the
+  // position in the vocabulary, which is only needed if there is a secondary
+  // vocabulary.
+  virtual bool hasSecondaryVocabulary() const = 0;
+
+  // Look up `word` in the secondary vocabulary of this index (see
+  // `index/vocabulary/SecondaryVocabulary.h`). Return `std::nullopt` if it is
+  // not contained there, and in particular also if the index has no secondary
+  // vocabulary at all. Note that the secondary vocabulary is disjoint from the
+  // vocabulary of the main index, so this only has to be called if
+  // `getPositionOfWord` above has already reported that `word` is not contained
+  // in the latter.
+  virtual std::optional<SecondaryVocabIndex> getSecondaryVocabIndex(
+      std::string_view word) const = 0;
+
   // Try to encode `word` directly in an `Id` instead of looking it up in the
   // vocabulary (see the `EncodedIriManager`). Return `std::nullopt` if `word`
   // cannot be encoded that way.
@@ -69,14 +86,15 @@ class LocalVocabContext {
 
   // Look up `word` in the vocabularies of this index. Return its `Id` if it is
   // contained in the vocabulary of the main index (an `Id` of type
-  // `VocabIndex`), and else the bounds of the position at which it would be
-  // sorted into that vocabulary (in which case the two bounds are equal, see
-  // `VocabBounds`).
+  // `VocabIndex`) or in the secondary vocabulary (an `Id` of type
+  // `SecondaryVocabIndex`), and else the bounds of the position at which it
+  // would be sorted into the vocabulary of the main index (in which case the
+  // two bounds are equal, see `VocabBounds`).
   //
   // NOTE: This function is deliberately not virtual, but implemented in terms
   // of the virtual functions above. It is the single place that knows how the
-  // vocabularies of an index play together, so that all its callers agree on
-  // that, in particular `LocalVocabEntry::positionInVocabExpensiveCase()` and
+  // two vocabularies play together, so that all its callers agree on that, in
+  // particular `LocalVocabEntry::positionInVocabExpensiveCase()` and
   // `toValueIdOrBounds()` (see `index/TripleComponentConversions.h`). Those two
   // have to agree, because the latter passes the position that it computes to
   // the corresponding constructor of `LocalVocabEntry`, which checks it against
