@@ -11,7 +11,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "global/Pattern.h"
+#include "util/CompactStringVector.h"
 
 // This Operation takes a Result with at least one column containing ids,
 // and a column index referring to such a column. It then creates a Result
@@ -66,6 +66,8 @@ class CountAvailablePredicates : public Operation {
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
  public:
@@ -96,11 +98,12 @@ class CountAvailablePredicates : public Operation {
                                   size_t patternColumnIdx,
                                   RuntimeInformation& runtimeInfo);
 
-  // Special implementation for the full pattern trick.
-  // Perform a lazy scan over the full `ql:has-pattern` relation,
-  // and then count and expand the patterns.
+  // Special implementation for the full pattern trick. Count and expand the
+  // patterns in the `patternColumn` of the `subresult`, which is the (possibly
+  // lazy) result of a scan of the full `ql:has-pattern` relation.
   void computePatternTrickAllEntities(
-      IdTable* result, const CompactVectorOfStrings<Id>& patterns) const;
+      IdTable* result, const CompactVectorOfStrings<Id>& patterns,
+      const Result& subresult, ColumnIndex patternColumn) const;
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;

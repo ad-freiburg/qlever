@@ -43,7 +43,7 @@ static std::vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
 template <typename T>
 static T expandVariant(const ad_utility::sparql_types::VarOrIri& graph) {
   return std::visit([](const auto& graph) -> T { return graph; }, graph);
-};
+}
 
 // ____________________________________________________________________________________
 updateClause::GraphUpdate::Triples Quads::toTriplesWithGraph(

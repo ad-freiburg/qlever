@@ -77,7 +77,7 @@ struct GraphStoreOperation {
 // No operation. This can happen for QLever's custom operations (e.g.
 // `cache-stats`). These requests have no operation but are still valid.
 struct None {
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(None)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(None, )
 };
 
 using Operation = std::variant<Query, Update, GraphStoreOperation, None>;

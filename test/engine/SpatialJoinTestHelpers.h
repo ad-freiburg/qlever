@@ -10,11 +10,11 @@
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
-#include "engine/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
 #include "index/ExportIds.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
-#include "util/GeoSparqlHelpers.h"
 
 namespace SpatialJoinTestHelpers {
 
@@ -500,13 +500,13 @@ inline std::shared_ptr<QueryExecutionTree> buildSmallChild(
   return buildJoin(qec, scan1, scan2, joinVariable);
 }
 
-// this function creates a minimum viable SpatialJoinAlgorithms class, which
+// this function creates a minimum viable BoundingBoxAlgorithm class, which
 // gets used in testing to access the wrapper methods. Note that not all
 // functions of this class work properly, as many necessary parameters are
 // defaulted as nullpointer or std::nullopt. The maxDist is necessary, because
 // one of the wrapper classes needs a proper maxDistance, otherwise the wrapper
 // can't be used to test the function
-inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
+inline BoundingBoxAlgorithm getDummySpatialJoinAlgsForWrapperTesting(
     size_t maxDist = 1000,
     std::optional<QueryExecutionContext*> qec = std::nullopt) {
   if (!qec) {
@@ -530,13 +530,8 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
                                    0,
                                    0,
                                    std::vector<ColumnIndex>{},
-                                   1,
-                                   spatialJoin->getMaxDist(),
-                                   std::nullopt,
-                                   std::nullopt,
-                                   std::nullopt,
-                                   std::nullopt,
-                                   std::nullopt};
+                                   std::vector<ColumnIndex>{},
+                                   1};
 
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};
 }

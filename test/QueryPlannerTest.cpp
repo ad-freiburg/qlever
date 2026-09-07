@@ -9,14 +9,15 @@
 #include <range/v3/view/cartesian_product.hpp>
 
 #include "./printers/PayloadVariablePrinters.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
-#include "parser/SparqlParser.h"
 #include "rdfTypes/Variable.h"
 #include "util/GTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
@@ -24,6 +25,7 @@ namespace h = queryPlannerTestHelpers;
 namespace {
 using Var = Variable;
 constexpr auto iri = ad_utility::testing::iri;
+using ad_utility::testing::parseQuery;
 using queryPlannerTestHelpers::NamedTag;
 }  // namespace
 using ::testing::HasSubstr;
@@ -31,11 +33,6 @@ using ::testing::HasSubstr;
 QueryPlanner makeQueryPlanner() {
   return QueryPlanner{ad_utility::testing::getQec(),
                       std::make_shared<ad_utility::CancellationHandle<>>()};
-}
-
-auto parseQuery(std::string query) {
-  static EncodedIriManager evM;
-  return SparqlParser::parseQuery(&evM, std::move(query));
 }
 
 TEST(QueryPlanner, createTripleGraph) {
@@ -739,6 +736,31 @@ TEST(QueryPlanner, CartesianProductJoin) {
           scan("?x", "<b>", "?c")));
 }
 
+// _____________________________________________________________________________
+TEST(QueryPlanner, DistinctIsPushedDown) {
+  auto scan = h::IndexScanFromStrings;
+
+  // `SELECT DISTINCT *` over a full index scan `?s ?p ?o` is a no-op: the scan
+  // already produces distinct rows, so no `Distinct` operation is added.
+  h::expect("SELECT DISTINCT * WHERE { ?s ?p ?o }", scan("?s", "?p", "?o"));
+
+  // The `DISTINCT` is pushed through the `CartesianProductJoin` into its
+  // children instead of being applied on top of the (potentially huge)
+  // product. Here both children are single-variable scans that are already
+  // distinct, so no `Distinct` operation is added at all.
+  h::expect("SELECT DISTINCT * WHERE { <s> <p> ?o . ?a <b> <c> }",
+            h::CartesianProductJoin(scan("<s>", "<p>", "?o"),
+                                    scan("?a", "<b>", "<c>")));
+
+  // Test based on https://github.com/ad-freiburg/qlever/issues/1895.
+  h::expect(
+      "SELECT DISTINCT * WHERE { ?s <p> <o> . ?s <p2> <o2> . ?x <b> <c> }",
+      h::CartesianProductJoin(
+          h::Distinct({0}, h::Join(scan("?s", "<p>", "<o>"),
+                                   scan("?s", "<p2>", "<o2>"))),
+          scan("?x", "<b>", "<c>")));
+}
+
 namespace {
 // A helper function to recreate the internal variables added by the query
 // planner for transitive paths.
@@ -1025,6 +1047,52 @@ TEST(QueryPlanner, numPathsPerTarget) {
       "{SELECT * WHERE {"
       "?start <p> ?end."
       "}}}}",
+      h::pathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, maxDepth) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec =
+      ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
+  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {},
+                                 true,
+                                 std::nullopt,
+                                 2};
+  h::expect(
+      R"(
+PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>
+SELECT ?start ?end ?path ?edge WHERE {
+  SERVICE pathSearch: {
+    _:path pathSearch:algorithm pathSearch:allPaths ;
+           pathSearch:source <x1> ;
+           pathSearch:source <x2> ;
+           pathSearch:target <y> ;
+           pathSearch:target <z> ;
+           pathSearch:pathColumn ?path ;
+           pathSearch:edgeColumn ?edge ;
+           pathSearch:start ?start ;
+           pathSearch:end ?end ;
+           pathSearch:maxDepth 2 ;
+    {
+      SELECT * WHERE {
+        ?start <p> ?end .
+      }
+    }
+  }
+}
+)",
       h::pathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
 }
 
@@ -1606,6 +1674,60 @@ TEST(QueryPlanner, PathSearchWrongArgumentNumPathsPerTarget) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The parameter <numPathsPerTarget> expects an integer"),
+      InvalidSparqlQueryException);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchWrongArgumentMaxDepth) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source1 ;"
+      "pathSearch:source ?source2 ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:maxDepth <two>;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("The parameter <maxDepth> expects an integer"),
+      InvalidSparqlQueryException);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchNegativeMaxDepth) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source1 ;"
+      "pathSearch:source ?source2 ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:maxDepth -1;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("The parameter <maxDepth> must not be negative"),
       InvalidSparqlQueryException);
 }
 
@@ -2601,6 +2723,33 @@ TEST(QueryPlanner, Exists) {
       h::GroupBy({V{"?x"}}, {"(SAMPLE(EXISTS{?a ?b ?c}) as ?s)"},
                  h::ExistsJoin(xyz, abc)));
 
+  // Inside a `GROUP BY`, an `EXISTS` that is not inside an aggregate may only
+  // be correlated with the grouped variables, so that its result is constant
+  // within each group. Here the body `{?x ?b ?c}` only shares the grouped `?x`
+  // with the outer query.
+  h::expect("SELECT ?x (EXISTS{?x ?b ?c} as ?e) { ?x ?y ?z } GROUP BY ?x",
+            h::GroupBy({V{"?x"}}, {"(EXISTS{?x ?b ?c} as ?e)"},
+                       h::ExistsJoin(::testing::_,
+                                     h::hasVariables({"?x", "?b", "?c"}))));
+  // Correlating such an `EXISTS` with a non-grouped variable (here `?y`) is
+  // rejected, because the SPARQL standard doesn't clearly define the semantics
+  // of this case.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(
+          "SELECT ?x (EXISTS{?x ?y ?c} as ?e) { ?x ?y ?z } GROUP BY ?x",
+          ad_utility::testing::getQec()),
+      HasSubstr("The EXISTS in the expression (EXISTS{?x ?y ?c} as ?e) uses "
+                "the variable ?y from the query body, but this variable is "
+                "not part of the GROUP BY."));
+  // In contrast, an `EXISTS` inside an aggregate is evaluated once per row and
+  // may therefore use non-grouped variables (here `?y`), just like in a
+  // `FILTER`.
+  h::expect(
+      "SELECT ?x (SAMPLE(EXISTS{?x ?y ?c}) as ?e) { ?x ?y ?z } GROUP BY ?x",
+      h::GroupBy(
+          {V{"?x"}}, {"(SAMPLE(EXISTS{?x ?y ?c}) as ?e)"},
+          h::ExistsJoin(::testing::_, h::hasVariables({"?x", "?y", "?c"}))));
+
   // Similar tests, but with multiple EXISTS clauses
   auto existsAbcDef = h::ExistsJoin(h::ExistsJoin(xyz, abc), def);
   h::expect(
@@ -2858,6 +3007,27 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, testDistributiveJoinInUnionWithMultipleJoinColumns) {
+  // Make sure that the optimization is enabled, so that this test actually
+  // tests something.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  // Both children of the `UNION` have the variables `?s` and `?o` in common
+  // with the `?s <P31> ?o` triple, so the join has two join columns. The
+  // optimization previously only handled a single join column.
+  auto scan = h::IndexScanFromStrings("?s", "<P31>", "?o");
+  h::expectWithGivenBudgets(
+      "SELECT * WHERE { ?s <P31> ?o . "
+      "{ ?s <P279> ?o } UNION { ?s <P280> ?o } }",
+      h::Union(h::MultiColumnJoin(
+                   scan, h::IndexScanFromStrings("?s", "<P279>", "?o")),
+               h::MultiColumnJoin(
+                   scan, h::IndexScanFromStrings("?s", "<P280>", "?o"))),
+      ad_utility::testing::getQec(), {4, 16, 64'000'000});
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionDoesntExplode) {
   // Make sure that this is enabled for this test to actually test something.
   auto cleanup =
@@ -2916,6 +3086,27 @@ TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
   ASSERT_EQ(plans.size(), 1);
   EXPECT_TRUE(
       std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, distributiveJoinInUnionIsNotAppliedIfUnionHasLimit) {
+  // Make sure that the optimization is enabled, so that this test actually
+  // tests something.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/3162. The
+  // `LIMIT` of the subquery applies to the `UNION` as a whole. Pushing the join
+  // into the children of the `UNION` would drop the `LIMIT` and thus change the
+  // semantics of the query, so the `UNION` has to be kept intact.
+  h::expect(
+      "SELECT * { VALUES ?s { <x> } "
+      "{ SELECT * { { ?s <label> ?o } UNION { ?s <is-a> ?o } } LIMIT 1 } }",
+      h::Join(h::Sort(h::ValuesClause("VALUES (?s) { (<x>) }")),
+              h::WithLimitOffset(
+                  LimitOffsetClause{1},
+                  h::Union(h::IndexScanFromStrings("?s", "<label>", "?o"),
+                           h::IndexScanFromStrings("?s", "<is-a>", "?o")))));
 }
 
 // _____________________________________________________________________________
@@ -3970,10 +4161,35 @@ SELECT ?p (COUNT(DISTINCT ?s) AS ?cnt) WHERE {
   SERVICE qlss: {
     _:config qlss:left ?e ;
              qlss:right ?z ;
-             qlss:maxDistance 500 .
+             qlss:maxDistance 500 ;
+             qlss:algorithm qlss:s2 .
   }
 }
 GROUP BY ?p
 )",
             h::_);
+}
+
+// _____________________________________________________________________________
+// Regression test for the issue mentioned in
+// https://github.com/ad-freiburg/qlever/pull/2782. Joining a `BIND(BNODE(...))`
+// subquery against a UNION must not distribute the non-deterministic BIND over
+// the UNION branches (which would require cloning the BIND and produce
+// different blank-node IDs for each branch).
+TEST(QueryPlanner, nonDeterministicOperandNotDistributedOverUnion) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  // This previously triggered an assertion violation because the query planner
+  // tried to clone the BIND(BNODE(...)) subquery to push it into both branches
+  // of the UNION.
+  h::expect(
+      "SELECT * WHERE {"
+      "  { SELECT ?s WHERE { BIND(BNODE(\"1\") AS ?s) VALUES ?x { 1 } } }"
+      "  { ?s ?p ?o } UNION { ?s ?p ?o }"
+      "}",
+      // The non-deterministic BIND must not be distributed into the UNION, so
+      // the join has to be on top!
+      h::Join(::testing::A<const QueryExecutionTree&>(),
+              ::testing::A<const QueryExecutionTree&>()));
 }

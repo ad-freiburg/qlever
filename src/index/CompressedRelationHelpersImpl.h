@@ -19,16 +19,23 @@ static constexpr size_t c2Idx = 2;
 // Compares two rows based on the second, third and fourth column only (it
 // ignores the first column as well as any payload columns).
 struct ComparatorForConstCol0 {
-  bool operator()(const auto& a, const auto& b) const {
+  template <typename A, typename B>
+  bool operator()(const A& a, const B& b) const {
     return std::tie(a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]) <
            std::tie(b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]);
   }
 };
 
-// Helper function to make a row from `IdTable` easier to compare. This ties
-// the cells of the given row with the indices 0, 1 and 2.
-inline auto tieFirstThreeColumns = [](const auto& row) {
-  return std::tie(row[0], row[1], row[2]);
+// Helper function to make a row from `IdTable` easier to compare. This selects
+// the binary representation of the cells of the given row with the indices 0, 1
+// and 2 and makes sure (using `AD_EXPENSIVE_CHECK`) that the resulting `Id`s
+// can be compared bitwise, which should always be true for index building. This
+// way comparison becomes really cheap.
+inline auto pickFirstThreeColumnsOfIdsWithoutLocalVocab = [](const auto& row) {
+  std::array result{row[0].getBits(), row[1].getBits(), row[2].getBits()};
+  AD_EXPENSIVE_CHECK(
+      ql::ranges::all_of(result, &Id::canBeComparedBitwise, &Id::fromBits));
+  return result;
 };
 
 // Collect elements of type `T` in batches of size 100'000 and apply the

@@ -13,6 +13,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 
 using namespace sparqlExpression;
 using ad_utility::source_location;
@@ -462,6 +463,77 @@ TEST(RegexExpression, prefixRegexOrderedColumn) {
                 ::testing::VariantWith<ad_utility::SetOfIntervals>(
                     ad_utility::SetOfIntervals{}));
   }
+}
+
+// _____________________________________________________________________________
+TEST(RegexExpression, prefixRegexOnGroupedVariableIsConstant) {
+  // Evaluate on a single-row "group" in which `?vocab` is constant (`"Beta"`).
+  auto setUpGroupedContext = [](TestContext& ctx) {
+    ctx.context._groupedVariables = {Variable{"?vocab"}};
+    ctx.context._isPartOfGroupBy = true;
+    ctx.context._beginIndex = 0;
+    ctx.context._endIndex = 1;
+  };
+
+  // `"Beta"` matches the prefix `^Be` -> constant `true`.
+  {
+    auto expression = makeRegexExpression("?vocab", "^Be");
+    ASSERT_TRUE(isPrefixExpression(expression));
+    TestContext ctx;
+    setUpGroupedContext(ctx);
+    EXPECT_THAT(expression->evaluate(&ctx.context),
+                ::testing::VariantWith<Id>(T));
+  }
+  // `"Beta"` does not match the prefix `^al` -> constant `false`.
+  {
+    auto expression = makeRegexExpression("?vocab", "^al");
+    ASSERT_TRUE(isPrefixExpression(expression));
+    TestContext ctx;
+    setUpGroupedContext(ctx);
+    EXPECT_THAT(expression->evaluate(&ctx.context),
+                ::testing::VariantWith<Id>(F));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(RegexExpression, prefixRegexInsideAggregateIsNotFolded) {
+  auto regex = makeRegexExpression("?vocab", "^al");
+  ASSERT_TRUE(isPrefixExpression(regex));
+  // Wrap the regex in an aggregate.
+  auto aggregate = std::make_unique<SampleExpression>(false, std::move(regex));
+  const auto* prefixRegex = aggregate->children()[0].get();
+  ASSERT_TRUE(prefixRegex->isInsideAggregate());
+
+  TestContext ctx;
+  ctx.context._groupedVariables = {Variable{"?vocab"}};
+  ctx.context._isPartOfGroupBy = true;
+  // The result is computed per row (a vector), not folded to a single constant.
+  EXPECT_THAT(prefixRegex->evaluate(&ctx.context),
+              ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                  ::testing::ElementsAre(F, T, T)));
+}
+
+// _____________________________________________________________________________
+TEST(RegexExpression, prefixRegexOnGroupedVariableWithUnexpectedChildResult) {
+  // The child of a `PrefixRegexExpression` is always a single variable, so when
+  // the variable is grouped, the child evaluates either to a single `ValueId`
+  // or (for hash-map/lazy GROUP BY) to a `VectorWithMemoryLimit<ValueId>`. Here
+  // we force an unexpected result type by replacing the child with an
+  // expression that yields an `IdOrLocalVocabEntry`, which must trigger the
+  // `AD_FAIL()` in the otherwise unreachable `else` branch.
+  auto expression = makeRegexExpression("?vocab", "^al");
+  ASSERT_TRUE(isPrefixExpression(expression));
+  expression->replaceChild(
+      0, std::make_unique<SingleUseExpression>(
+             ExpressionResult{IdOrLocalVocabEntry{Id::makeFromBool(true)}}));
+
+  TestContext ctx;
+  ctx.context._groupedVariables = {Variable{"?vocab"}};
+  ctx.context._isPartOfGroupBy = true;
+  ctx.context._beginIndex = 0;
+  ctx.context._endIndex = 1;
+  AD_EXPECT_THROW_WITH_MESSAGE(expression->evaluate(&ctx.context),
+                               ::testing::HasSubstr("unreachable"));
 }
 
 // _____________________________________________________________________________

@@ -55,7 +55,8 @@ class QueryToSocketDistributor
   /// `signalEnd()` is called and with `false` In the destructor if there where
   /// no explicit calls to `signalEnd()` before.
   explicit QueryToSocketDistributor(
-      net::io_context& ioContext, const std::function<void(bool)>& cleanupCall);
+      const net::any_io_executor& executor,
+      const std::function<void(bool)>& cleanupCall);
 
   /// Appends specified data to the vector and signals all waiting websockets
   /// that new data is available

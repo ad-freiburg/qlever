@@ -7,25 +7,42 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <gtest/gtest_prod.h>
+
+#include <boost/optional.hpp>
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
+#include "backports/filesystem.h"
+#include "backports/memory_resource.h"
+#include "backports/span.h"
+#include "engine/KeepPreviousIndexDirs.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
+#include "engine/RebuildIndexStrategy.h"
+#include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
+#include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "index/IndexRebuilderTypes.h"
+#include "index/IndexSwap.h"
 #include "index/InputFileSpecification.h"
+#include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
-#include "util/AllocatorWithLimit.h"
+#include "util/Allocator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
+#include "util/TimeTracer.h"
+#include "util/TransparentFunctors.h"
 #include "util/http/MediaTypes.h"
+#include "util/json.h"
 
 namespace qlever {
 
@@ -106,6 +123,22 @@ struct IndexBuilderConfig : CommonConfig {
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;
 
+  // A list of regexes for IRIs that should be treated as blank nodes. During
+  // index building, an IRI that is fully matched by one of these regexes (via
+  // `RE2::FullMatch`, applied to the full IRI text including the angle
+  // brackets) is not stored in the vocabulary, but converted to a blank node.
+  // The match has to cover the entire IRI, so each regex must describe a full
+  // IRI and therefore has to start with `<`; to allow an arbitrary suffix, end
+  // it with `.*` (e.g. `<https://example\.org/statement/.*>`). This is useful
+  // for IRIs that only act as internal connector nodes (e.g. statement nodes),
+  // to save vocabulary memory. Only IRIs are affected; literals are never
+  // converted.
+  //
+  // NOTE: This is an experimental feature. The affected IRIs behave as ordinary
+  // blank nodes, so they are no longer recognized as those IRIs if used, e.g.,
+  // in a query or an update. See `TripleComponentWithIndex::isBlankNode`.
+  std::vector<std::string> blankNodeIriRegexes_;
+
   // A list of IRI prefixes (without angle brackets). IRIs that start with one
   // of these prefixes, followed by a sequence of a bounded number of digits
   // are encoded directly in the internal ID. This reduces the size of the
@@ -175,12 +208,33 @@ struct EngineConfig : CommonConfig {
   // simply delete this file.
   bool persistUpdates_ = true;
 
+  // If set, an index rebuild (the same operation as the `cmd=rebuild-index`
+  // HTTP request) is triggered automatically in the background after an update,
+  // whenever `RebuildIndexStrategy::shouldTriggerRebuild` says so. If `nullopt`
+  // (the default), rebuilds are only triggered manually.
+  std::optional<RebuildIndexStrategy> rebuildIndexStrategy_ = std::nullopt;
+
+  // Which `previous.*` index directories to keep after a successful index
+  // rebuild (manual or automatic), see `KeepPreviousIndexDirs`. The default
+  // keeps the original and the most recent one.
+  KeepPreviousIndexDirs keepPreviousIndexDirs_ =
+      KeepPreviousIndexDirs::OriginalAndMostRecent;
+
   // If set to true, no permutations will be loaded from disk. This is useful
   // when only queries that don't require accessing the permutations need to be
   // executed (e.g., queries that only compute constant expressions, or query
   // that only rely on the `NamedQueryCache` which can be populated
   // separately).
   bool doNotLoadPermutations_ = false;
+
+  // QLever doesn't use a cancelable sorting algorithm, but before starting a
+  // sort estimates whether the sort will time out. To do so, on index load it
+  // sorts some `IdTable`s to measure the time that sorting takes on the
+  // concrete machine. This step can take some time and can be disabled by
+  // setting this flag to `false`. In that case, sort operations are always
+  // started and run to completion (unless the query times out or is canceled
+  // before the sort operation starts).
+  bool computeSortPerformanceEstimators_ = true;
 
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
   // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
@@ -198,9 +252,13 @@ struct EngineConfig : CommonConfig {
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
-// `src/engine/LibQleverExample.cpp` for an example use.
+// `src/engine/LibQleverExample.cpp` for an example use. If you extend the
+// interface of this class, consider also adding bindings to
+// `QleverEmscriptenBindings.cpp` so it can be used by JS code.
 class Qlever {
  public:
+  using PlannedQuery = qlever::PlannedQuery;
+
   // Bundle the `Index` and the `MaterializedViewsManager` under a single mutex
   // so that an index rebuild can atomically swap both in, while other threads
   // continue to read the previous instances via the `shared_ptr`s they hold.
@@ -236,26 +294,128 @@ class Qlever {
  private:
   // The cache is threadsafe, so making it `mutable` is reasonably safe.
   mutable QueryResultCache cache_;
-  ad_utility::AllocatorWithLimit<Id> allocator_;
+  qlever::Allocator<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   mutable NamedResultCache namedResultCache_;
   ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
   bool enablePatternTrick_;
   QueryExecutionContext::DisableCaching disableCaching_;
+  using TimeLimit = std::chrono::milliseconds;
+  using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
+
+  // Handles the (de)serialization of the vocabulary and the `NamedResultCache`
+  // to and from a compressed blob (see the delegating public methods
+  // `serializeVocabAndNamedCacheToCompressedBlob` /
+  // `deserializeVocabAndNamedCacheFromCompressedBlob` below). It is a friend of
+  // this class so that it can access the internals it needs.
+  NamedCachedQueryBlobManager blobManager_;
+  friend class NamedCachedQueryBlobManager;
+
+  FRIEND_TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache);
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
   static void buildIndex(IndexBuilderConfig config);
 
   // Create a QLever instance for querying using an `EngineConfig` as
-  // explained above.
-  explicit Qlever(const EngineConfig& config);
+  // explained above. If `skipLoading` is true, no index is loaded from disk
+  // (in particular, none of the on-disk index files, not even the vocabulary
+  // or the `.meta-data.json`, need to exist); the instance must then be
+  // populated from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob`
+  // before it can answer queries. The memory limit from `config` is enforced
+  // and cache eviction is wired into the allocator.
+  explicit Qlever(const EngineConfig& config, bool skipLoading = false);
 
-  // Parse and plan the given `query`.
+  // Same as above, but with a caller-provided allocator (e.g. a
+  // platform-injected memory pool). The allocator is used as-is; the memory
+  // limit from `config` is *not* applied on top of it.
+  Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator);
+
+  // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
+  // is also used to represent SPARQL update operations (see
+  // ParsedQuery::hasUpdateClause()); this function handles both cases
+  // uniformly.
   //
-  // NOTE: This is useful as a separate function for the following reasons.
+  // If `requestTimer` is set, the elapsed time of that timer at the end of
+  // query planning is stored in the query's runtime information as
+  // `timeQueryPlanning`. This information can be accessed via the
+  // query execution tree's root operation.
   //
-  // 1. Using a `QueryPlan`, one can execute a `query` multiple times without
+  // TODO<joka921,damekt> The `timeLimit` is currently only used for
+  // non-cancelable operations (in particular sorting). The time limit applies
+  // from the time this function is called until the execution of the query
+  // has finished. This might be very unintuitive when the `PlannedQuery` is
+  // stored for later execution. This is not an issue for now (only the
+  // `Server` actually imposes time limits and then executes the queries right
+  // away), but should be addressed in the future once the timeout management
+  // also is moved into the `QLever` class.
+  PlannedQuery planQuery(ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle,
+                         std::optional<TimeLimit> timeLimit,
+                         boost::optional<const ad_utility::Timer&>
+                             requestTimer = boost::none) const;
+
+  // Plan a query that was parsed by `parseQuery` (or bundled by
+  // `bindParsedQuery`, both see below). The query is planned against the
+  // `QueryExecutionContext` that `parsedQuery` carries, so the two can not get
+  // out of sync. Implemented in terms of the `planQuery` overload above.
+  //
+  // For the semantics of `handle`, `timeLimit`, and `requestTimer`, see
+  // `planQuery` above.
+  PlannedQuery planQuery(
+      ParsedQueryAndContext parsedQuery,
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
+
+  // Parse the given `query` (despite the name, `query` may also be a SPARQL
+  // update operation) and return it together with the
+  // `QueryExecutionContext` to plan and execute it against, see
+  // `ParsedQueryAndContext`.
+  //
+  // This is the first half of `parseAndPlanQuery`, the second half being the
+  // `planQuery` overload above. Calling the two separately is useful to inspect
+  // or modify the `ParsedQuery` before it is planned, to measure the time for
+  // the parsing and the planning separately, and to reuse a parsed query (see
+  // below).
+  //
+  // NOTE ON REUSING A PARSED QUERY: The `ParsedQuery` depends on the
+  // `QueryExecutionContext` it was parsed with, but only through that context's
+  // `EncodedIriManager` (which determines which IRIs are encoded directly in
+  // the ID). It is therefore valid, and saves the repeated parsing of the same
+  // query, to take the `ParsedQuery` out of the result and plan it against a
+  // *different* context, as long as that context has an equivalent
+  // `EncodedIriManager` (see `bindParsedQuery`). This is in particular the case
+  // for several `Qlever` instances whose indexes were built with the same
+  // `IndexBuilderConfig::prefixesForIdEncodedIris_`. If the
+  // `EncodedIriManager`s differ, the affected IRIs are silently misinterpreted,
+  // so this has to be ensured by the caller.
+  ParsedQueryAndContext parseQuery(
+      std::string query, const std::vector<DatasetClause>& datasetClauses = {},
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
+      bool pinSubtrees = false, bool pinResult = false) const;
+
+  // Bundle an already-parsed query with a fresh `QueryExecutionContext` of this
+  // instance, so that it can be planned here. Together with `parseQuery` this
+  // makes it possible to parse a query once and plan it on several instances.
+  //
+  // PRECONDITION: `parsedQuery` must have been parsed with a context whose
+  // `EncodedIriManager` is equivalent to this instance's; see the note on
+  // reusing a parsed query in `parseQuery` above. This is not checked.
+  ParsedQueryAndContext bindParsedQuery(
+      ParsedQuery parsedQuery,
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
+      bool pinSubtrees = false, bool pinResult = false) const;
+
+  // Parse and plan the given `query` (see `planQuery` above; despite the
+  // name, `query` may also be a SPARQL update operation). This is exactly
+  // `parseQuery` followed by `planQuery`.
+  //
+  // NOTES: This is useful as a separate function for the following reasons.
+  //
+  // 1. Using a `PlannedQuery`, one can execute a `query` multiple times without
   // having to parse and plan it again.
   //
   // 2. It helps measuring the time for the parsing and planning separately
@@ -263,8 +423,23 @@ class Qlever {
   //
   // 3. It enables an inspection or even modification of the query plan before
   // executing it (this requires some expertise).
-  using QueryPlan = qlever::QueryPlan;
-  QueryPlan parseAndPlanQuery(std::string query) const;
+  //
+  // TODO<joka921,damekt> The `timeLimit` is currently only used for
+  // non-cancelable operations (in particular sorting). The time limit applies
+  // from the time this function is called until the execution of the query
+  // has finished. This might be very unintuitive when the `PlannedQuery` is
+  // stored for later execution. This is not an issue for now (only the
+  // `Server` actually imposes time limits and then executes the queries right
+  // away), but should be addressed in the future once the timeout management
+  // also is moved into the `QLever` class.
+  PlannedQuery parseAndPlanQuery(
+      std::string query, const std::vector<DatasetClause>& datasetClauses = {},
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
+      bool pinSubtrees = false, bool pinResult = false) const;
 
   // Run the given parsed and planned query. The result is returned as a
   // string; see `src/util/http/MediaTypes.h` for the supported formats.
@@ -272,7 +447,7 @@ class Qlever {
   // NOTE: With `ad_utility::MediaType::qleverJson`, the result also contains
   // detailed information on the query execution, including timings of the
   // various parts of the query plan.
-  std::string query(const QueryPlan& queryPlan,
+  std::string query(const PlannedQuery& plannedQuery,
                     ad_utility::MediaType mediaType =
                         ad_utility::MediaType::sparqlJson) const;
 
@@ -285,6 +460,31 @@ class Qlever {
   std::string query(std::string query,
                     ad_utility::MediaType mediaType =
                         ad_utility::MediaType::sparqlJson) const;
+
+  // Execute `plannedUpdate` (a `PlannedQuery` for which
+  // `ParsedQuery::hasUpdateClause()` holds) against `deltaTriples`, and
+  // return metadata about the update (timing, number of triples changed,
+  // etc.). Also clear the query and named-result caches, because all cache
+  // entries have been invalidated by the update anyway (the located-triples
+  // snapshot is part of the cache key).
+  //
+  // `deltaTriples` must be obtained from the same `Index` that
+  // `plannedUpdate` was planned against (i.e. `plannedUpdate.getIndex()`),
+  // via `Index::deltaTriplesManager().modify(...)`, which also gives the
+  // caller the required exclusive access to it.
+  //
+  // NOTE: This is currently a low-level API, used internally by `Server`,
+  // which already has to obtain the `DeltaTriples` this way to plan the
+  // update against the correct `QueryExecutionContext` in the first place.
+  // A higher-level API that parses and executes an update in one call
+  // (without the caller having to manage the `DeltaTriples` reference itself)
+  // will be added in the future.
+  UpdateMetadata applyUpdate(
+      const PlannedQuery& plannedUpdate,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      DeltaTriples& deltaTriples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Plan, parse, and execute the given `query` and pin the result to the cache
   // with the given options (name and possibly request for building a geometry
@@ -300,39 +500,91 @@ class Qlever {
   void eraseResultWithName(std::string name);
   // Completely clear the `NamedResultCache`.
   void clearNamedResultCache();
+  // Completely clear the `QueryResultCache` (non-named).
+  void clearQueryResultCache();
+
+  // Clear the delta triples of the index snapshot that is active when this
+  // is called, and return the resulting counts. This function is threadsafe
+  // against queries and updates, but not against a concurrent index rebuild
+  // swapping out `indexAndViewsSnapshot()`'s current snapshot. Since delta
+  // triples can be populated directly through `Qlever` via `applyUpdate`
+  // (see above), this is tested independently of the HTTP `Server` layer in
+  // `LibQlever.clearDeltaTriples`.
+  DeltaTriplesCount clearDeltaTriples() const;
+
+  // Remove redundant delta triples of the index snapshot that is active when
+  // this is called, and return aggregated statistics about the removal.
+  // Cancellable via `handle`. Has the same concurrent-rebuild caveat as
+  // `clearDeltaTriples`, and is likewise tested directly in
+  // `LibQlever.vacuumDeltaTriples`.
+  nlohmann::json vacuumDeltaTriples(SharedCancellationHandle handle) const;
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
-  void writeMaterializedView(std::string name, std::string query) const;
+  //
+  // `requestTimer`, `timeLimit`, and `handle` are forwarded to `planQuery`
+  // (see there for their exact semantics). If omitted, the query is planned
+  // and executed without a timer, without a time limit, and with a fresh,
+  // never-triggered cancellation handle, i.e. it always runs to completion.
+  void writeMaterializedView(
+      std::string name, std::string query,
+      const std::vector<DatasetClause>& datasetClauses = {},
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
 
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.
   void loadMaterializedView(std::string name) const;
 
+  // Unload a materialized view that was previously loaded via
+  // `loadMaterializedView`. Has no effect if the view is not currently loaded.
+  void unloadMaterializedView(const std::string& name) const;
+
   // Check if a materialized view with the given name is currently loaded.
   bool isMaterializedViewLoaded(const std::string& name) const;
 
-  // Write the contents of the `NamedResultCache` to disk.
-  template <typename Serializer>
-  void writeNamedResultCacheToSerializer(Serializer& serializer) const {
-    namedResultCache_.writeToSerializer(serializer);
+  // Delete the materialized view with the given name: unload it if loaded and
+  // delete its files from disk. Throws if the view does not exist.
+  void deleteMaterializedView(std::string name) const;
+
+  // Serialize the index metadata JSON, the vocabulary, and the
+  // `NamedResultCache` of this instance into a single, self-contained,
+  // ZSTD-compressed blob that can later be loaded via
+  // `deserializeVocabAndNamedCacheFromCompressedBlob` (e.g. by a different
+  // process, without needing access to the on-disk index). For details see
+  // `NamedCachedQueryBlobManager::serialize`.
+  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob() const {
+    return blobManager_.serialize(*this);
   }
 
-  // Read the contents of the `NamedResultCache` from disk.
-  template <typename Serializer>
-  void readNamedResultCacheFromDisk(Serializer& serializer) {
-    auto indexAndViews = indexAndViewsSnapshot();
-    namedResultCache_.readFromSerializer(serializer, allocator_,
-                                         indexAndViews->index_);
+  // Load a blob previously written by
+  // `serializeVocabAndNamedCacheToCompressedBlob`. For details see
+  // `NamedCachedQueryBlobManager::deserialize`.
+  //
+  // PRECONDITION: Must only be called while no other thread can concurrently
+  // access this instance, e.g. right after construction and before the first
+  // query is answered. Must not be called more than once on the same
+  // instance.
+  void deserializeVocabAndNamedCacheFromCompressedBlob(
+      ql::span<const char> blob,
+      ql::pmr::polymorphic_allocator<char> allocator = {}) {
+    // Note: `polymorphic_allocator` is cheap to copy and has no
+    // dedicated move operations.
+    blobManager_.deserialize(*this, blob, allocator);
   }
+
+  // Clear the query result cache.
+  void clearCache() { cache_.clearAll(); }
 
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
   // consistent state.
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
       std::shared_ptr<IndexAndViews> indexAndViews,
-      std::function<void(std::string)> updateCallback =
-          [](std::string) { /* the default is a noop*/ },
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false,
       QueryExecutionContext::DisableCaching disableCaching =
           QueryExecutionContext::DisableCaching::FromRuntimeParameter) const;
@@ -348,17 +600,159 @@ class Qlever {
   // Atomically swap in a freshly built `IndexAndViews`. The old instance stays
   // alive as long as some `shared_ptr` (e.g. obtained via
   // `indexAndViewsSnapshot()`) still references it.
+  //
+  // PRECONDITION: The `NamedResultCache` must be empty. Its entries reference
+  // IDs (and possibly zero-copy views) that are only valid for the specific
+  // index snapshot they were created against; swapping in a different index
+  // would silently invalidate them. Callers that want to swap the index must
+  // therefore clear the named result cache first. (This is a deliberately
+  // minimally invasive guard; full support for keeping the named result cache
+  // across index snapshots is future work.)
   void swapIndexAndViews(std::shared_ptr<IndexAndViews> indexAndViews) {
+    AD_CONTRACT_CHECK(
+        namedResultCache_.numEntries() == 0,
+        "The index snapshot must not be swapped while the named result cache "
+        "is not empty");
     *indexAndViews_.wlock() = std::move(indexAndViews);
   }
+
+  // Assemble the `IndexSwapConfig` for a rebuild of `index` (which has to be
+  // the index that is currently being served) from the two directories a
+  // rebuild can be configured with: `rebuildTmpDir`, in which the new index
+  // is built, and `rebuildPreviousIndexDir`, to which the old index is retired.
+  // Both default (if `std::nullopt`) to `rebuild.<current datetime>.tmp` resp.
+  // `previous.<build date of the current index>`. This is a thin wrapper
+  // around `makeIndexSwapConfig` (see `index/IndexSwap.h`, in particular for
+  // the requirements on the two directories and the errors that are thrown
+  // when they are violated).
+  static IndexSwapConfig makeIndexRebuildConfig(
+      const Index& index, std::optional<std::string> rebuildTmpDir,
+      std::optional<std::string> rebuildPreviousIndexDir);
+
+  // Apply the given `policy` to the `previous.*` directories in the directory
+  // of the index with the base name `indexBaseName` (each successful rebuild
+  // retires the index that was served so far into such a directory, see
+  // `makeIndexRebuildConfig`): keep or delete each of them according to
+  // `keepPreviousIndexDir`, where the directories are ordered from the oldest
+  // to the newest. Each decision is appended to the `rebuild-index` log of
+  // the index with the base name `indexBaseName` (the log of the rebuild that
+  // has just finished), not to the server log. This function never throws
+  // (when this is called, the rebuild has already succeeded): a directory
+  // that cannot be deleted is logged as an error in the server log and
+  // skipped, and any other filesystem failure is also only logged.
+  static void cleanUpPreviousIndexDirs(const std::string& indexBaseName,
+                                       KeepPreviousIndexDirs policy);
+
+ private:
+  // The implementation of `cleanUpPreviousIndexDirs` above, which wraps this
+  // function in a try-catch.
+  static void cleanUpPreviousIndexDirsImpl(const std::string& indexBaseName,
+                                           KeepPreviousIndexDirs policy);
+
+ public:
+  // Move a freshly rebuilt index into the place of the old one. There are two
+  // indices involved, both with base names given by `config`: the old index
+  // that is currently being served (at `config.oldIndexSource()`), and the
+  // freshly rebuilt index `newIndexAndViews` (built in a temporary location at
+  // `config.newIndexSource()`). This function performs two renames and then
+  // re-anchors the new index in memory:
+  //
+  // 1. Move the files of the old index (including its materialized views and
+  //    its build log) from `config.oldIndexSource()` to
+  //    `config.oldIndexTarget()`.
+  // 2. Move the files of the freshly rebuilt index from
+  //    `config.newIndexSource()` to `config.newIndexTarget()`.
+  // 3. Remove the directory that contained `config.newIndexSource()`, which
+  //    step 2 has emptied (if it is actually empty). A failure here is only
+  //    logged as a warning.
+  // 4. Re-anchor all path-derived state of the new index in memory (on-disk
+  //    base name, files for persisted updates and graph names, and the views
+  //    manager) to `config.newIndexTarget()`.
+  // 5. Apply the `policy` for which `previous.*` index directories to keep
+  //    (see `cleanUpPreviousIndexDirs` above), right after step 1 has retired
+  //    the old index into such a directory. The default policy `all` keeps
+  //    everything, i.e. performs no cleanup.
+  //
+  // Steps 1 to 3 are the pure on-disk part of the swap and are performed by
+  // `qlever::moveIndexIntoPlace` (see `index/IndexSwap.h`), which is shared
+  // with `qlever-upgrade-index`.
+  //
+  // Typically, `config.newIndexTarget()` is `config.oldIndexSource()`, i.e. the
+  // new index is served from the place of the old index (so that a later
+  // restart loads the latest index); this works because step 1 has already
+  // freed that place. Existing files that may still exist at
+  // `config.oldIndexTarget()` or `config.newIndexTarget()` may be overwritten,
+  // so callers have to make sure the directories to write to are safe. The
+  // renames keep the open file handles of both indices valid, so running
+  // queries are not affected. This must be called BEFORE swapping in the new
+  // `IndexAndViews`, and with the guarantee that no updates are added
+  // concurrently (an update between the renames and the re-anchoring would
+  // persist to the old path). If this throws halfway through, the in-memory
+  // state still refers to a consistent old index, but some files will have been
+  // moved and others won't, so when restarting, files need to be moved into the
+  // proper directory first. This should realistically never happen since all
+  // this function does is string concatenation and moving files around. This
+  // function assumes that file handles are never reopened, so moving the files
+  // while the file handle is still open is fine in POSIX compliant systems.
+  static void moveRebuiltIndexIntoPlace(
+      IndexAndViews& newIndexAndViews, const IndexSwapConfig& config,
+      KeepPreviousIndexDirs policy = KeepPreviousIndexDirs::All);
+
+  // The result of the first phase of an index rebuild (see
+  // `rebuildIndexToDisk`): a snapshot of the delta triples taken at the start
+  // of the rebuild, the mapping from the old vocabulary `Id`s to the new ones,
+  // and the freshly built index (loaded from disk) paired with a fresh, empty
+  // `MaterializedViewsManager`.
+  using RebuildResult =
+      std::tuple<LocatedTriplesSharedState, indexRebuilder::IndexRebuildMapping,
+                 std::shared_ptr<IndexAndViews>>;
+
+  // The two functions below implement an index rebuild. They are only available
+  // in the C++20 build. They rely on `materializeToIndex` and
+  // `DeltaTriples::addFromSnapshotDiff`, which are excluded from the reduced
+  // C++17 feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+  // Build a new index from the current state of `index` and write it to disk
+  // under the base name `config.newIndexSource()` (the containing directory is
+  // created if it does not exist), then load it into a fresh `IndexAndViews`.
+  // This is the expensive, read-only first phase of an index rebuild. It
+  // returns the data required by `swapInRebuiltIndex` to atomically switch over
+  // to the new index. `handle` can be used to cancel the rebuild. The reason
+  // why `index` has to be passed in manually instead of using
+  // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs.
+  [[nodiscard]] RebuildResult rebuildIndexToDisk(
+      Index& index, const IndexSwapConfig& config,
+      const ad_utility::SharedCancellationHandle& handle) const;
+
+  // Remap the delta triples that accumulated on the old `index` (which has to
+  // be the exact same index that was used to create `rebuildResult`) onto the
+  // freshly built index (using the `rebuildResult` produced by
+  // `rebuildIndexToDisk`) and atomically swap the new index in. Calling this
+  // also persists the remapped delta triples to disk so that they are not lost
+  // if the engine is later restarted on the rebuilt index. The reason why
+  // `index` has to be passed in manually instead of using
+  // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs. It is crucial
+  // that this function is only called when you can guarantee no updates are
+  // added during the duration of this function call.
+  //
+  // Before the swap, `moveRebuiltIndexIntoPlace` is called, which moves the
+  // files of the old index to `config.oldIndexTarget()` and the files of the
+  // new index from `config.newIndexSource()` to `config.newIndexTarget()` (by
+  // default the place of the old index), removes the directory in which the
+  // new index was built, and applies the policy from `keepPreviousIndexDirs`
+  // for which `previous.*` index directories to keep.
+  void swapInRebuiltIndex(const Index& index, RebuildResult rebuildResult,
+                          const ad_utility::SharedCancellationHandle& handle,
+                          const IndexSwapConfig& config,
+                          KeepPreviousIndexDirs keepPreviousIndexDirs);
+#endif
 
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }
 
-  ad_utility::AllocatorWithLimit<Id>& allocator() { return allocator_; }
-  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
-    return allocator_;
-  }
+  Allocator<Id>& allocator() { return allocator_; }
+  const Allocator<Id>& allocator() const { return allocator_; }
 
   SortPerformanceEstimator& sortPerformanceEstimator() {
     return sortPerformanceEstimator_;
@@ -369,12 +763,6 @@ class Qlever {
 
   NamedResultCache& namedResultCache() { return namedResultCache_; }
   const NamedResultCache& namedResultCache() const { return namedResultCache_; }
-
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    auto snapshot = *indexAndViews_.rlock();
-    MaterializedViewsManager* manager = &snapshot->materializedViewsManager_;
-    return {std::move(snapshot), manager};
-  }
 };
 }  // namespace qlever
 

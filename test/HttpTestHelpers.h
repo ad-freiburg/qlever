@@ -24,18 +24,18 @@ using namespace std::literals;
 template <typename HttpHandler, BodyReadMode readMode = BodyReadMode::Eager>
 class TestHttpServer {
  private:
-  static constexpr auto webSocketSessionSupplier =
-      [](net::io_context& ioContext) {
+  static constexpr auto makeWebSocketSessionSupplier =
+      [](net::any_io_executor& ioExecutor) {
         using namespace ad_utility::websocket;
-        return [queryHub = QueryHub{ioContext}, registry = QueryRegistry{}](
+        return [queryHub = QueryHub{ioExecutor}, registry = QueryRegistry{}](
                    const http::request<http::string_body>& request,
                    tcp::socket socket) mutable {
           return WebSocketSession::handleSession(queryHub, registry, request,
                                                  std::move(socket));
         };
       };
-  using WebSocketHandlerType =
-      decltype(webSocketSessionSupplier(std::declval<net::io_context&>()));
+  using WebSocketHandlerType = decltype(makeWebSocketSessionSupplier(
+      std::declval<net::any_io_executor&>()));
 
   // The server.
   std::shared_ptr<HttpServer<readMode, HttpHandler, WebSocketHandlerType>>
@@ -60,7 +60,7 @@ class TestHttpServer {
                           size_t lazyBodyChunkSize = 100u) {
     server_ = std::make_shared<
         HttpServer<readMode, HttpHandler, WebSocketHandlerType>>(
-        0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier,
+        0, "0.0.0.0", 1, std::move(httpHandler), makeWebSocketSessionSupplier,
         ad_utility::MemorySize::bytes(lazyBodyChunkSize));
   }
 

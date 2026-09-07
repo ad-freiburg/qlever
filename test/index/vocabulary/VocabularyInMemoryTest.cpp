@@ -81,6 +81,38 @@ TEST(VocabularyInMemory, EmptyVocabulary) {
 }
 
 // _____________________________________________________________________________
+TEST(VocabularyInMemory, ScanAll) {
+  // `scanAll` uses the generic `operator[]` fallback here and must yield all
+  // words in order.
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42", "0"};
+  const auto vocab = createVocabulary(words);
+  EXPECT_THAT(scanAllToVector(vocab.scanAll()),
+              ::testing::ElementsAreArray(words));
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyInMemory, ScanAllEmptyVocabulary) {
+  const auto vocab = createVocabulary({});
+  EXPECT_TRUE(scanAllToVector(vocab.scanAll()).empty());
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyInMemory, ZeroCopyDeserialization) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42",
+                                       "31",    "0",     "al"};
+  const auto vocab = createVocabulary(words);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << vocab;
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  auto view = Vocab::fromZeroCopyDeserializer(readSerializer);
+
+  assertThatRangesAreEqual(vocab, view);
+}
+
+// _____________________________________________________________________________
 TEST(VocabularyInMemory, WordWriterDestructorBehavior) {
   const std::string filename = "VocabInMemoryWordWriterDestructorBehavior.tmp";
   Vocab v;

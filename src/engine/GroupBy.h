@@ -56,6 +56,10 @@ class GroupBy : public Operation {
   GroupByImpl& getImpl();
 
  private:
+  // Delegates to the implementation's isDeterministic(), which checks both
+  // alias expressions and the subtree.
+  [[nodiscard]] bool isDeterministicImpl() const override;
+
   std::unique_ptr<GroupByImpl> _impl;
 };
 

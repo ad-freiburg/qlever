@@ -37,10 +37,10 @@ struct BatchEvaluationResult {
   // set of evaluated columns may be sparse: some variables in the WHERE-clause
   // (in the `IdTable`) may not appear in the CONSTRUCT template and are thus
   // not evaluated.
-  ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
+  ad_utility::HashMap<ColumnIndex, EvaluatedVariableValues> variablesByColumn_;
   size_t numRows_ = 0;
 
-  const std::optional<EvaluatedTerm>& getVariable(size_t columnIndex,
+  const std::optional<EvaluatedTerm>& getVariable(ColumnIndex columnIndex,
                                                   size_t rowInBatch) const {
     return variablesByColumn_.at(columnIndex).at(rowInBatch);
   }
@@ -52,14 +52,19 @@ using IdCache =
 // Identifies a contiguous sub-range of rows of an `IdTable` that forms one
 // batch.
 struct BatchEvaluationContext {
-  const IdTable& idTable_;
+  // A non-owning view over the batch's `IdTable`. Stored by value: an
+  // `IdTableView` is a lightweight handle (like `string_view`), so copying it
+  // is cheap, and every caller already hands us a view
+  // (`TableWithVocab::idTable()` returns `const IdTableView<0>&`). The viewed
+  // table must outlive the context.
+  IdTableView<0> idTable_;
   size_t firstRow_;
   size_t endRow_;  // exclusive
 
-  BatchEvaluationContext(const IdTable& idTable, size_t firstRow, size_t endRow)
-      : idTable_(idTable), firstRow_(firstRow), endRow_(endRow) {
+  BatchEvaluationContext(IdTableView<0> idTable, size_t firstRow, size_t endRow)
+      : idTable_(std::move(idTable)), firstRow_(firstRow), endRow_(endRow) {
     AD_CONTRACT_CHECK(firstRow <= endRow);
-    AD_CONTRACT_CHECK(endRow <= idTable.numRows());
+    AD_CONTRACT_CHECK(endRow <= idTable_.numRows());
   }
 
   size_t numRows() const { return endRow_ - firstRow_; }
@@ -80,7 +85,7 @@ class ConstructBatchEvaluator {
   // in `evaluationContext`. Each entry in `variableColumnIndices` is an
   // `IdTable` column index representing a variable in the CONSTRUCT template.
   static BatchEvaluationResult evaluateBatch(
-      ql::span<const size_t> variableColumnIndices,
+      ql::span<const ColumnIndex> variableColumnIndices,
       const BatchEvaluationContext& evaluationContext,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
@@ -93,7 +98,7 @@ class ConstructBatchEvaluator {
 
   // Convert the result of `ExportIds::idToStringAndType` to an `EvaluatedTerm`.
   static std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
-      std::optional<std::pair<std::string, const char*>> optStringAndType);
+      std::optional<std::pair<std::string, const char*>>&& optStringAndType);
 };
 
 }  // namespace qlever::constructExport

@@ -7,19 +7,24 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 // The signature of the SplitFunction for a SplitVocabulary. For each literal or
 // IRI, it should return a marker index which of the underlying vocabularies of
@@ -101,6 +106,22 @@ class SplitVocabulary {
   // Array that holds all underlying vocabularies.
   UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
 
+  // Implementation of `scanAll`, written separately because in C++17, lambdas
+  // can't have explicit template parameters.
+  template <size_t... Is>
+  auto scanAllImpl(std::index_sequence<Is...>) const {
+    return ::ranges::views::concat(
+        (ad_utility::OwningView{std::visit(
+             [](const auto& vocab) {
+               return VocabularyScanRange{vocab.scanAll()};
+             },
+             underlying_[Is])} |
+         ql::views::transform([](const IndexAndWord& indexAndWord) {
+           return IndexAndWord{addMarker(indexAndWord.index_, Is),
+                               indexAndWord.word_};
+         }))...);
+  }
+
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index
   // that contains the marker and vocabIndex. The result is guaranteed to be
@@ -109,7 +130,7 @@ class SplitVocabulary {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs &&
                          vocabIndex <= vocabIndexBitMask);
     return vocabIndex | (static_cast<uint64_t>(marker) << markerShift);
-  };
+  }
 
   // Extract the marker from a full 64 bit index.
   static constexpr uint8_t getMarker(uint64_t indexWithMarker) {
@@ -122,7 +143,7 @@ class SplitVocabulary {
   // which vocabulary this word would go)
   static uint8_t getMarkerForWord(const std::string_view& word) {
     return splitFunction_(word);
-  };
+  }
 
   // Helper to detect if a "special" vocabulary is used.
   static constexpr bool isSpecialVocabIndex(uint64_t indexWithMarker) {
@@ -133,7 +154,7 @@ class SplitVocabulary {
   // bits.
   static constexpr uint64_t getVocabIndex(uint64_t indexWithMarker) {
     return indexWithMarker & vocabIndexBitMask;
-  };
+  }
 
   // Close all underlying vocabularies.
   void close();
@@ -164,6 +185,23 @@ class SplitVocabulary {
           return vocab[unmarkedIdx];
         },
         underlying_[marker]);
+  }
+
+  // Iterate over all words of all underlying vocabularies, one after the other,
+  // together with their global (marker-encoded) index.
+  auto scanAll() const {
+    return scanAllImpl(std::make_index_sequence<numberOfVocabs>{});
+  }
+
+  //____________________________________________________________________________
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+  }
+
+  //____________________________________________________________________________
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return ad_utility::vocabulary::lookupBatchesStreamed(*this,
+                                                         std::move(input));
   }
 
   // The size of a SplitVocabulary is the sum of the sizes of the underlying
@@ -305,8 +343,7 @@ namespace detail::splitVocabulary {
 // vocabulary 0 except WKT literals, which go to vocabulary 1.
 struct GeoSplitFunc {
   uint8_t operator()(std::string_view word) const {
-    return ql::starts_with(word, "\"") &&
-           ql::ends_with(word, GEO_LITERAL_SUFFIX);
+    return ad_utility::isWktLiteral(word);
   }
 };
 

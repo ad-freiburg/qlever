@@ -7,11 +7,11 @@
 #include <absl/container/flat_hash_map.h>
 
 #include <array>
-#include <filesystem>
 #include <fstream>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/filesystem.h"
 #include "backports/type_traits.h"
 #include "global/Id.h"
 #include "index/IndexImpl.h"
@@ -170,9 +170,9 @@ std::vector<Id> deserializeIds(Serializer& serializer,
 // Serialize the local vocabulary and the given ranges of Ids to the given path.
 CPP_template(typename Range)(
     requires ql::ranges::range<
-        Range>) void serializeIds(const std::filesystem::path& path,
+        Range>) void serializeIds(const ql::filesystem::path& path,
                                   const LocalVocab& vocab, Range&& idRanges) {
-  serialization::FileWriteSerializer serializer{path.c_str()};
+  serialization::FileWriteSerializer serializer{path.string()};
   detail::writeHeader(serializer);
   detail::serializeLocalVocab(serializer, vocab);
   serializer << uint64_t{ql::ranges::size(idRanges)};
@@ -182,15 +182,15 @@ CPP_template(typename Range)(
 }
 
 inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
-    const std::filesystem::path& path, const LocalVocabContext& context) {
+    const ql::filesystem::path& path, const LocalVocabContext& context) {
   // This is a minor TOCTOU issue, the file might be gone after this check and
   // before the call to `fopen`, done by `FileReadSerializer`, so ideally we'd
   // handle this as a special exception type of our own `File` class, which
   // doesn't exist yet.
-  if (!std::filesystem::exists(path)) {
+  if (!ql::filesystem::exists(path)) {
     return {};
   }
-  auto serializer = [p = path.c_str()]() {
+  auto serializer = [p = path.string()]() {
     try {
       return serialization::FileReadSerializer{p};
     } catch (const std::runtime_error& err) {

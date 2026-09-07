@@ -76,7 +76,7 @@ CPP_template(typename Type, typename FromString, typename ToString)(
   /// Construction is only allowed using an initial parameter value
   Parameter() = delete;
   explicit Parameter(Type initialValue, std::string name)
-      : value_{std::move(initialValue)}, name_{std::move(name)} {};
+      : value_{std::move(initialValue)}, name_{std::move(name)} {}
 
   /// Copying is disabled, but moving is ok
   Parameter(const Parameter& rhs) = delete;

@@ -167,7 +167,7 @@ void VariableCounter::operator()(const NamedCachedResult& op) {
 // _____________________________________________________________________________
 void VariableCounter::operator()(const MaterializedViewQuery& op) {
   (*this)(op.scanCol_);
-  (*this)(op.requestedColumns_ | ql::views::keys);
+  (*this)(op.requestedColumns_ | ql::views::values);
 }
 
 // _____________________________________________________________________________

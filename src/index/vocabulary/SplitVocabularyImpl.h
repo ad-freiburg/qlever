@@ -6,9 +6,9 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H
 
 #include "backports/type_traits.h"
-#include "index/Vocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
+#include "index/vocabulary/Vocabulary.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
 
@@ -72,7 +72,7 @@ SplitVocabulary<SF, SFN, S...>::WordWriter::WordWriter(
         },
         underlyingVocabularies[i]);
   }
-};
+}
 
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>

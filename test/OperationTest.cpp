@@ -7,11 +7,15 @@
 
 #include <optional>
 
+#include "engine/Bind.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/Sort.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
@@ -726,7 +730,7 @@ TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
       aggregatedValue.value()._resultPointer->resultTable();
   ASSERT_TRUE(aggregatedResult.isFullyMaterialized());
 
-  const auto& idTable = aggregatedResult.idTable();
+  const auto& idTable = aggregatedResult.idTableView();
   ASSERT_EQ(idTable.numColumns(), 2);
   ASSERT_EQ(idTable.numRows(), 3);
 
@@ -905,4 +909,92 @@ TEST(OperationTest, disableCachingGlobally) {
   // ONLY_IF_CACHED returns nullptr when caching is disabled.
   EXPECT_EQ(valuesForTesting.getResult(false, ComputationMode::ONLY_IF_CACHED),
             nullptr);
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, isDeterministicAlwaysTrueOperations) {
+  using namespace ad_utility::testing;
+  auto* qec = getQec();
+
+  ValuesForTesting values{qec, IdTable{1, qec->getAllocator()},
+                          std::vector<std::optional<Variable>>{Variable{"?x"}}};
+  EXPECT_TRUE(values.isDeterministic());
+
+  NeutralElementOperation neutral{qec};
+  EXPECT_TRUE(neutral.isDeterministic());
+
+  SparqlTripleSimple scanTriple{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}};
+  IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+  EXPECT_TRUE(scan.isDeterministic());
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, isDeterministicPropagatesFromChildren) {
+  using namespace ad_utility::testing;
+  using namespace sparqlExpression;
+  auto* qec = getQec();
+
+  // A BIND(RAND()) node is non-deterministic.
+  auto randBindTree = ad_utility::makeExecutionTree<Bind>(
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, IdTable{1, qec->getAllocator()},
+          std::vector<std::optional<Variable>>{Variable{"?x"}}),
+      parsedQuery::Bind{
+          SparqlExpressionPimpl{std::make_unique<RandomExpression>(), "RAND()"},
+          Variable{"?r"}});
+
+  EXPECT_FALSE(randBindTree->getRootOperation()->isDeterministic());
+
+  // Wrapping it in a Sort still yields non-deterministic.
+  auto sortedTree = ad_utility::makeExecutionTree<Sort>(
+      qec, randBindTree, std::vector<ColumnIndex>{});
+  EXPECT_FALSE(sortedTree->getRootOperation()->isDeterministic());
+}
+
+// _____________________________________________________________________________
+TEST(Operation, isDistinctByRecognizesLimitOne) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}, {0, 1}}),
+      Vars{Variable{"?x"}, Variable{"?y"}});
+
+  // Without a limit, `ValuesForTesting` is not known to be distinct.
+  EXPECT_FALSE(values->getRootOperation()->isDistinctBy(SC{0}));
+
+  // A limit greater than one doesn't help, as the result may still contain
+  // duplicates.
+  values->applyLimitOffset(LimitOffsetClause{._limit = 2});
+  EXPECT_FALSE(values->getRootOperation()->isDistinctBy(SC{0}));
+
+  // With `LIMIT 1` the result has at most one row, so it is trivially distinct
+  // wrt any set of columns.
+  values->applyLimitOffset(LimitOffsetClause{._limit = 1});
+  EXPECT_TRUE(values->getRootOperation()->isDistinctBy(SC{0}));
+  EXPECT_TRUE(values->getRootOperation()->isDistinctBy(SC{}));
+}
+
+// _____________________________________________________________________________
+TEST(Operation, makeDistinctTreeDefaultRequiresNotAlreadyDistinct) {
+  using TC = TripleComponent;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  // `IndexScan` overrides `isDistinctByImpl` but uses the default
+  // `makeDistinctTree` (which returns `nullopt`). The default implementation
+  // asserts that it is only called on operations that are not already distinct.
+  auto scan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
+                         TC{Variable{"?o"}}});
+  const auto& scanOp = *scan->getRootOperation();
+
+  ASSERT_TRUE(scanOp.isDistinctBy(SC{0, 1, 2}));
+  EXPECT_THROW(scanOp.makeDistinctTree(SC{0, 1, 2}), ad_utility::Exception);
+
+  ASSERT_FALSE(scanOp.isDistinctBy(SC{0}));
+  EXPECT_EQ(scanOp.makeDistinctTree(SC{0}), std::nullopt);
 }

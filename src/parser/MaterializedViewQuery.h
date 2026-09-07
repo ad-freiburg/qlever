@@ -70,7 +70,7 @@ struct MaterializedViewQuery : MagicServiceQuery {
 
   constexpr std::string_view name() const override {
     return "materialized view query";
-  };
+  }
 
  private:
   // Internal helpers for shared code between `addParameter` and magic predicate

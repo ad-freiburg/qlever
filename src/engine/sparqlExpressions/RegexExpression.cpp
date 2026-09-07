@@ -201,6 +201,55 @@ ExpressionResult PrefixRegexExpression::evaluate(
   }
   checkCancellation(context);
 
+  // Helper that checks whether a single `Id` lies in (at least) one of the
+  // prefix ranges.
+  auto matchesPrefix = [&lowerAndUpperIds](Id id) {
+    if (id.isUndefined()) {
+      return Id::makeUndefined();
+    }
+    return Id::makeFromBool(
+        ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
+          return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
+                 valueIdComparators::compareByBits(id, lowerUpper.second);
+        }));
+  };
+
+  // When we work on aggregated data (i.e. as part of a GROUP BY, but outside of
+  // an aggregate), the variable is grouped and thus constant within each group.
+  if (worksOnAggregatedData(context)) {
+    AD_CORRECTNESS_CHECK(
+        context->_groupedVariables.contains(variable_),
+        "A non-grouped variable outside of an aggregate should have been "
+        "rejected by the parser");
+    return std::visit(
+        [context, &matchesPrefix](const auto& childResult) -> ExpressionResult {
+          using T = std::decay_t<decltype(childResult)>;
+          // Usually the child of a prefix-regex expression is a
+          // `VariableExpression`, so the result is a single `ValueId`.
+          if constexpr (ad_utility::isSimilar<T, ValueId>) {
+            return matchesPrefix(childResult);
+            // Hash-map based or lazy GROUP BY implementations can lead to the
+            // child being replaced by `sparqlExpression::VectorIdExpression`.
+            // In this case, we have to apply the prefix check to each value in
+            // the vector.
+          } else if constexpr (ad_utility::isSimilar<
+                                   T, VectorWithMemoryLimit<ValueId>>) {
+            VectorWithMemoryLimit<Id> result{context->_allocator};
+            result.reserve(childResult.size());
+            for (Id id : childResult) {
+              result.push_back(matchesPrefix(id));
+              checkCancellation(context);
+            }
+            return ExpressionResult{std::move(result)};
+          } else {
+            // The child of a prefix-regex expression is always a single
+            // variable, so this is unreachable.
+            AD_FAIL();
+          }
+        },
+        child_->evaluate(context));
+  }
+
   // Begin and end of the input (for each row of which we want to
   // evaluate the regex).
   auto beg = context->_inputTable.begin() + context->_beginIndex;
@@ -245,15 +294,7 @@ ExpressionResult PrefixRegexExpression::evaluate(
   VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
   for (auto id : detail::makeGenerator(variable_, resultSize, context)) {
-    if (id.isUndefined()) {
-      result.push_back(Id::makeUndefined());
-    } else {
-      result.push_back(Id::makeFromBool(
-          ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
-            return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
-                   valueIdComparators::compareByBits(id, lowerUpper.second);
-          })));
-    }
+    result.push_back(matchesPrefix(id));
     checkCancellation(context);
   }
   return result;

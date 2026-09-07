@@ -6,16 +6,16 @@
 #define QLEVER_TEST_UTIL_ALLOCATORTESTHELPERS_H
 
 #include "global/Id.h"
+#include "util/Allocator.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 
 namespace ad_utility::testing {
-// Create an unlimited allocator.
+// Create a backend-agnostic allocator with the specified memory limit. If no
+// argument is specified, the allocator is unlimited.
 inline ad_utility::AllocatorWithLimit<Id> makeAllocator(
     MemorySize memorySize = MemorySize::max()) {
-  ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(memorySize)};
-  return a;
+  return qlever::makeAllocatorWithLimit<Id>(memorySize);
 }
 }  // namespace ad_utility::testing
 

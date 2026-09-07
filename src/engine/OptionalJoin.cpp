@@ -94,7 +94,12 @@ string OptionalJoin::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&) {
+  // Note that we use the merged `getLimitOffset()` and not the clause that was
+  // passed in, which only holds the increment that was just added. The bound
+  // below depends on the total limit and offset, so for nested subqueries the
+  // increment alone would be too small.
+  const auto& limitOffset = getLimitOffset();
   if (limitOffset._limit.has_value()) {
     std::optional<uint64_t> safeLimit = std::nullopt;
     auto limit = limitOffset._limit.value();
@@ -445,7 +450,7 @@ void OptionalJoin::optionalJoin(
       ad_utility::specialOptionalJoin(joinColumns.size(), joinColumnsLeft,
                                       joinColumnsRight, rowAdderOnIterators,
                                       addOptionalRow, checkCancellationLambda);
-      return 0UL;
+      return size_t{0};
     } else if (implementation == Implementation::NoUndef) {
       if (right.size() / left.size() > GALLOP_THRESHOLD) {
         ad_utility::gallopingJoin(joinColumnsLeft, joinColumnsRight,
@@ -456,9 +461,9 @@ void OptionalJoin::optionalJoin(
             joinColumnsLeft, joinColumnsRight, lessThanBoth,
             rowAdderOnIterators, ad_utility::noop, ad_utility::noop,
             addOptionalRow, checkCancellationLambda);
-        AD_CORRECTNESS_CHECK(shouldBeZero == 0UL);
+        AD_CORRECTNESS_CHECK(shouldBeZero == size_t{0});
       }
-      return 0UL;
+      return size_t{0};
     } else {
       return ad_utility::zipperJoinWithUndef(
           joinColumnsLeft, joinColumnsRight, lessThanBoth, rowAdderOnIterators,

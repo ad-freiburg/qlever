@@ -34,7 +34,7 @@ void GeoVocabulary<V>::open(const std::string& filename) {
         ad_utility::GEOMETRY_INFO_VERSION,
         " as required by this version of QLever. Please rebuild your index."));
   }
-};
+}
 
 // ____________________________________________________________________________
 template <typename V>
@@ -51,7 +51,7 @@ GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
       geoInfoFile_{getGeoInfoFilename(filename), "w"} {
   // Initialize geo info file with header
   geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
-};
+}
 
 // ____________________________________________________________________________
 template <typename V>
@@ -78,7 +78,7 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   geoInfoFile_.write(ptr, geoInfoOffset);
 
   return index;
-};
+}
 
 // ____________________________________________________________________________
 template <typename V>

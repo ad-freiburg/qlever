@@ -11,11 +11,11 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <filesystem>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
+#include "backports/filesystem.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
@@ -23,14 +23,19 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
+#include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
+#include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/Views.h"
@@ -38,20 +43,19 @@
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
     std::string onDiskBase, std::string name,
-    const qlever::Qlever::QueryPlan& queryPlan,
+    const qlever::PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
+      qet_{plannedQuery.sharedQueryExecutionTree()},
+      qec_{plannedQuery.sharedQueryExecutionContext()},
+      parsedQuery_{plannedQuery.parsedQuery()},
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
-  auto [qet, qec, parsedQuery] = queryPlan;
-  AD_CORRECTNESS_CHECK(qet != nullptr);
-  AD_CORRECTNESS_CHECK(qec != nullptr);
-  qet_ = qet;
-  qec_ = qec;
-  parsedQuery_ = std::move(parsedQuery);
+  throwIfLimitOffset();
+
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
@@ -59,15 +63,80 @@ MaterializedViewWriter::MaterializedViewWriter(
   columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
       columnNamesAndPermutation | ql::views::values);
   numAddEmptyColumns_ = numAddEmptyColumns;
+
+  throwIfOrderByInconsistentWithViewOrder();
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::throwIfLimitOffset() const {
+  if (!parsedQuery_._limitOffset.isUnconstrained()) {
+    throw MaterializedViewConfigException(
+        "The query to write a materialized view may not contain a `LIMIT` or "
+        "`OFFSET` clause as this might produce unintended results because the "
+        "view is sorted after query execution. If you are aware of this and "
+        "want to forcefully apply a `LIMIT` or `OFFSET`, use an explicit "
+        "subquery.");
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
+  const auto& orderBy = parsedQuery_._orderBy;
+  // No particular sorting is fine.
+  if (orderBy.empty()) {
+    return;
+  }
+
+  // An explicit `ORDER BY` is always rejected.
+  if (parsedQuery_._isInternalSort == IsInternalSort::False) {
+    throw MaterializedViewConfigException(
+        "The query to write a materialized view may not contain an `ORDER BY` "
+        "clause. A view is always stored in the internal order of its first "
+        "three columns, so the `ORDER BY` clause's sorting would be silently "
+        "dropped.");
+  }
+
+  // The user has explicitly written `INTERNAL SORT BY`. This is fine if the
+  // sorting is a prefix of the view's SPO sorting.
+  auto isConsistentWithViewOrder = [&]() {
+    // Sort keys beyond the view's columns cannot correspond to view columns,
+    // so their requested order could not be guaranteed.
+    if (orderBy.size() > columnPermutation_.size()) {
+      return false;
+    }
+    // Check prefix.
+    return ql::ranges::all_of(
+        ::ranges::views::zip(orderBy, columnPermutation_),
+        [this](const auto& pair) {
+          auto [order, target] = pair;
+          auto col = qet_->getVariableColumnOrNullopt(order.variable_);
+          return !order.isDescending_ && col == target;
+        });
+  };
+
+  if (!isConsistentWithViewOrder()) {
+    throw MaterializedViewConfigException(
+        "The `INTERNAL SORT BY` clause of the query to write a materialized "
+        "view must be a prefix of the view's columns in their `SELECT`ed "
+        "order, because a view is always stored sorted by these columns; any "
+        "other order would be silently discarded.");
+  }
 }
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::writeViewToDisk(
-    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
+    std::string name, const qlever::PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) const {
+  // Hold this lock for the whole write, so that an index rebuild can not move
+  // the files of this index away while we are creating the view's files (which
+  // would leave them behind under the base name of the rebuilt index, where
+  // they don't belong, see `retireOnDiskFiles`). NOTE: It has to be acquired
+  // before `loadedViews_` (which `unloadViewIfLoaded` locks).
+  auto notRetiredLock = lockIfNotRetired(
+      absl::StrCat("write the materialized view '", name, "'"));
   unloadViewIfLoaded(name);
-  MaterializedViewWriter writer{onDiskBase_, std::move(name), queryPlan,
+  MaterializedViewWriter writer{onDiskBase_, std::move(name), plannedQuery,
                                 std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }
@@ -75,7 +144,7 @@ void MaterializedViewsManager::writeViewToDisk(
 // _____________________________________________________________________________
 std::string MaterializedView::getFilenameBase(std::string_view onDiskBase,
                                               std::string_view name) {
-  return absl::StrCat(onDiskBase, ".view.", name);
+  return materializedViewFilenameBase(onDiskBase, name);
 }
 
 // _____________________________________________________________________________
@@ -107,6 +176,11 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
 
   // Add dummy columns such that the view has at least four columns in total.
   uint8_t numAddEmptyCols = 0;
+  if (numCols < 1) {
+    throw MaterializedViewConfigException{
+        "A query to write a materialized view needs to select at least one "
+        "column."};
+  }
   if (numCols < 4) {
     AD_LOG_INFO << "The query to write the materialized view \"" << name_
                 << "\" selects only " << numCols << " column(s), "
@@ -179,7 +253,7 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
   } else {
     // Transform the lazy result (permute columns)
     return RangeOfIdTables{
-        ad_utility::OwningView{result->idTables()} |
+        result->idTables() |
         ql::views::transform(
             [&](auto& idTableAndLocalVocab) -> IdTableStatic<0> {
               auto& [block, vocab] = idTableAndLocalVocab;
@@ -250,16 +324,15 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 }
 
 // _____________________________________________________________________________
-IndexMetaDataMmap MaterializedViewWriter::writePermutation(
+IndexMetaData MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
-  std::string spoFilename = getFilenameBase() + ".index.spo";
+  std::string spoFilename = absl::StrCat(getFilenameBase(), VIEW_SPO_SUFFIX);
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
       numCols(), ad_utility::File{spoFilename, "w"},
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
-  IndexMetaDataMmap spoMetaData;
-  spoMetaData.setup(spoFilename + ".meta", ad_utility::CreateTag{});
+  IndexMetaData spoMetaData;
   auto spoCallback =
       [&spoMetaData](ql::span<const CompressedRelationMetadata> md) {
         for (const auto& m : md) {
@@ -279,7 +352,8 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
   spoMetaData.setName(getFilenameBase());
   {
     ad_utility::File spoFile(spoFilename, "r+");
-    spoMetaData.appendToFile(&spoFile);
+    ad_utility::File spoMetaFile(spoFilename + META_FILE_SUFFIX, "w");
+    spoMetaData.appendToFile(spoFile, spoMetaFile);
   }
 
   return spoMetaData;
@@ -301,7 +375,7 @@ void MaterializedViewWriter::writeViewMetadata() const {
         }) |
         ::ranges::to<std::vector<nlohmann::json>>())},
       {"query", parsedQuery_._originalString}};
-  ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
+  ad_utility::makeOfstream(absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX))
       << viewInfo.dump() << std::endl;
 }
 
@@ -330,16 +404,21 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 }
 
 // _____________________________________________________________________________
+const Variable& MaterializedView::dummySubject() {
+  static const Variable var{"?_ql_materialized_view_s"};
+  return var;
+}
+// _____________________________________________________________________________
 const Variable& MaterializedView::dummyPredicate() {
   static const Variable var{"?_ql_materialized_view_p"};
   return var;
-};
+}
 
 // _____________________________________________________________________________
 const Variable& MaterializedView::dummyObject() {
   static const Variable var{"?_ql_materialized_view_o"};
   return var;
-};
+}
 
 // _____________________________________________________________________________
 MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
@@ -353,8 +432,8 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
               << std::endl;
   auto filename = getFilenameBase(onDiskBase_, name_);
 
-  auto metadataFilename = absl::StrCat(filename, ".viewinfo.json");
-  if (!std::filesystem::exists(metadataFilename)) {
+  auto metadataFilename = absl::StrCat(filename, VIEW_INFO_SUFFIX);
+  if (!ql::filesystem::exists(metadataFilename)) {
     throw std::runtime_error(
         absl::StrCat("The materialized view '", name_, "' does not exist."));
   }
@@ -441,21 +520,31 @@ void MaterializedView::connectPermutationBackReference() {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::loadView(const std::string& name) const {
-  auto lock = loadedViews_.wlock();
-  if (lock->views_.contains(name)) {
-    return;
+std::shared_ptr<MaterializedView>
+MaterializedViewsManager::loadViewIntoLockedState(
+    const std::string& name, LoadedViews& state,
+    QueryExecutionContext* qec) const {
+  if (auto it = state.views_.find(name); it != state.views_.end()) {
+    return it->second;
   }
   auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
   view->connectPermutationBackReference();
-  lock->views_.insert({name, view});
+  state.views_.insert({name, view});
   // If we would analyze the view at the time of writing and (de)serialize an
   // analysis result here, we could not extend query analysis without rewriting
   // all views. Therefore query analysis is performed when loading views.
-  if (lock->queryPatternCache_.analyzeView(view)) {
+  if (state.queryPatternCache_.analyzeView(view, qec)) {
     AD_LOG_INFO << "The materialized view '" << name
                 << "' was added to the query pattern cache." << std::endl;
   }
+  return view;
+}
+
+// _____________________________________________________________________________
+void MaterializedViewsManager::loadView(const std::string& name,
+                                        QueryExecutionContext* qec) const {
+  auto lock = loadedViews_.wlock();
+  loadViewIntoLockedState(name, *lock, qec);
 }
 
 // _____________________________________________________________________________
@@ -470,15 +559,71 @@ void MaterializedViewsManager::unloadViewIfLoaded(
 }
 
 // _____________________________________________________________________________
+void MaterializedViewsManager::deleteView(const std::string& name) const {
+  MaterializedView::throwIfInvalidName(name);
+  auto filenameBase = MaterializedView::getFilenameBase(onDiskBase_, name);
+
+  // Hold this lock for the whole sequence below, so that we can not delete
+  // files that an index rebuild has already replaced by the files of the
+  // rebuilt index (see `retireOnDiskFiles`). NOTE: It has to be acquired before
+  // `loadedViews_` below.
+  auto notRetiredLock = lockIfNotRetired(
+      absl::StrCat("delete the materialized view '", name, "'"));
+
+  // Hold the lock for the whole check-unload-delete sequence below, so that a
+  // concurrent `loadView`/`getView` call for the same view can not reload it
+  // in between, and so that of two concurrent `deleteView` calls for the same
+  // view exactly one succeeds and the other throws.
+  auto lock = loadedViews_.wlock();
+  if (!ql::filesystem::exists(absl::StrCat(filenameBase, VIEW_INFO_SUFFIX))) {
+    throw std::runtime_error(
+        absl::StrCat("The materialized view '", name, "' does not exist."));
+  }
+  if (auto it = lock->views_.find(name); it != lock->views_.end()) {
+    lock->queryPatternCache_.removeView(it->second);
+    lock->views_.erase(it);
+  }
+
+  // Delete all files belonging to the view from disk. NOTE: This is safe even
+  // if a running query still scans the view: the files are unlinked, but live
+  // on until the last open file handle is closed, and the query's shared
+  // pointer keeps the `MaterializedView` (and its open file) alive.
+  for (std::string_view suffix : VIEW_ALL_SUFFIXES) {
+    ql::error_code ec;
+    ql::filesystem::remove(absl::StrCat(filenameBase, suffix), ec);
+    if (ec) {
+      throw std::runtime_error(absl::StrCat(
+          "Failed to delete file '", filenameBase, suffix,
+          "' while deleting materialized view '", name, "': ", ec.message()));
+    }
+  }
+
+  AD_LOG_INFO << "Materialized view \"" << name << "\" deleted" << std::endl;
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
-    const std::string& name) const {
-  loadView(name);
-  return loadedViews_.rlock()->views_.at(name);
+    const std::string& name, QueryExecutionContext* qec) const {
+  auto lock = loadedViews_.wlock();
+  return loadViewIntoLockedState(name, *lock, qec);
 }
 
 // _____________________________________________________________________________
 bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
   return loadedViews_.rlock()->views_.contains(name);
+}
+
+// _____________________________________________________________________________
+bool MaterializedViewsManager::hasLoadedViews() const {
+  return !loadedViews_.rlock()->views_.empty();
+}
+
+// _____________________________________________________________________________
+std::vector<ql::filesystem::path> MaterializedViewsManager::viewFilesOnDisk(
+    const ql::filesystem::path& onDiskBase) {
+  // View files are named `<base>.view.<name>...`, so let the shared helper
+  // enumerate the files with that infix in the directory of `onDiskBase`.
+  return qlever::util::filesWithBaseNameAndSuffix(onDiskBase, VIEW_FILE_INFIX);
 }
 
 // _____________________________________________________________________________
@@ -608,8 +753,7 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
   throwIfColumnsHaveIllegalFixedValues(s, p, o);
 
   // Additional columns must be sorted (required by internals of `IndexScan`)
-  std::sort(additionalCols.begin(), additionalCols.end(),
-            [](const auto& a, const auto& b) { return a.first < b.first; });
+  ql::ranges::sort(additionalCols, {}, ad_utility::first);
 
   return {s.value(), p, o, additionalCols};
 }
@@ -636,8 +780,8 @@ void MaterializedView::throwIfInvalidName(std::string_view name) {
 // _____________________________________________________________________________
 void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
   AD_CORRECTNESS_CHECK(
-      onDiskBase_ == "" && loadedViews_.rlock()->views_.empty(),
-      "Changing the on disk basename is not allowed.");
+      loadedViews_.rlock()->views_.empty(),
+      "Changing the on disk basename is not allowed once views are loaded.");
   onDiskBase_ = onDiskBase;
 }
 
@@ -680,6 +824,43 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
 }
 
 // _____________________________________________________________________________
+std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
+    QueryExecutionContext* qec, const VariableToColumnMap& varToCol,
+    const ColumnMapping& colMap) const {
+  TripleComponent s{dummySubject()};
+  TripleComponent p{dummyPredicate()};
+  TripleComponent o{dummyObject()};
+  AdditionalScanColumns additionalCols;
+  for (const auto& [v, i] : varToCol) {
+    // This is only correct if the `QueryExecutionTree` uses the cache key and
+    // `VariableToColumnMap` of the new `IndexScan`.
+    auto it = colMap.find(i.columnIndex_);
+    AD_CORRECTNESS_CHECK(it != colMap.end(),
+                         "Column index not found in the column mapping of a "
+                         "materialized view.");
+    auto col = it->second;
+    if (col == 0) {
+      s = v;
+    } else if (col == 1) {
+      p = v;
+    } else if (col == 2) {
+      o = v;
+    } else {
+      additionalCols.emplace_back(col, v);
+    }
+  }
+  ql::ranges::sort(additionalCols, {}, ad_utility::first);
+  SparqlTripleSimple scanTriple{std::move(s), std::move(p), std::move(o),
+                                std::move(additionalCols)};
+  auto v = varToCol | ql::ranges::views::keys;
+  ad_utility::HashSet<Variable> varsToKeep{v.begin(), v.end()};
+  return std::make_shared<IndexScan>(
+      qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
+      std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
+      std::move(varsToKeep));
+}
+
+// _____________________________________________________________________________
 std::vector<MaterializedViewJoinReplacement>
 MaterializedViewsManager::makeJoinReplacementIndexScans(
     QueryExecutionContext* qec,
@@ -697,8 +878,36 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
         "To read from a materialized view its name must be set in the "
         "query configuration.");
   }
-  auto view = getView(viewQuery.viewName_.value());
+  if (qec->isAnalyzingMaterializedViewQuery()) {
+    // This is important when a materialized view's own query is being analyzed
+    // for the query pattern cache (see `computeCacheKey`), which holds a write
+    // lock on `loadedViews_`. `getView` below would try to acquire that same
+    // lock again and deadlock. Note that this must not be tied to the
+    // `enable-materialized-view-query-rewrite` runtime parameter (as opposed
+    // to `disableMaterializedViewRewriting`), because that parameter only
+    // disables the *automatic* substitution, not this explicit reference.
+    throw MaterializedViewConfigException(
+        "The query of a materialized view must not itself reference a "
+        "materialized view.");
+  }
+  auto view = getView(viewQuery.viewName_.value(), qec);
   return view->makeIndexScan(qec, viewQuery);
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
+    QueryExecutionContext* qec, const std::string& cacheKey,
+    const VariableToColumnMap& varToCol) const {
+  // TODO<ullingerc> Do we want to forcefully disable query rewriting if delta
+  // triples are present in the current index to prevent diverging results?
+  // (Same concern as in `QueryPlanner::createMaterializedViewJoinReplacements`,
+  // since a cache key alone does not capture the located-triples state.)
+  auto info =
+      loadedViews_.rlock()->queryPatternCache_.lookupByCacheKey(cacheKey);
+  if (info == nullptr) {
+    return nullptr;
+  }
+  return info->view_->makeIndexScan(qec, varToCol, info->colMapping_);
 }
 
 // _____________________________________________________________________________
@@ -707,4 +916,71 @@ std::optional<size_t> MaterializedView::lookupBindTargetColumn(
   auto opt = ad_utility::findOptional(coveredBinds_, bindCacheKey);
   // Convert `boost::optional<const size_t&>` to `std::optional<size_t>`.
   return opt ? std::optional<size_t>{opt.value()} : std::optional<size_t>{};
+}
+
+// _____________________________________________________________________________
+MaterializedView::CacheKeyWithAndWithoutInvariantPatterns
+MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
+  if (qecOriginal == nullptr || !originalQuery_.has_value()) {
+    return {std::nullopt, std::nullopt};
+  }
+  // Copy the `QueryExecutionContext` so that `disableMaterializedViewRewriting`
+  // is only set for planning this view's own query below, and not for the
+  // caller's context (which may be reused for other views).
+  QueryExecutionContext qec{*qecOriginal};
+  qec.setDisableMaterializedViewRewriting(true);
+  qec.setIsAnalyzingMaterializedViewQuery(true);
+  auto encodedIriManager = qec.getIndex().encodedIriManager();
+  // The query needs to be parsed again to take the `EncodedIriManager` into
+  // account.
+  auto parsedQuery =
+      SparqlParser::parseQuery(&encodedIriManager, originalQuery_.value());
+  const auto& viewCols = variableToColumnMap();
+
+  auto planAndComputeMapping =
+      [&](ParsedQuery parsed) -> std::optional<CacheKeyAndColumnMapping> {
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    QueryPlanner qp{&qec, handle};
+
+    QueryExecutionTree executionTree{&qec};
+    try {
+      executionTree = qp.createExecutionTree(parsed);
+    } catch (const MaterializedViewConfigException&) {
+      // The view's own query references another materialized view, which
+      // would deadlock on the write lock for `loadedViews_` (see the check in
+      // `MaterializedViewsManager::makeIndexScan`). Simply skip the cache-key
+      // based query pattern detection for this view instead of failing to
+      // load it; the view can still be used via its explicit name.
+      return std::nullopt;
+    }
+
+    ColumnMapping mapping;
+    for (const auto& [var, col] : executionTree.getVariableColumns()) {
+      auto it = viewCols.find(var);
+      // Internal variables and variables that are not selected by the
+      // materialized view query are not present in the view. Therefore this
+      // cache key can't be used then.
+      if (it == viewCols.end()) {
+        return std::nullopt;
+      }
+      mapping.insert({col.columnIndex_, it->second.columnIndex_});
+    }
+    return CacheKeyAndColumnMapping{executionTree.getCacheKey(),
+                                    std::move(mapping)};
+  };
+
+  // Needs to be passed by value as `qp.createExecutionTree` modifies the parsed
+  // query.
+  auto keyWithBinds = planAndComputeMapping(parsedQuery);
+
+  // Remove all `BIND`s that are invariant to the query.
+  graphPatternAnalysis::BasicGraphPatternsInvariantTo invariantCheck{
+      parsedQuery._rootGraphPattern};
+  ql::erase_if(parsedQuery.children(), [&invariantCheck](const auto& child) {
+    return child.visit(invariantCheck);
+  });
+  auto keyWithoutBinds = planAndComputeMapping(std::move(parsedQuery));
+
+  return CacheKeyWithAndWithoutInvariantPatterns{std::move(keyWithBinds),
+                                                 std::move(keyWithoutBinds)};
 }

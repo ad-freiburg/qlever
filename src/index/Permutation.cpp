@@ -13,6 +13,7 @@
 #include <absl/strings/str_cat.h>
 
 #include "engine/VariableToColumnMap.h"
+#include "global/FileSuffixConstants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "util/StringUtils.h"
@@ -40,7 +41,8 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 void Permutation::loadFromDisk(
     const std::string& onDiskBase, bool loadInternalPermutation,
     Type permutationType,
-    ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns) {
+    ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns,
+    bool logRegistration) {
   onDiskBase_ = onDiskBase;
   permutationType_ = permutationType;
   if (loadInternalPermutation) {
@@ -48,15 +50,12 @@ void Permutation::loadFromDisk(
     internalPermutation_ =
         std::make_unique<Permutation>(permutation_, allocator_);
     internalPermutation_->loadFromDisk(
-        absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false);
+        absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false,
+        Type::NORMAL, {}, logRegistration);
     internalPermutation_->permutationType_ = Type::INTERNAL;
   }
-  if constexpr (MetaData::isMmapBased_) {
-    meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
-                ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-  }
   possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
-  auto filename = std::string(onDiskBase + ".index" + fileSuffix_);
+  auto filename = absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, fileSuffix_);
   ad_utility::File file;
   try {
     file.open(filename, "r");
@@ -67,13 +66,16 @@ void Permutation::loadFromDisk(
              "message was: " +
              e.what());
   }
-  meta_.readFromFile(&file);
+  ad_utility::File metaFile{filename + META_FILE_SUFFIX, "r"};
+  meta_.readFromFile(file, metaFile);
   // Materialized views never use graph post-processing, while normal and
   // internal permutations always use it.
   bool useGraphPostProcessing = permutationType != Type::MATERIALIZED_VIEW;
   reader_.emplace(allocator_, std::move(file), useGraphPostProcessing);
-  AD_LOG_INFO << "Registered " << readableName_
-              << " permutation: " << meta_.statistics() << std::endl;
+  if (logRegistration) {
+    AD_LOG_INFO << "Registered " << readableName_
+                << " permutation: " << meta_.statistics() << std::endl;
+  }
   isLoaded_ = true;
 }
 
@@ -165,6 +167,15 @@ auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
 }
 
 // _____________________________________________________________________
+std::vector<ql::filesystem::path> Permutation::fileNames(
+    Enum permutation, std::string_view onDiskBase) {
+  ql::filesystem::path filename =
+      absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, ".",
+                   ad_utility::utf8ToLower(toString(permutation)));
+  return {filename, absl::StrCat(filename.string(), META_FILE_SUFFIX)};
+}
+
+// _____________________________________________________________________
 std::string_view Permutation::toString(Permutation::Enum permutation) {
   using enum Permutation::Enum;
   switch (permutation) {
@@ -187,8 +198,9 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 // _____________________________________________________________________
 std::optional<CompressedRelationMetadata> Permutation::getMetadata(
     Id col0Id, const LocatedTriplesState& locatedTriplesState) const {
-  if (meta_.col0IdExists(col0Id)) {
-    return meta_.getMetaData(col0Id);
+  auto optionalMetadata = meta_.getMetaDataIfPresent(col0Id);
+  if (optionalMetadata.has_value()) {
+    return optionalMetadata.value();
   }
   return reader().getMetadataForSmallRelation(
       getScanSpecAndBlocks(
@@ -248,10 +260,14 @@ Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState) const {
+    const LocatedTriplesState& locatedTriplesState,
+    std::optional<size_t> numThreadsOverride) const {
   auto independentReader = std::make_unique<CompressedRelationReader>(
       reader().makeReaderWithReboundAllocator(
           ad_utility::makeUnlimitedAllocator<Id>()));
+  // Applies only to this dedicated reader; query scans use the shared reader
+  // and are unaffected.
+  independentReader->lazyScanNumThreadsOverride_ = numThreadsOverride;
   auto blocks = lazyScanImpl(*independentReader, scanSpecAndBlocks,
                              std::nullopt, additionalColumns,
                              cancellationHandle, locatedTriplesState, {});

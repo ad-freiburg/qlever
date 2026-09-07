@@ -10,20 +10,27 @@
 #ifndef QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
 #define QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
 
-#include <boost/asio/any_io_executor.hpp>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <variant>
 
+#include "backports/asio.h"
 #include "parser/AsyncBlockSource.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/http/MediaTypes.h"
 
 namespace qlever {
 
 // An enum to distinguish between `Turtle` and `NQuad` files.
 enum class Filetype { Turtle, NQuad };
+
+// Convert a `MediaType` (typically parsed from an HTTP `Content-Type` header)
+// to a `Filetype` (typically used for selecting an RDF parser). Return
+// `nullopt` for any `MediaType` that isn't a supported RDF input format (e.g.
+// `json`, or `csv`).
+std::optional<Filetype> filetypeFromMediaType(ad_utility::MediaType mediaType);
 
 // Specify a single input file or stream for the index builder. The source of
 // bytes is either a filename or a factory that produces an `AsyncBlockSource`.
@@ -34,7 +41,7 @@ struct InputFileSpecification {
   // descriptor of the resource used for logging and debugging.
   using AsyncBlockSourceFactory =
       std::function<std::unique_ptr<qlever::parser::AsyncBlockSource>(
-          const boost::asio::any_io_executor&, ad_utility::MemorySize,
+          const ql::any_io_executor&, ad_utility::MemorySize,
           std::string_view)>;
 
   struct BufferFactoryAndDescription {
@@ -75,13 +82,12 @@ struct InputFileSpecification {
   }
 
   // Create and return an `AsyncBlockSource` for this spec. For filename-based
-  // specs, an `AsyncFileBlockSource` with the given `exec` and `blocksize` is
+  // specs, a `FileBlockSource` with the given `exec` and `blocksize` is
   // returned. For factory-based specs, the factory is called.
   std::unique_ptr<qlever::parser::AsyncBlockSource> makeAsyncBlockSource(
-      const boost::asio::any_io_executor& exec,
-      ad_utility::MemorySize blocksize) const {
+      const ql::any_io_executor& exec, ad_utility::MemorySize blocksize) const {
     if (std::holds_alternative<std::string>(source_)) {
-      return std::make_unique<qlever::parser::AsyncFileBlockSource>(
+      return std::make_unique<qlever::parser::FileBlockSource>(
           exec, blocksize, std::get<std::string>(source_));
     }
     auto& [factory, description] =

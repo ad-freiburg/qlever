@@ -27,7 +27,7 @@ constexpr inline int NUM_TRIPLES_PER_PARTIAL_VOCAB = 10'000'000;
 constexpr inline size_t PARSER_BATCH_SIZE = 1'000'000;
 
 // That many triples does the turtle parser have to buffer before the call to
-// getline returns (unless our input reaches EOF). This makes parsing from
+// `getBatch` returns (unless our input reaches EOF). This makes parsing from
 // streams faster.
 constexpr inline size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 
@@ -48,10 +48,6 @@ inline ad_utility::MemorySize& RDF_PARSER_MAX_TOTAL_BUFFER_SIZE() {
   static ad_utility::MemorySize value = ad_utility::MemorySize::gigabytes(1);
   return value;
 }
-
-// If a single relation has more than this number of triples, it will be
-// buffered into an MmapVector during the creation of the relations;
-constexpr inline size_t THRESHOLD_RELATION_CREATION = 2 << 20;
 
 // ________________________________________________________________
 constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =

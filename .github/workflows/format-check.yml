@@ -7,12 +7,16 @@ on:
     branches: [ master ]
   merge_group:
 
+# The default GITHUB_TOKEN only needs to read the repository here.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install dependencies
         run: |
           # The version in the default Ubuntu repositories is too old (and has some breaking changes),

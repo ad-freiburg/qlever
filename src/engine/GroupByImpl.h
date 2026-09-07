@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "engine/GroupByHashMapOptimization.h"
 #include "engine/Join.h"
@@ -619,6 +620,14 @@ class GroupByImpl : public Operation {
 
  public:
   std::unique_ptr<Operation> cloneImpl() const override;
+
+ private:
+  // Returns false if any alias expression is non-deterministic.
+  [[nodiscard]] bool isDeterministicImpl() const override {
+    return ql::ranges::all_of(_aliases, [](const Alias& alias) {
+      return alias._expression.isDeterministic();
+    });
+  }
 
   // TODO<joka921> implement optimization when *additional* Variables are
   // grouped.

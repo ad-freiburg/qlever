@@ -305,15 +305,10 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
-  auto& choice = ad_utility::LogstreamChoice::get();
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
-  auto& originalOStream = choice.getStream();
-  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
-
-  std::ostringstream testStream;
-  choice.setStream(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
@@ -334,15 +329,10 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
-  auto& choice = ad_utility::LogstreamChoice::get();
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
-  auto& originalOStream = choice.getStream();
-  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
-
-  std::ostringstream testStream;
-  choice.setStream(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
@@ -419,15 +409,10 @@ TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
-  auto& choice = ad_utility::LogstreamChoice::get();
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
-  auto& originalOStream = choice.getStream();
-  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
-
-  std::ostringstream testStream;
-  choice.setStream(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;

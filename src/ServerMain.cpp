@@ -6,8 +6,8 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/program_options.hpp>
+#include <cstdint>
 #include <cstdlib>
-#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -17,10 +17,14 @@
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "libqlever/Qlever.h"
+#include "util/Algorithm.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
+#include "util/ResourceMonitor.h"
+#include "util/http/HttpProxyConfig.h"
+#include "util/metrics/Metrics.h"
 
 using std::size_t;
 using std::string;
@@ -50,8 +54,12 @@ int main(int argc, char** argv) {
   std::string accessToken;
   bool noAccessCheck = false;
   unsigned short port;
+  bool metricsEnabled = false;
   NonNegative numSimultaneousQueries = 1;
   bool noMetricsLog = false;
+  bool noResourceUsageLog = false;
+  uint32_t resourceUsageIntervalS = 2;
+  std::string rebuildIndexStrategy;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -112,6 +120,13 @@ int main(int argc, char** argv) {
       "Disable the per-query metrics log. By default a JSONL log of query "
       "start/end events is written next to the index files "
       "(`<index-basename>.metrics-log.jsonl`).");
+  add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
+      "Disable the resource-usage log. By default a TSV log of the RSS and "
+      "CPU usage of the server is written next to the index files "
+      "(`<index-basename>.server.resource-usage-log.tsv`).");
+  add("resource-usage-interval-s",
+      po::value(&resourceUsageIntervalS)->default_value(2),
+      "The sampling interval of the resource-usage log in seconds.");
   add("text,t", po::bool_switch(&config.loadTextIndex_),
       "Also load the text index. The text index must have been built before "
       "using `qlever-index` with options `-d` and `- w`.");
@@ -150,6 +165,28 @@ int main(int argc, char** argv) {
   add("persist-updates", po::bool_switch(&config.persistUpdates_),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
+  add("rebuild-index-strategy",
+      po::value<std::string>(&rebuildIndexStrategy)->default_value("manual"),
+      "When to rebuild the index from the current data (including updates). "
+      "\"manual\" (the default): only when explicitly requested via the "
+      "`cmd=rebuild-index` HTTP request. \"automatic:min:max:fraction\": "
+      "additionally trigger a rebuild automatically in the background after "
+      "an update, once the number of delta triples (inserted plus deleted) "
+      "reaches the given `fraction` (a number greater than 0) of the number "
+      "of index triples, but never below `min` and always at `max` (e.g. "
+      "\"automatic:10000:1000000:0.1\").");
+  add("rebuild-keep-previous-index-dirs",
+      po::value(&config.keepPreviousIndexDirs_)
+          ->default_value(qlever::KeepPreviousIndexDirs::OriginalAndMostRecent),
+      "Which `previous.*` index directories to keep after a successful index "
+      "rebuild, manual or automatic (each rebuild moves the index that was "
+      "served so far into such a directory): \"all\" (keep all of them), "
+      "\"none\" (delete all of them), \"original-only\" (keep only the "
+      "oldest), \"most-recent-only\" (keep only the most recently created), "
+      "or \"original-and-most-recent\" (the default, keep both). The choices "
+      "and the default are the same as for the `--keep-previous-index-dirs` "
+      "option of the `qlever rebuild-index` command, which applies the same "
+      "policy on the client side.");
   add("syntax-test-mode",
       optionFactory.getProgramOption<&RuntimeParameters::syntaxTestMode_>(),
       "Make several query patterns that are syntactially valid, but otherwise "
@@ -198,25 +235,54 @@ int main(int argc, char** argv) {
       "prefix are rejected. To disable all federated queries, set this option "
       "to an invalid IRI prefix like `-`. Magic services (for example spatial "
       "search or materialized views) are never affected.");
+  auto logLevelDescription = absl::StrCat(
+      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
+      "Default is INFO. The compile-time level (",
+      LogLevel{LOGLEVEL}.toString(),
+      ") applies as an upper bound — messages above it are never emitted "
+      "regardless of this setting.");
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
-      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
-      "Default is INFO. The compile-time level (CMake -DLOGLEVEL=...) applies "
-      "as an upper bound — messages above it are never emitted regardless of "
-      "this setting.");
+      logLevelDescription.c_str());
   add("construct-deduplication",
       optionFactory
           .getProgramOption<&RuntimeParameters::constructDeduplication_>(),
       R"("Controls deduplication of triples in CONSTRUCT query results. "
       "\"none\" (default): no deduplication, every triple is emitted. "
-      "\"global\": a triple is emitted at most once across the entire result. "
-      "\"batchwise:N\" (positive integer N): deduplicate against the N most "
-      "recently seen unique triples per template triple (bounded memory, "
-      "partial deduplication).")");
+      "\"full\": a triple is emitted at most once across the entire result. "
+      "\"lru:N\" (positive integer N): deduplicate against the N most "
+      "recently used unique triples, with one cache shared across all "
+      "template triples (bounded memory, partial deduplication).")");
+  add("enable-metrics", po::bool_switch(&metricsEnabled)->default_value(false),
+      "Enable metrics collection and expose a Prometheus /metrics endpoint on "
+      "the main server port. Accessing the endpoint requires a valid access "
+      "token.");
+  std::vector<std::string> runtimeParameterAssignments;
+  add("set-runtime-parameter",
+      po::value<std::vector<std::string>>(&runtimeParameterAssignments)
+          ->composing(),
+      "Set any runtime parameter at startup, in the form <name>=<value>, for "
+      "example `--set-runtime-parameter default-query-timeout=300s`. Can be "
+      "given multiple times. Use `--set-runtime-parameter help` to list all "
+      "runtime parameters together with their default values. The parameters "
+      "can also be changed while the server is running, via the API. If a "
+      "parameter can also be set by one of the dedicated options above, the "
+      "value given here wins.");
   po::variables_map optionsMap;
 
   try {
     po::store(po::parse_command_line(argc, argv, options), optionsMap);
+    if (optionsMap.count("set-runtime-parameter") &&
+        ad_utility::contains(
+            optionsMap["set-runtime-parameter"].as<std::vector<std::string>>(),
+            "help")) {
+      std::cout << "Available runtime parameters and their default values:\n";
+      auto parameters = globalRuntimeParameters.rlock()->toMap();
+      for (const auto& name : globalRuntimeParameters.rlock()->getKeys()) {
+        std::cout << "  " << name << " = " << parameters.at(name) << '\n';
+      }
+      return EXIT_SUCCESS;
+    }
     if (optionsMap.count("help")) {
       std::cout << options << '\n';
       return EXIT_SUCCESS;
@@ -237,9 +303,84 @@ int main(int argc, char** argv) {
               << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
               << std::endl;
 
+  // Apply the `--set-runtime-parameter` assignments. This runs after
+  // `po::notify` above, so for parameters that can also be set by a dedicated
+  // option (like `--service-max-redirects`), the value given here wins. A bad
+  // name or value fails the startup with a readable message, before the index
+  // is loaded.
+  for (const auto& assignment : runtimeParameterAssignments) {
+    try {
+      globalRuntimeParameters.wlock()->setFromAssignment(assignment);
+    } catch (const std::exception& e) {
+      AD_LOG_ERROR << "Invalid argument to --set-runtime-parameter: "
+                   << e.what() << std::endl;
+      return EXIT_FAILURE;
+    }
+    AD_LOG_INFO << "Runtime parameter set from the command line: " << assignment
+                << std::endl;
+  }
+
+  // Read the proxy for outgoing requests (`SERVICE` and `LOAD`) from the
+  // environment. We do this eagerly so that a malformed proxy URL fails the
+  // startup with a readable message, instead of only surfacing on the first
+  // federated query. Only log if a proxy is actually configured, to not add
+  // noise for the common case.
   try {
+    const auto& proxy = ad_utility::httpProxy::globalProxy();
+    if (proxy.has_value()) {
+      AD_LOG_INFO << "Proxy for outgoing HTTP requests: "
+                  << proxy->asStringForLogging() << std::endl;
+    }
+    // The uppercase `HTTP_PROXY` is deliberately ignored (following `curl`,
+    // see `HttpProxyConfig.h`), but silently doing so would be confusing, so
+    // leave a hint.
+    if (ad_utility::httpProxy::uppercaseHttpProxyIsSetButIgnored()) {
+      AD_LOG_INFO << "The environment variable `HTTP_PROXY` (uppercase) is "
+                     "set, but deliberately ignored; use the lowercase "
+                     "`http_proxy` to configure a proxy for outgoing requests"
+                  << std::endl;
+    }
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Invalid value of the `http_proxy` environment variable: "
+                 << e.what() << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  // Resolve the `--rebuild-index-strategy` option. A bad value fails the
+  // startup with a readable message, before the index is loaded.
+  try {
+    config.rebuildIndexStrategy_ =
+        qlever::RebuildIndexStrategy::parse(rebuildIndexStrategy);
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Invalid argument to --rebuild-index-strategy: " << e.what()
+                 << std::endl;
+    return EXIT_FAILURE;
+  }
+  if (config.rebuildIndexStrategy_.has_value()) {
+    AD_LOG_INFO << "Automatic index rebuild enabled (--rebuild-index-strategy "
+                << rebuildIndexStrategy << ")" << std::endl;
+  }
+
+  // The `--rebuild-keep-previous-index-dirs` option is parsed directly into
+  // `config.keepPreviousIndexDirs_` (a bad value fails the startup with a
+  // readable message, via the `validate` hook in `EnumWithStrings.h`).
+  if (config.keepPreviousIndexDirs_ != qlever::KeepPreviousIndexDirs::All) {
+    AD_LOG_INFO << "Cleanup of previous index directories after each rebuild "
+                   "enabled (--rebuild-keep-previous-index-dirs "
+                << config.keepPreviousIndexDirs_ << ")" << std::endl;
+  }
+
+  try {
+    // Samples RSS and CPU usage, starting before the index is loaded.
+    ad_utility::ResourceMonitor resourceMonitor;
+    if (!noResourceUsageLog) {
+      resourceMonitor.start(config.baseName_ + ".server.resource-usage-log.tsv",
+                            ad_utility::ResourceMonitor::Mode::Append,
+                            std::chrono::seconds{resourceUsageIntervalS});
+    }
+    auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
-                  noAccessCheck);
+                  noAccessCheck, std::move(metricsReader));
     // Per-query jsonl metrics log, written next to the index files. On by
     // default; `--no-metrics-log` opts out.
     if (!noMetricsLog) {
@@ -247,8 +388,8 @@ int main(int argc, char** argv) {
     }
     server.run();
   } catch (const std::exception& e) {
-    // Reached if opening the metrics log fails; server.run() otherwise handles
-    // its own exceptions.
+    // Reached if opening the metrics log fails; server.run() otherwise
+    // handles its own exceptions.
     AD_LOG_ERROR << e.what() << std::endl;
     return 1;
   }

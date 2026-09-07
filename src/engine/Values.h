@@ -10,6 +10,8 @@
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
 
+class TripleComponent;
+
 class Values : virtual public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
 
@@ -57,6 +59,8 @@ class Values : virtual public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Compute the per-column multiplicity of the parsed values.
@@ -69,5 +73,9 @@ class Values : virtual public Operation {
   template <size_t I>
   void writeValues(IdTable* idTablePtr, LocalVocab* localVocab);
 };
+
+// Create a one-row `VALUES` clause that binds `value` to `variable`.
+std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
+    QueryExecutionContext* qec, Variable variable, TripleComponent value);
 
 #endif  // QLEVER_SRC_ENGINE_VALUES_H

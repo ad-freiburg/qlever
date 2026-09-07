@@ -10,6 +10,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/VectorWithMemoryLimit.h"
 
 class Minus : public Operation {
  private:
@@ -59,7 +60,7 @@ class Minus : public Operation {
   template <typename IdTableT, typename T>
   IdTable copyMatchingRows(
       const IdTableT& left, T reference,
-      const std::vector<T, ad_utility::AllocatorWithLimit<T>>& keepEntry) const;
+      const ad_utility::VectorWithMemoryLimit<T>& keepEntry) const;
 
  public:
   size_t getCostEstimate() override;
@@ -82,6 +83,8 @@ class Minus : public Operation {
       const std::vector<std::array<ColumnIndex, 2>>& matchedColumns) const;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Return true if the size estimate for the right side is smaller or equal

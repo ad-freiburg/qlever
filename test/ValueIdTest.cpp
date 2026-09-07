@@ -7,14 +7,16 @@
 #include <gtest/gtest.h>
 
 #include <bitset>
+#include <string>
+#include <vector>
 
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "backports/algorithm.h"
 #include "global/ValueId.h"
-#include "index/EncodedIriManager.h"
 #include "index/LocalVocabEntry.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "util/HashSet.h"
 #include "util/Random.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -34,8 +36,9 @@ TEST_F(ValueIdTest, makeFromDouble) {
     // This check expresses the precision more exactly
     if (id.getDouble() != d) {
       // The if is needed for the case of += infinity.
-      ASSERT_NEAR(id.getDouble(), d,
-                  std::abs(d / (1ul << (52 - ValueId::numDatatypeBits))));
+      ASSERT_NEAR(
+          id.getDouble(), d,
+          std::abs(d / (uint64_t{1} << (52 - ValueId::numDatatypeBits))));
     }
   };
 
@@ -152,6 +155,8 @@ TEST_F(ValueIdTest, Indices) {
   testRandomIds(&makeLocalVocabId, localVocabWordToInt,
                 Datatype::LocalVocabIndex);
   testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
+  testRandomIds(&makeSecondaryVocabId, &getSecondaryVocabIndex,
+                Datatype::SecondaryVocabIndex);
 }
 
 TEST_F(ValueIdTest, Undefined) {
@@ -197,6 +202,7 @@ TEST_F(ValueIdTest, IndexOrdering) {
   testOrder(&makeVocabId, &getVocabIndex);
   testOrder(&makeLocalVocabId, &getLocalVocabIndex);
   testOrder(&makeWordVocabId, &getWordVocabIndex);
+  testOrder(&makeSecondaryVocabId, &getSecondaryVocabIndex);
   testOrder(&makeTextRecordId, &getTextRecordIndex);
 }
 
@@ -320,11 +326,12 @@ TEST_F(ValueIdTest, Hashing) {
     LocalVocab lv1;
     LocalVocab lv2;
     Iri iri = Iri::fromIriref("<foo>");
-    LocalVocabEntry lve1(iri, index);
-    LocalVocabEntry lve2(iri, index);
-    LocalVocabEntry lve3 =
-        LocalVocabEntry::fromStringRepresentation("\"foo\"", index);
-    LocalVocabEntry lve4 = LocalVocabEntry::fromIriref("<x>", index);
+    LocalVocabEntry lve1(iri, index.getLocalVocabContext());
+    LocalVocabEntry lve2(iri, index.getLocalVocabContext());
+    LocalVocabEntry lve3 = LocalVocabEntry::fromStringRepresentation(
+        "\"foo\"", index.getLocalVocabContext());
+    LocalVocabEntry lve4 =
+        LocalVocabEntry::fromIriref("<x>", index.getLocalVocabContext());
     auto LVID = [](LocalVocabEntry& lve, LocalVocab& lv) {
       return Id::makeFromLocalVocabIndex(lv.getIndexAndAddIfNotContained(lve));
     };
@@ -464,4 +471,102 @@ TEST(ValueId, isTrivial) {
   EXPECT_FALSE(
       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
   EXPECT_FALSE(Id::makeFromEncodedVal(738).isTrivial());
+}
+
+// _____________________________________________________________________________
+TEST(ValueId, canBeComparedBitwise) {
+  EXPECT_TRUE(Id::makeUndefined().canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromBool(true).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromInt(1337).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromDouble(3.14).canBeComparedBitwise());
+  EXPECT_TRUE(
+      Id::makeFromVocabIndex(VocabIndex::make(0)).canBeComparedBitwise());
+  EXPECT_FALSE(Id::makeFromLocalVocabIndex(nullptr).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromTextRecordIndex(TextRecordIndex::make(0))
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromDate(DateYearOrDuration{Date{0, 0, 0}})
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromGeoPoint(GeoPoint{0, 0}).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromWordVocabIndex(WordVocabIndex::make(0))
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromEncodedVal(738).canBeComparedBitwise());
+}
+
+// _____________________________________________________________________________
+TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
+  using namespace ad_utility::testing;
+  // Use a fresh index (and not the shared one of `getQec`), because the
+  // secondary vocabulary must not leak into other tests.
+  TestIndexConfig config{"<a> <b> <c> ."};
+  config.secondaryVocabWords = std::vector<std::string>{"<zzz>"};
+  Index index = makeTestIndex(gtestCurrentTestName(), std::move(config));
+  auto mkId = makeGetId(index);
+  const auto& ctx = index.getLocalVocabContext();
+
+  // `<b>` is stored in the vocabulary of the main index, so the position of
+  // `entryInVocab` is of type `VocabIndex`, and `<zzz>` is stored in the
+  // secondary vocabulary, so the position of `entryInSecondaryVocab` is of type
+  // `SecondaryVocabIndex`.
+  LocalVocabEntry entryInVocab = LocalVocabEntry::fromIriref("<b>", ctx);
+  LocalVocabEntry entryInSecondaryVocab =
+      LocalVocabEntry::fromIriref("<zzz>", ctx);
+  Id localVocabId = Id::makeFromLocalVocabIndex(&entryInVocab);
+  Id localVocabIdSecondary =
+      Id::makeFromLocalVocabIndex(&entryInSecondaryVocab);
+  Id secondaryVocabId =
+      Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
+  // `Int` is a datatype that is smaller than `LocalVocabIndex` and `Date` is
+  // one that is greater, and neither of them is a datatype that a position in
+  // the vocabularies can have.
+  Id intId = Id::makeFromInt(42);
+  Id dateId = Id::makeFromDate(DateYearOrDuration{Date{2026, 8, 19}});
+
+  // `isDatatypeOfPositionInVocab(type) == true` and
+  // `otherType == LocalVocabIndex`: the position of the entry is compared to
+  // the left-hand `Id`.
+  EXPECT_LT(mkId("<a>"), localVocabId);
+  EXPECT_EQ(mkId("<b>"), localVocabId);
+  EXPECT_GT(mkId("<c>"), localVocabId);
+  // The same combination, but with `type == Datatype::SecondaryVocabIndex`.
+  // Note that every word of the secondary vocabulary is positioned after every
+  // word of the vocabulary of the main index.
+  EXPECT_EQ(secondaryVocabId, localVocabIdSecondary);
+  EXPECT_GT(secondaryVocabId, localVocabId);
+  // NOTE: The combination `isDatatypeOfPositionInVocab(type) == true` and
+  // `otherType != LocalVocabIndex` is unreachable. This point is only reached
+  // if exactly one of the two datatypes is `LocalVocabIndex`, so
+  // `otherType != LocalVocabIndex` implies `type == LocalVocabIndex`, which is
+  // none of the datatypes that a position can have.
+
+  // `isDatatypeOfPositionInVocab(type) == false`, but
+  // `otherType == LocalVocabIndex`: the position is not looked up at all, and
+  // the bits are compared instead.
+  EXPECT_LT(intId, localVocabId);
+  EXPECT_GT(dateId, localVocabId);
+
+  // `isDatatypeOfPositionInVocab(type) == false` and
+  // `otherType != LocalVocabIndex`, because `type == LocalVocabIndex`. This is
+  // the mirrored case, which the second condition of `compareThreeWay` handles.
+  // There, `type == LocalVocabIndex` is true and
+  // `isDatatypeOfPositionInVocab(otherType)` is true as well.
+  EXPECT_GT(localVocabId, mkId("<a>"));
+  EXPECT_EQ(localVocabId, mkId("<b>"));
+  EXPECT_LT(localVocabId, mkId("<c>"));
+  EXPECT_EQ(localVocabIdSecondary, secondaryVocabId);
+  EXPECT_LT(localVocabId, secondaryVocabId);
+  // Both operands of the first condition are false, and in the second condition
+  // `type == LocalVocabIndex` is true, but
+  // `isDatatypeOfPositionInVocab(otherType)` is false, so the bits are
+  // compared.
+  EXPECT_GT(localVocabId, intId);
+  EXPECT_LT(localVocabId, dateId);
+  // NOTE: For the second condition, the combination
+  // `type != LocalVocabIndex` and `isDatatypeOfPositionInVocab(otherType) ==
+  // true` is unreachable by the same argument as above: `type !=
+  // LocalVocabIndex` implies `otherType == LocalVocabIndex`, which is none of
+  // the datatypes that a position can have. Its remaining combination
+  // (`type != LocalVocabIndex` and `otherType == LocalVocabIndex`) is the case
+  // of `intId` and `dateId` above.
 }

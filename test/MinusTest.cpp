@@ -78,7 +78,7 @@ void testMinus(std::vector<IdTable> leftTables,
       expected.insertAtEnd(idTable);
     }
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
   }
 }
 }  // namespace
@@ -217,7 +217,7 @@ TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
                 std::nullopt, forceFullyMaterialized)};
     auto result = m.computeResultOnlyForTesting(true);
     ASSERT_TRUE(result.isFullyMaterialized());
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
     EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                 ::testing::UnorderedElementsAre(entryA));
     const auto& runtimeInfo =
@@ -273,7 +273,7 @@ TEST(Minus, computeMinusRightIndexNestedLoopJoinOptimization) {
     auto result = m.computeResultOnlyForTesting(requestLaziness);
     ASSERT_NE(result.isFullyMaterialized(), requestLaziness);
     if (result.isFullyMaterialized()) {
-      EXPECT_EQ(result.idTable(), expected);
+      EXPECT_EQ(result.idTableView(), expected);
       EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                   ::testing::UnorderedElementsAre(entryA));
     } else {

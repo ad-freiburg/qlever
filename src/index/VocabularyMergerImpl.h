@@ -27,22 +27,26 @@
 namespace ad_utility::vocabulary_merger {
 // _________________________________________________________________
 template <typename W, typename C>
-auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
-                     C& internalWordCallback,
-                     ad_utility::MemorySize memoryToUse)
+auto mergeVocabulary(const std::string& basename,
+                     const std::vector<std::string>& partialVocabularySuffixes,
+                     W comparator, C& internalWordCallback,
+                     ad_utility::MemorySize memoryToUse,
+                     const ad_utility::RegexSet& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   VocabularyMerger merger;
-  return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
-                                internalWordCallback, memoryToUse);
+  return merger.mergeVocabulary(basename, partialVocabularySuffixes,
+                                std::move(comparator), internalWordCallback,
+                                memoryToUse, blankNodeIriRegexes);
 }
 
 // _________________________________________________________________
 template <typename W, typename C>
-auto VocabularyMerger::mergeVocabulary(const std::string& basename,
-                                       size_t numFiles, W comparator,
-                                       C& wordCallback,
-                                       ad_utility::MemorySize memoryToUse)
+auto VocabularyMerger::mergeVocabulary(
+    const std::string& basename,
+    const std::vector<std::string>& partialVocabularySuffixes, W comparator,
+    C& wordCallback, ad_utility::MemorySize memoryToUse,
+    const ad_utility::RegexSet& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
@@ -58,9 +62,11 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   };
 
   // Open and prepare all infiles and file-based output vectors.
-  auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
+  auto makeWordRangeFromFile = [&basename,
+                                &partialVocabularySuffixes](size_t fileIndex) {
     ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, fileIndex)};
+        absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX,
+                     partialVocabularySuffixes.at(fileIndex))};
     uint64_t numWords;
     infile >> numWords;
 
@@ -74,11 +80,13 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
         }};
   };
   std::vector<decltype(makeWordRangeFromFile(0))> generators;
-  generators.reserve(numFiles);
+  generators.reserve(partialVocabularySuffixes.size());
 
-  for (std::size_t i : ad_utility::integerRange(numFiles)) {
+  for (std::size_t i :
+       ad_utility::integerRange(partialVocabularySuffixes.size())) {
     generators.push_back(makeWordRangeFromFile(i));
-    idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
+    idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX,
+                                      partialVocabularySuffixes.at(i)));
   }
 
   // Some memory (that is hard to measure exactly) is used for the writing of
@@ -92,7 +100,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
   for (std::vector<QueueWord>& currentWords : mergedWords) {
-    writeQueueWordsToIdMap(currentWords, wordCallback, lessThan, progressBar);
+    writeQueueWordsToIdMap(currentWords, wordCallback, lessThan,
+                           blankNodeIriRegexes, progressBar);
   }
 
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
@@ -110,6 +119,7 @@ CPP_template_def(typename C, typename L)(
                           TripleComponentWithIndex>) void VocabularyMerger::
     writeQueueWordsToIdMap(std::vector<QueueWord>& buffer, C& wordCallback,
                            const L& lessThan,
+                           const ad_utility::RegexSet& blankNodeIriRegexes,
                            ad_utility::ProgressBar& progressBar) {
   AD_LOG_TIMING << "Start writing a batch of merged words\n";
 
@@ -126,6 +136,8 @@ CPP_template_def(typename C, typename L)(
       lastTripleComponent_ =
           TripleComponentWithIndex{std::move(top.iriOrLiteral()),
                                    top.isExternal(), metaData_.numWordsTotal()};
+      lastTripleComponentIsBlankNode_ =
+          lastTripleComponent_.value().isBlankNode(blankNodeIriRegexes);
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
@@ -133,7 +145,7 @@ CPP_template_def(typename C, typename L)(
 
       // Write the new word to the vocabulary.
       auto& nextWord = lastTripleComponent_.value();
-      if (nextWord.isBlankNode()) {
+      if (lastTripleComponentIsBlankNode_) {
         nextWord.index_ = metaData_.getNextBlankNodeIndex();
       } else {
         nextWord.index_ =
@@ -151,7 +163,7 @@ CPP_template_def(typename C, typename L)(
     }
     const auto& word = lastTripleComponent_.value();
     Id targetId =
-        word.isBlankNode()
+        lastTripleComponentIsBlankNode_
             ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
             : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
     // Write pair of local and global ID to buffer.
@@ -184,9 +196,7 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
 // ________________________________________________________________________________________________________
 inline void writeMappedIdsToExtVec(
     const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
-    const HashMap<uint64_t, uint64_t>& map,
-    std::unique_ptr<TripleVec>* writePtr) {
-  auto& vec = *(*writePtr);
+    const HashMap<uint64_t, uint64_t>& map, TripleVec& vec) {
   for (const auto& curTriple : input) {
     std::array<Id, NumColumnsIndexBuilding> mappedTriple;
     // for all triple elements find their mapping from partial to global ids
@@ -242,35 +252,12 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(const ItemMapArray& map) {
+inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
   ItemVec els;
-  std::array<size_t, std::tuple_size_v<ItemMapArray>> offsets;
-  // This is essentially `std::transform_exclusive_scan`, but GCC 8 doesn't
-  // support this yet.
-  size_t totalEls = std::accumulate(
-      map.begin(), map.end(), 0,
-      [&offsets, idx = 0](const auto& x, const auto& y) mutable {
-        offsets.at(idx) = x;
-        idx++;
-        return x + y.map_.size();
-      });
-  els.resize(totalEls);
-  std::array<std::future<void>, std::tuple_size_v<ItemMapArray>> futures;
-  size_t i = 0;
-  for (const auto& singleMap : map) {
-    futures.at(i) =
-        std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
-          using T = ItemVec::value_type;
-          ql::ranges::transform(
-              singleMap.map_, els.begin() + offsets[i],
-              [](auto& el) -> T { return {el.first, el.second}; });
-        });
-    ++i;
-  }
-  for (auto& fut : futures) {
-    fut.get();
-  }
-
+  els.resize(map.map_.size());
+  using T = ItemVec::value_type;
+  ql::ranges::transform(map.map_, els.begin(),
+                        [](auto& el) -> T { return {el.first, el.second}; });
   return els;
 }
 

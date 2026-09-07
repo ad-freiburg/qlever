@@ -8,6 +8,7 @@
 #include "engine/Load.h"
 
 #include "global/RuntimeParameters.h"
+#include "index/TripleComponentConversions.h"
 #include "util/http/HttpUtils.h"
 
 // _____________________________________________________________________________
@@ -15,9 +16,7 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
            SendRequestType getResultFunction)
     : Operation(qec),
       loadClause_(std::move(loadClause)),
-      getResultFunction_(std::move(getResultFunction)),
-      loadResultCachingEnabled_(
-          getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>()) {}
+      getResultFunction_(std::move(getResultFunction)) {}
 
 // _____________________________________________________________________________
 std::string Load::getCacheKeyImpl() const {
@@ -150,7 +149,7 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   LocalVocab lv;
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   auto toId = [this, &lv](TripleComponent&& tc) {
-    return std::move(tc).toValueId(getIndex(), lv);
+    return toValueId(std::move(tc), getIndex(), lv);
   };
   for (auto& triple : parser.parseAndReturnAllTriples()) {
     result.push_back(
@@ -184,7 +183,9 @@ void Load::throwErrorWithContext(std::string_view msg,
 }
 
 // _____________________________________________________________________________
-bool Load::canResultBeCachedImpl() const { return loadResultCachingEnabled_; }
+bool Load::isDeterministicImpl() const {
+  return getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>();
+}
 
 // _____________________________________________________________________________
 void Load::resetGetResultFunctionForTesting(SendRequestType func) {

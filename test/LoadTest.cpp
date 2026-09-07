@@ -11,6 +11,7 @@
 #include "engine/ExecuteUpdate.h"
 #include "engine/Load.h"
 #include "engine/QueryPlanner.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpClientTestHelpers.h"
@@ -91,7 +92,7 @@ TEST_F(LoadTest, computeResult) {
       auto tr = generateLocationTrace(loc);
       Load load{testQec, pq, sendFunc};
       auto res = load.computeResultOnlyForTesting();
-      EXPECT_THAT(res.idTable(), testing::IsEmpty());
+      EXPECT_THAT(res.idTableView(), testing::IsEmpty());
       EXPECT_THAT(res.localVocab(), testing::IsEmpty());
     };
 
@@ -146,14 +147,14 @@ TEST_F(LoadTest, computeResult) {
                 responseBody, boost::beast::http::status::ok, contentType)};
         auto res = load.computeResultOnlyForTesting();
 
-        auto& idTable = res.idTable();
+        const auto& idTable = res.idTableView();
         auto& lv = res.localVocab();
 
         std::vector<std::vector<IntOrId>> idVector;
         for (const auto& row : expectedIdTable) {
           auto& idVecRow = idVector.emplace_back();
           for (auto& field : row) {
-            auto idOpt = field.toValueId(testQec->getIndex());
+            auto idOpt = toValueId(field, testQec->getIndex());
             if (!idOpt) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());
@@ -276,6 +277,8 @@ TEST_F(LoadTest, getCacheKey) {
 
 TEST_F(LoadTest, clone) {
   Load load{testQec, pqLoad("https://mundhahs.dev")};
+  // LOAD performs a network request and is therefore non-deterministic.
+  EXPECT_FALSE(load.isDeterministic());
   // When the results are not cached, cloning should create a decoupled object.
   // The cache breaker will be different.
   {

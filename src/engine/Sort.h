@@ -67,7 +67,7 @@ class Sort : public Operation {
     // Return  at least 1, s.t. the query planner will never emit an unnecessary
     // sort of an empty `IndexScan`. This makes the testing of the query
     // planner much easier.
-    return std::max(1UL, nlogn + subcost);
+    return std::max<size_t>(1, nlogn + subcost);
   }
 
   virtual bool knownEmptyResult() override {
@@ -101,6 +101,8 @@ class Sort : public Operation {
       const std::set<Variable>& variables) const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   virtual Result computeResult(bool requestLaziness) override;

@@ -18,11 +18,13 @@ namespace qlever::parser {
 // ____________________________________________________________________________
 AsyncFileBlockDriver::AsyncFileBlockDriver(
     const qlever::InputFileSpecification& spec,
-    ad_utility::MemorySize blocksize, std::string endRegex) {
-  fileBuffer_ = std::make_unique<AsyncEndRegexBlockSource>(
+    ad_utility::MemorySize blocksize,
+    AsyncStatementBoundaryBlockSource::EndPositionFinder findEndPosition,
+    std::string description) {
+  fileBuffer_ = std::make_unique<AsyncStatementBoundaryBlockSource>(
       ioPool_.get_executor(),
       spec.makeAsyncBlockSource(ioPool_.get_executor(), blocksize),
-      std::move(endRegex));
+      std::move(findEndPosition), std::move(description));
   pendingBlock_ = fileBuffer_->asyncGetNextBlock(boost::asio::use_future);
 }
 
@@ -32,7 +34,7 @@ AsyncFileBlockDriver::~AsyncFileBlockDriver() {
   if (pendingBlock_.valid()) {
     pendingBlock_.wait();
   }
-  // To additionally be safe that the `fileBuffer_` is unused before it gets
+  // Additionally make sure that `fileBuffer_` is no longer used before it is
   // destroyed.
   ioPool_.join();
 }

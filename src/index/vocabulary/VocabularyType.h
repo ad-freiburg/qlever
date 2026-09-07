@@ -10,7 +10,9 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPE_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPE_H
 
+#include "util/Algorithm.h"
 #include "util/EnumWithStrings.h"
+#include "util/Random.h"
 
 namespace ad_utility {
 
@@ -23,7 +25,14 @@ enum struct VocabularyTypeEnum {
   OnDiskUncompressed,
   InMemoryCompressed,
   OnDiskCompressed,
-  OnDiskCompressedGeoSplit
+  OnDiskCompressedGeoSplit,
+  // NOTE: The "with holes" variants are not used for regular index building
+  // (they cannot even be built word by word, see
+  // `VocabularyInMemoryBinSearch`). They are only used for vocabularies that
+  // were exported from a larger vocabulary with some of the entries excluded,
+  // such that the indices of the remaining entries are no longer contiguous.
+  InMemoryUncompressedWithHoles,
+  InMemoryCompressedWithHoles
 };
 
 }
@@ -33,22 +42,63 @@ class VocabularyType
   // The different vocabulary implementations.
   using Enum = detail::VocabularyTypeEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 5>
+  static constexpr std::array<std::pair<Enum, std::string_view>, 7>
       descriptions_{
           {{Enum::InMemoryUncompressed, "in-memory-uncompressed"},
            {Enum::OnDiskUncompressed, "on-disk-uncompressed"},
            {Enum::InMemoryCompressed, "in-memory-compressed"},
            {Enum::OnDiskCompressed, "on-disk-compressed"},
-           {Enum::OnDiskCompressedGeoSplit, "on-disk-compressed-geo-split"}}};
+           {Enum::OnDiskCompressedGeoSplit, "on-disk-compressed-geo-split"},
+           {Enum::InMemoryUncompressedWithHoles,
+            "in-memory-uncompressed-with-holes"},
+           {Enum::InMemoryCompressedWithHoles,
+            "in-memory-compressed-with-holes"}}};
+  // The vocabulary types that can be used to build a regular index, i.e. all
+  // types but the "with holes" variants (see above).
+  static constexpr std::array<Enum, 5> allForIndexBuilding_{
+      Enum::InMemoryUncompressed, Enum::OnDiskUncompressed,
+      Enum::InMemoryCompressed, Enum::OnDiskCompressed,
+      Enum::OnDiskCompressedGeoSplit};
+
   static const VocabularyType InMemoryUncompressed;
   static const VocabularyType OnDiskUncompressed;
   static const VocabularyType InMemoryCompressed;
   static const VocabularyType OnDiskCompressed;
   static const VocabularyType OnDiskCompressedGeoSplit;
+  static const VocabularyType InMemoryUncompressedWithHoles;
+  static const VocabularyType InMemoryCompressedWithHoles;
 
   static constexpr std::string_view typeName() { return "vocabulary type"; }
 
   using EnumWithStrings::EnumWithStrings;
+
+  // Return the vocabulary types that can be used to build a regular index (see
+  // `allForIndexBuilding_`) as a comma-separated single string. This is the
+  // counterpart of the inherited `getListOfSupportedValues`, which also
+  // includes the "with holes" variants.
+  static std::string getListOfValuesForIndexBuilding() {
+    return absl::StrJoin(
+        allForIndexBuilding_ | ql::views::transform([](Enum type) {
+          return VocabularyType{type}.toString();
+        }),
+        ", ");
+  }
+
+  // Return true if this vocabulary type can be used to build a regular index,
+  // i.e. if it is one of `allForIndexBuilding_` (see above).
+  bool isSupportedForIndexBuilding() const {
+    return ad_utility::contains(allForIndexBuilding_, value());
+  }
+
+  // Return a random vocabulary type that can be used to build a regular index
+  // (see `allForIndexBuilding_`), useful for fuzz testing. This is the
+  // counterpart of the inherited `random()`, which may also return one of the
+  // "with holes" variants.
+  static VocabularyType randomForIndexBuilding() {
+    thread_local ad_utility::FastRandomIntGenerator<size_t> generator;
+    return VocabularyType{
+        allForIndexBuilding_.at(generator() % allForIndexBuilding_.size())};
+  }
 };
 
 const inline VocabularyType VocabularyType::InMemoryUncompressed{
@@ -61,6 +111,10 @@ const inline VocabularyType VocabularyType::OnDiskCompressed{
     VocabularyType::Enum::OnDiskCompressed};
 const inline VocabularyType VocabularyType::OnDiskCompressedGeoSplit{
     VocabularyType::Enum::OnDiskCompressedGeoSplit};
+const inline VocabularyType VocabularyType::InMemoryUncompressedWithHoles{
+    VocabularyType::Enum::InMemoryUncompressedWithHoles};
+const inline VocabularyType VocabularyType::InMemoryCompressedWithHoles{
+    VocabularyType::Enum::InMemoryCompressedWithHoles};
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPE_H

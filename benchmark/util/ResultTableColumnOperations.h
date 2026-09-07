@@ -29,14 +29,14 @@ CPP_template(typename Type)(
 };
 
 // clang-format off
-CPP_variadic_template(typename ColumnReturnType, typename... ColumnInputTypes)
-  (requires(sizeof...(ColumnInputTypes) > 0))
+CPP_variadic_template(typename ColumnReturnType, typename Generator,
+                      typename... ColumnInputTypes)
+  (requires(sizeof...(ColumnInputTypes) > 0 &&
+            ad_utility::InvocableWithSimilarReturnType<
+                Generator, ColumnReturnType, const ColumnInputTypes&...>))
     // clang-format on
     void generateColumnWithColumnInput(
-        ResultTable* const table,
-        QL_CONCEPT_OR_NOTHING(
-            ad_utility::InvocableWithSimilarReturnType<
-                ColumnReturnType, const ColumnInputTypes&...>) auto&& generator,
+        ResultTable* const table, Generator&& generator,
         const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,
         const ColumnNumWithType<ColumnInputTypes>&... inputColumns) {
   // Using a column more than once is the sign of an error.

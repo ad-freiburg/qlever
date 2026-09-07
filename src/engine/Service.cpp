@@ -16,6 +16,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
@@ -36,6 +37,11 @@ Service::Service(QueryExecutionContext* qec,
     : Operation{qec},
       parsedServiceClause_{std::move(parsedServiceClause)},
       getResultFunction_{std::move(getResultFunction)} {}
+
+// ____________________________________________________________________________
+bool Service::isDeterministicImpl() const {
+  return getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>();
+}
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
@@ -102,12 +108,15 @@ std::string Service::pushDownValues(std::string_view pattern,
   size_t index = pattern.find('{');
   AD_CORRECTNESS_CHECK(index != std::string::npos);
   pattern.remove_prefix(index + 1);
+  size_t lastBrace = pattern.rfind('}');
+  AD_CORRECTNESS_CHECK(lastBrace != std::string_view::npos);
+  std::string_view body = pattern.substr(0, lastBrace);
   // If we have a single subquery in the service clause, wrap it inside curly
   // braces so it remains valid syntax alongside a VALUES clause.
   if (ctre::starts_with<selectPatternRegex>(pattern)) {
-    return absl::StrCat("{\n", values, "\n{", pattern, "\n}");
+    return absl::StrCat("{\n{", body, "}\n", values, "\n}");
   }
-  return absl::StrCat("{\n", values, "\n", pattern);
+  return absl::StrCat("{\n", body, "\n", values, "\n}");
 }
 
 // _____________________________________________________________________________
@@ -263,7 +272,7 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
                                            localVocab)
                 : TripleComponent::UNDEF();
 
-        Id id = std::move(tc).toValueId(getIndex(), *localVocab);
+        Id id = toValueId(std::move(tc), getIndex(), *localVocab);
         idTable(rowIdx, colIdx) = id;
         if (id.getDatatype() == Datatype::LocalVocabIndex) {
           ++numLocalVocabPerColumn[colIdx];
@@ -424,7 +433,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     checkCancellation();
   }
 
-  return "VALUES " + vars + values + "} . ";
+  return "VALUES " + vars + values + "} ";
 }
 
 // ____________________________________________________________________________

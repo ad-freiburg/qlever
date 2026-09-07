@@ -50,6 +50,8 @@ class TextIndexScanForWord : public Operation {
   const TextIndexScanForWordConfiguration& getConfig() const { return config_; }
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Returns a Result containing an IdTable with the columns being

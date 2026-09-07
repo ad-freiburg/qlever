@@ -13,6 +13,7 @@
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
 #include "util/Conversions.h"
+#include "util/ParsedQueryTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace m = matchers;
@@ -20,6 +21,7 @@ namespace p = parsedQuery;
 
 using Var = Variable;
 namespace {
+using ad_utility::testing::parseQuery;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
 auto iriV = ad_utility::testing::iriV;
@@ -28,11 +30,6 @@ const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {
   const auto& tripleComponent = std::get<PropertyPath>(varOrPath).getIri();
   return tripleComponent.toStringRepresentation();
-}
-auto parseQuery(std::string query,
-                const std::vector<DatasetClause>& datasets = {}) {
-  static EncodedIriManager evM;
-  return SparqlParser::parseQuery(&evM, std::move(query), datasets);
 }
 }  // namespace
 
@@ -1027,6 +1024,20 @@ TEST(ParserTest, testGroupByAndAlias) {
 }
 
 // _____________________________________________________________________________
+TEST(ParserTest, isAggregatingQuery) {
+  // Explicit `GROUP BY`.
+  EXPECT_TRUE(parseQuery("SELECT ?a (COUNT(?b) as ?c) WHERE { ?a <rel> ?b } "
+                         "GROUP BY ?a")
+                  .isAggregatingQuery());
+  // Implicit `GROUP BY` (aggregate in `SELECT`, no explicit `GROUP BY`).
+  EXPECT_TRUE(parseQuery("SELECT (COUNT(?b) as ?c) WHERE { ?a <rel> ?b }")
+                  .isAggregatingQuery());
+  // Neither.
+  EXPECT_FALSE(
+      parseQuery("SELECT ?a ?b WHERE { ?a <rel> ?b }").isAggregatingQuery());
+}
+
+// _____________________________________________________________________________
 TEST(ParserTest, Bind) {
   ParsedQuery pq = parseQuery("SELECT ?a WHERE { BIND (10 - 5 as ?a) . }");
   ASSERT_TRUE(pq.hasSelectClause());
@@ -1154,11 +1165,11 @@ TEST(ParserTest, Group) {
   {
     // grouping by a builtin call
     ParsedQuery pq = parseQuery(
-        "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY COUNT(?x) ?x");
+        "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY STR(?x) ?x");
     auto variant = pq._rootGraphPattern._graphPatterns[1];
     ASSERT_TRUE(holds_alternative<p::Bind>(variant));
     auto helperBind = get<p::Bind>(variant);
-    ASSERT_THAT(helperBind, m::BindExpression("COUNT(?x)"));
+    ASSERT_THAT(helperBind, m::BindExpression("STR(?x)"));
     EXPECT_THAT(pq, m::GroupByVariables({helperBind._target, Var{"?x"}}));
   }
   {
@@ -1462,6 +1473,11 @@ TEST(ParserTest, HandlesBasicUnicodeEscapeSequences) {
   // Ensure we don't double-unescape, \u sequences are not allowed in literals
   EXPECT_THROW(parseQuery(R"(SELECT * WHERE { "\u005Cu2764" ?p 1. })"),
                InvalidSparqlQueryException);
+
+  // A full code point beyond U+10FFFF is not valid Unicode and is encoded as
+  // the Unicode replacement character (U+FFFD).
+  ParsedQuery q5 = parseQuery(R"(SELECT * WHERE { ?s ?p "\UFFFFFFFF" . })");
+  EXPECT_EQ(getFirstTriple(q5), "{s: ?s, p: ?p, o: \"\uFFFD\"}");
 }
 
 // _____________________________________________________________________________

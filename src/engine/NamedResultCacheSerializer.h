@@ -8,13 +8,28 @@
 #define QLEVER_SRC_ENGINE_NAMEDRESULTCACHESERIALIZER_H
 
 #include <boost/math/tools/roots.hpp>
+#include <cstdint>
 
 #include "engine/NamedResultCache.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/Exception.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/Serializer/TripleSerializer.h"
+
+namespace namedResultCacheSerializer::detail {
+// An arbitrary magic byte that is written at the very beginning of a
+// serialized `NamedResultCache`. Used by `readFromSerializer` to give a clear
+// error message when the input is not a serialized `NamedResultCache`.
+constexpr uint8_t magicByte = 0xC3;
+
+// The version of the (de)serialization format implemented below. Increment
+// this whenever the format changes in a way that is incompatible with
+// previously serialized data, s.t. `readFromSerializer` can detect and reject
+// data that was written by an incompatible version of QLever.
+constexpr uint16_t formatVersion = 1;
+}  // namespace namedResultCacheSerializer::detail
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
@@ -22,6 +37,11 @@ CPP_template_def(typename Serializer)(
         Serializer>) void NamedResultCache::writeToSerializer(Serializer&
                                                                   serializer)
     const {
+  // Write the magic byte and format version first, s.t. `readFromSerializer`
+  // can detect and reject incompatible or unrelated input.
+  serializer << namedResultCacheSerializer::detail::magicByte;
+  serializer << namedResultCacheSerializer::detail::formatVersion;
+
   auto lock = cache_.wlock();
   std::vector<std::pair<Key, std::shared_ptr<const Value>>> entries;
   for (const auto& key : lock->getAllNonpinnedKeys()) {
@@ -47,6 +67,27 @@ CPP_template_def(typename Serializer)(
                        const LocalVocabContext& context) {
   // Clear the cache first.
   clear();
+
+  // Read and check the magic byte and format version written by
+  // `writeToSerializer`.
+  uint8_t readMagicByte;
+  serializer >> readMagicByte;
+  if (readMagicByte != namedResultCacheSerializer::detail::magicByte) {
+    AD_THROW(
+        "The given input is not a serialized `NamedResultCache` (the magic "
+        "byte does not match)");
+  }
+  uint16_t readFormatVersion;
+  serializer >> readFormatVersion;
+  if (readFormatVersion != namedResultCacheSerializer::detail::formatVersion) {
+    AD_THROW(absl::StrCat(
+        "The serialized `NamedResultCache` has format version ",
+        readFormatVersion,
+        ", but this version of QLever only supports format version ",
+        namedResultCacheSerializer::detail::formatVersion,
+        ". The named result cache was probably written by an incompatible "
+        "version of QLever"));
+  }
 
   // Deserialize the number of entries.
   size_t numEntries;
@@ -82,9 +123,10 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
 
     // Serialize the IdTable (uses the `serializeIds` helper which handles
     // LocalVocab IDs).
-    serializer << arg.result_->numRows();
-    serializer << arg.result_->numColumns();
-    for (const auto& col : arg.result_->getColumns()) {
+    const auto& resultView = ExplicitIdTableOperation::viewOf(arg.result_);
+    serializer << resultView.numRows();
+    serializer << resultView.numColumns();
+    for (const auto& col : resultView.getColumns()) {
       // NOTE: Although the code for serialization of a local vocab above is
       // already incorporated, we currently still let local vocab entries throw
       // an exception, because there are some caveats in the serialization that
@@ -141,10 +183,36 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     serializer >> numColumns;
 
     AD_CORRECTNESS_CHECK(arg.allocatorForSerialization_.has_value());
-    IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
-    idTable.resize(numRows);
-    for (auto&& col : idTable.getColumns()) {
-      ad_utility::detail::deserializeIds(serializer, mapping, col);
+    ExplicitIdTableOperation::IdTableOrView resultTable;
+    if constexpr (ZeroCopyReadSerializer<S>) {
+      // Zero-copy path: build a non-owning `IdTableView<0>` directly from
+      // spans into the serializer's buffer, without copying the column data.
+      // Since the writing side (see above) rejects any entry that contains a
+      // `LocalVocabIndex` id, `mapping` can never actually apply to any id in
+      // the columns, so skipping `deserializeIds`'s remapping step here is
+      // safe. We still defensively re-check the invariant.
+      IdTableView<0>::ViewSpans columns;
+      columns.reserve(numColumns);
+      for (size_t i = 0; i < numColumns; ++i) {
+        auto column = zeroCopyDeserializeToSpan<Id>(serializer);
+        AD_CORRECTNESS_CHECK(column.size() == numRows);
+        AD_CORRECTNESS_CHECK(
+            ql::ranges::find(column, Datatype::LocalVocabIndex,
+                             &Id::getDatatype) == column.end(),
+            "Named result cache entries that contain local vocab entries "
+            "currently cannot be deserialized.");
+        columns.push_back(column);
+      }
+      resultTable =
+          IdTableView<0>::fromColumns(std::move(columns), numColumns, numRows,
+                                      arg.allocatorForSerialization_.value());
+    } else {
+      IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
+      idTable.resize(numRows);
+      for (auto&& col : idTable.getColumns()) {
+        ad_utility::detail::deserializeIds(serializer, mapping, col);
+      }
+      resultTable = std::make_shared<const IdTable>(std::move(idTable));
     }
 
     // Deserialize VariableToColumnMap manually.
@@ -178,12 +246,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
 
     // Construct the `Value`.
     arg = NamedResultCache::Value{
-        std::make_shared<const IdTable>(std::move(idTable)),
-        std::move(varToColMap),
-        std::move(resultSortedOn),
-        std::move(localVocab),
-        std::move(cacheKey),
-        std::move(cachedGeoIndex)};
+        std::move(resultTable),    std::move(varToColMap),
+        std::move(resultSortedOn), std::move(localVocab),
+        std::move(cacheKey),       std::move(cachedGeoIndex)};
   }
 }
 

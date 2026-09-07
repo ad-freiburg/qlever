@@ -87,21 +87,6 @@ struct BasicGraphPattern {
   void collectAllContainedVariables(ad_utility::HashSet<Variable>& vars) const;
 };
 
-// Helper for a special use case: Extract all variables present in the first
-// `BasicGraphPattern` contained in a vector of `GraphPatternOperation`s.
-//
-// For example: If the vector contains a `BIND`, followed by two
-// `BasicGraphPattern`s, this would return the variables from the first of the
-// two `BasicGraphPattern`s.
-//
-// It is used for skipping some graph patterns in
-// `MaterializedViewQueryAnalysis.cpp`.
-//
-// IMPORTANT: This function does not consider variables that are contained in
-// other types of `GraphPatternOperation`s.
-ad_utility::HashSet<Variable> getVariablesPresentInFirstBasicGraphPattern(
-    const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns);
-
 /// A `Values` clause
 struct Values {
   SparqlValues _inlineValues;
@@ -141,7 +126,7 @@ struct GroupGraphPattern {
 struct Optional {
   Optional(GraphPattern child) : _child{std::move(child)} {
     _child._optional = true;
-  };
+  }
   GraphPattern _child;
 };
 
@@ -221,8 +206,7 @@ struct Bind {
   auto containedVariables() const {
     auto result = _expression.containedVariables();
     result.push_back(&_target);
-    return ad_utility::OwningView{std::move(result)} |
-           ql::views::transform(ad_utility::dereference);
+    return std::move(result) | ql::views::transform(ad_utility::dereference);
   }
 
   [[nodiscard]] std::string getDescriptor() const;

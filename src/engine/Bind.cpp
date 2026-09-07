@@ -6,6 +6,8 @@
 
 #include "engine/Bind.h"
 
+#include <absl/strings/str_cat.h>
+
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
@@ -21,10 +23,6 @@ Bind::Bind(QueryExecutionContext* qec,
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _bind._expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
-  // If the cache key is deterministic, this `Bind` expression can be cached.
-  isExpressionCacheable_ =
-      _bind._expression.getCacheKey(_subtree->getVariableColumns()) ==
-      _bind._expression.getCacheKey(_subtree->getVariableColumns());
 }
 
 // BIND adds exactly one new column
@@ -82,11 +80,9 @@ bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
 std::string Bind::getCacheKeyImpl() const {
-  std::ostringstream os;
-  os << "BIND ";
-  os << _bind._expression.getCacheKey(_subtree->getVariableColumns());
-  os << "\n" << _subtree->getCacheKey();
-  return std::move(os).str();
+  return absl::StrCat(
+      "BIND ", _bind._expression.getCacheKey(_subtree->getVariableColumns()),
+      "\n", _subtree->getCacheKey());
 }
 
 // _____________________________________________________________________________
@@ -134,9 +130,9 @@ Result Bind::computeResult(bool requestLaziness) {
 
   if (subRes->isFullyMaterialized()) {
     if (requestLaziness && subRes->idTableView().size() > CHUNK_SIZE) {
-      auto chunks = ad_utility::allView(::ranges::views::chunk(
+      auto chunks = ::ranges::views::chunk(
           ::ranges::views::iota(size_t{0}, subRes->idTableView().size()),
-          CHUNK_SIZE));
+          CHUNK_SIZE);
       auto f = [applyBind = std::move(applyBind),
                 subRes = std::move(subRes)](const auto& chunk) {
         // Make a deep copy of the local vocab from `subRes` and then add to it
@@ -243,6 +239,11 @@ IdTable Bind::computeExpressionBind(
   std::visit(visitor, std::move(expressionResult));
 
   return idTable;
+}
+
+// _____________________________________________________________________________
+bool Bind::isDeterministicImpl() const {
+  return _bind._expression.isDeterministic();
 }
 
 // _____________________________________________________________________________

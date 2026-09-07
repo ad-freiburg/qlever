@@ -262,20 +262,14 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
   // Test that the log message created in
   // `GraphSearchExecutionParams.checkCancellation()` when a cancellation is
   // received will be logged.
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
 
   const ad_utility::AllocatorWithLimit<Id> allocator =
       ad_utility::testing::makeAllocator();
   GraphSearchExecutionParams ep(
       std::make_shared<ad_utility::CancellationHandle<>>(), allocator);
 
-  // Tell absl to reset the logging stream after scope exits.
-  absl::Cleanup cleanup{
-      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
-
-  // Redirect logging stream to a stream object which we can test on.
-  std::stringstream stream;
-  ad_utility::setGlobalLoggingStream(&stream);
+  auto [cleanup, stream] = setGlobalLoggingStreamToStringStream();
 
   // Trigger a `CHECK_WINDOW_MISSED` cancellation state which will make the
   // handle's watchdog write logs containing the algorithmName specified in

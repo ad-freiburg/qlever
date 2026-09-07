@@ -53,6 +53,15 @@
   _Pragma("GCC diagnostic push")            \
       _Pragma("GCC diagnostic ignored \"-Wdangling-reference\"")
 
+// Disable the `array-bounds` warning, which produces false positives on GCC 13
+// when the comparators in `ExternalSortFunctors.h` are inlined into
+// `std::__insertion_sort`. GCC then conflates the `Row<ValueId, 5>` and
+// `Row<ValueId, 4>` instantiations and wrongly believes an out-of-bounds access
+// happens.
+#define DISABLE_ARRAY_BOUNDS_WARNINGS \
+  _Pragma("GCC diagnostic push")      \
+      _Pragma("GCC diagnostic ignored \"-Warray-bounds\"")
+
 // Re-enable the warnings disabled by the last `DISABLE_...` call.
 #define GCC_REENABLE_WARNINGS _Pragma("GCC diagnostic pop")
 
@@ -64,6 +73,7 @@
 #define DISABLE_FREE_NONHEAP_WARNINGS
 #define DISABLE_AGGRESSIVE_LOOP_OPT_WARNINGS
 #define DISABLE_DANGLING_REFERENCE_WARNINGS
+#define DISABLE_ARRAY_BOUNDS_WARNINGS
 #define GCC_REENABLE_WARNINGS
 #endif
 

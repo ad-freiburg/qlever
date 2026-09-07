@@ -17,7 +17,18 @@ Index::Index(Index&&) noexcept = default;
 // Needs to be in the .cpp file because of the unique_ptr to a forwarded class.
 // See
 // https://stackoverflow.com/questions/13414652/forward-declaration-with-unique-ptr
-Index::~Index() = default;
+Index::~Index() {
+  // NOTE: The message is only logged for an index that was loaded from disk.
+  // It is useful when a process unloads an index and keeps running, in
+  // particular when the runtime index rebuild retires the old index as soon
+  // as the last query on it has finished (see `Qlever::swapInRebuiltIndex`).
+  // For an index that was merely built (`qlever-index`), it would be
+  // confusing, because that index was never loaded in the first place.
+  if (pimpl_ && pimpl_->wasLoadedFromDisk()) {
+    AD_LOG_INFO << "Index with basename \"" << pimpl_->getOnDiskBase()
+                << "\" was unloaded" << std::endl;
+  }
+}
 
 // ____________________________________________________________________________
 void Index::createFromOnDiskIndex(const std::string& onDiskBase,
@@ -292,4 +303,9 @@ GraphNameManager& Index::graphNameManager() {
 // ____________________________________________________________________________
 const GraphNameManager& Index::graphNameManager() const {
   return pimpl_->graphNameManager();
+}
+
+// ____________________________________________________________________________
+const LocalVocabContext& Index::getLocalVocabContext() const {
+  return pimpl_->getLocalVocabContext();
 }

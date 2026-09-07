@@ -4,9 +4,12 @@
 
 #include "engine/CountAvailablePredicates.h"
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
-#include "index/IndexImpl.h"
+#include "global/Pattern.h"
+#include "global/RuntimeParameters.h"
+#include "util/ParallelExecutor.h"
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(
@@ -112,10 +115,14 @@ Result CountAvailablePredicates::computeResult(
   AD_CORRECTNESS_CHECK(subtree_);
   // Determine whether we can perform the full scan optimization. It can be
   // applied if the `subtree_` is a single index scan of a triple
-  // `?s ql:has-pattern ?p`.
-  // TODO<joka921> As soon as we have a lazy implementation for all index scans
-  // or even all operations Then the special case for all entities can be
-  // removed.
+  // `?s ql:has-pattern ?p`. This relation contains exactly one triple per
+  // entity. All subjects are therefore distinct, and the patterns can be
+  // counted directly while the scan is consumed lazily.
+  // TODO<joka921> The generic implementation below has to deduplicate the
+  // subjects. It therefore requires a fully materialized `IdTableView`. Make it
+  // consume its input lazily, carrying the last subject across the chunk
+  // boundaries. It then also handles the `ql:has-pattern` case, and this
+  // special case can be removed.
   bool isPatternTrickForAllEntities = [&]() {
     auto indexScan =
         dynamic_cast<const IndexScan*>(subtree_->getRootOperation().get());
@@ -126,17 +133,22 @@ Result CountAvailablePredicates::computeResult(
         !indexScan->object().isVariable()) {
       return false;
     }
-
-    return indexScan->predicate() == HAS_PATTERN_PREDICATE;
+    // Note: `HAS_PATTERN_PREDICATE` is a `std::string_view`, so it has to be
+    // explicitly turned into an `Iri` before the comparison. Comparing it
+    // directly would convert it into the `std::string` alternative of the
+    // `TripleComponent` variant, which never compares equal to the `Iri`
+    // alternative that the scan holds.
+    TripleComponent hasPattern{
+        TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE)};
+    return indexScan->predicate() == hasPattern;
   }();
 
   if (isPatternTrickForAllEntities) {
-    subtree_->getRootOperation()->runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterializedInProgress;
-    signalQueryUpdate(RuntimeInformation::SendPriority::Always);
-    // Compute the predicates for all entities
-    CountAvailablePredicates::computePatternTrickAllEntities(&idTable,
-                                                             patterns);
+    // Compute the predicates for all entities.
+    auto subresult = subtree_->getResult(true);
+    CountAvailablePredicates::computePatternTrickAllEntities(
+        &idTable, patterns, *subresult,
+        subtree_->getVariableColumn(predicateVariable_));
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
     std::shared_ptr<const Result> subresult = subtree_->getResult();
@@ -157,33 +169,47 @@ Result CountAvailablePredicates::computeResult(
 
 // _____________________________________________________________________________
 void CountAvailablePredicates::computePatternTrickAllEntities(
-    IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns) const {
+    IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns,
+    const Result& subresult, ColumnIndex patternColumn) const {
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   AD_LOG_DEBUG << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
-  ad_utility::HashMap<size_t, size_t> patternCounts;
-  const auto& index = getExecutionContext()->getIndex().getImpl();
-  auto scanSpec =
-      ScanSpecificationAsTripleComponent{
-          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
-          std::nullopt}
-          .toScanSpecification(index);
-  const auto& perm = index.getPermutation(Permutation::Enum::PSO);
-  const auto& locatedTriple = locatedTriplesState();
-  auto fullHasPattern =
-      perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),
-                    std::nullopt, {}, cancellationHandle_, locatedTriple);
-  for (const auto& idTable : fullHasPattern) {
-    for (const auto& patternId : idTable.getColumn(1)) {
+  // The pattern indices are dense, so the counts are kept in a vector, which
+  // is much faster than a hash map for the hundreds of millions of rows of a
+  // large knowledge graph. The last slot counts the entities without a
+  // pattern (`Pattern::NoPattern`).
+  std::vector<size_t> patternCounts(patterns.size() + 1, 0);
+  // Note: In contrast to `computePatternTrick` the subjects don't have to be
+  // deduplicated, because the `ql:has-pattern` relation contains exactly one
+  // triple per entity.
+  auto countPatterns = [&patternCounts, &patterns,
+                        patternColumn](const auto& idTable) {
+    for (Id patternId : idTable.getColumn(patternColumn)) {
       AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
-      patternCounts[patternId.getInt()]++;
+      size_t patternIdx = patternId.getInt();
+      if (patternIdx >= patterns.size()) {
+        AD_CONTRACT_CHECK(patternIdx == Pattern::NoPattern);
+        patternIdx = patterns.size();
+      }
+      patternCounts[patternIdx]++;
+    }
+  };
+  // The subresult is lazy unless it was already fully materialized (for
+  // example because it was read from the cache).
+  if (subresult.isFullyMaterialized()) {
+    countPatterns(subresult.idTableView());
+  } else {
+    for (const auto& pair : subresult.idTables()) {
+      countPatterns(pair.idTable_);
     }
   }
 
-  AD_LOG_DEBUG << "Using " << patternCounts.size()
-               << " patterns for computing the result" << std::endl;
-  for (const auto& [patternIdx, count] : patternCounts) {
-    AD_CORRECTNESS_CHECK(patternIdx < patterns.size());
+  // Entities without a pattern contribute no predicates.
+  for (size_t patternIdx = 0; patternIdx < patterns.size(); ++patternIdx) {
+    size_t count = patternCounts[patternIdx];
+    if (count == 0) {
+      continue;
+    }
     for (const auto& predicate : patterns[patternIdx]) {
       predicateCounts[predicate] += count;
     }
@@ -195,25 +221,26 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   *dynResult = std::move(result).toDynamic();
 }
 
-/**
- * @ brief A Hashmap from T to size_t which additionally supports merging of
- * Hashmaps
- *
- * publicly inherits from ad_utility::HashMap<T, size_t> and additionally
- * provides operator%= which merges Hashmaps by adding the values for
- * corresponding keys. This is needed for the parallel pattern trick
- *
- */
+namespace {
+// A HashMap from `T` to `size_t` that can be merged with another such map by
+// adding the counts of corresponding keys. This is what
+// `computeInParallelChunks` (see below) requires of its result type.
 template <typename T>
-class MergeableHashMap : public ad_utility::HashMap<T, size_t> {
- public:
-  MergeableHashMap& operator%=(const MergeableHashMap& rhs) {
-    for (const auto& [key, value] : rhs) {
-      (*this)[key] += value;
+struct CountMap : ad_utility::HashMap<T, size_t> {
+  void mergeWith(const CountMap& other) {
+    for (const auto& [key, count] : other) {
+      (*this)[key] += count;
     }
-    return *this;
   }
 };
+
+// The number of rows (patterns) that make up a single chunk of work in the
+// first (second) loop of `computePatternTrick`. Inputs that are not larger than
+// this are handled by a single thread, because then the work is dominated by
+// the cost of spawning threads and of merging the partial results.
+constexpr size_t CHUNK_SIZE_ROWS = 500'000;
+constexpr size_t CHUNK_SIZE_PATTERNS = 100'000;
+}  // namespace
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
@@ -226,90 +253,71 @@ void CountAvailablePredicates::computePatternTrick(
   AD_LOG_DEBUG << "For " << input.size() << " entities in column "
                << subjectColumnIdx << std::endl;
 
-  MergeableHashMap<Id> predicateCounts;
-  MergeableHashMap<size_t> patternCounts;
-
-  // declare openmp reductions which aggregate Hashmaps by adding the values for
-  // corresponding keys
-#pragma omp declare reduction( \
-        MergeHashmapsId : MergeableHashMap<Id> : omp_out %= omp_in)
-#pragma omp declare reduction( \
-        MergeHashmapsSizeT : MergeableHashMap<size_t> : omp_out %= omp_in)
-
-  // These variables are used to gather additional statistics
-  size_t numEntitiesWithPatterns = 0;
-  // the number of distinct predicates in patterns
+  // The number of distinct predicates in the used patterns (for the
+  // statistics below).
   size_t numPatternPredicates = 0;
-  // the number of predicates counted without patterns
-  size_t numListPredicates = 0;
 
-  if (input.size() > 0) {  // avoid strange OpenMP segfaults on GCC
-    decltype(auto) subjectColumn = input.getColumn(subjectColumnIdx);
-    decltype(auto) patternColumn = input.getColumn(patternColumnIdx);
-#pragma omp parallel
-#pragma omp single
-#pragma omp taskloop grainsize(500000) default(none)                           \
-    reduction(MergeHashmapsId : predicateCounts)                               \
-    reduction(MergeHashmapsSizeT : patternCounts)                              \
-    reduction(+ : numEntitiesWithPatterns) reduction(+ : numPatternPredicates) \
-    reduction(+ : numListPredicates)                                           \
-    shared(input, subjectColumn, patternColumn)
-    for (size_t i = 0; i < input.size(); ++i) {
-      // Skip over elements with the same subject (don't count them twice)
-      Id subjectId = subjectColumn[i];
-      if (i > 0 && subjectId == subjectColumn[i - 1]) {
-        continue;
-      }
-      patternCounts[patternColumn[i].getInt()]++;
-    }
-  }
+  decltype(auto) subjectColumn = input.getColumn(subjectColumnIdx);
+  decltype(auto) patternColumn = input.getColumn(patternColumnIdx);
+  size_t numThreads =
+      getRuntimeParameter<&RuntimeParameters::patternTrickNumThreads_>();
+  CountMap<size_t> patternCounts = ad_utility::computeInParallelChunks(
+      input.size(), CHUNK_SIZE_ROWS,
+      [&subjectColumn, &patternColumn](CountMap<size_t>& counts, size_t begin,
+                                       size_t end) {
+        for (size_t i = begin; i < end; ++i) {
+          // Skip over elements with the same subject (don't count them
+          // twice). Note: The element before the first one of a chunk is
+          // read, but never written, so this is safe to do in parallel.
+          if (i > 0 && subjectColumn[i] == subjectColumn[i - 1]) {
+            continue;
+          }
+          counts[patternColumn[i].getInt()]++;
+        }
+      },
+      numThreads);
   AD_LOG_DEBUG << "Using " << patternCounts.size()
                << " patterns for computing the result." << std::endl;
   // the number of predicates counted with patterns
   size_t numPredicatesSubsumedInPatterns = 0;
-  // resolve the patterns to predicate counts
 
-  AD_LOG_DEBUG << "Converting PatternMap to vector" << std::endl;
   // flatten into a vector, to make iterable
+  AD_LOG_DEBUG << "Converting PatternMap to vector" << std::endl;
   const std::vector<std::pair<size_t, size_t>> patternVec(patternCounts.begin(),
                                                           patternCounts.end());
 
+  // Gather the statistics, and check that all the pattern indices are valid.
+  // Both are cheap enough (they only look at the size of each pattern) to be
+  // done sequentially.
+  for (auto [patternIndex, patternCount] : patternVec) {
+    if (patternIndex >= patterns.size()) {
+      AD_CONTRACT_CHECK(patternIndex == Pattern::NoPattern);
+      continue;
+    }
+    size_t patternSize = patterns[patternIndex].size();
+    numPatternPredicates += patternSize;
+    numPredicatesSubsumedInPatterns += patternCount * patternSize;
+  }
+
+  // resolve the patterns to predicate counts
   AD_LOG_DEBUG << "Start translating pattern counts to predicate counts"
                << std::endl;
-  bool illegalPatternIndexFound = false;
-  if (patternVec.begin() !=
-      patternVec.end()) {  // avoid segfaults with OpenMP on GCC
-#pragma omp parallel
-#pragma omp single
-#pragma omp taskloop grainsize(100000) default(none)                           \
-    reduction(MergeHashmapsId : predicateCounts)                               \
-    reduction(+ : numPredicatesSubsumedInPatterns)                             \
-    reduction(+ : numEntitiesWithPatterns) reduction(+ : numPatternPredicates) \
-    reduction(+ : numListPredicates) shared(patternVec, patterns)              \
-    reduction(|| : illegalPatternIndexFound)
-    // TODO<joka921> When we use iterators (`patternVec.begin()`) for the loop,
-    // there is a strange warning on clang15 when OpenMP is activated. Find out
-    // whether this is a known issue and whether this will be fixed in later
-    // versions of clang.
-    for (size_t i = 0; i != patternVec.size(); ++i) {
-      auto [patternIndex, patternCount] = patternVec[i];
-      // TODO<joka921> As soon as we have a better way of handling the
-      // parallelism, the following block can become a simple AD_CONTRACT_CHECK.
-      if (patternIndex >= patterns.size()) {
-        if (patternIndex != Pattern::NoPattern) {
-          illegalPatternIndexFound = true;
+  CountMap<Id> predicateCounts = ad_utility::computeInParallelChunks(
+      patternVec.size(), CHUNK_SIZE_PATTERNS,
+      [&patternVec, &patterns](CountMap<Id>& counts, size_t begin, size_t end) {
+        for (auto [patternIndex, patternCount] : ql::ranges::subrange(
+                 patternVec.begin() + begin, patternVec.begin() + end)) {
+          // Entities without a pattern contribute no predicates. All other
+          // pattern indices have been checked above.
+          if (patternIndex >= patterns.size()) {
+            continue;
+          }
+          for (Id predicate : patterns[patternIndex]) {
+            counts[predicate] += patternCount;
+          }
         }
-        continue;
-      }
-      const auto& pattern = patterns[patternIndex];
-      numPatternPredicates += pattern.size();
-      for (const auto& predicate : pattern) {
-        predicateCounts[predicate] += patternCount;
-        numPredicatesSubsumedInPatterns += patternCount;
-      }
-    }
-  }
-  AD_CONTRACT_CHECK(!illegalPatternIndexFound);
+      },
+      numThreads);
   AD_LOG_DEBUG << "Finished translating pattern counts to predicate counts"
                << std::endl;
   // write the predicate counts to the result
@@ -319,46 +327,29 @@ void CountAvailablePredicates::computePatternTrick(
   }
   AD_LOG_DEBUG << "Finished writing results" << std::endl;
 
-  // Print interesting statistics about the pattern trick
-  double ratioHasPatterns =
-      static_cast<double>(numEntitiesWithPatterns) / input.size();
-  size_t numPredicatesWithRepetitions =
-      numPredicatesSubsumedInPatterns + numListPredicates;
-  double ratioCountedWithPatterns =
-      static_cast<double>(numPredicatesSubsumedInPatterns) /
-      numPredicatesWithRepetitions;
-
-  size_t costWithPatterns =
-      input.size() + numListPredicates + numPatternPredicates;
-  size_t costWithoutPatterns = input.size() + numPredicatesWithRepetitions;
+  // Print interesting statistics about the pattern trick: the conceptual
+  // cost with patterns (one lookup per row plus one count per distinct
+  // predicate in the used patterns) vs the cost without patterns (one count
+  // per predicate of every row).
+  size_t costWithPatterns = input.size() + numPatternPredicates;
+  size_t costWithoutPatterns = input.size() + numPredicatesSubsumedInPatterns;
   double costRatio =
       static_cast<double>(costWithPatterns) / costWithoutPatterns;
-  // Print the ratio of entities that used a pattern
-  AD_LOG_DEBUG << numEntitiesWithPatterns << " of " << input.size()
-               << " entities had a pattern. That equals "
-               << (ratioHasPatterns * 100) << " %" << std::endl;
-  // Print info about how many predicates where counted with patterns
-  AD_LOG_DEBUG << "Of the " << numPredicatesWithRepetitions << "predicates "
-               << numPredicatesSubsumedInPatterns
-               << " were counted with patterns, " << numListPredicates
-               << " were counted without.";
-  AD_LOG_DEBUG << "The ratio is " << (ratioCountedWithPatterns * 100) << "%"
-               << std::endl;
-  // Print information about of efficient the pattern trick is
   AD_LOG_DEBUG << "The conceptual cost with patterns was " << costWithPatterns
                << " vs " << costWithoutPatterns << " without patterns"
                << std::endl;
-  // Print the cost improvement using the pattern trick gave us
-  AD_LOG_DEBUG << "This gives a ratio  with to without of " << costRatio
+  AD_LOG_DEBUG << "This gives a ratio with to without of " << costRatio
                << std::endl;
 
-  // Add these values to the runtime info
+  // Add these values to the runtime info. NOTE: the value of
+  // `numPredicatesWithRepetitions` is unchanged (it was previously computed
+  // as `numPredicatesSubsumedInPatterns` plus a counter that was never
+  // incremented); the two `percent...` details, whose values were also
+  // computed from never-incremented counters (and hence always `0` or `NaN`),
+  // have been removed.
   runtimeInfo.addDetail("numEntities", input.size());
   runtimeInfo.addDetail("numPredicatesWithRepetitions",
-                        numPredicatesWithRepetitions);
-  runtimeInfo.addDetail("percentEntitesWithPatterns", ratioHasPatterns * 100);
-  runtimeInfo.addDetail("percentPredicatesFromPatterns",
-                        ratioCountedWithPatterns * 100);
+                        numPredicatesSubsumedInPatterns);
   runtimeInfo.addDetail("costWithoutPatterns", costWithoutPatterns);
   runtimeInfo.addDetail("costWithPatterns", costWithPatterns);
   runtimeInfo.addDetail("costRatio", costRatio * 100);

@@ -26,6 +26,7 @@
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
+#include "index/TripleComponentConversions.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -75,7 +76,7 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
     OptionalJoin opt{qec, left, right};
 
     auto result = opt.computeResultOnlyForTesting();
-    ASSERT_EQ(result.idTable(), expectedResult);
+    ASSERT_EQ(result.idTableView(), expectedResult);
   }
 }
 
@@ -132,7 +133,7 @@ void testLazyOptionalJoin(
       expected.insertAtEnd(idTable);
     }
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
   }
 }
 }  // namespace
@@ -372,8 +373,8 @@ TEST(OptionalJoin, gallopingJoin) {
     for (int64_t i = 0; i < 300; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }
-    auto numElementsInLarger = static_cast<int64_t>(
-        std::max(10000ul, a.numRows() * GALLOP_THRESHOLD + 1));
+    auto numElementsInLarger =
+        std::max<int64_t>(10000, a.numRows() * GALLOP_THRESHOLD + 1);
     for (int64_t i = 400; i < numElementsInLarger; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }
@@ -394,8 +395,8 @@ TEST(OptionalJoin, gallopingJoin) {
     for (int64_t i = 0; i < 300; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }
-    auto numElementsInLarger = static_cast<int64_t>(
-        std::max(10000ul, a.numRows() * GALLOP_THRESHOLD + 1));
+    auto numElementsInLarger =
+        std::max<int64_t>(10000, a.numRows() * GALLOP_THRESHOLD + 1);
     for (int64_t i = 400; i < numElementsInLarger; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }
@@ -458,7 +459,7 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
     auto result = optionalJoin.computeResultOnlyForTesting(false);
     ASSERT_TRUE(result.isFullyMaterialized());
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
     EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                 ::testing::UnorderedElementsAre(entryA, entryB));
 
@@ -553,6 +554,58 @@ TEST(OptionalJoin, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(opt, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), opt.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, limitAndOffsetArePushedDownToLeftChild) {
+  auto qec = ad_utility::testing::getQec();
+  auto a = makeIdTableFromVector({{0}});
+  auto makeOptionalJoin = [&qec, &a]() {
+    return OptionalJoin{qec, idTableToExecutionTree(qec, a),
+                        idTableToExecutionTree(qec, a)};
+  };
+  auto expectChildLimits = [](OptionalJoin& optionalJoin,
+                              std::optional<uint64_t> limit,
+                              ad_utility::source_location loc =
+                                  AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    auto children = optionalJoin.getChildren();
+    EXPECT_EQ(children.at(0)->getRootOperation()->getLimitOffset(),
+              LimitOffsetClause{limit});
+    // The right side is optional, so reducing it could drop matches.
+    EXPECT_TRUE(
+        children.at(1)->getRootOperation()->getLimitOffset().isUnconstrained());
+  };
+
+  {
+    // The left child only has to supply `limit + offset` rows.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({2, 3});
+    expectChildLimits(optionalJoin, 5);
+  }
+  {
+    // A `LIMIT`/`OFFSET` that is applied on top of a previous one (which
+    // happens for nested subqueries) must not shrink the limit of the left
+    // child too much. Here the result consists of the rows 5 and 6, so the
+    // left child still has to supply 7 rows.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({10, 5});
+    expectChildLimits(optionalJoin, 15);
+    optionalJoin.applyLimitOffset({2, 0});
+    expectChildLimits(optionalJoin, 7);
+  }
+  {
+    // Adding up the limit and the offset must not overflow.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({std::numeric_limits<uint64_t>::max(), 1});
+    expectChildLimits(optionalJoin, std::nullopt);
+  }
+  {
+    // Without a limit there is no bound that could be pushed down.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({std::nullopt, 8});
+    expectChildLimits(optionalJoin, std::nullopt);
+  }
 }
 
 // _____________________________________________________________________________
@@ -868,10 +921,20 @@ TEST(OptionalJoin, limitOffsetIsPropagated) {
   }
 }
 // Test fixture for testing optionalJoinWithIndexScan with prefiltering.
+// The first test parameter controls whether the result of the join is requested
+// lazily, the second one whether the left input of the join is a fully
+// materialized result. The latter selects between the two implementations
+// inside `OptionalJoin::optionalJoinWithIndexScan`.
 class OptionalJoinWithIndexScan
-    : public ::testing::TestWithParam<bool>,
+    : public ::testing::TestWithParam<std::tuple<bool, bool>>,
       public ad_utility::testing::LazyJoinTestHelper {
  protected:
+  // Whether the result of the join is requested lazily.
+  bool requestLaziness() const { return std::get<0>(GetParam()); }
+
+  // Whether the left input of the join is a fully materialized result.
+  bool materializeLeft() const { return std::get<1>(GetParam()); }
+
   void SetUp() override {
     // Create a small knowledge graph with controlled block structure.
     // Using 8 bytes per column gives us a single triple per block.
@@ -893,22 +956,24 @@ class OptionalJoinWithIndexScan
                                                     xpy);
   }
 
+  // Create a `ValuesForTesting` instance for the left side of the join from the
+  // given constructor arguments. Depending on the test parameter the operation
+  // is forced to return a fully materialized result.
+  template <typename... Args>
+  std::shared_ptr<QueryExecutionTree> makeLeftSideValues(
+      QueryExecutionContext* qec, Args&&... args) const {
+    auto values = std::make_shared<ValuesForTesting>(qec, AD_FWD(args)...);
+    values->forceFullyMaterialized() = materializeLeft();
+    return std::make_shared<QueryExecutionTree>(qec, std::move(values));
+  }
+
   // Create a ValuesForTesting instance for the left side (single column).
   std::shared_ptr<QueryExecutionTree> makeLeftSide(
       IdTable table, std::vector<ColumnIndex> sortedColumns = {0}) const {
-    return ad_utility::makeExecutionTree<ValuesForTesting>(
+    return makeLeftSideValues(
         qec_, std::move(table),
         std::vector<std::optional<Variable>>{Variable{"?x"}}, false,
         std::move(sortedColumns));
-  }
-
-  // Create a ValuesForTesting instance for the left side (two columns).
-  std::shared_ptr<QueryExecutionTree> makeLeftSide2Col(
-      IdTable table, std::vector<ColumnIndex> sortedColumns = {0, 1}) const {
-    return ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec_, std::move(table),
-        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
-        false, std::move(sortedColumns));
   }
 
   // Turn the `result` into an `IdTable`, no matter whether it was materialized
@@ -919,8 +984,7 @@ class OptionalJoinWithIndexScan
     if (!result.isFullyMaterialized()) {
       IdTable lazyResult{optJoin.getResultWidth(), qec_->getAllocator()};
       for (auto& [idTable, localVocab] : result.idTables()) {
-        for (Id id :
-             ad_utility::OwningView{idTable.getColumns()} | ql::views::join) {
+        for (Id id : idTable.getColumns() | ql::views::join) {
           if (id.getDatatype() == Datatype::LocalVocabIndex) {
             EXPECT_TRUE(
                 localVocab.isLocalVocabIndexContained(id.getLocalVocabIndex()));
@@ -930,15 +994,14 @@ class OptionalJoinWithIndexScan
       }
       return lazyResult;
     } else {
-      return result.idTable().clone();
+      return result.cloneIdTable();
     }
   }
   // Helper to verify that lazy and materialized results match.
   void verifyLazyAndMaterializedMatch(OptionalJoin& optJoin,
                                       const IdTable& expected) const {
-    bool requestLaziness = GetParam();
-    auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
-    auto actual = materializeResult(optJoin, result, requestLaziness);
+    auto result = optJoin.computeResultOnlyForTesting(requestLaziness());
+    auto actual = materializeResult(optJoin, result, requestLaziness());
     EXPECT_EQ(actual, expected);
   }
 
@@ -995,10 +1058,9 @@ TEST_P(OptionalJoinWithIndexScan, singleColumnWithUndef) {
   OptionalJoin optJoin{qec_, left, right};
   qec_->getQueryTreeCache().clearAll();
 
-  bool requestLaziness = GetParam();
-  auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+  auto result = optJoin.computeResultOnlyForTesting(requestLaziness());
 
-  IdTable actual = materializeResult(optJoin, result, requestLaziness);
+  IdTable actual = materializeResult(optJoin, result, requestLaziness());
 
   // UNDEF matches all 8 rows, and `<a>` matches 2 rows.
   EXPECT_EQ(actual.numRows(), 10);
@@ -1061,20 +1123,23 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsBasicFiltering) {
 
   // Left side: two columns with UNDEF in second column.
   IdTable leftTable{2, makeAllocator()};
-  auto s1 = TripleComponent{TripleComponent::Iri::fromIriref("<s1>")}
-                .toValueId(qec2->getIndex())
-                .value();
-  auto s3 = TripleComponent{TripleComponent::Iri::fromIriref("<s3>")}
-                .toValueId(qec2->getIndex())
-                .value();
-  auto o1 = TripleComponent{TripleComponent::Iri::fromIriref("<o1>")}
-                .toValueId(qec2->getIndex())
-                .value();
+  auto s1 =
+      ::toValueId(TripleComponent{TripleComponent::Iri::fromIriref("<s1>")},
+                  qec2->getIndex())
+          .value();
+  auto s3 =
+      ::toValueId(TripleComponent{TripleComponent::Iri::fromIriref("<s3>")},
+                  qec2->getIndex())
+          .value();
+  auto o1 =
+      ::toValueId(TripleComponent{TripleComponent::Iri::fromIriref("<o1>")},
+                  qec2->getIndex())
+          .value();
 
   leftTable.push_back({s1, o1});  // matches 1 row
   leftTable.push_back({s3, U});   // matches 1 row.
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = makeLeftSideValues(
       qec2, std::move(leftTable),
       std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
       false, std::vector<ColumnIndex>{0, 1});
@@ -1088,10 +1153,9 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsBasicFiltering) {
   OptionalJoin optJoin{qec2, left, right};
   qec2->getQueryTreeCache().clearAll();
 
-  bool requestLaziness = GetParam();
-  auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+  auto result = optJoin.computeResultOnlyForTesting(requestLaziness());
 
-  IdTable actual = materializeResult(optJoin, result, requestLaziness);
+  IdTable actual = materializeResult(optJoin, result, requestLaziness());
 
   // Result should have 2 rows (one for each left entry matched with <p>
   // predicate).
@@ -1139,7 +1203,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   auto l3 = Id::makeFromLocalVocabIndex(v3.getIndexAndAddIfNotContained(i(3)));
   tAndV.emplace_back(makeIdTableFromVector({{s1, o2, l3}}), std::move(v3));
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = makeLeftSideValues(
       qec2, std::move(tAndV),
       std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"},
                                            Variable{"?payload"}},
@@ -1154,12 +1218,11 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   OptionalJoin optJoin{qec2, left, right};
   qec2->getQueryTreeCache().clearAll();
 
-  bool requestLaziness = GetParam();
-  auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+  auto result = optJoin.computeResultOnlyForTesting(requestLaziness());
 
   // `materializeResult` also verifies that each local vocab entry is in fact
   // being kep alive by the `LocalVocab`.
-  IdTable actual = materializeResult(optJoin, result, requestLaziness);
+  IdTable actual = materializeResult(optJoin, result, requestLaziness());
 
   // Result should have 2 rows (one for each left entry matched with <p>
   // predicate).
@@ -1185,12 +1248,14 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsMultipleMatches) {
   config.blocksizePermutations = 8_B;
   auto qec2 = getQec(std::move(config));
 
-  auto s1 = TripleComponent{TripleComponent::Iri::fromIriref("<s1>")}
-                .toValueId(qec2->getIndex())
-                .value();
-  auto s2 = TripleComponent{TripleComponent::Iri::fromIriref("<s2>")}
-                .toValueId(qec2->getIndex())
-                .value();
+  auto s1 =
+      ::toValueId(TripleComponent{TripleComponent::Iri::fromIriref("<s1>")},
+                  qec2->getIndex())
+          .value();
+  auto s2 =
+      ::toValueId(TripleComponent{TripleComponent::Iri::fromIriref("<s2>")},
+                  qec2->getIndex())
+          .value();
   auto o1 = Id::makeFromInt(2);
   auto o3 = Id::makeFromInt(4);
 
@@ -1201,7 +1266,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsMultipleMatches) {
   leftTable.push_back({s1, o3});  // doesn't match, but is added as undefined.
   leftTable.push_back({s2, U});
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = makeLeftSideValues(
       qec2, std::move(leftTable),
       std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
       false, std::vector<ColumnIndex>{0, 1});
@@ -1214,10 +1279,9 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsMultipleMatches) {
   OptionalJoin optJoin{qec2, left, right};
   qec2->getQueryTreeCache().clearAll();
 
-  bool requestLaziness = GetParam();
-  auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+  auto result = optJoin.computeResultOnlyForTesting(requestLaziness());
 
-  IdTable actual = materializeResult(optJoin, result, requestLaziness);
+  IdTable actual = materializeResult(optJoin, result, requestLaziness());
 
   // Should have 5 rows total (s1,U) with 2 matches, (s1,o1) with 1 match,, (s1,
   // o2) with zero matches, but optional;  s2 with 1 match).
@@ -1226,5 +1290,12 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsMultipleMatches) {
   checkPrefilteringStats(optJoin, 3, 4);
 }
 
-INSTANTIATE_TEST_SUITE_P(OptionalJoinWithIndexScanSuite,
-                         OptionalJoinWithIndexScan, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    OptionalJoinWithIndexScanSuite, OptionalJoinWithIndexScan,
+    ::testing::Combine(::testing::Bool(), ::testing::Bool()),
+    ([](const ::testing::TestParamInfo<OptionalJoinWithIndexScan::ParamType>&
+            info) {
+      const auto& [requestLaziness, materializeLeft] = info.param;
+      return absl::StrCat(requestLaziness ? "LazyResult" : "MaterializedResult",
+                          materializeLeft ? "MaterializedLeft" : "LazyLeft");
+    }));

@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 
 #include "backports/keywords.h"
 #include "util/Log.h"
@@ -225,6 +226,14 @@ using detail::TimeBlockAndLog;
 }  // namespace timer
 using timer::TimeBlockAndLog;
 using timer::Timer;
+
+// Unix-epoch milliseconds for a wall-clock instant; used to serialize
+// timestamps (e.g. in the query-event and resource-usage logs).
+inline int64_t epochMillis(std::chrono::system_clock::time_point tp) noexcept {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             tp.time_since_epoch())
+      .count();
+}
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_TIMER_H
