@@ -9,10 +9,12 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
 #include "index/IdTableUtils.h"
 #include "util/TransparentFunctors.h"
+#include "util/VarsRequiredFromSubtree.h"
 
 // _____________________________________________________________________________
 size_t OrderBy::getResultWidth() const { return subtree_->getResultWidth(); }
@@ -145,4 +147,51 @@ OrderBy::SortedVariables OrderBy::getSortedVariables() const {
 std::unique_ptr<Operation> OrderBy::cloneImpl() const {
   return std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
                                    sortIndices_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+OrderBy::makeTreeWithStrippedColumns(
+    const std::set<Variable>& variables) const {
+  // Add variables and the variables corresponding to the sortIndices_ to the
+  // variables that are required from the subtree.
+  VarsRequiredFromSubtree helper(variables);
+  std::vector<std::pair<Variable, bool>> sortVars;
+  for (const auto& sortIndex : sortIndices_) {
+    const auto& var =
+        subtree_->getVariableAndInfoByColumnIndex(sortIndex.first).first;
+    sortVars.push_back(std::pair{var, sortIndex.second});
+    helper.add(var);
+  }
+  // Collect all the variables that are required from the subtree.
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
+
+  // Continue with the recursion and strip columns of subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      subtree_, varsRequiredFromSubtree);
+
+  // Find out the new column indices to update sortIndices_
+  std::vector<std::pair<ColumnIndex, bool>> distinctSortIndices;
+  for (const auto& var : sortVars) {
+    distinctSortIndices.push_back(
+        std::pair{subtree->getVariableColumn(var.first), var.second});
+  }
+
+  // Create query execution tree with OrderBy-Operation as root operation.
+  auto treeWithOrderByRoot = ad_utility::makeExecutionTree<OrderBy>(
+      getExecutionContext(), std::move(subtree), distinctSortIndices);
+
+  // The variables in sortVars (resulting from sortIndices_) are needed to
+  // compute OrderBy-Operation, but do not necessarily belong to the result
+  // requested by the parent tree.
+  // If all sortVars are requested by the parent tree, return
+  // treeWithOrderByRoot. If not, an additional StripColumns-Operation is added
+  // in the executionTree above the OrderBy-Operation.
+  if (ql::ranges::all_of(sortVars, [&variables](const auto& sortVar) {
+        return ad_utility::contains(variables, sortVar.first);
+      })) {
+    return treeWithOrderByRoot;
+  }
+  return ad_utility::makeExecutionTree<StripColumns>(
+      getExecutionContext(), std::move(treeWithOrderByRoot), variables);
 }
