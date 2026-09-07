@@ -23,6 +23,7 @@
 #include "global/ValueId.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/TripleComponentConversions.h"
+#include "parser/RdfAsyncParallelParser.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
@@ -1313,6 +1314,11 @@ std::vector<TurtleTriple> parseFromFileAsync(
                      qlever::InputFileSpecification{
                          filename, qlever::Filetype::Turtle, std::nullopt},
                      bufferSize, encodedIriManager()};
+  // The parser has to outlive all of its in-flight `asyncGetBatch()` calls, so
+  // the pool has to be joined while the parser is still alive. This matters on
+  // the error path below, where `future.get()` throws and the calls that are
+  // still in flight are abandoned.
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
 
   using FutureBatch = std::future<std::optional<std::vector<TurtleTriple>>>;
   std::vector<FutureBatch> inFlight;
@@ -1428,6 +1434,8 @@ TEST(RdfParserTest, asyncParallelParserHaltsOnFirstError) {
                   qlever::InputFileSpecification{
                       filename, qlever::Filetype::Turtle, std::nullopt},
                   1_kB, encodedIriManager()};
+    // See the comment in `parseFromFileAsync` above.
+    absl::Cleanup joinPool = [&pool] { pool.join(); };
 
     // The first call encounters the parse error and propagates it.
     EXPECT_ANY_THROW(parser.asyncGetBatch(boost::asio::use_future).get());

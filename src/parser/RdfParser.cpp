@@ -13,7 +13,6 @@
 #include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
-#include <boost/asio/use_future.hpp>
 #include <cstring>
 #include <ctre-unicode.hpp>
 #include <exception>
@@ -1158,17 +1157,8 @@ template <typename T>
 template <typename Batch>
 void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   try {
-    RdfStringParser<T> parser{&this->encodedIriManager(), defaultGraphIri_};
-    parser.header() = header_;
-    parser.useSimplifiedGrammar();
-    parser.setPositionOffset(parsePosition);
-    // Ensure that all sub-parsers use the same file-level blank node prefix
-    // so that user-specified blank node labels (_:foo) have the same ID
-    // across all batches of the same file.
-    parser.setFileBlankNodePrefix(fileBlankNodePrefix_);
-    parser.setInputStream(std::move(batch));
     // TODO: raise error message if a prefix parsing fails;
-    tripleCollector_.push(parser.parseAndReturnAllTriples());
+    tripleCollector_.push(state_.parseBatch(std::move(batch), parsePosition));
     finishTripleCollectorIfLastBatch();
   } catch (std::exception& e) {
     errorMessages_.wlock()->emplace_back(parsePosition, e.what());
@@ -1230,32 +1220,16 @@ void RdfParallelParser<T>::initialize(
     const qlever::InputFileSpecification& spec,
     ad_utility::MemorySize blocksize) {
   driver_.emplace(spec, blocksize, detail::findEndOfLastStatement,
-                  "a dot followed by a newline");
-  qlever::parser::ByteBlock remainingBatchFromInitialization;
-  RdfStringParser<T> declarationParser{&this->encodedIriManager()};
-  std::string_view remainder;
-  while (remainder.empty()) {
-    if (auto batch = driver_.value().getNextBlock()) {
-      declarationParser.setInputStream(std::move(batch.value()));
-      while (declarationParser.parseDirectiveManually()) {
-      }
-      remainder = declarationParser.getUnparsedRemainder();
-    } else {
-      AD_LOG_WARN
-          << "Empty input to the TURTLE parser, is this what you intended?"
-          << std::endl;
-      break;
-    }
-  }
-  header_ = std::move(declarationParser.header());
-  remainingBatchFromInitialization.reserve(remainder.size());
-  ql::ranges::copy(remainder,
-                   std::back_inserter(remainingBatchFromInitialization));
+                  std::string{detail::statementBoundaryDescription});
+  state_.parseHeader([this]() { return driver_.value().getNextBlock(); });
 
-  auto feedBatches = [this, firstBatch = std::move(
-                                remainingBatchFromInitialization)]() mutable {
-    feedBatchesToParser(std::move(firstBatch));
-  };
+  // NOTE: This is the only call to `takeRemainderFromInitialization`, so it
+  // always yields the remainder.
+  auto feedBatches =
+      [this, firstBatch =
+                 state_.takeRemainderFromInitialization().value()]() mutable {
+        feedBatchesToParser(std::move(firstBatch));
+      };
 
   parseFuture_ = std::async(std::launch::async, feedBatches);
 }
@@ -1303,59 +1277,6 @@ RdfParallelParser<T>::~RdfParallelParser() {
         parseFuture_.wait();
       },
       "During the destruction of a RdfParallelParser");
-}
-
-// ____________________________________________________________________________
-template <typename Parser>
-RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
-    const boost::asio::any_io_executor& executor,
-    const qlever::InputFileSpecification& spec,
-    ad_utility::MemorySize blocksize,
-    const EncodedIriManager* encodedIriManager,
-    const TripleComponent& defaultGraphIri)
-    : executor_{executor},
-      encodedIriManager_{encodedIriManager},
-      defaultGraphIri_{defaultGraphIri},
-      blockSource_{executor, spec.makeAsyncBlockSource(executor, blocksize),
-                   detail::findEndOfLastStatement,
-                   "a dot followed by a newline"},
-      blockFetchPermit_{executor, 1} {
-  RdfStringParser<Parser> declarationParser{encodedIriManager};
-  std::string_view remainder;
-  while (remainder.empty()) {
-    // NOTE: The header is parsed eagerly and synchronously, so the `executor`
-    // has to be running already (which it is for a `boost::asio::thread_pool`,
-    // the intended use of this class).
-    if (auto batch =
-            blockSource_.asyncGetNextBlock(boost::asio::use_future).get()) {
-      declarationParser.setInputStream(std::move(batch.value()));
-      while (declarationParser.parseDirectiveManually()) {
-      }
-      remainder = declarationParser.getUnparsedRemainder();
-    } else {
-      AD_LOG_WARN
-          << "Empty input to the TURTLE parser, is this what you intended?"
-          << std::endl;
-      break;
-    }
-  }
-  header_ = std::move(declarationParser.header());
-  remainderFromInit_.reserve(remainder.size());
-  ql::ranges::copy(remainder, std::back_inserter(remainderFromInit_));
-}
-
-// ____________________________________________________________________________
-template <typename Parser>
-std::vector<TurtleTriple> RdfAsyncParallelParser<Parser>::parseBatch(
-    qlever::parser::ByteBlock batch) {
-  RdfStringParser<Parser> parser{encodedIriManager_, defaultGraphIri_};
-  parser.header() = header_;
-  parser.useSimplifiedGrammar();
-  // Ensure that all sub-parsers use the same file-level blank node prefix, see
-  // `RdfParallelParser::parseBatch`.
-  parser.setFileBlankNodePrefix(fileBlankNodePrefix_);
-  parser.setInputStream(std::move(batch));
-  return parser.parseAndReturnAllTriples();
 }
 
 // Create a parser for a single file of an `InputFileSpecification`. The type
@@ -1471,11 +1392,7 @@ template class RdfStreamParser<TurtleParser<Tokenizer>>;
 template class RdfStreamParser<TurtleParser<TokenizerCtre>>;
 template class RdfParallelParser<TurtleParser<Tokenizer>>;
 template class RdfParallelParser<TurtleParser<TokenizerCtre>>;
-template class RdfAsyncParallelParser<TurtleParser<Tokenizer>>;
-template class RdfAsyncParallelParser<TurtleParser<TokenizerCtre>>;
 template class RdfStreamParser<NQuadParser<Tokenizer>>;
 template class RdfStreamParser<NQuadParser<TokenizerCtre>>;
 template class RdfParallelParser<NQuadParser<Tokenizer>>;
 template class RdfParallelParser<NQuadParser<TokenizerCtre>>;
-template class RdfAsyncParallelParser<NQuadParser<Tokenizer>>;
-template class RdfAsyncParallelParser<NQuadParser<TokenizerCtre>>;
