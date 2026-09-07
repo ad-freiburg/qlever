@@ -36,7 +36,7 @@ class PolymorphicVocabulary;
 // needs a special `getPositionOfWord` for a completely different reason.
 template <typename T>
 CPP_concept HasSpecialGetPositionOfWord =
-    ad_utility::isInstantiation<T, SplitVocabulary> ||
+    isSplitVocabulary<T> ||
     ad_utility::SameAsAny<T, PolymorphicVocabulary, VocabularyInMemoryBinSearch,
                           CompressedVocabulary<VocabularyInMemoryBinSearch>>;
 
@@ -59,8 +59,7 @@ CPP_concept HasDefaultGetPositionOfWord =
 // `isGeoInfoAvailable` to determine for sure.
 template <typename T>
 CPP_concept MaybeProvidesGeometryInfo =
-    std::is_same_v<T, PolymorphicVocabulary> ||
-    ad_utility::isInstantiation<T, SplitVocabulary> ||
+    std::is_same_v<T, PolymorphicVocabulary> || isSplitVocabulary<T> ||
     ad_utility::isInstantiation<T, GeoVocabulary>;
 
 // As a safeguard for the future: This concept states that a vocabulary
