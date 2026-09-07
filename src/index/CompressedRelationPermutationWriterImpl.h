@@ -288,13 +288,13 @@ struct CompressedRelationWriter::PermutationWriter {
     AD_CORRECTNESS_CHECK(!relation_.empty());
     const auto lastBufferedTriple =
         pickFirstThreeColumnsOfIdsWithoutLocalVocab(relation_.back());
-    for (size_t idx = begin; idx < end; ++idx) {
-      if (pickFirstThreeColumnsOfIdsWithoutLocalVocab(rows[idx]) !=
-          lastBufferedTriple) {
-        return idx;
-      }
-    }
-    return end;
+    auto it = ql::ranges::find_if(
+        rows.begin() + begin, rows.begin() + end,
+        [&lastBufferedTriple](const auto& triple) {
+          return triple != lastBufferedTriple;
+        },
+        pickFirstThreeColumnsOfIdsWithoutLocalVocab);
+    return static_cast<size_t>(it - rows.begin());
   }
 
   // Append the rows `[begin, end)` of `permutedCols`, which all belong to the
@@ -304,21 +304,42 @@ struct CompressedRelationWriter::PermutationWriter {
   // the `IdTable`s are stored column-based. A new block for a large relation
   // is started whenever the buffer has reached the `blocksize_` and the first
   // three columns change (see `findFirstTripleChange` above).
+  //
+  // Note: This function is always called for the rows of a large relation, but
+  // also for the rows of a small relation that spans several input blocks,
+  // because in that case we don't know yet that the relation will be small
+  // (see `isCompleteSmallRelation` below). It therefore has to work correctly
+  // for both cases.
   template <typename PermutedCols>
   void addRowsOfCurrentRelation(const PermutedCols& permutedCols, size_t begin,
                                 size_t end) {
     using compressedRelationHelpers::c1Idx;
     auto col1 = permutedCols.getColumn(c1Idx);
     while (begin < end) {
+      // Determine the largest chunk of rows that may be appended in one go.
       size_t chunkEnd;
       if (relation_.numRows() < blocksize_) {
+        // The buffer is not yet full, so we can simply append the rows that
+        // are missing to reach the `blocksize_`.
         chunkEnd = std::min(end, begin + (blocksize_ - relation_.numRows()));
       } else {
+        // The buffer is full, so we may only append rows that are equal to the
+        // last buffered row with respect to the first three columns, because
+        // equal triples have to stay in the same block.
         chunkEnd = findFirstTripleChange(permutedCols, begin, end);
         if (chunkEnd == begin) {
+          // The very next row is already different, so the block is complete.
+          // The next iteration then starts filling a fresh buffer.
           addBlockForLargeRelation();
           continue;
         }
+        // Otherwise the buffer deliberately grows beyond the `blocksize_`. If
+        // `chunkEnd < end`, then the block is completed by the branch above in
+        // the very next iteration. If `chunkEnd == end`, then we have to leave
+        // the block open, because the rows of this relation may continue in
+        // the next input block with further equal triples, which then have to
+        // end up in the same block. Such a block is eventually written either
+        // by the next call to this function or by `finishRelation`.
       }
       ql::ranges::for_each(col1.subspan(begin, chunkEnd - begin),
                            std::ref(distinctCol1Counter_));
