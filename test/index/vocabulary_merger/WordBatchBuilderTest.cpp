@@ -63,7 +63,7 @@ std::vector<Mapping> mappingsOf(const WordBatch& batch) {
     const auto& mapping = localIdxMappings.mappings_[i];
     result.push_back(Mapping{mapping.partialVocabularyIndex_,
                              mapping.indexOfWordInBatch_,
-                             mapping.indexOfWordInPartialVocabulary_});
+                             mapping.indexOfWordInPartialVocabulary_.get()});
   }
   return result;
 }

@@ -29,7 +29,7 @@ CPP_concept WordCallback =
 // `string_view`s) according to the order of the merged vocabulary.
 template <typename T>
 CPP_concept WordComparator =
-    ranges::predicate<T, std::string_view, std::string_view>;
+    ::ranges::predicate<T, std::string_view, std::string_view>;
 }  // namespace ad_utility::vocabulary_merger
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_MERGER_CONCEPTS_H

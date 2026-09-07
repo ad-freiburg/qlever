@@ -33,6 +33,11 @@ class VocabularyInMemoryBinSearch
   using Indices = std::vector<uint64_t>;
   using IndicesView = ql::span<const uint64_t>;
 
+  // This suffix is appended to the base filename in order to get the name of
+  // the file in which the (because of the holes, explicit) indices of the words
+  // are stored. The words themselves are stored under the base filename itself.
+  static constexpr std::string_view idsSuffix = ".ids";
+
   // The holes of this vocabulary are deliberate: such a vocabulary is created
   // by excluding some of the entries of a larger vocabulary, and is used in
   // settings where looking up an excluded entry must not throw. Exporting a
@@ -99,6 +104,30 @@ class VocabularyInMemoryBinSearch
   // `position` must be smaller than `size()`.
   uint64_t indexAtPosition(size_t position) const;
 
+  // Return the word at the given `position` (i.e. the offset into the words,
+  // which because of the holes is in general different from the vocabulary
+  // index, see `positionOfIndex`). The `position` must be smaller than
+  // `size()`.
+  std::string_view wordAtPosition(size_t position) const;
+
+  // Return the vocabulary index one past the largest index that is contained
+  // in this vocabulary, or `0` if the vocabulary is empty. Because of the
+  // holes, this is in general much larger than `size()`.
+  uint64_t endIndex() const;
+
+  // Return the range of vocabulary indices at which `word` is stored, or the
+  // empty range at the index at which it would be stored if it is not
+  // contained. This vocabulary needs a special implementation of this function
+  // (see `HasSpecialGetPositionOfWord` in `VocabularyConstraints.h`), because
+  // the generic implementation would use `size()` as the "one past the end"
+  // index, which is wrong in the presence of holes (see `endIndex`).
+  template <typename InternalStringType, typename Comparator>
+  std::pair<uint64_t, uint64_t> getPositionOfWord(
+      const InternalStringType& word, Comparator comparator) const {
+    return ad_utility::vocabulary::getPositionOfWordInVocabWithHoles(
+        *this, word, std::move(comparator), endIndex());
+  }
+
   // Return the word with index `index`. If this index is not part of the
   // vocabulary, return `std::nullopt`.
   std::optional<std::string_view> operator[](uint64_t index) const;
@@ -145,6 +174,10 @@ class VocabularyInMemoryBinSearch
     // disk.
     void finish();
   };
+
+  // The words are stored under the base filename itself, their explicit
+  // indices in an additional file (see `idsSuffix`).
+  static FileSuffixes fileSuffixes() { return {"", std::string{idsSuffix}}; }
 
   // A vocabulary with holes cannot be written via the `WordWriterBase`
   // interface (which cannot express the explicit indices), so this function

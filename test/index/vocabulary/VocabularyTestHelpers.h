@@ -5,6 +5,8 @@
 #ifndef QLEVER_VOCABULARYTESTHELPERS_H
 #define QLEVER_VOCABULARYTESTHELPERS_H
 
+#include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include <array>
@@ -13,6 +15,7 @@
 #include "backports/span.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/File.h"
 
 // human-readable output for the `WordAndIndex` class within GTest.
 inline void PrintTo(const WordAndIndex& wi, std::ostream* osPtr) {
@@ -337,6 +340,54 @@ void assertVocabularyMatchesContiguousIndices(
       vocab, ql::views::iota(size_t{0}, expectedWords.size()), expectedWords);
 }
 
+// Test `endIndex()` and `getPositionOfWord()` of a vocabulary with "holes"
+// (see `VocabularyInMemoryBinSearch`) that contains `words.at(i)` at the
+// vocabulary index `indices.at(i)`. The `words` must be sorted, the `indices`
+// ascending, and both must be non-empty. Each entry of `wordsNotContained`
+// pairs a word that the vocabulary does not contain with the vocabulary index
+// of the first word that is greater than it.
+template <typename Vocab>
+void testEndIndexAndGetPositionOfWord(
+    const Vocab& vocab, ql::span<const std::string> words,
+    ql::span<const uint64_t> indices,
+    const std::vector<std::pair<std::string, uint64_t>>& wordsNotContained) {
+  using Pair = std::pair<uint64_t, uint64_t>;
+  ASSERT_EQ(words.size(), indices.size());
+  ASSERT_FALSE(words.empty());
+  auto getPositionOfWord = [&vocab](std::string_view word) {
+    return vocab.getPositionOfWord(word, ql::ranges::less{});
+  };
+
+  // The "one past the end" index is one larger than the largest contained
+  // index, and NOT `size()`.
+  ASSERT_EQ(vocab.endIndex(), indices.back() + 1);
+  ASSERT_NE(vocab.endIndex(), vocab.size());
+
+  // A word that is contained yields the half-open range consisting of exactly
+  // its (non-contiguous) vocabulary index. This also has to work across the
+  // boundaries of the blocks that a vocabulary may internally use.
+  for (const auto& [word, index] : ::ranges::views::zip(words, indices)) {
+    EXPECT_EQ(getPositionOfWord(word), (Pair{index, index + 1}))
+        << "for the word \"" << word << '"';
+  }
+
+  // A word that is not contained yields the empty range at the index of the
+  // first word that is greater than it.
+  for (const auto& [word, expectedIndex] : wordsNotContained) {
+    EXPECT_EQ(getPositionOfWord(word), (Pair{expectedIndex, expectedIndex}))
+        << "for the word \"" << word << '"';
+  }
+
+  // A word that is greater than all contained words yields the empty range at
+  // `endIndex()`. Using `size()` here would be a bug, because `size()` is in
+  // general much smaller than the largest contained index, so such a word
+  // would be reported as sorting before words that are actually smaller.
+  auto wordAfterAll = absl::StrCat(words.back(), "x");
+  EXPECT_EQ(getPositionOfWord(wordAfterAll),
+            (Pair{vocab.endIndex(), vocab.endIndex()}));
+  EXPECT_GT(getPositionOfWord(wordAfterAll).first, indices.back());
+}
+
 // Assert that `lookupResult[i]` equals `vocab[indices[i]]`, for all positions
 // `i`.
 template <typename Vocab, typename Indices>
@@ -374,6 +425,57 @@ void assertStreamedLookupMatchesVocabularyAtIndices(
        ::ranges::views::zip(results, expectedBatches)) {
     assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
   }
+}
+
+// The names of all the files that a vocabulary with the given base `filename`
+// and the given `suffixes` consists of (see `FileSuffixes`).
+inline std::vector<std::string> vocabularyFilenames(
+    const std::string& filename, const FileSuffixes& suffixes) {
+  std::vector<std::string> filenames;
+  for (const std::string& suffix : suffixes) {
+    filenames.push_back(absl::StrCat(filename, suffix));
+  }
+  return filenames;
+}
+
+// Same as above, for a vocabulary of the given (statically known) type.
+template <typename Vocabulary>
+std::vector<std::string> vocabularyFilenames(const std::string& filename) {
+  return vocabularyFilenames(filename, Vocabulary::fileSuffixes());
+}
+
+// Delete all the files that a vocabulary with the given base `filename` and the
+// given `suffixes` consists of. Do not warn about files that were never
+// created, which happens for example when a test deliberately throws while
+// writing the vocabulary.
+inline void deleteVocabularyFiles(const std::string& filename,
+                                  const FileSuffixes& suffixes) {
+  for (const std::string& file : vocabularyFilenames(filename, suffixes)) {
+    ad_utility::deleteFile(file, false);
+  }
+}
+
+// Same as above, for a vocabulary of the given (statically known) type.
+template <typename Vocabulary>
+void deleteVocabularyFiles(const std::string& filename) {
+  deleteVocabularyFiles(filename, Vocabulary::fileSuffixes());
+}
+
+// Return an `absl::Cleanup` that deletes all the files that a vocabulary with
+// the given base `filename` and the given `suffixes` consists of (see
+// `deleteVocabularyFiles` above). The arguments are copied into the returned
+// object, which therefore stays valid independently of them.
+inline auto makeVocabFileCleanup(std::string filename, FileSuffixes suffixes) {
+  return absl::Cleanup{
+      [filename = std::move(filename), suffixes = std::move(suffixes)] {
+        deleteVocabularyFiles(filename, suffixes);
+      }};
+}
+
+// Same as above, for a vocabulary of the given (statically known) type.
+template <typename Vocabulary>
+auto makeVocabFileCleanup(std::string filename) {
+  return makeVocabFileCleanup(std::move(filename), Vocabulary::fileSuffixes());
 }
 
 }  // namespace vocabulary_test

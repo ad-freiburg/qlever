@@ -23,21 +23,23 @@ using namespace ad_utility::vocabulary_merger;
 
 namespace {
 auto V = ad_utility::testing::VocabId;
+// Shorthand for the local index that a word has inside a partial vocabulary.
+auto L = &VocabIndex::make;
 }  // namespace
 
 // _____________________________________________________________________________
 // Two `IdMapEntry`s are equal if and only if both of their members are equal.
 TEST(IdMapEntry, comparisonAndOutput) {
-  IdMapEntry entry{3, V(4)};
-  EXPECT_EQ(entry, (IdMapEntry{3, V(4)}));
-  EXPECT_NE(entry, (IdMapEntry{4, V(4)}));
-  EXPECT_NE(entry, (IdMapEntry{3, V(5)}));
+  IdMapEntry entry{L(3), V(4)};
+  EXPECT_EQ(entry, (IdMapEntry{L(3), V(4)}));
+  EXPECT_NE(entry, (IdMapEntry{L(4), V(4)}));
+  EXPECT_NE(entry, (IdMapEntry{L(3), V(5)}));
 
-  // The output consists of the local index and the global ID (which brings its
-  // own `operator<<`), in braces.
+  // The output consists of the local index and the global ID (both of which
+  // bring their own `operator<<`), in braces.
   std::ostringstream stream;
   stream << entry;
-  EXPECT_THAT(stream.str(), ::testing::StartsWith("{3, "));
+  EXPECT_THAT(stream.str(), ::testing::StartsWith("{VocabIndex:3, "));
   EXPECT_THAT(stream.str(), ::testing::EndsWith("}"));
 }
 
@@ -49,19 +51,19 @@ TEST(IdMapWriter, writeAndReadBack) {
   // Far more entries than fit into the internal buffer of the writer, such
   // that the buffer has to be flushed many times.
   const size_t numPairs = 200'000;
-  ASSERT_GT(numPairs * 16, 10 * IdMapWriter::bufferSize.getBytes());
+  ASSERT_GT(numPairs * 16, 10 * idMapWriterBufferSize.getBytes());
   IdMap expected;
   expected.reserve(numPairs);
   for (size_t i = 0; i < numPairs; ++i) {
-    expected.emplace_back(i, V(2 * i + 1));
+    expected.push_back({L(i), V(2 * i + 1)});
   }
 
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
   {
-    IdMapWriter writer{filename};
+    auto writer = makeIdMapWriter(filename);
     for (const auto& pair : expected) {
-      writer.push_back(pair);
+      writer.push(pair);
     }
   }
   EXPECT_THAT(getIdMapFromFile(filename),
@@ -80,7 +82,7 @@ TEST(IdMapWriter, emptyAndExplicitFinish) {
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
   {
-    IdMapWriter writer{filename};
+    auto writer = makeIdMapWriter(filename);
     writer.finish();
     EXPECT_THAT(getIdMapFromFile(filename), ::testing::IsEmpty());
     writer.finish();
@@ -88,12 +90,12 @@ TEST(IdMapWriter, emptyAndExplicitFinish) {
   EXPECT_THAT(getIdMapFromFile(filename), ::testing::IsEmpty());
 
   {
-    IdMapWriter writer{filename};
-    writer.push_back({3, V(4)});
+    auto writer = makeIdMapWriter(filename);
+    writer.push({L(3), V(4)});
     writer.finish();
     EXPECT_THAT(getIdMapFromFile(filename),
-                ::testing::ElementsAre(IdMapEntry{3, V(4)}));
+                ::testing::ElementsAre(IdMapEntry{L(3), V(4)}));
   }
   EXPECT_THAT(getIdMapFromFile(filename),
-              ::testing::ElementsAre(IdMapEntry{3, V(4)}));
+              ::testing::ElementsAre(IdMapEntry{L(3), V(4)}));
 }

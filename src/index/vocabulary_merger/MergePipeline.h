@@ -10,10 +10,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_MERGEPIPELINE_H
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_MERGEPIPELINE_H
 
-#include <re2/re2.h>
-
 #include <cstddef>
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -24,6 +21,7 @@
 #include "index/vocabulary_merger/VocabularyMetaData.h"
 #include "index/vocabulary_merger/VocabularyWriter.h"
 #include "index/vocabulary_merger/WordBatch.h"
+#include "util/RegexSet.h"
 #include "util/TaskQueue.h"
 
 // The asynchronous part of the merging pipeline of the vocabulary merger (see
@@ -56,10 +54,12 @@ class VocabularyMergePipeline {
       queueSize, 1, "Writing the merged vocabulary"};
 
  public:
-  // Create the pipeline. The `basename` and `numFiles` determine the files of
-  // the partial ID maps (see `IdMapBatchWriter`).
-  VocabularyMergePipeline(const std::string& basename, size_t numFiles)
-      : idMapBatchWriter_{basename, numFiles} {}
+  // Create the pipeline. The `basename` and the `partialVocabularySuffixes`
+  // determine the files of the partial ID maps (see `IdMapBatchWriter`).
+  VocabularyMergePipeline(
+      const std::string& basename,
+      const std::vector<std::string>& partialVocabularySuffixes)
+      : idMapBatchWriter_{basename, partialVocabularySuffixes} {}
 
   // Asynchronously process a single `batch` of merged words: write its
   // distinct words to the vocabulary (via the `wordCallback` and the
@@ -72,7 +72,7 @@ class VocabularyMergePipeline {
   // returned.
   CPP_template(typename C)(requires WordCallback<C>) void push(
       WordBatch batch, C& wordCallback,
-      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes);
+      const ad_utility::RegexSet& blankNodeIriRegexes);
 
   // Wait until all the batches that were pushed have been processed
   // completely, close the ID maps, and return the metadata of the merged
@@ -84,7 +84,7 @@ class VocabularyMergePipeline {
 CPP_template_def(typename C)(
     requires WordCallback<C>) void VocabularyMergePipeline::
     push(WordBatch batch, C& wordCallback,
-         const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes) {
+         const ad_utility::RegexSet& blankNodeIriRegexes) {
   wordWriterQueue_.push([this, batch = std::move(batch), &wordCallback,
                          &blankNodeIriRegexes]() mutable {
     auto idMapBatch = vocabularyWriter_.writeWordsToVocabulary(

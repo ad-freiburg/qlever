@@ -28,6 +28,8 @@ using ad_utility::vocabulary_merger::detail::LocalIdxToBatchMappings;
 
 namespace {
 auto V = ad_utility::testing::VocabId;
+// Shorthand for the local index that a word has inside a partial vocabulary.
+auto L = &VocabIndex::make;
 
 // Create an `IdMapBatch` from the given `mappings` and `globalIds`. In
 // contrast to the `WordBatchBuilder` (which allocates the mappings in
@@ -50,8 +52,10 @@ IdMapBatch makeBatch(const std::vector<LocalIdxToBatchMapping>& mappings,
 TEST(IdMapBatchWriter, writeSeveralBatches) {
   static constexpr size_t numFiles = 3;
   std::string basename = absl::StrCat(gtestCurrentTestName(), "-");
+  std::vector<std::string> suffixes;
   std::vector<std::string> filenames;
   for (size_t i = 0; i < numFiles; ++i) {
+    suffixes.push_back(std::to_string(i));
     filenames.push_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
   }
   absl::Cleanup cleanup = [&filenames] {
@@ -61,31 +65,32 @@ TEST(IdMapBatchWriter, writeSeveralBatches) {
   };
 
   {
-    IdMapBatchWriter writer{basename, numFiles};
+    IdMapBatchWriter writer{basename, suffixes};
     // The first batch has two distinct words with the global IDs `10` and
     // `11`. The first word occurs in the partial vocabularies `0` and `2`, the
     // second one only in `0`.
     writer.writeBatch(makeBatch(
-        {LocalIdxToBatchMapping{0, 0, 7}, LocalIdxToBatchMapping{2, 0, 8},
-         LocalIdxToBatchMapping{0, 1, 9}},
+        {LocalIdxToBatchMapping{0, 0, L(7)}, LocalIdxToBatchMapping{2, 0, L(8)},
+         LocalIdxToBatchMapping{0, 1, L(9)}},
         {V(10), V(11)}));
     // The second batch has a single word with the global ID `12`, which occurs
     // in all three partial vocabularies.
-    writer.writeBatch(makeBatch(
-        {LocalIdxToBatchMapping{0, 0, 100}, LocalIdxToBatchMapping{1, 0, 101},
-         LocalIdxToBatchMapping{2, 0, 102}},
-        {V(12)}));
+    writer.writeBatch(makeBatch({LocalIdxToBatchMapping{0, 0, L(100)},
+                                 LocalIdxToBatchMapping{1, 0, L(101)},
+                                 LocalIdxToBatchMapping{2, 0, L(102)}},
+                                {V(12)}));
     writer.finish();
   }
 
-  EXPECT_THAT(getIdMapFromFile(filenames[0]),
-              ::testing::ElementsAre(IdMapEntry{7, V(10)}, IdMapEntry{9, V(11)},
-                                     IdMapEntry{100, V(12)}));
-  EXPECT_THAT(getIdMapFromFile(filenames[1]),
-              ::testing::ElementsAre(IdMapEntry{101, V(12)}));
   EXPECT_THAT(
-      getIdMapFromFile(filenames[2]),
-      ::testing::ElementsAre(IdMapEntry{8, V(10)}, IdMapEntry{102, V(12)}));
+      getIdMapFromFile(filenames[0]),
+      ::testing::ElementsAre(IdMapEntry{L(7), V(10)}, IdMapEntry{L(9), V(11)},
+                             IdMapEntry{L(100), V(12)}));
+  EXPECT_THAT(getIdMapFromFile(filenames[1]),
+              ::testing::ElementsAre(IdMapEntry{L(101), V(12)}));
+  EXPECT_THAT(getIdMapFromFile(filenames[2]),
+              ::testing::ElementsAre(IdMapEntry{L(8), V(10)},
+                                     IdMapEntry{L(102), V(12)}));
 }
 
 // _____________________________________________________________________________
@@ -98,7 +103,7 @@ TEST(IdMapBatchWriter, noBatches) {
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename, false);
   };
-  { IdMapBatchWriter writer{basename, 1}; }
+  { IdMapBatchWriter writer{basename, {"0"}}; }
   EXPECT_THAT(getIdMapFromFile(filename), ::testing::IsEmpty());
 }
 
@@ -112,14 +117,14 @@ TEST(IdMapBatchWriter, onlyValidMappingsAreWritten) {
     ad_utility::deleteFile(filename, false);
   };
 
-  auto batch = makeBatch({LocalIdxToBatchMapping{0, 0, 42}}, {V(43)});
+  auto batch = makeBatch({LocalIdxToBatchMapping{0, 0, L(42)}}, {V(43)});
   // Allocate (but do not initialize) space for many more mappings, exactly as
   // the `WordBatchBuilder` does.
   batch.localIdxMappings_.mappings_.resize(1000);
   {
-    IdMapBatchWriter writer{basename, 1};
+    IdMapBatchWriter writer{basename, {"0"}};
     writer.writeBatch(batch);
   }
   EXPECT_THAT(getIdMapFromFile(filename),
-              ::testing::ElementsAre(IdMapEntry{42, V(43)}));
+              ::testing::ElementsAre(IdMapEntry{L(42), V(43)}));
 }

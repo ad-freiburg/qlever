@@ -20,6 +20,7 @@
 
 #include "backports/algorithm.h"
 #include "global/Id.h"
+#include "global/VocabIndex.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary_merger/IdMap.h"
 #include "util/Exception.h"
@@ -46,7 +47,7 @@ namespace ad_utility::vocabulary_merger::detail {
 struct LocalIdxToBatchMapping {
   uint32_t partialVocabularyIndex_;
   uint32_t indexOfWordInBatch_;
-  uint64_t indexOfWordInPartialVocabulary_;
+  VocabIndex indexOfWordInPartialVocabulary_;
 };
 static_assert(sizeof(LocalIdxToBatchMapping) == 16,
               "The members of a `LocalIdxToBatchMapping` have to be declared "
@@ -81,20 +82,23 @@ class IdMapBatchWriter {
   std::vector<IdMapWriter> idMapWriters_;
 
  public:
-  // Create the ID map for each of the `numFiles` partial vocabularies. The
-  // filenames are `basename + PARTIAL_VOCAB_IDMAP_INFIX + i`.
-  IdMapBatchWriter(const std::string& basename, size_t numFiles) {
+  // Create the ID map for each of the partial vocabularies. The filenames are
+  // `basename + PARTIAL_VOCAB_IDMAP_INFIX + suffix` for each `suffix` in
+  // `partialVocabularySuffixes`.
+  IdMapBatchWriter(const std::string& basename,
+                   const std::vector<std::string>& partialVocabularySuffixes) {
     // The index of the partial vocabulary is stored in a `uint32_t` for each of
     // the (very many) mappings, see `LocalIdxToBatchMapping`.
-    AD_CORRECTNESS_CHECK(numFiles <= std::numeric_limits<uint32_t>::max());
+    AD_CORRECTNESS_CHECK(partialVocabularySuffixes.size() <=
+                         std::numeric_limits<uint32_t>::max());
     // NOTE: We deliberately use the range constructor of `std::vector` and not
     // `::ranges::to_vector`. The latter goes via `std::vector::assign`, which
     // requires the elements to be assignable, which an `IdMapWriter`
     // deliberately is not (see `index/vocabulary_merger/IdMap.h`).
-    auto writers = ad_utility::integerRange(numFiles) |
-                   ql::views::transform([&basename](size_t i) {
-                     return IdMapWriter{
-                         absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i)};
+    auto writers = partialVocabularySuffixes |
+                   ql::views::transform([&basename](const std::string& suffix) {
+                     return makeIdMapWriter(absl::StrCat(
+                         basename, PARTIAL_VOCAB_IDMAP_INFIX, suffix));
                    });
     idMapWriters_ = std::vector<IdMapWriter>(ql::ranges::begin(writers),
                                              ql::ranges::end(writers));
@@ -107,7 +111,7 @@ class IdMapBatchWriter {
     const auto& localIdxMappings = batch.localIdxMappings_;
     for (size_t i = 0; i < localIdxMappings.numMappings_; ++i) {
       const auto& mapping = localIdxMappings.mappings_[i];
-      idMapWriters_[mapping.partialVocabularyIndex_].push_back(
+      idMapWriters_[mapping.partialVocabularyIndex_].push(
           IdMapEntry{mapping.indexOfWordInPartialVocabulary_,
                      globalIds[mapping.indexOfWordInBatch_]});
     }

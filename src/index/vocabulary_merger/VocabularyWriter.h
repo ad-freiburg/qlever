@@ -10,9 +10,6 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_VOCABULARYWRITER_H
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_VOCABULARYWRITER_H
 
-#include <re2/re2.h>
-
-#include <memory>
 #include <utility>
 #include <vector>
 
@@ -25,6 +22,7 @@
 #include "index/vocabulary_merger/WordBatch.h"
 #include "util/Log.h"
 #include "util/ProgressBar.h"
+#include "util/RegexSet.h"
 
 // The second stage of the merging pipeline of the vocabulary merger (see the
 // comment above `mergeVocabulary` in `index/VocabularyMerger.h`), which is not
@@ -51,10 +49,10 @@ class VocabularyWriter {
   // consists of the `localIdxMappings` together with the global IDs of those
   // words (which is then complete and can be handed on to the third stage).
   CPP_template(typename C)(requires WordCallback<C>) IdMapBatch
-      writeWordsToVocabulary(
-          const std::vector<UniqueWord>& uniqueWords,
-          LocalIdxToBatchMappings localIdxMappings, C& wordCallback,
-          const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes);
+      writeWordsToVocabulary(const std::vector<UniqueWord>& uniqueWords,
+                             LocalIdxToBatchMappings localIdxMappings,
+                             C& wordCallback,
+                             const ad_utility::RegexSet& blankNodeIriRegexes);
 
   // The metadata, which is complete as soon as all the batches have been
   // written.
@@ -70,7 +68,7 @@ CPP_template_def(typename C)(requires WordCallback<C>)
     IdMapBatch VocabularyWriter::writeWordsToVocabulary(
         const std::vector<UniqueWord>& uniqueWords,
         LocalIdxToBatchMappings localIdxMappings, C& wordCallback,
-        const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes) {
+        const ad_utility::RegexSet& blankNodeIriRegexes) {
   AD_LOG_TRACE << "Start writing a batch of merged words\n";
 
   // TODO<optimization> If we aim to further speed this up, we could

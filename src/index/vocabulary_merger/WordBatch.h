@@ -20,44 +20,13 @@
 
 #include "index/IndexBuilderTypes.h"
 #include "index/vocabulary_merger/IdMapBatch.h"
-#include "util/MemorySize/MemorySize.h"
+#include "index/vocabulary_merger/QueueWord.h"
 
 // The data that the individual stages of the vocabulary merger (see
 // `index/VocabularyMerger.h`) hand to each other. In contrast to
 // `index/vocabulary_merger/IdMapBatch.h`, these types also carry the words
 // themselves.
 namespace ad_utility::vocabulary_merger::detail {
-
-// Helper `struct` for a word from a partial vocabulary.
-struct QueueWord {
-  QueueWord() = default;
-  QueueWord(TripleComponentWithIndex&& v, size_t file)
-      : entry_(std::move(v)), partialFileId_(file) {}
-  TripleComponentWithIndex entry_;  // the word, its local ID and the
-                                    // information if it will be externalized
-  size_t partialFileId_;  // from which partial vocabulary did this word come
-
-  [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
-  [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
-
-  [[nodiscard]] const std::string& iriOrLiteral() const {
-    return entry_.iriOrLiteral();
-  }
-
-  [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
-
-  [[nodiscard]] const auto& id() const { return entry_.index_; }
-};
-
-// Compute the memory footprint of a `QueueWord`, which the parallel merging
-// needs to limit its memory consumption.
-struct SizeOfQueueWord {
-  ad_utility::MemorySize operator()(const QueueWord& q) const {
-    return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
-                                         q.entry_.iriOrLiteral().size());
-  }
-};
-inline constexpr SizeOfQueueWord sizeOfQueueWord{};
 
 // A unique word from the merged vocabulary (after deduplication between
 // partial vocabularies has been performed) together with the information

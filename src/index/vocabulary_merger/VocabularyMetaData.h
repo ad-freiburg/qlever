@@ -23,9 +23,8 @@
 // NOTE: This class is the return type of `mergeVocabulary` and hence part of
 // the public interface of the vocabulary merger. It only lives in its own
 // header (instead of in `index/VocabularyMerger.h`, which is the user-facing
-// header and which includes this one) because the internal stages of the
-// merging pipeline need it, and those in turn are included by
-// `index/VocabularyMerger.h`.
+// header and which includes this one) because it is understandable and
+// testable on its own.
 namespace ad_utility::vocabulary_merger {
 
 // The result of a call to `mergeVocabulary` (see `index/VocabularyMerger.h`).
@@ -89,11 +88,7 @@ struct VocabularyMetaData {
   // Return the index of the next blank node and increment the internal counter
   // of blank nodes. This has to be called for every distinct blank node that
   // is encountered.
-  size_t getNextBlankNodeIndex() {
-    auto res = numBlankNodesTotal_;
-    ++numBlankNodesTotal_;
-    return res;
-  }
+  size_t getNextBlankNodeIndex() { return numBlankNodesTotal_++; }
 
   // The mapping from the `qlever::specialIds` to their actual IDs.
   // This is created on the fly by the calls to `addWord`.

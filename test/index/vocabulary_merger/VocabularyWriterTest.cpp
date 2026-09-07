@@ -45,9 +45,8 @@ TEST(VocabularyWriter, writeWordsAndBlankNodes) {
     written.emplace_back(word, isExternal);
     return written.size() - 1;
   };
-  std::vector<std::unique_ptr<re2::RE2>> blankNodeIriRegexes;
-  blankNodeIriRegexes.push_back(
-      std::make_unique<re2::RE2>("<http://ex/bn_.*>"));
+  ad_utility::RegexSet blankNodeIriRegexes{{"<http://ex/bn_.*>"},
+                                           "for the test"};
 
   std::vector<UniqueWord> uniqueWords{UniqueWord{"\"lit\"", false},
                                       UniqueWord{"_:blank", false},
@@ -55,7 +54,8 @@ TEST(VocabularyWriter, writeWordsAndBlankNodes) {
                                       UniqueWord{"<http://ex/other>", true}};
   // A single index mapping, which refers to the last of the words.
   LocalIdxToBatchMappings localIdxMappings;
-  localIdxMappings.mappings_.push_back(LocalIdxToBatchMapping{2, 3, 17});
+  localIdxMappings.mappings_.push_back(
+      LocalIdxToBatchMapping{2, 3, VocabIndex::make(17)});
   localIdxMappings.numMappings_ = 1;
 
   auto batch =
@@ -74,7 +74,7 @@ TEST(VocabularyWriter, writeWordsAndBlankNodes) {
   const auto& mapping = batch.localIdxMappings_.mappings_[0];
   EXPECT_EQ(mapping.partialVocabularyIndex_, 2u);
   EXPECT_EQ(mapping.indexOfWordInBatch_, 3u);
-  EXPECT_EQ(mapping.indexOfWordInPartialVocabulary_, 17u);
+  EXPECT_EQ(mapping.indexOfWordInPartialVocabulary_, VocabIndex::make(17));
   // Only the words that were actually added to the vocabulary are counted.
   EXPECT_EQ(writer.metaData().numWordsTotal(), 2u);
 }
@@ -88,7 +88,7 @@ TEST(VocabularyWriter, stateIsCarriedOverBetweenBatches) {
   auto wordCallback = [&numWords](std::string_view, bool) -> uint64_t {
     return numWords++;
   };
-  std::vector<std::unique_ptr<re2::RE2>> noRegexes;
+  ad_utility::RegexSet noRegexes;
 
   auto firstBatch = writer.writeWordsToVocabulary(
       {UniqueWord{"\"a\"", false}, UniqueWord{"_:x", false}},
@@ -111,7 +111,7 @@ TEST(VocabularyWriter, emptyBatch) {
     ADD_FAILURE() << "The word callback must not be called";
     return 0;
   };
-  std::vector<std::unique_ptr<re2::RE2>> noRegexes;
+  ad_utility::RegexSet noRegexes;
   auto batch = writer.writeWordsToVocabulary({}, LocalIdxToBatchMappings{},
                                              wordCallback, noRegexes);
   EXPECT_THAT(batch.globalIds_, ::testing::IsEmpty());

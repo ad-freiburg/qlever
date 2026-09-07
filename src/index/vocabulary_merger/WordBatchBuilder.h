@@ -18,6 +18,7 @@
 #include "index/IndexBuilderTypes.h"
 #include "index/vocabulary_merger/Concepts.h"
 #include "index/vocabulary_merger/IdMapBatch.h"
+#include "index/vocabulary_merger/QueueWord.h"
 #include "index/vocabulary_merger/WordBatch.h"
 #include "util/Exception.h"
 
@@ -134,8 +135,9 @@ CPP_template_def(typename W,
     // index of the word within its batch is only filled in by
     // `commitPendingWord`, and the actual entry of the ID map is only created
     // (and written) once the global ID of the word is known.
-    pendingMappings_.push_back(LocalIdxToBatchMapping{
-        static_cast<uint32_t>(top.partialFileId_), 0, top.id()});
+    pendingMappings_.push_back(
+        LocalIdxToBatchMapping{static_cast<uint32_t>(top.partialFileId_), 0,
+                               VocabIndex::make(top.id())});
   }
 
   if (currentBatch_.localIdxMappings_.numMappings_ >= idMapEntryBatchSize) {

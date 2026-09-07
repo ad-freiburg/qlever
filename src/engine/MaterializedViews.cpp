@@ -139,6 +139,7 @@ void MaterializedViewsManager::writeViewToDisk(
   MaterializedViewWriter writer{onDiskBase_, std::move(name), plannedQuery,
                                 std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
+  loadView(writer.name_, writer.qec_.get());
 }
 
 // _____________________________________________________________________________
@@ -523,7 +524,7 @@ void MaterializedView::connectPermutationBackReference() {
 std::shared_ptr<MaterializedView>
 MaterializedViewsManager::loadViewIntoLockedState(
     const std::string& name, LoadedViews& state,
-    QueryExecutionContext* qec) const {
+    const QueryExecutionContext* qec) const {
   if (auto it = state.views_.find(name); it != state.views_.end()) {
     return it->second;
   }
@@ -541,21 +542,24 @@ MaterializedViewsManager::loadViewIntoLockedState(
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::loadView(const std::string& name,
-                                        QueryExecutionContext* qec) const {
+void MaterializedViewsManager::loadView(
+    const std::string& name, const QueryExecutionContext* qec) const {
   auto lock = loadedViews_.wlock();
   loadViewIntoLockedState(name, *lock, qec);
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::unloadViewIfLoaded(
+bool MaterializedViewsManager::unloadViewIfLoaded(
     const std::string& name) const {
   auto lock = loadedViews_.wlock();
-  if (!lock->views_.contains(name)) {
-    return;
+  auto view = ad_utility::findOptional(lock->views_, name);
+  if (!view.has_value()) {
+    return false;
   }
-  lock->queryPatternCache_.removeView(lock->views_.at(name));
+  lock->queryPatternCache_.removeView(view.value());
   lock->views_.erase(name);
+  AD_LOG_INFO << "Materialized view \"" << name << "\" unloaded" << std::endl;
+  return true;
 }
 
 // _____________________________________________________________________________
@@ -603,7 +607,7 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
 
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
-    const std::string& name, QueryExecutionContext* qec) const {
+    const std::string& name, const QueryExecutionContext* qec) const {
   auto lock = loadedViews_.wlock();
   return loadViewIntoLockedState(name, *lock, qec);
 }
@@ -920,7 +924,8 @@ std::optional<size_t> MaterializedView::lookupBindTargetColumn(
 
 // _____________________________________________________________________________
 MaterializedView::CacheKeyWithAndWithoutInvariantPatterns
-MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
+MaterializedView::computeCacheKey(
+    const QueryExecutionContext* qecOriginal) const {
   if (qecOriginal == nullptr || !originalQuery_.has_value()) {
     return {std::nullopt, std::nullopt};
   }

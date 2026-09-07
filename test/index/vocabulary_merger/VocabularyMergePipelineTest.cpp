@@ -33,6 +33,8 @@ using ad_utility::vocabulary_merger::detail::WordBatchBuilder;
 
 namespace {
 auto V = ad_utility::testing::VocabId;
+// Shorthand for the local index that a word has inside a partial vocabulary.
+auto L = &VocabIndex::make;
 
 // A `WordComparator` that simply compares the words lexicographically.
 constexpr auto lessThan = [](std::string_view a, std::string_view b) {
@@ -55,6 +57,7 @@ QueueWord makeQueueWord(std::string word, bool isExternal, size_t partialFileId,
 // writes as well as the resulting partial ID maps.
 TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
   static constexpr size_t numFiles = 2;
+  std::vector<std::string> suffixes{"0", "1"};
   std::string basename = absl::StrCat(gtestCurrentTestName(), "-");
   std::vector<std::string> filenames;
   for (size_t i = 0; i < numFiles; ++i) {
@@ -72,11 +75,11 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
     vocabulary.emplace_back(word, isExternal);
     return vocabulary.size() - 1;
   };
-  std::vector<std::unique_ptr<re2::RE2>> noRegexes;
+  ad_utility::RegexSet noRegexes;
 
   VocabularyMetaData metaData;
   {
-    VocabularyMergePipeline pipeline{basename, numFiles};
+    VocabularyMergePipeline pipeline{basename, suffixes};
     WordBatchBuilder builder;
     auto push = [&pipeline, &wordCallback, &noRegexes](WordBatch batch) {
       pipeline.push(std::move(batch), wordCallback, noRegexes);
@@ -97,10 +100,12 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
                                      ::testing::Pair("\"b\"", true),
                                      ::testing::Pair("\"c\"", false)));
   EXPECT_EQ(metaData.numWordsTotal(), 3u);
-  EXPECT_THAT(getIdMapFromFile(filenames[0]),
-              ::testing::ElementsAre(IdMapEntry{0, V(0)}, IdMapEntry{1, V(1)}));
-  EXPECT_THAT(getIdMapFromFile(filenames[1]),
-              ::testing::ElementsAre(IdMapEntry{0, V(1)}, IdMapEntry{1, V(2)}));
+  EXPECT_THAT(
+      getIdMapFromFile(filenames[0]),
+      ::testing::ElementsAre(IdMapEntry{L(0), V(0)}, IdMapEntry{L(1), V(1)}));
+  EXPECT_THAT(
+      getIdMapFromFile(filenames[1]),
+      ::testing::ElementsAre(IdMapEntry{L(0), V(1)}, IdMapEntry{L(1), V(2)}));
 }
 
 // _____________________________________________________________________________
@@ -112,7 +117,7 @@ TEST(VocabularyMergePipeline, noBatches) {
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename, false);
   };
-  VocabularyMergePipeline pipeline{basename, 1};
+  VocabularyMergePipeline pipeline{basename, {"0"}};
   auto metaData = pipeline.finish();
   EXPECT_EQ(metaData.numWordsTotal(), 0u);
   EXPECT_THAT(getIdMapFromFile(filename), ::testing::IsEmpty());
