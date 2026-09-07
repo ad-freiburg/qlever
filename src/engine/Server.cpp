@@ -468,6 +468,18 @@ nlohmann::json Server::processDeleteMaterializedView(
 }
 
 // _____________________________________________________________________________
+nlohmann::json Server::processUnloadMaterializedView(
+    const ParamValueMap& parameters) const {
+  auto name =
+      qlever::http_api_helpers::getViewNameParameter(parameters, "Unloading");
+
+  // Fresh snapshot, see `processDeleteMaterializedView` above for why.
+  indexAndViewsSnapshot()->materializedViewsManager_.unloadViewIfLoaded(name);
+
+  return json{{"materialized-view-unloaded", name}};
+}
+
+// _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Server::ResponseT Server::processPing(std::optional<std::string> msg,
@@ -514,6 +526,7 @@ constexpr std::array commands = {
     CommandMeta{"load-materialized-view", "explicitly load materialized view",
                 true},
     CommandMeta{"delete-materialized-view", "delete materialized view", true},
+    CommandMeta{"unload-materialized-view", "unload materialized view", true},
 };
 
 // Throw a 403 `HttpError` if `accessTokenOk` is false; `actionName` names the
@@ -891,6 +904,11 @@ CPP_template_def(typename RequestT, typename SendT)(
     parsedHttpRequest.operation_ = None{};
   } else if (commandIs("delete-materialized-view")) {
     response = jsonResponse(processDeleteMaterializedView(parameters));
+    // Prevent regular query processing by removing the query from the
+    // request.
+    parsedHttpRequest.operation_ = None{};
+  } else if (commandIs("unload-materialized-view")) {
+    response = jsonResponse(processUnloadMaterializedView(parameters));
     // Prevent regular query processing by removing the query from the
     // request.
     parsedHttpRequest.operation_ = None{};

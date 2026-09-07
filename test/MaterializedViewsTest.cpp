@@ -999,6 +999,39 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
             "Loading materialized view \"testViewFromHTTP2\" from disk"));
   }
 
+  // Unload a materialized view through a simulated HTTP GET request. Reuse
+  // one server instance so the unload actually observes a loaded view.
+  {
+    auto server = makeServerForTesting(testIndexBase_);
+    responseBodyAsJson(server.process(makeGetRequest(
+        "/?cmd=load-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken")));
+
+    clearLog();
+    auto response = responseBodyAsJson(server.process(makeGetRequest(
+        "/?cmd=unload-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken")));
+    EXPECT_THAT(response,
+                ::testing::Optional(::testing::Eq(nlohmann::json{
+                    {"materialized-view-unloaded", "testViewFromHTTP2"}})));
+
+    // The view's files remain on disk, unlike deletion.
+    EXPECT_TRUE(ql::filesystem::exists(
+        absl::StrCat(testIndexBase_, ".view.testViewFromHTTP2.viewinfo.json")));
+    EXPECT_THAT(log_.str(),
+                ::testing::HasSubstr(
+                    "Materialized view \"testViewFromHTTP2\" unloaded"));
+  }
+
+  // Test access token check for unloading.
+  {
+    auto request = makeGetRequest(
+        "/?cmd=unload-materialized-view&view-name=testViewFromHTTP2");
+    expectRequiresValidAccessToken("unload-materialized-view", [&] {
+      makeServerForTesting(testIndexBase_).process(request);
+    });
+  }
+
   // Test error message for wrong query type.
   {
     auto request = makePostRequest(

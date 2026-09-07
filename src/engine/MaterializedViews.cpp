@@ -556,6 +556,7 @@ void MaterializedViewsManager::unloadViewIfLoaded(
   }
   lock->queryPatternCache_.removeView(lock->views_.at(name));
   lock->views_.erase(name);
+  AD_LOG_INFO << "Materialized view \"" << name << "\" unloaded" << std::endl;
 }
 
 // _____________________________________________________________________________
