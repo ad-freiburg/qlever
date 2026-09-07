@@ -173,9 +173,9 @@ std::optional<double> ioStallSecondsFromPressure(std::istream& pressure) {
   //   full avg10=0.00 avg60=0.26 avg300=0.26 total=22059793
   //
   // `some` counts the time during which at least one task was stalled on I/O,
-  // `full` only the time during which every runnable task was stalled. As the
-  // example shows, `full` stops moving as soon as anything else can run, so
-  // `some` is the line that reflects the stall. This function reads `some`.
+  // `full` only the time during which every runnable task was stalled. A
+  // process that waits for the disk while others keep running is only
+  // visible in `some`, so this function reads that line.
   //
   // The `avg` fields are ready-made percentages over the last 10, 60 and 300
   // seconds, which do not match our sampling interval. This function instead

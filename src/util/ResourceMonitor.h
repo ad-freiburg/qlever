@@ -142,7 +142,7 @@ struct Readers {
 // become empty cells. The destructor stops the sampling thread and closes
 // the file. Sampling is designed for intervals on the order of a second, as
 // set by the `--resource-usage-interval-s` option. One tick reads a few small
-// OS counters and costs a handful of microseconds.
+// OS counters, which is negligible at such intervals.
 class ResourceMonitor {
  public:
   // `Truncate` starts a fresh file per run (index builds); `Append`
