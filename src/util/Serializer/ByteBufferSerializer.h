@@ -14,6 +14,7 @@
 #include "backports/type_traits.h"
 #include "util/AlignedAllocator.h"
 #include "util/Exception.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Serializer/Serializer.h"
 
 namespace ad_utility::serialization {
@@ -24,7 +25,7 @@ namespace ad_utility::serialization {
  * `Serializer.h`).
  */
 template <bool usesAlignedSerialization = false>
-class ByteBufferWriteSerializerT {
+class ByteBufferWriteSerializerT : public NoCopy {
  public:
   using SerializerType = WriteSerializerTag;
   using Storage =
@@ -34,11 +35,6 @@ class ByteBufferWriteSerializerT {
   static constexpr bool UsesAlignedSerialization = usesAlignedSerialization;
 
   ByteBufferWriteSerializerT() = default;
-  ByteBufferWriteSerializerT(const ByteBufferWriteSerializerT&) = delete;
-  ByteBufferWriteSerializerT& operator=(const ByteBufferWriteSerializerT&) =
-      delete;
-  ByteBufferWriteSerializerT(ByteBufferWriteSerializerT&&) = default;
-  ByteBufferWriteSerializerT& operator=(ByteBufferWriteSerializerT&&) = default;
 
   void serializeBytes(const char* bytePointer, size_t numBytes) {
     data_.insert(data_.end(), bytePointer, bytePointer + numBytes);
@@ -66,7 +62,7 @@ class ByteBufferWriteSerializerT {
  */
 template <bool AlignedSerialization = false,
           typename Storage = std::vector<char>>
-class ByteBufferReadSerializerT {
+class ByteBufferReadSerializerT : public NoCopy {
  public:
   static_assert(ql::ranges::random_access_range<Storage>);
   static_assert(
@@ -94,13 +90,6 @@ class ByteBufferReadSerializerT {
     std::copy(iterator_, iterator_ + numBytes, bytePointer);
     iterator_ += numBytes;
   }
-
-  ByteBufferReadSerializerT(const ByteBufferReadSerializerT&) noexcept = delete;
-  ByteBufferReadSerializerT& operator=(const ByteBufferReadSerializerT&) =
-      delete;
-  ByteBufferReadSerializerT(ByteBufferReadSerializerT&&) noexcept = default;
-  ByteBufferReadSerializerT& operator=(ByteBufferReadSerializerT&&) noexcept =
-      default;
 
   const Storage& data() const noexcept { return data_; }
 
