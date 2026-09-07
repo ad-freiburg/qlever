@@ -20,6 +20,7 @@
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/BitUtils.h"
+#include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Serializer/Serializer.h"
@@ -94,6 +95,10 @@ class SplitVocabulary {
   // is also part of the constraints of this class, but is repeated here because
   // those are not enforced in the C++17 mode (see `QL_CONCEPT_OR_NOTHING`).
   static_assert(FilenameSuffixesT<decltype(FilenameSuffixes), numberOfVocabs>);
+
+  // The suffixes have to be distinct, as otherwise two of the underlying
+  // vocabularies would be stored in the same files.
+  static_assert(ad_utility::allDistinct(FilenameSuffixes));
 
   // Because of the marker bits, a `SplitVocabulary` should not hold another
   // `SplitVocabulary` or a `PolymorphicVocabulary`, where it cannot be
