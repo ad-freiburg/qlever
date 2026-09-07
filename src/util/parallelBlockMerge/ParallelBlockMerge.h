@@ -39,6 +39,11 @@
 // * A `chunk` is a contiguous piece of the *output*, described by a
 //   `ChunkBoundary` (a half-open range of elements). The chunks partition the
 //   whole range of elements, so every element belongs to exactly one chunk.
+// * A `chunk split point` (or just `split point`) is the element at which a new
+//   chunk starts. The chunks of a merge are described by the strictly
+//   increasing list of their split points, which never includes the (trivial)
+//   split point of the very first chunk; `n` split points therefore describe
+//   `n + 1` chunks.
 //
 // It is exactly the metadata-only interface of the input (see `InputConcept` in
 // `RunsInputPolicy.h`) which makes the merge splittable: a weighted quantile

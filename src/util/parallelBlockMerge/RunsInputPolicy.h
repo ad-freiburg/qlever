@@ -19,6 +19,7 @@
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
 
 // The input policy of the block merge: the `InputConcept`, and the
@@ -192,7 +193,7 @@ class VectorInput {
   // ________________________________________________________________________
   template <typename U>
   void appendToBlock(Block& block, U&& element) const {
-    block.push_back(std::forward<U>(element));
+    block.push_back(AD_FWD(element));
   }
 
   // ________________________________________________________________________

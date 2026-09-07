@@ -10,25 +10,22 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEHELPERS_H
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEHELPERS_H
 
-#include <algorithm>
 #include <cstddef>
 #include <optional>
-#include <range/v3/numeric/accumulate.hpp>
-#include <range/v3/numeric/partial_sum.hpp>
 #include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
-#include "util/TransparentFunctors.h"
 #include "util/Views.h"
+#include "util/parallelBlockMerge/MergeHelpersImpl.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
 // The chunk boundaries of the block merge and their computation. For the
-// terminology (runs, blocks, and chunks) see
+// terminology (runs, blocks, chunks, and split points) see
 // `util/parallelBlockMerge/ParallelBlockMerge.h`, which is the header to read
-// first.
+// first. The internals of the computation live in `MergeHelpersImpl.h`.
 namespace ad_utility::parallelBlockMerge {
 
 // ___________________________________________________________________________
@@ -70,39 +67,6 @@ struct ChunkSizes {
 };
 
 namespace detail {
-
-// ___________________________________________________________________________
-// Metadata-only helpers. None of these performs any I/O.
-// ___________________________________________________________________________
-
-// Return a view of all `[runIdx, blockIdx]` pairs of the `input`, in the order
-// of the runs and, within a run, in the order of the blocks.
-//
-// NOTE: The returned view refers to the `input`, which therefore has to outlive
-// it.
-CPP_template(typename Input)(
-    requires InputConcept<Input>) auto allBlocksInAllRuns(const Input& input) {
-  return ::ranges::views::for_each(
-      ad_utility::integerRange(input.numRuns()), [&input](size_t runIdx) {
-        return ::ranges::views::transform(
-            ad_utility::integerRange(input.numBlocks(runIdx)),
-            [runIdx](size_t blockIdx) {
-              return std::pair<size_t, size_t>{runIdx, blockIdx};
-            });
-      });
-}
-
-// Return the total number of elements of all runs of the `input`.
-CPP_template(typename Input)(requires InputConcept<Input>) size_t
-    totalNumElements(const Input& input) {
-  return ::ranges::accumulate(
-      allBlocksInAllRuns(input) |
-          ::ranges::views::transform([&input](const auto& runAndBlock) {
-            return input.numElementsInBlock(runAndBlock.first,
-                                            runAndBlock.second);
-          }),
-      size_t{0});
-}
 
 // The half-open range of block indices `[firstBlockIdx_, endBlockIdx_)` of a
 // single run that a chunk has to look at.
@@ -159,155 +123,22 @@ CPP_template(typename Input,
   return {firstBlockIdx, endBlockIdx};
 }
 
-// ___________________________________________________________________________
-// The computation of the chunk boundaries.
-// ___________________________________________________________________________
-//
-// The computation consists of four independent steps (see
-// `computeChunkBoundaries` below for the interface and for the guarantees),
-// each of which is a pure function: collect the elements and their weights,
-// accumulate those weights, compute the target quantiles, and pick the
-// chunk starts at those quantiles.
-
-// The last element of a single block together with the number of elements in
-// that block, which is the weight of that element.
-template <typename Element>
-using ElementAndWeight = std::pair<Element, size_t>;
-
-// Step 1: Collect the last element of every block of the `input` together with
-// its weight.
-//
-// PRECONDITION: No block of the `input` is empty, see `InputConcept`.
-CPP_template(typename Input)(requires InputConcept<Input>) std::
-    vector<ElementAndWeight<typename Input::Element>> collectElementsAndWeights(
-        const Input& input) {
-  std::vector<ElementAndWeight<typename Input::Element>> result;
-  for (auto [runIdx, blockIdx] : allBlocksInAllRuns(input)) {
-    size_t numElements = input.numElementsInBlock(runIdx, blockIdx);
-    AD_CORRECTNESS_CHECK(numElements > 0);
-    result.emplace_back(input.lastElement(runIdx, blockIdx), numElements);
-  }
-  return result;
-}
-
-// Step 2: Sort the `elementsAndWeights` by their element, merge the entries of
-// equal elements into a single one, and replace the weights by their prefix
-// sums. In the result, `result[i].second` is the number of elements of the
-// whole input that are (approximately) not greater than `result[i].first`, and
-// the elements are strictly increasing.
-template <typename Element, typename Comparator>
-std::vector<ElementAndWeight<Element>> sortAndAccumulateWeights(
-    std::vector<ElementAndWeight<Element>> elementsAndWeights,
-    const Comparator& comparator) {
-  ql::ranges::sort(elementsAndWeights, comparator, ad_utility::first);
-  std::vector<ElementAndWeight<Element>> result;
-  result.reserve(elementsAndWeights.size());
-  for (auto& elementAndWeight : elementsAndWeights) {
-    // Merging equal elements is what makes the quantiles below exact: a target
-    // then always identifies a single entry, and picking that entry for two
-    // different targets can be avoided by simply moving on to the next one.
-    if (!result.empty() &&
-        !comparator(result.back().first, elementAndWeight.first)) {
-      result.back().second += elementAndWeight.second;
-    } else {
-      result.push_back(std::move(elementAndWeight));
-    }
-  }
-  auto weights = result | ql::views::transform(ad_utility::second);
-  ::ranges::partial_sum(weights, ql::ranges::begin(weights));
-  return result;
-}
-
-// Step 3a: The strictly increasing numbers of elements at which a new chunk
-// starts, one per chunk boundary, for `numChunks` equally sized chunks.
-inline std::vector<size_t> uniformTargets(size_t totalNumElements,
-                                          size_t numChunks) {
-  std::vector<size_t> targets;
-  for (size_t i = 1; i < numChunks; ++i) {
-    // NOTE: The target is at least `1`, because a target of `0` would always
-    // pick the smallest element and thereby waste a chunk on the empty range
-    // in front of it.
-    targets.push_back(std::max<size_t>(1, totalNumElements * i / numChunks));
-  }
-  return targets;
-}
-
-// Step 3b: The same, but for explicitly given `chunkSizes`: the `i`-th target
-// is the total size of the first `i` chunks. Stop as soon as a target has
-// reached the total number of elements, because all the chunks after that one
-// would be empty. This is what makes a `remainingChunkSize_` that is smaller
-// than the input terminate, and it also handles leading sizes that already
-// exceed the input.
-inline std::vector<size_t> targetsFromChunkSizes(size_t totalNumElements,
-                                                 const ChunkSizes& chunkSizes) {
-  std::vector<size_t> targets;
-  size_t sizeOfPreviousChunks = 0;
-  // Return `false` if the chunk of the given `chunkSize` is the last one.
-  auto addTarget = [&sizeOfPreviousChunks, &targets,
-                    totalNumElements](size_t chunkSize) {
-    sizeOfPreviousChunks += chunkSize;
-    if (sizeOfPreviousChunks >= totalNumElements) {
-      return false;
-    }
-    targets.push_back(sizeOfPreviousChunks);
-    return true;
-  };
-  for (size_t chunkSize : chunkSizes.firstChunkSizes_) {
-    if (!addTarget(chunkSize)) {
-      return targets;
-    }
-  }
-  while (addTarget(chunkSizes.remainingChunkSize_)) {
-  }
-  return targets;
-}
-
-// Step 4: Walk the target quantiles and pick the elements at which a new chunk
-// starts. As the `targets` as well as the accumulated weights are increasing, a
-// single scan that never goes back suffices. The result is strictly increasing,
-// because the `elementsAndWeights` are (see `sortAndAccumulateWeights`) and
-// because an entry that was picked is never looked at again.
-//
-// NOTE: The first chunk may well start at the smallest element of the whole
-// input, in which case the chunk before it is empty. This happens whenever the
-// blocks that end with that element already hold enough elements to reach the
-// first target, in particular if all the elements of the input are equal. An
-// empty chunk is perfectly legal: it simply yields no output block at all, see
-// `ChunkMerger`.
-template <typename Element>
-std::vector<Element> pickChunkStarts(
-    const std::vector<ElementAndWeight<Element>>& elementsAndWeights,
-    const std::vector<size_t>& targets) {
-  std::vector<Element> result;
-  auto it = elementsAndWeights.begin();
-  for (size_t target : targets) {
-    it = ql::ranges::lower_bound(it, elementsAndWeights.end(), target,
-                                 std::less<>{}, ad_utility::second);
-    if (it == elementsAndWeights.end()) {
-      break;
-    }
-    result.push_back(it->first);
-    ++it;
-  }
-  return result;
-}
-
-// Convert the `chunkStarts` into the boundaries of the `chunkStarts.size() + 1`
+// Convert the `splitPoints` into the boundaries of the `splitPoints.size() + 1`
 // chunks that they describe: the `i`-th of them separates chunk `i` from chunk
 // `i + 1`. The lower bound of the first and the upper bound of the last chunk
 // are empty, that is minus and plus infinity.
 template <typename Element>
-std::vector<ChunkBoundary<Element>> chunkBoundariesFromChunkStarts(
-    const std::vector<Element>& chunkStarts) {
+std::vector<ChunkBoundary<Element>> chunkBoundariesFromSplitPoints(
+    const std::vector<Element>& splitPoints) {
   std::vector<ChunkBoundary<Element>> result;
-  result.reserve(chunkStarts.size() + 1);
-  for (size_t chunkIdx = 0; chunkIdx <= chunkStarts.size(); ++chunkIdx) {
+  result.reserve(splitPoints.size() + 1);
+  for (size_t chunkIdx = 0; chunkIdx <= splitPoints.size(); ++chunkIdx) {
     ChunkBoundary<Element> boundary;
     if (chunkIdx > 0) {
-      boundary.lo_ = chunkStarts.at(chunkIdx - 1);
+      boundary.lo_ = splitPoints.at(chunkIdx - 1);
     }
-    if (chunkIdx < chunkStarts.size()) {
-      boundary.hi_ = chunkStarts.at(chunkIdx);
+    if (chunkIdx < splitPoints.size()) {
+      boundary.hi_ = splitPoints.at(chunkIdx);
     }
     result.push_back(std::move(boundary));
   }
@@ -315,8 +146,8 @@ std::vector<ChunkBoundary<Element>> chunkBoundariesFromChunkStarts(
 }
 
 // The common part of the two overloads of `computeChunkBoundaries` below: run
-// the steps above, where `makeTargets` turns the total number of elements into
-// the target quantiles.
+// the steps from `MergeHelpersImpl.h`, where `makeTargets` turns the total
+// number of elements into the target quantiles.
 CPP_template(typename Input, typename Comparator,
              typename MakeTargets)(requires InputConcept<Input>)
     std::vector<ChunkBoundary<typename Input::Element>> chunkBoundariesImpl(
@@ -330,8 +161,8 @@ CPP_template(typename Input, typename Comparator,
   }
   // The accumulated weight of the last entry is the total number of elements.
   auto targets = makeTargets(elementsAndWeights.back().second);
-  return chunkBoundariesFromChunkStarts(
-      pickChunkStarts(elementsAndWeights, targets));
+  return chunkBoundariesFromSplitPoints(
+      pickChunkSplitPoints(elementsAndWeights, targets));
 }
 
 }  // namespace detail
@@ -387,7 +218,9 @@ CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
                                        [](size_t size) { return size > 0; }));
   return detail::chunkBoundariesImpl(
       input, comparator, [&chunkSizes](size_t totalNumElements) {
-        return detail::targetsFromChunkSizes(totalNumElements, chunkSizes);
+        return detail::targetsFromChunkSizes(totalNumElements,
+                                             chunkSizes.firstChunkSizes_,
+                                             chunkSizes.remainingChunkSize_);
       });
 }
 

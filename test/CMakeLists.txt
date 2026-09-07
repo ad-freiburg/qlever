@@ -514,6 +514,7 @@ addLinkAndDiscoverTestNoLibs(RunsInputPolicyTest)
 addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
+addLinkAndDiscoverTestNoLibs(MergeHelpersTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 
