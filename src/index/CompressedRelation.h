@@ -20,6 +20,7 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
+#include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -850,6 +851,52 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
  public:
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Lazily compute the distinct `col0Id`s of a full scan of the permutation
+  // that this reader reads from (none of the columns of
+  // `scanSpecAndBlocks.scanSpec_` may be fixed).
+  //
+  // If `addGraphColumn` is false, the yielded `IdTable`s have a single column
+  // that contains the distinct `col0Id`s. If it is true, they have a second
+  // column with the graph IDs, and the pairs of `col0Id` and graph ID are
+  // distinct. In both cases the yielded tables are sorted, and their
+  // concatenation is sorted and free of duplicates.
+  //
+  // If `idFilter` is specified, only `col0Id`s that are contained in it are
+  // returned. It has to be sorted in ascending order and must neither contain
+  // duplicates nor undefined IDs. Blocks that cannot contain any of the
+  // requested IDs are then not read at all.
+  //
+  // Blocks whose contribution can already be determined from their metadata
+  // alone (which is the case for all blocks that only contain a single
+  // `col0Id`) are never read, which makes this much cheaper than a full scan
+  // followed by a `DISTINCT`.
+  //
+  // The `LazyScanMetadata` of the returned generator is that of the inner scan
+  // over the blocks that actually had to be read, with `numBlocksAll_` set to
+  // the total number of blocks of the scan.
+  //
+  // NOTE: This reader and `locatedTriplesPerBlock` have to be kept alive until
+  // the returned generator has been fully consumed.
+  //
+  // The helper classes for the implementation live in `DistinctCol0Ids.h`.
+  cppcoro::generator<IdTable, LazyScanMetadata> getDistinctCol0Ids(
+      ScanSpecAndBlocks scanSpecAndBlocks, bool addGraphColumn,
+      std::optional<std::vector<Id>> idFilter,
+      CancellationHandle cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+#endif
+
+  // Return true iff the contents of the given block, restricted to its first
+  // `numColumns` columns, are already known from its metadata alone. This
+  // requires that all the triples of the block agree on those columns (which
+  // the metadata knows because it stores the first and the last triple), and
+  // that there are no delta triples for the block, as those might have deleted
+  // some of its triples or added new ones.
+  static bool contentsAreKnownFromMetadata(
+      const CompressedBlockMetadata& block, size_t numColumns,
+      const LocatedTriplesPerBlock& locatedTriples);
+
   // Determine the distinct values and their counts for the column at
   // `columnIndex` (must be 0 or 1). Used for GROUP BY optimizations.
   IdTable getDistinctColIdsAndCounts(
