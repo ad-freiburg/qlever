@@ -1,3 +1,12 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Prashanth Premakumar <prashanthp0703@gmail.com>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_BINARYEXPRESSION_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_BINARYEXPRESSION_H
 
@@ -16,47 +25,6 @@ namespace sparqlExpression::detail {
 // binary expressions because the operation is applied in direct loops over
 // vector or constant operands, avoiding the generator-based per-element
 // abstraction.
-
-template <typename Function, typename LeftValueGetter,
-          typename RightValueGetter, typename Left, typename Right>
-ExpressionResult evaluateBinaryOperation(Left&& left, Right&& right,
-                                         EvaluationContext* context);
-
-template <typename Function, typename LeftValueGetter,
-          typename RightValueGetter, typename Left, typename Right>
-ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
-    Left&& left, Right&& right, EvaluationContext* context);
-
-template <typename FunctionAndValueGettersT>
-class BinaryExpression;
-
-// Binary expression whose operation and value getters are known at compile
-// time.
-template <typename Function, typename... ValueGetters>
-class BinaryExpression<FunctionAndValueGetters<Function, ValueGetters...>>
-    : public NaryExpressionBase<2> {
- public:
-  using Base = NaryExpressionBase<2>;
-  using Children = typename Base::Children;
-  using Getters = ValueGetterPack<2, std::tuple<ValueGetters...>>;
-  using LeftValueGetter = std::tuple_element_t<0, Getters>;
-  using RightValueGetter = std::tuple_element_t<1, Getters>;
-  BinaryExpression(SparqlExpression::Ptr lhs, SparqlExpression::Ptr rhs)
-      : Base{Children{std::move(lhs), std::move(rhs)}} {}
-
-  ExpressionResult evaluate(EvaluationContext* context) const override {
-    auto leftResult = this->children_[0]->evaluate(context);
-    auto rightResult = this->children_[1]->evaluate(context);
-
-    auto visitor = [context](auto&& left, auto&& right) -> ExpressionResult {
-      return evaluateBinaryOperation<Function, LeftValueGetter,
-                                     RightValueGetter>(AD_FWD(left),
-                                                       AD_FWD(right), context);
-    };
-
-    return std::visit(visitor, std::move(leftResult), std::move(rightResult));
-  }
-};
 
 // Convert an expression result into either a vector-like or constant
 // representation that can be handled directly by the binary evaluation loop.
@@ -78,22 +46,6 @@ decltype(auto) convertToVectorOrConstant(T&& value,
   }
 }
 
-// Convert both operands to the supported representations and evaluate the
-// binary operation.
-template <typename Function, typename LeftValueGetter,
-          typename RightValueGetter, typename Left, typename Right>
-ExpressionResult evaluateBinaryOperation(Left&& left, Right&& right,
-                                         EvaluationContext* context) {
-  decltype(auto) leftConverted =
-      convertToVectorOrConstant(AD_FWD(left), context);
-  decltype(auto) rightConverted =
-      convertToVectorOrConstant(AD_FWD(right), context);
-
-  return evaluateBinaryOperationOnVectorOrConstant<Function, LeftValueGetter,
-                                                   RightValueGetter>(
-      AD_FWD(leftConverted), AD_FWD(rightConverted), context);
-}
-
 // Return a callable that provides the converted value at index `i`. For
 // constant operands, the converted value is computed only once.
 template <typename ValueGetter, typename Operand>
@@ -103,10 +55,11 @@ auto makeIndexedValueGetter(Operand&& operand, EvaluationContext* context) {
   if constexpr (isVectorResult<OperandType>) {
     AD_CORRECTNESS_CHECK(operand.size() == context->size());
 
-    // TODO: The generator-based `NaryExpression` infrastructure forwards/moves
-    // individual values into the value getter. Here, indexed vector elements
-    // are passed as lvalues. This is irrelevant for the currently used value
-    // getters, but should be revisited for move-sensitive value types.
+    // TODO<Prashanth0703>: The generator-based `NaryExpression` infrastructure
+    // forwards/moves individual values into the value getter. Here, indexed
+    // vector elements are passed as lvalues. This is irrelevant for the
+    // currently used value getters, but should be revisited for move-sensitive
+    // value types.
     return [&operand, context](size_t i) {
       return ValueGetter{}(operand[i], context);
     };
@@ -156,6 +109,54 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                   "Unhandled binary expression operand types");
   }
 }
+
+// Convert both operands to the supported representations and evaluate the
+// binary operation.
+template <typename Function, typename LeftValueGetter,
+          typename RightValueGetter, typename Left, typename Right>
+ExpressionResult evaluateBinaryOperation(Left&& left, Right&& right,
+                                         EvaluationContext* context) {
+  decltype(auto) leftConverted =
+      convertToVectorOrConstant(AD_FWD(left), context);
+  decltype(auto) rightConverted =
+      convertToVectorOrConstant(AD_FWD(right), context);
+
+  return evaluateBinaryOperationOnVectorOrConstant<Function, LeftValueGetter,
+                                                   RightValueGetter>(
+      AD_FWD(leftConverted), AD_FWD(rightConverted), context);
+}
+
+template <typename FunctionAndValueGettersT>
+class BinaryExpression;
+
+// Binary expression whose operation and value getters are known at compile
+// time.
+template <typename Function, typename... ValueGetters>
+class BinaryExpression<FunctionAndValueGetters<Function, ValueGetters...>>
+    : public NaryExpressionBase<2> {
+ public:
+  using Base = NaryExpressionBase<2>;
+  using Children = typename Base::Children;
+  using Getters = ValueGetterPack<2, std::tuple<ValueGetters...>>;
+  using LeftValueGetter = std::tuple_element_t<0, Getters>;
+  using RightValueGetter = std::tuple_element_t<1, Getters>;
+  BinaryExpression(SparqlExpression::Ptr lhs, SparqlExpression::Ptr rhs)
+      : Base{Children{std::move(lhs), std::move(rhs)}} {}
+
+  ExpressionResult evaluate(EvaluationContext* context) const override {
+    auto leftResult = this->children_[0]->evaluate(context);
+    auto rightResult = this->children_[1]->evaluate(context);
+
+    auto visitor = [context](auto&& left, auto&& right) -> ExpressionResult {
+      return evaluateBinaryOperation<Function, LeftValueGetter,
+                                     RightValueGetter>(AD_FWD(left),
+                                                       AD_FWD(right), context);
+    };
+
+    return std::visit(visitor, std::move(leftResult), std::move(rightResult));
+  }
+};
+
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
 
 #define BINARY_EXPRESSION(Name, ...) NARY_EXPRESSION(Name, 2, __VA_ARGS__)

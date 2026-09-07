@@ -1,3 +1,12 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Prashanth Premakumar <prashanthp0703@gmail.com>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
 #include <cstddef>
 #include <functional>
 #include <memory>
