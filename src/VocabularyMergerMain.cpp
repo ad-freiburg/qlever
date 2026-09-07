@@ -38,10 +38,8 @@ int main(int argc, char** argv) {
   TripleComponentComparator comparator;
   ad_utility::vocabulary_merger::mergeVocabulary(
       basename, partialVocabularySuffixes,
-      [&comparator](std::string_view a, bool aIsExternal, std::string_view b,
-                    bool bIsExternal) {
-        return comparator.isLessInTotalWithExternalFlag(a, aIsExternal, b,
-                                                        bIsExternal);
+      [&comparator](std::string_view a, std::string_view b) {
+        return comparator(a, b, TripleComponentComparator::Level::TOTAL);
       },
       wordCallback, 4_GB);
 }
