@@ -317,6 +317,18 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> process(RequestT& request, SendT&& send);
 
+  // The final step of `process()`: by this point the operation type (which also
+  // can be `no-operation`) is known, so this builds the
+  // query/update/graph-store-protocol/no-operation visitors and hands them,
+  // together with `operation`, to `processOperation`.
+  CPP_template(typename RequestT, typename SendT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> processSparqlOperation(
+          SparqlOperation operation, const ParamValueMap& parameters,
+          bool accessTokenOk, const ad_utility::Timer& requestTimer,
+          SharedIndexAndView indexAndViews, RequestT& request, SendT&& send,
+          std::optional<ResponseT> response);
+
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
   CPP_template(typename VisitorT, typename RequestT, typename SendT)(
@@ -384,7 +396,8 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::MessageSender createMessageSender(
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-          const RequestT& request, std::string_view operation,
+          const RequestT& request, std::string_view operationString,
+          ad_utility::websocket::QueryOperation operationType,
           std::string_view clientIp = {});
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
@@ -404,6 +417,8 @@ class Server {
   ///
   /// \param request The HTTP request to extract the id from.
   /// \param query A string representation of the query to register an id for.
+  /// \param operationType Whether this is a query or an update. It is written
+  ///        to the `type` field of the `start` event in the query event log.
   ///
   /// \return An OwningQueryId object. It removes itself from the registry
   ///         on destruction.
@@ -411,6 +426,7 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::OwningQueryId
       getQueryId(const RequestT& request, std::string_view query,
+                 ad_utility::websocket::QueryOperation operationType,
                  std::string_view clientIp = {});
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.

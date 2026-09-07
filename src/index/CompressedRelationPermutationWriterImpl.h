@@ -194,9 +194,9 @@ struct CompressedRelationWriter::PermutationWriter {
     if constexpr (WritePair) {
       auto twinRelation = relation_.asStaticView<0>();
       twinRelation.swapColumns(c1Idx, c2Idx);
-      for (const auto& row : twinRelation) {
-        twinRelationSorter_.push(row);
-      }
+      // Note: `pushBlock` inserts the columns of the `twinRelation`
+      // contiguously, which is much faster than pushing the rows one by one.
+      twinRelationSorter_.pushBlock(twinRelation);
     }
     writer1_->addBlockForLargeRelation(col0IdCurrentRelation_.value(),
                                        std::move(relation_).toDynamic());
