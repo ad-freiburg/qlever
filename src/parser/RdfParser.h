@@ -682,34 +682,22 @@ class RdfParallelParsingState {
   // the input) until the first block is found that has something left after
   // the declarations. Store that header in `header_` and the rest of the block
   // for `takeRemainderFromInitialization`.
+  //
+  // NOTE: This is the only function that writes the shared state, and it is
+  // not thread-safe. Call it exactly once, before any worker calls
+  // `parseBatch` (both parsers do so in their constructor).
   void parseHeader(
       absl::AnyInvocable<std::optional<qlever::parser::ByteBlock>()>
-          getNextBlock) {
-    RdfStringParser<Parser> declarationParser{encodedIriManager_};
-    std::string_view remainder;
-    while (remainder.empty()) {
-      auto block = getNextBlock();
-      if (!block.has_value()) {
-        AD_LOG_WARN
-            << "Empty input to the TURTLE parser, is this what you intended?"
-            << std::endl;
-        break;
-      }
-      declarationParser.setInputStream(std::move(block.value()));
-      while (declarationParser.parseDirectiveManually()) {
-      }
-      remainder = declarationParser.getUnparsedRemainder();
-    }
-    header_ = std::move(declarationParser.header());
-    remainderFromInitialization_.reserve(remainder.size());
-    ql::ranges::copy(remainder,
-                     std::back_inserter(remainderFromInitialization_));
-  }
+          getNextBlock);
 
   // Hand out the block remainder that `parseHeader` has left over. The first
   // caller becomes its sole owner, every subsequent call returns `nullopt`, so
-  // that the block is parsed exactly once even if several workers ask for it
-  // concurrently.
+  // that the block is parsed exactly once.
+  //
+  // This is thread-safe: `remainderWasTaken_` is the synchronizing atomic, so
+  // exactly one of several concurrent callers sees it as `false`, and the move
+  // out of `remainderFromInitialization_` by that caller happens before every
+  // other caller observes the flag as `true`.
   std::optional<qlever::parser::ByteBlock> takeRemainderFromInitialization() {
     if (remainderWasTaken_.exchange(true)) {
       return std::nullopt;
@@ -721,19 +709,13 @@ class RdfParallelParsingState {
   // parser that is set up from the shared state. `positionOffset` is the offset
   // of `batch` in the input file and is only used for error messages. Throw on
   // a parse error.
+  //
+  // This is thread-safe (and hence `const`): it only reads the shared state
+  // and each call has its own worker parser, so arbitrarily many calls may run
+  // concurrently. This requires that `parseHeader`, which writes that state,
+  // has already returned.
   std::vector<TurtleTriple> parseBatch(qlever::parser::ByteBlock batch,
-                                       size_t positionOffset = 0) {
-    RdfStringParser<Parser> parser{encodedIriManager_, defaultGraphIri_};
-    parser.header() = header_;
-    parser.useSimplifiedGrammar();
-    parser.setPositionOffset(positionOffset);
-    // Ensure that all sub-parsers use the same file-level blank node prefix
-    // so that user-specified blank node labels (_:foo) have the same ID
-    // across all batches of the same file.
-    parser.setFileBlankNodePrefix(fileBlankNodePrefix_);
-    parser.setInputStream(std::move(batch));
-    return parser.parseAndReturnAllTriples();
-  }
+                                       size_t positionOffset = 0) const;
 };
 
 // This class parses an uncompressed file (which can also be a stream like

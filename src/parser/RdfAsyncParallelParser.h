@@ -71,7 +71,8 @@ class RdfAsyncParallelParser {
   // `blockSource_`, which requires that at most one call to
   // `asyncGetNextBlock` is in flight at any time. A concurrent
   // `asyncGetBatch()` call that arrives while a fetch is in flight suspends
-  // here instead of blocking its thread.
+  // here instead of blocking its thread. It is taken and returned by the
+  // private `asyncGetNextBlock` below, see there for the details.
   ad_utility::AsyncResourcePool<void> blockFetchPermit_;
 
   // Set to true by the first `asyncGetBatch()` call that encounters an error.
@@ -134,40 +135,68 @@ class RdfAsyncParallelParser {
                       });
             return;
           }
-          // General case: take the single fetch permit, fetch the next block
-          // asynchronously, and then parse it. `handleBlockAndDispatch`
-          // factors out the parse-and-dispatch logic so it can be shared with
-          // the initial-batch path above. The lambdas are defined here (rather
-          // than in a struct) so they can call the private
-          // `handleBlockAndDispatch()` via the captured `this`.
-          blockFetchPermit_.asyncAcquire(net::bind_executor(
+          // General case: fetch the next block asynchronously, then parse it.
+          // `handleBlockAndDispatch` factors out the parse-and-dispatch logic
+          // so it can be shared with the initial-batch path above.
+          asyncGetNextBlock(net::bind_executor(
               executor_,
               [this, dispatchResult = std::move(dispatchResult)](
-                  const boost::system::error_code& errorCode,
-                  ad_utility::AsyncResourcePool<void>::Handle permit) mutable {
-                // Nothing ever cancels `blockFetchPermit_`, so acquiring a
-                // permit cannot fail.
-                AD_CORRECTNESS_CHECK(!errorCode && permit.isValid());
-                blockSource_.asyncGetNextBlock(net::bind_executor(
-                    executor_, [this, permit = std::move(permit),
-                                dispatchResult = std::move(dispatchResult)](
-                                   std::exception_ptr fetchEptr,
-                                   std::optional<qlever::parser::ByteBlock>
-                                       block) mutable {
-                      // Let the next waiting call fetch its block while this
-                      // call parses. This is safe: `blockSource_` has already
-                      // updated all of its state by the time this handler
-                      // runs.
-                      permit.release();
-                      handleBlockAndDispatch(fetchEptr, std::move(block),
-                                             dispatchResult);
-                    }));
+                  std::exception_ptr fetchEptr,
+                  std::optional<qlever::parser::ByteBlock> block) mutable {
+                handleBlockAndDispatch(fetchEptr, std::move(block),
+                                       dispatchResult);
               }));
         },
         token);
   }
 
  private:
+  // Fetch the next block from `blockSource_`, serialized such that at most one
+  // fetch is in flight at any time. Accept any Asio completion token; the
+  // completion signature is that of `AsyncBlockSource::asyncGetNextBlock`,
+  // i.e. `void(std::exception_ptr, std::optional<ByteBlock>)`.
+  //
+  // NOTE: A `strand` would not be enough here. It serializes the *execution*
+  // of handlers, whereas `AsyncBlockSource` requires that at most one
+  // operation is *outstanding*: initiating the next fetch is only allowed once
+  // the previous fetch's completion handler has run. Two initiations posted to
+  // a strand would still overlap, because `asyncGetNextBlock` returns as soon
+  // as it has initiated. Hence the single permit of `blockFetchPermit_`, which
+  // is held for the whole duration of a fetch, and which suspends a waiting
+  // caller instead of blocking its thread.
+  template <typename CompletionToken>
+  auto asyncGetNextBlock(CompletionToken&& token) {
+    namespace net = boost::asio;
+    return net::async_initiate<CompletionToken,
+                               void(std::exception_ptr,
+                                    std::optional<qlever::parser::ByteBlock>)>(
+        [this](auto handler) {
+          auto ex = net::get_associated_executor(handler, executor_);
+          blockFetchPermit_.asyncAcquire(net::bind_executor(
+              ex,
+              [this, ex, h = std::move(handler)](
+                  const boost::system::error_code& errorCode,
+                  ad_utility::AsyncResourcePool<void>::Handle permit) mutable {
+                // Nothing ever cancels `blockFetchPermit_`, so acquiring a
+                // permit cannot fail.
+                AD_CORRECTNESS_CHECK(!errorCode && permit.isValid());
+                blockSource_.asyncGetNextBlock(net::bind_executor(
+                    ex, [permit = std::move(permit), h = std::move(h)](
+                            std::exception_ptr fetchEptr,
+                            std::optional<qlever::parser::ByteBlock>
+                                block) mutable {
+                      // Let the next waiting call fetch its block while this
+                      // call proceeds. This is safe: `blockSource_` has
+                      // already updated all of its state by the time this
+                      // handler runs.
+                      permit.release();
+                      std::move(h)(fetchEptr, std::move(block));
+                    }));
+              }));
+        },
+        token);
+  }
+
   // Handle the result of a block fetch: parse `block` if successful and
   // dispatch the result (or the error) via `dispatch`. Set
   // `errorWasEncountered_` on the first error so that subsequent calls

@@ -1136,6 +1136,47 @@ std::optional<std::vector<TurtleTriple>> RdfStreamParser<T>::getBatch() {
   return std::exchange(triples_, {});
 }
 
+// ____________________________________________________________________________
+template <typename Parser>
+void RdfParallelParsingState<Parser>::parseHeader(
+    absl::AnyInvocable<std::optional<qlever::parser::ByteBlock>()>
+        getNextBlock) {
+  RdfStringParser<Parser> declarationParser{encodedIriManager_};
+  std::string_view remainder;
+  while (remainder.empty()) {
+    auto block = getNextBlock();
+    if (!block.has_value()) {
+      AD_LOG_WARN
+          << "Empty input to the TURTLE parser, is this what you intended?"
+          << std::endl;
+      break;
+    }
+    declarationParser.setInputStream(std::move(block.value()));
+    while (declarationParser.parseDirectiveManually()) {
+    }
+    remainder = declarationParser.getUnparsedRemainder();
+  }
+  header_ = std::move(declarationParser.header());
+  remainderFromInitialization_.reserve(remainder.size());
+  ql::ranges::copy(remainder, std::back_inserter(remainderFromInitialization_));
+}
+
+// ____________________________________________________________________________
+template <typename Parser>
+std::vector<TurtleTriple> RdfParallelParsingState<Parser>::parseBatch(
+    qlever::parser::ByteBlock batch, size_t positionOffset) const {
+  RdfStringParser<Parser> parser{encodedIriManager_, defaultGraphIri_};
+  parser.header() = header_;
+  parser.useSimplifiedGrammar();
+  parser.setPositionOffset(positionOffset);
+  // Ensure that all sub-parsers use the same file-level blank node prefix
+  // so that user-specified blank node labels (_:foo) have the same ID
+  // across all batches of the same file.
+  parser.setFileBlankNodePrefix(fileBlankNodePrefix_);
+  parser.setInputStream(std::move(batch));
+  return parser.parseAndReturnAllTriples();
+}
+
 // We will use the  following trick: For a batch that is forwarded to the
 // parallel parser, we will first increment `numBatchesTotal_` and then call
 // the following lambda after the batch has completely been parsed and the
@@ -1390,6 +1431,10 @@ template class TurtleParser<Tokenizer>;
 template class TurtleParser<TokenizerCtre>;
 template class RdfStreamParser<TurtleParser<Tokenizer>>;
 template class RdfStreamParser<TurtleParser<TokenizerCtre>>;
+template class RdfParallelParsingState<TurtleParser<Tokenizer>>;
+template class RdfParallelParsingState<TurtleParser<TokenizerCtre>>;
+template class RdfParallelParsingState<NQuadParser<Tokenizer>>;
+template class RdfParallelParsingState<NQuadParser<TokenizerCtre>>;
 template class RdfParallelParser<TurtleParser<Tokenizer>>;
 template class RdfParallelParser<TurtleParser<TokenizerCtre>>;
 template class RdfStreamParser<NQuadParser<Tokenizer>>;
