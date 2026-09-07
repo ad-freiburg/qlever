@@ -35,14 +35,15 @@ template <typename T>
 CPP_concept SplitFunctionT =
     ad_utility::InvocableWithExactReturnType<T, uint8_t, std::string_view>;
 
-// The signature of the SplitFilenameFunction for a SplitVocabulary. For a given
-// base filename the function should construct readable filenames for each of
-// the underlying vocabularies. This should usually happen by appending a suffix
-// for each vocabulary.
+// The signature of the SplitFilenameSuffixFunction for a SplitVocabulary. For
+// each of the underlying vocabularies, the function should return the suffix
+// that is appended to the base filename of the SplitVocabulary to obtain the
+// base filename of that underlying vocabulary. The suffixes have to be distinct
+// and must have static storage duration.
 template <typename T, uint8_t N>
-CPP_concept SplitFilenameFunctionT =
-    ad_utility::InvocableWithExactReturnType<T, std::array<std::string, N>,
-                                             std::string_view>;
+CPP_concept SplitFilenameSuffixFunctionT =
+    ad_utility::InvocableWithExactReturnType<T,
+                                             std::array<std::string_view, N>>;
 
 // Forward declaration of `PolymorphicVocabulary` for static assertion.
 class PolymorphicVocabulary;
@@ -50,13 +51,13 @@ class PolymorphicVocabulary;
 // A SplitVocabulary is a vocabulary layer that divides words into different
 // underlying vocabularies. It is templated on the UnderlyingVocabularies as
 // well as a SplitFunction that decides which underlying vocabulary is used for
-// each word and a SplitFilenameFunction that assigns filenames to underlying
-// vocabularies.
-template <typename SplitFunction, typename SplitFilenameFunction,
+// each word and a SplitFilenameSuffixFunction that assigns filename suffixes to
+// underlying vocabularies.
+template <typename SplitFunction, typename SplitFilenameSuffixFunction,
           typename... UnderlyingVocabularies>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SplitFunction>&& SplitFilenameFunctionT<
-        SplitFilenameFunction, sizeof...(UnderlyingVocabularies)>)
+    requires SplitFunctionT<SplitFunction>&& SplitFilenameSuffixFunctionT<
+        SplitFilenameSuffixFunction, sizeof...(UnderlyingVocabularies)>)
 class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying
@@ -100,11 +101,24 @@ class SplitVocabulary {
 
   // Instances of the functions used for implementing the specific split logic
   static constexpr SplitFunction splitFunction_{};
-  static constexpr SplitFilenameFunction splitFilenameFunction_{};
+  static constexpr SplitFilenameSuffixFunction splitFilenameSuffixFunction_{};
 
  private:
   // Array that holds all underlying vocabularies.
   UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
+
+  // The base filenames of all the underlying vocabularies for the given base
+  // `filename` of this vocabulary, obtained by appending the suffixes from
+  // `splitFilenameSuffixFunction_`.
+  static std::array<std::string, numberOfVocabs> underlyingFilenames(
+      std::string_view filename) {
+    std::array<std::string, numberOfVocabs> filenames;
+    const auto suffixes = splitFilenameSuffixFunction_();
+    for (uint8_t i = 0; i < numberOfVocabs; ++i) {
+      filenames[i] = absl::StrCat(filename, suffixes[i]);
+    }
+    return filenames;
+  }
 
   // Implementation of `scanAll`, written separately because in C++17, lambdas
   // can't have explicit template parameters.
@@ -160,8 +174,8 @@ class SplitVocabulary {
   void close();
 
   // Read the vocabulary from files: all underlying vocabularies will be read
-  // using the filenames returned by SplitFilenameFunction for the given base
-  // filename.
+  // using the base filename plus the suffix returned by
+  // SplitFilenameSuffixFunction for the respective vocabulary.
   void readFromFile(const std::string& filename);
 
   // The item-at operator retrieves a word by a given index. The index is
@@ -285,8 +299,8 @@ class SplitVocabulary {
     return underlying_[marker];
   }
 
-  // Load from file: open all underlying vocabularies on the corresponding
-  // result of SplitFilenameFunction for the given base filename.
+  // Load from file: open all underlying vocabularies on the given base filename
+  // plus the corresponding suffix from SplitFilenameSuffixFunction.
   void open(const std::string& filename);
 
   // This word writer writes words to different vocabularies depending on the
@@ -297,7 +311,8 @@ class SplitVocabulary {
 
    public:
     // Construct a WordWriter for each vocabulary in the given array. Determine
-    // filenames of underlying vocabularies using the SplitFilenameFunction.
+    // filenames of underlying vocabularies using the
+    // SplitFilenameSuffixFunction.
     WordWriter(const UnderlyingVocabsArray& underlyingVocabularies,
                const std::string& filename);
 
@@ -312,12 +327,9 @@ class SplitVocabulary {
   };
 
   // The files of all the underlying vocabularies, each prefixed with the suffix
-  // that `splitFilenameFunction_` appends for the respective vocabulary.
+  // that `splitFilenameSuffixFunction_` yields for the respective vocabulary.
   static FileSuffixes fileSuffixes() {
-    // The suffixes that `splitFilenameFunction_` appends for each of the
-    // underlying vocabularies, obtained by applying it to an empty base
-    // filename.
-    auto vocabSuffixes = splitFilenameFunction_("");
+    const auto vocabSuffixes = splitFilenameSuffixFunction_();
     FileSuffixes suffixes;
     uint8_t i = 0;
     auto addOne = [&suffixes, &vocabSuffixes, &i](auto vocabulary) {
@@ -367,12 +379,12 @@ struct GeoSplitFunc {
   }
 };
 
-// Split filename function for Well-Known Text Literals: The vocabulary 0 is
-// saved under the base filename and WKT literals are saved with a suffix
+// Split filename suffix function for Well-Known Text Literals: The vocabulary 0
+// is saved under the base filename and WKT literals are saved with a suffix
 // ".geometry"
-struct GeoFilenameFunc {
-  std::array<std::string, 2> operator()(std::string_view base) const {
-    return {std::string(base), absl::StrCat(base, ".geometry")};
+struct GeoFilenameSuffixFunc {
+  std::array<std::string_view, 2> operator()() const {
+    return {"", ".geometry"};
   }
 };
 
@@ -383,7 +395,7 @@ struct GeoFilenameFunc {
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
     SplitVocabulary<detail::splitVocabulary::GeoSplitFunc,
-                    detail::splitVocabulary::GeoFilenameFunc,
+                    detail::splitVocabulary::GeoFilenameSuffixFunc,
                     UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

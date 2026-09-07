@@ -22,9 +22,7 @@ using SGV =
 };
 
 [[maybe_unused]] auto testSplitFnTwoFunction =
-    [](std::string_view s) -> std::array<std::string, 2> {
-  return {std::string(s), absl::StrCat(s, ".a")};
-};
+    []() -> std::array<std::string_view, 2> { return {"", ".a"}; };
 
 using TwoSplitVocabulary =
     SplitVocabulary<decltype(testSplitTwoFunction),
@@ -44,9 +42,7 @@ using TwoSplitVocabulary =
 };
 
 [[maybe_unused]] auto testSplitFnThreeFunction =
-    [](std::string_view s) -> std::array<std::string, 3> {
-  return {absl::StrCat(s, ".a"), absl::StrCat(s, ".b"), absl::StrCat(s, ".c")};
-};
+    []() -> std::array<std::string_view, 3> { return {".a", ".b", ".c"}; };
 
 using ThreeSplitVocabulary =
     SplitVocabulary<decltype(testSplitThreeFunction),
