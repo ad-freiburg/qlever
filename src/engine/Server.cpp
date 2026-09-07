@@ -455,14 +455,14 @@ nlohmann::json Server::processDeleteMaterializedView(
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
 
-  // Snapshot again instead of reusing the snapshot taken at the beginning of
-  // `process()` (see `clear-delta-triples` above for the same pattern), so
-  // that we delete the view from the index that is currently being served
-  // and not from a stale one that a concurrent rebuild has swapped out in the
-  // meantime. Deleting from a stale manager is not unsafe (the rebuild called
-  // `MaterializedViewsManager::retireOnDiskFiles` on it, which makes
-  // `deleteView` throw), it would just needlessly fail.
-  indexAndViewsSnapshot()->materializedViewsManager_.deleteView(name);
+  // `Qlever::deleteMaterializedView` takes a fresh snapshot instead of reusing
+  // the one taken at the beginning of `process()` (see `clear-delta-triples`
+  // above for the same pattern), so that the view is deleted from the index
+  // that is currently being served and not from a stale one that a concurrent
+  // rebuild has swapped out in the meantime. Deleting from a stale manager is
+  // not unsafe (the rebuild called `MaterializedViewsManager::retireOnDiskFiles`
+  // on it, which makes `deleteView` throw), it would just needlessly fail.
+  qlever().deleteMaterializedView(name);
 
   return json{{"materialized-view-deleted", name}};
 }
@@ -473,10 +473,14 @@ nlohmann::json Server::processUnloadMaterializedView(
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Unloading");
 
-  // Fresh snapshot, see `processDeleteMaterializedView` above for why.
-  indexAndViewsSnapshot()->materializedViewsManager_.unloadViewIfLoaded(name);
+  // `Qlever::unloadMaterializedView` takes a fresh snapshot for the same reason
+  // as in `processDeleteMaterializedView` above (unloading from a stale
+  // manager would silently leave the view loaded in the served one). Report
+  // whether the view was actually loaded, so that a request with a wrong
+  // name does not look like a success.
+  bool wasLoaded = qlever().unloadMaterializedView(name);
 
-  return json{{"materialized-view-unloaded", name}};
+  return json{{"materialized-view-unloaded", name}, {"was-loaded", wasLoaded}};
 }
 
 // _____________________________________________________________________________

@@ -421,9 +421,10 @@ class MaterializedViewsManager {
   // used by tests that do not care about it).
   void loadView(const std::string& name, QueryExecutionContext* qec) const;
 
-  // Unload a materialized view if it is loaded. This function is a no-op
-  // otherwise. It is `const` for the same reason described above.
-  void unloadViewIfLoaded(const std::string& name) const;
+  // Unload a materialized view if it is loaded and return `true`. Return
+  // `false` (and do nothing else) if it is not loaded. It is `const` for the
+  // same reason described above.
+  bool unloadViewIfLoaded(const std::string& name) const;
 
   // Delete a materialized view: unload it if loaded and delete all of its files
   // from disk. Throws if the view does not exist.

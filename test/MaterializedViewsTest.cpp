@@ -625,9 +625,13 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   EXPECT_TRUE(manager.isViewLoaded("testView1"));
   EXPECT_FALSE(manager.isViewLoaded("something"));
 
-  // Unloading a view that is not loaded is a no-op.
-  manager.unloadViewIfLoaded("something");
+  // Unloading a view that is not loaded is a no-op, unloading a loaded view
+  // reports that it was loaded.
+  EXPECT_FALSE(manager.unloadViewIfLoaded("something"));
   EXPECT_FALSE(manager.isViewLoaded("something"));
+  EXPECT_TRUE(manager.unloadViewIfLoaded("testView1"));
+  EXPECT_FALSE(manager.isViewLoaded("testView1"));
+  EXPECT_FALSE(manager.unloadViewIfLoaded("testView1"));
   EXPECT_THAT(view->originalQuery(),
               ::testing::Optional(::testing::Eq(simpleWriteQuery_)));
 
@@ -1013,7 +1017,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "&access-token=accessToken")));
     EXPECT_THAT(response,
                 ::testing::Optional(::testing::Eq(nlohmann::json{
-                    {"materialized-view-unloaded", "testViewFromHTTP2"}})));
+                    {"materialized-view-unloaded", "testViewFromHTTP2"},
+                    {"was-loaded", true}})));
 
     // The view's files remain on disk, unlike deletion.
     EXPECT_TRUE(ql::filesystem::exists(
@@ -1021,6 +1026,15 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr(
                     "Materialized view \"testViewFromHTTP2\" unloaded"));
+
+    // Unloading again is a no-op that reports the view as not loaded.
+    response = responseBodyAsJson(server.process(makeGetRequest(
+        "/?cmd=unload-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken")));
+    EXPECT_THAT(response,
+                ::testing::Optional(::testing::Eq(nlohmann::json{
+                    {"materialized-view-unloaded", "testViewFromHTTP2"},
+                    {"was-loaded", false}})));
   }
 
   // Test access token check for unloading.
