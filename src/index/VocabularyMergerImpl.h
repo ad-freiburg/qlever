@@ -85,8 +85,8 @@ auto VocabularyMerger::mergeVocabulary(
   for (std::size_t i :
        ad_utility::integerRange(partialVocabularySuffixes.size())) {
     generators.push_back(makeWordRangeFromFile(i));
-    idMapWriters_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX,
-                                            partialVocabularySuffixes.at(i)));
+    idMapWriters_.push_back(makeIdMapWriter(absl::StrCat(
+        basename, PARTIAL_VOCAB_IDMAP_INFIX, partialVocabularySuffixes.at(i))));
   }
 
   // Some memory (that is hard to measure exactly) is used for the writing of
@@ -168,7 +168,7 @@ CPP_template_def(typename C, typename L)(
             : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
     // Write the mapping from the local index to the global ID to the ID map
     // of the partial vocabulary that this occurrence of the word came from.
-    idMapWriters_[top.partialFileId_].push_back(
+    idMapWriters_[top.partialFileId_].push(
         IdMapEntry{VocabIndex::make(top.id()), targetId});
   }
 }

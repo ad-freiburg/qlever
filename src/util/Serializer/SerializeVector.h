@@ -7,9 +7,11 @@
 
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "backports/span.h"
+#include "util/ExceptionHandling.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
@@ -120,6 +122,21 @@ CPP_template(typename T, typename Serializer)(
     alignSerializerForType<T>(_serializer);
   }
 
+  // This class is move-only, as the underlying serializers are.
+  VectorIncrementalSerializer(const VectorIncrementalSerializer&) = delete;
+  VectorIncrementalSerializer& operator=(const VectorIncrementalSerializer&) =
+      delete;
+  VectorIncrementalSerializer(VectorIncrementalSerializer&& other) noexcept(
+      std::is_nothrow_move_constructible_v<Serializer>)
+      : _serializer{std::move(other._serializer)},
+        _startPosition{other._startPosition},
+        _size{other._size},
+        _isFinished{other._isFinished} {
+    // The moved-from object must not write anything anymore, as its serializer
+    // has been moved away.
+    other._isFinished = true;
+  }
+
   void push(const T& element) {
     _serializer << element;
     _size++;
@@ -138,7 +155,11 @@ CPP_template(typename T, typename Serializer)(
     return std::move(_serializer);
   }
 
-  ~VectorIncrementalSerializer() { finish(); }
+  ~VectorIncrementalSerializer() {
+    ad_utility::terminateIfThrows(
+        [this]() { finish(); },
+        "The finishing of a `VectorIncrementalSerializer` failed");
+  }
 };
 
 }  // namespace ad_utility::serialization

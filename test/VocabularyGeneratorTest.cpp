@@ -32,7 +32,7 @@ using namespace ad_utility::vocabulary_merger;
 namespace {
 auto V = ad_utility::testing::VocabId;
 // Shorthand for the local index that a word has inside a partial vocabulary.
-auto L = [](uint64_t index) { return VocabIndex::make(index); };
+auto L = &VocabIndex::make;
 
 // Write the given `words` as a partial vocabulary file at `path`, assigning
 // them consecutive local ids `0, 1, ...` in the given order and marking all of

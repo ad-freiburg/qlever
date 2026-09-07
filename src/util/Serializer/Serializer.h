@@ -368,8 +368,9 @@ CPP_template(typename T, typename S)(
 // end) that has been written to a fixed position earlier.
 //
 // NOTE: The `serializer` has to support `get/setSerializationPosition`, which
-// not all `WriteSerializer`s do. A `BufferedWriteSerializer` for example does
-// not, because a part of the data might still be sitting in its buffer.
+// not all `WriteSerializer`s do. For a `BufferedWriteSerializer` (which cannot
+// simply seek, because a part of the data might still be sitting in its
+// buffer) there is a dedicated overload in `BufferedSerializer.h`.
 CPP_template(typename S, typename T)(
     requires WriteSerializer<S>) void serializeAtPosition(S& serializer,
                                                           uint64_t position,

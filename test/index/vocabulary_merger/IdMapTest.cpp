@@ -24,7 +24,7 @@ using namespace ad_utility::vocabulary_merger;
 namespace {
 auto V = ad_utility::testing::VocabId;
 // Shorthand for the local index that a word has inside a partial vocabulary.
-auto L = [](uint64_t index) { return VocabIndex::make(index); };
+auto L = &VocabIndex::make;
 }  // namespace
 
 // _____________________________________________________________________________
@@ -51,7 +51,7 @@ TEST(IdMapWriter, writeAndReadBack) {
   // Far more entries than fit into the internal buffer of the writer, such
   // that the buffer has to be flushed many times.
   const size_t numPairs = 200'000;
-  ASSERT_GT(numPairs * 16, 10 * IdMapWriter::bufferSize.getBytes());
+  ASSERT_GT(numPairs * 16, 10 * idMapWriterBufferSize.getBytes());
   IdMap expected;
   expected.reserve(numPairs);
   for (size_t i = 0; i < numPairs; ++i) {
@@ -61,9 +61,9 @@ TEST(IdMapWriter, writeAndReadBack) {
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
   {
-    IdMapWriter writer{filename};
+    auto writer = makeIdMapWriter(filename);
     for (const auto& pair : expected) {
-      writer.push_back(pair);
+      writer.push(pair);
     }
   }
   EXPECT_THAT(getIdMapFromFile(filename),
@@ -82,7 +82,7 @@ TEST(IdMapWriter, emptyAndExplicitFinish) {
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
   {
-    IdMapWriter writer{filename};
+    auto writer = makeIdMapWriter(filename);
     writer.finish();
     EXPECT_THAT(getIdMapFromFile(filename), ::testing::IsEmpty());
     writer.finish();
@@ -90,8 +90,8 @@ TEST(IdMapWriter, emptyAndExplicitFinish) {
   EXPECT_THAT(getIdMapFromFile(filename), ::testing::IsEmpty());
 
   {
-    IdMapWriter writer{filename};
-    writer.push_back({L(3), V(4)});
+    auto writer = makeIdMapWriter(filename);
+    writer.push({L(3), V(4)});
     writer.finish();
     EXPECT_THAT(getIdMapFromFile(filename),
                 ::testing::ElementsAre(IdMapEntry{L(3), V(4)}));
