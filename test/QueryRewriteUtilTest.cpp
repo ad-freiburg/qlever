@@ -164,7 +164,7 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoin) {
   const auto& sjConf = sj->onlyForTestingGetConfig();
   EXPECT_EQ(sjConf.left_, V{"?a"});
   EXPECT_EQ(sjConf.right_, V{"?b"});
-  EXPECT_EQ(sjConf.joinType_, WITHIN_DIST);
+  EXPECT_EQ(sjConf.getJoinType(), WITHIN_DIST);
   EXPECT_EQ(sj->getMaxDist(), 10.0);
   // Both sides are variables, so no child is prebuilt.
   EXPECT_EQ(sj->onlyForTestingGetLeftChild(), nullptr);
@@ -192,7 +192,7 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoin) {
   const auto& de9imSjConf = de9imSj->onlyForTestingGetConfig();
   EXPECT_EQ(de9imSjConf.left_, V{"?a"});
   EXPECT_EQ(de9imSjConf.right_, V{"?b"});
-  EXPECT_EQ(de9imSjConf.joinType_, DE9IM);
+  EXPECT_EQ(de9imSjConf.getJoinType(), DE9IM);
   const auto& de9imTask = std::get<LibSpatialJoinConfig>(de9imSjConf.task_);
   EXPECT_EQ(de9imTask.de9imFilter_, parseDe9imFilterString("T*T***T**"));
 }

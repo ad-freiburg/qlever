@@ -10,8 +10,10 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include "./util/GTestHelpers.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Permutation.h"
+#include "util/IndexTestHelpers.h"
 
 // _____________________________________________________________________________
 TEST(Permutation, fileNames) {
@@ -26,4 +28,34 @@ TEST(Permutation, fileNames) {
                   POS, absl::StrCat("index", QLEVER_INTERNAL_INDEX_INFIX)),
               ::testing::ElementsAre("index.internal.index.pos",
                                      "index.internal.index.pos.meta"));
+}
+
+// _____________________________________________________________________________
+TEST(Permutation, logRegistrationCanBeDisabled) {
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
+  std::string basename = gtestCurrentTestName();
+  // Build an index on disk. The `Index` object itself is not used, but it has
+  // to be kept alive while the permutations below are loaded.
+  Index index = ad_utility::testing::makeTestIndex(
+      basename, "<a> <b> <c> . <a> <b> <d> . <e> <f> <g> .");
+
+  // Load the `PSO` permutation (including its internal permutation) from disk
+  // with the given `logRegistration` and return the log output that this
+  // produced.
+  auto loadAndCaptureLog = [&basename](bool logRegistration) {
+    auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    Permutation permutation{Permutation::Enum::PSO,
+                            ad_utility::makeUnlimitedAllocator<Id>()};
+    permutation.loadFromDisk(basename, true, Permutation::Type::NORMAL, {},
+                             logRegistration);
+    return logStream.str();
+  };
+
+  // With `logRegistration` set to `true`, the registration is logged.
+  EXPECT_THAT(loadAndCaptureLog(true),
+              ::testing::HasSubstr("Registered PSO permutation"));
+  // With `logRegistration` set to `false`, neither the permutation itself nor
+  // its internal permutation logs its registration.
+  EXPECT_THAT(loadAndCaptureLog(false),
+              ::testing::Not(::testing::HasSubstr("Registered")));
 }

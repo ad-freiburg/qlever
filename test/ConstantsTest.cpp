@@ -1,6 +1,12 @@
-//   Copyright 2023, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023 - 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026        Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
@@ -15,6 +21,7 @@ using namespace std::chrono_literals;
 using ::testing::AllOf;
 using ::testing::HasSubstr;
 
+// _____________________________________________________________________________
 TEST(Constants, testDefaultQueryTimeoutIsStriclyPositive) {
   auto reset =
       setRuntimeParameterForTest<&RuntimeParameters::defaultQueryTimeout_>(
@@ -35,9 +42,19 @@ namespace {
 constexpr std::string_view hi = "hi";
 constexpr std::string_view bye = "-bye";
 }  // namespace
+
+// _____________________________________________________________________________
 TEST(Constants, makeQleverInternalIri) {
   EXPECT_EQ(makeQleverInternalIri("hi", "-bye"),
             (makeQleverInternalIriConst<hi, bye>()));
   EXPECT_EQ(makeQleverInternalIri(hi, bye),
             "<http://qlever.cs.uni-freiburg.de/builtin-functions/hi-bye>");
+}
+
+// _____________________________________________________________________________
+TEST(Constants, isFullTextPseudoPredicate) {
+  EXPECT_TRUE(isFullTextPseudoPredicate(CONTAINS_ENTITY_PREDICATE));
+  EXPECT_TRUE(isFullTextPseudoPredicate(CONTAINS_WORD_PREDICATE));
+  EXPECT_FALSE(
+      isFullTextPseudoPredicate("<http://example.com/normalPredicate>"));
 }

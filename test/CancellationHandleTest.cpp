@@ -305,7 +305,7 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
   auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
@@ -329,7 +329,7 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
   auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
@@ -409,7 +409,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
   auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();

@@ -1,5 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2026 Tomas Damek <tomas.damek@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -10,6 +11,7 @@
 #include "engine/ResponseJson.h"
 
 #include "CompilationInfo.h"
+#include "backports/filesystem.h"
 #include "global/Constants.h"
 #include "util/StringUtils.h"
 
@@ -56,6 +58,20 @@ json composeCacheStats(const QueryResultCache& cache,
   // converter.
   result["cache-size-unpinned"] = cache.nonPinnedSize().getBytes();
   result["cache-size-pinned"] = cache.pinnedSize().getBytes();
+  return result;
+}
+
+// _____________________________________________________________________________
+json composeRebuildSuccess(const qlever::IndexSwapConfig& config) {
+  json result;
+  result["message"] = "Index successfully rebuilt and swapped in";
+  // Report the directory (not the full base name): it mirrors the
+  // `rebuild-previous-index-dir` command parameter and is the one piece of
+  // information the client cannot know in advance (the default is derived from
+  // the build date of the old index). The new index is not mentioned because
+  // it is always served from the base name of the old one.
+  result["previous-index-dir"] =
+      ql::filesystem::path{config.oldIndexTarget()}.parent_path().string();
   return result;
 }
 

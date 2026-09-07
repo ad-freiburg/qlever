@@ -83,6 +83,13 @@ class ServerForTesting {
     return server_->indexAndViewsSnapshot()->index_.deltaTriplesManager();
   }
 
+  // Access the `Index` of the underlying `Server`, e.g. to inspect the KB or
+  // text description after setting it via `?index-description=` or
+  // `?text-description=`.
+  const Index& getIndex() const {
+    return server_->indexAndViewsSnapshot()->index_;
+  }
+
   // Forwards to `Server::configureQueryEventLog`.
   void configureQueryEventLog(const ql::filesystem::path& path) {
     server_->configureQueryEventLog(path);
