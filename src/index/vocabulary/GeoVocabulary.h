@@ -138,6 +138,14 @@ class GeoVocabulary {
     ~WordWriter() override;
   };
 
+  // The files of the underlying vocabulary, which is stored under the base
+  // filename itself, plus the file with the geometry information.
+  static FileSuffixes fileSuffixes() {
+    FileSuffixes suffixes = UnderlyingVocabulary::fileSuffixes();
+    suffixes.emplace_back(geoInfoSuffix);
+    return suffixes;
+  }
+
   // ___________________________________________________________________________
   std::unique_ptr<WordWriter> makeDiskWriterPtr(
       const std::string& filename) const {
