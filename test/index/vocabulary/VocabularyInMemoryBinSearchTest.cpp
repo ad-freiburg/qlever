@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
+#include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "util/Forward.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -216,6 +217,7 @@ TEST(VocabularyInMemoryBinSearch, positionOfIndexAndAccessOperator) {
     uint64_t index = indicesWithHoles.at(position);
     EXPECT_EQ(vocab.positionOfIndex(index), std::optional{position});
     EXPECT_EQ(vocab.indexAtPosition(position), index);
+    EXPECT_EQ(vocab.wordAtPosition(position), wordsWithHoles.at(position));
     EXPECT_EQ(vocab[index], std::optional{wordsWithHoles.at(position)});
   }
 
@@ -228,6 +230,25 @@ TEST(VocabularyInMemoryBinSearch, positionOfIndexAndAccessOperator) {
 
   // A position that is out of range is a bug and hence throws.
   EXPECT_THROW(vocab.indexAtPosition(vocab.size()), ad_utility::Exception);
+  EXPECT_THROW(vocab.wordAtPosition(vocab.size()), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyInMemoryBinSearch, endIndexAndGetPositionOfWord) {
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  auto vocab =
+      createVocabularyWithIndices(filename, wordsWithHoles, indicesWithHoles);
+
+  vocabulary_test::testEndIndexAndGetPositionOfWord(
+      vocab, wordsWithHoles, indicesWithHoles,
+      {{"aaa", 0}, {"alx", 3}, {"cat", 4}});
+
+  // In an empty vocabulary, every word yields the empty range at index 0.
+  auto emptyVocab = createVocabularyWithIndices(filename, {}, {});
+  EXPECT_EQ(emptyVocab.endIndex(), 0);
+  EXPECT_EQ(emptyVocab.getPositionOfWord("alpha", ql::ranges::less{}),
+            (std::pair<uint64_t, uint64_t>{0, 0}));
 }
 
 // _____________________________________________________________________________
