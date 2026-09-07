@@ -549,7 +549,7 @@ TEST(IndexTest, setBlankNodeIriRegexesRequiresValidIriPatterns) {
   // Valid IRI regexes are accepted, compiled, and stored (in order).
   index.setBlankNodeIriRegexes({"<http://ex/bn_.*>", "<http://ex/other>"});
   const auto& regexes = index.getBlankNodeIriRegexes();
-  EXPECT_THAT(regexes.patterns(),
+  EXPECT_THAT(regexes.regexesAsStrings(),
               ::testing::ElementsAre("<http://ex/bn_.*>", "<http://ex/other>"));
   EXPECT_TRUE(regexes.matchesAny("<http://ex/bn_1>"));
   EXPECT_FALSE(regexes.matchesAny("<http://ex/bn_1>suffix"));

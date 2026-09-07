@@ -13,10 +13,10 @@
 #include "util/TypeTraits.h"
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
+template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-void SplitVocabulary<SF, SFN, S...>::readFromFile(const std::string& filename) {
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+void SplitVocabulary<SF, FS, S...>::readFromFile(const std::string& filename) {
   auto readSingle = [](auto& vocab, const std::string& filename) {
     AD_LOG_INFO << "Reading vocabulary from file " << filename << " ..."
                 << std::endl;
@@ -37,7 +37,7 @@ void SplitVocabulary<SF, SFN, S...>::readFromFile(const std::string& filename) {
   };
 
   // Make filenames and read each underlying vocabulary
-  auto vocabFilenames = splitFilenameFunction_(filename);
+  auto vocabFilenames = underlyingFilenames(filename);
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
     std::visit([&](auto& vocab) { readSingle(vocab, vocabFilenames[i]); },
                underlying_[i]);
@@ -45,11 +45,11 @@ void SplitVocabulary<SF, SFN, S...>::readFromFile(const std::string& filename) {
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
+template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-void SplitVocabulary<SF, SFN, S...>::open(const std::string& filename) {
-  auto vocabFilenames = splitFilenameFunction_(filename);
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+void SplitVocabulary<SF, FS, S...>::open(const std::string& filename) {
+  auto vocabFilenames = underlyingFilenames(filename);
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
     std::visit([&](auto& vocab) { vocab.open(vocabFilenames[i]); },
                underlying_[i]);
@@ -57,33 +57,28 @@ void SplitVocabulary<SF, SFN, S...>::open(const std::string& filename) {
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
+template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-SplitVocabulary<SF, SFN, S...>::WordWriter::WordWriter(
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+SplitVocabulary<SF, FS, S...>::WordWriter::WordWriter(
     const UnderlyingVocabsArray& underlyingVocabularies,
     const std::string& filename) {
   // Init all underlying word writers
-  auto vocabFilenames = splitFilenameFunction_(filename);
-  // The suffixes that `splitFilenameFunction_` appends for each of the
-  // underlying vocabularies, obtained by applying it to an empty base filename.
-  auto vocabSuffixes = splitFilenameFunction_("");
+  auto vocabFilenames = underlyingFilenames(filename);
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
     underlyingWordWriters_[i] = std::visit(
         [&](auto& vocab) -> AnyUnderlyingWordWriterPtr {
           return vocab.makeDiskWriterPtr(vocabFilenames[i]);
         },
         underlyingVocabularies[i]);
-    fileSuffixes_.addPrefixed(vocabSuffixes[i],
-                              underlyingWordWriters_[i]->fileSuffixes());
   }
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
+template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-uint64_t SplitVocabulary<SF, SFN, S...>::WordWriter::operator()(
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+uint64_t SplitVocabulary<SF, FS, S...>::WordWriter::operator()(
     std::string_view word, bool isExternal) {
   // The word will be stored in the vocabulary selected by the split
   // function. Therefore the word's index needs the marker bit(s) set
@@ -94,20 +89,20 @@ uint64_t SplitVocabulary<SF, SFN, S...>::WordWriter::operator()(
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
+template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-void SplitVocabulary<SF, SFN, S...>::WordWriter::finishImpl() {
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+void SplitVocabulary<SF, FS, S...>::WordWriter::finishImpl() {
   for (const auto& wordWriter : underlyingWordWriters_) {
     wordWriter->finish();
   }
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
+template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-SplitVocabulary<SF, SFN, S...>::WordWriter::~WordWriter() {
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+SplitVocabulary<SF, FS, S...>::WordWriter::~WordWriter() {
   if (!finishWasCalled()) {
     ad_utility::terminateIfThrows([this]() { this->finish(); },
                                   "Calling `finish` from the destructor of "
@@ -115,21 +110,21 @@ SplitVocabulary<SF, SFN, S...>::WordWriter::~WordWriter() {
   }
 }
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
+template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-void SplitVocabulary<SF, SFN, S...>::close() {
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+void SplitVocabulary<SF, FS, S...>::close() {
   for (auto& vocab : underlying_) {
     std::visit([&](auto& v) { v.close(); }, vocab);
   }
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
+template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
 std::optional<ad_utility::GeometryInfo> SplitVocabulary<
-    SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
+    SF, FS, S...>::getGeoInfo(uint64_t indexWithMarker) const {
   // Visit the underlying vocabulary and retrieve the requested `GeometryInfo`
   // if it is a `GeoVocabulary`.
   const auto& vocab = underlying_[getMarker(indexWithMarker)];
@@ -147,10 +142,10 @@ std::optional<ad_utility::GeometryInfo> SplitVocabulary<
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
+template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-bool SplitVocabulary<SF, SFN, S...>::isGeoInfoAvailable() {
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+bool SplitVocabulary<SF, FS, S...>::isGeoInfoAvailable() {
   // If any of the underlying vocabularies is a `GeoVocabulary`, then this
   // `SplitVocabulary` is able to provide precomputed `GeometryInfo`. The other
   // two possibilities, `SplitVocabulary` and `PolymorphicVocabulary`, which

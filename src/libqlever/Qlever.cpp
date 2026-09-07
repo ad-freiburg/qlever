@@ -144,7 +144,8 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
-  index.getImpl().setBlankNodeIriRegexes(config.blankNodeIriRegexes_);
+  index.getImpl().setBlankNodeIriRegexes(
+      std::move(config.blankNodeIriRegexes_));
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
@@ -434,9 +435,9 @@ bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
 }
 
 // ___________________________________________________________________________
-void Qlever::unloadMaterializedView(const std::string& name) const {
+bool Qlever::unloadMaterializedView(const std::string& name) const {
   const auto indexAndViews = indexAndViewsSnapshot();
-  indexAndViews->materializedViewsManager_.unloadViewIfLoaded(name);
+  return indexAndViews->materializedViewsManager_.unloadViewIfLoaded(name);
 }
 
 // ___________________________________________________________________________

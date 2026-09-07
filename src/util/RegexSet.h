@@ -23,18 +23,16 @@ namespace ad_utility {
 // the regexes are compiled into a single automaton (an `RE2::Set`), so that a
 // single pass over the string suffices, no matter how many regexes there are.
 //
-// A `RegexSet` is cheap to copy (the compiled automaton is shared).
+// A `RegexSet` is cheap to copy (all the state is shared).
 class RegexSet {
  private:
-  // A `class` that is only forward-declared here, so that neither `re2/re2.h`
-  // nor `re2/set.h` has to be included in this header.
+  // A `struct` that is only forward-declared here, so that neither `re2/re2.h`
+  // nor `re2/set.h` has to be included in this header. It holds all the state
+  // of a `RegexSet` (the regexes as strings as well as the compiled
+  // automaton), so that copying a `RegexSet` only copies a `shared_ptr`.
   struct Impl;
 
-  // The patterns, kept for error messages and for `patterns()`.
-  std::vector<std::string> patterns_;
-
-  // All the `patterns_`, compiled into a single automaton. `nullptr` if and
-  // only if `patterns_` is empty.
+  // The regexes, `nullptr` if and only if there are none.
   std::shared_ptr<const Impl> impl_;
 
  public:
@@ -42,33 +40,26 @@ class RegexSet {
   // always `false`.
   RegexSet() = default;
 
-  // Compile the given `patterns`. The `description` says what the regexes are
-  // used for (for example ``passed to `--iri-as-blank-node-regexes` ``) and
-  // becomes part of the message of the exception that is thrown if one of the
-  // `patterns` is not a valid regular expression (as understood by Google's
-  // RE2 library).
-  RegexSet(std::vector<std::string> patterns, std::string_view description);
+  // Compile the given `regexesAsStrings`. The `description` says what the
+  // regexes are used for (for example ``passed to
+  // `--iri-as-blank-node-regexes` ``) and becomes part of the message of the
+  // exception that is thrown if one of the `regexesAsStrings` is not a valid
+  // regular expression (as understood by Google's RE2 library).
+  RegexSet(std::vector<std::string> regexesAsStrings,
+           std::string_view description);
 
   // Return whether at least one of the regexes matches the complete `word`
   // (like `RE2::FullMatch` does for a single regex). Always `false` for an
   // empty set of regexes.
   bool matchesAny(std::string_view word) const;
 
-  // The patterns of the regexes, in the order in which they were passed to the
+  // The regexes as strings, in the order in which they were passed to the
   // constructor.
-  const std::vector<std::string>& patterns() const { return patterns_; }
+  const std::vector<std::string>& regexesAsStrings() const;
 
   // The number of regexes, and whether there are none at all.
-  size_t size() const { return patterns_.size(); }
-  bool empty() const { return patterns_.empty(); }
-
- private:
-  // Compile each of the `patterns_` on its own to find the one that is not a
-  // valid regular expression, and throw a descriptive exception for it. If all
-  // of them are valid on their own (so that only their combination could not be
-  // compiled), throw a generic exception. Called when the combined compilation
-  // has failed, and therefore never returns.
-  [[noreturn]] void throwCompilationError(std::string_view description) const;
+  size_t size() const { return regexesAsStrings().size(); }
+  bool empty() const { return regexesAsStrings().empty(); }
 };
 
 }  // namespace ad_utility

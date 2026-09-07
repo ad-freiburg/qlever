@@ -5,7 +5,6 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 
-#include <array>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -174,18 +173,11 @@ class VocabularyInMemoryBinSearch
     // Finish writing and dump all contents that still reside in buffers to
     // disk.
     void finish();
-
-    // The suffixes of the files that this `WordWriter` writes. This class does
-    // not inherit from `WordWriterBase` (see `makeDiskWriterPtr` below), but
-    // mirrors its `fileSuffixes` interface.
-    static ql::span<const std::string_view> fileSuffixes() {
-      return fileSuffixes_;
-    }
-
-   private:
-    static constexpr std::array<std::string_view, 2> fileSuffixes_{"",
-                                                                   idsSuffix};
   };
+
+  // The words are stored under the base filename itself, their explicit
+  // indices in an additional file (see `idsSuffix`).
+  static FileSuffixes fileSuffixes() { return {"", std::string{idsSuffix}}; }
 
   // A vocabulary with holes cannot be written via the `WordWriterBase`
   // interface (which cannot express the explicit indices), so this function

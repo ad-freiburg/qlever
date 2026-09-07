@@ -37,20 +37,6 @@ const std::vector<std::string> sourceWords{"<alpha-keep>", "<beta-drop>",
 // `drop`.
 const std::string dropRegex = "<.*-drop>";
 
-// The names of the files that `buildFilteredVocabulary` creates for a filtered
-// vocabulary of the given `type` with the given `basename`, see the
-// implementation of `buildFilteredVocabulary`. Used below to check that they
-// are all deleted again.
-std::vector<std::string> temporaryFilenames(VocabularyType type,
-                                            const std::string& basename) {
-  if (type == VocabularyType::InMemoryCompressedWithHoles) {
-    return {absl::StrCat(basename, ".words"),
-            absl::StrCat(basename, ".words.ids"),
-            absl::StrCat(basename, ".codebooks")};
-  }
-  return {basename, absl::StrCat(basename, ".ids")};
-}
-
 // Delete all files in the current working directory whose name starts with
 // `prefix`. Used to clean up the files of a source vocabulary, the exact
 // suffixes of which depend on the vocabulary type.
@@ -121,9 +107,11 @@ TEST(BuildFilteredVocabulary, filterAllSupportedVocabularyTypes) {
     EXPECT_EQ(filtered.type_, expectedType);
     checkFilteredVocabulary(filtered.vocabulary_);
 
-    // The intermediate on-disk representation is deleted again.
-    for (const std::string& filename :
-         temporaryFilenames(expectedType, temporaryBasename)) {
+    // The intermediate on-disk representation (all the files that a
+    // vocabulary of the `expectedType` consists of) is deleted again.
+    for (const std::string& suffix :
+         PolymorphicVocabulary::fileSuffixes(expectedType)) {
+      std::string filename = absl::StrCat(temporaryBasename, suffix);
       EXPECT_FALSE(ql::filesystem::exists(filename)) << filename;
     }
   }

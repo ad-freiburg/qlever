@@ -22,11 +22,11 @@ TEST(RegexSet, emptySetMatchesNothing) {
   RegexSet regexes;
   EXPECT_TRUE(regexes.empty());
   EXPECT_EQ(regexes.size(), 0);
-  EXPECT_THAT(regexes.patterns(), ElementsAre());
+  EXPECT_THAT(regexes.regexesAsStrings(), ElementsAre());
   EXPECT_FALSE(regexes.matchesAny(""));
   EXPECT_FALSE(regexes.matchesAny("anything"));
 
-  // The same holds for an explicitly empty list of patterns.
+  // The same holds for an explicitly empty list of regexes.
   RegexSet explicitlyEmpty{{}, "for the test"};
   EXPECT_TRUE(explicitlyEmpty.empty());
   EXPECT_FALSE(explicitlyEmpty.matchesAny("anything"));
@@ -39,7 +39,7 @@ TEST(RegexSet, matchesAnyIsAFullMatchOfAnyOfTheRegexes) {
   RegexSet regexes{{"<http://ex/bn_.*>", "\"lit.*\""}, "for the test"};
   EXPECT_FALSE(regexes.empty());
   EXPECT_EQ(regexes.size(), 2);
-  EXPECT_THAT(regexes.patterns(),
+  EXPECT_THAT(regexes.regexesAsStrings(),
               ElementsAre("<http://ex/bn_.*>", "\"lit.*\""));
 
   // Each of the regexes is applied.
@@ -59,7 +59,7 @@ TEST(RegexSet, matchesAnyIsAFullMatchOfAnyOfTheRegexes) {
 TEST(RegexSet, isCopyable) {
   RegexSet regexes{{"a+"}, "for the test"};
   RegexSet copy = regexes;
-  EXPECT_THAT(copy.patterns(), ElementsAre("a+"));
+  EXPECT_THAT(copy.regexesAsStrings(), ElementsAre("a+"));
   EXPECT_TRUE(copy.matchesAny("aaa"));
   EXPECT_FALSE(copy.matchesAny("aab"));
 
@@ -69,10 +69,10 @@ TEST(RegexSet, isCopyable) {
 }
 
 // _____________________________________________________________________________
-// A pattern that is not a valid regular expression is reported with a
-// user-readable message that names the offending pattern, the given
+// A regex that is not a valid regular expression is reported with a
+// user-readable message that names the offending regex, the given
 // `description`, and the error of the RE2 library.
-TEST(RegexSet, invalidPatternIsReported) {
+TEST(RegexSet, invalidRegexIsReported) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       RegexSet({"valid", "invalid("}, "for excluding vocabulary entries"),
       ::testing::AllOf(HasSubstr("The regex \"invalid(\""),

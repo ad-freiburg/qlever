@@ -123,28 +123,27 @@ std::pair<PolymorphicVocabulary, NumKeptAndDropped> buildAndDeleteFiles(
     const PolymorphicVocabulary& vocabulary,
     const ad_utility::RegexSet& regexes, const std::string& temporaryBasename,
     ad_utility::VocabularyType type) {
-  // The names of the files that the `WordWriter` below creates, filled as soon
-  // as that writer exists (which is what knows the suffixes).
-  std::vector<std::string> temporaryFilenames;
-  // NOTE: This is deliberately declared before the scope of the `wordWriter`
-  // below, so that the files are deleted only after that writer has been
-  // destroyed. The destructor of a `WordWriter` writes the remaining buffers to
-  // disk if `finish` was not called, which is exactly what happens when an
-  // exception is thrown.
-  absl::Cleanup deleteTemporaryFiles = [&temporaryFilenames]() {
-    for (const std::string& filename : temporaryFilenames) {
+  // Delete all the files that the `WordWriter` below creates. Their names don't
+  // have to be hardcoded here, because each vocabulary type knows the suffixes
+  // of the files that it consists of (see `FileSuffixes`).
+  //
+  // NOTE: The cleanup is deliberately declared before the scope of the
+  // `wordWriter` below, so that the files are deleted only after that writer
+  // has been destroyed. The destructor of a `WordWriter` writes the remaining
+  // buffers to disk if `finish` was not called, which is exactly what happens
+  // when an exception is thrown.
+  absl::Cleanup deleteTemporaryFiles = [&temporaryBasename, type]() {
+    for (const std::string& suffix :
+         PolymorphicVocabulary::fileSuffixes(type)) {
       // Do not warn if the file does not exist: if an exception was thrown,
       // some of the files may never have been created.
-      ad_utility::deleteFile(filename, false);
+      ad_utility::deleteFile(absl::StrCat(temporaryBasename, suffix), false);
     }
   };
 
   NumKeptAndDropped numKeptAndDropped;
   {
     typename Vocabulary::WordWriter wordWriter{temporaryBasename};
-    for (std::string_view suffix : wordWriter.fileSuffixes()) {
-      temporaryFilenames.push_back(absl::StrCat(temporaryBasename, suffix));
-    }
     numKeptAndDropped = writeSurvivingEntries(vocabulary, regexes, wordWriter);
   }
 

@@ -122,9 +122,6 @@ class VocabularyInternalExternal {
     uint64_t idx_ = 0;
     size_t milestoneDistance_;
     size_t sinceMilestone_ = 0;
-    // The suffixes of the files of the two underlying writers, which write to
-    // the base filename plus `internalSuffix`/`externalSuffix`.
-    FileSuffixes fileSuffixes_{};
 
     // Construct from the `filename` to which the vocabulary will be serialized.
     // At least every `milestoneDistance`-th word will be cached in RAM.
@@ -139,12 +136,18 @@ class VocabularyInternalExternal {
 
     // Finish writing.
     void finishImpl() override;
-
-    // The files of the two underlying writers.
-    ql::span<const std::string_view> fileSuffixes() const override {
-      return fileSuffixes_.asSpan();
-    }
   };
+
+  // The files of the internal and the external vocabulary, which are stored
+  // under the base filename plus `internalSuffix`/`externalSuffix`.
+  static FileSuffixes fileSuffixes() {
+    FileSuffixes suffixes;
+    addFileSuffixesWithPrefix(suffixes, internalSuffix,
+                              VocabularyInMemoryBinSearch::fileSuffixes());
+    addFileSuffixesWithPrefix(suffixes, externalSuffix,
+                              VocabularyOnDisk::fileSuffixes());
+    return suffixes;
+  }
 
   // Return a `unique_ptr<WordWriter>` that writes to the given `filename`.
   static auto makeDiskWriterPtr(const std::string& filename) {

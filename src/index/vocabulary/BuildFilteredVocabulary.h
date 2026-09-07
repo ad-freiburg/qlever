@@ -45,9 +45,10 @@ struct FilteredVocabulary {
 // `temporaryBasename` is used for the intermediate on-disk representation of
 // the result (the vocabulary implementations can only be built via a
 // `WordWriter` that writes to disk); all files that are created there (which
-// the `WordWriter` reports via `fileSuffixes`) are deleted again before
-// returning (also if an exception is thrown), because both of the possible
-// result types load everything into memory when they are opened.
+// the vocabulary type reports via `PolymorphicVocabulary::fileSuffixes`) are
+// deleted again before returning (also if an exception is thrown), because
+// both of the possible result types load everything into memory when they are
+// opened.
 //
 // Throw if `vocabulary` is a `SplitVocabulary` (i.e. a vocabulary of type
 // `on-disk-compressed-geo-split`): its marker-encoded indices are not ascending

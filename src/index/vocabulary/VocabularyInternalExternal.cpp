@@ -20,10 +20,7 @@ VocabularyInternalExternal::WordWriter::WordWriter(const std::string& filename,
                                                    size_t milestoneDistance)
     : internalWriter_{absl::StrCat(filename, internalSuffix)},
       externalWriter_{absl::StrCat(filename, externalSuffix)},
-      milestoneDistance_{milestoneDistance} {
-  fileSuffixes_.addPrefixed(internalSuffix, internalWriter_.fileSuffixes());
-  fileSuffixes_.addPrefixed(externalSuffix, externalWriter_.fileSuffixes());
-}
+      milestoneDistance_{milestoneDistance} {}
 
 // _____________________________________________________________________________
 uint64_t VocabularyInternalExternal::WordWriter::operator()(

@@ -28,7 +28,6 @@ class WordWriterThrowing : public WordWriterBase {
   WordWriterThrowing()
       : caller_{[]() { throw std::runtime_error("Constructor failed"); }} {}
   uint64_t operator()(std::string_view, bool) override { return 0; }
-  ql::span<const std::string_view> fileSuffixes() const override { return {}; }
   void finishImpl() override {}
 };
 
@@ -37,7 +36,6 @@ class WordWriterNoFinish : public WordWriterBase {
  public:
   WordWriterNoFinish() {}
   uint64_t operator()(std::string_view, bool) override { return 0; }
-  ql::span<const std::string_view> fileSuffixes() const override { return {}; }
   void finishImpl() override {}
 };
 }  // namespace

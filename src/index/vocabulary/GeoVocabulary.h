@@ -120,9 +120,6 @@ class GeoVocabulary {
     ad_utility::File geoInfoFile_;
     size_t numInvalidGeometries_ = 0;
     size_t numInvalidPolygonArea_ = 0;
-    // The files of the underlying writer (which writes to the base filename
-    // itself) plus the file for the geometry information.
-    FileSuffixes fileSuffixes_{};
 
    public:
     // Initialize the `geoInfoFile_` by writing its header and open a word
@@ -139,12 +136,15 @@ class GeoVocabulary {
     void finishImpl() override;
 
     ~WordWriter() override;
-
-    // ______________________________________________________________________
-    ql::span<const std::string_view> fileSuffixes() const override {
-      return fileSuffixes_.asSpan();
-    }
   };
+
+  // The files of the underlying vocabulary, which is stored under the base
+  // filename itself, plus the file with the geometry information.
+  static FileSuffixes fileSuffixes() {
+    FileSuffixes suffixes = UnderlyingVocabulary::fileSuffixes();
+    suffixes.emplace_back(geoInfoSuffix);
+    return suffixes;
+  }
 
   // ___________________________________________________________________________
   std::unique_ptr<WordWriter> makeDiskWriterPtr(
