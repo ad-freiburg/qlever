@@ -21,34 +21,36 @@
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 
-// The input policy of the block merge (see
-// `util/parallelBlockMerge/ParallelBlockMerge.h`): the `BlockedRunsInput`
-// concept, and the `VectorRunsInput` adapter for in-memory data.
+// The input policy of the block merge: the `InputConcept`, and the
+// `VectorInput` adapter for in-memory data. For the terminology (runs, blocks,
+// and chunks) see `util/parallelBlockMerge/ParallelBlockMerge.h`, which is the
+// header to read first.
 namespace ad_utility::parallelBlockMerge {
 
-// The requirements of the `BlockedRunsInput` concept below, see there for the
+// The requirements of the `InputConcept` below, see there for the
 // documentation.
 template <typename T>
 CPP_requires(
-    BlockedRunsInput_,
-    requires(const T& t, size_t run, size_t block, typename T::Block& out,
+    InputConcept_,
+    requires(const T& t, size_t runIdx, size_t blockIdx, typename T::Block& out,
              ql::ranges::range_reference_t<typename T::Block> el)(
         // The number of presorted runs.
         ql::concepts::convertible_to<decltype(t.numRuns()), size_t>,
         // The number of blocks of a single run.
-        ql::concepts::convertible_to<decltype(t.numBlocks(run)), size_t>,
+        ql::concepts::convertible_to<decltype(t.numBlocks(runIdx)), size_t>,
         // The number of elements in a single block, available without I/O.
-        ql::concepts::convertible_to<decltype(t.numElementsInBlock(run, block)),
-                                     size_t>,
-        // The first and the last key of a single block, available without I/O.
-        ql::concepts::same_as<decltype(t.firstKey(run, block)),
-                              const typename T::Key&>,
-        ql::concepts::same_as<decltype(t.lastKey(run, block)),
-                              const typename T::Key&>,
+        ql::concepts::convertible_to<
+            decltype(t.numElementsInBlock(runIdx, blockIdx)), size_t>,
+        // The first and the last element of a single block, available without
+        // I/O.
+        ql::concepts::convertible_to<decltype(t.firstElement(runIdx, blockIdx)),
+                                     typename T::Element>,
+        ql::concepts::convertible_to<decltype(t.lastElement(runIdx, blockIdx)),
+                                     typename T::Element>,
         // Materialize a single block. This is the only operation that performs
         // I/O, and it has to be thread-safe.
-        ql::concepts::same_as<decltype(t.readBlock(run, block)),
-                              typename T::Block>,
+        ql::concepts::convertible_to<decltype(t.readBlock(runIdx, blockIdx)),
+                                     typename T::Block>,
         // Create an empty block, and append a single element to a block.
         ql::concepts::same_as<decltype(t.makeEmptyBlock()), typename T::Block>,
         t.appendToBlock(out, el),
@@ -58,11 +60,11 @@ CPP_requires(
 
 namespace detail {
 // Extract `T::Block` if it exists, and `void` otherwise. This is needed so that
-// the `BlockedRunsInput` concept below is a hard `false` (instead of a
-// compilation error) for types without a nested `Block` type. Note that this
-// requires a class template (and not simply a `CPP_requires` clause), because
-// in C++17 mode the concepts are emulated via variable templates, for which
-// SFINAE does not apply to the template arguments.
+// the `InputConcept` below is a hard `false` (instead of a compilation error)
+// for types without a nested `Block` type. Note that this requires a class
+// template (and not simply a `CPP_requires` clause), because in C++17 mode the
+// concepts are emulated via variable templates, for which SFINAE does not apply
+// to the template arguments.
 template <typename T, typename = void>
 struct BlockTypeOrVoid {
   using type = void;
@@ -80,19 +82,31 @@ using BlockTypeOrVoidT = typename BlockTypeOrVoid<T>::type;
 }  // namespace detail
 
 // The input policy of the merge. It abstracts a set of presorted runs
-// (`numRuns()` many), each of which is split into blocks (`numBlocks(run)` many
-// for the run with the given index). The elements of the blocks are ordered
-// according to a key of type `T::Key`, and the concatenation of all blocks of a
-// single run is sorted with respect to that key.
+// (`numRuns()` many), each of which is split into blocks (`numBlocks(runIdx)`
+// many for the run with the given index). The concatenation of all blocks of a
+// single run is sorted with respect to the comparator of the merge, and no
+// block is empty.
 //
 // The crucial property of this policy is that the number of elements
-// (`numElementsInBlock`) as well as the first and the last key
-// (`firstKey`/`lastKey`) of every block are available *without* performing any
-// I/O. They typically come from cheap in-memory metadata. It is exactly this
-// property that allows the blocks themselves to live compressed on disk: the
-// merge can compute the boundaries of the independent chunks from the metadata
-// alone and only then read (via the thread-safe `readBlock`) those blocks that
-// a given chunk actually needs.
+// (`numElementsInBlock`) as well as the first and the last element
+// (`firstElement`/`lastElement`) of every block are available *without*
+// performing any I/O. They typically come from cheap in-memory metadata. It is
+// exactly this property that allows the blocks themselves to live compressed on
+// disk: the merge can compute the boundaries of the independent chunks from the
+// metadata alone and only then read (via the thread-safe `readBlock`) those
+// blocks that a given chunk actually needs.
+//
+// IMPORTANT: There is deliberately no separate notion of a *key*. The merge
+// splits on whole elements and applies the `Comparator` to them and only to
+// them, so `firstElement(runIdx, blockIdx)` and `lastElement(runIdx, blockIdx)`
+// have to be equivalent to the first and the last element of
+// `readBlock(runIdx, blockIdx)`: the `Comparator` must not be able to
+// distinguish them. `Element` need not be the value type of `Block` (it may for
+// example be an owning type that corresponds to a proxy reference, or a type
+// that only stores those parts of an element that the comparator looks at), it
+// only has to be morally the same value. Anything weaker silently breaks the
+// merge, because a chunk trims its first and its last input block by exactly
+// these bounds, see `ChunkMerger`.
 //
 // The remaining member functions describe how the *output* blocks are built:
 // `makeEmptyBlock()` creates a fresh (empty) block, `appendToBlock(block, el)`
@@ -105,96 +119,80 @@ using BlockTypeOrVoidT = typename BlockTypeOrVoid<T>::type;
 // in practice: a merge that distributes them over several threads calls these
 // functions from all of those threads at the same time.
 template <typename T>
-CPP_concept BlockedRunsInput =
+CPP_concept InputConcept =
     ql::ranges::random_access_range<detail::BlockTypeOrVoidT<T>> &&
-    CPP_requires_ref(BlockedRunsInput_, T);
+    ql::ranges::sized_range<detail::BlockTypeOrVoidT<T>> &&
+    CPP_requires_ref(InputConcept_, T);
 
 // ___________________________________________________________________________
 // An in-memory input policy.
 // ___________________________________________________________________________
 
-// Expose a set of sorted random-access ranges as runs of fixed-size virtual
-// blocks. The first and last key of every virtual block are directly available
-// from the underlying range, so no I/O and no stored metadata are needed. Use
-// this to run the merge on in-memory data, and in tests.
-CPP_template(typename Range)(
-    requires ql::ranges::random_access_range<Range>) class VectorRunsInput {
+// Expose a set of runs, each of which is a `std::vector` of blocks, as an
+// `InputConcept`. Every run (that is, the concatenation of its blocks) has to
+// be sorted, and no block may be empty.
+//
+// NOTE: `readBlock` returns a *copy* of the block, which is of course not
+// efficient. This is deliberate and perfectly fine: in production the merge is
+// only ever used on external (that is, on-disk) data, where a block has to be
+// materialized anyway, so this class only serves the tests. The copy is also
+// what makes the class correct for a merge with `moveElements == true`. The
+// very same block may be read by two different chunks (namely by the two chunks
+// whose boundary lies inside that block), so a chunk that moves the elements
+// out of a block must not be able to affect the other one.
+template <typename T>
+class VectorInput {
  public:
-  using value_type = ql::ranges::range_value_t<Range>;
-  using Key = value_type;
-  using Block = std::vector<value_type>;
+  using value_type = T;
+  using Element = T;
+  using Block = std::vector<T>;
 
  private:
-  std::vector<Range> runs_;
-  size_t virtualBlockSize_;
-  // If `true`, then `readBlock` moves the elements out of the underlying
-  // ranges. This only has an effect if the elements of the ranges are mutable
-  // (for example if `Range` is a `subrange` or a `span`), and it has to match
-  // the `moveElements` argument of `serialBlockMergeToRange`.
-  bool moveElements_;
+  std::vector<std::vector<Block>> runs_;
 
  public:
-  // Construct from the `runs` (each of which has to be sorted) and the number
-  // of elements in a single virtual block.
-  explicit VectorRunsInput(std::vector<Range> runs, size_t virtualBlockSize,
-                           bool moveElements = false)
-      : runs_{std::move(runs)},
-        virtualBlockSize_{virtualBlockSize},
-        moveElements_{moveElements} {
-    AD_CONTRACT_CHECK(virtualBlockSize > 0);
+  // Construct from the blocks of every run.
+  explicit VectorInput(std::vector<std::vector<Block>> runs)
+      : runs_{std::move(runs)} {
+    for (const auto& run : runs_) {
+      AD_CONTRACT_CHECK(ql::ranges::none_of(
+          run, [](const Block& block) { return block.empty(); }));
+    }
   }
 
   // ________________________________________________________________________
   size_t numRuns() const { return runs_.size(); }
 
   // ________________________________________________________________________
-  size_t numBlocks(size_t run) const {
-    size_t numElements = runSize(run);
-    return (numElements + virtualBlockSize_ - 1) / virtualBlockSize_;
+  size_t numBlocks(size_t runIdx) const { return runs_.at(runIdx).size(); }
+
+  // ________________________________________________________________________
+  size_t numElementsInBlock(size_t runIdx, size_t blockIdx) const {
+    return block(runIdx, blockIdx).size();
   }
 
   // ________________________________________________________________________
-  size_t numElementsInBlock(size_t run, size_t block) const {
-    size_t begin = block * virtualBlockSize_;
-    return std::min(virtualBlockSize_, runSize(run) - begin);
+  const Element& firstElement(size_t runIdx, size_t blockIdx) const {
+    return block(runIdx, blockIdx).front();
   }
 
   // ________________________________________________________________________
-  const Key& firstKey(size_t run, size_t block) const {
-    return ql::ranges::begin(runs_[run])[block * virtualBlockSize_];
+  const Element& lastElement(size_t runIdx, size_t blockIdx) const {
+    return block(runIdx, blockIdx).back();
   }
 
-  // ________________________________________________________________________
-  const Key& lastKey(size_t run, size_t block) const {
-    size_t begin = block * virtualBlockSize_;
-    return ql::ranges::begin(
-        runs_[run])[begin + numElementsInBlock(run, block) - 1];
-  }
-
-  // ________________________________________________________________________
-  Block readBlock(size_t run, size_t block) const {
-    size_t begin = block * virtualBlockSize_;
-    size_t numElements = numElementsInBlock(run, block);
-    Block result;
-    result.reserve(numElements);
-    auto it = ql::ranges::begin(runs_[run]) + begin;
-    for (size_t i = 0; i < numElements; ++i, ++it) {
-      if (moveElements_) {
-        result.push_back(std::move(*it));
-      } else {
-        result.push_back(*it);
-      }
-    }
-    return result;
+  // Return a copy of the block, see the note at the top of this class.
+  Block readBlock(size_t runIdx, size_t blockIdx) const {
+    return block(runIdx, blockIdx);
   }
 
   // ________________________________________________________________________
   Block makeEmptyBlock() const { return Block{}; }
 
   // ________________________________________________________________________
-  template <typename T>
-  void appendToBlock(Block& block, T&& element) const {
-    block.push_back(std::forward<T>(element));
+  template <typename U>
+  void appendToBlock(Block& block, U&& element) const {
+    block.push_back(std::forward<U>(element));
   }
 
   // ________________________________________________________________________
@@ -204,11 +202,31 @@ CPP_template(typename Range)(
   }
 
  private:
-  // Return the number of elements of the run with the given index.
-  size_t runSize(size_t run) const {
-    return static_cast<size_t>(ql::ranges::distance(runs_[run]));
+  // Return the block with the given index of the run with the given index.
+  const Block& block(size_t runIdx, size_t blockIdx) const {
+    return runs_.at(runIdx).at(blockIdx);
   }
 };
+
+// Split each of the `runs` (each of which has to be sorted) into blocks of
+// `blockSize` elements, where the last block of a run may be smaller, and
+// return the corresponding `VectorInput`. This is the convenient way to obtain
+// a `VectorInput` from flat vectors.
+template <typename T>
+VectorInput<T> makeVectorInput(const std::vector<std::vector<T>>& runs,
+                               size_t blockSize) {
+  AD_CONTRACT_CHECK(blockSize > 0);
+  std::vector<std::vector<std::vector<T>>> blockedRuns;
+  blockedRuns.reserve(runs.size());
+  for (const auto& run : runs) {
+    auto& blocks = blockedRuns.emplace_back();
+    for (size_t begin = 0; begin < run.size(); begin += blockSize) {
+      size_t end = std::min(begin + blockSize, run.size());
+      blocks.emplace_back(run.begin() + begin, run.begin() + end);
+    }
+  }
+  return VectorInput<T>{std::move(blockedRuns)};
+}
 
 }  // namespace ad_utility::parallelBlockMerge
 

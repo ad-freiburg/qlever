@@ -16,10 +16,11 @@
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 
-// The tuning knobs of the block merge (see
-// `util/parallelBlockMerge/ParallelBlockMerge.h`) together with their defaults.
-// These are shared configuration and not a policy, which is why they live in a
-// header of their own.
+// The tuning knobs of the block merge together with their defaults. These are
+// shared configuration and not a policy, which is why they live in a header of
+// their own. For the terminology (runs, blocks, and chunks) see
+// `util/parallelBlockMerge/ParallelBlockMerge.h`, which is the header to read
+// first.
 namespace ad_utility::parallelBlockMerge {
 
 // The default number of elements in a single output block of the merge.
@@ -29,7 +30,7 @@ constexpr inline size_t DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_SIZE = 100'000;
 // merge may occupy. An output block is finished as soon as either this limit or
 // `DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_SIZE` is reached.
 constexpr inline MemorySize DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY =
-    MemorySize::megabytes(16);
+    MemorySize::megabytes(1);
 
 // The criterion for when a single output block of the merge is complete. A
 // block is finished as soon as it either contains a given number of elements or

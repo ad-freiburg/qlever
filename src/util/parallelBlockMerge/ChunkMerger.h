@@ -11,6 +11,7 @@
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_CHUNKMERGER_H
 
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -27,33 +28,72 @@
 #include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
+// The merger of a single chunk, together with the state that the mergers of all
+// chunks of a merge share. For the terminology (runs, blocks, and chunks) see
+// `util/parallelBlockMerge/ParallelBlockMerge.h`, which is the header to read
+// first.
 namespace ad_utility::parallelBlockMerge {
 namespace detail {
 
-// Merge that part of the runs of a `BlockedRunsInput` that lies in the
-// half-open key range of a `Split` and yield the result as a lazy range of
+// Everything that a single merge consists of, and that the mergers of its
+// chunks share. It is always held by a `shared_ptr`, so that a `ChunkMerger`
+// (of which there is one per chunk, created lazily) can keep it alive, no
+// matter in which order and on which thread the chunks are merged. This is also
+// the only owner of the `input` and the `comparator`, both of which the
+// `ChunkMerger`s only refer to.
+template <typename Input, typename Comparator>
+struct MergeState {
+  using Element = typename Input::Element;
+
+  Input input_;
+  Comparator comparator_;
+  MergeOptions options_;
+  // May be `nullptr`, in which case the merge cannot be cancelled.
+  ad_utility::SharedCancellationHandle cancellationHandle_;
+  // The boundaries of the chunks, which partition the whole range of elements.
+  // Never empty, see `computeChunkBoundaries`.
+  std::vector<ChunkBoundary<Element>> chunkBoundaries_;
+
+  // NOTE: An explicit constructor (instead of aggregate initialization) is
+  // needed so that `std::make_shared` can be used.
+  MergeState(Input input, Comparator comparator, MergeOptions options,
+             ad_utility::SharedCancellationHandle cancellationHandle,
+             std::vector<ChunkBoundary<Element>> chunkBoundaries)
+      : input_{std::move(input)},
+        comparator_{std::move(comparator)},
+        options_{std::move(options)},
+        cancellationHandle_{std::move(cancellationHandle)},
+        chunkBoundaries_{std::move(chunkBoundaries)} {
+    AD_CONTRACT_CHECK(!chunkBoundaries_.empty());
+  }
+};
+
+// Merge that part of the runs of a `MergeState` that lies in the range of the
+// chunk with the index `chunkIdx` and yield the result as a lazy range of
 // output blocks (see `get()`).
 //
 // The blocks of the input are read lazily and one at a time per run, so the
 // memory that a single `ChunkMerger` requires is one input block per run plus
 // a single output block.
 //
-// The `Comparator` has to be able to compare two elements, two keys, as well as
-// an element with a key (in both orders).
+// The `Comparator` has to be able to compare two elements. It is also applied
+// to the bounds of the chunk, which the `InputConcept` requires to be
+// equivalent to actual elements.
 //
 // If `moveElements` is `true`, then the elements are moved out of the input
 // blocks into the output blocks.
 CPP_template(bool moveElements, typename Input, typename Comparator)(
-    requires BlockedRunsInput<Input>) class ChunkMerger
+    requires InputConcept<Input>) class ChunkMerger
     : public ad_utility::InputRangeFromGet<typename Input::Block>,
       public ad_utility::NoCopyNoMove {
  public:
   using Block = typename Input::Block;
-  using Key = typename Input::Key;
+  using Element = typename Input::Element;
+  using State = MergeState<Input, Comparator>;
 
  private:
-  // The lazy cursor over that part of a single run that lies in the key range
-  // of the chunk. The current element is `*it_`, and the cursor is exhausted if
+  // The lazy cursor over that part of a single run that lies in the range of
+  // the chunk. The current element is `*it_`, and the cursor is exhausted if
   // `it_ == end_` and there is no further block to read.
   //
   // NOTE: `it_` and `end_` are iterators into `block_`, so a `Cursor` must not
@@ -81,34 +121,23 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
           end_{it_} {}
   };
 
-  const Input* input_;
-  const Comparator* comparator_;
-  MergeOptions options_;
-  Split<Key> split_;
-  ad_utility::SharedCancellationHandle cancellationHandle_;
+  std::shared_ptr<const State> state_;
+  size_t chunkIdx_;
   std::vector<Cursor> cursors_;
   // The min-heap over the cursors, see `heapComparator()`.
   std::vector<Cursor*> heap_;
   bool isInitialized_ = false;
 
  public:
-  // Construct from the `input` and the `comparator` (both of which must not be
-  // `nullptr` and have to outlive the `ChunkMerger`), the `options`, the key
-  // range of the chunk, and an optional `cancellationHandle`.
+  // Construct from the shared `state` (which must not be `nullptr`) and the
+  // index of the chunk to merge.
   //
   // NOTE: The merger holds pointers into itself (the `heap_` points into
-  // `cursors_`) as well as to the `input` and the `comparator`, which is why it
-  // is a `NoCopyNoMove`, and why the latter two are passed as pointers.
-  ChunkMerger(const Input* input, const Comparator* comparator,
-              MergeOptions options, Split<Key> split,
-              ad_utility::SharedCancellationHandle cancellationHandle)
-      : input_{input},
-        comparator_{comparator},
-        options_{std::move(options)},
-        split_{std::move(split)},
-        cancellationHandle_{std::move(cancellationHandle)} {
-    AD_CONTRACT_CHECK(input_ != nullptr);
-    AD_CONTRACT_CHECK(comparator_ != nullptr);
+  // `cursors_`), which is why it is a `NoCopyNoMove`.
+  ChunkMerger(std::shared_ptr<const State> state, size_t chunkIdx)
+      : state_{std::move(state)}, chunkIdx_{chunkIdx} {
+    AD_CONTRACT_CHECK(state_ != nullptr);
+    AD_CONTRACT_CHECK(chunkIdx_ < state_->chunkBoundaries_.size());
   }
 
   // Return the next output block, or `std::nullopt` if the chunk is exhausted
@@ -121,17 +150,19 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     if (heap_.empty()) {
       return std::nullopt;
     }
-    auto block = input_->makeEmptyBlock();
+    const Input& input = state_->input_;
+    auto block = input.makeEmptyBlock();
     size_t numElements = 0;
     MemorySize memory = MemorySize::bytes(0);
     auto comparator = heapComparator();
     while (!heap_.empty() &&
-           !options_.outputBlockSize.isBlockLargeEnough(numElements, memory)) {
+           !state_->options_.outputBlockSize.isBlockLargeEnough(numElements,
+                                                                memory)) {
       ql::ranges::pop_heap(heap_, comparator);
       Cursor* cursor = heap_.back();
       auto&& element = *cursor->it_;
-      memory += input_->memorySizeOfElement(element);
-      input_->appendToBlock(block, ad_utility::moveIf<moveElements>(element));
+      memory += input.memorySizeOfElement(element);
+      input.appendToBlock(block, ad_utility::moveIf<moveElements>(element));
       ++numElements;
       ++cursor->it_;
       // NOTE: `readNextBlockIfNecessary` may replace `cursor->block_`, which
@@ -143,19 +174,25 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
         heap_.pop_back();
       }
     }
-    if (cancellationHandle_ != nullptr) {
-      cancellationHandle_->throwIfCancelled();
+    if (state_->cancellationHandle_ != nullptr) {
+      state_->cancellationHandle_->throwIfCancelled();
     }
     return block;
   }
 
  private:
+  // The boundary of the chunk that this merger covers.
+  const ChunkBoundary<Element>& boundary() const {
+    return state_->chunkBoundaries_[chunkIdx_];
+  }
+
   // Return the comparator of the `heap_`. Its arguments are reversed, such that
   // the max-heap of the standard library acts as a min-heap.
   auto heapComparator() const {
-    return [comparator = comparator_](const Cursor* a, const Cursor* b) {
-      return (*comparator)(*b->it_, *a->it_);
-    };
+    return
+        [comparator = &state_->comparator_](const Cursor* a, const Cursor* b) {
+          return (*comparator)(*b->it_, *a->it_);
+        };
   }
 
   // Set up the cursors of all runs that contribute to this chunk and build the
@@ -164,15 +201,17 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     if (std::exchange(isInitialized_, true)) {
       return;
     }
-    size_t numRuns = input_->numRuns();
+    const Input& input = state_->input_;
+    size_t numRuns = input.numRuns();
     cursors_.reserve(numRuns);
     for (size_t runIdx = 0; runIdx < numRuns; ++runIdx) {
-      auto blockRange = blockRangeForRun(*input_, *comparator_, split_, runIdx);
+      auto blockRange =
+          blockRangeForRun(input, state_->comparator_, boundary(), runIdx);
       if (blockRange.empty()) {
         continue;
       }
       cursors_.emplace_back(runIdx, blockRange.firstBlockIdx_,
-                            blockRange.endBlockIdx_, input_->makeEmptyBlock());
+                            blockRange.endBlockIdx_, input.makeEmptyBlock());
     }
     heap_.reserve(cursors_.size());
     for (auto& cursor : cursors_) {
@@ -192,25 +231,27 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   // because a first block that is trimmed away completely is directly followed
   // by the second one.
   bool readNextBlockIfNecessary(Cursor& cursor, bool isFirstBlock = false) {
+    const Input& input = state_->input_;
+    const Comparator& comparator = state_->comparator_;
     while (cursor.it_ == cursor.end_) {
       if (cursor.nextBlockIdx_ == cursor.endBlockIdx_) {
         return false;
       }
       size_t blockIdx = cursor.nextBlockIdx_;
       ++cursor.nextBlockIdx_;
-      cursor.block_ = input_->readBlock(cursor.runIdx_, blockIdx);
+      cursor.block_ = input.readBlock(cursor.runIdx_, blockIdx);
       cursor.it_ = ql::ranges::begin(cursor.block_);
-      cursor.end_ = cursor.it_ + blockSize(cursor.block_);
+      cursor.end_ = cursor.it_ + ql::ranges::size(cursor.block_);
       // Only the very first block of the chunk can contain elements that are
-      // smaller than `lo`, and only the very last one can contain elements that
-      // are not smaller than `hi`.
-      if (std::exchange(isFirstBlock, false) && split_.lo_.has_value()) {
-        cursor.it_ = ql::ranges::lower_bound(cursor.block_, split_.lo_.value(),
-                                             *comparator_);
+      // smaller than `lo_`, and only the very last one can contain elements
+      // that are not smaller than `hi_`.
+      if (std::exchange(isFirstBlock, false) && boundary().lo_.has_value()) {
+        cursor.it_ = ql::ranges::lower_bound(
+            cursor.block_, boundary().lo_.value(), comparator);
       }
-      if (blockIdx + 1 == cursor.endBlockIdx_ && split_.hi_.has_value()) {
-        cursor.end_ = ql::ranges::lower_bound(cursor.block_, split_.hi_.value(),
-                                              *comparator_);
+      if (blockIdx + 1 == cursor.endBlockIdx_ && boundary().hi_.has_value()) {
+        cursor.end_ = ql::ranges::lower_bound(
+            cursor.block_, boundary().hi_.value(), comparator);
       }
       AD_CORRECTNESS_CHECK(cursor.it_ <= cursor.end_);
     }
