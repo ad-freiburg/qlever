@@ -674,7 +674,8 @@ class Qlever {
   //    everything, i.e. performs no cleanup.
   //
   // Steps 1 to 3 are the pure on-disk part of the swap and are performed by
-  // `qlever::moveIndexIntoPlace` (see `index/IndexSwap.h`).
+  // `qlever::moveIndexIntoPlace` (see `index/IndexSwap.h`), which is shared
+  // with `qlever-upgrade-index`.
   //
   // Typically, `config.newIndexTarget()` is `config.oldIndexSource()`, i.e. the
   // new index is served from the place of the old index (so that a later
