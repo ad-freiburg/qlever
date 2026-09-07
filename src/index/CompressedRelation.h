@@ -878,12 +878,24 @@ class CompressedRelationReader {
   //
   // NOTE: This reader and `locatedTriplesPerBlock` have to be kept alive until
   // the returned generator has been fully consumed.
+  //
+  // The helper classes for the implementation live in `DistinctCol0Ids.h`.
   cppcoro::generator<IdTable, LazyScanMetadata> getDistinctCol0Ids(
       ScanSpecAndBlocks scanSpecAndBlocks, bool addGraphColumn,
       std::optional<std::vector<Id>> idFilter,
       CancellationHandle cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 #endif
+
+  // Return true iff the contents of the given block, restricted to its first
+  // `numColumns` columns, are already known from its metadata alone. This
+  // requires that all the triples of the block agree on those columns (which
+  // the metadata knows because it stores the first and the last triple), and
+  // that there are no delta triples for the block, as those might have deleted
+  // some of its triples or added new ones.
+  static bool contentsAreKnownFromMetadata(
+      const CompressedBlockMetadata& block, size_t numColumns,
+      const LocatedTriplesPerBlock& locatedTriples);
 
   // Determine the distinct values and their counts for the column at
   // `columnIndex` (must be 0 or 1). Used for GROUP BY optimizations.
