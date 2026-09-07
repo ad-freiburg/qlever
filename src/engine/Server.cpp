@@ -461,16 +461,32 @@ nlohmann::json Server::processDeleteMaterializedView(
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
 
-  // Snapshot again instead of reusing the snapshot taken at the beginning of
-  // `process()` (see `clear-delta-triples` above for the same pattern), so
-  // that we delete the view from the index that is currently being served
-  // and not from a stale one that a concurrent rebuild has swapped out in the
-  // meantime. Deleting from a stale manager is not unsafe (the rebuild called
-  // `MaterializedViewsManager::retireOnDiskFiles` on it, which makes
-  // `deleteView` throw), it would just needlessly fail.
-  indexAndViewsSnapshot()->materializedViewsManager_.deleteView(name);
+  // `Qlever::deleteMaterializedView` takes a fresh snapshot instead of reusing
+  // the one taken at the beginning of `process()` (see `clear-delta-triples`
+  // above for the same pattern), so that the view is deleted from the index
+  // that is currently being served and not from a stale one that a concurrent
+  // rebuild has swapped out in the meantime. Deleting from a stale manager is
+  // not unsafe (rebuild called `MaterializedViewsManager::retireOnDiskFiles` on
+  // it, which makes `deleteView` throw), it would just needlessly fail.
+  qlever().deleteMaterializedView(name);
 
   return json{{"materialized-view-deleted", name}};
+}
+
+// _____________________________________________________________________________
+nlohmann::json Server::processUnloadMaterializedView(
+    const ParamValueMap& parameters) const {
+  auto name =
+      qlever::http_api_helpers::getViewNameParameter(parameters, "Unloading");
+
+  // `Qlever::unloadMaterializedView` takes a fresh snapshot for the same reason
+  // as in `processDeleteMaterializedView` above (unloading from a stale
+  // manager would silently leave the view loaded in the served one). Report
+  // whether the view was actually loaded, so that a request with a wrong
+  // name does not look like a success.
+  bool wasLoaded = qlever().unloadMaterializedView(name);
+
+  return json{{"materialized-view-unloaded", name}, {"was-loaded", wasLoaded}};
 }
 
 // _____________________________________________________________________________
@@ -520,6 +536,7 @@ constexpr std::array commands = {
     CommandMeta{"load-materialized-view", "explicitly load materialized view",
                 true},
     CommandMeta{"delete-materialized-view", "delete materialized view", true},
+    CommandMeta{"unload-materialized-view", "unload materialized view", true},
 };
 
 // Throw a 403 `HttpError` if `accessTokenOk` is false; `actionName` names the
@@ -897,6 +914,11 @@ CPP_template_def(typename RequestT, typename SendT)(
     parsedHttpRequest.operation_ = None{};
   } else if (commandIs("delete-materialized-view")) {
     response = jsonResponse(processDeleteMaterializedView(parameters));
+    // Prevent regular query processing by removing the query from the
+    // request.
+    parsedHttpRequest.operation_ = None{};
+  } else if (commandIs("unload-materialized-view")) {
+    response = jsonResponse(processUnloadMaterializedView(parameters));
     // Prevent regular query processing by removing the query from the
     // request.
     parsedHttpRequest.operation_ = None{};

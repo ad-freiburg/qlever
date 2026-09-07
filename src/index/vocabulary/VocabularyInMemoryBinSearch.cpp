@@ -4,6 +4,8 @@
 
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 
+#include <absl/strings/str_cat.h>
+
 using std::string;
 
 // _____________________________________________________________________________
@@ -26,7 +28,8 @@ void VocabularyInMemoryBinSearch::open(const string& fileName) {
     file >> words_;
   }
   {
-    ad_utility::serialization::FileReadSerializer idFile(fileName + ".ids");
+    ad_utility::serialization::FileReadSerializer idFile(
+        absl::StrCat(fileName, idsSuffix));
     idFile >> ownedIndices();
   }
 }
@@ -105,7 +108,7 @@ void VocabularyInMemoryBinSearch::close() {
 
 // _____________________________________________________________________________
 VocabularyInMemoryBinSearch::WordWriter::WordWriter(const std::string& filename)
-    : writer_{filename}, offsetWriter_{filename + ".ids"} {}
+    : writer_{filename}, offsetWriter_{absl::StrCat(filename, idsSuffix)} {}
 
 // _____________________________________________________________________________
 uint64_t VocabularyInMemoryBinSearch::WordWriter::operator()(

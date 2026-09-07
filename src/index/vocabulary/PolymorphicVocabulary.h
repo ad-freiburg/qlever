@@ -209,6 +209,10 @@ class PolymorphicVocabulary {
         vocab_);
   }
 
+  // The files that a vocabulary with the given `type` consists of, as suffixes
+  // of its base filename (see `FileSuffixes`).
+  static FileSuffixes fileSuffixes(VocabularyType type);
+
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`. Throw for a `type` with holes (see
   // `VocabularyInMemoryBinSearch`), which cannot be built word by word.
