@@ -86,11 +86,13 @@ LocalVocabContext::IdOrVocabBounds toValueIdOrBounds(
       tripleComponent.isLiteral()
           ? tripleComponent.getLiteral().toStringRepresentation()
           : tripleComponent.getIri().toStringRepresentation();
-  // Look up the word in the vocabularies of the index. NOTE: It is crucial that
-  // this lookup uses the exact same logic as the `LocalVocabEntry` for looking
-  // up words in the vocabulary, as the resulting bounds are passed manually to
-  // the `LocalVocabEntry` constructor in `toValueId` below. We thus delegate
-  // that lookup to the `LocalVocabContext`.
+  // Look up the word in the vocabularies of the index. NOTE: This is exactly
+  // the lookup that a `LocalVocabEntry` performs, which is required because
+  // `toValueId` below passes the result to the constructor of that class that
+  // takes the position in the vocabularies, see
+  // `LocalVocabContext::lookupWordInVocabularies`. That function returns
+  // exactly the type that this function returns, so the result is passed on
+  // unchanged.
   return index.getLocalVocabContext().lookupWordInVocabularies(content);
 }
 
@@ -115,7 +117,10 @@ Id toValueId(TripleComponent&& tripleComponent, const IndexImpl& index,
   AD_CORRECTNESS_CHECK(std::holds_alternative<Bounds>(idOrBounds));
   auto [lower, upper] = std::get<Bounds>(idOrBounds);
   // If `toValueIdOrBounds` could not convert to `Id`, we have a Literal or Iri,
-  // which we look up in (and potentially add to) our local vocabulary.
+  // which we look up in (and potentially add to) our local vocabulary. NOTE:
+  // The bounds are the position of a word that is contained in none of the
+  // vocabularies of the index, which is exactly the position that the
+  // `LocalVocabEntry` below requires, see `positionInVocab()` there.
   AD_CORRECTNESS_CHECK(tripleComponent.isLiteral() || tripleComponent.isIri());
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   auto moveWord = [&tripleComponent]() {
