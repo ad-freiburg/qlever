@@ -139,6 +139,7 @@ void MaterializedViewsManager::writeViewToDisk(
   MaterializedViewWriter writer{onDiskBase_, std::move(name), plannedQuery,
                                 std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
+  loadView(writer.name_, const_cast<QueryExecutionContext*>(writer.qec_.get()));
 }
 
 // _____________________________________________________________________________

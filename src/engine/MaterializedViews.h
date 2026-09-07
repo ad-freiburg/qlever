@@ -458,7 +458,7 @@ class MaterializedViewsManager {
 
   // Write a `MaterializedView` given a valid `name` (consisting only of
   // alphanumerics and hyphens) and a `plannedQuery` to be executed. The query's
-  // result is written to the view.
+  // result is written to the view. The view is then loaded automatically.
   //
   // If a view with the same name is already loaded, it is unloaded before
   // writing.

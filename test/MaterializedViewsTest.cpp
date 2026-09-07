@@ -72,17 +72,13 @@ TEST_F(MaterializedViewsTest, Basic) {
   EXPECT_THAT(
       log_.str(),
       ::testing::HasSubstr("Materialized view \"testView1\" written to disk"));
-  EXPECT_FALSE(qlv().isMaterializedViewLoaded("testView1"));
-  qlv().loadMaterializedView("testView1");
   EXPECT_THAT(log_.str(),
               ::testing::HasSubstr(
                   "Loading materialized view \"testView1\" from disk"));
   EXPECT_TRUE(qlv().isMaterializedViewLoaded("testView1"));
 
-  // Overwriting a materialized view automatically unloads it first.
+  // Overwriting a materialized view automatically unloads and reloads it.
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
-  EXPECT_FALSE(qlv().isMaterializedViewLoaded("testView1"));
-  qlv().loadMaterializedView("testView1");
   EXPECT_TRUE(qlv().isMaterializedViewLoaded("testView1"));
 
   // Test index scan on materialized view.
@@ -164,7 +160,6 @@ TEST_F(MaterializedViewsTest, Basic) {
   // Join between index scan on view and regular index scan.
   qlv().writeMaterializedView(
       "testView2", "SELECT * { ?s <p1> ?o . BIND(42 AS ?g) . BIND(3 AS ?x) }");
-  qlv().loadMaterializedView("testView2");
   {
     auto plannedQuery = qlv().parseAndPlanQuery(R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
@@ -186,12 +181,10 @@ TEST_F(MaterializedViewsTest, ViewReferencingAnotherViewDoesNotDeadlock) {
   // detected and skipped instead (see `MaterializedView::computeCacheKey`).
   // The view must still load successfully and remain usable.
   qlv().writeMaterializedView("baseView", simpleWriteQuery_);
-  qlv().loadMaterializedView("baseView");
   qlv().writeMaterializedView("outerView", R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * { ?s view:baseView-g ?x }
     )");
-  qlv().loadMaterializedView("outerView");
   EXPECT_TRUE(qlv().isMaterializedViewLoaded("outerView"));
 
   auto plannedQuery = qlv().parseAndPlanQuery(R"(
@@ -212,7 +205,6 @@ TEST_F(MaterializedViewsTest, ExplicitReferenceWorksWhenAutoRewriteDisabled) {
   // views. It must not affect an *explicit* reference to a view (via the
   // `view:<name>-<column>` predicate or the `SERVICE` syntax).
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
-  qlv().loadMaterializedView("testView1");
 
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
@@ -821,6 +813,9 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       ad_utility::makeOfstream(metadataFilename)
           << viewInfo.dump() << std::endl;
     }
+    // Force a fresh load from the (now hand-edited) disk file:
+    // `writeViewToDisk` already auto-loaded the view before the edit above.
+    manager.unloadViewIfLoaded("testView6");
     // Load the view: It can be loaded correctly, but does not have an original
     // query set.
     auto view = manager.getView("testView6", nullptr);
@@ -844,6 +839,9 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       ad_utility::makeOfstream(metadataFilename)
           << viewInfo.dump() << std::endl;
     }
+    // Force a fresh load from the (now hand-edited) disk file:
+    // `writeViewToDisk` already auto-loaded the view before the edit above.
+    manager.unloadViewIfLoaded("testView7");
     // Load the view: The view can be loaded correctly, but all columns are
     // possibly undefined because the information is missing.
     auto view = manager.getView("testView7", nullptr);
@@ -1329,7 +1327,6 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
   const std::string dupQuery =
       "SELECT ?s ?p ?o ?g { ?s ?p ?o . VALUES ?g { 1 2 } }";
   qlv().writeMaterializedView("dupView", dupQuery);
-  qlv().loadMaterializedView("dupView");
 
   // Base case: Query the view selecting all 4 columns: we expect exactly the
   // original result.
@@ -1408,7 +1405,6 @@ TEST_F(MaterializedViewsTest, DistinctIsNotDroppedForViewScan) {
   // values of the fourth column `?g` (which we do not select below).
   qlv().writeMaterializedView(
       "dupView", "SELECT ?s ?p ?o ?g { ?s ?p ?o . VALUES ?g { 1 2 } }");
-  qlv().loadMaterializedView("dupView");
 
   constexpr std::string_view distinctQuery = R"(
     PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
@@ -1448,7 +1444,6 @@ constexpr std::string_view bindWriteQuery =
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, BindRewrite) {
   qlv().writeMaterializedView("bindView", std::string{bindWriteQuery});
-  qlv().loadMaterializedView("bindView");
 
   // We fix the first columns of the `IndexScan` matcher because we are only
   // interested in the additional columns. The number of columns after stripping
@@ -1672,7 +1667,6 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     qlv().writeMaterializedView(
         "bindView2",
         "SELECT ?a ?b ?c { <s1> <p2> ?a . BIND(2 * ?a AS ?b) BIND(42 AS ?c) }");
-    qlv().loadMaterializedView("bindView2");
     const std::string secondColBind = R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * {
@@ -1824,7 +1818,6 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
 
   // Write geometries view with bounding boxes.
   qlv.writeMaterializedView(viewName, std::string{geoBoundingBoxesViewQuery});
-  qlv.loadMaterializedView(viewName);
 
   // Running the same query for reading that was used for writing results in a
   // single `IndexScan` for all columns of the materialized view.
@@ -1926,7 +1919,6 @@ TEST(MaterializedViewsSpatialJoinTest, FixedValueFilterOnFullyCoveredView) {
       "  ?osm_id geo:hasGeometry ?intermediate .\n"
       "  ?intermediate geo:asWKT ?geometry .\n"
       "}");
-  qlv.loadMaterializedView(viewName);
 
   const std::string query = R"qy(
     PREFIX geo: <http://www.opengis.net/ont/geosparql#>
@@ -2108,11 +2100,10 @@ TEST_F(MaterializedViewsTest, GroupByOptimizations) {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest,
        GetPermutationForThreeVariableTripleMaterializedView) {
-  // Write and load a three-variable view.
+  // Write a three-variable view (writing auto-loads it).
   auto plan = qlv().parseAndPlanQuery("SELECT ?s ?p ?o { ?s ?p ?o }");
   MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("threeVarPermTestView", plan);
-  manager.loadView("threeVarPermTestView", nullptr);
 
   // Create a three-variable scan on the view binding all three columns.
   using RCols = parsedQuery::MaterializedViewQuery::RequestedColumns;
