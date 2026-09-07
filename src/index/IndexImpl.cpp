@@ -503,17 +503,6 @@ namespace {
 // named `IdTriple`, which is a class with a similar purpose defined in
 // `index/IdTriple.h`.
 using IdRow = std::array<Id, NumColumnsIndexBuilding>;
-
-// The number of worker threads that build the partial vocabularies via hash
-// maps, given the total number of threads `numThreads` available for the index
-// build (see `DEFAULT_NUM_THREADS`). Building the hash maps is roughly half as
-// expensive as parsing, so the item maps get about a third of the threads and
-// the parsers the remaining two thirds (see `detail::numParserThreads` in
-// `RdfParser.h`, which must agree with the split computed here). At least two
-// threads are used.
-size_t numItemMapThreads(uint32_t numThreads) {
-  return std::max<size_t>(2, (numThreads + 1) / 3);
-}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -589,7 +578,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
                  "per batch, using "
               << numItemMapThreads(numThreads_) << " worker threads and "
-              << detail::numParserThreads(numThreads_) << " parser threads ..."
+              << numParserThreads(numThreads_) << " parser threads ..."
               << std::endl;
 
   // Show progress and statistics for the number of triples parsed. The total

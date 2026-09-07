@@ -55,21 +55,6 @@ std::optional<size_t> findEndOfLastNewline(std::string_view input);
 // `std::nullopt` if there is no match. Used to split a block of input at a
 // Turtle statement boundary.
 std::optional<size_t> findEndOfLastStatement(std::string_view input);
-
-// The number of threads that a parallel parser uses, given the total number of
-// threads `numThreads` available for the index build (see
-// `DEFAULT_NUM_THREADS`). Parsing is roughly twice as expensive as building
-// the partial vocabularies, so the parsers get about two thirds of the threads
-// and the item maps the remaining third (see `numItemMapThreads` in
-// `IndexImpl.cpp`, which must agree with the split computed here). At least
-// two threads are used.
-inline size_t numParserThreads(uint32_t numThreads) {
-  size_t numItemMapThreads = std::max<size_t>(2, (numThreads + 1) / 3);
-  // NOTE: The subtraction is saturating, because on machines with very few
-  // hardware threads `numItemMapThreads` may exceed `numThreads`.
-  return std::max<size_t>(
-      2, numThreads - std::min<size_t>(numThreads, numItemMapThreads));
-}
 }  // namespace detail
 
 struct TurtleTriple {
@@ -670,7 +655,7 @@ class RdfParallelParser : public RdfParserBase {
   // creates its own I/O thread and `AsyncBlockSource` internally. The
   // `blocksize` parameter controls the size of the underlying I/O block buffer,
   // and `numThreads` the total number of threads of the index build, of which
-  // this parser uses `detail::numParserThreads` many.
+  // this parser uses `numParserThreads` many (see `ConstantsIndexBuilding.h`).
   RdfParallelParser(const qlever::InputFileSpecification& spec,
                     ad_utility::MemorySize blocksize,
                     const EncodedIriManager* ev, uint32_t numThreads,
@@ -682,8 +667,7 @@ class RdfParallelParser : public RdfParserBase {
         defaultGraphIri_{defaultGraphIri},
         sleepTimeForTesting_(sleepTimeForTesting),
         parallelParser_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
-                        detail::numParserThreads(numThreads),
-                        "parallel parser"} {
+                        numParserThreads(numThreads), "parallel parser"} {
     initialize(spec, blocksize);
   }
 
@@ -768,7 +752,7 @@ class RdfMultifileParser : public RdfParserBase {
                      uint32_t numThreads)
       : RdfParserBase{encodedIriManager},
         parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
-                      detail::numParserThreads(numThreads)},
+                      numParserThreads(numThreads)},
         numThreads_{numThreads} {}
 
   // Construct the parser from a type-erased input range of file specifications
@@ -777,7 +761,7 @@ class RdfMultifileParser : public RdfParserBase {
   // files instead of the standard-compliant `Tokenizer` (see the comment on
   // `TurtleParser` above for the limitations of the relaxed mode).
   // `numThreads` is the total number of threads of the index build. This
-  // parser parses `detail::numParserThreads` many files concurrently, and
+  // parser parses `numParserThreads` many files concurrently, and
   // passes the number of threads on to the parser of each single file.
   RdfMultifileParser(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,

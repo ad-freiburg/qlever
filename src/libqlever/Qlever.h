@@ -103,7 +103,7 @@ struct IndexBuilderConfig : CommonConfig {
   // The number of threads that the index build uses for the steps that run in
   // parallel. Each such step derives its own share from this value. Must be
   // greater than zero.
-  uint32_t numThreads_ = DEFAULT_NUM_THREADS();
+  uint32_t numThreads_ = defaultNumThreads();
 
   // Filename of a JSON file with additional settings. Examples can be seen in
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles

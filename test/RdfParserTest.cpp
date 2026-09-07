@@ -914,7 +914,7 @@ TEST(RdfParserTest, iriref) {
 
 // The smallest number of threads that the parsers accept. The tests
 // themselves are already run in parallel, so each parser should use as few
-// threads as possible (which is two, see `detail::numParserThreads`).
+// threads as possible (which is two, see `numParserThreads`).
 constexpr uint32_t minNumThreads = 1;
 
 // Parse the file at `filename` using a parser of type `Parser` and return the
@@ -1920,7 +1920,6 @@ TEST(RdfParserTest, findEndOfLastStatement) {
 
 // _____________________________________________________________________________
 TEST(RdfParserTest, numParserThreads) {
-  using detail::numParserThreads;
   // For sufficiently many threads, the parsers get about two thirds of them,
   // the remaining third goes to the item maps of the index build.
   EXPECT_EQ(numParserThreads(12), 8u);

@@ -111,7 +111,7 @@ class IndexImpl {
   // parallel (see `--num-threads` in `IndexBuilderMain.cpp`). Currently, it is
   // divided between the parser threads and the workers that build the partial
   // vocabularies via hash maps.
-  uint32_t numThreads_ = DEFAULT_NUM_THREADS();
+  uint32_t numThreads_ = defaultNumThreads();
   ad_utility::MemorySize blocksizePermutationPerColumn_ =
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   nlohmann::json configurationJson_;
@@ -548,9 +548,9 @@ class IndexImpl {
   }
 
   // Set the number of threads for the parallel steps of the index build.
-  // Currently, they are divided between the parser threads (see
-  // `detail::numParserThreads` in `RdfParser.h`) and the workers that build
-  // the partial vocabularies (see `numItemMapThreads` in `IndexImpl.cpp`).
+  // Currently, they are divided between the parser threads and the workers
+  // that build the partial vocabularies (see `numParserThreads` and
+  // `numItemMapThreads` in `ConstantsIndexBuilding.h`).
   void setNumThreads(uint32_t numThreads) {
     AD_CONTRACT_CHECK(numThreads > 0,
                       "The number of threads must be greater than zero");

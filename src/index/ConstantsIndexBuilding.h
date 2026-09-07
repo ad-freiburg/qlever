@@ -63,13 +63,36 @@ constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 // _________________________________________________________________
 // The default value for the number of threads that the index build uses for
 // the steps that run in parallel: the number of hardware threads of this
-// machine, or `1` if that number cannot be determined. It can be overridden
-// via `--num-threads`, see `IndexBuilderMain.cpp`. The threads are divided
-// among the consumers of this value, each of which computes its own share:
-// see `numItemMapThreads` in `IndexImpl.cpp` and `detail::numParserThreads`
-// in `RdfParser.h`.
-inline uint32_t DEFAULT_NUM_THREADS() {
+// machine (including SMT threads, and regardless of the CPU limits of a
+// container), or `1` if that number cannot be determined. It can be
+// overridden via `--num-threads`, see `IndexBuilderMain.cpp`. The two
+// functions below divide this number between the two steps that currently run
+// in parallel.
+inline uint32_t defaultNumThreads() {
   return std::max(1u, std::thread::hardware_concurrency());
+}
+
+// The number of worker threads that build the partial vocabularies via hash
+// maps, given the total number of threads `numThreads` for the index build.
+// Building the hash maps is roughly half as expensive as parsing, so the item
+// maps get about a third of the threads (the rest goes to the parsers, see
+// `numParserThreads` below). At least two threads are used.
+inline size_t numItemMapThreads(uint32_t numThreads) {
+  return std::max<size_t>(2, (numThreads + 1) / 3);
+}
+
+// The number of threads that a parallel parser uses, given the total number of
+// threads `numThreads` for the index build: the threads that are left after
+// `numItemMapThreads`, but at least two.
+//
+// NOTE: The subtraction is saturating, because on machines with very few
+// hardware threads `numItemMapThreads` may exceed `numThreads`. Because of the
+// minimum of two for both functions, fewer than four threads in total are
+// never used.
+inline size_t numParserThreads(uint32_t numThreads) {
+  return std::max<size_t>(
+      2,
+      numThreads - std::min<size_t>(numThreads, numItemMapThreads(numThreads)));
 }
 
 // Increasing the following two constants increases the RAM usage without much

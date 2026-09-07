@@ -1374,7 +1374,7 @@ RdfMultifileParser::RdfMultifileParser(
     ad_utility::MemorySize bufferSize, bool useRelaxedParsing)
     : RdfParserBase(encodedIriManager),
       parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
-                    detail::numParserThreads(numThreads)},
+                    numParserThreads(numThreads)},
       useRelaxedParsing_{useRelaxedParsing},
       numThreads_{numThreads} {
   // Feed all the input files to the `parsingQueue_`.
