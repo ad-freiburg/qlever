@@ -130,10 +130,7 @@ CPP_template(typename T, typename Serializer)(
       return;
     }
     _isFinished = true;
-    auto endPosition = _serializer.getSerializationPosition();
-    _serializer.setSerializationPosition(_startPosition);
-    _serializer << _size;
-    _serializer.setSerializationPosition(endPosition);
+    serializeAtPosition(_serializer, _startPosition, _size);
   }
 
   Serializer serializer() && {

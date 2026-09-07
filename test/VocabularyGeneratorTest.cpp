@@ -31,6 +31,8 @@
 using namespace ad_utility::vocabulary_merger;
 namespace {
 auto V = ad_utility::testing::VocabId;
+// Shorthand for the local index that a word has inside a partial vocabulary.
+auto L = [](uint64_t index) { return VocabIndex::make(index); };
 
 // Write the given `words` as a partial vocabulary file at `path`, assigning
 // them consecutive local ids `0, 1, ...` in the given order and marking all of
@@ -67,9 +69,8 @@ class MergeVocabularyTest : public ::testing::Test {
 
   // two std::vectors where we store the expected mapping
   // form partial to global ids;
-  using Mapping = IdMap;
-  Mapping _expMapping0;
-  Mapping _expMapping1;
+  IdMap _expMapping0;
+  IdMap _expMapping1;
 
   // Constructor. TODO: Better write Setup method because of complex logic which
   // may throw?
@@ -131,32 +132,33 @@ class MergeVocabularyTest : public ::testing::Test {
     ad_utility::serialization::FileWriteSerializer partial0(_path0);
     ad_utility::serialization::FileWriteSerializer partial1(_path1);
 
-    auto writePartialVocabulary =
-        [](auto& partialVocab, const auto& tripleComponents, Mapping* mapping) {
-          // write first partial vocabulary
-          partialVocab << tripleComponents.size();
-          size_t localIdx = 0;
-          for (auto w : tripleComponents) {
-            auto globalId = w.index_;
-            w.index_ = localIdx;
-            partialVocab << w;
-            if (mapping) {
-              if (w.isBlankNode({})) {
-                mapping->emplace_back(
-                    localIdx,
-                    Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));
-              } else {
-                using GeoVocab = SplitGeoVocabulary<
-                    CompressedVocabulary<VocabularyInternalExternal>>;
-                if (GeoVocab::getMarkerForWord(w.iriOrLiteral()) == 1) {
-                  globalId = GeoVocab::addMarker(globalId, 1);
-                }
-                mapping->emplace_back(localIdx, V(globalId));
-              }
+    auto writePartialVocabulary = [](auto& partialVocab,
+                                     const auto& tripleComponents,
+                                     IdMap* mapping) {
+      // write first partial vocabulary
+      partialVocab << tripleComponents.size();
+      size_t localIdx = 0;
+      for (auto w : tripleComponents) {
+        auto globalId = w.index_;
+        w.index_ = localIdx;
+        partialVocab << w;
+        if (mapping) {
+          if (w.isBlankNode({})) {
+            mapping->push_back(
+                {L(localIdx),
+                 Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId))});
+          } else {
+            using GeoVocab = SplitGeoVocabulary<
+                CompressedVocabulary<VocabularyInternalExternal>>;
+            if (GeoVocab::getMarkerForWord(w.iriOrLiteral()) == 1) {
+              globalId = GeoVocab::addMarker(globalId, 1);
             }
-            localIdx++;
+            mapping->push_back({L(localIdx), V(globalId)});
           }
-        };
+        }
+        localIdx++;
+      }
+    };
     writePartialVocabulary(partial0, words0, &_expMapping0);
 
     writePartialVocabulary(partial1, words1, &_expMapping1);
@@ -327,11 +329,11 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
   };
   IdMap idMap = getIdMapFromFile(idMapFile);
   EXPECT_THAT(idMap, ::testing::ElementsAreArray(
-                         IdMap{{0, V(0)},     // "bn_lit"
-                               {1, V(1)},     // <http://ex/apple>
-                               {2, BN(0)},    // <http://ex/bn_1>
-                               {3, BN(1)},    // <http://ex/bn_2>
-                               {4, V(2)}}));  // <http://ex/cherry>
+                         IdMap{{L(0), V(0)},     // "bn_lit"
+                               {L(1), V(1)},     // <http://ex/apple>
+                               {L(2), BN(0)},    // <http://ex/bn_1>
+                               {L(3), BN(1)},    // <http://ex/bn_2>
+                               {L(4), V(2)}}));  // <http://ex/cherry>
 }
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {

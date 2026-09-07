@@ -73,8 +73,9 @@ class VocabularyMerger {
   // `isBlankNode` (which may run a set of regexes) is evaluated only once per
   // distinct word.
   bool lastTripleComponentIsBlankNode_ = false;
-  // The partial ID maps, one per partial vocabulary. Each of them maps the
-  // local indices of its partial vocabulary to the global IDs.
+  // The writers for the partial ID maps, one per partial vocabulary. Each of
+  // them writes the mapping from the local indices of its partial vocabulary
+  // to the global IDs.
   std::vector<IdMapWriter> idMapWriters_;
 
   // Friend declaration for the publicly available function.

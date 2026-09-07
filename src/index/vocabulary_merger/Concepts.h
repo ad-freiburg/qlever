@@ -29,7 +29,7 @@ CPP_concept WordCallback =
 // `isExternal` flags.
 template <typename T>
 CPP_concept WordComparator =
-    ranges::predicate<T, std::string_view, bool, std::string_view, bool>;
+    ::ranges::predicate<T, std::string_view, bool, std::string_view, bool>;
 }  // namespace ad_utility::vocabulary_merger
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_MERGER_CONCEPTS_H

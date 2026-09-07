@@ -168,7 +168,8 @@ CPP_template_def(typename C, typename L)(
             : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
     // Write the mapping from the local index to the global ID to the ID map
     // of the partial vocabulary that this occurrence of the word came from.
-    idMapWriters_[top.partialFileId_].push_back(IdMapEntry{top.id(), targetId});
+    idMapWriters_[top.partialFileId_].push_back(
+        IdMapEntry{VocabIndex::make(top.id()), targetId});
   }
 }
 
@@ -286,7 +287,7 @@ inline ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
   ad_utility::HashMap<VocabIndex, Id> map;
   map.reserve(vec.size());
   for (const auto& entry : vec) {
-    map.emplace(VocabIndex::make(entry.localIndex_), entry.globalId_);
+    map.emplace(entry.localIndex_, entry.globalId_);
   }
   return map;
 }

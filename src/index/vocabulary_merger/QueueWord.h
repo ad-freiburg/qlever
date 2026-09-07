@@ -27,16 +27,12 @@ struct QueueWord {
   QueueWord() = default;
   QueueWord(TripleComponentWithIndex&& v, size_t file)
       : entry_(std::move(v)), partialFileId_(file) {}
-  TripleComponentWithIndex entry_;  // the word, its local ID and the
-                                    // information if it will be externalized
+  // The word, its local ID, and the information whether it will be
+  // externalized.
+  TripleComponentWithIndex entry_;
   size_t partialFileId_;  // from which partial vocabulary did this word come
 
-  [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
   [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
-
-  [[nodiscard]] const std::string& iriOrLiteral() const {
-    return entry_.iriOrLiteral();
-  }
 
   [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
 

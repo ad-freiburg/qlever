@@ -18,6 +18,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "global/VocabIndex.h"
 #include "util/ExceptionHandling.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/BufferedSerializer.h"
@@ -40,13 +41,13 @@ namespace ad_utility::vocabulary_merger {
 // serializable (it would then be written and read one member at a time) nor
 // bitwise relocatable.
 struct IdMapEntry {
-  // NOTE: The local index deliberately is a plain index and not an `Id`. Inside
-  // a partial vocabulary a word is always a `VocabIndex`, so the datatype bits
-  // of an `Id` would carry no information. Adding them is cheap, but
-  // `Id::makeFromVocabIndex` also checks that the index fits into the available
-  // bits, and that check for each of the (very many) entries would cost
-  // measurable time in the vocabulary merger.
-  uint64_t localIndex_;
+  // NOTE: The local index deliberately is a `VocabIndex` and not an `Id`.
+  // Inside a partial vocabulary a word is always a `VocabIndex`, so the
+  // datatype bits of an `Id` would carry no information. Adding them is cheap,
+  // but `Id::makeFromVocabIndex` also checks that the index fits into the
+  // available bits, and that check for each of the (very many) entries would
+  // cost measurable time in the vocabulary merger.
+  VocabIndex localIndex_;
   Id globalId_;
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(IdMapEntry, localIndex_,
@@ -129,8 +130,7 @@ class IdMapWriter {
     }
     auto file = std::move(*serializer_).underlyingSerializer();
     serializer_.reset();
-    file.setSerializationPosition(0);
-    file << numEntries_;
+    ad_utility::serialization::serializeAtPosition(file, 0, numEntries_);
     file.close();
   }
 };

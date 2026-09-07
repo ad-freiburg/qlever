@@ -88,11 +88,7 @@ struct VocabularyMetaData {
   // Return the index of the next blank node and increment the internal counter
   // of blank nodes. This has to be called for every distinct blank node that
   // is encountered.
-  size_t getNextBlankNodeIndex() {
-    auto res = numBlankNodesTotal_;
-    ++numBlankNodesTotal_;
-    return res;
-  }
+  size_t getNextBlankNodeIndex() { return numBlankNodesTotal_++; }
 
   // The mapping from the `qlever::specialIds` to their actual IDs.
   // This is created on the fly by the calls to `addWord`.

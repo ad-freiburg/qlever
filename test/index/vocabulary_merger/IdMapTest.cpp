@@ -23,21 +23,23 @@ using namespace ad_utility::vocabulary_merger;
 
 namespace {
 auto V = ad_utility::testing::VocabId;
+// Shorthand for the local index that a word has inside a partial vocabulary.
+auto L = [](uint64_t index) { return VocabIndex::make(index); };
 }  // namespace
 
 // _____________________________________________________________________________
 // Two `IdMapEntry`s are equal if and only if both of their members are equal.
 TEST(IdMapEntry, comparisonAndOutput) {
-  IdMapEntry entry{3, V(4)};
-  EXPECT_EQ(entry, (IdMapEntry{3, V(4)}));
-  EXPECT_NE(entry, (IdMapEntry{4, V(4)}));
-  EXPECT_NE(entry, (IdMapEntry{3, V(5)}));
+  IdMapEntry entry{L(3), V(4)};
+  EXPECT_EQ(entry, (IdMapEntry{L(3), V(4)}));
+  EXPECT_NE(entry, (IdMapEntry{L(4), V(4)}));
+  EXPECT_NE(entry, (IdMapEntry{L(3), V(5)}));
 
-  // The output consists of the local index and the global ID (which brings its
-  // own `operator<<`), in braces.
+  // The output consists of the local index and the global ID (both of which
+  // bring their own `operator<<`), in braces.
   std::ostringstream stream;
   stream << entry;
-  EXPECT_THAT(stream.str(), ::testing::StartsWith("{3, "));
+  EXPECT_THAT(stream.str(), ::testing::StartsWith("{VocabIndex:3, "));
   EXPECT_THAT(stream.str(), ::testing::EndsWith("}"));
 }
 
@@ -53,7 +55,7 @@ TEST(IdMapWriter, writeAndReadBack) {
   IdMap expected;
   expected.reserve(numPairs);
   for (size_t i = 0; i < numPairs; ++i) {
-    expected.emplace_back(i, V(2 * i + 1));
+    expected.push_back({L(i), V(2 * i + 1)});
   }
 
   std::string filename = gtestCurrentTestName();
@@ -89,11 +91,11 @@ TEST(IdMapWriter, emptyAndExplicitFinish) {
 
   {
     IdMapWriter writer{filename};
-    writer.push_back({3, V(4)});
+    writer.push_back({L(3), V(4)});
     writer.finish();
     EXPECT_THAT(getIdMapFromFile(filename),
-                ::testing::ElementsAre(IdMapEntry{3, V(4)}));
+                ::testing::ElementsAre(IdMapEntry{L(3), V(4)}));
   }
   EXPECT_THAT(getIdMapFromFile(filename),
-              ::testing::ElementsAre(IdMapEntry{3, V(4)}));
+              ::testing::ElementsAre(IdMapEntry{L(3), V(4)}));
 }
