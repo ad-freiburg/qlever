@@ -34,6 +34,7 @@
 #include "util/HashMap.h"
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/VarsRequiredFromSubtree.h"
 
 using namespace qlever::joinHelpers;
 using namespace qlever::joinWithIndexScanHelpers;
@@ -767,19 +768,22 @@ bool JoinImpl::columnOriginatesFromGraphOrUndef(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 JoinImpl::makeTreeWithStrippedColumns(
     const std::set<Variable>& variables) const {
-  std::set<Variable> newVariables;
-  const auto* vars = &variables;
-  if (!ad_utility::contains(variables, joinVar_)) {
-    newVariables = variables;
-    newVariables.insert(joinVar_);
-    vars = &newVariables;
-  }
+  // Collect all variables required from the subtree
+  VarsRequiredFromSubtree helper(variables);
+  helper.add(joinVar_);
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
-  // TODO<joka921> Code duplication including a former copy-paste bug.
-  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(left_, *vars);
-  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(right_, *vars);
+  // Continue with the recursion and strip columns of the two subtrees.
+  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(
+      left_, varsRequiredFromSubtree);
+  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(
+      right_, varsRequiredFromSubtree);
   auto leftCol = left->getVariableColumn(joinVar_);
   auto rightCol = right->getVariableColumn(joinVar_);
+
+  // Create query execution tree with Join-Operation as root operation.
+  // Keep in mind, that no additional Strip-Columns Operation has to be added
+  // here, as the Join-Constructor takes care of it by setting keepJoinColumn_.
   return ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), std::move(left), std::move(right), leftCol,
       rightCol, ad_utility::contains(variables, joinVar_));
