@@ -551,12 +551,12 @@ void MaterializedViewsManager::loadView(const std::string& name,
 bool MaterializedViewsManager::unloadViewIfLoaded(
     const std::string& name) const {
   auto lock = loadedViews_.wlock();
-  auto it = lock->views_.find(name);
-  if (it == lock->views_.end()) {
+  auto view = ad_utility::findOptional(lock->views_, name);
+  if (!view.has_value()) {
     return false;
   }
-  lock->queryPatternCache_.removeView(it->second);
-  lock->views_.erase(it);
+  lock->queryPatternCache_.removeView(view.value());
+  lock->views_.erase(name);
   AD_LOG_INFO << "Materialized view \"" << name << "\" unloaded" << std::endl;
   return true;
 }
