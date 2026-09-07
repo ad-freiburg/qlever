@@ -372,7 +372,6 @@ inline void expectRewrite(
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(sourceLocation);
   qlv.writeMaterializedView(std::string{viewName}, std::string{viewQuery});
-  qlv.loadMaterializedView(std::string{viewName});
   qpExpect(qlv, testQuery, matcher, sourceLocation);
 };
 
