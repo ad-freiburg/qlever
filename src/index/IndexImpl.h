@@ -107,6 +107,11 @@ class IndexImpl {
   ad_utility::MemorySize memoryLimitIndexBuilding_ =
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
+  // The total number of threads used by the first phase of the index build
+  // (see `--concurrency-level` in `IndexBuilderMain.cpp`). It is divided
+  // between the parser threads and the workers that build the partial
+  // vocabularies via hash maps.
+  uint32_t concurrencyLevel_ = DEFAULT_CONCURRENCY_LEVEL();
   ad_utility::MemorySize blocksizePermutationPerColumn_ =
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   nlohmann::json configurationJson_;
@@ -542,6 +547,16 @@ class IndexImpl {
     return parserBufferSize_;
   }
 
+  // Set the total number of threads for the first phase of the index build.
+  // They are divided between the parser threads (see
+  // `detail::numParserThreads` in `RdfParser.h`) and the workers that build
+  // the partial vocabularies (see `numItemMapThreads` in `IndexImpl.cpp`).
+  void setConcurrencyLevel(uint32_t concurrencyLevel) {
+    AD_CONTRACT_CHECK(concurrencyLevel > 0,
+                      "The concurrency level must be greater than zero");
+    concurrencyLevel_ = concurrencyLevel;
+  }
+
   ad_utility::MemorySize& blocksizePermutationPerColumn() {
     return blocksizePermutationPerColumn_;
   }
@@ -636,7 +651,7 @@ class IndexImpl {
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
       std::shared_ptr<RdfParserBase> parser);
 
-  // Parse all triples from `parser` using `NUM_PARALLEL_ITEM_MAPS` worker
+  // Parse all triples from `parser` using `numItemMapThreads` worker
   // threads that work completely independently of each other. Each of them
   // processes batches of `linesPerPartial` triples, and for each batch writes
   // one partial vocabulary file and stores the corresponding ID triples in its

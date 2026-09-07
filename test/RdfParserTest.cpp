@@ -912,6 +912,11 @@ TEST(RdfParserTest, iriref) {
   runTestsForParser(ctreParser());
 }
 
+// The smallest concurrency level that the parsers accept. The tests
+// themselves are already run in parallel, so each parser should use as few
+// threads as possible (which is two, see `detail::numParserThreads`).
+constexpr uint32_t minConcurrencyLevel = 1;
+
 // Parse the file at `filename` using a parser of type `Parser` and return the
 // sorted result. The default size for the parse buffer in the following tests
 // is 1 kB (which is much less than the default value
@@ -922,16 +927,17 @@ template <typename Parser>
 std::vector<TurtleTriple> parseFromFile(
     const std::string& filename, ad_utility::MemorySize bufferSize = 1_kB) {
   auto parser = [&]() {
+    qlever::InputFileSpecification spec{filename, qlever::Filetype::Turtle,
+                                        std::nullopt};
     if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
-      return Parser{
-          ad_utility::InputRangeTypeErased{
-              std::vector<qlever::InputFileSpecification>{
-                  {filename, qlever::Filetype::Turtle, std::nullopt}}},
-          encodedIriManager(), bufferSize};
+      return Parser{ad_utility::InputRangeTypeErased{
+                        std::vector<qlever::InputFileSpecification>{spec}},
+                    encodedIriManager(), minConcurrencyLevel, bufferSize};
+    } else if constexpr (ad_utility::isInstantiation<Parser,
+                                                     RdfParallelParser>) {
+      return Parser{spec, bufferSize, encodedIriManager(), minConcurrencyLevel};
     } else {
-      return Parser{qlever::InputFileSpecification{
-                        filename, qlever::Filetype::Turtle, std::nullopt},
-                    bufferSize, encodedIriManager()};
+      return Parser{spec, bufferSize, encodedIriManager()};
     }
   }();
 
@@ -1264,17 +1270,19 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     {
       [[maybe_unused]] Parser parserChild = [&]() {
+        qlever::InputFileSpecification spec{filename, qlever::Filetype::Turtle,
+                                            std::nullopt};
         if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
-          return Parser{
-              ad_utility::InputRangeTypeErased{
-                  std::vector<qlever::InputFileSpecification>{
-                      {filename, qlever::Filetype::Turtle, std::nullopt}}},
-              encodedIriManager(), 40_B};
+          return Parser{ad_utility::InputRangeTypeErased{
+                            std::vector<qlever::InputFileSpecification>{spec}},
+                        encodedIriManager(), minConcurrencyLevel, 40_B};
         } else {
-          return Parser{qlever::InputFileSpecification{
-                            filename, qlever::Filetype::Turtle, std::nullopt},
-                        ad_utility::MemorySize::bytes(40), encodedIriManager(),
-                        qlever::specialIds().at(DEFAULT_GRAPH_IRI), 10ms};
+          return Parser{spec,
+                        ad_utility::MemorySize::bytes(40),
+                        encodedIriManager(),
+                        minConcurrencyLevel,
+                        qlever::specialIds().at(DEFAULT_GRAPH_IRI),
+                        10ms};
         }
       }();
       timer.cont();
@@ -1351,7 +1359,7 @@ TEST(RdfParserTest, noGetBatchInStringParser) {
 TEST(RdfParserTest, dummyParsePositionOfMultifileParsers) {
   auto runTestsForParser = [](auto t) {
     using Parser = typename decltype(t)::type;
-    Parser parser{encodedIriManager()};
+    Parser parser{encodedIriManager(), minConcurrencyLevel};
     EXPECT_EQ(parser.getParsePosition(), 0u);
   };
   forAllMultifileParsers(runTestsForParser);
@@ -1388,7 +1396,7 @@ TEST(RdfParserTest, multifileParser) {
     specs.emplace_back(file2, qlever::Filetype::NQuad, "defaultGraphNQ",
                        useParallelParser);
     Parser p{ad_utility::InputRangeTypeErased{std::move(specs)},
-             encodedIriManager()};
+             encodedIriManager(), minConcurrencyLevel};
     std::vector<TurtleTriple> result;
     while (auto batch = p.getBatch()) {
       ql::ranges::copy(batch.value(), std::back_inserter(result));
@@ -1418,7 +1426,7 @@ TEST(RdfParserTest, multifileParserSelectsTokenizer) {
     specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt, false);
     RdfMultifileParser parser{
         ad_utility::InputRangeTypeErased{std::move(specs)}, encodedIriManager(),
-        DEFAULT_PARSER_BUFFER_SIZE, useRelaxedParsing};
+        minConcurrencyLevel, DEFAULT_PARSER_BUFFER_SIZE, useRelaxedParsing};
     std::vector<TurtleTriple> result;
     while (auto batch = parser.getBatch()) {
       ql::ranges::copy(batch.value(), std::back_inserter(result));
@@ -1908,4 +1916,23 @@ TEST(RdfParserTest, findEndOfLastStatement) {
   // The last statement end is found.
   EXPECT_THAT(findEndOfLastStatement("a.\nbc.\ndef"), Optional(Eq(7u)));
   EXPECT_THAT(findEndOfLastStatement("a.\n# comment\n"), Optional(Eq(3u)));
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, numParserThreads) {
+  using detail::numParserThreads;
+  // For sufficiently many threads, the parsers get about two thirds of them,
+  // the remaining third goes to the item maps of the index build.
+  EXPECT_EQ(numParserThreads(12), 8u);
+  EXPECT_EQ(numParserThreads(16), 11u);
+  EXPECT_EQ(numParserThreads(9), 6u);
+  EXPECT_EQ(numParserThreads(5), 3u);
+  // At least two threads are used, even if that means using more threads in
+  // total than the concurrency level allows.
+  EXPECT_EQ(numParserThreads(4), 2u);
+  EXPECT_EQ(numParserThreads(1), 2u);
+  // A concurrency level of zero is rejected by
+  // `IndexBuilderConfig::validate()`, but the computation is still
+  // well-defined (in particular, the subtraction doesn't underflow).
+  EXPECT_EQ(numParserThreads(0), 2u);
 }

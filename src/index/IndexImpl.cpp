@@ -102,8 +102,8 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
   return std::make_unique<RdfMultifileParser>(
-      std::move(files), &encodedIriManager(), parserBufferSize(),
-      onlyAsciiTurtlePrefixes_);
+      std::move(files), &encodedIriManager(), concurrencyLevel_,
+      parserBufferSize(), onlyAsciiTurtlePrefixes_);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -503,6 +503,17 @@ namespace {
 // named `IdTriple`, which is a class with a similar purpose defined in
 // `index/IdTriple.h`.
 using IdRow = std::array<Id, NumColumnsIndexBuilding>;
+
+// The number of worker threads that build the partial vocabularies via hash
+// maps, given the total number of threads `concurrencyLevel` available for the
+// first phase of the index build (see `DEFAULT_CONCURRENCY_LEVEL`). Building
+// the hash maps is roughly half as expensive as parsing, so the item maps get
+// about a third of the threads and the parsers the remaining two thirds (see
+// `detail::numParserThreads` in `RdfParser.h`, which must agree with the split
+// computed here). At least two threads are used.
+size_t numItemMapThreads(uint32_t concurrencyLevel) {
+  return std::max<size_t>(2, (concurrencyLevel + 1) / 3);
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -527,11 +538,15 @@ IndexImpl::runPartialVocabularyWorker(
     // That's why we use the `CachingMemoryResource` as an underlying memory
     // pool for the allocator of the hash map to make the allocation and
     // deallocation of these hash maps (that are newly created for each batch)
-    // much cheaper (see `CachingMemoryResource.h`). Note: The division is
-    // deliberate. Reserving space for all the words that a batch could
-    // possibly contain would mean that the memory reserved upfront grows with
-    // the number of workers.
-    itemMap.map_.map_.reserve(5 * linesPerPartial / NUM_PARALLEL_ITEM_MAPS);
+    // much cheaper (see `CachingMemoryResource.h`). NOTE: The factor of one
+    // half is purely empirical. It is the value that this expression
+    // effectively had back when the number of workers was a hard-coded
+    // constant, and reserving that much was measurably faster than reserving
+    // space for all the words that a batch could possibly contain. There is
+    // no deeper reason for this particular number, it just works well in
+    // practice, which is also why it is deliberately independent of the
+    // number of workers.
+    itemMap.map_.map_.reserve(linesPerPartial / 2);
     std::vector<IdRow> localWriter;
     size_t numInputTriples = 0;
     while (numInputTriples < linesPerPartial) {
@@ -572,8 +587,10 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
-                 "per batch ..."
-              << std::endl;
+                 "per batch, using "
+              << numItemMapThreads(concurrencyLevel_) << " worker threads and "
+              << detail::numParserThreads(concurrencyLevel_)
+              << " parser threads ..." << std::endl;
 
   // Show progress and statistics for the number of triples parsed. The total
   // number of triples is not known in advance, and the workers report their
@@ -587,7 +604,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   std::atomic<size_t> numHasWordTriples = 0;
 
   using WorkerResult = BuildPartialVocabulariesResult::WorkerResult;
-  auto tasks = ad_utility::integerRange(NUM_PARALLEL_ITEM_MAPS) |
+  auto tasks = ad_utility::integerRange(numItemMapThreads(concurrencyLevel_)) |
                ql::views::transform([this, linesPerPartial, &parser, itemAlloc,
                                      &numHasWordTriples,
                                      &progressBar](size_t workerIdx) {

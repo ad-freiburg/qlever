@@ -308,6 +308,14 @@ int main(int argc, char** argv) {
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
+  add("concurrency-level",
+      po::value(&config.concurrencyLevel_)
+          ->default_value(DEFAULT_CONCURRENCY_LEVEL()),
+      "The total number of threads used for parsing the input and building the "
+      "partial vocabularies. About a third of them build the partial "
+      "vocabularies and the remaining two thirds parse the input (each of the "
+      "two gets at least two threads). The default is the number of hardware "
+      "threads of this machine.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),

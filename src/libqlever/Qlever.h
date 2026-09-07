@@ -29,6 +29,7 @@
 #include "engine/RebuildIndexStrategy.h"
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
 #include "index/IndexRebuilderTypes.h"
@@ -98,6 +99,12 @@ struct IndexBuilderConfig : CommonConfig {
   // or subject with predicate-object list in Turtle) fits into a single chunk.
   // The default chunk size is large enough for most input sets.
   std::optional<ad_utility::MemorySize> parserBufferSize_;
+
+  // The total number of threads used by the first phase of the index build.
+  // They are divided between the threads that parse the input and the workers
+  // that build the partial vocabularies, where each of these two consumers
+  // computes its own share. Must be greater than zero.
+  uint32_t concurrencyLevel_ = DEFAULT_CONCURRENCY_LEVEL();
 
   // Filename of a JSON file with additional settings. Examples can be seen in
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles

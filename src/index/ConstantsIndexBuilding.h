@@ -5,9 +5,11 @@
 #ifndef QLEVER_SRC_INDEX_CONSTANTSINDEXBUILDING_H
 #define QLEVER_SRC_INDEX_CONSTANTSINDEXBUILDING_H
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <thread>
 
 #include "util/MemorySize/MemorySize.h"
 
@@ -59,15 +61,16 @@ constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 
 // _________________________________________________________________
-// The degree of parallelism that is used for the index building step, where the
-// unique elements of the vocabulary are identified via hash maps. Typically, 6
-// is a good value. On systems with very few CPUs, a lower value might be
-// beneficial.
-constexpr inline size_t NUM_PARALLEL_ITEM_MAPS = 10;
-
-// The number of threads that are parsing in parallel, when the parallel Turtle
-// parser is used.
-constexpr inline size_t NUM_PARALLEL_PARSER_THREADS = 8;
+// The default value for the total number of threads that the first phase of
+// the index build (parsing the input and building the partial vocabularies)
+// uses: the number of hardware threads of this machine, or `1` if that number
+// cannot be determined. It can be overridden via `--concurrency-level`, see
+// `IndexBuilderMain.cpp`. The threads are divided among the consumers of this
+// value, each of which computes its own share: see `numItemMapThreads` in
+// `IndexImpl.cpp` and `detail::numParserThreads` in `RdfParser.h`.
+inline uint32_t DEFAULT_CONCURRENCY_LEVEL() {
+  return std::max(1u, std::thread::hardware_concurrency());
+}
 
 // Increasing the following two constants increases the RAM usage without much
 // benefit to the performance.
