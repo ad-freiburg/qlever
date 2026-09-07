@@ -203,8 +203,8 @@ class SplitVocabulary {
   void close();
 
   // Read the vocabulary from files: all underlying vocabularies will be read
-  // using the base filename plus the suffix returned by
-  // SplitFilenameSuffixFunction for the respective vocabulary.
+  // using the base filename plus the corresponding one of the
+  // `FilenameSuffixes`.
   void readFromFile(const std::string& filename);
 
   // The item-at operator retrieves a word by a given index. The index is
@@ -329,7 +329,7 @@ class SplitVocabulary {
   }
 
   // Load from file: open all underlying vocabularies on the given base filename
-  // plus the corresponding suffix from SplitFilenameSuffixFunction.
+  // plus the corresponding one of the `FilenameSuffixes`.
   void open(const std::string& filename);
 
   // This word writer writes words to different vocabularies depending on the
@@ -340,8 +340,8 @@ class SplitVocabulary {
 
    public:
     // Construct a WordWriter for each vocabulary in the given array. Determine
-    // filenames of underlying vocabularies using the
-    // SplitFilenameSuffixFunction.
+    // the filenames of the underlying vocabularies using the
+    // `FilenameSuffixes`.
     WordWriter(const UnderlyingVocabsArray& underlyingVocabularies,
                const std::string& filename);
 
