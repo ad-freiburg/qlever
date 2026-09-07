@@ -139,7 +139,7 @@ class GraphStoreProtocol {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    BlankNodeAdder bn{index.getBlankNodeManager()};
     auto insertIntoNewGraph = mustInsertIntoNewGraph(rawRequest, graph);
     const GraphOrDefault effectiveGraph =
         insertIntoNewGraph ? generateNewGraphIri() : graph;
@@ -172,7 +172,7 @@ class GraphStoreProtocol {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    BlankNodeAdder bn{index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{{}, std::move(convertedTriples)};
     ParsedQuery res;
@@ -221,7 +221,7 @@ class GraphStoreProtocol {
 
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    BlankNodeAdder bn{index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery insertData;

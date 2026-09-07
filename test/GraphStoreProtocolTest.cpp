@@ -396,7 +396,7 @@ MATCHER_P(IfBlankNode, sub, "") {
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, convertTriples) {
   auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
-  BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+  BlankNodeAdder bn{index.getBlankNodeManager()};
   auto expectConvert =
       [&bn](const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
             const std::vector<SparqlTripleSimpleWithGraph>& expectedTriples,

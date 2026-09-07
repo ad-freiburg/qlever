@@ -15,7 +15,15 @@
 // _____________________________________________________________________________
 Id BlankNodeAdder::getBlankNodeIndex(std::string_view label) {
   AD_CORRECTNESS_CHECK(ql::starts_with(label, "_:"));
-  auto [it, isNew] = map_.try_emplace(label.substr(2), Id::makeUndefined());
+  return getBlankNodeIndexForLabelWithoutPrefix(label.substr(2));
+}
+
+// _____________________________________________________________________________
+Id BlankNodeAdder::getBlankNodeIndexForLabelWithoutPrefix(
+    std::string_view label) {
+  // NOTE: The `map_` is a `std::unordered_map` (see `HashMapWithMemoryLimit`),
+  // which has no heterogeneous lookup, so we have to materialize the `label`.
+  auto [it, isNew] = map_.try_emplace(std::string{label}, Id::makeUndefined());
   auto& id = it->second;
   if (isNew) {
     id = Id::makeFromBlankNodeIndex(

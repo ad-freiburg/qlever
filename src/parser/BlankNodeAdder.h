@@ -17,6 +17,7 @@
 #include "global/Id.h"
 #include "index/LocalVocab.h"
 #include "parser/TripleComponent.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/BlankNodeManager.h"
 #include "util/HashMap.h"
 
@@ -29,17 +30,41 @@
 // it assigns its own dense range of blank node indices, see
 // `VocabularyMerger::getNextBlankNodeIndex`.
 struct BlankNodeAdder {
+  // The type of the mapping from labels to IDs, and the type of its allocator.
+  using Map = ad_utility::HashMapWithMemoryLimit<std::string, Id>;
+  using Allocator = Map::allocator_type;
+
   // The used blank node IDs are stored in the `LocalVocab` via the
   // `LocalBlankNodeManager`.
   LocalVocab localVocab_;
   // Store the mapping from labels to IDs.
-  ad_utility::HashMap<std::string, Id> map_;
+  Map map_;
   // The (global) blank node manager used to obtain new unique blank node IDs.
   ad_utility::BlankNodeManager* bnodeManager_;
 
-  // Get an `Id` for the `label`. If the same `label` was previously passed to
-  // the same `BlankNodeAdder`, this will result in the same `Id`.
+  // Construct from the (global) `bnodeManager` and the `allocator` that
+  // accounts for the memory used by the mapping from labels to IDs. Operations
+  // that resolve blank nodes from an input of unbounded size (`SERVICE` and
+  // `LOAD`) have to pass the allocator of their query, such that the mapping is
+  // part of the memory limit of that query. For blank nodes that come from a
+  // query or update itself, the size of the mapping is bounded by the size of
+  // that query, hence the default of an unlimited allocator.
+  explicit BlankNodeAdder(
+      ad_utility::BlankNodeManager* bnodeManager,
+      Allocator allocator =
+          ad_utility::makeUnlimitedAllocator<Map::value_type>())
+      : map_{std::move(allocator)}, bnodeManager_{bnodeManager} {}
+
+  // Get an `Id` for the `label`, which has to include the leading `_:` (as
+  // blank nodes are written in Turtle and SPARQL). If the same `label` was
+  // previously passed to the same `BlankNodeAdder`, this will result in the
+  // same `Id`.
   Id getBlankNodeIndex(std::string_view label);
+
+  // Same as above, but for a `label` without the leading `_:`. This is how
+  // blank nodes are represented in SPARQL JSON results (see the `bnode` type in
+  // `Service::bindingToTripleComponent`).
+  Id getBlankNodeIndexForLabelWithoutPrefix(std::string_view label);
 
   // Resolve a `TripleComponent` that was produced by one of the RDF parsers
   // (see `RdfParser.h`). Those represent blank nodes as plain strings (all

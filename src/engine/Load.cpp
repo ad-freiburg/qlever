@@ -153,7 +153,8 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // `LOAD` and distinct from the blank nodes of any other operation. Its
   // `LocalVocab` also holds the blank node blocks alive, so it is the
   // `LocalVocab` of the result.
-  BlankNodeAdder blankNodeAdder{{}, {}, getIndex().getBlankNodeManager()};
+  BlankNodeAdder blankNodeAdder{getIndex().getBlankNodeManager(),
+                                getExecutionContext()->getAllocator()};
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   auto toId = [this, &blankNodeAdder](TripleComponent&& tc) {
     auto component = blankNodeAdder.resolveParsedComponent(std::move(tc));
