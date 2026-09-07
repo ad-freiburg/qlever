@@ -56,10 +56,10 @@ void writePartialVocabularyFile(const std::string& path, const Range& words) {
 class MergeVocabularyTest : public ::testing::Test {
  protected:
   // path of the 2 partial Vocabularies that are used by mergeVocabulary
-  std::string _path0;
-  std::string _path1;
+  std::string path0_;
+  std::string path1_;
   // the base directory for our test
-  std::string _basePath;
+  std::string basePath_;
 
   // The bool means "is in the external vocabulary and not in the internal
   // vocabulary".
@@ -67,31 +67,30 @@ class MergeVocabularyTest : public ::testing::Test {
   ExpectedVocabulary expectedMergedVocabulary_;
   ExpectedVocabulary expectedMergedGeoVocabulary_;
 
-  // two std::vectors where we store the expected mapping
-  // form partial to global ids;
-  IdMap _expMapping0;
-  IdMap _expMapping1;
+  // The two expected ID maps from the partial to the global ids.
+  IdMap expectedIdMap0_;
+  IdMap expectedIdMap1_;
 
   // Constructor. TODO: Better write Setup method because of complex logic which
   // may throw?
   MergeVocabularyTest() {
-    _basePath = std::string("vocabularyGeneratorTestFiles");
+    basePath_ = std::string("vocabularyGeneratorTestFiles");
     // those names are required by mergeVocabulary
-    _path0 = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(0));
-    _path1 = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(1));
+    path0_ = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(0));
+    path1_ = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(1));
 
     // Create a subdirectory for the test files in the working directory.
-    _basePath = _basePath + "/";
+    basePath_ = basePath_ + "/";
     ql::error_code errorCode;
-    ql::filesystem::create_directories(_basePath, errorCode);
+    ql::filesystem::create_directories(basePath_, errorCode);
     if (errorCode) {
       std::cerr << "Could not create the directory for the test files. This "
                    "might lead to test failures\n";
     }
 
     // Prepend the created directory to the paths.
-    _path0 = _basePath + _path0;
-    _path1 = _basePath + _path1;
+    path0_ = basePath_ + path0_;
+    path1_ = basePath_ + path1_;
 
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
@@ -129,12 +128,12 @@ class MergeVocabularyTest : public ::testing::Test {
          true}};
 
     // open files for partial Vocabularies
-    ad_utility::serialization::FileWriteSerializer partial0(_path0);
-    ad_utility::serialization::FileWriteSerializer partial1(_path1);
+    ad_utility::serialization::FileWriteSerializer partial0(path0_);
+    ad_utility::serialization::FileWriteSerializer partial1(path1_);
 
     auto writePartialVocabulary = [](auto& partialVocab,
                                      const auto& tripleComponents,
-                                     IdMap* mapping) {
+                                     IdMap* idMap) {
       // write first partial vocabulary
       partialVocab << tripleComponents.size();
       size_t localIdx = 0;
@@ -142,9 +141,9 @@ class MergeVocabularyTest : public ::testing::Test {
         auto globalId = w.index_;
         w.index_ = localIdx;
         partialVocab << w;
-        if (mapping) {
+        if (idMap) {
           if (w.isBlankNode({})) {
-            mapping->push_back(
+            idMap->push_back(
                 {L(localIdx),
                  Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId))});
           } else {
@@ -153,22 +152,22 @@ class MergeVocabularyTest : public ::testing::Test {
             if (GeoVocab::getMarkerForWord(w.iriOrLiteral()) == 1) {
               globalId = GeoVocab::addMarker(globalId, 1);
             }
-            mapping->push_back({L(localIdx), V(globalId)});
+            idMap->push_back({L(localIdx), V(globalId)});
           }
         }
         localIdx++;
       }
     };
-    writePartialVocabulary(partial0, words0, &_expMapping0);
+    writePartialVocabulary(partial0, words0, &expectedIdMap0_);
 
-    writePartialVocabulary(partial1, words1, &_expMapping1);
+    writePartialVocabulary(partial1, words1, &expectedIdMap1_);
   }
 
   // __________________________________________________________________
   ~MergeVocabularyTest() {
     // Delete the test files (to debug a test failure, comment this out).
     ql::error_code errorCode;
-    ql::filesystem::remove_all(_basePath, errorCode);
+    ql::filesystem::remove_all(basePath_, errorCode);
   }
 
   // read all bytes from a file (e.g. to check equality of small test files)
@@ -215,7 +214,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 
     TripleComponentComparator comparator;
     res = mergeVocabulary(
-        _basePath, {"0", "1"},
+        basePath_, {"0", "1"},
         [&comparator](std::string_view a, bool aIsExternal, std::string_view b,
                       bool bIsExternal) {
           return comparator.isLessInTotalWithExternalFlag(a, aIsExternal, b,
@@ -236,12 +235,12 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   ASSERT_EQ(res.internalEntities().begin(), Id::makeUndefined());
   ASSERT_EQ(res.internalEntities().end(), Id::makeUndefined());
   // Check that vocabulary has the right form.
-  IdMap mapping0 = getIdMapFromFile(_basePath + PARTIAL_VOCAB_IDMAP_INFIX +
-                                    std::to_string(0));
-  EXPECT_THAT(mapping0, ::testing::ElementsAreArray(_expMapping0));
-  IdMap mapping1 = getIdMapFromFile(_basePath + PARTIAL_VOCAB_IDMAP_INFIX +
-                                    std::to_string(1));
-  EXPECT_THAT(mapping1, ::testing::ElementsAreArray(_expMapping1));
+  IdMap idMap0 = getIdMapFromFile(basePath_ + PARTIAL_VOCAB_IDMAP_INFIX +
+                                  std::to_string(0));
+  EXPECT_THAT(idMap0, ::testing::ElementsAreArray(expectedIdMap0_));
+  IdMap idMap1 = getIdMapFromFile(basePath_ + PARTIAL_VOCAB_IDMAP_INFIX +
+                                  std::to_string(1));
+  EXPECT_THAT(idMap1, ::testing::ElementsAreArray(expectedIdMap1_));
 }
 
 // _____________________________________________________________________________
