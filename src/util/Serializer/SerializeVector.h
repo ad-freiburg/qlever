@@ -12,6 +12,7 @@
 
 #include "backports/span.h"
 #include "util/ExceptionHandling.h"
+#include "util/ResetWhenMoved.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
@@ -110,7 +111,10 @@ CPP_template(typename T, typename Serializer)(
   Serializer _serializer;
   uint64_t _startPosition;
   typename std::vector<T>::size_type _size = 0;
-  bool _isFinished = false;
+  // A moved-from `VectorIncrementalSerializer` must not write anything anymore,
+  // as its serializer has been moved away. The `ResetWhenMoved` takes care of
+  // this, such that the move constructor can simply be defaulted.
+  ad_utility::ResetWhenMoved<bool, true> _isFinished = false;
 
  public:
   explicit VectorIncrementalSerializer(Serializer&& serializer)
@@ -126,16 +130,13 @@ CPP_template(typename T, typename Serializer)(
   VectorIncrementalSerializer(const VectorIncrementalSerializer&) = delete;
   VectorIncrementalSerializer& operator=(const VectorIncrementalSerializer&) =
       delete;
-  VectorIncrementalSerializer(VectorIncrementalSerializer&& other) noexcept(
-      std::is_nothrow_move_constructible_v<Serializer>)
-      : _serializer{std::move(other._serializer)},
-        _startPosition{other._startPosition},
-        _size{other._size},
-        _isFinished{other._isFinished} {
-    // The moved-from object must not write anything anymore, as its serializer
-    // has been moved away.
-    other._isFinished = true;
-  }
+  // The defaulted move constructor has the correct semantics because of the
+  // usage of `ResetWhenMoved` for the `_isFinished` member.
+  //
+  // NOTE: There deliberately is no move assignment operator. It would have to
+  // `finish()` the assigned-to object first (which might already have been
+  // written to), and no caller currently needs it.
+  VectorIncrementalSerializer(VectorIncrementalSerializer&&) = default;
 
   void push(const T& element) {
     _serializer << element;
