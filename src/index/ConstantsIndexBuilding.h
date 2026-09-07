@@ -61,14 +61,14 @@ constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 
 // _________________________________________________________________
-// The default value for the total number of threads that the first phase of
-// the index build (parsing the input and building the partial vocabularies)
-// uses: the number of hardware threads of this machine, or `1` if that number
-// cannot be determined. It can be overridden via `--concurrency-level`, see
-// `IndexBuilderMain.cpp`. The threads are divided among the consumers of this
-// value, each of which computes its own share: see `numItemMapThreads` in
-// `IndexImpl.cpp` and `detail::numParserThreads` in `RdfParser.h`.
-inline uint32_t DEFAULT_CONCURRENCY_LEVEL() {
+// The default value for the number of threads that the index build uses for
+// the steps that run in parallel: the number of hardware threads of this
+// machine, or `1` if that number cannot be determined. It can be overridden
+// via `--num-threads`, see `IndexBuilderMain.cpp`. The threads are divided
+// among the consumers of this value, each of which computes its own share:
+// see `numItemMapThreads` in `IndexImpl.cpp` and `detail::numParserThreads`
+// in `RdfParser.h`.
+inline uint32_t DEFAULT_NUM_THREADS() {
   return std::max(1u, std::thread::hardware_concurrency());
 }
 

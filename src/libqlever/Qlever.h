@@ -100,11 +100,10 @@ struct IndexBuilderConfig : CommonConfig {
   // The default chunk size is large enough for most input sets.
   std::optional<ad_utility::MemorySize> parserBufferSize_;
 
-  // The total number of threads used by the first phase of the index build.
-  // They are divided between the threads that parse the input and the workers
-  // that build the partial vocabularies, where each of these two consumers
-  // computes its own share. Must be greater than zero.
-  uint32_t concurrencyLevel_ = DEFAULT_CONCURRENCY_LEVEL();
+  // The number of threads that the index build uses for the steps that run in
+  // parallel. Each such step derives its own share from this value. Must be
+  // greater than zero.
+  uint32_t numThreads_ = DEFAULT_NUM_THREADS();
 
   // Filename of a JSON file with additional settings. Examples can be seen in
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles

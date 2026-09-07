@@ -107,11 +107,11 @@ class IndexImpl {
   ad_utility::MemorySize memoryLimitIndexBuilding_ =
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
-  // The total number of threads used by the first phase of the index build
-  // (see `--concurrency-level` in `IndexBuilderMain.cpp`). It is divided
-  // between the parser threads and the workers that build the partial
+  // The number of threads that the index build uses for the steps that run in
+  // parallel (see `--num-threads` in `IndexBuilderMain.cpp`). Currently, it is
+  // divided between the parser threads and the workers that build the partial
   // vocabularies via hash maps.
-  uint32_t concurrencyLevel_ = DEFAULT_CONCURRENCY_LEVEL();
+  uint32_t numThreads_ = DEFAULT_NUM_THREADS();
   ad_utility::MemorySize blocksizePermutationPerColumn_ =
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   nlohmann::json configurationJson_;
@@ -547,14 +547,14 @@ class IndexImpl {
     return parserBufferSize_;
   }
 
-  // Set the total number of threads for the first phase of the index build.
-  // They are divided between the parser threads (see
+  // Set the number of threads for the parallel steps of the index build.
+  // Currently, they are divided between the parser threads (see
   // `detail::numParserThreads` in `RdfParser.h`) and the workers that build
   // the partial vocabularies (see `numItemMapThreads` in `IndexImpl.cpp`).
-  void setConcurrencyLevel(uint32_t concurrencyLevel) {
-    AD_CONTRACT_CHECK(concurrencyLevel > 0,
-                      "The concurrency level must be greater than zero");
-    concurrencyLevel_ = concurrencyLevel;
+  void setNumThreads(uint32_t numThreads) {
+    AD_CONTRACT_CHECK(numThreads > 0,
+                      "The number of threads must be greater than zero");
+    numThreads_ = numThreads;
   }
 
   ad_utility::MemorySize& blocksizePermutationPerColumn() {

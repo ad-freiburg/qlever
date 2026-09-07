@@ -102,8 +102,8 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
   return std::make_unique<RdfMultifileParser>(
-      std::move(files), &encodedIriManager(), concurrencyLevel_,
-      parserBufferSize(), onlyAsciiTurtlePrefixes_);
+      std::move(files), &encodedIriManager(), numThreads_, parserBufferSize(),
+      onlyAsciiTurtlePrefixes_);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -505,14 +505,14 @@ namespace {
 using IdRow = std::array<Id, NumColumnsIndexBuilding>;
 
 // The number of worker threads that build the partial vocabularies via hash
-// maps, given the total number of threads `concurrencyLevel` available for the
-// first phase of the index build (see `DEFAULT_CONCURRENCY_LEVEL`). Building
-// the hash maps is roughly half as expensive as parsing, so the item maps get
-// about a third of the threads and the parsers the remaining two thirds (see
-// `detail::numParserThreads` in `RdfParser.h`, which must agree with the split
-// computed here). At least two threads are used.
-size_t numItemMapThreads(uint32_t concurrencyLevel) {
-  return std::max<size_t>(2, (concurrencyLevel + 1) / 3);
+// maps, given the total number of threads `numThreads` available for the index
+// build (see `DEFAULT_NUM_THREADS`). Building the hash maps is roughly half as
+// expensive as parsing, so the item maps get about a third of the threads and
+// the parsers the remaining two thirds (see `detail::numParserThreads` in
+// `RdfParser.h`, which must agree with the split computed here). At least two
+// threads are used.
+size_t numItemMapThreads(uint32_t numThreads) {
+  return std::max<size_t>(2, (numThreads + 1) / 3);
 }
 }  // namespace
 
@@ -588,9 +588,9 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
                  "per batch, using "
-              << numItemMapThreads(concurrencyLevel_) << " worker threads and "
-              << detail::numParserThreads(concurrencyLevel_)
-              << " parser threads ..." << std::endl;
+              << numItemMapThreads(numThreads_) << " worker threads and "
+              << detail::numParserThreads(numThreads_) << " parser threads ..."
+              << std::endl;
 
   // Show progress and statistics for the number of triples parsed. The total
   // number of triples is not known in advance, and the workers report their
@@ -604,7 +604,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   std::atomic<size_t> numHasWordTriples = 0;
 
   using WorkerResult = BuildPartialVocabulariesResult::WorkerResult;
-  auto tasks = ad_utility::integerRange(numItemMapThreads(concurrencyLevel_)) |
+  auto tasks = ad_utility::integerRange(numItemMapThreads(numThreads_)) |
                ql::views::transform([this, linesPerPartial, &parser, itemAlloc,
                                      &numHasWordTriples,
                                      &progressBar](size_t workerIdx) {

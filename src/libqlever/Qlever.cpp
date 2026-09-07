@@ -125,7 +125,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   if (config.parserBufferSize_.has_value()) {
     index.parserBufferSize() = config.parserBufferSize_.value();
   }
-  index.getImpl().setConcurrencyLevel(config.concurrencyLevel_);
+  index.getImpl().setNumThreads(config.numThreads_);
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
@@ -394,9 +394,9 @@ void IndexBuilderConfig::validate() const {
         "\" cannot be used for index building, the supported types are ",
         ad_utility::VocabularyType::getListOfValuesForIndexBuilding()));
   }
-  if (concurrencyLevel_ == 0) {
+  if (numThreads_ == 0) {
     throw std::invalid_argument(
-        "The value of --concurrency-level must be greater than 0");
+        "The value of --num-threads must be greater than 0");
   }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");
