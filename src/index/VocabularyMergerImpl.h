@@ -85,8 +85,8 @@ auto VocabularyMerger::mergeVocabulary(
   for (std::size_t i :
        ad_utility::integerRange(partialVocabularySuffixes.size())) {
     generators.push_back(makeWordRangeFromFile(i));
-    idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX,
-                                      partialVocabularySuffixes.at(i)));
+    idMapWriters_.push_back(makeIdMapWriter(absl::StrCat(
+        basename, PARTIAL_VOCAB_IDMAP_INFIX, partialVocabularySuffixes.at(i))));
   }
 
   // Some memory (that is hard to measure exactly) is used for the writing of
@@ -95,7 +95,7 @@ auto VocabularyMerger::mergeVocabulary(
   // detail.
   auto mergedWords =
       ad_utility::parallelMultiwayMerge<QueueWord, true,
-                                        decltype(sizeOfQueueWord)>(
+                                        decltype(detail::sizeOfQueueWord)>(
           0.8 * memoryToUse, std::move(generators), lessThanForQueue);
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
@@ -166,9 +166,10 @@ CPP_template_def(typename C, typename L)(
         lastTripleComponentIsBlankNode_
             ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
             : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
-    // Write pair of local and global ID to buffer.
-    idMaps_[top.partialFileId_].push_back(
-        {Id::makeFromVocabIndex(VocabIndex::make(top.id())), targetId});
+    // Write the mapping from the local index to the global ID to the ID map
+    // of the partial vocabulary that this occurrence of the word came from.
+    idMapWriters_[top.partialFileId_].push(
+        IdMapEntry{VocabIndex::make(top.id()), targetId});
   }
 }
 
@@ -280,10 +281,15 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 }
 
 // _____________________________________________________________________
-inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+inline ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
     const std::string& filename) {
   auto vec = getIdMapFromFile(filename);
-  return ad_utility::HashMap<Id, Id>{vec.begin(), vec.end()};
+  ad_utility::HashMap<VocabIndex, Id> map;
+  map.reserve(vec.size());
+  for (const auto& entry : vec) {
+    map.emplace(entry.localIndex_, entry.globalId_);
+  }
+  return map;
 }
 }  // namespace ad_utility::vocabulary_merger
 
