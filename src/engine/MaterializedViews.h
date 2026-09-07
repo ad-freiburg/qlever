@@ -285,7 +285,7 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
     std::optional<CacheKeyAndColumnMapping> withoutInvariants_;
   };
   CacheKeyWithAndWithoutInvariantPatterns computeCacheKey(
-      QueryExecutionContext* qec) const;
+      const QueryExecutionContext* qec) const;
 
   // If the materialized view contains a top-level `BIND` statement where the
   // expression matches the given cache key, return the column index of the
@@ -369,7 +369,7 @@ class MaterializedViewsManager {
   // view atomically with loading it, without releasing the lock in between).
   std::shared_ptr<MaterializedView> loadViewIntoLockedState(
       const std::string& name, LoadedViews& state,
-      QueryExecutionContext* qec) const;
+      const QueryExecutionContext* qec) const;
 
  public:
   MaterializedViewsManager() = default;
@@ -419,7 +419,8 @@ class MaterializedViewsManager {
   // `qec` is forwarded to `MaterializedView::computeCacheKey` for cache-key
   // based query rewriting; passing `nullptr` skips that analysis (currently
   // used by tests that do not care about it).
-  void loadView(const std::string& name, QueryExecutionContext* qec) const;
+  void loadView(const std::string& name,
+                const QueryExecutionContext* qec) const;
 
   // Unload a materialized view if it is loaded. This function is a no-op
   // otherwise. It is `const` for the same reason described above.
@@ -433,7 +434,7 @@ class MaterializedViewsManager {
   // is never `nullptr`. If the view does not exist, the function throws. See
   // `loadView` above for details on the use of the `QueryExecutionContext`.
   std::shared_ptr<const MaterializedView> getView(
-      const std::string& name, QueryExecutionContext* qec) const;
+      const std::string& name, const QueryExecutionContext* qec) const;
 
   // The same as `MaterializedView::makeIndexScan` above, but load and use the
   // right view automatically as requested in the `MaterializedViewQuery`.
@@ -458,7 +459,7 @@ class MaterializedViewsManager {
 
   // Write a `MaterializedView` given a valid `name` (consisting only of
   // alphanumerics and hyphens) and a `plannedQuery` to be executed. The query's
-  // result is written to the view.
+  // result is written to the view. The view is then loaded automatically.
   //
   // If a view with the same name is already loaded, it is unloaded before
   // writing.
