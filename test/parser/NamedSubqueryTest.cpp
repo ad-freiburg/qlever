@@ -17,7 +17,8 @@ namespace {
 // Parse the given query and return the resulting `ParsedQuery`.
 ParsedQuery parse(std::string query) {
   static EncodedIriManager encodedIriManager;
-  return SparqlParser::parseQuery(&encodedIriManager, std::move(query));
+  return SparqlParser::parseQuery(&encodedIriManager, std::move(query), {},
+                                  ad_utility::testing::makeAllocator());
 }
 
 // The dataset for the equivalence tests below.
@@ -182,7 +183,8 @@ namespace {
 // Collect the warnings of the given query and of all its (transitive)
 // subqueries.
 std::vector<std::string> allWarnings(const ParsedQuery& query) {
-  std::vector<std::string> warnings = query.warnings();
+  const auto& queryWarnings = query.warnings();
+  std::vector<std::string> warnings(queryWarnings.begin(), queryWarnings.end());
   for (const parsedQuery::Subquery& subquery :
        ad_utility::filterRangeOfVariantsByType<parsedQuery::Subquery>(
            query._rootGraphPattern._graphPatterns)) {

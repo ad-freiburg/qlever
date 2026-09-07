@@ -11,6 +11,8 @@
 // TODO<joka921> is this the right header where the pathSearchConfiguration
 // should live, or do we need a forward declaration here?
 #include "engine/PathSearch.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 
 class SparqlTriple;
 
@@ -31,20 +33,25 @@ class PathSearchException : public std::runtime_error {
 // All the error handling for the PathSearch happens in the PathQuery object.
 // Thus, if a PathSearchConfiguration can be constructed, it is valid.
 struct PathQuery : MagicServiceQuery {
-  std::vector<TripleComponent> sources_;
-  std::vector<TripleComponent> targets_;
+  qlever::vector<TripleComponent> sources_;
+  qlever::vector<TripleComponent> targets_;
   std::optional<Variable> start_;
   std::optional<Variable> end_;
   std::optional<Variable> pathColumn_;
   std::optional<Variable> edgeColumn_;
-  std::vector<Variable> edgeProperties_;
+  qlever::vector<Variable> edgeProperties_;
   PathSearchAlgorithm algorithm_;
 
   bool cartesian_ = true;
   std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
   std::optional<uint64_t> maxDepth_ = std::nullopt;
 
-  PathQuery() = default;
+  // `allocator` is the real, query-execution-bound allocator that
+  // `sources_`/`targets_`/`edgeProperties_` are routed through. Every caller
+  // that constructs a `PathQuery` must supply this explicitly (there is no
+  // implicit unlimited-allocator fallback).
+  explicit PathQuery(qlever::Allocator<Id> allocator)
+      : sources_{allocator}, targets_{allocator}, edgeProperties_{allocator} {}
   PathQuery(PathQuery&& other) noexcept = default;
   PathQuery(const PathQuery& other) = default;
   PathQuery& operator=(const PathQuery& other) = default;
@@ -66,7 +73,7 @@ struct PathQuery : MagicServiceQuery {
    * contains IRIs.
    */
   std::variant<Variable, std::vector<Id>> toSearchSide(
-      std::vector<TripleComponent> side, const IndexImpl& index) const;
+      qlever::vector<TripleComponent> side, const IndexImpl& index) const;
 
   /**
    * @brief Convert this PathQuery into a PathSearchConfiguration object.

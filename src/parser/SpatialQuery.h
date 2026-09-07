@@ -70,7 +70,11 @@ struct SpatialQuery : MagicServiceQuery {
   // declared inside the service (despite confusing semantics).
   bool ignoreMissingRightChild_ = false;
 
-  SpatialQuery() = default;
+  SpatialQuery() = delete;
+  // `allocator` is the real allocator that `payloadVariables_` is routed
+  // through; there is no implicit unlimited-allocator fallback.
+  explicit SpatialQuery(qlever::Allocator<Id> allocator)
+      : payloadVariables_{std::move(allocator)} {}
   SpatialQuery(SpatialQuery&& other) noexcept = default;
   SpatialQuery(const SpatialQuery& other) = default;
   SpatialQuery& operator=(const SpatialQuery& other) = default;
@@ -78,8 +82,9 @@ struct SpatialQuery : MagicServiceQuery {
   ~SpatialQuery() noexcept override = default;
 
   // Alternative constructor for backward compatibility (allows initializing a
-  // SpatialJoin using a magic predicate)
-  explicit SpatialQuery(const SparqlTriple& triple);
+  // SpatialJoin using a magic predicate). `allocator` is routed through the
+  // same way as for the main constructor above.
+  explicit SpatialQuery(const SparqlTriple& triple, qlever::Allocator<Id> allocator);
 
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;

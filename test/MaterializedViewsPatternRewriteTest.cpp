@@ -18,6 +18,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "libqlever/Qlever.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/File.h"
 
 namespace {
@@ -69,7 +70,8 @@ TEST_F(MaterializedViewsPatternRewriteTest, starRewrite) {
                     h::IndexScanFromStrings("?s", "<p2>", "?o2")));
 
   // Write a star structure to the materialized view.
-  MaterializedViewsManager manager{onDiskBase};
+  MaterializedViewsManager manager{onDiskBase,
+                                  ad_utility::testing::makeAllocator()};
   manager.writeViewToDisk(viewName,
                           qlv.parseAndPlanQuery(std::string{simpleStar}));
   qlv.loadMaterializedView(viewName);
@@ -153,7 +155,8 @@ TEST_F(MaterializedViewsPatternRewriteTest, generalPatternRewrite) {
   qlever::EngineConfig config;
   config.baseName_ = onDiskBase;
   qlever::Qlever qlv{config};
-  MaterializedViewsManager manager{onDiskBase};
+  MaterializedViewsManager manager{onDiskBase,
+                                  ad_utility::testing::makeAllocator()};
 
   auto generalPatternView =
       std::bind_front(&viewScanSimple, "generalPatternView");
@@ -219,7 +222,8 @@ TEST_F(MaterializedViewsPatternRewriteTest,
   config.baseName_ = onDiskBase;
   config.loadTextIndex_ = true;
   qlever::Qlever qlv{config};
-  MaterializedViewsManager manager{onDiskBase};
+  MaterializedViewsManager manager{onDiskBase,
+                                  ad_utility::testing::makeAllocator()};
 
   expectNotSuitableForRewrite(
       qlv, manager, "fullTextView",
@@ -368,7 +372,7 @@ TEST_F(MaterializedViewsPatternMatchingTest, restrictingModifiersNotRewritten) {
 // _____________________________________________________________________________
 TEST(MaterializedViewsPatternRewriteRejectionTest,
      emptyGraphPatternNotRewritten) {
-  ParsedQuery parsed;
+  ParsedQuery parsed{ad_utility::testing::makeAllocator()};
   parsed._rootGraphPattern._graphPatterns.emplace_back(
       parsedQuery::BasicGraphPattern{});
 

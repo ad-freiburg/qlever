@@ -19,6 +19,7 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "rdfTypes/Variable.h"
 #include "util/AllocateShared.h"
+#include "util/Allocator.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
 #include "util/CopyableSynchronization.h"

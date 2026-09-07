@@ -24,6 +24,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "parser/Alias.h"
+#include "util/AllocatorTypes.h"
 #include "util/TypeIdentity.h"
 
 // Block size for when using the hash map optimization
@@ -88,7 +89,8 @@ class GroupByImpl : public Operation {
    * @param subtree The QueryExecutionTree that contains the operations
    *                  creating the sorting operation inputs.
    */
-  vector<ColumnIndex> computeSortColumns(const QueryExecutionTree* subtree);
+  qlever::vector<ColumnIndex> computeSortColumns(
+      const QueryExecutionTree* subtree);
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};

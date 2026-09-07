@@ -16,6 +16,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/JoinHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -297,10 +298,11 @@ ExpectedColumns makeExpectedColumns(const VariableToColumnMap& varToColMap,
 std::shared_ptr<QueryExecutionTree> makeValuesForSingleVariable(
     QueryExecutionContext* qec, std::string variable,
     std::vector<TripleComponent> values) {
-  parsedQuery::SparqlValues sparqlValues;
+  parsedQuery::SparqlValues sparqlValues{qec->getAllocator()};
   sparqlValues._variables.emplace_back(std::move(variable));
   for (auto& value : values) {
-    sparqlValues._values.push_back({std::move(value)});
+    sparqlValues._values.push_back(ad_utility::testing::toQVec(
+        std::vector<TripleComponent>{std::move(value)}));
   }
   return ad_utility::makeExecutionTree<Values>(qec, sparqlValues);
 }

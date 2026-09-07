@@ -401,9 +401,9 @@ std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   return sortedOn;
 }
 
-std::vector<ColumnIndex> GroupByImpl::computeSortColumns(
+qlever::vector<ColumnIndex> GroupByImpl::computeSortColumns(
     const QueryExecutionTree* subtree) {
-  vector<ColumnIndex> cols;
+  qlever::vector<ColumnIndex> cols{allocator()};
   // If we have an implicit GROUP BY, where the entire input is a single group,
   // no sorting needs to be done.
   if (_groupByVariables.empty()) {

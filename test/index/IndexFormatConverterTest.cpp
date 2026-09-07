@@ -367,14 +367,17 @@ TEST_F(IndexFormatConverterTest, convertedMaterializedView) {
   // The version of the on-disk format of the materialized views was raised
   // together with the index format, so the view of the index in the previous
   // format cannot be loaded.
-  AD_EXPECT_THROW_WITH_MESSAGE(MaterializedView(oldBasename_, "testview"),
-                               HasSubstr("saved with format version 1"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      MaterializedView(oldBasename_, "testview",
+                       ad_utility::testing::makeAllocator()),
+      HasSubstr("saved with format version 1"));
 
   convertIndexToCurrentFormat(oldBasename_, newBasename_);
 
   // The converted view can be loaded, which also checks its version, its
   // columns, and its query, and it contains all its rows.
-  MaterializedView view{newBasename_, "testview"};
+  MaterializedView view{newBasename_, "testview",
+                       ad_utility::testing::makeAllocator()};
   EXPECT_EQ(view.permutation()->metaData().totalElements(), 6);
   EXPECT_THAT(view.originalQuery(),
               ::testing::Optional(HasSubstr("<http://example.org/label>")));

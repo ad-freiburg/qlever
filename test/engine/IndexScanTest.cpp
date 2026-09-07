@@ -15,6 +15,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/ParsedQueryTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
@@ -578,7 +579,8 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
 
   QueryResultCache cache;
   NamedResultCache namedCache;
-  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
+  auto materializedViewsManager =
+      std::make_shared<MaterializedViewsManager>(makeAllocator());
   std::unique_ptr<QueryExecutionContext> qec = nullptr;
 
   auto makeScan = [&]() {
@@ -1499,7 +1501,9 @@ TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
   IndexScan scan2{
       qec, Permutation::PSO,
       SparqlTripleSimple{
-          Var{"?x"}, Var{"?y"}, Var{"?z"}, {std::pair{3, Var{"?g"}}}}};
+          Var{"?x"}, Var{"?y"}, Var{"?z"},
+          toQVec(std::vector<std::pair<ColumnIndex, Variable>>{
+              {3, Var{"?g"}}})}};
   EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?x"}));
   EXPECT_FALSE(scan2.columnOriginatesFromGraphOrUndef(Var{"?y"}));
   EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?z"}));
@@ -2240,7 +2244,9 @@ TEST(IndexScan, additionalVariablesInDescriptor) {
   IndexScan scan2{
       qec, Permutation::PSO,
       SparqlTripleSimple{
-          Var{"?s"}, Var{"?p"}, Var{"?o"}, {std::pair{3, Var{"?g"}}}}};
+          Var{"?s"}, Var{"?p"}, Var{"?o"},
+          toQVec(std::vector<std::pair<ColumnIndex, Variable>>{
+              {3, Var{"?g"}}})}};
   EXPECT_EQ(scan2.getDescriptor(), "IndexScan PSO ?s ?p ?o ?g");
 }
 
@@ -2276,12 +2282,12 @@ TEST(IndexScan, isDistinctBy) {
   // and therefore need not be covered.
   auto scanWithAdditionalColumns = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTripleSimple{TC{Variable{"?s"}},
-                         TC{Variable{"?p"}},
-                         TC{Variable{"?o"}},
-                         {std::pair{ADDITIONAL_COLUMN_GRAPH_ID, Variable{"?g"}},
-                          std::pair{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
-                                    Variable{"?pattern"}}}});
+      SparqlTripleSimple{
+          TC{Variable{"?s"}}, TC{Variable{"?p"}}, TC{Variable{"?o"}},
+          toQVec(std::vector<std::pair<ColumnIndex, Variable>>{
+              {ADDITIONAL_COLUMN_GRAPH_ID, Variable{"?g"}},
+              {ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+               Variable{"?pattern"}}})});
   // The columns are `?s`, `?p`, `?o`, `?g`, `?pattern` in this order.
   const auto& scanWithColumnsOp =
       *scanWithAdditionalColumns->getRootOperation();

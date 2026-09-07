@@ -7,6 +7,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/AllocatorTypes.h"
 
 // The implementation of an "EXISTS join", which we use to realize the semantics
 // of the SPARQL `EXISTS` function. The join takes two subtrees as input, and
@@ -17,7 +18,7 @@ class ExistsJoin : public Operation {
   // The left and right child.
   std::shared_ptr<QueryExecutionTree> left_;
   std::shared_ptr<QueryExecutionTree> right_;
-  std::vector<std::array<ColumnIndex, 2>> joinColumns_;
+  qlever::vector<std::array<ColumnIndex, 2>> joinColumns_;
 
   // The variable of the added (Boolean) result column.
   Variable existsVariable_;

@@ -32,6 +32,7 @@
 #include "global/Id.h"
 #include "global/Pattern.h"
 #include "util/IndexTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 
 namespace {
 // Get test collection of words of a given size. The words are all distinct.
@@ -323,19 +324,23 @@ TEST(LocalVocab, propagation) {
   // purposes of this test, we just want something that's not yet in the index,
   // so "x" etc. is just fine (and also different from the "<x>" below).
   auto iri = ad_utility::testing::iri;
+  using ad_utility::testing::makeSparqlValues;
   Values values1(
       testQec,
-      {{Variable{"?x"}, Variable{"?y"}},
-       {{TripleComponent{iri("<xN1>")}, TripleComponent{iri("<yN1>")}},
-        {TripleComponent{iri("<xN1>")}, TripleComponent{iri("<yN2>")}}}});
+      makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}},
+          {{TripleComponent{iri("<xN1>")}, TripleComponent{iri("<yN1>")}},
+           {TripleComponent{iri("<xN1>")}, TripleComponent{iri("<yN2>")}}}));
   Values values1copy = values1;
   std::vector<std::string> localVocab1{"<xN1>", "<yN1>", "<yN2>"};
   checkLocalVocab(values1copy, localVocab1);
 
   // VALUES operation that uses an existing literal (from the test index).
   Values values2(
-      testQec, {{Variable{"?x"}, Variable{"?y"}},
-                {{TripleComponent{iri("<x>")}, TripleComponent{iri("<y>")}}}});
+      testQec,
+      makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}},
+          {{TripleComponent{iri("<x>")}, TripleComponent{iri("<y>")}}}));
   Values values2copy = values2;
   checkLocalVocab(values2copy, std::vector<std::string>{});
 
@@ -343,9 +348,10 @@ TEST(LocalVocab, propagation) {
   // words in `values1`.
   Values values3(
       testQec,
-      {{Variable{"?x"}, Variable{"?y"}},
-       {{TripleComponent{iri("<xN1>")}, TripleComponent{iri("<yN1>")}},
-        {TripleComponent{iri("<xN2>")}, TripleComponent{iri("<yN3>")}}}});
+      makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}},
+          {{TripleComponent{iri("<xN1>")}, TripleComponent{iri("<yN1>")}},
+           {TripleComponent{iri("<xN2>")}, TripleComponent{iri("<yN3>")}}}));
   std::vector<std::string> localVocab13{"<xN1>", "<yN1>", "<yN2>", "<xN2>",
                                         "<yN3>"};
 
@@ -373,7 +379,9 @@ TEST(LocalVocab, propagation) {
 
   // ORDER BY operation (the third argument are the indices of the columns to be
   // sorted, and the sort order; not important for this test).
-  OrderBy orderBy(testQec, qet(values1), {{0, true}, {1, true}});
+  OrderBy orderBy(testQec, qet(values1),
+                 OrderBy::SortIndices({{0, true}, {1, true}},
+                                      testQec->getAllocator()));
   checkLocalVocab(orderBy, localVocab1);
 
   // SORT operation (the third operation is the sort column).
@@ -399,9 +407,11 @@ TEST(LocalVocab, propagation) {
             "GROUP_CONCAT"};
   };
   Values values1b(
-      testQec, {{Variable{"?x"}, Variable{"?y"}},
-                {{TripleComponent{lit("xN1")}, TripleComponent{lit("yN1")}},
-                 {TripleComponent{lit("xN1")}, TripleComponent{lit("yN2")}}}});
+      testQec,
+      makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}},
+          {{TripleComponent{lit("xN1")}, TripleComponent{lit("yN1")}},
+           {TripleComponent{lit("xN1")}, TripleComponent{lit("yN2")}}}));
   GroupBy groupBy(
       testQec, {Variable{"?x"}},
       {Alias{groupConcatExpression("?y", "|"), Variable{"?concat"}}},
@@ -461,9 +471,11 @@ TEST(LocalVocab, propagation) {
   checkLocalVocab(hasPredicateScan, localVocab1);
   Values valuesPatternTrick(
       testQec,
-      {{Variable{"?x"}, Variable{"?y"}},
-       {{TripleComponent{iri("<xN1>")}, TripleComponent{Pattern::NoPattern}},
-        {TripleComponent{iri("<xN1>")}, TripleComponent{Pattern::NoPattern}}}});
+      makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}},
+          {{TripleComponent{iri("<xN1>")}, TripleComponent{Pattern::NoPattern}},
+           {TripleComponent{iri("<xN1>")},
+            TripleComponent{Pattern::NoPattern}}}));
   CountAvailablePredicates countAvailablePredictes(
       testQec, qet(valuesPatternTrick), 0, Variable{"?y"}, Variable{"?count"});
   checkLocalVocab(countAvailablePredictes, {"<xN1>"});

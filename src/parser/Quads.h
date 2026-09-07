@@ -14,6 +14,8 @@
 #include "parser/SparqlTriple.h"
 #include "parser/UpdateTriples.h"
 #include "parser/data/Types.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 
 // A class for the intermediate parsing results of `quads`. Provides utilities
 // for converting the quads into the required formats. The Quads/Triples can be
@@ -29,7 +31,21 @@ struct Quads {
   // Free triples are outside a `GRAPH ...` clause.
   ad_utility::sparql_types::Triples freeTriples_{};
   // Graph triples are inside a `GRAPH ...` clause.
-  std::vector<GraphBlock> graphTriples_{};
+  qlever::vector<GraphBlock> graphTriples_;
+
+  // `allocator` is the real, query-execution-bound allocator that
+  // `graphTriples_` is routed through. Used by callers that start out with
+  // empty triples and populate them afterwards.
+  explicit Quads(qlever::Allocator<Id> allocator)
+      : graphTriples_{std::move(allocator)} {}
+
+  // Construct directly from already-allocated free/graph triples (the
+  // allocator is taken from `graphTriples`, which the caller must have
+  // already constructed with a real allocator).
+  Quads(ad_utility::sparql_types::Triples freeTriples,
+        qlever::vector<GraphBlock> graphTriples)
+      : freeTriples_{std::move(freeTriples)},
+        graphTriples_{std::move(graphTriples)} {}
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Quads, freeTriples_,
                                               graphTriples_)

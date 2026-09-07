@@ -813,7 +813,7 @@ TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
 // _____________________________________________________________________________
 TEST(CartesianProductJoin, distinctIsPushedDownIntoChildren) {
   using Vars = std::vector<std::optional<Variable>>;
-  using SC = std::vector<ColumnIndex>;
+  using SC = qlever::vector<ColumnIndex>;
   auto qec = getQec();
 
   auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -826,7 +826,8 @@ TEST(CartesianProductJoin, distinctIsPushedDownIntoChildren) {
   // A `DISTINCT` over all columns is pushed into the children: the root stays a
   // `CartesianProductJoin`, each child is made distinct, and no `Distinct` is
   // added on top.
-  auto tree = QueryExecutionTree::createDistinctTree(cartesian, SC{0, 1});
+  auto tree = QueryExecutionTree::createDistinctTree(
+      cartesian, SC({0, 1}, qec->getAllocator()));
   ASSERT_TRUE(std::dynamic_pointer_cast<CartesianProductJoin>(
       tree->getRootOperation()));
   for (auto* child : tree->getRootOperation()->getChildren()) {
@@ -842,7 +843,7 @@ TEST(CartesianProductJoin, distinctIsPushedDownIntoChildren) {
 // _____________________________________________________________________________
 TEST(CartesianProductJoin, distinctIsNoOpWhenChildrenAlreadyDistinct) {
   using TC = TripleComponent;
-  using SC = std::vector<ColumnIndex>;
+  using SC = qlever::vector<ColumnIndex>;
   auto qec = getQec();
 
   // Each full index scan is distinct over its own three columns, so the
@@ -861,12 +862,14 @@ TEST(CartesianProductJoin, distinctIsNoOpWhenChildrenAlreadyDistinct) {
 
   // `DISTINCT *` is a no-op and returns the tree unchanged.
   EXPECT_EQ(
-      QueryExecutionTree::createDistinctTree(cartesian, SC{0, 1, 2, 3, 4, 5}),
+      QueryExecutionTree::createDistinctTree(
+          cartesian, SC({0, 1, 2, 3, 4, 5}, qec->getAllocator())),
       cartesian);
 
   // If only some columns are covered, the product is not distinct, so the
   // `DISTINCT` is pushed down (the root stays a `CartesianProductJoin`).
-  auto tree = QueryExecutionTree::createDistinctTree(cartesian, SC{0, 1, 2});
+  auto tree = QueryExecutionTree::createDistinctTree(
+      cartesian, SC({0, 1, 2}, qec->getAllocator()));
   EXPECT_NE(tree, cartesian);
   EXPECT_TRUE(std::dynamic_pointer_cast<CartesianProductJoin>(
       tree->getRootOperation()));
@@ -875,7 +878,7 @@ TEST(CartesianProductJoin, distinctIsNoOpWhenChildrenAlreadyDistinct) {
 // _____________________________________________________________________________
 TEST(CartesianProductJoin, distinctCollapsesChildWithoutSelectedColumn) {
   using Vars = std::vector<std::optional<Variable>>;
-  using SC = std::vector<ColumnIndex>;
+  using SC = qlever::vector<ColumnIndex>;
   auto qec = getQec();
 
   auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -888,7 +891,8 @@ TEST(CartesianProductJoin, distinctCollapsesChildWithoutSelectedColumn) {
   // Only `?a` is selected, so the `?b` child contributes no column. It is
   // collapsed to a single row via `LIMIT 1`, while the `?a` child is made
   // distinct; no `Distinct` is added on top.
-  SC distinctIndices{cartesian->getVariableColumn(Variable{"?a"})};
+  SC distinctIndices({cartesian->getVariableColumn(Variable{"?a"})},
+                     qec->getAllocator());
   auto tree =
       QueryExecutionTree::createDistinctTree(cartesian, distinctIndices);
   auto cpj =

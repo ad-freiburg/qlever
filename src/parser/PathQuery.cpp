@@ -79,7 +79,7 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
 
 // ____________________________________________________________________________
 std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
-    std::vector<TripleComponent> side, const IndexImpl& index) const {
+    qlever::vector<TripleComponent> side, const IndexImpl& index) const {
   if (side.size() == 1 && side[0].isVariable()) {
     return side[0].getVariable();
   } else {
@@ -120,8 +120,10 @@ PathSearchConfiguration PathQuery::toPathSearchConfiguration(
   return PathSearchConfiguration{
       algorithm_,          sources,         targets,
       start_.value(),      end_.value(),    pathColumn_.value(),
-      edgeColumn_.value(), edgeProperties_, cartesian_,
-      numPathsPerTarget_,  maxDepth_};
+      edgeColumn_.value(),
+      std::vector<Variable>(edgeProperties_.begin(), edgeProperties_.end()),
+      cartesian_,          numPathsPerTarget_,
+      maxDepth_};
 }
 
 }  // namespace parsedQuery

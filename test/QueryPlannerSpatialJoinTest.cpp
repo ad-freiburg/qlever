@@ -16,6 +16,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SpatialQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -23,6 +24,7 @@ namespace {
 using Var = Variable;
 constexpr auto iri = ad_utility::testing::iri;
 using queryPlannerTestHelpers::NamedTag;
+using ad_utility::testing::toQVec;
 }  // namespace
 using ::testing::HasSubstr;
 
@@ -34,7 +36,7 @@ TEST(QueryPlanner, SpatialJoinService) {
   auto Basel = SpatialJoinAlgorithm::BASELINE;
   auto BBox = SpatialJoinAlgorithm::BOUNDING_BOX;
   auto SJ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  PayloadVariables emptyPayload{};
+  PayloadVariables emptyPayload{ad_utility::testing::makeAllocator()};
 
   // Simple base cases
   h::expect(
@@ -316,7 +318,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "_:config spatialSearch:payload ?a ."
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
-                     PV{std::vector<V>{V{"?a"}}}, S2, std::nullopt,
+                     PV{toQVec(std::vector<V>{V{"?a"}})}, S2, std::nullopt,
                      std::nullopt, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
   h::expect(
@@ -333,7 +335,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::spatialJoin(
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
-          PV{std::vector<V>{V{"?a"}, V{"?a2"}}}, S2, std::nullopt, std::nullopt,
+          PV{toQVec(std::vector<V>{V{"?a"}, V{"?a2"}})}, S2, std::nullopt, std::nullopt,
           scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 
@@ -353,7 +355,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::spatialJoin(
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
-          PV{std::vector<V>{V{"?a"}, V{"?a"}, V{"?b"}, V{"?a2"}}}, S2,
+          PV{toQVec(std::vector<V>{V{"?a"}, V{"?a"}, V{"?b"}, V{"?a2"}})}, S2,
           std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 
@@ -560,18 +562,20 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       // versions are semantically correct.
       ::testing::AnyOf(
           h::spatialJoin(500, 5, V{"?y"}, V{"?c"}, V{"?dc"},
-                         PV{std::vector<V>{V{"?ac"}}}, S2, std::nullopt,
+                         PV{toQVec(std::vector<V>{V{"?ac"}})}, S2, std::nullopt,
                          std::nullopt,
-                         h::spatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?db"}, PV{},
+                         h::spatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?db"},
+                                        PV{ad_utility::testing::makeAllocator()},
                                         S2, std::nullopt, std::nullopt,
                                         scan("?x", "<p>", "?y"),
                                         scan("?ab", "<p1>", "?b")),
                          scan("?ac", "<p2>", "?c")),
           h::spatialJoin(
-              -1, 5, V{"?y"}, V{"?b"}, V{"?db"}, PV{}, S2, std::nullopt,
+              -1, 5, V{"?y"}, V{"?b"}, V{"?db"},
+              PV{ad_utility::testing::makeAllocator()}, S2, std::nullopt,
               std::nullopt,
               h::spatialJoin(500, 5, V{"?y"}, V{"?c"}, V{"?dc"},
-                             PV{std::vector<V>{V{"?ac"}}}, S2, std::nullopt,
+                             PV{toQVec(std::vector<V>{V{"?ac"}})}, S2, std::nullopt,
                              std::nullopt, scan("?x", "<p>", "?y"),
                              scan("?ac", "<p2>", "?c")),
               scan("?ab", "<p1>", "?b"))));
@@ -1941,14 +1945,15 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
     TripleComponent subject{Variable{"?subject"}};
     TripleComponent object{Variable{"?object"}};
     if (shouldThrow) {
-      ASSERT_ANY_THROW((parsedQuery::SpatialQuery{
-                            SparqlTriple{subject, iri(distanceIRI), object}})
-                           .toSpatialJoinConfiguration());
+      ASSERT_ANY_THROW(
+          (parsedQuery::SpatialQuery{SparqlTriple{subject, iri(distanceIRI),
+                                                  object},
+                                    qec->getAllocator()})
+              .toSpatialJoinConfiguration());
     } else {
       auto config = parsedQuery::SpatialQuery{
-          SparqlTriple{
-              subject, iri(distanceIRI),
-              object}}.toSpatialJoinConfiguration();
+          SparqlTriple{subject, iri(distanceIRI), object},
+          qec->getAllocator()}.toSpatialJoinConfiguration();
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
           ad_utility::makeExecutionTree<SpatialJoin>(qec, config, std::nullopt,
                                                      std::nullopt);

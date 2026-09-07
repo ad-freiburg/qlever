@@ -19,7 +19,8 @@ using ad_utility::source_location;
 
 namespace {
 // Create an `OrderBy` operation that sorts the `input` by the `sortColumns`.
-OrderBy makeOrderBy(IdTable input, const OrderBy::SortIndices& sortColumns) {
+OrderBy makeOrderBy(IdTable input,
+                    const std::vector<std::pair<ColumnIndex, bool>>& sortColumns) {
   std::vector<std::optional<Variable>> vars;
   auto qec = ad_utility::testing::getQec();
   for (size_t i = 0; i < input.numColumns(); ++i) {
@@ -27,7 +28,9 @@ OrderBy makeOrderBy(IdTable input, const OrderBy::SortIndices& sortColumns) {
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return OrderBy{qec, std::move(subtree), sortColumns};
+  return OrderBy{qec, std::move(subtree),
+                OrderBy::SortIndices(sortColumns.begin(), sortColumns.end(),
+                                     qec->getAllocator())};
 }
 
 // Test that the `input`, when being sorted by its 0-th column as its primary
@@ -47,7 +50,7 @@ void testOrderBy(IdTable input, const IdTable& expected,
   AD_CONTRACT_CHECK(input.numRows() == expected.numRows());
   // Set up a vector of `SortIndices`. Those will later be permuted.
   // The second element (`isDescending`) will be correctly set later.
-  OrderBy::SortIndices sortColumns;
+  OrderBy::SortIndices sortColumns{qec->getAllocator()};
   for (size_t i = 0; i < input.numColumns(); ++i) {
     sortColumns.emplace_back(i, false);
   }
@@ -75,7 +78,10 @@ void testOrderBy(IdTable input, const IdTable& expected,
     // Randomly shuffle the input and sort.
     for (size_t i = 0; i < 5; ++i) {
       randomShuffle(permutedInput.begin(), permutedInput.end());
-      OrderBy s = makeOrderBy(permutedInput.clone(), sortColumns);
+      OrderBy s = makeOrderBy(
+          permutedInput.clone(),
+          std::vector<std::pair<ColumnIndex, bool>>(sortColumns.begin(),
+                                                     sortColumns.end()));
       auto result = s.getResult();
       const auto& resultTable = result->idTableView();
       ASSERT_EQ(resultTable, permutedExpected);
@@ -265,7 +271,7 @@ TEST(OrderBy, clone) {
   IdTable permutedInput{2, qec->getAllocator()};
 
   OrderBy orderBy =
-      makeOrderBy(permutedInput.clone(), OrderBy::SortIndices{{0, true}});
+      makeOrderBy(permutedInput.clone(), {{0, true}});
 
   auto clone = orderBy.clone();
   ASSERT_TRUE(clone);

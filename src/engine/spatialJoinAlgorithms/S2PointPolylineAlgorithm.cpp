@@ -55,7 +55,8 @@ Result S2PointPolylineAlgorithm::run() {
     }
     auto s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
 
-    ad_utility::HashMap<size_t, double> deduplicatedSet{};
+    ad_utility::HashMapWithMemoryLimit<size_t, double> deduplicatedSet{
+        qec_->getAllocator()};
     timerS2.cont();
     auto res = s2query.FindClosestEdges(&s2target);
 

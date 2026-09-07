@@ -13,6 +13,7 @@
 #include <optional>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
@@ -228,7 +229,7 @@ inline bool doesJoinProduceGuaranteedGraphValuesOrUndef(
 // Helper function to check if any of the join columns could potentially contain
 // undef values.
 inline bool joinColumnsAreAlwaysDefined(
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns,
     const std::shared_ptr<QueryExecutionTree>& left,
     const std::shared_ptr<QueryExecutionTree>& right) {
   auto alwaysDefHelper = [](const auto& tree, ColumnIndex index) {
@@ -262,7 +263,7 @@ inline std::shared_ptr<const Result> computeResultSkipChild(
 inline bool rightIndexNestedLoopJoinIsPossible(
     const std::shared_ptr<QueryExecutionTree>& left,
     const std::shared_ptr<QueryExecutionTree>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& matchedColumns) {
+    ql::span<const std::array<ColumnIndex, 2>> matchedColumns) {
   auto sort = std::dynamic_pointer_cast<Sort>(left->getRootOperation());
   return sort && left->getSizeEstimate() >= right->getSizeEstimate() &&
          joinColumnsAreAlwaysDefined(matchedColumns, left, right);

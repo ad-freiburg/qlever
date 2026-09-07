@@ -7,20 +7,6 @@
 namespace parsedQuery {
 
 // _____________________________________________________________________________
-DatasetClauses DatasetClauses::fromClauses(
-    const std::vector<DatasetClause>& clauses) {
-  DatasetClauses result;
-  for (auto& [dataset, isNamed] : clauses) {
-    auto& graphs = isNamed ? result.namedGraphs_ : result.defaultGraphs_;
-    if (!graphs.has_value()) {
-      graphs.emplace();
-    }
-    graphs.value().insert(dataset);
-  }
-  return result;
-}
-
-// _____________________________________________________________________________
 DatasetClauses DatasetClauses::fromWithClause(
     const TripleComponent::Iri& withGraph) {
   DatasetClauses result;

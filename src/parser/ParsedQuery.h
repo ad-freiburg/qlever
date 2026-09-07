@@ -14,6 +14,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
@@ -28,6 +29,8 @@
 #include "parser/data/OrderKey.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
+#include "util/AllocatorTypes.h"
+#include "util/AllocatorWithLimit.h"
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/http/ResponseMiddleware.h"
 #endif
@@ -70,20 +73,28 @@ class ParsedQuery {
   // struct
   struct AskClause : public parsedQuery::ClauseBase {};
 
-  ParsedQuery() = default;
+  // `allocator` is the real, query-execution-bound allocator that
+  // `_havingClauses`/`_orderBy`/`_groupByVariables`/`warnings_` are routed
+  // through. Every caller that constructs a `ParsedQuery` must supply this
+  // explicitly.
+  explicit ParsedQuery(qlever::Allocator<Id> allocator)
+      : _havingClauses{allocator},
+        _orderBy{allocator},
+        _groupByVariables{allocator},
+        warnings_{allocator} {}
 
   GraphPattern _rootGraphPattern;
-  std::vector<SparqlFilter> _havingClauses;
-  std::vector<VariableOrderKey> _orderBy;
+  qlever::vector<SparqlFilter> _havingClauses;
+  qlever::vector<VariableOrderKey> _orderBy;
   IsInternalSort _isInternalSort = IsInternalSort::False;
-  std::vector<Variable> _groupByVariables;
+  qlever::vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   std::string _originalString;
   std::optional<parsedQuery::Values> postQueryValuesClause_ = std::nullopt;
 
   // Contains warnings about queries that are valid according to the SPARQL
   // standard, but are probably semantically wrong.
-  std::vector<std::string> warnings_;
+  qlever::vector<std::string> warnings_;
 
   using HeaderClause =
       std::variant<SelectClause, ConstructClause, UpdateClause, AskClause>;
@@ -145,12 +156,11 @@ class ParsedQuery {
   void registerVariableVisibleInQueryBody(const Variable& variable);
 
   // Add variables, that were found in the query body.
-  void registerVariablesVisibleInQueryBody(
-      const std::vector<Variable>& variables);
+  void registerVariablesVisibleInQueryBody(ql::span<const Variable> variables);
 
   // Return all the warnings that have been added via `addWarning()` or
   // `addWarningOrThrow`.
-  const std::vector<std::string>& warnings() const { return warnings_; }
+  const qlever::vector<std::string>& warnings() const { return warnings_; }
 
   // Add a warning to the query. The warning becomes part of the return value of
   // the `warnings()` function above.

@@ -23,6 +23,8 @@
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/Union.h"
+#include "util/AllocatorTypes.h"
+#include "util/MemorySize/MemorySize.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -116,7 +118,8 @@ TransitivePathBase::makeIndexScanPair(
   auto c = makeInternalVariable("c");
   auto d = makeInternalVariable("d");
   std::set variables{variable};
-  SparqlTripleSimple::AdditionalScanColumns additionalColumns;
+  SparqlTripleSimple::AdditionalScanColumns additionalColumns{
+      qec->getAllocator()};
   if (graphVariable.has_value()) {
     additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
                                    graphVariable.value());
@@ -573,7 +576,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   // never re-sort an index scan (which should not happen because we can just
   // take the appropriate index scan in the first place).
   bool useBinSearch = dynamic_cast<const TransitivePathBinSearch*>(this);
-  std::vector<std::shared_ptr<TransitivePathBase>> candidates;
+  qlever::vector<std::shared_ptr<TransitivePathBase>> candidates{allocator()};
   candidates.push_back(makeTransitivePath(getExecutionContext(), subtree_, lhs,
                                           rhs, minDist_, maxDist_, useBinSearch,
                                           activeGraphs_, graphVariable_));

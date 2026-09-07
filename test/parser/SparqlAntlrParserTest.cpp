@@ -68,8 +68,12 @@ TEST(SparqlParser, Prefix) {
 
   {
     static ad_utility::BlankNodeManager blankNodeManager;
-    ParserAndVisitor p{&blankNodeManager, encodedIriManager(),
-                       "PREFIX wd: <www.wikidata.org/>"};
+    ParserAndVisitor p{&blankNodeManager,
+                      encodedIriManager(),
+                      "PREFIX wd: <www.wikidata.org/>",
+                      std::nullopt,
+                      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False,
+                      ad_utility::testing::makeAllocator()};
     auto defaultPrefixes = p.visitor_.prefixMap();
     ASSERT_EQ(defaultPrefixes.size(), 0);
     p.visitor_.visit(p.parser_.prefixDecl());
@@ -679,10 +683,25 @@ TEST(SparqlParser, InlineData) {
 TEST(SparqlParser, propertyPaths) {
   auto expectPathOrVar = ExpectCompleteParse<&Parser::verbPathOrSimple>{};
   auto Iri = &PathIri;
-  auto Sequence = &PropertyPath::makeSequence;
-  auto Alternative = &PropertyPath::makeAlternative;
-  auto Inverse = &PropertyPath::makeInverse;
-  auto Negated = &PropertyPath::makeNegated;
+  auto toChildren = [](std::vector<PropertyPath> children) {
+    return PropertyPath::ChildrenVec(
+        std::make_move_iterator(children.begin()),
+        std::make_move_iterator(children.end()),
+        qlever::makeUnlimitedAllocator<PropertyPath>());
+  };
+  auto Sequence = [&toChildren](std::vector<PropertyPath> children) {
+    return PropertyPath::makeSequence(toChildren(std::move(children)));
+  };
+  auto Alternative = [&toChildren](std::vector<PropertyPath> children) {
+    return PropertyPath::makeAlternative(toChildren(std::move(children)));
+  };
+  auto Inverse = [](PropertyPath child) {
+    return PropertyPath::makeInverse(std::move(child),
+                                     qlever::makeUnlimitedAllocator<PropertyPath>());
+  };
+  auto Negated = [&toChildren](std::vector<PropertyPath> children) {
+    return PropertyPath::makeNegated(toChildren(std::move(children)));
+  };
   auto WithLength = &PropertyPath::makeWithLength;
   size_t max = std::numeric_limits<size_t>::max();
   using PrefixMap = SparqlQleverVisitor::PrefixMap;
@@ -1283,7 +1302,9 @@ TEST(SparqlParser, ConstructQuery) {
 TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
   static ad_utility::BlankNodeManager blankNodeManager;
   SparqlQleverVisitor visitor{
-      &blankNodeManager, encodedIriManager(), {}, std::nullopt};
+      &blankNodeManager, encodedIriManager(), {}, std::nullopt,
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False,
+      ad_utility::testing::makeAllocator()};
 
   EXPECT_THROW(
       visitor.toGraphPattern({{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
@@ -1632,7 +1653,9 @@ TEST(SparqlParser, QuadData) {
   auto expectQuadDataFails = ExpectParseFails<&Parser::quadData>{};
 
   expectQuadData("{ <a> <b> <c> }",
-                 Quads{{{iri("<a>"), iri("<b>"), iri("<c>")}}, {}});
+                 Quads{{{iri("<a>"), iri("<b>"), iri("<c>")}},
+                       ad_utility::testing::toQVec(
+                           std::vector<Quads::GraphBlock>{})});
   expectQuadDataFails("{ <a> <b> ?c }");
   expectQuadDataFails("{ <a> <b> <c> . GRAPH <foo> { <d> ?e <f> } }");
   expectQuadDataFails("{ <a> <b> <c> . ?d <e> <f> } }");
@@ -1725,7 +1748,8 @@ TEST(ParserTest, propertyPathInCollection) {
       "SELECT * { ?s ?p ([:p* 123] [^:r \"hello\"]) }";
   EncodedIriManager encodedIriManager;
   EXPECT_THAT(
-      SparqlParser::parseQuery(&encodedIriManager, std::move(query)),
+      SparqlParser::parseQuery(&encodedIriManager, std::move(query), {},
+                               ad_utility::testing::makeAllocator()),
       m::SelectQuery(
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples(
@@ -1737,7 +1761,8 @@ TEST(ParserTest, propertyPathInCollection) {
                 iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")},
                {Var{"?_QLever_internal_variable_1"},
                 PropertyPath::makeInverse(
-                    PropertyPath::fromIri(iri("<http://example.org/r>"))),
+                    PropertyPath::fromIri(iri("<http://example.org/r>")),
+                    qlever::makeUnlimitedAllocator<PropertyPath>()),
                 lit("\"hello\"")},
                {Var{"?_QLever_internal_variable_3"},
                 iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"),
@@ -1810,7 +1835,12 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
 
   auto parseWithEncoding = [&](const std::string& input) {
     static ad_utility::BlankNodeManager blankNodeManager;
-    return ParserAndVisitor{&blankNodeManager, encodedIriManager.get(), input}
+    return ParserAndVisitor{&blankNodeManager,
+                            encodedIriManager.get(),
+                            input,
+                            std::nullopt,
+                            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False,
+                            ad_utility::testing::makeAllocator()}
         .parseTypesafe(&SparqlAutomaticParser::query);
   };
 

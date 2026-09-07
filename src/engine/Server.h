@@ -30,6 +30,7 @@
 #include "libqlever/Qlever.h"
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/AllocatorTypes.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
@@ -385,7 +386,7 @@ class Server {
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
+          MakeQueryExecutionContext makeQec, qlever::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           const RequestT& request, SendT&& send, TimeLimit timeLimit,

@@ -6,8 +6,10 @@
 #ifndef QLEVER_SRC_ENGINE_OPTIONALJOIN_H
 #define QLEVER_SRC_ENGINE_OPTIONALJOIN_H
 
+#include "backports/span.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/AllocatorTypes.h"
 
 // Forward declaration
 class IndexScan;
@@ -26,7 +28,7 @@ class OptionalJoin : public Operation {
 
   Implementation implementation_ = Implementation::GeneralCase;
 
-  std::vector<std::array<ColumnIndex, 2>> _joinColumns;
+  qlever::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
   std::vector<float> _multiplicities;
   size_t _sizeEstimate;
@@ -83,7 +85,7 @@ class OptionalJoin : public Operation {
   // value `Id::makeUndefined()` for any entries marked as optional.
   void optionalJoin(
       const IdTableView<0>& left, const IdTableView<0>& right,
-      const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+      ql::span<const std::array<ColumnIndex, 2>> joinColumns,
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
 
@@ -132,7 +134,7 @@ class OptionalJoin : public Operation {
   // and return the appropriate `Implementation`.
   static Implementation computeImplementationFromIdTables(
       const IdTableView<0>& left, const IdTableView<0>& right,
-      const std::vector<std::array<ColumnIndex, 2>>&);
+      ql::span<const std::array<ColumnIndex, 2>>);
 };
 
 #endif  // QLEVER_SRC_ENGINE_OPTIONALJOIN_H

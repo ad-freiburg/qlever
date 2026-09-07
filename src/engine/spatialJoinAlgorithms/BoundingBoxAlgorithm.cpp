@@ -21,7 +21,7 @@ using namespace BoostGeometryNamespace;
 
 // ____________________________________________________________________________
 bool BoundingBoxAlgorithm::isContainedInBoundingBoxes(
-    const std::vector<Box>& boundingBox, Point point) const {
+    const qlever::vector<Box>& boundingBox, Point point) const {
   // correct lon and lat bounds if necessary
   while (point.get<0>() < -180) {
     point.set<0>(point.get<0>() + 360);
@@ -41,7 +41,7 @@ bool BoundingBoxAlgorithm::isContainedInBoundingBoxes(
 }
 
 // ____________________________________________________________________________
-std::vector<Box> BoundingBoxAlgorithm::computeQueryBox(
+qlever::vector<Box> BoundingBoxAlgorithm::computeQueryBox(
     const Point& startPoint, double additionalDist) const {
   const auto& maxDist = maxDist_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
@@ -78,7 +78,8 @@ std::vector<Box> BoundingBoxAlgorithm::computeQueryBox(
   auto northPoleReached = isAPoleTouched(upperLatBound).at(0);
 
   if (southPoleReached || northPoleReached) {
-    return {Box(Point(-180.0f, lowerLatBound), Point(180.0f, upperLatBound))};
+    return {{Box(Point(-180.0f, lowerLatBound), Point(180.0f, upperLatBound))},
+            qec_->getAllocator()};
   }
 
   // compute longitude bound. For an explanation of the calculation and the
@@ -105,21 +106,22 @@ std::vector<Box> BoundingBoxAlgorithm::computeQueryBox(
         Box(Point(-180, lowerLatBound), Point(rightLonBound, upperLatBound));
     auto box2 = Box(Point(leftLonBound + 360, lowerLatBound),
                     Point(180, upperLatBound));
-    return {box1, box2};
+    return {{box1, box2}, qec_->getAllocator()};
   } else if (rightLonBound > 180) {
     auto box1 =
         Box(Point(leftLonBound, lowerLatBound), Point(180, upperLatBound));
     auto box2 = Box(Point(-180, lowerLatBound),
                     Point(rightLonBound - 360, upperLatBound));
-    return {box1, box2};
+    return {{box1, box2}, qec_->getAllocator()};
   }
   // default case, when no bound has an "overflow"
-  return {Box(Point(leftLonBound, lowerLatBound),
-              Point(rightLonBound, upperLatBound))};
+  return {{Box(Point(leftLonBound, lowerLatBound),
+               Point(rightLonBound, upperLatBound))},
+          qec_->getAllocator()};
 }
 
 // ____________________________________________________________________________
-std::vector<Box> BoundingBoxAlgorithm::computeQueryBoxForLargeDistances(
+qlever::vector<Box> BoundingBoxAlgorithm::computeQueryBoxForLargeDistances(
     const Point& startPoint) const {
   const auto& maxDist = maxDist_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
@@ -164,7 +166,7 @@ std::vector<Box> BoundingBoxAlgorithm::computeQueryBoxForLargeDistances(
     boxCrosses180Longitude = true;
   }
   // compute bounding boxes using the anti bounding box from above
-  std::vector<Box> boxes;
+  qlever::vector<Box> boxes{qec_->getAllocator()};
   if (!northPoleTouched) {
     // add upper bounding box(es)
     if (boxCrosses180Longitude) {
@@ -224,7 +226,7 @@ double BoundingBoxAlgorithm::getMaxDistFromMidpointToAnyPointInsideTheBox(
 }
 
 // ____________________________________________________________________________
-std::vector<Box> BoundingBoxAlgorithm::getQueryBox(
+qlever::vector<Box> BoundingBoxAlgorithm::getQueryBox(
     const std::optional<RtreeEntry>& entry) const {
   if (!entry.value().geoPoint_) {
     auto midpoint = calculateMidpointOfBox(entry.value().boundingBox_.value());
@@ -308,7 +310,7 @@ Result BoundingBoxAlgorithm::run() {
       // skipped
       continue;
     }
-    std::vector<Box> queryBox = getQueryBox(entry);
+    qlever::vector<Box> queryBox = getQueryBox(entry);
 
     results.clear();
 
@@ -316,7 +318,10 @@ Result BoundingBoxAlgorithm::run() {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
     });
 
-    std::set<AddedPair> pairs;
+    // Deduplication set for this query point; explicitly constructed with
+    // the configured allocator (rather than default-constructed), since
+    // `PmrAllocator` has no default constructor.
+    qlever::set<AddedPair> pairs{qec_->getAllocator()};
     ql::ranges::for_each(results, [&](Value& res) {
       size_t rowLeft = res.second.row_;
       size_t rowRight = i;

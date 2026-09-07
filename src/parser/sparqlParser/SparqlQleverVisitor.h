@@ -17,7 +17,10 @@
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "parser/data/GraphRef.h"
 #include "parser/sparqlParser/DatasetClause.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 #include "util/HashSet.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/ParsedUri.h"
 #undef EOF
 #include "parser/Quads.h"
@@ -51,7 +54,7 @@ class SparqlQleverVisitor {
   using PredicateObjectPairsAndTriples =
       ad_utility::sparql_types::PredicateObjectPairsAndTriples;
   using OperationsAndFilters =
-      std::pair<std::vector<GraphPatternOperation>, std::vector<SparqlFilter>>;
+      std::pair<std::vector<GraphPatternOperation>, qlever::vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
       std::pair<std::variant<GraphPatternOperation, SparqlFilter>,
                 std::optional<parsedQuery::BasicGraphPattern>>;
@@ -59,7 +62,7 @@ class SparqlQleverVisitor {
   using SubQueryAndMaybeValues =
       std::pair<parsedQuery::Subquery, std::optional<parsedQuery::Values>>;
   using PatternAndVisibleVariables =
-      std::pair<ParsedQuery::GraphPattern, std::vector<Variable>>;
+      std::pair<ParsedQuery::GraphPattern, qlever::vector<Variable>>;
   using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
   using PrefixMap = ad_utility::HashMap<std::string, std::string>;
   using Parser = SparqlAutomaticParser;
@@ -79,6 +82,14 @@ class SparqlQleverVisitor {
   // Needed to efficiently encode common IRIs directly into the ID.
   const EncodedIriManager* encodedIriManager_;
 
+  // The allocator that dynamic allocations performed while parsing should be
+  // routed through. Defaults to an unlimited allocator (backed by the
+  // configured `qlever::Allocator<T>`/`ql::pmr::memory_resource` backend) when
+  // the caller does not have a "real", query-execution-bound allocator
+  // available yet (e.g. when parsing happens before a `QueryExecutionContext`
+  // has been created).
+  qlever::Allocator<Id> allocator_;
+
   // Convert a GraphTerm to TripleComponent with IRI encoding support
   TripleComponent graphTermToTripleComponentWithEncoding(
       const GraphTerm& graphTerm) const;
@@ -91,7 +102,7 @@ class SparqlQleverVisitor {
   // The visible variables in the order in which they are encountered in the
   // query. This may contain duplicates. A variable is added via
   // `addVisibleVariable`.
-  std::vector<Variable> visibleVariables_{};
+  qlever::vector<Variable> visibleVariables_;
 
   // The `FROM` and `FROM NAMED` clauses of the query that is currently
   // being parsed. Those are inherited by certain constructs, which are
@@ -109,7 +120,7 @@ class SparqlQleverVisitor {
   // graph pattern together with the variables that are visible in it.
   struct NamedSubquery {
     ParsedQuery::GraphPattern pattern_;
-    std::vector<Variable> visibleVariables_;
+    qlever::vector<Variable> visibleVariables_;
   };
 
   // The named subqueries that have been defined so far, by name (including
@@ -190,22 +201,34 @@ class SparqlQleverVisitor {
   // If `datasetOverride` contains datasets, then the datasets in
   // the operation itself are ignored. This is used for the datasets from the
   // url parameters which override those in the operation.
+  //
+  // `allocator` is the allocator that dynamic allocations performed while
+  // parsing should be routed through (see `allocator_` above). Callers with
+  // no query-execution-bound allocator available at parse time must pass an
+  // explicit `qlever::makeUnlimitedAllocator<Id>()`.
   explicit SparqlQleverVisitor(
       ad_utility::BlankNodeManager* bnodeManager,
       const EncodedIriManager* encodedIriManager, PrefixMap prefixMap,
       std::optional<ParsedQuery::DatasetClauses> datasetOverride,
-      DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
-          DisableSomeChecksOnlyForTesting::False)
+      DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting,
+      qlever::Allocator<Id> allocator)
       : blankNodeManager_{bnodeManager},
         encodedIriManager_{encodedIriManager},
+        allocator_{std::move(allocator)},
+        visibleVariables_{allocator_},
         prefixMap_{std::move(prefixMap)},
-        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
+        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting},
+        parsedQuery_{allocator_} {
     if (datasetOverride.has_value()) {
       activeDatasetClauses_ = std::move(*datasetOverride);
       datasetsAreFixed_ = true;
     }
     AD_CORRECTNESS_CHECK(blankNodeManager_ != nullptr);
   }
+
+  // The allocator that dynamic allocations performed while parsing should be
+  // routed through, see `allocator_` above.
+  const qlever::Allocator<Id>& allocator() const { return allocator_; }
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
@@ -311,9 +334,9 @@ class SparqlQleverVisitor {
 
   std::optional<parsedQuery::Values> visit(Parser::ValuesClauseContext* ctx);
 
-  std::vector<ParsedQuery> visit(Parser::UpdateContext* ctx);
+  qlever::vector<ParsedQuery> visit(Parser::UpdateContext* ctx);
 
-  std::vector<ParsedQuery> visit(Parser::Update1Context* ctx);
+  qlever::vector<ParsedQuery> visit(Parser::Update1Context* ctx);
 
   ParsedQuery visit(Parser::LoadContext* ctx);
 
@@ -321,15 +344,15 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::DropContext* ctx);
 
-  static std::vector<ParsedQuery> visit(const Parser::CreateContext* ctx);
+  qlever::vector<ParsedQuery> visit(const Parser::CreateContext* ctx);
 
   // Although only 0 or 1 ParsedQuery are ever returned, the vector makes the
   // interface much simpler.
-  std::vector<ParsedQuery> visit(Parser::AddContext* ctx);
+  qlever::vector<ParsedQuery> visit(Parser::AddContext* ctx);
 
-  std::vector<ParsedQuery> visit(Parser::MoveContext* ctx);
+  qlever::vector<ParsedQuery> visit(Parser::MoveContext* ctx);
 
-  std::vector<ParsedQuery> visit(Parser::CopyContext* ctx);
+  qlever::vector<ParsedQuery> visit(Parser::CopyContext* ctx);
 
   updateClause::GraphUpdate visit(Parser::InsertDataContext* ctx);
 
@@ -409,7 +432,7 @@ class SparqlQleverVisitor {
 
   parsedQuery::SparqlValues visit(Parser::InlineDataFullContext* ctx);
 
-  std::vector<TripleComponent> visit(Parser::DataBlockSingleContext* ctx);
+  qlever::vector<TripleComponent> visit(Parser::DataBlockSingleContext* ctx);
 
   TripleComponent visit(Parser::DataBlockValueContext* ctx);
 
@@ -423,7 +446,7 @@ class SparqlQleverVisitor {
 
   ExpressionPtr visit(Parser::FunctionCallContext* ctx);
 
-  std::vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
+  qlever::vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
 
   std::vector<ExpressionPtr> visit(Parser::ExpressionListContext* ctx);
 
@@ -646,7 +669,7 @@ class SparqlQleverVisitor {
   struct FreshQueryContextResult {
     Result result_;
     ParsedQuery parsedQuery_;
-    std::vector<Variable> visibleVariables_;
+    qlever::vector<Variable> visibleVariables_;
   };
 
   // Visit the given context with a fresh (initially empty) `parsedQuery_`,
@@ -686,7 +709,7 @@ class SparqlQleverVisitor {
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.
   static ExpressionPtr processIriFunctionCall(
-      const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
+      const TripleComponent::Iri& iri, qlever::vector<ExpressionPtr> argList,
       const antlr4::ParserRuleContext*);
 
   void addVisibleVariable(Variable var);
@@ -791,7 +814,12 @@ class SparqlQleverVisitor {
   // `datasetsAreFixed_` controls whether the datasets can be modified from
   // inside the query or update. Then returns the currently active datasets.
   const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
-      const std::vector<DatasetClause>& clauses);
+      const qlever::vector<DatasetClause>& clauses);
+
+  // Convert the `std::vector` of dataset clauses produced by `visitVector`
+  // into a `qlever::vector` using the visitor's own allocator.
+  qlever::vector<DatasetClause> toPmrDatasetClauses(
+      std::vector<DatasetClause> clauses) const;
 
   // Construct a `ParsedQuery` that clears the given graph equivalent to
   // `DELETE WHERE { GRAPH graph { ?s ?p ?o } }`.
@@ -805,8 +833,8 @@ class SparqlQleverVisitor {
 
   // Construct `ParsedQuery`s that clear the target graph and then copy all
   // triples from the source graph to the target graph.
-  std::vector<ParsedQuery> makeCopy(const GraphOrDefault& from,
-                                    const GraphOrDefault& to);
+  qlever::vector<ParsedQuery> makeCopy(const GraphOrDefault& from,
+                                      const GraphOrDefault& to);
 
   // Check that there are exactly 2 sub-clauses and returned the result from
   // visiting them.

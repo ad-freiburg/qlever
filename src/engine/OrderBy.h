@@ -11,6 +11,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/AllocatorTypes.h"
 
 // The implementation of the SPARQL `ORDER BY` operation.
 //
@@ -24,7 +25,7 @@ class OrderBy : public Operation {
  public:
   // TODO<joka921> This should be `pair<ColumnIndex, IsAscending>`
   // The bool means "isDescending"
-  using SortIndices = std::vector<std::pair<ColumnIndex, bool>>;
+  using SortIndices = qlever::vector<std::pair<ColumnIndex, bool>>;
 
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;

@@ -24,13 +24,15 @@ ParserAndVisitor::ParserAndVisitor(
     ad_utility::BlankNodeManager* blankNodeManager,
     const EncodedIriManager* encodedIriManager, std::string input,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
-    SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
+    SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks,
+    qlever::Allocator<Id> allocator)
     : Base{unescapeUnicodeSequences(std::move(input)),
            SparqlQleverVisitor{blankNodeManager,
                                encodedIriManager,
                                {},
                                std::move(datasetClauses),
-                               disableSomeChecks}} {}
+                               disableSomeChecks,
+                               std::move(allocator)}} {}
 
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
@@ -38,9 +40,11 @@ ParserAndVisitor::ParserAndVisitor(
     const EncodedIriManager* encodedIriManager, std::string input,
     SparqlQleverVisitor::PrefixMap prefixes,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
-    SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
-    : ParserAndVisitor{blankNodeManager, encodedIriManager, std::move(input),
-                       std::move(datasetClauses), disableSomeChecks} {
+    SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks,
+    qlever::Allocator<Id> allocator)
+    : ParserAndVisitor{blankNodeManager,       encodedIriManager,
+                       std::move(input),       std::move(datasetClauses),
+                       disableSomeChecks,       std::move(allocator)} {
   visitor_.setPrefixMapManually(std::move(prefixes));
 }
 

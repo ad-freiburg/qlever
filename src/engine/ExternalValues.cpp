@@ -25,14 +25,14 @@ ExternalValues::ExternalValues(QueryExecutionContext* qec,
                                const parsedQuery::ExternalValuesQuery& query)
     : ExternalValues(
           qec,
-          [&query]() {
+          [&query, qec]() {
             // Check that all variables are unique.
             ad_utility::HashSet<Variable> uniqueVars(query.variables_.begin(),
                                                      query.variables_.end());
             AD_CONTRACT_CHECK(
                 uniqueVars.size() == query.variables_.size(),
                 "Variables in external values query must be unique");
-            parsedQuery::SparqlValues values;
+            parsedQuery::SparqlValues values{qec->getAllocator()};
             values._variables = query.variables_;
             return values;
           }(),

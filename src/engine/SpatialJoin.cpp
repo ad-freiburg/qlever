@@ -278,7 +278,7 @@ size_t SpatialJoin::getResultWidth() const {
     } else {
       // We convert to a set here, because we allow multiple occurrences of
       // variables in payloadVariables_
-      std::vector<Variable> pv = config_.payloadVariables_.getVariables();
+      const auto& pv = config_.payloadVariables_.getVariables();
       absl::flat_hash_set<Variable> pvSet{pv.begin(), pv.end()};
 
       // The payloadVariables_ may contain the right join variable
@@ -505,7 +505,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   // taken into account. Also note that here `childLeft_` not `childLeft` is
   // used, because `leftSelectedCols` and `rightSelectedCols` are applied after
   // swapping tables back in case of a `WITHIN` join.
-  std::vector<ColumnIndex> leftSelectedCols;
+  qlever::vector<ColumnIndex> leftSelectedCols{allocator()};
   for (auto [var, colInfo] :
        copySortedByColumnIndex(childLeft_->getVariableColumns())) {
     leftSelectedCols.push_back(colInfo.columnIndex_);
@@ -513,7 +513,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
-  std::vector<ColumnIndex> rightSelectedCols;
+  qlever::vector<ColumnIndex> rightSelectedCols{allocator()};
   for (const auto& [var, colInfo] : varsAndColInfo) {
     rightSelectedCols.push_back(colInfo.columnIndex_);
   }

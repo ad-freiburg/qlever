@@ -32,8 +32,21 @@ struct DatasetClauses {
 
  public:
   // Divide the dataset clause from `clauses` into default and named graphs,
-  // as needed for a `DatasetClauses` object.
-  static DatasetClauses fromClauses(const std::vector<DatasetClause>& clauses);
+  // as needed for a `DatasetClauses` object. Templated on the container type of
+  // `clauses` so that callers can pass either a `std::vector<DatasetClause>` or
+  // a `qlever::vector<DatasetClause>`.
+  template <typename Range>
+  static DatasetClauses fromClauses(const Range& clauses) {
+    DatasetClauses result;
+    for (auto& [dataset, isNamed] : clauses) {
+      auto& graphs = isNamed ? result.namedGraphs_ : result.defaultGraphs_;
+      if (!graphs.has_value()) {
+        graphs.emplace();
+      }
+      graphs.value().insert(dataset);
+    }
+    return result;
+  }
 
   // Return the `DatasetClauses` that correspond to the `WITH <withGraph>`
   // clause in a SPARQL UPDATE.

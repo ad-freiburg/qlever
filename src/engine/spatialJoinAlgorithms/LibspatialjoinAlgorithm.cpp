@@ -243,8 +243,17 @@ Result LibspatialjoinAlgorithm::run() {
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
-  std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
-  std::vector<std::vector<double>> resultDists(NUM_THREADS);
+  // The per-thread result buffers can grow arbitrarily large, so both the
+  // outer (indexed by thread) and inner backing storage are routed through
+  // the configured memory resource via `qec_->getAllocator()`. Filled via the
+  // fill-constructor (rather than the count-only one) because
+  // `qlever::vector`'s allocator is not default-constructible.
+  qlever::vector<qlever::vector<std::pair<size_t, size_t>>> results(
+      NUM_THREADS, qlever::vector<std::pair<size_t, size_t>>{qec_->getAllocator()},
+      qec_->getAllocator());
+  qlever::vector<qlever::vector<double>> resultDists(
+      NUM_THREADS, qlever::vector<double>{qec_->getAllocator()},
+      qec_->getAllocator());
   AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
   auto joinTypeVal = config_.getJoinType().value();
   // Within should be replaced by contains on swapped tables.

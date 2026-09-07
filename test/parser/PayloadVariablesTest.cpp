@@ -5,20 +5,24 @@
 #include <gmock/gmock.h>
 
 #include "../printers/PayloadVariablePrinters.h"
+#include "../util/AllocatorTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "../util/ParsedQueryTestHelpers.h"
 #include "gmock/gmock.h"
 #include "parser/PayloadVariables.h"
 #include "rdfTypes/Variable.h"
 
+using ad_utility::testing::toQVec;
+
 namespace {  // anonymous namespace to avoid linker problems
 
 TEST(PayloadVariablesTest, PayloadVariables) {
-  PayloadVariables pv1;
+  PayloadVariables pv1{ad_utility::testing::makeAllocator()};
   ASSERT_TRUE(pv1.empty());
   ASSERT_FALSE(pv1.isAll());
-  ASSERT_EQ(pv1.getVariables(), std::vector<Variable>{});
+  ASSERT_EQ(pv1.getVariables(), toQVec(std::vector<Variable>{}));
 
-  PayloadVariables pv2{std::vector<Variable>{}};
+  PayloadVariables pv2{toQVec(std::vector<Variable>{})};
   ASSERT_EQ(pv1, pv2);
   ASSERT_TRUE(pv2.empty());
   ASSERT_FALSE(pv2.isAll());
@@ -42,22 +46,23 @@ TEST(PayloadVariablesTest, PayloadVariables) {
   ASSERT_TRUE(pv3.isAll());
   ASSERT_FALSE(pv3.empty());
 
-  PayloadVariables pv4{std::vector<Variable>{Variable{"?a"}, Variable{"?b"}}};
+  PayloadVariables pv4{
+      toQVec(std::vector<Variable>{Variable{"?a"}, Variable{"?b"}})};
   ASSERT_FALSE(pv4.isAll());
   ASSERT_FALSE(pv4.empty());
   ASSERT_NE(pv3, pv4);
   ASSERT_NE(pv1, pv4);
   std::vector<Variable> expect4{Variable{"?a"}, Variable{"?b"}};
-  ASSERT_EQ(pv4.getVariables(), expect4);
+  ASSERT_EQ(pv4.getVariables(), toQVec(expect4));
 
-  PayloadVariables pv5;
-  ASSERT_EQ(pv5.getVariables(), std::vector<Variable>{});
+  PayloadVariables pv5{ad_utility::testing::makeAllocator()};
+  ASSERT_EQ(pv5.getVariables(), toQVec(std::vector<Variable>{}));
   pv5.addVariable(Variable{"?var"});
   std::vector<Variable> expect5_step1{Variable{"?var"}};
-  ASSERT_EQ(pv5.getVariables(), expect5_step1);
+  ASSERT_EQ(pv5.getVariables(), toQVec(expect5_step1));
   pv5.addVariable(Variable{"?var2"});
   std::vector<Variable> expect5_step2{Variable{"?var"}, Variable{"?var2"}};
-  ASSERT_EQ(pv5.getVariables(), expect5_step2);
+  ASSERT_EQ(pv5.getVariables(), toQVec(expect5_step2));
   ASSERT_FALSE(pv5.isAll());
   ASSERT_FALSE(pv5.empty());
 };

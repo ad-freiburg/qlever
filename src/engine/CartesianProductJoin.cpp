@@ -11,6 +11,7 @@
 #include "engine/CartesianProductJoin.h"
 
 #include "engine/CallFixedSize.h"
+#include "util/AllocatorTypes.h"
 #include "util/Views.h"
 
 namespace {
@@ -487,9 +488,12 @@ CartesianProductJoin::makeDistinctTree(
   auto newChildren =
       ::ranges::views::zip(children_,
                            perChildDistinctIndices(distinctIndices)) |
-      ql::views::transform([](const auto& childAndIndices) {
+      ql::views::transform([this](const auto& childAndIndices) {
         const auto& [child, childIndices] = childAndIndices;
-        return QueryExecutionTree::createDistinctTree(child, childIndices);
+        return QueryExecutionTree::createDistinctTree(
+            child, qlever::vector<ColumnIndex>(childIndices.begin(),
+                                               childIndices.end(),
+                                               allocator()));
       }) |
       ::ranges::to<Children>();
   return ad_utility::makeExecutionTree<CartesianProductJoin>(

@@ -8,6 +8,8 @@
 #include <string>
 
 #include "parser/ParsedQuery.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 #include "util/BlankNodeManager.h"
 
 // The SPARQL parser used by QLever. The actual parsing is delegated to a parser
@@ -20,13 +22,21 @@ class SparqlParser {
   // overwritten from inside the query (using `FROM`) or update (using `USING`).
   // Passing no datasets means that the datasets are set normally from the
   // query or update.
-  static ParsedQuery parseQuery(
-      const EncodedIriManager* encodedIriManager, std::string query,
-      const std::vector<DatasetClause>& datasets = {});
-  static std::vector<ParsedQuery> parseUpdate(
+  //
+  // `allocator` is the allocator that dynamic allocations performed while
+  // parsing should be routed through. Pass the allocator of an existing
+  // `QueryExecutionContext` (e.g. `qec->getAllocator()`) when one is already
+  // available at the call site; otherwise pass an explicit
+  // `qlever::makeUnlimitedAllocator<Id>()` (there is no implicit default).
+  static ParsedQuery parseQuery(const EncodedIriManager* encodedIriManager,
+                                std::string query,
+                                const std::vector<DatasetClause>& datasets,
+                                qlever::Allocator<Id> allocator);
+  static qlever::vector<ParsedQuery> parseUpdate(
       ad_utility::BlankNodeManager* bnodeManager,
       const EncodedIriManager* encodedIriManager, std::string update,
-      const std::vector<DatasetClause>& datasets = {});
+      const std::vector<DatasetClause>& datasets,
+      qlever::Allocator<Id> allocator);
 };
 
 #endif  // QLEVER_SRC_PARSER_SPARQLPARSER_H

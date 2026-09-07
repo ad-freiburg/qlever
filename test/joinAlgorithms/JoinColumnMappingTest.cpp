@@ -7,6 +7,9 @@
 
 #include <gmock/gmock.h>
 
+#include <array>
+#include <vector>
+
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
 using ad_utility::JoinColumnMapping;
@@ -18,7 +21,8 @@ class JoinColumnMappingTest : public ::testing::TestWithParam<bool> {};
 // _____________________________________________________________________________
 TEST_P(JoinColumnMappingTest, SingleJoinColAtBeginningOfLeft) {
   bool keepJoinCols = GetParam();
-  JoinColumnMapping m{{{0, 2}}, 2, 3, keepJoinCols};
+  std::vector<std::array<ColumnIndex, 2>> jcs{{0, 2}};
+  JoinColumnMapping m{jcs, 2, 3, keepJoinCols};
   EXPECT_THAT(m.jcsLeft(), ElementsAre(0));
   EXPECT_THAT(m.jcsRight(), ElementsAre(2));
   EXPECT_THAT(m.permutationLeft(), ElementsAre(0, 1));
@@ -33,7 +37,8 @@ TEST_P(JoinColumnMappingTest, SingleJoinColAtBeginningOfLeft) {
 // _____________________________________________________________________________
 TEST_P(JoinColumnMappingTest, SingleJoinColInMiddleOfLeft) {
   bool keepJoinCols = GetParam();
-  JoinColumnMapping m{{{1, 0}}, 3, 2, keepJoinCols};
+  std::vector<std::array<ColumnIndex, 2>> jcs{{1, 0}};
+  JoinColumnMapping m{jcs, 3, 2, keepJoinCols};
   EXPECT_THAT(m.jcsLeft(), ElementsAre(1));
   EXPECT_THAT(m.jcsRight(), ElementsAre(0));
   EXPECT_THAT(m.permutationLeft(), ElementsAre(1, 0, 2));
@@ -48,7 +53,8 @@ TEST_P(JoinColumnMappingTest, SingleJoinColInMiddleOfLeft) {
 // _____________________________________________________________________________
 TEST_P(JoinColumnMappingTest, MultipleJoinCols) {
   bool keepJoinCols = GetParam();
-  JoinColumnMapping m{{{2, 0}, {1, 3}}, 3, 4, keepJoinCols};
+  std::vector<std::array<ColumnIndex, 2>> jcs{{2, 0}, {1, 3}};
+  JoinColumnMapping m{jcs, 3, 4, keepJoinCols};
   EXPECT_THAT(m.jcsLeft(), ElementsAre(2, 1));
   EXPECT_THAT(m.jcsRight(), ElementsAre(0, 3));
   EXPECT_THAT(m.permutationLeft(), ElementsAre(2, 1, 0));

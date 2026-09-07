@@ -6,6 +6,7 @@
 
 #include <gmock/gmock.h>
 
+#include "../util/ParsedQueryTestHelpers.h"
 #include "parser/GraphPatternAnalysis.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
@@ -52,34 +53,45 @@ TEST(BasicGraphPatternsInvariantToTest, Values) {
   BasicGraphPatternsInvariantTo invariantTo{counter};
 
   // Test VALUES with exactly one row and no variable overlap.
-  parsedQuery::Values values;
-  values._inlineValues._variables = {Variable{"?a"}, Variable{"?b"}};
-  values._inlineValues._values = {
-      {TripleComponent::Iri::fromIriref("<value1>"),
-       TripleComponent::Iri::fromIriref("<value2>")}};
+  parsedQuery::Values values{
+      parsedQuery::SparqlValues{ad_utility::testing::makeAllocator()}};
+  values._inlineValues._variables =
+      ad_utility::testing::toQVec(std::vector{Variable{"?a"}, Variable{"?b"}});
+  values._inlineValues._values = ad_utility::testing::toQVecOfVec(
+      std::vector<std::vector<TripleComponent>>{
+          {TripleComponent::Iri::fromIriref("<value1>"),
+           TripleComponent::Iri::fromIriref("<value2>")}});
   EXPECT_TRUE(invariantTo(values));
 
   // Test VALUES with one row but with variable overlap.
-  parsedQuery::Values values2;
-  values2._inlineValues._variables = {Variable{"?x"}, Variable{"?b"}};
-  values2._inlineValues._values = {
-      {TripleComponent::Iri::fromIriref("<value1>"),
-       TripleComponent::Iri::fromIriref("<value2>")}};
+  parsedQuery::Values values2{
+      parsedQuery::SparqlValues{ad_utility::testing::makeAllocator()}};
+  values2._inlineValues._variables =
+      ad_utility::testing::toQVec(std::vector{Variable{"?x"}, Variable{"?b"}});
+  values2._inlineValues._values = ad_utility::testing::toQVecOfVec(
+      std::vector<std::vector<TripleComponent>>{
+          {TripleComponent::Iri::fromIriref("<value1>"),
+           TripleComponent::Iri::fromIriref("<value2>")}});
   EXPECT_FALSE(invariantTo(values2));
 
   // Test VALUES with multiple rows (not invariant even without variable
   // overlap).
-  parsedQuery::Values values3;
-  values3._inlineValues._variables = {Variable{"?a"}};
-  values3._inlineValues._values = {
-      {TripleComponent::Iri::fromIriref("<value1>")},
-      {TripleComponent::Iri::fromIriref("<value2>")}};
+  parsedQuery::Values values3{
+      parsedQuery::SparqlValues{ad_utility::testing::makeAllocator()}};
+  values3._inlineValues._variables =
+      ad_utility::testing::toQVec(std::vector{Variable{"?a"}});
+  values3._inlineValues._values = ad_utility::testing::toQVecOfVec(
+      std::vector<std::vector<TripleComponent>>{
+          {TripleComponent::Iri::fromIriref("<value1>")},
+          {TripleComponent::Iri::fromIriref("<value2>")}});
   EXPECT_FALSE(invariantTo(values3));
 
   // Test VALUES with zero rows (not invariant).
-  parsedQuery::Values values4;
-  values4._inlineValues._variables = {Variable{"?a"}};
-  values4._inlineValues._values = {};
+  parsedQuery::Values values4{
+      parsedQuery::SparqlValues{ad_utility::testing::makeAllocator()}};
+  values4._inlineValues._variables =
+      ad_utility::testing::toQVec(std::vector{Variable{"?a"}});
+  values4._inlineValues._values.clear();
   EXPECT_FALSE(invariantTo(values4));
 }
 

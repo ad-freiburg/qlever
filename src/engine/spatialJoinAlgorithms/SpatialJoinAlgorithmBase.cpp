@@ -33,7 +33,7 @@ void SpatialJoinAlgorithmBase::addResultTableEntry(
   // columns given in `sourceColumns`.
   auto addColumns = [&resrow, &rescol, &result](
                         const IdTableView<0>* copyFrom, size_t rowIndCopy,
-                        const std::vector<ColumnIndex>& sourceColumns) {
+                        const qlever::vector<ColumnIndex>& sourceColumns) {
     for (size_t col : sourceColumns) {
       result->at(resrow, rescol) = copyFrom->at(rowIndCopy, col);
       ++rescol;

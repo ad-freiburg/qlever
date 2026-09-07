@@ -199,7 +199,7 @@ class OperationTestFixture : public testing::Test {
   QueryResultCache cache;
   NamedResultCache namedCache;
   std::shared_ptr<MaterializedViewsManager> materializedViewsManager =
-      std::make_shared<MaterializedViewsManager>();
+      std::make_shared<MaterializedViewsManager>(makeAllocator());
   QueryExecutionContext qec{
       index,
       &cache,
@@ -503,7 +503,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
                     TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>(makeAllocator());
   QueryExecutionContext context{
       index,
       &cache,
@@ -533,7 +533,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       "ensureFailedStatusIsSetWhenGeneratorIsCancelled", TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>(makeAllocator());
   QueryExecutionContext context{
       index,
       &cache,
@@ -570,7 +570,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       "ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd", TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>(makeAllocator());
   QueryExecutionContext context{
       index,
       &cache,
@@ -620,7 +620,7 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
                     TestIndexConfig{}));
   QueryResultCache cache{};
   NamedResultCache namedCache{};
-  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>(makeAllocator());
   QueryExecutionContext context{
       index,
       &cache,

@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/ParsedQueryTestHelpers.h"
 #include "./SparqlAntlrParserTestHelpers.h"
 #include "parser/Quads.h"
 
@@ -21,7 +22,7 @@ TEST(QuadTest, getQuads) {
         // test with blank nodes.
         ad_utility::BlankNodeManager manager;
         Quads::BlankNodeAdder bn{{}, {}, &manager};
-        const Quads quads{std::move(triples), std::move(graphs)};
+        const Quads quads{std::move(triples), toQVec(std::move(graphs))};
         auto res = quads.toTriplesWithGraph(std::monostate{}, bn);
         EXPECT_THAT(res.triples_, testing::UnorderedElementsAreArray(expected));
         EXPECT_EQ(manager.numBlocksUsed(), 0);
@@ -57,7 +58,8 @@ TEST(QuadTest, getQuadsWithBlankNodes) {
   std::array tr{bn("a"), bn("b"), bn("a")};
   ad_utility::BlankNodeManager manager;
   Quads::BlankNodeAdder adder{{}, {}, &manager};
-  const Quads quads{{tr}, {}};
+  Quads quads{ad_utility::testing::makeAllocator()};
+  quads.freeTriples_ = {tr};
   auto res = quads.toTriplesWithGraph(std::monostate{}, adder);
   EXPECT_EQ(res.triples_.size(), 1ul);
   const auto& triple = res.triples_.at(0);
@@ -84,7 +86,7 @@ TEST(QuadTest, getOperations) {
              std::vector<parsedQuery::GraphPatternOperation>>& m,
          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto t = generateLocationTrace(l);
-        const Quads quads{std::move(triples), std::move(graphs)};
+        const Quads quads{std::move(triples), toQVec(std::move(graphs))};
         EXPECT_THAT(quads.toGraphPatternOperations(), m);
       };
   auto TripleOf = [](const GraphTerm& t) -> std::array<GraphTerm, 3> {
@@ -120,10 +122,13 @@ TEST(QuadTest, getOperations) {
 
 TEST(QuadTest, forAllVariables) {
   auto expectForAllVariables =
-      [](Quads quads, const ad_utility::HashSet<Variable>& expectVariables,
+      [](ad_utility::sparql_types::Triples freeTriples,
+         std::vector<Quads::GraphBlock> graphTriples,
+         const ad_utility::HashSet<Variable>& expectVariables,
          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto t = generateLocationTrace(l);
         ad_utility::HashSet<Variable> calledVariables;
+        Quads quads{std::move(freeTriples), toQVec(std::move(graphTriples))};
         quads.forAllVariables([&calledVariables](const Variable& var) {
           calledVariables.insert(var);
         });
@@ -139,20 +144,20 @@ TEST(QuadTest, forAllVariables) {
                        GraphTerm(Var("?c"))};
   Triple sameVar{GraphTerm(Var("?a")), GraphTerm(Var("?a")),
                  GraphTerm(Var("?a"))};
-  expectForAllVariables({}, {});
-  expectForAllVariables({{noVars}, {}}, {});
-  expectForAllVariables({{differentVars}, {}},
+  expectForAllVariables({}, {}, {});
+  expectForAllVariables({noVars}, {}, {});
+  expectForAllVariables({differentVars}, {},
                         {Var("?a"), Var("?b"), Var("?c")});
-  expectForAllVariables({{sameVar}, {}}, {Var("?a")});
-  expectForAllVariables({{}, {{{TCIri("<a>"), {}}}}}, {});
-  expectForAllVariables({{}, {{{TCIri("<a>"), {noVars}}}}}, {});
-  expectForAllVariables({{}, {{{TCIri("<a>"), {differentVars}}}}},
+  expectForAllVariables({sameVar}, {}, {Var("?a")});
+  expectForAllVariables({}, {{TCIri("<a>"), {}}}, {});
+  expectForAllVariables({}, {{TCIri("<a>"), {noVars}}}, {});
+  expectForAllVariables({}, {{TCIri("<a>"), {differentVars}}},
                         {Var("?a"), Var("?b"), Var("?c")});
-  expectForAllVariables({{}, {{{TCIri("<a>"), {sameVar}}}}}, {Var("?a")});
+  expectForAllVariables({}, {{TCIri("<a>"), {sameVar}}}, {Var("?a")});
   // Even if the graph block is empty, the variable is still omitted.
-  expectForAllVariables({{}, {{{Var("?d"), {}}}}}, {Var("?d")});
+  expectForAllVariables({}, {{Var("?d"), {}}}, {Var("?d")});
   expectForAllVariables(
-      {{noVars, differentVars, sameVar}, {{{Var("?d"), {differentVars}}}}},
+      {noVars, differentVars, sameVar}, {{Var("?d"), {differentVars}}},
       {Var("?a"), Var("?b"), Var("?c"), Var("?d")});
 }
 
@@ -165,9 +170,10 @@ TEST(QuadTest, equalityOfSparqlTripleSimpleWithGraph) {
   auto makeTriple =
       [](std::string_view s, std::string_view p, std::string_view o,
          const Graph& g,
-         Triple::AdditionalScanColumns additionalScanColumns = {}) {
+         std::vector<std::pair<ColumnIndex, Variable>> additionalScanColumns =
+             {}) {
         return Triple{iri(s), iri(p), iri(o), g,
-                      std::move(additionalScanColumns)};
+                      toQVec(std::move(additionalScanColumns))};
       };
   const Graph graph{iri("<d>")};
   const Triple triple = makeTriple("<a>", "<b>", "<c>", graph);

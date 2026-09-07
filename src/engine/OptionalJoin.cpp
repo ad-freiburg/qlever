@@ -335,14 +335,14 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 // ______________________________________________________________
 auto OptionalJoin::computeImplementationFromIdTables(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns)
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns)
     -> Implementation {
   auto implementation = Implementation::NoUndef;
   auto anyIsUndefined = [](auto column) {
     return ql::ranges::any_of(column, &Id::isUndefined);
   };
   for (size_t i = 0; i < joinColumns.size(); ++i) {
-    auto [leftCol, rightCol] = joinColumns.at(i);
+    auto [leftCol, rightCol] = joinColumns[i];
     if (anyIsUndefined(right.getColumn(rightCol))) {
       return Implementation::GeneralCase;
     }
@@ -379,7 +379,7 @@ bool OptionalJoin::columnOriginatesFromGraphOrUndef(
 // ______________________________________________________________
 void OptionalJoin::optionalJoin(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns, IdTable* result,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns, IdTable* result,
     Implementation implementation) {
   // check for trivial cases
   if (left.empty()) {

@@ -398,7 +398,7 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
                 std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
                 std::make_unique<QueryResultCache>(),
                 std::make_unique<NamedResultCache>(),
-                std::make_shared<MaterializedViewsManager>()});
+                std::make_shared<MaterializedViewsManager>(makeAllocator())});
   }
   return contextMap.at({c, indexBasenamePrefix}).qec_.get();
 }

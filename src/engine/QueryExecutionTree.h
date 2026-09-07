@@ -11,11 +11,13 @@
 #include <string>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
 #include "util/AllocateShared.h"
+#include "util/AllocatorTypes.h"
 #include "util/HashSet.h"
 
 // Strongly typed enum for controlling whether stripped variables are explicitly
@@ -188,7 +190,7 @@ class QueryExecutionTree {
   // limit-pushdown optimization is undesired.
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::vector<ColumnIndex>& sortColumns, bool explicitSort = false);
+      const qlever::vector<ColumnIndex>& sortColumns, bool explicitSort = false);
 
   // Create a `QueryExecutionTree` that produces the same set of results as
   // applying a `DISTINCT` on the columns `distinctIndices` to `qet`. In order
@@ -206,7 +208,7 @@ class QueryExecutionTree {
   // duplicates.
   static std::shared_ptr<QueryExecutionTree> createDistinctTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::vector<ColumnIndex>& distinctIndices);
+      const qlever::vector<ColumnIndex>& distinctIndices);
 
   // Similar to `createSortedTree` (see directly above), but create the sorted
   // trees for two different trees, the sort columns of which are specified as
@@ -216,7 +218,7 @@ class QueryExecutionTree {
                    std::shared_ptr<QueryExecutionTree>>
   createSortedTrees(std::shared_ptr<QueryExecutionTree> qetA,
                     std::shared_ptr<QueryExecutionTree> qetB,
-                    const std::vector<std::array<ColumnIndex, 2>>& sortColumns);
+                    ql::span<const std::array<ColumnIndex, 2>> sortColumns);
 
   // The return type of the `getSortedTreesAndJoinColumns` function below. It is
   // deliberately stored as a tuple vs. a struct with named members, so that we
@@ -224,7 +226,7 @@ class QueryExecutionTree {
   using SortedTreesAndJoinColumns =
       std::tuple<std::shared_ptr<QueryExecutionTree>,
                  std::shared_ptr<QueryExecutionTree>,
-                 std::vector<std::array<ColumnIndex, 2>>>;
+                 qlever::vector<std::array<ColumnIndex, 2>>>;
 
   // First compute the join columns of the two trees, and then sort the trees by
   // those join columns. Return the sorted trees as well as the join columns.
@@ -246,7 +248,7 @@ class QueryExecutionTree {
   // same variable. The result is sorted by the column indices, so that it is
   // deterministic when called repeatedly. This is important to find a
   // `QueryExecutionTree` in the cache.
-  static std::vector<std::array<ColumnIndex, 2>> getJoinColumns(
+  static qlever::vector<std::array<ColumnIndex, 2>> getJoinColumns(
       const QueryExecutionTree& qetA, const QueryExecutionTree& qetB);
 
   // If the result of this `Operation` is sorted (either because this

@@ -21,7 +21,7 @@ using std::string;
 Minus::Minus(QueryExecutionContext* qec,
              std::shared_ptr<QueryExecutionTree> left,
              std::shared_ptr<QueryExecutionTree> right)
-    : Operation{qec} {
+    : Operation{qec}, _matchedColumns{qec->getAllocator()} {
   std::tie(_left, _right, _matchedColumns) =
       QueryExecutionTree::getSortedSubtreesAndJoinColumns(std::move(left),
                                                           std::move(right));
@@ -169,7 +169,7 @@ IdTable Minus::copyMatchingRows(
 // _____________________________________________________________________________
 IdTable Minus::computeMinus(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns) const {
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns) const {
   if (left.empty()) {
     return IdTable{getResultWidth(), getExecutionContext()->getAllocator()};
   }

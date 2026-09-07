@@ -8,6 +8,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/GroupBy.h"
@@ -86,8 +87,8 @@ TEST(GroupBy, getDescriptor) {
       Alias{sparqlExpression::SparqlExpressionPimpl{std::move(expr), "?a"},
             Variable{"?a"}};
 
-  parsedQuery::SparqlValues input;
-  input._variables = {Variable{"?a"}};
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
+  input._variables = toQVec(std::vector{Variable{"?a"}});
   auto* qec = getQec();
   auto values = ad_utility::makeExecutionTree<Values>(qec, input);
 
@@ -103,8 +104,8 @@ TEST(GroupBy, clone) {
       Alias{sparqlExpression::SparqlExpressionPimpl{std::move(expr), "?a"},
             Variable{"?a"}};
 
-  parsedQuery::SparqlValues input;
-  input._variables = {Variable{"?a"}};
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
+  input._variables = toQVec(std::vector{Variable{"?a"}});
   auto* qec = getQec();
   auto values = ad_utility::makeExecutionTree<Values>(qec, input);
 
@@ -383,9 +384,9 @@ TEST_F(GroupByOptimizations, findGroupedVariable) {
       std::make_unique<AvgExpression>(false, makeVariableExpression(varB)));
 
   // Set up the Group By object.
-  parsedQuery::SparqlValues input;
-  input._variables = std::vector{varA, varB};
-  input._values.push_back(std::vector{TC(1.0), TC(3.0)});
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
+  input._variables = toQVec(std::vector{varA, varB});
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(3.0)}));
   auto values = ad_utility::makeExecutionTree<Values>(
       ad_utility::testing::getQec(), input);
   GroupByImpl groupBy{
@@ -694,16 +695,17 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
 
   auto makeExistsArgument = [](const std::vector<Variable>& variables,
                                const std::vector<std::vector<int64_t>>& rows) {
-    ParsedQuery pq;
-    parsedQuery::Values valuesClause;
-    valuesClause._inlineValues._variables = variables;
+    ParsedQuery pq{ad_utility::testing::makeAllocator()};
+    parsedQuery::Values valuesClause{
+        parsedQuery::SparqlValues{ad_utility::testing::makeAllocator()}};
+    valuesClause._inlineValues._variables = toQVec(variables);
     for (const auto& row : rows) {
       std::vector<TripleComponent> valueRow;
       valueRow.reserve(row.size());
       for (int64_t value : row) {
         valueRow.emplace_back(value);
       }
-      valuesClause._inlineValues._values.push_back(std::move(valueRow));
+      valuesClause._inlineValues._values.push_back(toQVec(std::move(valueRow)));
     }
     pq._rootGraphPattern._graphPatterns.emplace_back(std::move(valuesClause));
     for (const auto& variable : variables) {
@@ -874,7 +876,7 @@ TEST_F(GroupByOptimizations,
       setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
-  parsedQuery::SparqlValues input;
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
   using TC = TripleComponent;
 
   // SELECT (?b + AVG(?c) as ?x) (?a AS ?y) WHERE {
@@ -885,10 +887,10 @@ TEST_F(GroupByOptimizations,
   Variable varC = Variable{"?c"};
   Variable varY = Variable{"?y"};
 
-  input._variables = std::vector{varA, varB, varC};
-  input._values.push_back(std::vector{TC(1.0), TC(2.0), TC(3.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(2.0), TC(4.0)});
-  input._values.push_back(std::vector{TC(2.0), TC(2.0), TC(5.0)});
+  input._variables = toQVec(std::vector{varA, varB, varC});
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(2.0), TC(3.0)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(2.0), TC(4.0)}));
+  input._values.push_back(toQVec(std::vector{TC(2.0), TC(2.0), TC(5.0)}));
   auto values = ad_utility::makeExecutionTree<Values>(
       ad_utility::testing::getQec(), input);
 
@@ -934,7 +936,7 @@ TEST_F(GroupByOptimizations,
       setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
-  parsedQuery::SparqlValues input;
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
   using TC = TripleComponent;
 
   // SELECT (AVG(?c) as ?x) WHERE {
@@ -944,11 +946,11 @@ TEST_F(GroupByOptimizations,
   Variable varB = Variable{"?b"};
   Variable varC = Variable{"?c"};
 
-  input._variables = std::vector{varA, varB, varC};
-  input._values.push_back(std::vector{TC(2.0), TC(2.0), TC(5.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(2.0), TC(3.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(2.0), TC(4.0)});
-  input._values.push_back(std::vector{TC(4.0), TC(1.0), TC(42.0)});
+  input._variables = toQVec(std::vector{varA, varB, varC});
+  input._values.push_back(toQVec(std::vector{TC(2.0), TC(2.0), TC(5.0)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(2.0), TC(3.0)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(2.0), TC(4.0)}));
+  input._values.push_back(toQVec(std::vector{TC(4.0), TC(1.0), TC(42.0)}));
 
   auto values = ad_utility::makeExecutionTree<Values>(
       ad_utility::testing::getQec(), input);
@@ -990,7 +992,7 @@ TEST_F(GroupByOptimizations,
       setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
-  parsedQuery::SparqlValues input;
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
   using TC = TripleComponent;
 
   // SELECT (AVG(?b) as ?x) WHERE {
@@ -1000,11 +1002,11 @@ TEST_F(GroupByOptimizations,
   Variable varB = Variable{"?b"};
   Variable varC = Variable{"?c"};
 
-  input._variables = std::vector{varA, varB, varC};
-  input._values.push_back(std::vector{TC(2.0), TC(5.0), TC(2.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(3.0), TC(2.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(4.0), TC(2.0)});
-  input._values.push_back(std::vector{TC(4.0), TC(42.0), TC(1.0)});
+  input._variables = toQVec(std::vector{varA, varB, varC});
+  input._values.push_back(toQVec(std::vector{TC(2.0), TC(5.0), TC(2.0)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(3.0), TC(2.0)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(4.0), TC(2.0)}));
+  input._values.push_back(toQVec(std::vector{TC(4.0), TC(42.0), TC(1.0)}));
 
   auto values = ad_utility::makeExecutionTree<Values>(
       ad_utility::testing::getQec(), input);
@@ -1045,7 +1047,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
       setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
-  parsedQuery::SparqlValues input;
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
   using TC = TripleComponent;
 
   // SELECT (AVG(?g) as ?x) WHERE {
@@ -1059,15 +1061,15 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
   Variable varF = Variable{"?f"};
   Variable varG = Variable{"?g"};
 
-  input._variables = std::vector{varA, varB, varC, varD, varE, varF, varG};
-  input._values.push_back(std::vector{TC(2.0), TC(2.0), TC(2.0), TC(2.0),
-                                      TC(2.0), TC(5.0), TC(5.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(2.0), TC(2.0), TC(2.0),
-                                      TC(2.0), TC(5.0), TC(5.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(2.0), TC(2.0), TC(2.0),
-                                      TC(2.0), TC(5.0), TC(3.0)});
-  input._values.push_back(std::vector{TC(4.0), TC(1.0), TC(2.0), TC(2.0),
-                                      TC(2.0), TC(5.0), TC(2.0)});
+  input._variables = toQVec(std::vector{varA, varB, varC, varD, varE, varF, varG});
+  input._values.push_back(toQVec(std::vector{TC(2.0), TC(2.0), TC(2.0), TC(2.0),
+                                      TC(2.0), TC(5.0), TC(5.0)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(2.0), TC(2.0), TC(2.0),
+                                      TC(2.0), TC(5.0), TC(5.0)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(2.0), TC(2.0), TC(2.0),
+                                      TC(2.0), TC(5.0), TC(3.0)}));
+  input._values.push_back(toQVec(std::vector{TC(4.0), TC(1.0), TC(2.0), TC(2.0),
+                                      TC(2.0), TC(5.0), TC(2.0)}));
 
   auto values = ad_utility::makeExecutionTree<Values>(
       ad_utility::testing::getQec(), input);
@@ -1117,7 +1119,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
       setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
-  parsedQuery::SparqlValues input;
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
   using TC = TripleComponent;
 
   // SELECT (?a AS ?x) (?a + COUNT(?b) AS ?y) (?x + AVG(?b) as ?z) WHERE {
@@ -1127,10 +1129,10 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
   Variable varX = Variable{"?x"};
   Variable varB = Variable{"?b"};
 
-  input._variables = std::vector{varA, varB};
-  input._values.push_back(std::vector{TC(1.0), TC(3.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(7.0)});
-  input._values.push_back(std::vector{TC(5.0), TC(4.0)});
+  input._variables = toQVec(std::vector{varA, varB});
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(3.0)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(7.0)}));
+  input._values.push_back(toQVec(std::vector{TC(5.0), TC(4.0)}));
   auto values = ad_utility::makeExecutionTree<Values>(
       ad_utility::testing::getQec(), input);
 
@@ -1185,7 +1187,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
       setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
-  parsedQuery::SparqlValues input;
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
   using TC = TripleComponent;
 
   // SELECT (MIN(?b) as ?x) (MAX(?b) as ?z) (SUM(?b) as ?w) WHERE {
@@ -1197,14 +1199,14 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   Variable varZ = Variable{"?z"};
   Variable varW = Variable{"?w"};
 
-  input._variables = std::vector{varA, varB};
-  input._values.push_back(std::vector{TC(1.0), TC(42)});
-  input._values.push_back(std::vector{TC(1.0), TC(9.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(3)});
-  input._values.push_back(std::vector{TC(3.0), TC(13.37)});
-  input._values.push_back(std::vector{TC(3.0), TC(1.0)});
-  input._values.push_back(std::vector{TC(3.0), TC(4.0)});
-  input._values.push_back(std::vector<TripleComponent>{TC(4.0), TC::UNDEF{}});
+  input._variables = toQVec(std::vector{varA, varB});
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(42)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(9.0)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(3)}));
+  input._values.push_back(toQVec(std::vector{TC(3.0), TC(13.37)}));
+  input._values.push_back(toQVec(std::vector{TC(3.0), TC(1.0)}));
+  input._values.push_back(toQVec(std::vector{TC(3.0), TC(4.0)}));
+  input._values.push_back(toQVec(std::vector<TripleComponent>{TC(4.0), TC::UNDEF{}}));
   auto qec = ad_utility::testing::getQec();
   auto values = ad_utility::makeExecutionTree<Values>(qec, input);
 
@@ -1390,16 +1392,16 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
       setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
           true);
 
-  parsedQuery::SparqlValues input;
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
   using TC = TripleComponent;
 
-  input._variables = std::vector{varX, varY};
-  input._values.push_back(std::vector{TC(1.0), TC{lit("B")}});
-  input._values.push_back(std::vector{TC(1.0), TC{lit("A")}});
-  input._values.push_back(std::vector{TC(1.0), TC{lit("C")}});
-  input._values.push_back(std::vector{TC(3.0), TC{lit("g")}});
-  input._values.push_back(std::vector{TC(3.0), TC{lit("h")}});
-  input._values.push_back(std::vector{TC(3.0), TC{lit("f")}});
+  input._variables = toQVec(std::vector{varX, varY});
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC{lit("B")}}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC{lit("A")}}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC{lit("C")}}));
+  input._values.push_back(toQVec(std::vector{TC(3.0), TC{lit("g")}}));
+  input._values.push_back(toQVec(std::vector{TC(3.0), TC{lit("h")}}));
+  input._values.push_back(toQVec(std::vector{TC(3.0), TC{lit("f")}}));
   auto qec = ad_utility::testing::getQec();
   auto values = ad_utility::makeExecutionTree<Values>(qec, input);
 
@@ -1651,12 +1653,12 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     Id idOfY = getId("<y>");
     // Set up a `VALUES` clause with three values for `?x`, two of which
     // (`<x>` and `<y>`) actually appear in the test knowledge graph.
-    parsedQuery::SparqlValues sparqlValues;
+    parsedQuery::SparqlValues sparqlValues{ad_utility::testing::makeAllocator()};
     sparqlValues._variables.push_back(varX);
-    sparqlValues._values.emplace_back(std::vector{TripleComponent{iri("<x>")}});
+    sparqlValues._values.emplace_back(toQVec(std::vector{TripleComponent{iri("<x>")}}));
     sparqlValues._values.emplace_back(
-        std::vector{TripleComponent{iri("<xa>")}});
-    sparqlValues._values.emplace_back(std::vector{TripleComponent{iri("<y>")}});
+        toQVec(std::vector{TripleComponent{iri("<xa>")}}));
+    sparqlValues._values.emplace_back(toQVec(std::vector{TripleComponent{iri("<y>")}}));
     auto values = makeExecutionTree<Values>(qec, sparqlValues);
     // Set up a GROUP BY operation for which the optimization can be applied.
     // The last two arguments of the `Join` constructor are the indices of the
@@ -1856,7 +1858,8 @@ TEST_F(GroupByOptimizations,
         Variable{"?x"},
         Variable{"?y"},
         Variable{"?z"},
-        {std::pair<ColumnIndex, Variable>{3, Variable{"?g"}}}};
+        toQVec(std::vector<std::pair<ColumnIndex, Variable>>{
+            {3, Variable{"?g"}}})};
 
     // With graph column this should return 3.
     auto xyzScanNquad = makeExecutionTree<IndexScan>(
@@ -2014,7 +2017,7 @@ struct QecWrapper {
   QueryResultCache cache_{};
   NamedResultCache namedCache_{};
   std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
-      std::make_shared<MaterializedViewsManager>();
+      std::make_shared<MaterializedViewsManager>(makeAllocator());
 
   QueryExecutionContext makeQec() {
     return QueryExecutionContext{
@@ -2182,9 +2185,9 @@ TEST(GroupByOptimizationsDeltaTriples, joinWithFullScanCardinalityAfterInsert) {
 
   // Build VALUES (?x) { (<a>) } as the non-full-scan child of the join.
   Variable varX{"?x"};
-  parsedQuery::SparqlValues sparqlValues;
+  parsedQuery::SparqlValues sparqlValues{ad_utility::testing::makeAllocator()};
   sparqlValues._variables.push_back(varX);
-  sparqlValues._values.emplace_back(std::vector{TripleComponent{iri("<a>")}});
+  sparqlValues._values.emplace_back(toQVec(std::vector{TripleComponent{iri("<a>")}}));
   auto values = makeExecutionTree<Values>(&qec, sparqlValues);
 
   // Full scan ?x ?y ?z in SPO order (sorted by subject = ?x).
@@ -2331,7 +2334,7 @@ auto make = [](auto&&... args) -> SparqlExpression::Ptr {
 }  // namespace
 // _____________________________________________________________________________
 TEST(GroupBy, GroupedVariableInExpressions) {
-  parsedQuery::SparqlValues input;
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
   using TC = TripleComponent;
   // Test the following SPARQL query:
   //
@@ -2347,10 +2350,10 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   Variable varA = Variable{"?a"};
   Variable varB = Variable{"?b"};
 
-  input._variables = std::vector{varA, varB};
-  input._values.push_back(std::vector{TC(1.0), TC(3.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(7.0)});
-  input._values.push_back(std::vector{TC(5.0), TC(4.0)});
+  input._variables = toQVec(std::vector{varA, varB});
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(3.0)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(7.0)}));
+  input._values.push_back(toQVec(std::vector{TC(5.0), TC(4.0)}));
   auto values = ad_utility::makeExecutionTree<Values>(
       ad_utility::testing::getQec(), input);
 
@@ -2394,7 +2397,7 @@ TEST(GroupBy, GroupedVariableInExpressions) {
 
 // _____________________________________________________________________________
 TEST(GroupBy, AliasResultReused) {
-  parsedQuery::SparqlValues input;
+  parsedQuery::SparqlValues input{ad_utility::testing::makeAllocator()};
   using TC = TripleComponent;
   // Test the following SPARQL query:
   //
@@ -2410,10 +2413,10 @@ TEST(GroupBy, AliasResultReused) {
   Variable varA = Variable{"?a"};
   Variable varB = Variable{"?b"};
 
-  input._variables = std::vector{varA, varB};
-  input._values.push_back(std::vector{TC(1.0), TC(3.0)});
-  input._values.push_back(std::vector{TC(1.0), TC(7.0)});
-  input._values.push_back(std::vector{TC(5.0), TC(4.0)});
+  input._variables = toQVec(std::vector{varA, varB});
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(3.0)}));
+  input._values.push_back(toQVec(std::vector{TC(1.0), TC(7.0)}));
+  input._values.push_back(toQVec(std::vector{TC(5.0), TC(4.0)}));
   auto values = ad_utility::makeExecutionTree<Values>(
       ad_utility::testing::getQec(), input);
 
@@ -2466,8 +2469,8 @@ TEST(GroupBy, AddedHavingRows) {
       " VALUES (?x ?y) {(0 1) (0 3) (0 5) (1 4) (1 3) } }"
       "GROUP BY ?x HAVING (?count > 2)";
   auto qec = ad_utility::testing::getQec();
-  auto pq =
-      SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(), query);
+  auto pq = SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(),
+                                     query, {}, qec->getAllocator());
   QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto tree = qp.createExecutionTree(pq);
 
@@ -2785,7 +2788,9 @@ TEST(GroupBy, countDistinctGraph) {
     // Regression test for https://github.com/ad-freiburg/qlever/issues/2284
     auto subtree = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
-        SparqlTripleSimple{V{"?s"}, V{"?p"}, V{"?o"}, {{3, V{"?g"}}}});
+        SparqlTripleSimple{V{"?s"}, V{"?p"}, V{"?o"},
+                           toQVec(std::vector<std::pair<ColumnIndex, Variable>>{
+                               {3, V{"?g"}}})});
 
     auto expr0 = std::make_unique<VariableExpression>(Variable{"?g"});
     auto expr1 = std::make_unique<CountExpression>(true, std::move(expr0));
@@ -2803,7 +2808,9 @@ TEST(GroupBy, countDistinctGraph) {
   {
     auto subtree = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
-        SparqlTripleSimple{V{"?s"}, V{"?p"}, V{"?o"}, {{3, V{"?g"}}}},
+        SparqlTripleSimple{V{"?s"}, V{"?p"}, V{"?o"},
+                           toQVec(std::vector<std::pair<ColumnIndex, Variable>>{
+                               {3, V{"?g"}}})},
         IndexScan::Graphs::Blacklist(TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)}));
 

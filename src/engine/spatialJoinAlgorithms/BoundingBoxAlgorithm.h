@@ -12,6 +12,8 @@
 #define QLEVER_SRC_ENGINE_BOUNDINGBOXALGORITHM_H
 
 #include "engine/spatialJoinAlgorithms/RtreeEntryAlgorithm.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 
 // Spatial join for `maxDistance` tasks using an r-tree built over the
 // bounding boxes of the smaller input table: for each row of the larger
@@ -25,7 +27,7 @@ class BoundingBoxAlgorithm : public RtreeEntryAlgorithm {
 
   // This function returns true, iff the given point is contained in any of
   // the bounding boxes
-  bool isContainedInBoundingBoxes(const std::vector<Box>& boundingBox,
+  bool isContainedInBoundingBoxes(const qlever::vector<Box>& boundingBox,
                                   Point point) const;
 
   // This function computes the bounding box(es) which represent all points,
@@ -43,8 +45,8 @@ class BoundingBoxAlgorithm : public RtreeEntryAlgorithm {
   // midpoint of the bounding box of the area to any point inside the area.
   // The function getMaxDistFromMidpointToAnyPointInsideTheBox() can be used to
   // calculate it.
-  std::vector<Box> computeQueryBox(const Point& startPoint,
-                                   double additionalDist = 0) const;
+  qlever::vector<Box> computeQueryBox(const Point& startPoint,
+                                      double additionalDist = 0) const;
 
   // this function calculates the maximum distance from the midpoint of the box
   // to any other point, which is contained in the box. If the midpoint has
@@ -63,7 +65,7 @@ class BoundingBoxAlgorithm : public RtreeEntryAlgorithm {
   // gets used, when the usual procedure, would just result in taking a big
   // bounding box, which covers the whole planet (so for extremely large max
   // distances)
-  std::vector<Box> computeQueryBoxForLargeDistances(
+  qlever::vector<Box> computeQueryBoxForLargeDistances(
       const Point& startPoint) const;
 
   // return whether one of the poles is being touched
@@ -74,7 +76,7 @@ class BoundingBoxAlgorithm : public RtreeEntryAlgorithm {
   // query. It returns a `std::vector` because if the box crosses the poles or
   // the -180/180 longitude line, we have to cut them into multiple boxes.
   // If there is more than one box, the boxes are disjoint.
-  std::vector<Box> getQueryBox(const std::optional<RtreeEntry>& entry) const;
+  qlever::vector<Box> getQueryBox(const std::optional<RtreeEntry>& entry) const;
 
   // circumference in meters at the equator (max) and the pole (min) (as the
   // earth is not exactly a sphere the circumference is different. Note that

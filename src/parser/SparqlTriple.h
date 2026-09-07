@@ -16,15 +16,20 @@
 #include "parser/TripleComponent.h"
 #include "parser/data/Types.h"
 #include "rdfTypes/Variable.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 
 // Data container for parsed triples from the where clause.
 // It is templated on the predicate type, see the instantiations below.
 template <typename Predicate>
 class SparqlTripleBase {
  public:
-  using AdditionalScanColumns = std::vector<std::pair<ColumnIndex, Variable>>;
+  using AdditionalScanColumns = qlever::vector<std::pair<ColumnIndex, Variable>>;
   SparqlTripleBase(TripleComponent s, Predicate p, TripleComponent o,
-                   AdditionalScanColumns additionalScanColumns = {})
+                   AdditionalScanColumns additionalScanColumns =
+                       AdditionalScanColumns{
+                           qlever::makeUnlimitedAllocator<
+                               std::pair<ColumnIndex, Variable>>()})
       : s_(std::move(s)),
         p_(std::move(p)),
         o_(std::move(o)),
@@ -40,7 +45,7 @@ class SparqlTripleBase {
   // performing an index scan using this triple.
   // TODO<joka921> On this level we should not store `ColumnIndex`, but the
   // special predicate IRIs that are to be attached here.
-  std::vector<std::pair<ColumnIndex, Variable>> additionalScanColumns_;
+  AdditionalScanColumns additionalScanColumns_;
 };
 
 // A triple where the predicate is a `TripleComponent`, so a fixed entity or a
@@ -54,9 +59,12 @@ class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
  public:
   using Graph = std::variant<std::monostate, TripleComponent::Iri, Variable>;
 
-  SparqlTripleSimpleWithGraph(TripleComponent s, TripleComponent p,
-                              TripleComponent o, Graph g,
-                              AdditionalScanColumns additionalScanColumns = {})
+  SparqlTripleSimpleWithGraph(
+      TripleComponent s, TripleComponent p, TripleComponent o, Graph g,
+      AdditionalScanColumns additionalScanColumns =
+          AdditionalScanColumns{
+              qlever::makeUnlimitedAllocator<
+                  std::pair<ColumnIndex, Variable>>()})
       : SparqlTripleSimple(std::move(s), std::move(p), std::move(o),
                            std::move(additionalScanColumns)),
         g_{std::move(g)} {}
