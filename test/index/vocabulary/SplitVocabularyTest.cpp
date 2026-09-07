@@ -6,6 +6,7 @@
 
 #include <variant>
 
+#include "VocabularyTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 #include "index/vocabulary/Vocabulary.h"
@@ -20,15 +21,11 @@ using SGV =
   return ql::starts_with(s, "\"a");
 };
 
-[[maybe_unused]] auto testSplitFnTwoFunction =
-    [](std::string_view s) -> std::array<std::string, 2> {
-  return {std::string(s), absl::StrCat(s, ".a")};
-};
+constexpr std::array<std::string_view, 2> testTwoFilenameSuffixes{"", ".a"};
 
 using TwoSplitVocabulary =
-    SplitVocabulary<decltype(testSplitTwoFunction),
-                    decltype(testSplitFnTwoFunction), VocabularyInMemory,
-                    VocabularyInMemory>;
+    SplitVocabulary<decltype(testSplitTwoFunction), testTwoFilenameSuffixes,
+                    VocabularyInMemory, VocabularyInMemory>;
 
 [[maybe_unused]] auto testSplitThreeFunction =
     [](std::string_view s) -> uint8_t {
@@ -42,15 +39,12 @@ using TwoSplitVocabulary =
   return 0;
 };
 
-[[maybe_unused]] auto testSplitFnThreeFunction =
-    [](std::string_view s) -> std::array<std::string, 3> {
-  return {absl::StrCat(s, ".a"), absl::StrCat(s, ".b"), absl::StrCat(s, ".c")};
-};
+constexpr std::array<std::string_view, 3> testThreeFilenameSuffixes{".a", ".b",
+                                                                    ".c"};
 
 using ThreeSplitVocabulary =
-    SplitVocabulary<decltype(testSplitThreeFunction),
-                    decltype(testSplitFnThreeFunction), VocabularyInMemory,
-                    VocabularyInMemory, VocabularyInMemory>;
+    SplitVocabulary<decltype(testSplitThreeFunction), testThreeFilenameSuffixes,
+                    VocabularyInMemory, VocabularyInMemory, VocabularyInMemory>;
 
 }  // namespace splitVocabTestHelpers
 
@@ -59,6 +53,18 @@ using namespace splitVocabTestHelpers;
 using namespace ad_utility;
 const VocabularyType geoSplitVocabType{
     VocabularyType::Enum::OnDiskCompressedGeoSplit};
+
+// An `absl::Cleanup` that deletes all the files that an `RdfsVocabulary` of the
+// given `type` with the given base `filename` consists of.
+auto getFileCleanup(VocabularyType type, const std::string& filename) {
+  return vocabulary_test::makeVocabFileCleanup(
+      filename, PolymorphicVocabulary::fileSuffixes(type));
+}
+
+// Same as above, for a `TwoSplitVocabulary`, which most of the tests below use.
+auto getFileCleanup(const std::string& filename) {
+  return vocabulary_test::makeVocabFileCleanup<TwoSplitVocabulary>(filename);
+}
 
 // _____________________________________________________________________________
 TEST(Vocabulary, SplitGeoVocab) {
@@ -138,7 +144,9 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   ASSERT_EQ(sv.getMarkerForWord("<abc>"), 0);
   ASSERT_EQ(sv.getMarkerForWord("\"abc\""), 1);
 
-  auto ww = sv.makeDiskWriterPtr("twoSplitVocab.dat");
+  const std::string filename = gtestCurrentTestName();
+  auto cleanup = getFileCleanup(filename);
+  auto ww = sv.makeDiskWriterPtr(filename);
   ASSERT_EQ((*ww)("\"\"", true), sv.addMarker(0, 0));
   ASSERT_EQ((*ww)("\"abc\"", true), sv.addMarker(0, 1));
   ASSERT_EQ((*ww)("\"axyz\"", true), sv.addMarker(1, 1));
@@ -146,7 +154,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   ww->readableName() = "Split Vocab with Two Underlying Vocabs";
   ww->finish();
 
-  sv.readFromFile("twoSplitVocab.dat");
+  sv.readFromFile(filename);
   ASSERT_EQ(sv.size(), 4);
   ASSERT_EQ(sv[1], "\"xyz\"");
   ASSERT_EQ(sv[(1ULL << 59) | 1], "\"axyz\"");
@@ -257,7 +265,10 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   ASSERT_EQ(sv.getMarkerForWord("<abc>"), 0);
   ASSERT_EQ(sv.getMarkerForWord("\"abc\""), 0);
 
-  auto ww = sv.makeDiskWriterPtr("threeSplitVocab.dat");
+  const std::string filename = gtestCurrentTestName();
+  auto cleanup =
+      vocabulary_test::makeVocabFileCleanup<ThreeSplitVocabulary>(filename);
+  auto ww = sv.makeDiskWriterPtr(filename);
   ASSERT_EQ((*ww)("\"\"", true), sv.addMarker(0, 0));
   ASSERT_EQ((*ww)("\"abc\"", true), sv.addMarker(1, 0));
   ASSERT_EQ((*ww)("\"axyz\"", true), sv.addMarker(2, 0));
@@ -267,7 +278,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   ww->readableName() = "Split Vocab with Three Underlying Vocabs";
   ww->finish();
 
-  sv.readFromFile("threeSplitVocab.dat");
+  sv.readFromFile(filename);
   ASSERT_EQ(sv.size(), 6);
   ASSERT_EQ(sv[2], "\"axyz\"");
   ASSERT_EQ(sv[2ULL << 58], "\"xyz\"^^<blabliblu>");
@@ -291,9 +302,9 @@ TEST(Vocabulary, SplitVocabularyItemAt) {
 
   RdfsVocabulary v;
   v.resetToType(geoSplitVocabType);
-  auto filename = "vocTest6.dat";
+  const std::string filename = gtestCurrentTestName();
+  auto cleanup = getFileCleanup(geoSplitVocabType, filename);
   v.createFromSet(s, filename);
-  absl::Cleanup del = [&]() { deleteFile(filename); };
 
   ASSERT_EQ(v[VocabIndex::make(0)], "a");
   ASSERT_EQ(v[VocabIndex::make(1)], "ab");
@@ -321,7 +332,9 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
   // and non-geo words. This split is tested here.
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(geoSplitVocabType);
-  auto wordCallback = vocabulary.makeWordWriterPtr("vocTest7.dat");
+  const std::string filename = gtestCurrentTestName();
+  auto cleanup = getFileCleanup(geoSplitVocabType, filename);
+  auto wordCallback = vocabulary.makeWordWriterPtr(filename);
   ASSERT_TRUE(vocabulary.isGeoInfoAvailable());
 
   // Call word writer
@@ -342,7 +355,7 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
 
   wordCallback->finish();
 
-  vocabulary.readFromFile("vocTest7.dat");
+  vocabulary.readFromFile(filename);
 
   // Check that the resulting vocabulary is correct
   VocabIndex idx;
@@ -429,13 +442,15 @@ TEST(Vocabulary, SplitVocabularyScanAll) {
   // vocabularies (here: words starting with `"a` go into the second vocab).
   // `scanAll` must still enumerate all of them.
   TwoSplitVocabulary sv;
-  auto ww = sv.makeDiskWriterPtr("splitVocabScanAll.dat");
+  const std::string filename = gtestCurrentTestName();
+  auto cleanup = getFileCleanup(filename);
+  auto ww = sv.makeDiskWriterPtr(filename);
   (*ww)("\"\"", true);
   (*ww)("\"abc\"", true);
   (*ww)("\"axyz\"", true);
   (*ww)("\"xyz\"", true);
   ww->finish();
-  sv.readFromFile("splitVocabScanAll.dat");
+  sv.readFromFile(filename);
 
   // `scanAll` yields all words of all underlying vocabularies, together with
   // their marker-encoded global index (main vocabulary first, then the second
@@ -457,18 +472,20 @@ TEST(Vocabulary, SplitVocabularyScanAll) {
 TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
   // Create a `SplitVocabulary::WordWriter` and destruct it without a call to
   // `finish()`.
+  const std::string filename1 = absl::StrCat(gtestCurrentTestName(), ".1");
+  auto cleanup1 = getFileCleanup(filename1);
   TwoSplitVocabulary sv1;
-  auto wordWriter1 =
-      sv1.makeDiskWriterPtr("SplitVocabularyWordWriterDestructor1.dat");
+  auto wordWriter1 = sv1.makeDiskWriterPtr(filename1);
   (*wordWriter1)("\"abc\"", true);
   ASSERT_FALSE(wordWriter1->finishWasCalled());
   wordWriter1.reset();
 
   // Create a `SplitVocabulary::WordWriter` and destruct it after an explicit
   // call to `finish()`.
+  const std::string filename2 = absl::StrCat(gtestCurrentTestName(), ".2");
+  auto cleanup2 = getFileCleanup(filename2);
   TwoSplitVocabulary sv2;
-  auto wordWriter2 =
-      sv2.makeDiskWriterPtr("SplitVocabularyWordWriterDestructor2.dat");
+  auto wordWriter2 = sv2.makeDiskWriterPtr(filename2);
   (*wordWriter2)("\"abc\"", true);
   wordWriter2->finish();
   ASSERT_TRUE(wordWriter2->finishWasCalled());

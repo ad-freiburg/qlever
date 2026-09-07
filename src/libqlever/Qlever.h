@@ -546,8 +546,9 @@ class Qlever {
   void loadMaterializedView(std::string name) const;
 
   // Unload a materialized view that was previously loaded via
-  // `loadMaterializedView`. Has no effect if the view is not currently loaded.
-  void unloadMaterializedView(const std::string& name) const;
+  // `loadMaterializedView` and return `true`. Return `false` (and do nothing
+  // else) if the view is not currently loaded.
+  bool unloadMaterializedView(const std::string& name) const;
 
   // Check if a materialized view with the given name is currently loaded.
   bool isMaterializedViewLoaded(const std::string& name) const;

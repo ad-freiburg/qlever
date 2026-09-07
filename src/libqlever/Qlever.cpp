@@ -440,9 +440,9 @@ bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
 }
 
 // ___________________________________________________________________________
-void Qlever::unloadMaterializedView(const std::string& name) const {
+bool Qlever::unloadMaterializedView(const std::string& name) const {
   const auto indexAndViews = indexAndViewsSnapshot();
-  indexAndViews->materializedViewsManager_.unloadViewIfLoaded(name);
+  return indexAndViews->materializedViewsManager_.unloadViewIfLoaded(name);
 }
 
 // ___________________________________________________________________________
