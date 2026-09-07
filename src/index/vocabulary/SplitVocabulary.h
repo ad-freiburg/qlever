@@ -35,29 +35,50 @@ template <typename T>
 CPP_concept SplitFunctionT =
     ad_utility::InvocableWithExactReturnType<T, uint8_t, std::string_view>;
 
-// The signature of the SplitFilenameSuffixFunction for a SplitVocabulary. For
-// each of the underlying vocabularies, the function should return the suffix
-// that is appended to the base filename of the SplitVocabulary to obtain the
-// base filename of that underlying vocabulary. The suffixes have to be distinct
-// and must have static storage duration.
+// The type of the FilenameSuffixes of a SplitVocabulary with `N` underlying
+// vocabularies: for each of them, the suffix that is appended to the base
+// filename of the SplitVocabulary to obtain the base filename of that
+// underlying vocabulary. The suffixes have to be distinct.
+// Note: In C++17 an array cannot be a template argument directly, but a
+// reference to an array with static storage duration can, which is why a
+// SplitVocabulary takes its suffixes by reference (`const auto&`).
 template <typename T, uint8_t N>
-CPP_concept SplitFilenameSuffixFunctionT =
-    ad_utility::InvocableWithExactReturnType<T,
-                                             std::array<std::string_view, N>>;
+CPP_concept FilenameSuffixesT =
+    std::is_same_v<std::decay_t<T>, std::array<std::string_view, N>>;
 
 // Forward declaration of `PolymorphicVocabulary` for static assertion.
 class PolymorphicVocabulary;
 
+// Forward declaration of `SplitVocabulary` for the `isSplitVocabulary` trait
+// below.
+template <typename SplitFunction, const auto& FilenameSuffixes,
+          typename... UnderlyingVocabularies>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SplitFunction>&& FilenameSuffixesT<
+        decltype(FilenameSuffixes), sizeof...(UnderlyingVocabularies)>)
+class SplitVocabulary;
+
+// True iff `T` is an instantiation of `SplitVocabulary`. Note that
+// `ad_utility::isInstantiation` cannot be used for this, because
+// `SplitVocabulary` has a non-type template parameter and hence does not match
+// a `template <typename...> typename` template template parameter.
+template <typename T>
+constexpr bool isSplitVocabulary = false;
+
+template <typename SplitFunction, const auto& FilenameSuffixes,
+          typename... UnderlyingVocabularies>
+constexpr bool isSplitVocabulary<SplitVocabulary<
+    SplitFunction, FilenameSuffixes, UnderlyingVocabularies...>> = true;
+
 // A SplitVocabulary is a vocabulary layer that divides words into different
 // underlying vocabularies. It is templated on the UnderlyingVocabularies as
 // well as a SplitFunction that decides which underlying vocabulary is used for
-// each word and a SplitFilenameSuffixFunction that assigns filename suffixes to
-// underlying vocabularies.
-template <typename SplitFunction, typename SplitFilenameSuffixFunction,
+// each word and the FilenameSuffixes of the underlying vocabularies.
+template <typename SplitFunction, const auto& FilenameSuffixes,
           typename... UnderlyingVocabularies>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SplitFunction>&& SplitFilenameSuffixFunctionT<
-        SplitFilenameSuffixFunction, sizeof...(UnderlyingVocabularies)>)
+    requires SplitFunctionT<SplitFunction>&& FilenameSuffixesT<
+        decltype(FilenameSuffixes), sizeof...(UnderlyingVocabularies)>)
 class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying
@@ -69,11 +90,15 @@ class SplitVocabulary {
   static constexpr uint8_t numberOfVocabs =
       static_cast<uint8_t>(sizeof...(UnderlyingVocabularies));
 
+  // There has to be exactly one filename suffix per underlying vocabulary. This
+  // is also part of the constraints of this class, but is repeated here because
+  // those are not enforced in the C++17 mode (see `QL_CONCEPT_OR_NOTHING`).
+  static_assert(FilenameSuffixesT<decltype(FilenameSuffixes), numberOfVocabs>);
+
   // Because of the marker bits, a `SplitVocabulary` should not hold another
   // `SplitVocabulary` or a `PolymorphicVocabulary`, where it cannot be
   // guaranteed that it does not hold an underlying `SplitVocabulary`.
-  static_assert(!ad_utility::anyIsInstantiationOf<SplitVocabulary,
-                                                  UnderlyingVocabularies...>);
+  static_assert(!(... || isSplitVocabulary<UnderlyingVocabularies>));
   static_assert(
       !ad_utility::SameAsAny<PolymorphicVocabulary, UnderlyingVocabularies...>);
 
@@ -99,23 +124,21 @@ class SplitVocabulary {
   static constexpr uint64_t vocabIndexBitMask =
       ad_utility::bitMaskForLowerBits(markerShift);
 
-  // Instances of the functions used for implementing the specific split logic
+  // Instance of the function used for implementing the specific split logic
   static constexpr SplitFunction splitFunction_{};
-  static constexpr SplitFilenameSuffixFunction splitFilenameSuffixFunction_{};
 
  private:
   // Array that holds all underlying vocabularies.
   UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
 
   // The base filenames of all the underlying vocabularies for the given base
-  // `filename` of this vocabulary, obtained by appending the suffixes from
-  // `splitFilenameSuffixFunction_`.
+  // `filename` of this vocabulary, obtained by appending the
+  // `FilenameSuffixes`.
   static std::array<std::string, numberOfVocabs> underlyingFilenames(
       std::string_view filename) {
     std::array<std::string, numberOfVocabs> filenames;
-    const auto suffixes = splitFilenameSuffixFunction_();
     for (uint8_t i = 0; i < numberOfVocabs; ++i) {
-      filenames[i] = absl::StrCat(filename, suffixes[i]);
+      filenames[i] = absl::StrCat(filename, FilenameSuffixes[i]);
     }
     return filenames;
   }
@@ -326,15 +349,14 @@ class SplitVocabulary {
     ~WordWriter() override;
   };
 
-  // The files of all the underlying vocabularies, each prefixed with the suffix
-  // that `splitFilenameSuffixFunction_` yields for the respective vocabulary.
+  // The files of all the underlying vocabularies, each prefixed with the
+  // respective one of the `FilenameSuffixes`.
   static FileSuffixes fileSuffixes() {
-    const auto vocabSuffixes = splitFilenameSuffixFunction_();
     FileSuffixes suffixes;
     uint8_t i = 0;
-    auto addOne = [&suffixes, &vocabSuffixes, &i](auto vocabulary) {
+    auto addOne = [&suffixes, &i](auto vocabulary) {
       using Vocabulary = typename decltype(vocabulary)::type;
-      addFileSuffixesWithPrefix(suffixes, vocabSuffixes.at(i),
+      addFileSuffixesWithPrefix(suffixes, FilenameSuffixes.at(i),
                                 Vocabulary::fileSuffixes());
       ++i;
     };
@@ -379,14 +401,10 @@ struct GeoSplitFunc {
   }
 };
 
-// Split filename suffix function for Well-Known Text Literals: The vocabulary 0
-// is saved under the base filename and WKT literals are saved with a suffix
-// ".geometry"
-struct GeoFilenameSuffixFunc {
-  std::array<std::string_view, 2> operator()() const {
-    return {"", ".geometry"};
-  }
-};
+// Filename suffixes for Well-Known Text Literals: The vocabulary 0 is saved
+// under the base filename and WKT literals are saved with a suffix ".geometry"
+inline constexpr std::array<std::string_view, 2> geoFilenameSuffixes{
+    "", ".geometry"};
 
 }  // namespace detail::splitVocabulary
 
@@ -395,7 +413,7 @@ struct GeoFilenameSuffixFunc {
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
     SplitVocabulary<detail::splitVocabulary::GeoSplitFunc,
-                    detail::splitVocabulary::GeoFilenameSuffixFunc,
+                    detail::splitVocabulary::geoFilenameSuffixes,
                     UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

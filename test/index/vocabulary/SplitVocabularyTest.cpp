@@ -21,13 +21,11 @@ using SGV =
   return ql::starts_with(s, "\"a");
 };
 
-[[maybe_unused]] auto testSplitFnTwoFunction =
-    []() -> std::array<std::string_view, 2> { return {"", ".a"}; };
+constexpr std::array<std::string_view, 2> testTwoFilenameSuffixes{"", ".a"};
 
 using TwoSplitVocabulary =
-    SplitVocabulary<decltype(testSplitTwoFunction),
-                    decltype(testSplitFnTwoFunction), VocabularyInMemory,
-                    VocabularyInMemory>;
+    SplitVocabulary<decltype(testSplitTwoFunction), testTwoFilenameSuffixes,
+                    VocabularyInMemory, VocabularyInMemory>;
 
 [[maybe_unused]] auto testSplitThreeFunction =
     [](std::string_view s) -> uint8_t {
@@ -41,13 +39,12 @@ using TwoSplitVocabulary =
   return 0;
 };
 
-[[maybe_unused]] auto testSplitFnThreeFunction =
-    []() -> std::array<std::string_view, 3> { return {".a", ".b", ".c"}; };
+constexpr std::array<std::string_view, 3> testThreeFilenameSuffixes{".a", ".b",
+                                                                    ".c"};
 
 using ThreeSplitVocabulary =
-    SplitVocabulary<decltype(testSplitThreeFunction),
-                    decltype(testSplitFnThreeFunction), VocabularyInMemory,
-                    VocabularyInMemory, VocabularyInMemory>;
+    SplitVocabulary<decltype(testSplitThreeFunction), testThreeFilenameSuffixes,
+                    VocabularyInMemory, VocabularyInMemory, VocabularyInMemory>;
 
 }  // namespace splitVocabTestHelpers
 
