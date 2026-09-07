@@ -233,7 +233,7 @@ std::string formatTsvRow(const Sample& sample) {
                             formatCell(sample.bytesReadPerSecond_),
                             formatCell(sample.bytesWrittenPerSecond_),
                             formatCell(sample.ioStallPercent_)};
-  return absl::StrJoin(tsvCells, "\t") + "\n";
+  return absl::StrCat(absl::StrJoin(tsvCells, "\t"), "\n");
 }
 
 // _____________________________________________________________________________
