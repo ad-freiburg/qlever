@@ -33,6 +33,11 @@ class VocabularyInMemoryBinSearch
   using Indices = std::vector<uint64_t>;
   using IndicesView = ql::span<const uint64_t>;
 
+  // This suffix is appended to the base filename in order to get the name of
+  // the file in which the (because of the holes, explicit) indices of the words
+  // are stored. The words themselves are stored under the base filename itself.
+  static constexpr std::string_view idsSuffix = ".ids";
+
   // The holes of this vocabulary are deliberate: such a vocabulary is created
   // by excluding some of the entries of a larger vocabulary, and is used in
   // settings where looking up an excluded entry must not throw. Exporting a
@@ -169,6 +174,10 @@ class VocabularyInMemoryBinSearch
     // disk.
     void finish();
   };
+
+  // The words are stored under the base filename itself, their explicit
+  // indices in an additional file (see `idsSuffix`).
+  static FileSuffixes fileSuffixes() { return {"", std::string{idsSuffix}}; }
 
   // A vocabulary with holes cannot be written via the `WordWriterBase`
   // interface (which cannot express the explicit indices), so this function
