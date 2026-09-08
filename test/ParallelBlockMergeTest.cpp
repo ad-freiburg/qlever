@@ -61,7 +61,7 @@ struct CountingString {
 };
 
 // An input policy that wraps a `VectorInput<size_t>` and additionally records
-// every call to `readBlock` and (optionally) throws from the `throwAtRead_`-th
+// every call to `getBlock` and (optionally) throws from the `throwAtRead_`-th
 // of them. The recorded state is shared between all copies, because the merge
 // takes the input by value.
 struct InstrumentedInput {
@@ -72,11 +72,11 @@ struct InstrumentedInput {
   // The shared state of all copies of an `InstrumentedInput`.
   struct State {
     // NOTE: The `mutex_` is only there because `InputConcept` requires
-    // `readBlock` to be thread-safe. A serial merge only ever reads from the
+    // `getBlock` to be thread-safe. A serial merge only ever reads from the
     // consuming thread.
     std::mutex mutex_{};
     std::vector<std::pair<size_t, size_t>> readBlocks_{};
-    // The number of the call to `readBlock` that throws. The value `0` means
+    // The number of the call to `getBlock` that throws. The value `0` means
     // "never throw".
     size_t throwAtRead_ = 0;
   };
@@ -95,7 +95,7 @@ struct InstrumentedInput {
   const Element& lastElement(size_t runIdx, size_t blockIdx) const {
     return wrapped_.lastElement(runIdx, blockIdx);
   }
-  Block readBlock(size_t runIdx, size_t blockIdx) const {
+  Block getBlock(size_t runIdx, size_t blockIdx) const {
     size_t numReads = 0;
     {
       std::lock_guard<std::mutex> lock{state_->mutex_};
@@ -103,9 +103,9 @@ struct InstrumentedInput {
       numReads = state_->readBlocks_.size();
     }
     if (state_->throwAtRead_ != 0 && numReads >= state_->throwAtRead_) {
-      throw std::runtime_error{"readBlock failed"};
+      throw std::runtime_error{"getBlock failed"};
     }
-    return wrapped_.readBlock(runIdx, blockIdx);
+    return wrapped_.getBlock(runIdx, blockIdx);
   }
   Block makeEmptyBlock() const { return {}; }
   template <typename T>
@@ -126,7 +126,8 @@ template <bool moveElements = false, typename Input, typename Comparator>
 std::vector<typename Input::value_type> mergeToVector(
     Input input, Comparator comparator, MergeOptions options = {},
     size_t numChunks = 1,
-    ad_utility::SharedCancellationHandle cancellationHandle = nullptr) {
+    ad_utility::SharedCancellationHandle cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>()) {
   auto boundaries = computeChunkBoundaries(input, comparator, numChunks);
   auto blocks = serialBlockMergeToRange<moveElements>(
       std::move(input), std::move(comparator), std::move(options),
@@ -191,7 +192,8 @@ auto makeSingleChunkState(Input input, Comparator comparator,
                           ChunkBoundary<typename Input::Element> boundary) {
   using State = detail::MergeState<Input, Comparator>;
   return std::make_shared<const State>(
-      std::move(input), std::move(comparator), std::move(options), nullptr,
+      std::move(input), std::move(comparator), std::move(options),
+      std::make_shared<ad_utility::CancellationHandle<>>(),
       std::vector<ChunkBoundary<typename Input::Element>>{std::move(boundary)});
 }
 }  // namespace
@@ -241,7 +243,7 @@ TEST(ParallelBlockMerge, moveOfElements) {
       // Moving the elements out of the input blocks saves a copy.
       EXPECT_LT(moved.at(i).numCopies_, notMoved.at(i).numCopies_);
     }
-    // `readBlock` hands out a copy of a block, so the merge never touches the
+    // `getBlock` hands out a copy of a block, so the merge never touches the
     // input itself, no matter how the chunks are laid out. In particular, a
     // block that two neighboring chunks share is still intact for the second of
     // them.
@@ -415,7 +417,8 @@ TEST(ParallelBlockMerge, chunksWithoutAnyElementAreSkipped) {
   auto mergeWithSplitPoints = [&runs, &expected](SizeVec splitPoints) {
     auto blocks = serialBlockMergeToRange<false>(
         makeVectorInput(runs, 8), std::less<>{}, optionsWithBlockSize(8),
-        nullptr, detail::chunkBoundariesFromSplitPoints(splitPoints));
+        std::make_shared<ad_utility::CancellationHandle<>>(),
+        detail::chunkBoundariesFromSplitPoints(splitPoints));
     SizeVec result;
     for (const auto& block : blocks) {
       EXPECT_FALSE(block.empty());
@@ -439,12 +442,12 @@ TEST(ParallelBlockMerge, chunksWithoutAnyElementAreSkipped) {
 TEST(ParallelBlockMerge, exceptionFromChunkPropagates) {
   auto runs = makeRandomRuns(16, 200, 300);
   InstrumentedInput input{makeVectorInput(runs, 16)};
-  // Throw from the third call to `readBlock` onwards, so that the merge has
+  // Throw from the third call to `getBlock` onwards, so that the merge has
   // already yielded some output blocks when the exception arrives.
   input.state_->throwAtRead_ = 3;
   AD_EXPECT_THROW_WITH_MESSAGE(
       mergeToVector(input, std::less<>{}, optionsWithBlockSize(16), 4),
-      ::testing::HasSubstr("readBlock failed"));
+      ::testing::HasSubstr("getBlock failed"));
 }
 
 // _____________________________________________________________________________

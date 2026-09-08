@@ -82,7 +82,8 @@ CPP_template(bool moveElements, typename Input,
              typename Comparator)(requires InputConcept<Input>) ad_utility::
     InputRangeTypeErased<typename Input::Block> serialBlockMergeToRange(
         Input input, Comparator comparator, MergeOptions options = {},
-        ad_utility::SharedCancellationHandle cancellationHandle = nullptr,
+        ad_utility::SharedCancellationHandle cancellationHandle =
+            std::make_shared<ad_utility::CancellationHandle<>>(),
         std::vector<ChunkBoundary<typename Input::Element>> chunkBoundaries =
             singleChunk<typename Input::Element>()) {
   using Block = typename Input::Block;

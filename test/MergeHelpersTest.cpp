@@ -56,8 +56,8 @@ struct ZeroSizeBlockInput {
   const Element& lastElement(size_t runIdx, size_t blockIdx) const {
     return wrapped_.lastElement(runIdx, blockIdx);
   }
-  Block readBlock(size_t runIdx, size_t blockIdx) const {
-    return wrapped_.readBlock(runIdx, blockIdx);
+  Block getBlock(size_t runIdx, size_t blockIdx) const {
+    return wrapped_.getBlock(runIdx, blockIdx);
   }
   Block makeEmptyBlock() const { return {}; }
   template <typename U>

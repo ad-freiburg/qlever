@@ -120,6 +120,11 @@ std::vector<ElementAndWeight<Element>> sortAndAccumulateWeights(
   // Merging equal elements is what makes the quantiles below exact: a target
   // then always identifies a single entry, and picking that entry for two
   // different targets can be avoided by simply moving on to the next one.
+  //
+  // NOTE: The `comparator` has the semantics of "less than", and it is applied
+  // to consecutive elements of a sorted sequence, so "not less" means "equal"
+  // here. The negation is also exactly what `chunk_by` expects: it starts a new
+  // group where the predicate is `false`.
   auto isEquivalent = [&comparator](const ElementAndWeight<Element>& a,
                                     const ElementAndWeight<Element>& b) {
     return !comparator(a.first, b.first);
@@ -184,6 +189,8 @@ inline std::vector<size_t> targetsFromChunkSizes(
       return targets;
     }
   }
+  // Fill up the targets with chunks of size `remainingChunkSize` until the
+  // total number of elements is reached and we are thus done.
   while (addTarget(remainingChunkSize)) {
   }
   return targets;

@@ -48,7 +48,7 @@ struct MergeState {
   Input input_;
   Comparator comparator_;
   MergeOptions options_;
-  // May be `nullptr`, in which case the merge cannot be cancelled.
+  // Never `nullptr`, see the constructor below.
   ad_utility::SharedCancellationHandle cancellationHandle_;
   // The boundaries of the chunks, which partition the whole range of elements.
   // Never empty, see `computeChunkBoundaries`.
@@ -64,6 +64,7 @@ struct MergeState {
         options_{std::move(options)},
         cancellationHandle_{std::move(cancellationHandle)},
         chunkBoundaries_{std::move(chunkBoundaries)} {
+    AD_CONTRACT_CHECK(cancellationHandle_ != nullptr);
     AD_CONTRACT_CHECK(!chunkBoundaries_.empty());
   }
 };
@@ -174,9 +175,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
         heap_.pop_back();
       }
     }
-    if (state_->cancellationHandle_ != nullptr) {
-      state_->cancellationHandle_->throwIfCancelled();
-    }
+    state_->cancellationHandle_->throwIfCancelled();
     return block;
   }
 
@@ -239,7 +238,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
       }
       size_t blockIdx = cursor.nextBlockIdx_;
       ++cursor.nextBlockIdx_;
-      cursor.block_ = input.readBlock(cursor.runIdx_, blockIdx);
+      cursor.block_ = input.getBlock(cursor.runIdx_, blockIdx);
       cursor.it_ = ql::ranges::begin(cursor.block_);
       cursor.end_ = cursor.it_ + ql::ranges::size(cursor.block_);
       // Only the very first block of the chunk can contain elements that are

@@ -16,9 +16,11 @@
 #include <vector>
 
 #include "util/MemorySize/MemorySize.h"
+#include "util/ParallelBlockMergeTestHelpers.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
 using namespace ad_utility::parallelBlockMerge;
+using namespace parallelBlockMergeTestHelpers;
 
 namespace {
 // A minimal type that fulfills the `InputConcept`. It is only used to check
@@ -41,8 +43,8 @@ struct DummyInput {
                              [[maybe_unused]] size_t blockIdx) const {
     return element_;
   }
-  Block readBlock([[maybe_unused]] size_t runIdx,
-                  [[maybe_unused]] size_t blockIdx) const {
+  Block getBlock([[maybe_unused]] size_t runIdx,
+                 [[maybe_unused]] size_t blockIdx) const {
     return {};
   }
   Block makeEmptyBlock() const { return {}; }
@@ -55,11 +57,11 @@ struct DummyInput {
   Element element_ = 0;
 };
 
-// The same, but `readBlock` returns a reference instead of a value, which the
+// The same, but `getBlock` returns a reference instead of a value, which the
 // concept explicitly allows.
 struct DummyInputWithReferenceToBlock : public DummyInput {
-  const Block& readBlock([[maybe_unused]] size_t runIdx,
-                         [[maybe_unused]] size_t blockIdx) const {
+  const Block& getBlock([[maybe_unused]] size_t runIdx,
+                        [[maybe_unused]] size_t blockIdx) const {
     return block_;
   }
 
@@ -96,9 +98,9 @@ TEST(RunsInputPolicy, VectorInputMetadata) {
   EXPECT_EQ(input.firstElement(0, 1), 5);
   EXPECT_EQ(input.lastElement(0, 1), 7);
   EXPECT_EQ(input.lastElement(0, 2), 9);
-  EXPECT_THAT(input.readBlock(0, 0), ::testing::ElementsAre(1, 3));
-  EXPECT_THAT(input.readBlock(0, 2), ::testing::ElementsAre(9));
-  EXPECT_THAT(input.readBlock(1, 0), ::testing::ElementsAre(2, 4));
+  EXPECT_THAT(input.getBlock(0, 0), ::testing::ElementsAre(1, 3));
+  EXPECT_THAT(input.getBlock(0, 2), ::testing::ElementsAre(9));
+  EXPECT_THAT(input.getBlock(1, 0), ::testing::ElementsAre(2, 4));
   auto block = input.makeEmptyBlock();
   EXPECT_THAT(block, ::testing::IsEmpty());
   input.appendToBlock(block, 42);
@@ -126,15 +128,15 @@ TEST(RunsInputPolicy, VectorInputEdgeCases) {
 
 // _____________________________________________________________________________
 TEST(RunsInputPolicy, VectorInputReadBlockReturnsACopy) {
-  // `readBlock` deliberately hands out a copy, so that a chunk which moves the
+  // `getBlock` deliberately hands out a copy, so that a chunk which moves the
   // elements out of a block cannot affect another chunk that reads the very
   // same block.
   std::vector<std::vector<std::string>> runs{{"alphaalpha", "betabeta"}};
   auto input = makeVectorInput(runs, 2);
-  auto block = input.readBlock(0, 0);
+  auto block = input.getBlock(0, 0);
   for (auto& element : block) {
     [[maybe_unused]] std::string moved = std::move(element);
   }
-  EXPECT_THAT(input.readBlock(0, 0),
+  EXPECT_THAT(input.getBlock(0, 0),
               ::testing::ElementsAre("alphaalpha", "betabeta"));
 }
