@@ -1,6 +1,9 @@
 # Build directory
 build/
+build-*/
 cmake-build*
+olympics.nt
+_static*
 
 # End-to-End data
 e2e_data/*
