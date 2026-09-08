@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <fstream>
 #include <istream>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -99,8 +100,8 @@ struct Sample {
   std::optional<double> bytesReadPerSecond_;
   std::optional<double> bytesWrittenPerSecond_;
   std::optional<double> ioStallPercent_;
-  // id of the index rebuild running at this sample, empty (and not 0) when no
-  // rebuild in progress.
+  // The number of the index rebuild that was running when this row was
+  // sampled. It is empty, and not 0, when no rebuild was running.
   std::optional<uint64_t> rebuildId_;
 };
 
@@ -136,12 +137,40 @@ struct Readers {
   IoStallReader ioStallReader_ = ioStallSeconds;
 };
 
-// Returns the number of the index rebuild that is running, or nothing if none
-// is running. The server supplies this, because a rebuild is not something the
-// monitor can read from the operating system.
-using RebuildIdReader = absl::AnyInvocable<std::optional<uint64_t>()>;
-
 }  // namespace resource_monitor
+
+// Holds the number of the index rebuild that is running. The sampler reads it
+// once per tick and writes it to the `rebuild_id` column. The operating system
+// knows nothing about rebuilds, so a rebuild has to report itself here.
+//
+// Rebuilds are numbered from 1. The numbering starts over in every new server
+// process. The rebuild marks its start and end, and the sampler reads the
+// number from another thread. That is why both counters are atomic.
+//
+// This class only observes. Making sure that two rebuilds never run at the
+// same time is the job of the `Server`.
+class RebuildIdTracker {
+ public:
+  // Marks the start of a rebuild and gives it the next number.
+  void markStart() { currentId_.store(numRebuildsStarted_.fetch_add(1) + 1); }
+
+  // Marks the end of a rebuild. It does not matter how the rebuild ended.
+  void markEnd() { currentId_.store(0); }
+
+  // Returns the number of the running rebuild, or nothing if none is running.
+  [[nodiscard]] std::optional<uint64_t> currentId() const {
+    auto id = currentId_.load();
+    return id == 0 ? std::nullopt : std::optional(id);
+  }
+
+ private:
+  // Counts the rebuilds that have started so far. The next rebuild takes its
+  // number from here.
+  std::atomic<uint64_t> numRebuildsStarted_{0};
+
+  // The number of the rebuild that is running. It is 0 when none is running.
+  std::atomic<uint64_t> currentId_{0};
+};
 
 // Samples the RSS, CPU usage, and disk IO rate of this process, plus
 // system-wide IO stall on a background thread and appends one TSV row
@@ -170,16 +199,16 @@ class ResourceMonitor {
   void start(const ql::filesystem::path& path, Mode mode,
              std::chrono::milliseconds interval);
 
+  // Returns the tracker whose number the sampler writes to the `rebuild_id`
+  // column. The server takes this handle and marks its rebuilds on it. An
+  // index build marks nothing, so there the column stays empty.
+  std::shared_ptr<RebuildIdTracker> rebuildIdTracker() const;
+
   // Test-only: swaps the OS readers before `start`, for example a throwing
   // reader that exercises the sampler's error handling. The readers that a
   // test does not set keep the defaults from `Readers`, which are the real OS
   // readers, so no reader is ever empty.
   void setReadersForTesting(resource_monitor::Readers readers);
-
-  // Set where the sampler gets the number of the running index rebuild from.
-  // Must be called before `start`, since the sampling thread reads it. When it
-  // is never called (index builds), the `rebuild_id` column stays empty.
-  void setRebuildIdReader(resource_monitor::RebuildIdReader reader);
 
  private:
   // Body of the sampling thread.
@@ -189,9 +218,11 @@ class ResourceMonitor {
   // (i.e. joined) first, while the members it uses are still alive.
   std::ofstream stream_;
   resource_monitor::Readers readers_;
-  // Empty when nobody set one. The `rebuild_id` column then stays empty too.
-  resource_monitor::RebuildIdReader rebuildIdReader_;
-
+  // The sampler reads the rebuild number from here every tick, and the server
+  // writes to the same object. A `shared_ptr` keeps it alive no matter which of
+  // the two is destroyed first.
+  std::shared_ptr<RebuildIdTracker> rebuildIdTracker_ =
+      std::make_shared<RebuildIdTracker>();
   std::atomic<bool> started_{false};
   std::mutex mutex_;
   std::condition_variable stopCondition_;

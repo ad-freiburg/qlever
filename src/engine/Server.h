@@ -24,7 +24,6 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/RebuildTracker.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
@@ -51,6 +50,11 @@ CPP_concept QueryOrUpdate =
 // Forward declaration for testing.
 namespace serverTestHelpers {
 class ServerForTesting;
+}
+
+// Defined in `util/ResourceMonitor.h`, which only `Server.cpp` includes.
+namespace ad_utility {
+class RebuildIdTracker;
 }
 
 //! The HTTP Server used.
@@ -81,7 +85,7 @@ class Server {
       const qlever::EngineConfig& config, bool noAccessCheck = false,
       std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader =
           nullptr,
-      std::shared_ptr<ad_utility::RebuildTracker> rebuildTracker = nullptr);
+      std::shared_ptr<ad_utility::RebuildIdTracker> rebuildIdTracker = nullptr);
 
   virtual ~Server() = default;
 
@@ -114,6 +118,10 @@ class Server {
   /// Executor with a single thread that is used to run timers asynchronously.
   boost::asio::static_thread_pool timerExecutor_{1};
 
+  // Indicates if an index rebuild is currently in progress so that we prevent
+  // triggering this twice.
+  std::atomic_bool rebuildInProgress_{false};
+
   // If set, an index rebuild is triggered automatically after an update
   // whenever the strategy says so, see `triggerRebuildIfStrategySaysSo`. Set
   // via the `--rebuild-index-strategy` option of `qlever-server`.
@@ -129,10 +137,11 @@ class Server {
   // disabled (--enable-metrics not passed).
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
 
-  // Keeps only one rebuild running at a time and gives each one its number.
-  // Shared with the resource sampler in `ServerMain`, which reads the number
-  // for the `rebuild_id` column of the resource-usage log.
-  std::shared_ptr<ad_utility::RebuildTracker> rebuildTracker_;
+  // Holds the number of the running rebuild, which the resource sampler reads
+  // for the `rebuild_id` column. It only reports. Preventing a second rebuild
+  // is the job of `rebuildInProgress_` above. The constructor creates one if
+  // the caller passes none, so it is never null.
+  std::shared_ptr<ad_utility::RebuildIdTracker> rebuildIdTracker_;
 
   // Deregisters callbacks on destruction. Declared after `qlever_` so that it
   // is destroyed before `qlever_` which the callbacks access.
@@ -494,9 +503,9 @@ class Server {
       std::optional<std::string> rebuildPreviousIndexDir);
 
   // Like `rebuildIndex` above, but do nothing and return `std::nullopt` if
-  // another rebuild is currently in progress. The guard from `rebuildTracker_`
-  // is held for the duration of the rebuild. This is the common implementation
-  // behind the two ways of triggering a rebuild: the manual
+  // another rebuild is currently in progress (the `rebuildInProgress_` flag
+  // is held for the duration of the rebuild). This is the common
+  // implementation behind the two ways of triggering a rebuild: the manual
   // `cmd=rebuild-index` HTTP request and the automatic trigger below.
   Awaitable<std::optional<qlever::IndexSwapConfig>>
   rebuildIndexUnlessInProgress(

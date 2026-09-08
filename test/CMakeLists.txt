@@ -206,8 +206,6 @@ addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
 
 addLinkAndDiscoverTest(RebuildIndexStrategyTest qlever_util)
 
-addLinkAndDiscoverTest(RebuildTrackerTest qlever_util)
-
 addLinkAndDiscoverTest(KeepPreviousIndexDirsTest qlever)
 
 addLinkAndDiscoverTest(DeltaTriplesTest index)

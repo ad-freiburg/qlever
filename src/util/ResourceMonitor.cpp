@@ -19,6 +19,7 @@
 #include <array>
 #include <charconv>
 #include <fstream>
+#include <memory>
 #include <string_view>
 #include <type_traits>
 
@@ -343,20 +344,16 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
 }
 
 // _____________________________________________________________________________
+std::shared_ptr<RebuildIdTracker> ResourceMonitor::rebuildIdTracker() const {
+  return rebuildIdTracker_;
+}
+
+// _____________________________________________________________________________
 void ResourceMonitor::setReadersForTesting(resource_monitor::Readers readers) {
   AD_CONTRACT_CHECK(!started_,
                     "The readers must be swapped before `start` is called, "
                     "otherwise this would race the sampling thread.");
   readers_ = std::move(readers);
-}
-
-// _____________________________________________________________________________
-void ResourceMonitor::setRebuildIdReader(
-    resource_monitor::RebuildIdReader reader) {
-  AD_CONTRACT_CHECK(!started_,
-                    "The rebuild id reader must be set before `start` is "
-                    "called, otherwise this would race the sampling thread.");
-  rebuildIdReader_ = std::move(reader);
 }
 
 // _____________________________________________________________________________
@@ -415,7 +412,7 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     sample.bytesWrittenPerSecond_ =
         bytesWrittenTracker.update(numBytesWritten, elapsed);
     sample.ioStallPercent_ = ioStallPercent;
-    sample.rebuildId_ = rebuildIdReader_ ? rebuildIdReader_() : std::nullopt;
+    sample.rebuildId_ = rebuildIdTracker_->currentId();
     stream_ << resource_monitor::formatTsvRow(sample);
     stream_.flush();
     if (stream_.fail()) {

@@ -373,16 +373,12 @@ class FakeMetricsReader : public ad_utility::metrics::MetricsReader {
 TEST(ServerTest, metricsEndpoint) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
   auto makeServerWithMetrics =
-      [&qec](std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
-             std::shared_ptr<ad_utility::RebuildTracker> rebuildTracker =
-                 nullptr) {
+      [&qec](
+          std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader) {
         return ServerForTesting{
-            1,
-            "accessToken",
-            getDefaultConfigWithName(qec->getIndex().getOnDiskBase()),
-            false,
-            std::move(metricsReader),
-            std::move(rebuildTracker)};
+            1, "accessToken",
+            getDefaultConfigWithName(qec->getIndex().getOnDiskBase()), false,
+            std::move(metricsReader)};
       };
   auto expectMetrics = [](std::optional<std::string> accessToken,
                           ServerForTesting& server, const auto& responseMatcher,
@@ -498,18 +494,6 @@ TEST(ServerTest, metricsEndpoint) {
   ExpectMetricsChange(IsZero(qleverIndexRebuildInProgress),
                       QueryRequest("SELECT * WHERE { ?s ?p ?o } LIMIT 10"),
                       IsZero(qleverIndexRebuildInProgress));
-  // `qlever_index_rebuild_in_progress` reads 1 while a rebuild runs. Holding a
-  // guard is what a real rebuild does.
-  {
-    auto rebuildTracker = std::make_shared<ad_utility::RebuildTracker>();
-    auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true),
-                                        rebuildTracker);
-    expectMetrics("accessToken", server, StatusIs(http::status::ok),
-                  IsZero(qleverIndexRebuildInProgress));
-    auto runningRebuild = rebuildTracker->tryBegin();
-    expectMetrics("accessToken", server, StatusIs(http::status::ok),
-                  MetricIs(qleverIndexRebuildInProgress, "1"));
-  }
   ExpectMetricsChange(
       IsZero(qleverSparqlOperationErrorsTotal, syntaxError),
       QueryRequest("Foo"),

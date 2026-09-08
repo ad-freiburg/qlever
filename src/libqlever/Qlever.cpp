@@ -477,7 +477,7 @@ IndexSwapConfig Qlever::makeIndexRebuildConfig(
   //
   // NOTE: The non-atomic check-then-use of the default directory names inside
   // `makeIndexSwapConfig` is fine here, because rebuilds are serialized (see
-  // `Server::rebuildTracker_`).
+  // `Server::rebuildInProgress_`).
   IndexSwapNaming naming{"rebuild.", "previous.",
                          index.getImpl().dateOfIndexBuild(),
                          " or specify a directory explicitly via "

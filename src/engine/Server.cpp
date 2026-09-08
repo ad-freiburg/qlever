@@ -60,7 +60,7 @@ Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
     std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
-    std::shared_ptr<ad_utility::RebuildTracker> rebuildTracker)
+    std::shared_ptr<ad_utility::RebuildIdTracker> rebuildIdTracker)
     : qlever_(config),
       numThreads_(numThreads),
       port_(port),
@@ -70,9 +70,9 @@ Server::Server(
       rebuildIndexStrategy_(config.rebuildIndexStrategy_),
       keepPreviousIndexDirs_(config.keepPreviousIndexDirs_),
       metricsReader_(std::move(metricsReader)),
-      rebuildTracker_(rebuildTracker
-                          ? std::move(rebuildTracker)
-                          : std::make_shared<ad_utility::RebuildTracker>()) {
+      rebuildIdTracker_(
+          rebuildIdTracker ? std::move(rebuildIdTracker)
+                           : std::make_shared<ad_utility::RebuildIdTracker>()) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   initializeServerMetrics(config.memoryLimit_);
@@ -105,7 +105,7 @@ void Server::initializeServerMetrics(
       },
       [this]() -> int64_t { return cache().getMaxSize().getBytes(); },
       [this]() -> int64_t {
-        return static_cast<int64_t>(rebuildTracker_->poll().has_value());
+        return static_cast<int64_t>(rebuildInProgress_.load());
       },
       memoryLimit);
   metrics_->registerCallbacks();
@@ -1636,12 +1636,18 @@ Awaitable<std::optional<qlever::IndexSwapConfig>>
 Server::rebuildIndexUnlessInProgress(
     std::optional<std::string> rebuildTmpDir,
     std::optional<std::string> rebuildPreviousIndexDir) {
-  // The rebuild counts as running until this goes out of scope, which happens
-  // whether the rebuild succeeds, throws, or is cancelled.
-  auto runningRebuild = rebuildTracker_->tryBegin();
-  if (!runningRebuild.has_value()) {
+  if (rebuildInProgress_.exchange(true)) {
     co_return std::nullopt;
   }
+  rebuildIdTracker_->markStart();
+  // Clear the rebuild id and release `rebuildInProgress_` when this rebuild
+  // ends, no matter how it ends. The order matters: the next rebuild starts as
+  // soon as `rebuildInProgress_` is false and takes its own id, so a `markEnd`
+  // after that would erase the new id instead of this one.
+  absl::Cleanup cleanup{[this]() {
+    rebuildIdTracker_->markEnd();
+    rebuildInProgress_.store(false);
+  }};
   co_return co_await rebuildIndex(std::move(rebuildTmpDir),
                                   std::move(rebuildPreviousIndexDir));
 }
@@ -1666,7 +1672,7 @@ void Server::triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
   // The authoritative check is the guard in `rebuildIndexUnlessInProgress`,
   // which is shared with the `cmd=rebuild-index` HTTP request, so that a
   // manual and an automatic rebuild can never run concurrently.
-  if (rebuildTracker_->poll().has_value()) {
+  if (rebuildInProgress_.load()) {
     return;
   }
   AD_LOG_INFO << "Triggering an automatic index rebuild, the number of delta "
