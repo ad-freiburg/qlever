@@ -1006,9 +1006,11 @@ CompressedRelationReader::getDistinctCol0Ids(
   ColumnIndices additionalColumns =
       addGraphColumn ? ColumnIndices{ADDITIONAL_COLUMN_GRAPH_ID}
                      : ColumnIndices{};
-  // `BlockSelector` needs the graph filter of the scan, in particular its
-  // `canBlockBeSkipped`. Only the filter of the config is used, so the columns
-  // that it computes on the side don't matter here.
+  // Set up the same scan configuration that the actual scan below will use.
+  // Out of that configuration we only need the `graphFilter_`, which knows
+  // which blocks can be skipped entirely and which graphs are allowed; the
+  // columns that `getScanConfig` also computes are only relevant for the scan
+  // itself, which computes them again for its own blocks.
   auto scanConfig = getScanConfig(scanSpecAndBlocks.scanSpec_,
                                   additionalColumns, locatedTriplesPerBlock);
   auto [blocksToRead, fromMetadata] =
@@ -1032,15 +1034,14 @@ CompressedRelationReader::getDistinctCol0Ids(
   // requested) from both sources before appending it to the result.
   IdCursor fromMetadataCursor{
       std::move(fromMetadata),
-      addGraphColumn ? std::optional{ColumnIndex{1}} : std::nullopt};
+      graphColumnIfRequested(addGraphColumn, graphColumnInResult)};
   IdCursor fromBlocksCursor{
       [&scan]() { return scan.get(); },
-      addGraphColumn ? std::optional{graphColumnInBlock} : std::nullopt};
-  RequestedIds requestedIds{idFilter};
+      graphColumnIfRequested(addGraphColumn, graphColumnInBlock)};
+  RequestedIdsCursor requestedIds{idFilter};
 
   GraphSet graphs{allocator_};
-  ad_utility::VectorWithMemoryLimit<Id> sortedGraphs{allocator_};
-  IdTable result = makeResultTable(addGraphColumn, idFilter, allocator_);
+  ResultBuilder result{addGraphColumn, idFilter, allocator_};
   for (;;) {
     cancellationHandle->throwIfCancelled();
     auto id = smallerId(fromMetadataCursor.peek(), fromBlocksCursor.peek());
@@ -1051,19 +1052,34 @@ CompressedRelationReader::getDistinctCol0Ids(
     fromMetadataCursor.consumeId(id.value(), graphs);
     fromBlocksCursor.consumeId(id.value(), graphs);
     // Blocks that had to be read can contain IDs that weren't requested.
-    if (requestedIds.contains(id.value())) {
-      appendRowsForId(result, id.value(), graphs, sortedGraphs);
+    if (requestedIds.advanceTo(id.value())) {
+      result.addId(id.value(), graphs);
     }
-    if (result.numRows() >= chunkSize) {
-      co_yield std::move(result);
-      result = makeResultTable(addGraphColumn, idFilter, allocator_);
+    if (result.chunkIsFull()) {
+      co_yield result.extractChunk();
     }
   }
-  if (!result.empty()) {
-    co_yield std::move(result);
+  if (!result.chunkIsEmpty()) {
+    co_yield result.extractChunk();
   }
 }
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+// ____________________________________________________________________________
+bool CompressedRelationReader::columnValuesAreKnownFromMetadata(
+    const CompressedBlockMetadata& block, size_t numColumns,
+    const LocatedTriplesPerBlock& locatedTriples) {
+  if (block.containsInconsistentTriples(numColumns)) {
+    return false;
+  }
+  // Each of the delta triples can delete at most one of the block's triples, so
+  // if there are fewer of them than the block has rows, then at least one of
+  // its triples remains. Note that `numTriples` only returns an upper bound
+  // (which is on the safe side here), and that the block that purely consists
+  // of delta triples has `numRows_ == 0` and is thus handled correctly, too.
+  return locatedTriples.numTriples(block.blockIndex_).numDeleted_ <
+         block.numRows_;
+}
 
 // ____________________________________________________________________________
 bool CompressedRelationReader::contentsAreKnownFromMetadata(

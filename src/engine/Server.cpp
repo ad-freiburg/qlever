@@ -39,6 +39,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/QueryEventLog.h"
+#include "util/ResourceMonitor.h"
 #include "util/TimeTracer.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
@@ -58,7 +59,8 @@ using ad_utility::MediaType;
 Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
-    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader)
+    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
+    std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker)
     : qlever_(config),
       numThreads_(numThreads),
       port_(port),
@@ -67,7 +69,11 @@ Server::Server(
       queryThreadPool_{numThreads},
       rebuildIndexStrategy_(config.rebuildIndexStrategy_),
       keepPreviousIndexDirs_(config.keepPreviousIndexDirs_),
-      metricsReader_(std::move(metricsReader)) {
+      metricsReader_(std::move(metricsReader)),
+      indexRebuildIdTracker_(
+          indexRebuildIdTracker
+              ? std::move(indexRebuildIdTracker)
+              : std::make_shared<ad_utility::IndexRebuildIdTracker>()) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   initializeServerMetrics(config.memoryLimit_);
@@ -455,16 +461,32 @@ nlohmann::json Server::processDeleteMaterializedView(
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
 
-  // Snapshot again instead of reusing the snapshot taken at the beginning of
-  // `process()` (see `clear-delta-triples` above for the same pattern), so
-  // that we delete the view from the index that is currently being served
-  // and not from a stale one that a concurrent rebuild has swapped out in the
-  // meantime. Deleting from a stale manager is not unsafe (the rebuild called
-  // `MaterializedViewsManager::retireOnDiskFiles` on it, which makes
-  // `deleteView` throw), it would just needlessly fail.
-  indexAndViewsSnapshot()->materializedViewsManager_.deleteView(name);
+  // `Qlever::deleteMaterializedView` takes a fresh snapshot instead of reusing
+  // the one taken at the beginning of `process()` (see `clear-delta-triples`
+  // above for the same pattern), so that the view is deleted from the index
+  // that is currently being served and not from a stale one that a concurrent
+  // rebuild has swapped out in the meantime. Deleting from a stale manager is
+  // not unsafe (rebuild called `MaterializedViewsManager::retireOnDiskFiles` on
+  // it, which makes `deleteView` throw), it would just needlessly fail.
+  qlever().deleteMaterializedView(name);
 
   return json{{"materialized-view-deleted", name}};
+}
+
+// _____________________________________________________________________________
+nlohmann::json Server::processUnloadMaterializedView(
+    const ParamValueMap& parameters) const {
+  auto name =
+      qlever::http_api_helpers::getViewNameParameter(parameters, "Unloading");
+
+  // `Qlever::unloadMaterializedView` takes a fresh snapshot for the same reason
+  // as in `processDeleteMaterializedView` above (unloading from a stale
+  // manager would silently leave the view loaded in the served one). Report
+  // whether the view was actually loaded, so that a request with a wrong
+  // name does not look like a success.
+  bool wasLoaded = qlever().unloadMaterializedView(name);
+
+  return json{{"materialized-view-unloaded", name}, {"was-loaded", wasLoaded}};
 }
 
 // _____________________________________________________________________________
@@ -514,6 +536,7 @@ constexpr std::array commands = {
     CommandMeta{"load-materialized-view", "explicitly load materialized view",
                 true},
     CommandMeta{"delete-materialized-view", "delete materialized view", true},
+    CommandMeta{"unload-materialized-view", "unload materialized view", true},
 };
 
 // Throw a 403 `HttpError` if `accessTokenOk` is false; `actionName` names the
@@ -891,6 +914,11 @@ CPP_template_def(typename RequestT, typename SendT)(
     parsedHttpRequest.operation_ = None{};
   } else if (commandIs("delete-materialized-view")) {
     response = jsonResponse(processDeleteMaterializedView(parameters));
+    // Prevent regular query processing by removing the query from the
+    // request.
+    parsedHttpRequest.operation_ = None{};
+  } else if (commandIs("unload-materialized-view")) {
+    response = jsonResponse(processUnloadMaterializedView(parameters));
     // Prevent regular query processing by removing the query from the
     // request.
     parsedHttpRequest.operation_ = None{};
@@ -1634,7 +1662,15 @@ Server::rebuildIndexUnlessInProgress(
   if (rebuildInProgress_.exchange(true)) {
     co_return std::nullopt;
   }
-  absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
+  indexRebuildIdTracker_->markStart();
+  // Clear the ID and release `rebuildInProgress_` when this index rebuild
+  // ends, no matter how it ends. The order matters: the next rebuild might
+  // start immediately when `rebuildInProgress_` is set to false, in which case
+  // a later `markEnd` would clear that rebuild's ID instead of this one's.
+  absl::Cleanup cleanup{[this]() {
+    indexRebuildIdTracker_->markEnd();
+    rebuildInProgress_.store(false);
+  }};
   co_return co_await rebuildIndex(std::move(rebuildTmpDir),
                                   std::move(rebuildPreviousIndexDir));
 }
