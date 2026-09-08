@@ -19,6 +19,7 @@
 #include "backports/three_way_comparison.h"
 #include "global/ValueId.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "util/BitUtils.h"
 #include "util/EnumWithStrings.h"
 #include "util/Exception.h"
 
@@ -153,7 +154,7 @@ class GeoCellGrid {
     return index >> numPositionBits();
   }
   uint64_t positionOfIndex(uint64_t index) const {
-    return index & (maxNumWords() - 1);
+    return index & ad_utility::bitMaskForLowerBits(numPositionBits());
   }
 
   // For the rectangle given by the two corner points, compute closed,
