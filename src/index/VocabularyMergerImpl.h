@@ -108,10 +108,27 @@ auto VocabularyMerger::mergeVocabulary(
                         &blankNodeIriRegexes](detail::WordBatch batch) {
     wordBatchQueue_.push([this, batch = std::move(batch), &wordCallback,
                           &blankNodeIriRegexes]() mutable {
-      writeWordBatch(batch, wordCallback, blankNodeIriRegexes);
+      // An exception must not escape the thread of the queue, see
+      // `writerException_`. Once a batch has failed, the remaining batches
+      // are skipped, because their words could no longer be written
+      // consistently anyway.
+      if (writerFailed_) {
+        return;
+      }
+      try {
+        writeWordBatch(batch, wordCallback, blankNodeIriRegexes);
+      } catch (...) {
+        writerException_ = std::current_exception();
+        writerFailed_ = true;
+      }
     });
   };
   for (std::vector<QueueWord>& currentWords : mergedWords) {
+    // Stop merging as soon as the writing thread has failed, the exception is
+    // rethrown below.
+    if (writerFailed_) {
+      break;
+    }
     batchBuilder_.addMergedWords(std::move(currentWords), comparator,
                                  batchCallback);
   }
@@ -119,6 +136,14 @@ auto VocabularyMerger::mergeVocabulary(
   // the writing thread and wait until all of them have actually been written.
   batchBuilder_.finish(batchCallback);
   wordBatchQueue_.finish();
+  // Propagate an exception from the writing thread to the caller. NOTE: The
+  // queue has been joined, so reading `writerException_` here is safe. The
+  // internal state is not `clear()`ed on this path (the `IdMapWriter`s are
+  // finished by their destructors, which do not throw), so that a failure
+  // of that cleanup cannot hide the original exception.
+  if (writerException_) {
+    std::rethrow_exception(writerException_);
+  }
 
   AD_LOG_INFO << progressBar_.getFinalProgressString() << std::flush;
 

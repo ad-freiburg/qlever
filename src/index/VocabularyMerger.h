@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
+#include <atomic>
+#include <exception>
 #include <memory>
 #include <string>
 #include <vector>
@@ -93,6 +95,15 @@ class VocabularyMerger {
   // The first stage of the merging, which runs on the thread that calls
   // `mergeVocabulary`.
   detail::WordBatchBuilder batchBuilder_;
+  // The first exception that `writeWordBatch` threw on the writing thread, if
+  // any, and a flag that says whether that has happened. An exception must not
+  // escape the thread of the `wordBatchQueue_` (that would terminate the
+  // process), so it is stored here and rethrown by `mergeVocabulary` once the
+  // queue has been finished. The flag is checked by both threads, so that the
+  // merging stops early and the batches that are still queued are skipped;
+  // the `exception_ptr` itself is only read after the queue has been joined.
+  std::atomic<bool> writerFailed_{false};
+  std::exception_ptr writerException_;
   // The second stage of the merging. NOTE: The queue has exactly one worker
   // thread, so the batches are written in exactly the order in which the
   // `batchBuilder_` creates them, and the state that `writeWordBatch` touches
@@ -140,6 +151,9 @@ class VocabularyMerger {
   // variables.
   void clear() {
     metaData_ = VocabularyMetaData{};
+    batchBuilder_ = detail::WordBatchBuilder{};
+    writerFailed_ = false;
+    writerException_ = nullptr;
     // NOTE: The destructor of an `IdMapWriter` also finishes it, but only
     // an explicit `finish()` can propagate errors as exceptions.
     for (auto& idMapWriter : idMapWriters_) {

@@ -526,3 +526,39 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
       getIdMapFromFile(absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, 1)),
       ::testing::ElementsAre(IdMapEntry{L(0), V(numWords - 1)}));
 }
+// _____________________________________________________________________________
+// An exception that is thrown while a batch is written (here by the word
+// callback, in practice e.g. by a full disk) happens on the writing thread. It
+// must be propagated to the caller of `mergeVocabulary` and must not terminate
+// the process, and the batches that are still queued must not be written.
+TEST(MergeVocabulary, exceptionFromWritingThreadIsPropagated) {
+  // More words than fit into a single batch (see
+  // `VOCAB_MERGER_WORD_BATCH_SIZE`), so that there is a second batch that
+  // has to be skipped after the first one has failed.
+  static constexpr size_t numWords = 120'000;
+  std::string basePath = absl::StrCat(gtestCurrentTestName(), "-");
+  std::vector<std::string> filenames{
+      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0),
+      absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, 0)};
+  absl::Cleanup cleanup = [&filenames] {
+    for (const auto& filename : filenames) {
+      ad_utility::deleteFile(filename, false);
+    }
+  };
+  std::vector<std::string> words;
+  for (size_t i = 0; i < numWords; ++i) {
+    words.push_back(absl::StrFormat("\"word%08d\"", i));
+  }
+  writePartialVocabularyFile(filenames.at(0), words);
+
+  size_t numCalls = 0;
+  auto wordCallback = [&numCalls](std::string_view, bool) -> uint64_t {
+    ++numCalls;
+    throw std::runtime_error{"The vocabulary could not be written"};
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      mergeVocabulary(basePath, {"0"}, std::less{}, wordCallback, 1_GB),
+      ::testing::HasSubstr("could not be written"), std::runtime_error);
+  // The first word of the first batch threw, and the second batch was skipped.
+  EXPECT_EQ(numCalls, 1u);
+}
