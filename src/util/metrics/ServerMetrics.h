@@ -16,7 +16,7 @@
 
 #include <memory>
 
-#include "index/DeltaTriples.h"
+#include "engine/UpdateMetadata.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Owns all OTEL instruments and deregisters observable callbacks on
