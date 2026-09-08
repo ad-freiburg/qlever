@@ -317,20 +317,8 @@ class SplitVocabulary {
                    .positionOfWord(word);
     if (!pos.has_value()) {
       // The word is larger than all words of its vocabulary, so return its
-      // past-the-end index. For a `GeoVocabulary` with a geo cell grid this
-      // is not simply the size (see `GeoVocabulary::endIndex`).
-      auto end = addMarker(
-          std::visit(
-              [](auto& v) -> uint64_t {
-                using T = std::decay_t<decltype(v)>;
-                if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
-                  return v.endIndex();
-                } else {
-                  return v.size();
-                }
-              },
-              underlying_[marker]),
-          marker);
+      // past-the-end index.
+      auto end = addMarker(endIndexOfUnderlying(marker), marker);
       return {end, end};
     }
     return pos.value();
@@ -388,6 +376,22 @@ class SplitVocabulary {
           vocab);
     }
     return result;
+  }
+
+  // The past-the-end index of the underlying vocabulary with the given
+  // `marker`. For a `GeoVocabulary` with a geo cell grid this is not simply
+  // the size (see `GeoVocabulary::endIndex`).
+  uint64_t endIndexOfUnderlying(uint8_t marker) const {
+    return std::visit(
+        [](const auto& v) -> uint64_t {
+          using T = std::decay_t<decltype(v)>;
+          if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+            return v.endIndex();
+          } else {
+            return v.size();
+          }
+        },
+        underlying_[marker]);
   }
 
   // This word writer writes words to different vocabularies depending on the
