@@ -50,9 +50,21 @@ static_assert(sizeof(LocalIdxToBatchMapping) == 16,
 
 // The value that is stored in `LocalIdxToBatchMapping::indexOfWordInBatch_` as
 // long as the index of the word within its batch is not yet known (see
-// `WordBatchBuilder::commitPendingWord`). Deliberately not `0`, such that a
-// mapping for which that index was never filled in is easy to spot.
-inline constexpr uint32_t indexOfWordInBatchDummy = 424345;
+// `WordBatchBuilder::commitPendingWord`). Deliberately a bogus bit pattern
+// with the highest bit set (and in particular not `0`), such that a mapping
+// for which that index was never filled in is easy to spot.
+inline constexpr uint32_t indexOfWordInBatchDummy = 0xDEADBEEF;
+
+// The maximal number of distinct words in a single batch. Because of this
+// limit, every actual `indexOfWordInBatch_` is smaller than the
+// `indexOfWordInBatchDummy` above (which has its highest bit set), so the
+// dummy can never be confused with an actual index. NOTE: The limit is checked
+// in `WordBatchBuilder::commitPendingWord`, and it is far larger than the
+// batch sizes that are used in practice (see `VOCAB_MERGER_WORD_BATCH_SIZE`).
+inline constexpr uint32_t maxNumUniqueWordsPerBatch = uint32_t{1} << 31;
+static_assert(maxNumUniqueWordsPerBatch <= indexOfWordInBatchDummy,
+              "The dummy has to be an upper bound for the actual indices of "
+              "the words within a batch, see the comment above");
 
 // All the `LocalIdxToBatchMapping`s for a single batch of merged words. NOTE:
 // We deliberately do not use a plain vector with `push_back`, but a plain
@@ -92,6 +104,25 @@ struct WordBatch {
   // (because of the short string optimization) would invalidate a
   // `string_view` into a plain `std::string` member.
   std::unique_ptr<std::string> carriedOverWord_;
+
+  // Create an empty batch, with the buffers for `numWordsPerBatch` merged
+  // words already allocated.
+  explicit WordBatch(size_t numWordsPerBatch) {
+    // The mappings are stored in a vector with a `default_init_allocator`, so
+    // this `resize` is a plain allocation that doesn't touch the memory.
+    localIdxMappings_.mappings_.resize(numWordsPerBatch);
+    // There is exactly one index mapping per merged word, and the number of
+    // distinct words is at most the number of merged words, so this is an
+    // upper bound for all but the rare batch that slightly overshoots the
+    // `numWordsPerBatch` (a batch is only handed on once a complete buffer of
+    // merged words has been added to it).
+    uniqueWords_.reserve(numWordsPerBatch);
+  }
+
+  // A batch is empty as long as no index mapping has been added to it. NOTE:
+  // There is exactly one index mapping per merged word, so an empty batch also
+  // has no `uniqueWords_`.
+  bool empty() const { return localIdxMappings_.numMappings_ == 0; }
 };
 
 // Concept for a callback that consumes a complete `WordBatch`.

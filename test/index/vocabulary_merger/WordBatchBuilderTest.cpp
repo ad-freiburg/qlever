@@ -172,7 +172,7 @@ TEST(WordBatchBuilder, externalizationAcrossBatchBoundary) {
   // Destroy the merged words of the first batch, exactly as the pipeline does
   // once that batch has been written. The held-back word must survive this,
   // because the second batch owns its own copy of it.
-  batches[0] = WordBatch{};
+  batches[0] = WordBatch{0};
 
   // The word was externalized, although its first occurrence (which arrived
   // before the batch boundary) was not marked as external.

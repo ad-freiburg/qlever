@@ -5,7 +5,9 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 
+#include <cstdint>
 #include <future>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -76,6 +78,12 @@ auto VocabularyMerger::mergeVocabulary(
   };
   std::vector<decltype(makeWordRangeFromFile(0))> generators;
   generators.reserve(partialVocabularySuffixes.size());
+  // The index of the partial vocabulary that a merged word comes from is
+  // stored in 32 bits (see `detail::LocalIdxToBatchMapping`). NOTE: This check
+  // is done here (and not per merged word, which would be on the hot path of
+  // the merging), because `partialFileId_` is always one of the indices below.
+  AD_CORRECTNESS_CHECK(partialVocabularySuffixes.size() <=
+                       std::numeric_limits<uint32_t>::max());
 
   for (std::size_t i :
        ad_utility::integerRange(partialVocabularySuffixes.size())) {

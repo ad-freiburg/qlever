@@ -246,6 +246,11 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 
 // _____________________________________________________________________________
 TEST(MergeVocabulary, mergeVocabularyAssertion) {
+  // The violated order is only detected if the expensive checks are enabled
+  // (see `WordBatchBuilder::addMergedWords`).
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP();
+  }
   auto callback = [](const auto&, bool) { return uint64_t{0}; };
 
   std::string basePath = gtestCurrentTestName();
