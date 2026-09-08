@@ -401,8 +401,9 @@ class Operation {
     return getExecutionContext()->getAllocator();
   }
 
-  // Create a `shared_ptr` whose object is allocated using the memory limited
-  // allocator of this query (see `util/AllocateShared.h`).
+  // define a `makeShared` member function that has the same interface as
+  // `std::make_shared`, but allocates via the `allocator()` (see
+  // `util/AllocateShared.h`).
   DEFINE_MAKE_SHARED_MEMBER(allocator())
 
   // If the result of this `Operation` is sorted (either because this

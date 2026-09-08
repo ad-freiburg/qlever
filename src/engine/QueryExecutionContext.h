@@ -160,8 +160,9 @@ class QueryExecutionContext
     return _allocator;
   }
 
-  // Create a `shared_ptr` whose object is allocated using the memory limited
-  // allocator of this query (see `util/AllocateShared.h`).
+  // define a `makeShared` member function that has the same interface as
+  // `std::make_shared`, but allocates via the `getAllocator()` (see
+  // `util/AllocateShared.h`).
   DEFINE_MAKE_SHARED_MEMBER(getAllocator())
 
   // Serialize the given `runtimeInformation` to a JSON string and send it

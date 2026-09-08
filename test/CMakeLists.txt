@@ -278,6 +278,8 @@ addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
 
 addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
 
+addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
+
 addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)

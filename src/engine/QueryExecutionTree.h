@@ -335,8 +335,9 @@ class QueryExecutionTree {
     }
   };
 
-  // Create a `shared_ptr` whose object is allocated using the memory limited
-  // allocator of this query (see `util/AllocateShared.h`).
+  // define a `makeShared` member function that has the same interface as
+  // `std::make_shared`, but allocates via the `qec_->getAllocator()` (see
+  // `util/AllocateShared.h`).
   DEFINE_MAKE_SHARED_MEMBER(qec_->getAllocator())
 
   std::shared_ptr<QueryExecutionTree> clone() const {
