@@ -254,10 +254,11 @@ class Vocabulary {
 
   // Set the geo cell grid of the geo vocabulary (see `GeoVocabulary`), which
   // must happen before the vocabulary is opened. No-op unless the underlying
-  // vocabulary is a `PolymorphicVocabulary` holding a `SplitVocabulary` with
-  // a `GeoVocabulary`.
+  // vocabulary is a `SplitVocabulary` (or a `PolymorphicVocabulary` holding
+  // one) with a `GeoVocabulary`.
   void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
-    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary> ||
+                  isSplitVocabulary<UnderlyingVocabulary>) {
       vocabulary_.getUnderlyingVocabulary().setGeoCellGrid(std::move(grid));
     }
   }
@@ -265,7 +266,8 @@ class Vocabulary {
   // The geo cell grid of the geo vocabulary, or `std::nullopt` if there is
   // none.
   std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
-    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary> ||
+                  isSplitVocabulary<UnderlyingVocabulary>) {
       return vocabulary_.getUnderlyingVocabulary().getGeoCellGrid();
     } else {
       return std::nullopt;
