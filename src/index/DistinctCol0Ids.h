@@ -19,6 +19,7 @@
 #include <optional>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
@@ -35,15 +36,31 @@ namespace distinctCol0Ids {
 
 using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
 
-// The number of rows after which `getDistinctCol0Ids` yields a new `IdTable`.
-// This is only an upper bound to keep the memory usage bounded, the sizes of
-// the yielded tables don't matter otherwise.
-constexpr size_t chunkSize = 100'000;
+// The column that holds the IDs, both in the result and in the tables from
+// which the result is computed.
+constexpr ColumnIndex idColumn = 0;
+
+// The index of the graph column in the result (and in the IDs that are known
+// from the block metadata), if graph IDs were requested.
+constexpr ColumnIndex graphColumnInResult = 1;
 
 // The index of the graph column in the blocks that `getDistinctCol0Ids` reads.
 // The blocks of a full scan always consist of the three triple columns,
 // followed by the graph column (if it was requested).
 constexpr ColumnIndex graphColumnInBlock = 3;
+
+// The number of columns of the result: the IDs, plus the graph IDs if they were
+// requested.
+constexpr size_t numResultColumns(bool addGraphColumn) {
+  return addGraphColumn ? graphColumnInResult + 1 : idColumn + 1;
+}
+
+// The given `graphColumn`, or `std::nullopt` if no graph IDs were requested.
+// Used to set up the `IdCursor`s below.
+constexpr std::optional<ColumnIndex> graphColumnIfRequested(
+    bool addGraphColumn, ColumnIndex graphColumn) {
+  return addGraphColumn ? std::optional{graphColumn} : std::nullopt;
+}
 
 // The classification of the blocks of a full scan by `BlockSelector` below.
 struct SelectedBlocks {
@@ -94,12 +111,15 @@ class BlockSelector {
       absl::FunctionRef<void(const CompressedBlockMetadata&)> action) const;
 };
 
-// Hash and compare graph IDs by their bit representation, which is much
-// cheaper than hashing and comparing `Id`s (whose comparison may have to look
-// into the local vocabulary). The graph IDs of a properly normalized index all
-// have the same datatype, so their bitwise equality coincides with their actual
-// equality. Note that this only affects the deduplication, not the order: the
-// graphs are sorted as `Id`s.
+// Hash and compare graph IDs by their bit representation, which is much cheaper
+// than hashing and comparing `Id`s (whose comparison may have to look into the
+// local vocabulary). This is correct because all the graph IDs that we see come
+// directly from an index (or from the local vocabulary of an update, which is
+// normalized against that index), and in such a normalized setting two
+// different bit representations always denote two different values: an entry
+// that is representable by the vocabulary of the index never appears as a local
+// vocabulary entry, and vice versa. Note that this only affects the
+// deduplication, not the order: the graphs are sorted as `Id`s.
 struct HashGraphIdByBits {
   size_t operator()(Id id) const { return absl::Hash<Id::T>{}(id.getBits()); }
 };
@@ -113,7 +133,7 @@ using GraphSet =
 
 // A cursor over one of the two ascending sources of IDs that
 // `getDistinctCol0Ids` merges. The tables are fetched one at a time by the
-// `nextTable` function, their first column holds the IDs. If `graphColumn` is
+// `getNextTable` function, their `idColumn` holds the IDs. If `graphColumn` is
 // set, that column holds the graph IDs.
 class IdCursor {
  public:
@@ -123,14 +143,14 @@ class IdCursor {
   using TableSource = std::function<std::optional<IdTable>()>;
 
  private:
-  TableSource nextTable_;
+  TableSource getNextTable_;
   std::optional<ColumnIndex> graphColumn_;
-  std::optional<IdTable> table_ = std::nullopt;
-  size_t row_ = 0;
+  std::optional<IdTable> currentTable_ = std::nullopt;
+  size_t rowIdx_ = 0;
   bool isExhausted_ = false;
 
  public:
-  IdCursor(TableSource nextTable, std::optional<ColumnIndex> graphColumn);
+  IdCursor(TableSource getNextTable, std::optional<ColumnIndex> graphColumn);
 
   // A cursor over the rows of a single `table`.
   IdCursor(IdTable table, std::optional<ColumnIndex> graphColumn);
@@ -145,34 +165,65 @@ class IdCursor {
 };
 
 // The IDs that the caller of `getDistinctCol0Ids` requested (all of them if
-// `ids` is `std::nullopt`). The IDs have to be passed to `contains` in
-// ascending order, which makes it run in amortized constant time.
-class RequestedIds {
-  const std::optional<std::vector<Id>>& ids_;
-  size_t index_ = 0;
+// `ids` is `std::nullopt`). The IDs have to be passed to `advanceTo` in
+// ascending order.
+class RequestedIdsCursor {
+  // The requested IDs that haven't been passed to `advanceTo` yet.
+  std::optional<ql::span<const Id>> remainingIds_;
 
  public:
-  explicit RequestedIds(const std::optional<std::vector<Id>>& ids);
+  explicit RequestedIdsCursor(const std::optional<std::vector<Id>>& ids);
 
-  bool contains(Id id);
+  // Advance the cursor to `id` and return whether `id` is one of the requested
+  // IDs. All the requested IDs that are smaller than `id` are consumed in the
+  // process, so subsequent calls must pass ascending `id`s.
+  bool advanceTo(Id id);
 };
 
 // The smaller of the two IDs, or `std::nullopt` if both of them are
 // `std::nullopt`.
 std::optional<Id> smallerId(std::optional<Id> first, std::optional<Id> second);
 
-// Create an empty table for the result of `getDistinctCol0Ids`, with enough
-// space reserved for one chunk (or for fewer rows if only few IDs were
-// requested).
-IdTable makeResultTable(bool addGraphColumn,
-                        const std::optional<std::vector<Id>>& idFilter,
-                        const CompressedRelationReader::Allocator& allocator);
+// Collects the rows of the result of `getDistinctCol0Ids` and hands them out in
+// chunks of bounded size.
+class ResultBuilder {
+  // The number of rows after which a chunk is handed out. This is a soft bound
+  // that only serves to keep the memory usage of a single chunk bounded: all
+  // the rows of a single ID always end up in the same chunk, so a chunk may
+  // exceed this size by the number of graphs of one ID. The sizes of the chunks
+  // don't matter otherwise.
+  static constexpr size_t chunkSize = 100'000;
 
-// Append the rows for a single distinct `id` to `result`. If `result` has a
-// graph column, one row per graph ID is appended, else a single row.
-// `sortedGraphs` is a scratch buffer that is reused across the `col0Id`s.
-void appendRowsForId(IdTable& result, Id id, const GraphSet& graphs,
-                     ad_utility::VectorWithMemoryLimit<Id>& sortedGraphs);
+  CompressedRelationReader::Allocator allocator_;
+  bool addGraphColumn_;
+  size_t numRowsToReserve_;
+  IdTable currentChunk_;
+  // Scratch space for the sorted graph IDs of a single ID. This is a member and
+  // not a local variable of `addId` only to avoid an allocation for each of the
+  // IDs; neither its contents on entry nor the contents that it is left with
+  // are of any interest.
+  ad_utility::VectorWithMemoryLimit<Id> sortedGraphs_;
+
+ public:
+  ResultBuilder(bool addGraphColumn,
+                const std::optional<std::vector<Id>>& idFilter,
+                const CompressedRelationReader::Allocator& allocator);
+
+  // Append the rows for a single distinct `id`. If graph IDs were requested,
+  // one row per graph ID is appended (in ascending order of the graph IDs),
+  // else a single row.
+  void addId(Id id, const GraphSet& graphs);
+
+  // Return true iff the current chunk has reached `chunkSize` rows and should
+  // be handed out via `extractChunk`.
+  bool chunkIsFull() const;
+
+  // Return true iff no rows have been added to the current chunk.
+  bool chunkIsEmpty() const;
+
+  // Hand out the current chunk and start a new one.
+  IdTable extractChunk();
+};
 
 }  // namespace distinctCol0Ids
 

@@ -868,9 +868,9 @@ class CompressedRelationReader {
   // requested IDs are then not read at all.
   //
   // Blocks whose contribution can already be determined from their metadata
-  // alone (which is the case for all blocks that only contain a single
-  // `col0Id`) are never read, which makes this much cheaper than a full scan
-  // followed by a `DISTINCT`.
+  // alone (which is the case for almost all blocks that only contain a single
+  // `col0Id`, see `columnValuesAreKnownFromMetadata`) are never read, which
+  // makes this much cheaper than a full scan followed by a `DISTINCT`.
   //
   // The `LazyScanMetadata` of the returned generator is that of the inner scan
   // over the blocks that actually had to be read, with `numBlocksAll_` set to
@@ -887,12 +887,31 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 #endif
 
-  // Return true iff the contents of the given block, restricted to its first
-  // `numColumns` columns, are already known from its metadata alone. This
-  // requires that all the triples of the block agree on those columns (which
-  // the metadata knows because it stores the first and the last triple), and
-  // that there are no delta triples for the block, as those might have deleted
-  // some of its triples or added new ones.
+  // Return true iff the values of the first `numColumns` columns of all the
+  // triples of the given block are already known from its metadata alone,
+  // which is the case iff
+  // 1. All the triples of the block agree on those columns. The metadata knows
+  //    this because it stores the first and the last triple of the block,
+  //    including the delta triples that were inserted into it (see
+  //    `LocatedTriplesPerBlock::updateAugmentedMetadata`), so if those agree,
+  //    then so do all the triples in between.
+  // 2. The block still contains at least one triple. Delta triples might have
+  //    deleted all of them, but we can rule that out if there are fewer delta
+  //    triples for the block than it has rows, as each delta triple can delete
+  //    at most one of them.
+  //
+  // NOTE: The *number* of triples of the block is not known in this case, as
+  // delta triples may have deleted some of them (and inserted others). Use
+  // `contentsAreKnownFromMetadata` if you need that.
+  static bool columnValuesAreKnownFromMetadata(
+      const CompressedBlockMetadata& block, size_t numColumns,
+      const LocatedTriplesPerBlock& locatedTriples);
+
+  // Return true iff the complete contents of the given block, restricted to
+  // its first `numColumns` columns, are already known from its metadata alone,
+  // including the number of triples. In addition to
+  // `columnValuesAreKnownFromMetadata` this requires that there are no delta
+  // triples for the block at all.
   static bool contentsAreKnownFromMetadata(
       const CompressedBlockMetadata& block, size_t numColumns,
       const LocatedTriplesPerBlock& locatedTriples);

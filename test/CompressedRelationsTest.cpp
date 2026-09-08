@@ -1022,6 +1022,24 @@ DistinctCol0IdsResult getDistinctCol0Ids(
   return {std::move(result), range.details().numBlocksRead_,
           range.details().numBlocksAll_};
 }
+
+// Locate the given `triples` (which are all inserted if `insertOrDelete` is
+// true, and all deleted otherwise) in the given `blocks` and return the
+// resulting `LocatedTriplesPerBlock`, including the augmented block metadata.
+LocatedTriplesPerBlock makeLocatedTriplesPerBlock(
+    const std::vector<CompressedBlockMetadata>& blocks,
+    std::vector<IdTriple<>> triples, bool insertOrDelete) {
+  LocatedTriplesPerBlock locatedTriples;
+  locatedTriples.setOriginalMetadata(blocks);
+  if (!triples.empty()) {
+    locatedTriples.add(LocatedTriple::locateTriplesInPermutation(
+        triples, blocks, {0, 1, 2, 3}, insertOrDelete,
+        std::make_shared<ad_utility::CancellationHandle<>>()));
+    locatedTriples.consolidateAllBlocks();
+  }
+  locatedTriples.updateAugmentedMetadata();
+  return locatedTriples;
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -1223,6 +1241,117 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithUnknownGraphsInBlock) {
         *reader, scanSpecAndBlocks, false, std::nullopt, locatedTriples);
     checkThatTablesAreEqual(std::vector<RowInput>{{1}}, result);
     EXPECT_EQ(numBlocksRead, 1);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, getDistinctCol0IdsWithDeltaTriples) {
+  // Relation 1 is large enough to span several blocks, each of which contains
+  // nothing but its `col0Id`. The small relations 2 and 3 share a single block.
+  constexpr int numTriplesOfRelation1 = 20;
+  constexpr int graph = 103496581;
+  std::vector<RelationInput> inputs{{1, {}}, {2, {{0, 0}}}, {3, {{0, 0}}}};
+  for (int i = 0; i < numTriplesOfRelation1; ++i) {
+    inputs.at(0).col1And2_.push_back({0, i});
+  }
+  addGraphColumnIfNecessary(inputs);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] =
+      writeAndOpenRelations(inputs, filename, 64_B);
+  ASSERT_GT(blocks.size(), 2);
+  auto tripleOfRelation1 = [](int col2) {
+    return IdTriple<>{{V(1), V(0), V(col2), V(graph)}};
+  };
+
+  // Compute the distinct `col0Id`s in the presence of the given delta triples.
+  auto getIds = [&reader](const LocatedTriplesPerBlock& locatedTriples,
+                          bool addGraphColumn = false,
+                          ScanSpecification::GraphFilter graphFilter =
+                              ScanSpecification::GraphFilter::All()) {
+    CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
+        ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
+                          LocalVocab{}, std::move(graphFilter)},
+        getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata())};
+    return getDistinctCol0Ids(*reader, scanSpecAndBlocks, addGraphColumn,
+                              std::nullopt, locatedTriples);
+  };
+
+  // Without any delta triples, only the block of the small relations has to be
+  // read. This is the baseline for the comparisons below.
+  auto noDeltaTriples = makeLocatedTriplesPerBlock(blocks, {}, true);
+  auto baseline = getIds(noDeltaTriples);
+  checkThatTablesAreEqual(std::vector<RowInput>{{1}, {2}, {3}},
+                          baseline.idTable_);
+  EXPECT_LT(baseline.numBlocksRead_, baseline.numBlocksAll_);
+
+  // Deleting a single triple of relation 1 doesn't change that: the block that
+  // the deleted triple belongs to still contains nothing but the `col0Id` 1,
+  // and it has more rows than there are delta triples for it, so it cannot have
+  // become empty.
+  {
+    auto locatedTriples =
+        makeLocatedTriplesPerBlock(blocks, {tripleOfRelation1(5)}, false);
+    auto [result, numBlocksRead, numBlocksAll] = getIds(locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{1}, {2}, {3}}, result);
+    EXPECT_EQ(numBlocksRead, baseline.numBlocksRead_);
+  }
+
+  // If all the triples of relation 1 are deleted, then we can no longer rule
+  // out that its blocks have become empty, so they have to be read (and its
+  // `col0Id` then disappears from the result).
+  {
+    std::vector<IdTriple<>> triples;
+    for (int i = 0; i < numTriplesOfRelation1; ++i) {
+      triples.push_back(tripleOfRelation1(i));
+    }
+    auto locatedTriples =
+        makeLocatedTriplesPerBlock(blocks, std::move(triples), false);
+    auto [result, numBlocksRead, numBlocksAll] = getIds(locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{2}, {3}}, result);
+    EXPECT_GT(numBlocksRead, baseline.numBlocksRead_);
+  }
+
+  // An inserted triple with a new `col0Id` appears in the result. Its block
+  // then contains more than one `col0Id` (or consists of delta triples only)
+  // and hence has to be read.
+  {
+    auto locatedTriples = makeLocatedTriplesPerBlock(
+        blocks, {IdTriple<>{{V(4), V(0), V(0), V(graph)}}}, true);
+    auto [result, numBlocksRead, numBlocksAll] = getIds(locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{1}, {2}, {3}, {4}}, result);
+  }
+
+  // The graphs of a block with delta triples are not known from its metadata
+  // (the graph of a deleted triple is still stored there), so such a block has
+  // to be read if the graph column is requested ...
+  {
+    auto graphBaseline = getIds(noDeltaTriples, true);
+    checkThatTablesAreEqual(
+        std::vector<RowInput>{{1, graph}, {2, graph}, {3, graph}},
+        graphBaseline.idTable_);
+    auto locatedTriples =
+        makeLocatedTriplesPerBlock(blocks, {tripleOfRelation1(5)}, false);
+    auto [result, numBlocksRead, numBlocksAll] = getIds(locatedTriples, true);
+    checkThatTablesAreEqual(
+        std::vector<RowInput>{{1, graph}, {2, graph}, {3, graph}}, result);
+    EXPECT_GT(numBlocksRead, graphBaseline.numBlocksRead_);
+  }
+
+  // ... or if there is a graph filter that would otherwise be evaluated on the
+  // metadata alone.
+  {
+    auto whitelist = [] {
+      return ScanSpecification::GraphFilter::Whitelist({V(graph)});
+    };
+    auto filterBaseline = getIds(noDeltaTriples, false, whitelist());
+    checkThatTablesAreEqual(std::vector<RowInput>{{1}, {2}, {3}},
+                            filterBaseline.idTable_);
+    auto locatedTriples =
+        makeLocatedTriplesPerBlock(blocks, {tripleOfRelation1(5)}, false);
+    auto [result, numBlocksRead, numBlocksAll] =
+        getIds(locatedTriples, false, whitelist());
+    checkThatTablesAreEqual(std::vector<RowInput>{{1}, {2}, {3}}, result);
+    EXPECT_GT(numBlocksRead, filterBaseline.numBlocksRead_);
   }
 }
 
