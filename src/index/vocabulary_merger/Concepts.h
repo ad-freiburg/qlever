@@ -25,11 +25,11 @@ template <typename T>
 CPP_concept WordCallback =
     ad_utility::InvocableWithExactReturnType<T, uint64_t, std::string_view,
                                              bool>;
-// Concept for a callable that compares two `string_view`s with respective
-// `isExternal` flags.
+// Concept for a callable that compares two words (represented as
+// `string_view`s) according to the order of the merged vocabulary.
 template <typename T>
 CPP_concept WordComparator =
-    ::ranges::predicate<T, std::string_view, bool, std::string_view, bool>;
+    ::ranges::predicate<T, std::string_view, std::string_view>;
 }  // namespace ad_utility::vocabulary_merger
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_MERGER_CONCEPTS_H

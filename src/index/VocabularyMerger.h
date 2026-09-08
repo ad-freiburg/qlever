@@ -5,10 +5,10 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
+#include <atomic>
+#include <exception>
 #include <memory>
-#include <optional>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -22,9 +22,12 @@
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/QueueWord.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
+#include "index/vocabulary_merger/WordBatch.h"
+#include "index/vocabulary_merger/WordBatchBuilder.h"
 #include "util/HashMap.h"
 #include "util/ProgressBar.h"
 #include "util/Serializer/FileSerializer.h"
+#include "util/TaskQueue.h"
 #include "util/TypeTraits.h"
 
 using TripleVec =
@@ -34,7 +37,8 @@ using TripleVec =
 // it that are understandable (and testable) on their own live in
 // `src/index/vocabulary_merger/`, and all of them are made available by this
 // header: the `VocabularyMetaData` (the return type of `mergeVocabulary`), the
-// concepts for its callbacks, the `IdMap` types, and the `detail::QueueWord`.
+// concepts for its callbacks, the `IdMap` types, the `detail::QueueWord`, and
+// the first stage of the merging (the `detail::WordBatchBuilder`).
 namespace ad_utility::vocabulary_merger {
 
 // _______________________________________________________________
@@ -50,6 +54,20 @@ namespace ad_utility::vocabulary_merger {
 // compiled regexes; IRIs that are fully matched by any of them are treated as
 // blank nodes (see `TripleComponentWithIndex::isBlankNode`). The regexes are
 // compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
+//
+// The merging is split into two stages, which run on two threads that work
+// concurrently:
+//
+// 1. The thread that calls `mergeVocabulary` obtains the merged words in
+//    sorted order and eliminates the duplicates (a word typically occurs in
+//    many of the partial vocabularies). It collects the distinct words as well
+//    as the index mappings for the partial ID maps in batches (see
+//    `detail::WordBatchBuilder`) and hands each complete batch to the second
+//    thread.
+// 2. The thread of the `wordBatchQueue_` writes the distinct words of a batch
+//    to the vocabulary (via the `wordCallback`), which determines their global
+//    IDs, and then writes the index mappings of that batch to the partial ID
+//    maps (see `VocabularyMerger::writeWordBatch`).
 template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename,
                      const std::vector<std::string>& partialVocabularySuffixes,
@@ -68,15 +86,32 @@ class VocabularyMerger {
 
   // The result (mostly metadata) which we'll return.
   VocabularyMetaData metaData_;
-  std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
-  // Whether `lastTripleComponent_` is a blank node. Cached here so that
-  // `isBlankNode` (which may run a set of regexes) is evaluated only once per
-  // distinct word.
-  bool lastTripleComponentIsBlankNode_ = false;
+  ad_utility::ProgressBar progressBar_{metaData_.numWordsTotal(),
+                                       "Words merged: "};
   // The writers for the partial ID maps, one per partial vocabulary. Each of
   // them writes the mapping from the local indices of its partial vocabulary
   // to the global IDs.
   std::vector<IdMapWriter> idMapWriters_;
+  // The first stage of the merging, which runs on the thread that calls
+  // `mergeVocabulary`.
+  detail::WordBatchBuilder batchBuilder_;
+  // The first exception that `writeWordBatch` threw on the writing thread, if
+  // any, and a flag that says whether that has happened. An exception must not
+  // escape the thread of the `wordBatchQueue_` (that would terminate the
+  // process), so it is stored here and rethrown by `mergeVocabulary` once the
+  // queue has been finished. The flag is checked by both threads, so that the
+  // merging stops early and the batches that are still queued are skipped;
+  // the `exception_ptr` itself is only read after the queue has been joined.
+  std::atomic<bool> writerFailed_{false};
+  std::exception_ptr writerException_;
+  // The second stage of the merging. NOTE: The queue has exactly one worker
+  // thread, so the batches are written in exactly the order in which the
+  // `batchBuilder_` creates them, and the state that `writeWordBatch` touches
+  // requires no further synchronization. The queue is deliberately declared
+  // last, because its destructor blocks until all its pending tasks have been
+  // run, and those tasks access all the members above.
+  ad_utility::TaskQueue<false> wordBatchQueue_{
+      VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Writing the merged vocabulary"};
 
   // Friend declaration for the publicly available function.
   template <typename W, typename C>
@@ -103,26 +138,22 @@ class VocabularyMerger {
 
   using QueueWord = detail::QueueWord;
 
-  // Write the queue words in the buffer to their corresponding
-  // `idMapWriters_`.
-  // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
-  // across multiple calls).
-  // clang-format off
-    CPP_template(typename C, typename L)(
-      requires WordCallback<C> CPP_and ranges::predicate<
-          L, TripleComponentWithIndex, TripleComponentWithIndex>)
-      // clang-format on
-      void writeQueueWordsToIdMap(
-          std::vector<QueueWord>& buffer, C& wordCallback, const L& lessThan,
-          const ad_utility::RegexSet& blankNodeIriRegexes,
-          ad_utility::ProgressBar& progressBar);
+  // Write a single complete `batch`: its distinct words to the vocabulary (via
+  // the `wordCallback`), which determines their global IDs, and then its index
+  // mappings to the corresponding `idMapWriters_`.
+  //
+  // NOTE: This is called exclusively by the thread of the `wordBatchQueue_`.
+  CPP_template(typename C)(requires WordCallback<C>) void writeWordBatch(
+      const detail::WordBatch& batch, C& wordCallback,
+      const ad_utility::RegexSet& blankNodeIriRegexes);
 
   // Close all associated files and file-based vectors and reset all internal
   // variables.
   void clear() {
     metaData_ = VocabularyMetaData{};
-    lastTripleComponent_ = std::nullopt;
-    lastTripleComponentIsBlankNode_ = false;
+    batchBuilder_ = detail::WordBatchBuilder{};
+    writerFailed_ = false;
+    writerException_ = nullptr;
     // NOTE: The destructor of an `IdMapWriter` also finishes it, but only
     // an explicit `finish()` can propagate errors as exceptions.
     for (auto& idMapWriter : idMapWriters_) {
