@@ -18,8 +18,6 @@ namespace sparqlExpression::detail {
 
 // Common storage and metadata handling for expressions with a fixed number of
 // child expressions.
-// Common storage and metadata handling for expressions with a fixed number of
-// child expressions.
 template <size_t N>
 class NaryExpressionBase : public SparqlExpression {
  protected:
