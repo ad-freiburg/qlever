@@ -238,21 +238,22 @@ class TransitivePathImpl : public TransitivePathBase {
         start.isVariable() && graphVariable_ == start.getVariable();
     bool targetNodesAreBound = lhs_.isBoundVariable() && rhs_.isBoundVariable();
 
-    using OptionalPair = std::pair<std::optional<Id>, std::optional<Id>>;
-    using Result = ad_utility::InputRangeTypeErased<OptionalPair>;
-
-    auto targetExpandUndef = [&](auto& graphId) -> Result {
+    // Expand the `targetId` into a pair of `std::optional<Id>`s.
+    using OptionalIdPair = std::pair<std::optional<Id>, std::optional<Id>>;
+    using TargetNodeExpanded = ad_utility::InputRangeTypeErased<OptionalIdPair>;
+    auto targetExpandUndef = [&](auto& graphId) {
       if (targetNodesAreBound) {
-        return Result{TableColumnWithVocab::expandUndef(
-                          std::pair{targetId.value(), graphId}, edges,
-                          graphVariable_.has_value()) |
-                      ql::views::transform([](const std::pair<Id, Id>& pair) {
-                        return std::pair{std::make_optional(pair.first),
-                                         std::make_optional(pair.second)};
-                      })};
+        return TargetNodeExpanded{
+            TableColumnWithVocab::expandUndef(
+                std::pair{targetId.value(), graphId}, edges,
+                graphVariable_.has_value()) |
+            ql::views::transform([](const std::pair<Id, Id>& pair) {
+              return std::pair{std::make_optional(pair.first),
+                               std::make_optional(pair.second)};
+            })};
       }
-      return Result{
-          ql::views::single(OptionalPair{std::nullopt, std::nullopt})};
+      return TargetNodeExpanded{
+          ql::views::single(OptionalIdPair{targetId, std::nullopt})};
     };
 
     for (auto&& tableColumn : startNodes) {
@@ -277,35 +278,9 @@ class TransitivePathImpl : public TransitivePathBase {
           }
           edges.setGraphId(graphId);
 
-          if (targetNodesAreBound) {
-            for (const auto& [targetNode, _] : targetExpandUndef(graphId)) {
-              if (targetNodesAreBound) {
-                // Pick the appropriate graph search strategy and run it.
-                GraphSearchProblem<T> gsp(edges, startNode, targetNode,
-                                          minDist_, maxDist_);
-                GraphSearchExecutionParams ep(cancellationHandle_, allocator());
-                Set connectedNodes = runOptimalGraphSearch(gsp, ep);
-
-                if (!connectedNodes.empty()) {
-                  runtimeInfo().addDetail("Hull time", timer.msecs());
-                  timer.stop();
-                  co_yield NodeWithTargets{startNode,
-                                           graphId,
-                                           std::move(connectedNodes),
-                                           mergedVocab.clone(),
-                                           tableColumn.payload_,
-                                           static_cast<size_t>(currentRow)};
-                  timer.cont();
-                  // Reset vocab to prevent merging the same vocab over and over
-                  // again.
-                  if (yieldOnce) {
-                    mergedVocab = LocalVocab{};
-                  }
-                }
-              }
-            }
-          } else {  // Pick the appropriate graph search strategy and run it.
-            GraphSearchProblem<T> gsp(edges, startNode, targetId, minDist_,
+          for (const auto& [targetNode, _] : targetExpandUndef(graphId)) {
+            // Pick the appropriate graph search strategy and run it.
+            GraphSearchProblem<T> gsp(edges, startNode, targetNode, minDist_,
                                       maxDist_);
             GraphSearchExecutionParams ep(cancellationHandle_, allocator());
             Set connectedNodes = runOptimalGraphSearch(gsp, ep);
