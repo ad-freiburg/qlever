@@ -175,4 +175,15 @@ std::optional<uint64_t> determineSendLimit(const ParamValueMap& params,
   return detail::considerSendParameter(mediaType) ? sendLimit : std::nullopt;
 }
 
+// _____________________________________________________________________________
+std::string getViewNameParameter(const ParamValueMap& params,
+                                 std::string_view actionName) {
+  auto name = getParameterCheckAtMostOnce(params, "view-name");
+  AD_CONTRACT_CHECK(name.has_value(),
+                    absl::StrCat(actionName,
+                                 " a materialized view requires a name to be "
+                                 "set via the 'view-name' parameter"));
+  return std::move(name.value());
+}
+
 }  // namespace qlever::http_api_helpers

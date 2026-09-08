@@ -1,0 +1,1 @@
+{"columns":[{"always_defined":true,"name":"?s"},{"always_defined":true,"name":"?o"}],"query":"SELECT ?s ?o WHERE { ?s <http://example.org/label> ?o }","version":1}

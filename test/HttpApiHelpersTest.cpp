@@ -260,3 +260,25 @@ TEST(HttpApiHelpersTest, determineSendLimit) {
       determineSendLimit({{"send", {"1", "2"}}}, csv),
       ::testing::HasSubstr("Parameter \"send\" must be given exactly once."));
 }
+
+// _____________________________________________________________________________
+TEST(HttpApiHelpersTest, getViewNameParameter) {
+  EXPECT_EQ(getViewNameParameter({{"view-name", {"myView"}}}, "Writing"),
+            "myView");
+
+  // Missing `view-name` throws, with `actionName` in the message.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      getViewNameParameter({}, "Writing"),
+      ::testing::HasSubstr("Writing a materialized view requires a name to "
+                           "be set via the 'view-name' parameter"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      getViewNameParameter({}, "Deleting"),
+      ::testing::HasSubstr("Deleting a materialized view requires a name to "
+                           "be set via the 'view-name' parameter"));
+
+  // A duplicated `view-name` also throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      getViewNameParameter({{"view-name", {"a", "b"}}}, "Loading"),
+      ::testing::HasSubstr(
+          "Parameter \"view-name\" must be given exactly once."));
+}

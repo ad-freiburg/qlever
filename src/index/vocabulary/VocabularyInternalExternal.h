@@ -27,6 +27,11 @@ class VocabularyInternalExternal {
   VocabularyOnDisk externalVocab_;
 
  public:
+  // These suffixes are appended to the base filename in order to get the base
+  // filenames of the internal and the external vocabulary.
+  static constexpr std::string_view internalSuffix = ".internal";
+  static constexpr std::string_view externalSuffix = ".external";
+
   /// Construct an empty vocabulary
   VocabularyInternalExternal() = default;
 
@@ -133,6 +138,17 @@ class VocabularyInternalExternal {
     void finishImpl() override;
   };
 
+  // The files of the internal and the external vocabulary, which are stored
+  // under the base filename plus `internalSuffix`/`externalSuffix`.
+  static FileSuffixes fileSuffixes() {
+    FileSuffixes suffixes;
+    addFileSuffixesWithPrefix(suffixes, internalSuffix,
+                              VocabularyInMemoryBinSearch::fileSuffixes());
+    addFileSuffixesWithPrefix(suffixes, externalSuffix,
+                              VocabularyOnDisk::fileSuffixes());
+    return suffixes;
+  }
+
   // Return a `unique_ptr<WordWriter>` that writes to the given `filename`.
   static auto makeDiskWriterPtr(const std::string& filename) {
     return std::make_unique<WordWriter>(filename);
@@ -149,7 +165,7 @@ class VocabularyInternalExternal {
   }
   uint64_t iteratorToIndex(
       ql::ranges::iterator_t<VocabularyInMemoryBinSearch> it) const {
-    return internalVocab_.indices().at(it - internalVocab_.begin());
+    return internalVocab_.indexAtPosition(it - internalVocab_.begin());
   }
 
   // Generic serialization support.
