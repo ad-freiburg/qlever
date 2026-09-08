@@ -176,7 +176,8 @@ class RequestedIdsCursor {
 
   // Advance the cursor to `id` and return whether `id` is one of the requested
   // IDs. All the requested IDs that are smaller than `id` are consumed in the
-  // process, so subsequent calls must pass ascending `id`s.
+  // process, so each subsequent call has to pass an `id` that is not smaller
+  // than this one.
   bool advanceTo(Id id);
 };
 

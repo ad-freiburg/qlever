@@ -1245,6 +1245,75 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithUnknownGraphsInBlock) {
 }
 
 // _____________________________________________________________________________
+TEST(CompressedRelationReader, getDistinctCol0IdsWithSeveralGraphsInBlock) {
+  // A single relation whose two triples live in the same block, but in two
+  // different graphs. Both of them are stored in the block metadata.
+  std::vector<RelationInput> inputs{{1, {{0, 0, 10}, {1, 0, 11}}}};
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  // All the triples fit into a single block.
+  auto [blocks, metaData, reader] =
+      writeAndOpenRelations(inputs, filename, 1_kB);
+  ASSERT_EQ(blocks.size(), 1);
+  ASSERT_TRUE(blocks.at(0).graphInfo_.has_value());
+  LocatedTriplesPerBlock locatedTriples{};
+  locatedTriples.setOriginalMetadata(blocks);
+  locatedTriples.updateAugmentedMetadata();
+  auto makeScanSpecAndBlocks =
+      [&blocks](ScanSpecification::GraphFilter filter) {
+        return CompressedRelationReader::ScanSpecAndBlocks{
+            ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
+                              LocalVocab{}, std::move(filter)},
+            getBlockMetadataRangesfromVec(blocks)};
+      };
+
+  // Both graphs of the single `col0Id` are known from the metadata, so the
+  // block doesn't have to be read although the `col0Id` appears twice.
+  {
+    auto scanSpecAndBlocks =
+        makeScanSpecAndBlocks(ScanSpecification::GraphFilter::All());
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, true, std::nullopt, locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{1, 10}, {1, 11}}, result);
+    EXPECT_EQ(numBlocksRead, 0);
+  }
+
+  // The graph filter is also applied to the graphs that come from the metadata.
+  {
+    auto scanSpecAndBlocks = makeScanSpecAndBlocks(
+        ScanSpecification::GraphFilter::Whitelist({V(11)}));
+    auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+        *reader, scanSpecAndBlocks, true, std::nullopt, locatedTriples);
+    checkThatTablesAreEqual(std::vector<RowInput>{{1, 11}}, result);
+    EXPECT_EQ(numBlocksRead, 0);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, getDistinctCol0IdsWithExhaustedIdFilter) {
+  // Two small relations that share a single block.
+  std::vector<RelationInput> inputs{{1, {{0, 0}}}, {2, {{0, 0}}}};
+  addGraphColumnIfNecessary(inputs);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] =
+      writeAndOpenRelations(inputs, filename, 1_kB);
+  ASSERT_EQ(blocks.size(), 1);
+  LocatedTriplesPerBlock locatedTriples{};
+  locatedTriples.setOriginalMetadata(blocks);
+  locatedTriples.updateAugmentedMetadata();
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(blocks)};
+
+  // Only the smaller of the two `col0Id`s is requested. The block has to be
+  // read because it contains two `col0Id`s, and the larger one is then
+  // discarded although the requested IDs are already exhausted at that point.
+  auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+      *reader, scanSpecAndBlocks, false, std::vector{V(1)}, locatedTriples);
+  checkThatTablesAreEqual(std::vector<RowInput>{{1}}, result);
+  EXPECT_EQ(numBlocksRead, 1);
+}
+
+// _____________________________________________________________________________
 TEST(CompressedRelationReader, getDistinctCol0IdsWithDeltaTriples) {
   // Relation 1 is large enough to span several blocks, each of which contains
   // nothing but its `col0Id`. The small relations 2 and 3 share a single block.
