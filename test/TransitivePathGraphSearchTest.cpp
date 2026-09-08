@@ -259,7 +259,7 @@ TYPED_TEST(GraphSearchTest, graphSearchWithTargetWithLimit) {
 
 // ___________________________________________________________________________
 TEST(GraphSearchTestExtraTests, cancellationCheck) {
-  QLEVER_SKIP_IF_NO_TIMING_TEST;
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   // Test that the log message created in
   // `GraphSearchExecutionParams.checkCancellation()` when a cancellation is
   // received will be logged.

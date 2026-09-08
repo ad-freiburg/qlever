@@ -34,7 +34,7 @@ void testTime(const ad_utility::Timer& timer,
 }
 
 TEST(Timer, BasicWorkflow) {
-  QLEVER_SKIP_IF_NO_TIMING_TEST;
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   Timer t{Timer::Started};
   ASSERT_TRUE(t.isRunning());
   std::this_thread::sleep_for(10ms);
@@ -85,7 +85,7 @@ TEST(Timer, BasicWorkflow) {
 }
 
 TEST(Timer, InitiallyStopped) {
-  QLEVER_SKIP_IF_NO_TIMING_TEST;
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   Timer t{Timer::Stopped};
   ASSERT_FALSE(t.isRunning());
   ASSERT_EQ(t.value(), Timer::Duration::zero());
@@ -100,7 +100,7 @@ TEST(Timer, InitiallyStopped) {
 }
 
 TEST(TimeBlockAndLog, TimeBlockAndLog) {
-  QLEVER_SKIP_IF_NO_TIMING_TEST;
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   std::string s;
   {
     auto callback = [&s](std::chrono::milliseconds msecs,
@@ -115,7 +115,7 @@ TEST(TimeBlockAndLog, TimeBlockAndLog) {
 
 // ____________________________________________________________________________
 TEST(Timer, ThreadSafeTimerSingleThreaded) {
-  QLEVER_SKIP_IF_NO_TIMING_TEST;
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   ad_utility::timer::ThreadSafeTimer t;
   for (size_t i = 0; i < 10; ++i) {
     auto m = t.startMeasurement();
@@ -131,7 +131,7 @@ TEST(Timer, ThreadSafeTimerSingleThreaded) {
 
 // ____________________________________________________________________________
 TEST(Timer, ThreadSafeTimerMultiThreaded) {
-  QLEVER_SKIP_IF_NO_TIMING_TEST;
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   ad_utility::timer::ThreadSafeTimer t;
 
   auto f = [&t]() {

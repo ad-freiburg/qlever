@@ -31,7 +31,7 @@ static auto createWaitLambda(std::chrono::milliseconds waitDuration) {
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultEntry) {
-  QLEVER_SKIP_IF_NO_TIMING_TEST;
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
 
   // There's really no special cases.
   const std::string entryDescriptor{"entry"};
@@ -58,7 +58,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultEntry) {
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
-  QLEVER_SKIP_IF_NO_TIMING_TEST;
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   // The function should just wait 0.01 seconds.
   constexpr auto waitTime = 10ms;
   // There's really no special cases.
@@ -131,7 +131,7 @@ static void checkResultTableRow(const ResultTable& table,
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {
-  QLEVER_SKIP_IF_NO_TIMING_TEST;
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   // Looks, if the general form is correct.
   auto checkForm = [](const ResultTable& table, const std::string& name,
                       const std::string& descriptorForLog,

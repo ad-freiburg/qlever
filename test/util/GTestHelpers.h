@@ -129,10 +129,10 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 // timings, which are unreliable on some platforms (in particular macOS). Note
 // that the macro has to be used as a statement (with a trailing semicolon).
 #ifdef _QLEVER_NO_TIMING_TESTS
-#define QLEVER_SKIP_IF_NO_TIMING_TEST \
+#define QLEVER_SKIP_TEST_IF_FLAKY_TIMING \
   GTEST_SKIP() << "because `_QLEVER_NO_TIMING_TESTS` is defined"
 #else
-#define QLEVER_SKIP_IF_NO_TIMING_TEST static_assert(true)
+#define QLEVER_SKIP_TEST_IF_FLAKY_TIMING static_assert(true)
 #endif
 
 // _____________________________________________________________________________

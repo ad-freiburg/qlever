@@ -554,7 +554,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
 
 // _____________________________________________________________________________
 TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
-  QLEVER_SKIP_IF_NO_TIMING_TEST;
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});
   auto index = std::make_shared<Index>(makeTestIndex(
