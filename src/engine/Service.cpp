@@ -680,7 +680,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
           moveToCachingInputRange(std::move(resultPairs)));
       viewCollection.emplace_back(std::move(generator));
       sibling->precomputedResultBecauseSiblingOfService() =
-          std::make_shared<const Result>(
+          sibling->makeShared<const Result>(
               Result::LazyResult{
                   ad_utility::OwningViewNoConst{std::move(viewCollection)} |
                   ql::views::join},
@@ -693,9 +693,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // The `siblingResult` has been fully materialized, so it can now be
   // used in both sibling and service.
   Result::IdTableVocabPair siblingPair(
-      IdTable{sibling->getResultWidth(),
-              sibling->getExecutionContext()->getAllocator()},
-      LocalVocab{});
+      IdTable{sibling->getResultWidth(), sibling->allocator()}, LocalVocab{});
   siblingPair.idTable_.reserve(rows);
 
   for (auto& pair : resultPairs) {
@@ -704,8 +702,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }
 
   service->siblingInfo_.emplace(
-      std::make_shared<Result>(std::move(siblingPair),
-                               siblingResult->sortedBy()),
+      service->makeShared<Result>(std::move(siblingPair),
+                                  siblingResult->sortedBy()),
       sibling->getExternallyVisibleVariableColumns(), sibling->getCacheKey());
 
   sibling->precomputedResultBecauseSiblingOfService() =

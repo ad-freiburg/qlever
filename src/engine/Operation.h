@@ -18,6 +18,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "rdfTypes/Variable.h"
+#include "util/AllocateShared.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
 #include "util/CopyableSynchronization.h"
@@ -56,13 +57,29 @@ class Operation {
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using Milliseconds = std::chrono::milliseconds;
 
+ protected:
+  // The `QueryExecutionContext` for this particular element. No ownership.
+  //
+  // NOTE: This has to be the first data member of this class, because the
+  // default member initializers of the members below use it (via
+  // `makeShared`), and data members are initialized in declaration order.
+  QueryExecutionContext* _executionContext;
+
+  // Pointer to the cancellation handle of this operation.
+  SharedCancellationHandle cancellationHandle_ =
+      makeShared<SharedCancellationHandle::element_type>();
+
+  std::chrono::steady_clock::time_point deadline_ =
+      std::chrono::steady_clock::time_point::max();
+
+ private:
   // Holds a precomputed Result of this operation if it is the sibling of a
   // Service operation.
   std::optional<std::shared_ptr<const Result>>
       precomputedResultBecauseSiblingOfService_;
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
-      std::make_shared<RuntimeInformation>();
+      makeShared<RuntimeInformation>();
 
   // Pointer to the `RuntimeInformation` tree; used in `signalQueryUpdate()`,
   // and reset in `createRuntimeInfoFromEstimates()`.
@@ -119,7 +136,8 @@ class Operation {
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
 
-  // Constructor.
+  // Constructor. Note that `executionContext` must not be `nullptr`, as it is
+  // required by the default member initializers of the members above.
   explicit Operation(QueryExecutionContext* executionContext)
       : _executionContext(executionContext) {}
 
@@ -383,6 +401,10 @@ class Operation {
     return getExecutionContext()->getAllocator();
   }
 
+  // Create a `shared_ptr` whose object is allocated using the memory limited
+  // allocator of this query (see `util/AllocateShared.h`).
+  DEFINE_MAKE_SHARED_MEMBER(allocator())
+
   // If the result of this `Operation` is sorted (either because this
   // `Operation` enforces this sorting, or because it preserves the sorting of
   // its children), return the variable that is the primary sort key. Else
@@ -491,10 +513,6 @@ class Operation {
   }
 
  protected:
-  // The QueryExecutionContext for this particular element.
-  // No ownership.
-  QueryExecutionContext* _executionContext;
-
   /**
    * @brief Compute and return the columns on which the result will be sorted
    * @return The columns on which the result will be sorted.
@@ -515,13 +533,6 @@ class Operation {
   }
 
   std::chrono::milliseconds remainingTime() const;
-
-  /// Pointer to the cancellation handle of this operation.
-  SharedCancellationHandle cancellationHandle_ =
-      std::make_shared<SharedCancellationHandle::element_type>();
-
-  std::chrono::steady_clock::time_point deadline_ =
-      std::chrono::steady_clock::time_point::max();
 
   // Get the mapping from variables to column indices. This mapping may only be
   // used internally, because the actually visible variables might be different
