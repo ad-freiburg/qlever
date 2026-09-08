@@ -48,6 +48,12 @@ static_assert(sizeof(LocalIdxToBatchMapping) == 16,
               "The members of a `LocalIdxToBatchMapping` have to be declared "
               "such that no padding is required, see the comment above");
 
+// The value that is stored in `LocalIdxToBatchMapping::indexOfWordInBatch_` as
+// long as the index of the word within its batch is not yet known (see
+// `WordBatchBuilder::commitPendingWord`). Deliberately not `0`, such that a
+// mapping for which that index was never filled in is easy to spot.
+inline constexpr uint32_t indexOfWordInBatchDummy = 424345;
+
 // All the `LocalIdxToBatchMapping`s for a single batch of merged words. NOTE:
 // We deliberately do not use a plain vector with `push_back`, but a plain
 // array with a manual index for maximal performance (the `push_back` overhead
@@ -91,18 +97,6 @@ struct WordBatch {
 // Concept for a callback that consumes a complete `WordBatch`.
 template <typename T>
 CPP_concept WordBatchCallback = std::is_invocable_v<const T&, WordBatch>;
-
-// The number of index mappings (which is the same as the number of merged
-// words) that are collected in a single batch. A single buffer of merged
-// words only contains a rather small number of words (currently 100), which
-// would be much too fine-grained for a task queue.
-inline constexpr size_t wordBatchSize = 100'000;
-
-// The maximal number of batches that may be waiting in the queue of the
-// writing thread. NOTE: A batch keeps all the merged words alive that it was
-// created from (typically a few megabytes, see `wordBatchSize`), so this also
-// determines the additional memory footprint of the writing.
-inline constexpr size_t wordBatchQueueSize = 3;
 }  // namespace ad_utility::vocabulary_merger::detail
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_MERGER_WORDBATCH_H

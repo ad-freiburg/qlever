@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary_merger/Concepts.h"
 #include "index/vocabulary_merger/QueueWord.h"
 #include "index/vocabulary_merger/WordBatch.h"
@@ -61,6 +62,11 @@ class WordBatchBuilder {
   std::vector<LocalIdxToBatchMapping> pendingMappings_;
   // The batch that is currently being filled.
   WordBatch currentBatch_;
+  // The total size of the words that were merged into the `currentBatch_`
+  // (including the duplicates, as the batch keeps all of them alive). NOTE:
+  // This is deliberately a plain number of bytes and not an
+  // `ad_utility::MemorySize`, because it is updated once per merged word.
+  size_t currentBatchWordSizeInBytes_ = 0;
 
  public:
   WordBatchBuilder() { startNewBatch(); }
@@ -68,11 +74,13 @@ class WordBatchBuilder {
   // Eliminate the duplicates from a `buffer` of merged words and add the
   // resulting distinct words as well as one index mapping per merged word to
   // the current batch. The last distinct word and its mappings are held back
-  // (see the class comment above). Whenever a batch is full, it is handed to
-  // the `batchCallback`. The `QueueWord`s must be passed in alphabetical order
-  // wrt the `comparator` (also across multiple calls). NOTE: This order is only
-  // checked if the expensive checks are enabled (see `AD_EXPENSIVE_CHECK`),
-  // because the additional comparison per word is rather costly.
+  // (see the class comment above). Whenever a batch is full (see
+  // `VOCAB_MERGER_WORD_BATCH_SIZE` and `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`),
+  // it is handed to the `batchCallback`. The `QueueWord`s must be passed in
+  // alphabetical order wrt the `comparator` (also across multiple calls). NOTE:
+  // This order is only checked if the expensive checks are enabled (see
+  // `AD_EXPENSIVE_CHECK`), because the additional comparison per word is rather
+  // costly.
   CPP_template(typename W, typename F)(
       requires WordComparator<W> CPP_and WordBatchCallback<
           F>) void addMergedWords(std::vector<QueueWord> buffer,
@@ -132,16 +140,22 @@ CPP_template_def(typename W,
       // held back, and hence has not been written to the vocabulary yet.
       pendingWordIsExternal_ = pendingWordIsExternal_ || top.isExternal();
     }
+    currentBatchWordSizeInBytes_ += top.iriOrLiteral().size();
     // Remember the local index of this occurrence of the `pendingWord_`. The
     // index of the word within its batch is only filled in by
-    // `commitPendingWord`, and the actual entry of the ID map is only created
-    // (and written) once the global ID of the word is known.
-    pendingMappings_.push_back(
-        LocalIdxToBatchMapping{static_cast<uint32_t>(top.partialFileId_), 0,
-                               VocabIndex::make(top.id())});
+    // `commitPendingWord`, so we write the dummy `indexOfWordInBatchDummy` for
+    // now. The actual entry of the ID map is only created (and written) once
+    // the global ID of the word is known.
+    pendingMappings_.push_back(LocalIdxToBatchMapping{
+        static_cast<uint32_t>(top.partialFileId_), indexOfWordInBatchDummy,
+        VocabIndex::make(top.id())});
   }
 
-  if (currentBatch_.localIdxMappings_.numMappings_ >= wordBatchSize) {
+  // A batch is complete as soon as one of the two limits is reached.
+  if (currentBatch_.localIdxMappings_.numMappings_ >=
+          VOCAB_MERGER_WORD_BATCH_SIZE ||
+      currentBatchWordSizeInBytes_ >=
+          VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes()) {
     flush(batchCallback);
   }
 }
@@ -211,15 +225,17 @@ inline void WordBatchBuilder::startNewBatch() {
   // NOTE: A moved-from vector is in a valid but unspecified state, so we have
   // to explicitly reset the batch.
   currentBatch_ = WordBatch{};
+  currentBatchWordSizeInBytes_ = 0;
   // The mappings are stored in a vector with a `default_init_allocator`, so
   // this `resize` is a plain allocation that doesn't touch the memory.
-  currentBatch_.localIdxMappings_.mappings_.resize(wordBatchSize);
+  currentBatch_.localIdxMappings_.mappings_.resize(
+      VOCAB_MERGER_WORD_BATCH_SIZE);
   // There is exactly one index mapping per merged word, and the number of
   // distinct words is at most the number of merged words, so this is an upper
   // bound for all but the rare batch that slightly overshoots the
-  // `wordBatchSize` (a batch is only handed on once a complete buffer of
-  // merged words has been added to it).
-  currentBatch_.uniqueWords_.reserve(wordBatchSize);
+  // `VOCAB_MERGER_WORD_BATCH_SIZE` (a batch is only handed on once a complete
+  // buffer of merged words has been added to it).
+  currentBatch_.uniqueWords_.reserve(VOCAB_MERGER_WORD_BATCH_SIZE);
 }
 }  // namespace ad_utility::vocabulary_merger::detail
 

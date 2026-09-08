@@ -99,8 +99,8 @@ class VocabularyMerger {
   // requires no further synchronization. The queue is deliberately declared
   // last, because its destructor blocks until all its pending tasks have been
   // run, and those tasks access all the members above.
-  ad_utility::TaskQueue<false> wordBatchQueue_{detail::wordBatchQueueSize, 1,
-                                               "Writing the merged vocabulary"};
+  ad_utility::TaskQueue<false> wordBatchQueue_{
+      VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Writing the merged vocabulary"};
 
   // Friend declaration for the publicly available function.
   template <typename W, typename C>
