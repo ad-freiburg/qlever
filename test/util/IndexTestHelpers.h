@@ -74,6 +74,9 @@ struct TestIndexConfig {
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
   qlever::Filetype indexType = qlever::Filetype::Turtle;
   std::optional<VocabularyType> vocabularyType = std::nullopt;
+  // The level of the geo cell grid for WKT literals, 0 means no grid (see
+  // `GeoCellGrid`). Requires the `OnDiskCompressedGeoSplit` vocabulary type.
+  uint8_t geoCellGridLevel = 0;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
   // If true, add `ql:has-word` triples for each word in each literal during

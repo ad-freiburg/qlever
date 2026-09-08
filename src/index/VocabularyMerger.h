@@ -69,6 +69,8 @@ class VocabularyMerger {
   // The result (mostly metadata) which we'll return.
   VocabularyMetaData metaData_;
   std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
+  // The geo sort key of `lastTripleComponent_` (see `QueueWord`).
+  uint64_t lastGeoSortKey_ = 0;
   // Whether `lastTripleComponent_` is a blank node. Cached here so that
   // `isBlankNode` (which may run a set of regexes) is evaluated only once per
   // distinct word.
@@ -105,12 +107,14 @@ class VocabularyMerger {
 
   // Write the queue words in the buffer to their corresponding
   // `idMapWriters_`.
-  // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
-  // across multiple calls).
+  // The `QueueWord`s must be passed in ascending order wrt `lessThan` (also
+  // across multiple calls), which compares two words given as (geo sort key,
+  // word) pairs.
   // clang-format off
     CPP_template(typename C, typename L)(
       requires WordCallback<C> CPP_and ranges::predicate<
-          L, TripleComponentWithIndex, TripleComponentWithIndex>)
+          L, uint64_t, TripleComponentWithIndex, uint64_t,
+          TripleComponentWithIndex>)
       // clang-format on
       void writeQueueWordsToIdMap(
           std::vector<QueueWord>& buffer, C& wordCallback, const L& lessThan,
@@ -122,6 +126,7 @@ class VocabularyMerger {
   void clear() {
     metaData_ = VocabularyMetaData{};
     lastTripleComponent_ = std::nullopt;
+    lastGeoSortKey_ = 0;
     lastTripleComponentIsBlankNode_ = false;
     // NOTE: The destructor of an `IdMapWriter` also finishes it, but only
     // an explicit `finish()` can propagate errors as exceptions.
@@ -161,10 +166,11 @@ void writeMappedIdsToExtVec(
     const HashMap<Id, Id>& map, TripleVec& vec);
 
 /**
- * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
+ * @brief Serialize an `ItemVec` to a binary file
  *
- * For each string first writes the size of the string (64 bits). Then the
- * actual string content (no trailing zero) and then the Id (sizeof(Id)
+ * First writes the number of entries. Then, for each entry, the word (its
+ * size and then its content, without a trailing zero), the external flag, the
+ * index, and the geo sort key.
  *
  * @param els The input
  * @param fileName will write to this file. If it exists it will be overwritten
@@ -175,8 +181,12 @@ void writePartialVocabularyToFile(const ItemVec& els,
 /**
  * @brief Take a HashMap of strings to Ids and insert all its elements into a
  * single vector. No reordering or deduplication is done, so result.size() ==
- * size of the hash map
+ * size of the hash map. The `geoSortKeyFn` computes the geo sort key of each
+ * word (see `ItemVecEntry`); the overload without it sets all keys to 0.
  */
+template <typename GeoSortKeyFn>
+ItemVec vocabMapsToVector(const ItemMapAndBuffer& map,
+                          const GeoSortKeyFn& geoSortKeyFn);
 ItemVec vocabMapsToVector(const ItemMapAndBuffer& map);
 
 // _____________________________________________________________________________________________________________

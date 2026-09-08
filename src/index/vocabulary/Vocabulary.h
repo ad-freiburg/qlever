@@ -252,13 +252,17 @@ class Vocabulary {
     }
   }
 
-  // Set the geo cell grid of the geo vocabulary (see `GeoVocabulary`), which
-  // must happen before the vocabulary is opened. No-op unless the underlying
-  // vocabulary is a `SplitVocabulary` (or a `PolymorphicVocabulary` holding
-  // one) with a `GeoVocabulary`.
+  // Set the geo cell grid on the word comparator (which then orders WKT
+  // literals by their grid cell, see `TripleComponentComparator`) and on the
+  // geo vocabulary (see `GeoVocabulary`). Must happen before the vocabulary
+  // is opened or written, and after `setLocale`, which recreates the
+  // comparator. No-op unless the underlying vocabulary is a
+  // `SplitVocabulary` (or a `PolymorphicVocabulary` holding one) with a
+  // `GeoVocabulary`.
   void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary> ||
                   isSplitVocabulary<UnderlyingVocabulary>) {
+      vocabulary_.getComparator().setGeoCellGrid(grid);
       vocabulary_.getUnderlyingVocabulary().setGeoCellGrid(std::move(grid));
     }
   }

@@ -25,12 +25,15 @@ namespace ad_utility::vocabulary_merger::detail {
 // Helper `struct` for a word from a partial vocabulary.
 struct QueueWord {
   QueueWord() = default;
-  QueueWord(TripleComponentWithIndex&& v, size_t file)
-      : entry_(std::move(v)), partialFileId_(file) {}
+  QueueWord(TripleComponentWithIndex&& v, size_t file, uint64_t geoSortKey = 0)
+      : entry_(std::move(v)), partialFileId_(file), geoSortKey_(geoSortKey) {}
   // The word, its local ID, and the information whether it will be
   // externalized.
   TripleComponentWithIndex entry_;
   size_t partialFileId_;  // from which partial vocabulary did this word come
+  // The geo sort key of the word (see `ItemVecEntry`), read from the partial
+  // vocabulary file.
+  uint64_t geoSortKey_ = 0;
 
   [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
 

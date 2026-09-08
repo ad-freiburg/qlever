@@ -26,6 +26,7 @@
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
+#include "engine/QueryPlanner.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "index/Index.h"
@@ -34,6 +35,8 @@
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "parser/SparqlParser.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
@@ -452,6 +455,80 @@ TEST(IndexTest, emptyTextIndex) {
         qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
     EXPECT_EQ(result.size(), 0);
   }
+}
+
+// Test an index built with a geo cell grid: the vocabulary and its comparator
+// get the grid from the index configuration, the vocabulary indices of WKT
+// literals carry their grid cell, and the literals can be looked up. NOTE: The
+// tiny input gives a single partial vocabulary; the merge of several partial
+// vocabularies by geo sort key is tested in `VocabularyGeneratorTest`.
+TEST(IndexTest, geoCellGridIndexBuild) {
+  using ad_utility::GeoCellGrid;
+  auto wkt = [](std::string_view content) {
+    return absl::StrCat("\"", content, GEO_LITERAL_SUFFIX);
+  };
+  // With a grid of level 2 (4 x 4 cells of 90 degrees), the first literal is
+  // in cell 3, the other two in cell 12. NOTE: Point literals would not do
+  // here, because they are encoded directly in the ID and never reach the
+  // vocabulary.
+  std::string w3 = wkt("LINESTRING(170 -80, 171 -81)");
+  std::string w12 = wkt("LINESTRING(-170 80, -171 81)");
+  std::string w12b = wkt("LINESTRING(-170 80, -172 82)");
+  ad_utility::testing::TestIndexConfig config{
+      absl::StrCat("<a> <p> ", w12, " . <b> <p> ", w3, " . <c> <p> ", w12b,
+                   " . <d> <p> \"other\" .")};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  config.geoCellGridLevel = 2;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& index = qec->getIndex();
+  const auto& vocab = index.getVocab();
+
+  GeoCellGrid grid{2};
+  ASSERT_TRUE(vocab.getGeoCellGrid().has_value());
+  EXPECT_EQ(vocab.getGeoCellGrid().value(), grid);
+  ASSERT_TRUE(vocab.getCaseComparator().getGeoCellGrid().has_value());
+  EXPECT_EQ(vocab.getCaseComparator().getGeoCellGrid().value(), grid);
+
+  // The vocabulary index of a WKT literal is its cell in the upper bits and
+  // its position in the lower bits, where the positions follow the cell
+  // order: cell 3 first, then the two literals of cell 12 in lexicographic
+  // order.
+  using SGV =
+      SplitGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
+  auto indexOf = [&vocab](const std::string& word) {
+    VocabIndex idx;
+    EXPECT_TRUE(vocab.getId(word, &idx)) << word;
+    EXPECT_EQ(SGV::getMarker(idx.get()), 1u);
+    return SGV::getVocabIndex(idx.get());
+  };
+  EXPECT_EQ(indexOf(w3), grid.indexFromCellAndPosition(3, 0));
+  EXPECT_EQ(indexOf(w12), grid.indexFromCellAndPosition(12, 1));
+  EXPECT_EQ(indexOf(w12b), grid.indexFromCellAndPosition(12, 2));
+
+  // The literals are retrieved by these indices.
+  VocabIndex idx;
+  ASSERT_TRUE(vocab.getId(w12b, &idx));
+  EXPECT_EQ(index.indexToString(idx), w12b);
+
+  // A query with a WKT literal as constant finds its subject.
+  auto query = absl::StrCat("SELECT ?s WHERE { ?s <p> ", w12, " }");
+  auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), query);
+  QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+  auto result = qp.createExecutionTree(pq).getResult();
+  VocabIndex idxOfA;
+  ASSERT_TRUE(vocab.getId("<a>", &idxOfA));
+  EXPECT_EQ(result->idTableView(),
+            makeIdTableFromVector({{Id::makeFromVocabIndex(idxOfA)}}));
+}
+
+// Test that a geo cell grid requires the geo split vocabulary type.
+TEST(IndexTest, geoCellGridRequiresGeoSplitVocabulary) {
+  ad_utility::testing::TestIndexConfig config{"<a> <p> <b> ."};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressed;
+  config.geoCellGridLevel = 2;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::testing::getQec(config),
+      ::testing::HasSubstr("requires the vocabulary type"));
 }
 
 // Regression test for #3191.

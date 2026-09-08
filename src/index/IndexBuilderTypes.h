@@ -153,9 +153,29 @@ using ItemMap =
                         absl::DefaultHashContainerEq<std::string_view>,
                         ItemAlloc>;
 
+// An entry of an `ItemVec` (see below): a word of a partial vocabulary with
+// its index and external flag, plus the geo sort key of the word (see
+// `TripleComponentComparator::geoSortKey`), which is 0 unless a geo cell grid
+// is configured and the word is a WKT literal. The key is stored because
+// computing it means parsing the literal, which should happen once per word
+// and not once per comparison during sorting.
+struct ItemVecEntry {
+  ItemVecEntry() = default;
+  ItemVecEntry(std::string_view word,
+               PartialVocabIndexWithExternalFlag idAndFlag,
+               uint64_t geoSortKey = 0)
+      : word_{word}, idAndFlag_{idAndFlag}, geoSortKey_{geoSortKey} {}
+  // The word (a view into the buffer of the partial vocabulary).
+  std::string_view word_;
+  // The index of the word in the partial vocabulary and its external flag,
+  // see `PartialVocabIndexWithExternalFlag`.
+  PartialVocabIndexWithExternalFlag idAndFlag_;
+  // The geo sort key of the word, see above.
+  uint64_t geoSortKey_ = 0;
+};
+
 // A vector that stores the same values as the hash map.
-using ItemVec =
-    std::vector<std::pair<std::string_view, PartialVocabIndexWithExternalFlag>>;
+using ItemVec = std::vector<ItemVecEntry>;
 
 // A buffer that very efficiently handles a set of strings that is deallocated
 // at once when the buffer goes out of scope.

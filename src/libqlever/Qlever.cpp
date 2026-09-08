@@ -12,6 +12,7 @@
 
 #include <boost/optional.hpp>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string_view>
@@ -143,6 +144,14 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
+  if (config.geoCellGridLevel_ > 0) {
+    AD_CONTRACT_CHECK(
+        config.geoCellGridLevel_ <= std::numeric_limits<uint8_t>::max(),
+        "The geo cell grid level is too large");
+    index.getImpl().setGeoCellGridForIndexBuilding(
+        ad_utility::GeoCellGrid{static_cast<uint8_t>(config.geoCellGridLevel_),
+                                config.geoCellGridScheme_});
+  }
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(
       std::move(config.blankNodeIriRegexes_));
