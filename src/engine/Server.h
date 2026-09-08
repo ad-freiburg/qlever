@@ -244,6 +244,11 @@ class Server {
   // `processLoadMaterializedView` above.
   json processDeleteMaterializedView(const ParamValueMap& parameters) const;
 
+  // Handle an `unload-materialized-view` command: unload the view named in
+  // `parameters` if loaded, keeping its on-disk files (unlike `delete`). The
+  // response tells whether the view was loaded before.
+  json processUnloadMaterializedView(const ParamValueMap& parameters) const;
+
   // Handle the `/ping` endpoint: log the alive check (with or without an
   // accompanying "msg" parameter) and return a fixed confirmation response.
   CPP_template(typename RequestT)(

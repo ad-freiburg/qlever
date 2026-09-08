@@ -1,4 +1,5 @@
 add_subdirectory(vocabulary)
+add_subdirectory(vocabulary_merger)
 addLinkAndDiscoverTest(PatternCreatorTest index)
 addLinkAndDiscoverTest(ScanSpecificationTest index)
 addLinkAndDiscoverTestNoLibs(KeyOrderTest)
