@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 
+#include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./ValuesForTesting.h"
@@ -303,4 +304,11 @@ TEST(QueryExecutionTree,
                             ->getRootOperation();
   EXPECT_TRUE(std::dynamic_pointer_cast<IndexScan>(childOperation));
   EXPECT_EQ(childOperation->getLimitOffset(), limitOffset);
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, constructorRequiresQueryExecutionContext) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      QueryExecutionTree{nullptr},
+      ::testing::HasSubstr("Assertion `qec_ != nullptr` failed."));
 }
