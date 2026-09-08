@@ -114,9 +114,10 @@ class TransitivePathImpl : public TransitivePathBase {
         startSide.value_, targetSide.value_, yieldOnce);
 
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
-    const std::optional<decltype(joinColumn)>& targetJoinColumn =
-        targetSide.isBoundVariable() ? targetSide.treeAndCol_->second
-                                     : std::optional<decltype(joinColumn)>();
+    const std::optional<size_t> targetJoinColumn =
+        targetSide.isBoundVariable()
+            ? std::make_optional(targetSide.treeAndCol_->second)
+            : std::nullopt;
     size_t numberOfPayloadColumns =
         tree->getResultWidth() -
         numJoinColumnsWith(tree, joinColumn, targetJoinColumn);
@@ -478,7 +479,7 @@ class TransitivePathImpl : public TransitivePathBase {
       std::optional<ColumnIndex> graphColumn) {
     std::vector<ColumnIndex> columnsWithoutJoinColumn;
 
-    auto padding = [&joinColumn](const auto& column) {
+    auto padding = [&joinColumn](const auto& column) -> size_t {
       return column.has_value() && joinColumn != column;
     };
     AD_CORRECTNESS_CHECK(totalColumns >
