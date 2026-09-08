@@ -1492,6 +1492,20 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 
+  // The geo cell grid of the geo vocabulary, if the index was built with one
+  // (see `GeoCellGrid`). The vocabulary needs it before it is opened, because
+  // the grid determines how its indices are composed.
+  uint8_t geoCellGridLevel = 0;
+  loadDataMember("geo-cell-grid-level", geoCellGridLevel, geoCellGridLevel);
+  if (geoCellGridLevel > 0) {
+    ad_utility::GeoCellGridScheme geoCellGridScheme =
+        ad_utility::GeoCellGridScheme::Flat;
+    loadDataMember("geo-cell-grid-scheme", geoCellGridScheme,
+                   geoCellGridScheme);
+    vocab_.setGeoCellGrid(
+        ad_utility::GeoCellGrid{geoCellGridLevel, geoCellGridScheme});
+  }
+
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;
   loadDataMember(BLANK_NODE_ALLOCATION_START, numBlankNodesTotal);

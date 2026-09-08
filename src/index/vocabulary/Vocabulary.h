@@ -252,6 +252,26 @@ class Vocabulary {
     }
   }
 
+  // Set the geo cell grid of the geo vocabulary (see `GeoVocabulary`), which
+  // must happen before the vocabulary is opened. No-op unless the underlying
+  // vocabulary is a `PolymorphicVocabulary` holding a `SplitVocabulary` with
+  // a `GeoVocabulary`.
+  void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      vocabulary_.getUnderlyingVocabulary().setGeoCellGrid(std::move(grid));
+    }
+  }
+
+  // The geo cell grid of the geo vocabulary, or `std::nullopt` if there is
+  // none.
+  std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      return vocabulary_.getUnderlyingVocabulary().getGeoCellGrid();
+    } else {
+      return std::nullopt;
+    }
+  }
+
   // Replace the words of the currently held vocabulary with a non-owning,
   // zero-copy view directly into `serializer`'s buffer (see e.g.
   // `VocabularyInMemory::fromZeroCopyDeserializer`). This only works for

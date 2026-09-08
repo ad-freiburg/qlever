@@ -139,19 +139,21 @@ class GeoCellGrid {
   // must be a pure function of the literal string.
   CellIndex cellIndexFromWktLiteral(std::string_view wktLiteral) const;
 
-  // Combine a cell index and a position into an annotated vocabulary index
-  // and take it apart again. The cell index must be at most `sentinelCell()`
-  // and the position must be smaller than `maxNumWords()`.
-  uint64_t annotateIndex(CellIndex cellIndex, uint64_t position) const {
+  // Combine a cell index and a position into a vocabulary index (the cell
+  // index in the upper bits, the position in the lower bits) and take it
+  // apart again. The cell index must be at most `sentinelCell()` and the
+  // position must be smaller than `maxNumWords()`.
+  uint64_t indexFromCellAndPosition(CellIndex cellIndex,
+                                    uint64_t position) const {
     AD_EXPENSIVE_CHECK(cellIndex <= sentinelCell());
     AD_EXPENSIVE_CHECK(position < maxNumWords());
     return (cellIndex << numPositionBits()) | position;
   }
-  CellIndex cellOfIndex(uint64_t annotatedIndex) const {
-    return annotatedIndex >> numPositionBits();
+  CellIndex cellOfIndex(uint64_t index) const {
+    return index >> numPositionBits();
   }
-  uint64_t positionOfIndex(uint64_t annotatedIndex) const {
-    return annotatedIndex & (maxNumWords() - 1);
+  uint64_t positionOfIndex(uint64_t index) const {
+    return index & (maxNumWords() - 1);
   }
 
   // For the rectangle given by the two corner points, compute closed,
