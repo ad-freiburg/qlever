@@ -124,6 +124,18 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
   ad_utility::ScopedLogLevel AD_SCOPED_LOG_LEVEL_NAME(__COUNTER__) { level }
 
 // _____________________________________________________________________________
+// Skip the enclosing test if the `_NO_TIMING_TESTS` CMake option is set. Use
+// this in tests that depend on the actual duration of `sleep` or on similar
+// timings, which are unreliable on some platforms (in particular macOS). Note
+// that the macro has to be used as a statement (with a trailing semicolon).
+#ifdef _QLEVER_NO_TIMING_TESTS
+#define QLEVER_SKIP_IF_NO_TIMING_TEST \
+  GTEST_SKIP() << "because `_QLEVER_NO_TIMING_TESTS` is defined"
+#else
+#define QLEVER_SKIP_IF_NO_TIMING_TEST static_assert(true)
+#endif
+
+// _____________________________________________________________________________
 // Redirect the global logging stream to `stream` and return an `absl::Cleanup`
 // that restores the *previously active* stream when it goes out of scope. Use
 // this in tests that temporarily capture or suppress log output, so the global

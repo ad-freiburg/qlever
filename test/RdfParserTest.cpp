@@ -1251,9 +1251,7 @@ TEST(RdfParserTest, betterErrorMessageOnMultilineLiteralError) {
 // for a loaded CI runner (20ms were not, see the frequent spurious failures in
 // August 2026).
 TEST(RdfParserTest, stopParsingOnOutsideFailure) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_IF_NO_TIMING_TEST;
   std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};
   auto testWithParser = [&](auto t, std::string_view input) {
     using Parser = typename decltype(t)::type;

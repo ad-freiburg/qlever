@@ -259,9 +259,7 @@ TYPED_TEST(GraphSearchTest, graphSearchWithTargetWithLimit) {
 
 // ___________________________________________________________________________
 TEST(GraphSearchTestExtraTests, cancellationCheck) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_IF_NO_TIMING_TEST;
   // Test that the log message created in
   // `GraphSearchExecutionParams.checkCancellation()` when a cancellation is
   // received will be logged.
