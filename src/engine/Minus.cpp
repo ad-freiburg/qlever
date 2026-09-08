@@ -9,10 +9,12 @@
 #include "engine/MinusRowHandler.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/VarsRequiredFromSubtree.h"
 
 using std::endl;
 using std::string;
@@ -368,31 +370,39 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Minus::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
-  std::set<Variable> newVariables;
-  const auto* vars = &variables;
+
+  // Add variables and the variables corresponding to the keepIndices_ to the
+  // variables that are required from the subtree.
+  VarsRequiredFromSubtree helper(variables);
+  std::vector<Variable> matchedVars;
   for (const auto& [jcl, _] : _matchedColumns) {
     const auto& var = _left->getVariableAndInfoByColumnIndex(jcl).first;
-    if (!ad_utility::contains(variables, var)) {
-      if (vars == &variables) {
-        newVariables = variables;
-      }
-      newVariables.insert(var);
-      vars = &newVariables;
-    }
+    matchedVars.push_back(var);
+    helper.add(var);
   }
+  // Collect all the varaibles that are required from the subtree.
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
-  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(_left, *vars);
-  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(_right, *vars);
+  // Continue with the recursion and strip columns of the two subtrees.
+  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(_left, varsRequiredFromSubtree);
+  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(_right, varsRequiredFromSubtree);
 
-  // TODO<joka921> The following could be done more efficiently in a constructor
-  // (like this it is done twice).
-  // TODO<joka921> apply the `keepJoinColumn` optimization.
-  auto jcls = QueryExecutionTree::getJoinColumns(*_left, *_right);
-  [[maybe_unused]] bool keepJoinColumns =
-      ql::ranges::any_of(jcls, [&](const auto& jcl) {
-        const auto& var = _left->getVariableAndInfoByColumnIndex(jcl[0]).first;
-        return ad_utility::contains(variables, var);
-      });
-  return ad_utility::makeExecutionTree<Minus>(
+  // Create query execution tree with Minus-Operation as root operation.
+  // Keep in mind that _matchedColumns does not have to be updated, as this is done in the constructor.
+  auto treeWithMinusRoot = ad_utility::makeExecutionTree<Minus>(
       getExecutionContext(), std::move(left), std::move(right));
+
+  // The variables in matchedVars (resulting from _matchedColumns) are needed to
+  // compute Minus-Operation, but do not necessarily belong to the result
+  // requested by the parent tree.
+  // If all matchedVars are requested by the parent tree, return
+  // treeWithMinusRoot. If not, an additional StripColumns-Operation is added
+  // in the executionTree above the Minus-Operation.
+  if (ql::ranges::all_of(matchedVars, [&variables](const auto& matchedVar) {
+        return ad_utility::contains(variables, matchedVar);
+      })) {
+    return treeWithMinusRoot;
+  }
+  return ad_utility::makeExecutionTree<StripColumns>(
+      getExecutionContext(), std::move(treeWithMinusRoot), variables);
 }
