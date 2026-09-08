@@ -63,8 +63,10 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
                                        "31",    "0",     "al"};
 
   CompressedVocabulary<VocabularyInMemory, DummyCompressionWrapper> v;
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = makeVocabFileCleanup<decltype(v)>(filename);
   {
-    auto writerPtr = v.makeDiskWriterPtr("vocabtmp.txt");
+    auto writerPtr = v.makeDiskWriterPtr(filename);
     auto& writer = *writerPtr;
     for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
       ASSERT_EQ(writer(word, false), static_cast<uint64_t>(i));
@@ -76,8 +78,7 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   }
 
   VocabularyInMemory simple;
-  simple.open("vocabtmp.txt.words");
-  ad_utility::deleteFile("vocabtmp.txt.words");
+  simple.open(absl::StrCat(filename, decltype(v)::wordsSuffix));
 
   ASSERT_EQ(simple.size(), words.size());
   for (size_t i = 0; i < simple.size(); ++i) {
@@ -99,6 +100,16 @@ using Compressors =
 template <typename Compressor>
 struct CompressedVocabularyF : public testing::Test {
   static_assert(ad_utility::vocabulary::CompressionWrapper<Compressor>);
+  // The vocabulary that `createCompressedVocabulary` below creates. It is
+  // written to the file with the name of the current test.
+  using Vocabulary = CompressedVocabulary<VocabularyOnDisk, Compressor, 4>;
+
+  // Delete the files of that vocabulary. The vocabulary itself is a local
+  // variable of the test body and hence already destroyed at this point.
+  void TearDown() override {
+    deleteVocabularyFiles<Vocabulary>(gtestCurrentTestName());
+  }
+
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.
   static auto createCompressedVocabulary() {
@@ -106,7 +117,7 @@ struct CompressedVocabularyF : public testing::Test {
     return [filename =
                 std::move(filename)](const std::vector<std::string>& words) {
       // We deliberately set the blocksize to a very small number.
-      CompressedVocabulary<VocabularyOnDisk, Compressor, 4> vocab;
+      Vocabulary vocab;
       auto writerPtr = vocab.makeDiskWriterPtr(filename);
       auto& writer = *writerPtr;
       for (const auto& word : words) {
@@ -150,6 +161,7 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   // Use VocabularyInMemory as the underlying vocabulary.
   CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
   std::string filename = gtestCurrentTestName();
+  auto cleanup = makeVocabFileCleanup<decltype(vocab)>(filename);
   auto writerPtr = vocab.makeDiskWriterPtr(filename);
   auto& writer = *writerPtr;
   for (const auto& word : words) {
@@ -169,9 +181,6 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   ad_utility::serialization::ByteBufferReadSerializer readSerializer{blob};
   readSerializer | readVocab;
   assertThatRangesAreEqual(vocab, readVocab);
-
-  // Cleanup files.
-  ad_utility::deleteFile(filename);
 }
 
 // _______________________________________________________
@@ -183,6 +192,7 @@ TYPED_TEST(CompressedVocabularyF, ZeroCopyDeserialization) {
   // in-memory (and hence zero-copy-capable) underlying vocabulary.
   CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
   std::string filename = gtestCurrentTestName();
+  auto cleanup = makeVocabFileCleanup<decltype(vocab)>(filename);
   auto writerPtr = vocab.makeDiskWriterPtr(filename);
   auto& writer = *writerPtr;
   for (const auto& word : words) {
@@ -203,8 +213,6 @@ TYPED_TEST(CompressedVocabularyF, ZeroCopyDeserialization) {
       (CompressedVocabulary<VocabularyInMemory, TypeParam,
                             4>::fromZeroCopyDeserializer(readSerializer));
   assertThatRangesAreEqual(vocab, view);
-
-  ad_utility::deleteFile(filename);
 }
 
 }  // namespace
@@ -256,6 +264,13 @@ static_assert(std::is_same_v<
               CompressedVocabularyWithHoles::WordWriter,
               CompressedVocabularyWithHoles::DiskWriterWithExplicitIndices>);
 
+// An `absl::Cleanup` that deletes all the files that a
+// `CompressedVocabularyWithHoles` with the given base `filename` consists of.
+auto getFileCleanup(const std::string& filename) {
+  return vocabulary_test::makeVocabFileCleanup<CompressedVocabularyWithHoles>(
+      filename);
+}
+
 // The words of the vocabulary with holes that the tests below use, sorted (as
 // the underlying vocabulary requires sorted input at write time).
 //
@@ -281,24 +296,14 @@ std::vector<uint64_t> indicesWithHoles() {
   return indices;
 }
 
-// Delete the three files that the `DiskWriterWithExplicitIndices` for the given
-// `filename` creates. Do not warn about files that were never created.
-void deleteVocabularyFiles(const std::string& filename) {
-  for (const auto& suffix : {".words", ".words.ids", ".codebooks"}) {
-    ad_utility::deleteFile(absl::StrCat(filename, suffix), false);
-  }
-}
-
 // Create a `CompressedVocabularyWithHoles` with the given `words` and
-// `indices`, using the `DiskWriterWithExplicitIndices`. The suffixes of the two
-// filenames are the ones that `CompressedVocabulary::open` expects.
+// `indices`, using the `DiskWriterWithExplicitIndices`.
 CompressedVocabularyWithHoles createVocabularyWithHoles(
     const std::string& filename, const std::vector<std::string>& words,
     const std::vector<uint64_t>& indices) {
   AD_CORRECTNESS_CHECK(words.size() == indices.size());
   {
-    CompressedVocabularyWithHoles::WordWriter writer{
-        absl::StrCat(filename, ".words"), absl::StrCat(filename, ".codebooks")};
+    CompressedVocabularyWithHoles::WordWriter writer{filename};
     for (size_t i = 0; i < words.size(); ++i) {
       EXPECT_EQ(writer(words.at(i), indices.at(i)), indices.at(i));
     }
@@ -328,7 +333,7 @@ std::vector<std::pair<uint64_t, std::string>> expectedIndicesAndWords() {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, accessOperator) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  auto cleanup = getFileCleanup(filename);
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
   auto vocab = createVocabularyWithHoles(filename, words, indices);
@@ -351,7 +356,7 @@ TEST(CompressedVocabularyWithHoles, accessOperator) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, lowerAndUpperBound) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  auto cleanup = getFileCleanup(filename);
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
   // `lower_bound` and `upper_bound` have to report the vocabulary indices (and
@@ -364,7 +369,7 @@ TEST(CompressedVocabularyWithHoles, lowerAndUpperBound) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, endIndexAndGetPositionOfWord) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  auto cleanup = getFileCleanup(filename);
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
   auto vocab = createVocabularyWithHoles(filename, words, indices);
@@ -384,7 +389,7 @@ TEST(CompressedVocabularyWithHoles, endIndexAndGetPositionOfWord) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, scanAll) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  auto cleanup = getFileCleanup(filename);
   auto vocab =
       createVocabularyWithHoles(filename, wordsWithHoles(), indicesWithHoles());
 
@@ -395,7 +400,7 @@ TEST(CompressedVocabularyWithHoles, scanAll) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, serialization) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  auto cleanup = getFileCleanup(filename);
   auto vocab =
       createVocabularyWithHoles(filename, wordsWithHoles(), indicesWithHoles());
 
@@ -436,9 +441,8 @@ TEST(CompressedVocabularyWithHoles, makeDiskWriterPtrThrows) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, addWordAfterFinishThrows) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
-  CompressedVocabularyWithHoles::WordWriter writer{
-      absl::StrCat(filename, ".words"), absl::StrCat(filename, ".codebooks")};
+  auto cleanup = getFileCleanup(filename);
+  CompressedVocabularyWithHoles::WordWriter writer{filename};
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
   EXPECT_EQ(writer(words.at(0), indices.at(0)), indices.at(0));
@@ -461,9 +465,8 @@ TEST(CompressedVocabularyWithHoles, addWordAfterFinishThrows) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, nonAscendingIndicesThrow) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
-  CompressedVocabularyWithHoles::WordWriter writer{
-      absl::StrCat(filename, ".words"), absl::StrCat(filename, ".codebooks")};
+  auto cleanup = getFileCleanup(filename);
+  CompressedVocabularyWithHoles::WordWriter writer{filename};
   auto words = wordsWithHoles();
   auto indices = indicesWithHoles();
   // Write one word more than a single block holds, such that the check for
