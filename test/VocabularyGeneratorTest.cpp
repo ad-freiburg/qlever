@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -263,12 +264,7 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
       absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1), unorderedWords);
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      mergeVocabulary(
-          basePath, {"0", "1"},
-          [](std::string_view a, std::string_view b) {
-            return std::less{}(a, b);
-          },
-          callback, 1_GB),
+      mergeVocabulary(basePath, {"0", "1"}, std::less{}, callback, 1_GB),
       ::testing::HasSubstr("vocabulary order violated"), ad_utility::Exception);
 }
 
@@ -312,10 +308,8 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
   //   partial match it would have wrongly converted `<http://ex/apple>`.
   ad_utility::RegexSet blankNodeIriRegexes{
       {"<http://ex/bn_.*>", "<http://ex/apple"}, "for the test"};
-  mergeVocabulary(
-      basePath, {"0"},
-      [](std::string_view a, std::string_view b) { return std::less{}(a, b); },
-      wordCallback, 1_GB, blankNodeIriRegexes);
+  mergeVocabulary(basePath, {"0"}, std::less{}, wordCallback, 1_GB,
+                  blankNodeIriRegexes);
 
   // Only the two `bn_` IRIs became blank nodes; the two other IRIs and the
   // literal remain in the vocabulary, in sorted order.
@@ -447,10 +441,8 @@ TEST(MergeVocabulary, duplicateWordsAcrossBatchBoundaries) {
                                             bool) -> uint64_t {
     return numWordsInCallback++;
   };
-  auto result = mergeVocabulary(
-      basePath, suffixes,
-      [](std::string_view a, std::string_view b) { return std::less{}(a, b); },
-      wordCallback, 1_GB);
+  auto result =
+      mergeVocabulary(basePath, suffixes, std::less{}, wordCallback, 1_GB);
   // Each word is written to the vocabulary exactly once.
   EXPECT_EQ(numWordsInCallback, numWords);
   EXPECT_EQ(result.numWordsTotal(), numWords);
@@ -521,10 +513,8 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
     vocabulary.emplace_back(word, isExternal);
     return vocabulary.size() - 1;
   };
-  auto result = mergeVocabulary(
-      basePath, {"0", "1"},
-      [](std::string_view a, std::string_view b) { return std::less{}(a, b); },
-      wordCallback, 1_GB);
+  auto result =
+      mergeVocabulary(basePath, {"0", "1"}, std::less{}, wordCallback, 1_GB);
   EXPECT_EQ(result.numWordsTotal(), numWords);
 
   // `"zzz"` is written exactly once, and it is externalized because one of its
