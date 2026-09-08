@@ -114,6 +114,13 @@ class SplitVocabulary {
   static_assert(!(... || isSplitVocabulary<UnderlyingVocabularies>));
   static_assert(
       !ad_utility::SameAsAny<PolymorphicVocabulary, UnderlyingVocabularies...>);
+  // At most one of the underlying vocabularies may be a `GeoVocabulary`, so
+  // that `setGeoCellGrid` and `getGeoCellGrid` below refer to a unique one.
+  static_assert(
+      (0 + ... +
+       (ad_utility::isInstantiation<UnderlyingVocabularies, GeoVocabulary>
+            ? 1
+            : 0)) <= 1);
 
   // Assuming we only make use of methods that all UnderlyingVocabularies
   // provide, we simplify this class by using an array over a variant instead of
