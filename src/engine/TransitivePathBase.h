@@ -101,20 +101,18 @@ struct NodeWithTargets {
   Set targets_;
   LocalVocab localVocab_;
   PayloadTable idTable_;
-  PayloadTable targetIdTable_;
-  // Corresponding row in `idTable_` and `targetIdTable_`.
+  // Corresponding row in `idTable_`.
   size_t row_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   NodeWithTargets(Id node, Id graph, Set targets, LocalVocab localVocab,
-                  PayloadTable idTable, PayloadTable targetIdTable, size_t row)
+                  PayloadTable idTable, size_t row)
       : node_{node},
         graph_{graph},
         targets_{std::move(targets)},
         localVocab_{std::move(localVocab)},
         idTable_{std::move(idTable)},
-        targetIdTable_{std::move(targetIdTable)},
         row_{row} {}
 };
 
@@ -170,8 +168,8 @@ class TransitivePathBase : public Operation {
   // operation if the amount of those values is smaller than all possible values
   // (as the transitive path has to be computed for fewer elements).
   std::shared_ptr<TransitivePathBase> bindSides(
-      std::optional<TreeAndCol> leftOpAndCol = std::nullopt,
-      std::optional<TreeAndCol> rightOpAndCol = std::nullopt) const;
+      std::shared_ptr<QueryExecutionTree> op, std::optional<size_t> leftCol,
+      std::optional<size_t> rightCol = std::nullopt) const;
 
   bool isBoundOrId() const;
 
@@ -221,9 +219,9 @@ class TransitivePathBase : public Operation {
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-  void copyColumns(const PayloadTable& inputTable,
+  void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                    IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow,
-                   size_t outputRow, size_t outputColOffset = 0) const;
+                   size_t outputRow) const;
 
   // Return the actual index of the graph column in `tree`. If
   // `internalGraphHelper_` is present it takes precedence over
@@ -232,11 +230,13 @@ class TransitivePathBase : public Operation {
   std::optional<ColumnIndex> getActualGraphColumnIndex(
       const std::shared_ptr<QueryExecutionTree>& tree) const;
 
-  // Return how many columns would be joined given the passed `tree`. Return 1
-  // if `getActualGraphColumnIndex(tree)` is `std::nullopt` or the returned
-  // index is equal to `joinColumn`. Return 2 otherwise.
-  size_t numJoinColumnsWith(const std::shared_ptr<QueryExecutionTree>& tree,
-                            ColumnIndex joinColumn) const;
+  // Return the amount of distinctive non-payload columns (start, target, graph)
+  // that are present in the input and will be joined given the passed `tree`.
+  // Depending on how many are given and if some are identical, return either 1,
+  // 2 or 3.
+  size_t numJoinColumnsWith(
+      const std::shared_ptr<QueryExecutionTree>& tree, ColumnIndex joinColumn,
+      std::optional<ColumnIndex> otherJoinColumn = std::nullopt) const;
 
  public:
   std::string getDescriptor() const override;
@@ -291,14 +291,6 @@ class TransitivePathBase : public Operation {
   std::shared_ptr<QueryExecutionTree> matchWithKnowledgeGraph(
       size_t& inputCol,
       std::shared_ptr<QueryExecutionTree> leftOrRightOp) const;
-
-  // Insert the payload columns of one or two given sides into a plan.
-  // Traverse each side of the operation and insert columns which are not
-  // related to joining into the plan.
-  void insertPayloadColumnsToPlan(
-      const std::shared_ptr<TransitivePathBase>& plan,
-      const std::optional<TreeAndCol>& opAndCol,
-      const std::optional<TreeAndCol>& otherOpAndCol) const;
 
  public:
   size_t getCostEstimate() override;

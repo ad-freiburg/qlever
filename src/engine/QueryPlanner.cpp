@@ -2664,7 +2664,7 @@ auto QueryPlanner::createJoinWithTransitivePath(
   // The left or right side is a transitive path and its join column corresponds
   // to the left side of its input.
   SubtreePlan plan = [&]() {
-    auto firstSide = std::pair{otherTree, firstColOther};
+    auto firstSide = firstColOther;
     auto secondSide = std::optional<decltype(firstSide)>();
 
     // Assign the targeet side if given.
@@ -2673,15 +2673,15 @@ auto QueryPlanner::createJoinWithTransitivePath(
           joinCols.targetCols_.value();
       AD_CONTRACT_CHECK(secondColTransPath <= 1 &&
                         secondColTransPath != firstColTransPath);
-      secondSide = std::pair{otherTree, secondColOther};
+      secondSide = secondColOther;
     }
 
     if (firstColTransPath == 1) {
       return makeSubtreePlan(
-          transPathOperation->bindSides(secondSide, firstSide));
+          transPathOperation->bindSides(otherTree, secondSide, firstSide));
     }
     return makeSubtreePlan(
-        transPathOperation->bindSides(firstSide, secondSide));
+        transPathOperation->bindSides(otherTree, firstSide, secondSide));
   }();
   mergeSubtreePlanIds(plan, a, b);
   return plan;
