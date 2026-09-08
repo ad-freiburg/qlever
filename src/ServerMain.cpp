@@ -121,10 +121,11 @@ int main(int argc, char** argv) {
       "start/end events is written next to the index files "
       "(`<index-basename>.metrics-log.jsonl`).");
   add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
-      "Disable the resource-usage log. By default a TSV log of the RSS, CPU "
-      "and disk I/O of the server, plus the system-wide I/O stall (Linux "
-      "only), is written next to the index files "
-      "(`<index-basename>.server.resource-usage-log.tsv`).");
+      "Disable the resource-usage log. By default a TSV log is written next to "
+      "the index files (`<index-basename>.server.resource-usage-log.tsv`). "
+      "Each row holds the RSS, CPU and disk I/O of the server, the "
+      "system-wide I/O stall (Linux only) and the ID of a running index "
+      "rebuild.");
   add("resource-usage-interval-s",
       po::value(&resourceUsageIntervalS)->default_value(2),
       "The sampling interval of the resource-usage log in seconds.");
@@ -380,11 +381,9 @@ int main(int argc, char** argv) {
                             std::chrono::seconds{resourceUsageIntervalS});
     }
     auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
-    // The server marks the start and end of each rebuild on the monitor's
-    // tracker, so that the sampler can log which rebuild was running.
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
                   noAccessCheck, std::move(metricsReader),
-                  resourceMonitor.rebuildIdTracker());
+                  resourceMonitor.indexRebuildIdTracker());
     // Per-query jsonl metrics log, written next to the index files. On by
     // default; `--no-metrics-log` opts out.
     if (!noMetricsLog) {

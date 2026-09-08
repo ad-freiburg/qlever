@@ -37,7 +37,7 @@
 namespace {
 namespace fs = ql::filesystem;
 namespace rm = ad_utility::resource_monitor;
-using ad_utility::RebuildIdTracker;
+using ad_utility::IndexRebuildIdTracker;
 using ad_utility::ResourceMonitor;
 using ad_utility::testing::readLines;
 using ::testing::DoubleEq;
@@ -214,7 +214,7 @@ TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
   base.bytesReadPerSecond_ = 8192.0;
   base.bytesWrittenPerSecond_ = 4096.0;
   base.ioStallPercent_ = 25.0;
-  base.rebuildId_ = 7u;
+  base.indexRebuildId_ = 7u;
   EXPECT_EQ(rm::formatTsvRow(base),
             "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\t7\n");
 
@@ -244,11 +244,11 @@ TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
   EXPECT_EQ(rm::formatTsvRow(noIoStall),
             "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t\t7\n");
 
-  // Most rows look like this, because no rebuild is running. `rebuild_id` is
-  // the last column, so the row ends in a tab. A consumer that strips trailing
-  // whitespace before splitting would lose a column.
+  // Most rows look like this, because no rebuild is running. `index_rebuild_id`
+  // is the last column, so the row ends in a tab. A consumer that strips
+  // trailing whitespace before splitting would lose a column.
   auto noRebuild = base;
-  noRebuild.rebuildId_ = std::nullopt;
+  noRebuild.indexRebuildId_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noRebuild),
             "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\t\n");
 
@@ -258,7 +258,7 @@ TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
   nothing.bytesReadPerSecond_ = std::nullopt;
   nothing.bytesWrittenPerSecond_ = std::nullopt;
   nothing.ioStallPercent_ = std::nullopt;
-  nothing.rebuildId_ = std::nullopt;
+  nothing.indexRebuildId_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(nothing), "1.0\t1000\t\t\t\t\t\t\n");
 }
 
@@ -369,8 +369,8 @@ TEST(ResourceMonitor, SetReadersAfterStartThrows) {
 }
 
 // _____________________________________________________________________________
-TEST(RebuildIdTracker, ReportsANumberOnlyWhileARebuildRuns) {
-  RebuildIdTracker tracker;
+TEST(IndexRebuildIdTracker, ReportsAnIdOnlyWhileARebuildRuns) {
+  IndexRebuildIdTracker tracker;
   // No rebuild has run yet.
   EXPECT_FALSE(tracker.currentId().has_value());
 
@@ -382,12 +382,12 @@ TEST(RebuildIdTracker, ReportsANumberOnlyWhileARebuildRuns) {
 }
 
 // _____________________________________________________________________________
-TEST(RebuildIdTracker, NumbersRebuildsFromOne) {
-  RebuildIdTracker tracker;
+TEST(IndexRebuildIdTracker, AssignsIdsFromOne) {
+  IndexRebuildIdTracker tracker;
   tracker.markStart();
   EXPECT_THAT(tracker.currentId(), Optional(1u));
 
-  // The next rebuild gets the next number. Without that, two rebuilds that
+  // The next rebuild gets the next ID. Without that, two rebuilds that
   // follow each other closely would look like one long rebuild in the log.
   tracker.markEnd();
   tracker.markStart();
@@ -651,9 +651,9 @@ TEST(ResourceMonitor, RowsCarryTheRebuildIdOnlyWhileARebuildRuns) {
                   std::chrono::milliseconds{5});
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     // This is what the server does around a rebuild.
-    monitor.rebuildIdTracker()->markStart();
+    monitor.indexRebuildIdTracker()->markStart();
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
-    monitor.rebuildIdTracker()->markEnd();
+    monitor.indexRebuildIdTracker()->markEnd();
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
   }
   auto lines = readLines(path);
@@ -663,13 +663,13 @@ TEST(ResourceMonitor, RowsCarryTheRebuildIdOnlyWhileARebuildRuns) {
   // carry its number, the rest are empty. Which row lands on a phase boundary
   // is up to the scheduler, so the values that occur are checked, not how
   // often.
-  std::set<std::string> rebuildIds;
+  std::set<std::string> indexRebuildIds;
   for (auto it = lines.begin() + 1; it != lines.end(); ++it) {
     const std::vector<std::string> cells = absl::StrSplit(*it, '\t');
     ASSERT_EQ(cells.size(), 8u);
-    rebuildIds.insert(cells[7]);
+    indexRebuildIds.insert(cells[7]);
   }
-  EXPECT_THAT(rebuildIds, ::testing::UnorderedElementsAre("", "1"));
+  EXPECT_THAT(indexRebuildIds, ::testing::UnorderedElementsAre("", "1"));
 }
 
 // _____________________________________________________________________________
@@ -685,7 +685,7 @@ TEST(ResourceMonitor, IoStallPercentIsClampedToAHundred) {
 
   auto lines = sampledLines(std::move(readers));
   ASSERT_GE(lines.size(), 2u);
-  // No rebuild ran, so the empty `rebuild_id` cell follows the stall.
+  // No rebuild ran, so the empty `index_rebuild_id` cell follows the stall.
   EXPECT_THAT(lines[1], ::testing::EndsWith("\t100.0\t"));
 }
 
@@ -701,7 +701,7 @@ TEST(ResourceMonitor, AMissingIoStallReadingLeavesTheColumnEmpty) {
   auto lines = sampledLines(std::move(readers));
   ASSERT_GE(lines.size(), 2u);
   // All eight columns are still there rather than one being dropped. The stall
-  // cell is empty, and so is the `rebuild_id` cell after it, because no
+  // cell is empty, and so is the `index_rebuild_id` cell after it, because no
   // rebuild ran.
   EXPECT_EQ(std::count(lines[1].begin(), lines[1].end(), '\t'), 7);
   EXPECT_THAT(lines[1], ::testing::EndsWith("\t\t"));

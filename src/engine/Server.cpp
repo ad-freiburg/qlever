@@ -60,7 +60,7 @@ Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
     std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
-    std::shared_ptr<ad_utility::RebuildIdTracker> rebuildIdTracker)
+    std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker)
     : qlever_(config),
       numThreads_(numThreads),
       port_(port),
@@ -70,9 +70,10 @@ Server::Server(
       rebuildIndexStrategy_(config.rebuildIndexStrategy_),
       keepPreviousIndexDirs_(config.keepPreviousIndexDirs_),
       metricsReader_(std::move(metricsReader)),
-      rebuildIdTracker_(
-          rebuildIdTracker ? std::move(rebuildIdTracker)
-                           : std::make_shared<ad_utility::RebuildIdTracker>()) {
+      indexRebuildIdTracker_(
+          indexRebuildIdTracker
+              ? std::move(indexRebuildIdTracker)
+              : std::make_shared<ad_utility::IndexRebuildIdTracker>()) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   initializeServerMetrics(config.memoryLimit_);
@@ -1661,13 +1662,13 @@ Server::rebuildIndexUnlessInProgress(
   if (rebuildInProgress_.exchange(true)) {
     co_return std::nullopt;
   }
-  rebuildIdTracker_->markStart();
-  // Clear the rebuild id and release `rebuildInProgress_` when this rebuild
-  // ends, no matter how it ends. The order matters: the next rebuild starts as
-  // soon as `rebuildInProgress_` is false and takes its own id, so a `markEnd`
-  // after that would erase the new id instead of this one.
+  indexRebuildIdTracker_->markStart();
+  // Clear the ID and release `rebuildInProgress_` when this index rebuild
+  // ends, no matter how it ends. The order matters: the next rebuild might
+  // start immediately when `rebuildInProgress_` is set to false, in which case
+  // a later `markEnd` would clear that rebuild's ID instead of this one's.
   absl::Cleanup cleanup{[this]() {
-    rebuildIdTracker_->markEnd();
+    indexRebuildIdTracker_->markEnd();
     rebuildInProgress_.store(false);
   }};
   co_return co_await rebuildIndex(std::move(rebuildTmpDir),

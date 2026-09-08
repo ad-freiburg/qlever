@@ -54,7 +54,7 @@ class ServerForTesting;
 
 // Defined in `util/ResourceMonitor.h`, which only `Server.cpp` includes.
 namespace ad_utility {
-class RebuildIdTracker;
+class IndexRebuildIdTracker;
 }
 
 //! The HTTP Server used.
@@ -85,7 +85,8 @@ class Server {
       const qlever::EngineConfig& config, bool noAccessCheck = false,
       std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader =
           nullptr,
-      std::shared_ptr<ad_utility::RebuildIdTracker> rebuildIdTracker = nullptr);
+      std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker =
+          nullptr);
 
   virtual ~Server() = default;
 
@@ -137,11 +138,12 @@ class Server {
   // disabled (--enable-metrics not passed).
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
 
-  // Holds the number of the running rebuild, which the resource sampler reads
-  // for the `rebuild_id` column. It only reports. Preventing a second rebuild
-  // is the job of `rebuildInProgress_` above. The constructor creates one if
-  // the caller passes none, so it is never null.
-  std::shared_ptr<ad_utility::RebuildIdTracker> rebuildIdTracker_;
+  // Holds the ID of the currently running index rebuild, which the resource
+  // sampler reads for the `index_rebuild_id` column. The `shared_ptr` is never
+  // null, as the constructor creates a tracker even if the caller passes none.
+  // Note: This member is purely observational. Preventing a second concurrent
+  // index rebuild is the job of the `rebuildInProgress_` data member above.
+  std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker_;
 
   // Deregisters callbacks on destruction. Declared after `qlever_` so that it
   // is destroyed before `qlever_` which the callbacks access.

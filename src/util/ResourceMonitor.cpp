@@ -234,7 +234,7 @@ std::string formatTsvRow(const Sample& sample) {
                             formatCell(sample.bytesReadPerSecond_),
                             formatCell(sample.bytesWrittenPerSecond_),
                             formatCell(sample.ioStallPercent_),
-                            formatCell(sample.rebuildId_)};
+                            formatCell(sample.indexRebuildId_)};
   return absl::StrCat(absl::StrJoin(tsvCells, "\t"), "\n");
 }
 
@@ -344,8 +344,9 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<RebuildIdTracker> ResourceMonitor::rebuildIdTracker() const {
-  return rebuildIdTracker_;
+std::shared_ptr<IndexRebuildIdTracker> ResourceMonitor::indexRebuildIdTracker()
+    const {
+  return indexRebuildIdTracker_;
 }
 
 // _____________________________________________________________________________
@@ -412,7 +413,7 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     sample.bytesWrittenPerSecond_ =
         bytesWrittenTracker.update(numBytesWritten, elapsed);
     sample.ioStallPercent_ = ioStallPercent;
-    sample.rebuildId_ = rebuildIdTracker_->currentId();
+    sample.indexRebuildId_ = indexRebuildIdTracker_->currentId();
     stream_ << resource_monitor::formatTsvRow(sample);
     stream_.flush();
     if (stream_.fail()) {
