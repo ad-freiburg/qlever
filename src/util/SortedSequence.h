@@ -14,6 +14,7 @@
 
 #include <functional>
 #include <iterator>
+#include <optional>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -201,6 +202,24 @@ class SortedSequence {
                               self.comp_, self.proj_);
   }
 
+  // Restrict the `part` (which must be one of the two sorted parts) to the
+  // elements whose projected key lies in the half-open range `[lower, upper)`
+  // w.r.t. the given `comparator`. A bound that is `nullopt` means that the
+  // range is unbounded in that direction.
+  template <typename Range, typename Bound, typename Comparator>
+  auto restrictPartToRange(Range part, const std::optional<Bound>& lower,
+                           const std::optional<Bound>& upper,
+                           const Comparator& comparator) const {
+    auto begin = lower.has_value() ? ql::ranges::lower_bound(
+                                         part, lower.value(), comparator, proj_)
+                                   : ql::ranges::begin(part);
+    auto end = upper.has_value()
+                   ? ql::ranges::lower_bound(begin, ql::ranges::end(part),
+                                             upper.value(), comparator, proj_)
+                   : ql::ranges::end(part);
+    return ql::ranges::subrange(begin, end);
+  }
+
  public:
   // Return a view of the sorted and deduplicated elements in this container.
   // Requires `isConsolidated` to be true.
@@ -208,6 +227,38 @@ class SortedSequence {
   auto getSortedView() const& { return getSortedViewImpl(*this); }
   void getSortedView() && = delete;
   void getSortedView() const&& = delete;
+
+  // Like `getSortedView`, but only return the elements whose projected key lies
+  // in the half-open range `[lower, upper)`. A bound that is `nullopt` means
+  // that the range is unbounded in that direction. The bounds are compared to
+  // the projected keys using the `comparator`, which must be compatible with
+  // the order of this sequence (that is, this sequence must also be sorted with
+  // respect to the `comparator`). Requires `isConsolidated` to be true.
+  template <typename Bound, typename Comparator>
+  auto getSortedViewInRange(const std::optional<Bound>& lower,
+                            const std::optional<Bound>& upper,
+                            const Comparator& comparator) const {
+    AD_CONTRACT_CHECK(isConsolidated());
+    return ZipMergeUniqueView(
+        restrictPartToRange(largePart(), lower, upper, comparator),
+        restrictPartToRange(smallPart(), lower, upper, comparator), comp_,
+        proj_);
+  }
+
+  // Return an upper bound for the number of elements whose projected key lies
+  // in the half-open range `[lower, upper)`. For the meaning of the arguments
+  // and the reason why this is only an upper bound, see `getSortedViewInRange`
+  // and `sizeUpperBound`. Requires `isConsolidated` to be true.
+  template <typename Bound, typename Comparator>
+  size_t sizeUpperBoundInRange(const std::optional<Bound>& lower,
+                               const std::optional<Bound>& upper,
+                               const Comparator& comparator) const {
+    AD_CONTRACT_CHECK(isConsolidated());
+    return ql::ranges::size(
+               restrictPartToRange(largePart(), lower, upper, comparator)) +
+           ql::ranges::size(
+               restrictPartToRange(smallPart(), lower, upper, comparator));
+  }
 
  private:
   // Return the extreme (maximal if `wantMax`, else minimal) element w.r.t.
