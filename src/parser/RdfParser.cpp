@@ -1310,7 +1310,7 @@ RdfParallelParser<T>::~RdfParallelParser() {
 template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
     const qlever::InputFileSpecification& input, const EncodedIriManager* ev,
-    ad_utility::MemorySize bufferSize, uint32_t numThreads) {
+    ad_utility::MemorySize bufferSize, uint32_t numParsingThreads) {
   auto graph = [input]() -> TripleComponent {
     if (input.defaultGraph_.has_value()) {
       return TripleComponent::Iri::fromIrirefWithoutBrackets(
@@ -1320,7 +1320,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
     }
   };
   auto makeRdfParserImpl = ad_utility::ApplyAsValueIdentity{
-      [&input, &bufferSize, &graph, ev, numThreads](
+      [&input, &bufferSize, &graph, ev, numParsingThreads](
           auto useParallel,
           auto isTurtleInput) -> std::unique_ptr<RdfParserBase> {
         using InnerParser =
@@ -1328,7 +1328,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
                                NQuadParser<TokenizerT>>;
         if constexpr (useParallel == 1) {
           return std::make_unique<RdfParallelParser<InnerParser>>(
-              input, bufferSize, ev, numThreads, graph());
+              input, bufferSize, ev, numParsingThreads, graph());
         } else {
           return std::make_unique<RdfStreamParser<InnerParser>>(
               input, bufferSize, ev, graph());
@@ -1349,12 +1349,13 @@ void RdfMultifileParser::parseFileAndPushBatches(
     const qlever::InputFileSpecification& file,
     ad_utility::MemorySize bufferSize) {
   try {
-    auto parser =
-        useRelaxedParsing_
-            ? makeSingleRdfParser<TokenizerCtre>(file, &encodedIriManager(),
-                                                 bufferSize, numThreads_)
-            : makeSingleRdfParser<Tokenizer>(file, &encodedIriManager(),
-                                             bufferSize, numThreads_);
+    auto parser = useRelaxedParsing_
+                      ? makeSingleRdfParser<TokenizerCtre>(
+                            file, &encodedIriManager(), bufferSize,
+                            numParsingThreadsPerFile_)
+                      : makeSingleRdfParser<Tokenizer>(
+                            file, &encodedIriManager(), bufferSize,
+                            numParsingThreadsPerFile_);
     while (auto batch = parser->getBatch()) {
       bool active = finishedBatchQueue_.push(std::move(batch.value()));
       if (!active) {
@@ -1371,12 +1372,13 @@ void RdfMultifileParser::parseFileAndPushBatches(
 RdfMultifileParser::RdfMultifileParser(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     const EncodedIriManager* encodedIriManager, uint32_t numThreads,
-    ad_utility::MemorySize bufferSize, bool useRelaxedParsing)
+    uint32_t numParsingThreadsPerFile, ad_utility::MemorySize bufferSize,
+    bool useRelaxedParsing)
     : RdfParserBase(encodedIriManager),
       parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
                     numParserThreads(numThreads)},
       useRelaxedParsing_{useRelaxedParsing},
-      numThreads_{numThreads} {
+      numParsingThreadsPerFile_{numParsingThreadsPerFile} {
   // Feed all the input files to the `parsingQueue_`.
   auto makeParsers = [files = std::move(files), bufferSize, this]() mutable {
     for (auto& file : files) {

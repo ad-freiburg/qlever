@@ -12,6 +12,7 @@
 #include <absl/time/time.h>
 #include <sys/stat.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <functional>
@@ -93,8 +94,8 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
-    const {
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    uint32_t numParsingThreadsPerFile) const {
   AD_CONTRACT_CHECK(
       parserBufferSize().getBytes() > 0,
       "The buffer size of the RDF parser must be greater than zero");
@@ -102,8 +103,8 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
   return std::make_unique<RdfMultifileParser>(
-      std::move(files), &encodedIriManager(), numThreads_, parserBufferSize(),
-      onlyAsciiTurtlePrefixes_);
+      std::move(files), &encodedIriManager(), numThreads_,
+      numParsingThreadsPerFile, parserBufferSize(), onlyAsciiTurtlePrefixes_);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -387,16 +388,33 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
   }
 }
 
-// _____________________________________________________________________________
-void IndexImpl::createFromFiles(
-    std::vector<Index::InputFileSpecification> files) {
-  updateInputFileSpecificationsAndLog(files, useParallelParser_);
-  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)});
+// The number of threads that the parser for a single input file gets, given the
+// total number of threads `numThreads` for the index build and the number
+// `numFiles` of input files. An `RdfMultifileParser` parses `numParserThreads`
+// files concurrently (but of course never more files than there are), and the
+// `numParserThreads` are divided evenly among those, such that the total number
+// of threads used for parsing stays roughly the same, no matter how many input
+// files there are. At least one thread is used per file.
+static uint32_t numParserThreadsPerFile(uint32_t numThreads, size_t numFiles) {
+  auto numConcurrentFiles =
+      std::clamp<size_t>(numFiles, 1, numParserThreads(numThreads));
+  return std::max<uint32_t>(1,
+                            numParserThreads(numThreads) / numConcurrentFiles);
 }
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files) {
+    std::vector<Index::InputFileSpecification> files) {
+  updateInputFileSpecificationsAndLog(files, useParallelParser_);
+  auto numThreadsPerFile = numParserThreadsPerFile(numThreads_, files.size());
+  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)},
+                  numThreadsPerFile);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createFromFiles(
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    uint32_t numParsingThreadsPerFile) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -411,7 +429,8 @@ void IndexImpl::createFromFiles(
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeRdfParser(std::move(files)));
+      createIdTriplesAndVocab(
+          makeRdfParser(std::move(files), numParsingThreadsPerFile));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.

@@ -253,8 +253,13 @@ class IndexImpl {
   // by createFromOnDiskIndex after this call.
   void createFromFiles(std::vector<Index::InputFileSpecification> files);
 
+  // Same as above, but for a lazy range of input files. Because the range is
+  // consumed lazily, the number of input files is not known here and has to be
+  // passed in via `numParsingThreadsPerFile`, see `numParserThreadsPerFile` in
+  // `IndexImpl.cpp`.
   void createFromFiles(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      uint32_t numParsingThreadsPerFile);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -688,10 +693,11 @@ class IndexImpl {
   // Return a Turtle parser that parses the given files. The parser will be
   // configured to either parse in parallel or not (per input file), and to
   // either use the CTRE-based relaxed parser or not (via the
-  // `ascii-prefixes-only` setting, see `onlyAsciiTurtlePrefixes_`).
+  // `ascii-prefixes-only` setting, see `onlyAsciiTurtlePrefixes_`). Each of the
+  // files is parsed with `numParsingThreadsPerFile` threads.
   std::unique_ptr<RdfParserBase> makeRdfParser(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
-      const;
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      uint32_t numParsingThreadsPerFile) const;
 
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(

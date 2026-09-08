@@ -77,22 +77,24 @@ inline uint32_t defaultNumThreads() {
 // Building the hash maps is roughly half as expensive as parsing, so the item
 // maps get about a third of the threads (the rest goes to the parsers, see
 // `numParserThreads` below). At least two threads are used.
-inline size_t numItemMapThreads(uint32_t numThreads) {
-  return std::max<size_t>(2, (numThreads + 1) / 3);
+inline uint32_t numItemMapThreads(uint32_t numThreads) {
+  return std::max<uint32_t>(2, (numThreads + 1) / 3);
 }
 
-// The number of threads that a parallel parser uses, given the total number of
+// The number of threads that are used for parsing, given the total number of
 // threads `numThreads` for the index build: the threads that are left after
-// `numItemMapThreads`, but at least two.
+// `numItemMapThreads`, but at least two. When several input files are parsed
+// concurrently, these threads are divided among them, see
+// `numParserThreadsPerFile` in `IndexImpl.cpp`.
 //
 // NOTE: The subtraction is saturating, because on machines with very few
 // hardware threads `numItemMapThreads` may exceed `numThreads`. Because of the
 // minimum of two for both functions, fewer than four threads in total are
 // never used.
-inline size_t numParserThreads(uint32_t numThreads) {
-  return std::max<size_t>(
-      2,
-      numThreads - std::min<size_t>(numThreads, numItemMapThreads(numThreads)));
+inline uint32_t numParserThreads(uint32_t numThreads) {
+  return std::max<uint32_t>(
+      2, numThreads -
+             std::min<uint32_t>(numThreads, numItemMapThreads(numThreads)));
 }
 
 // Increasing the following two constants increases the RAM usage without much

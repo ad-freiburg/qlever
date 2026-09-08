@@ -654,11 +654,14 @@ class RdfParallelParser : public RdfParserBase {
   // Construct a parser that reads from an `InputFileSpecification`. The parser
   // creates its own I/O thread and `AsyncBlockSource` internally. The
   // `blocksize` parameter controls the size of the underlying I/O block buffer,
-  // and `numThreads` the total number of threads of the index build, of which
-  // this parser uses `numParserThreads` many (see `ConstantsIndexBuilding.h`).
+  // and `numParsingThreads` is the number of worker threads that this parser
+  // uses for parsing the blocks. NOTE: This is the number of threads for *this*
+  // parser, not the total number of threads of the index build; for how the
+  // latter is divided, see `ConstantsIndexBuilding.h` and
+  // `numParserThreadsPerFile` in `IndexImpl.cpp`.
   RdfParallelParser(const qlever::InputFileSpecification& spec,
                     ad_utility::MemorySize blocksize,
-                    const EncodedIriManager* ev, uint32_t numThreads,
+                    const EncodedIriManager* ev, uint32_t numParsingThreads,
                     const TripleComponent& defaultGraphIri =
                         qlever::specialIds().at(DEFAULT_GRAPH_IRI),
                     std::chrono::milliseconds sleepTimeForTesting =
@@ -666,8 +669,8 @@ class RdfParallelParser : public RdfParserBase {
       : RdfParserBase{ev},
         defaultGraphIri_{defaultGraphIri},
         sleepTimeForTesting_(sleepTimeForTesting),
-        parallelParser_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
-                        numParserThreads(numThreads), "parallel parser"} {
+        parallelParser_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING, numParsingThreads,
+                        "parallel parser"} {
     initialize(spec, blocksize);
   }
 
@@ -753,19 +756,23 @@ class RdfMultifileParser : public RdfParserBase {
       : RdfParserBase{encodedIriManager},
         parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
                       numParserThreads(numThreads)},
-        numThreads_{numThreads} {}
+        numParsingThreadsPerFile_{numParserThreads(numThreads)} {}
 
   // Construct the parser from a type-erased input range of file specifications
   // and eagerly start parsing them on background threads. If
   // `useRelaxedParsing` is true, the faster `TokenizerCtre` is used for all
   // files instead of the standard-compliant `Tokenizer` (see the comment on
   // `TurtleParser` above for the limitations of the relaxed mode).
-  // `numThreads` is the total number of threads of the index build. This
-  // parser parses `numParserThreads` many files concurrently, and
-  // passes the number of threads on to the parser of each single file.
+  // `numThreads` is the total number of threads of the index build, of which
+  // this parser uses `numParserThreads` many to parse that many files
+  // concurrently (see `ConstantsIndexBuilding.h`). Each of those files is
+  // parsed with `numParsingThreadsPerFile` threads. That number is computed by
+  // the caller (see `IndexImpl.cpp`), because only the caller knows how many
+  // input files there are, and this parser consumes `files` lazily.
   RdfMultifileParser(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager, uint32_t numThreads,
+      uint32_t numParsingThreadsPerFile,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
       bool useRelaxedParsing = false);
 
@@ -806,10 +813,9 @@ class RdfMultifileParser : public RdfParserBase {
   // never modified after construction.
   bool useRelaxedParsing_ = false;
 
-  // The total number of threads of the index build, passed on to the parser
-  // for a single file. Only read by the parsing threads, and never modified
-  // after construction.
-  uint32_t numThreads_;
+  // The number of threads that the parser for a single file gets. Only read by
+  // the parsing threads, and never modified after construction.
+  uint32_t numParsingThreadsPerFile_;
 
   // A thread that feeds the file specifications to the actual parser threads.
   ad_utility::JThread feederThread_;

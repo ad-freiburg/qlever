@@ -912,10 +912,19 @@ TEST(RdfParserTest, iriref) {
   runTestsForParser(ctreParser());
 }
 
-// The smallest number of threads that the parsers accept. The tests
-// themselves are already run in parallel, so each parser should use as few
-// threads as possible (which is two, see `numParserThreads`).
+// The smallest number of threads that the parsers accept. The tests themselves
+// are already run in parallel, so each parser should use as few threads as
+// possible. NOTE: For an `RdfParallelParser` this is the number of threads that
+// the parser itself uses, for an `RdfMultifileParser` it is the total number of
+// threads of the index build, which is then divided among the input files (see
+// `ConstantsIndexBuilding.h`).
 constexpr uint32_t minNumThreads = 1;
+
+// The number of threads that an `RdfMultifileParser` gives to the parser of a
+// single input file. In production this is computed from the total number of
+// threads and the number of input files, see `numParserThreadsPerFile` in
+// `IndexImpl.cpp`.
+constexpr uint32_t minNumThreadsPerFile = 1;
 
 // Parse the file at `filename` using a parser of type `Parser` and return the
 // sorted result. The default size for the parse buffer in the following tests
@@ -932,7 +941,8 @@ std::vector<TurtleTriple> parseFromFile(
     if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
       return Parser{ad_utility::InputRangeTypeErased{
                         std::vector<qlever::InputFileSpecification>{spec}},
-                    encodedIriManager(), minNumThreads, bufferSize};
+                    encodedIriManager(), minNumThreads, minNumThreadsPerFile,
+                    bufferSize};
     } else if constexpr (ad_utility::isInstantiation<Parser,
                                                      RdfParallelParser>) {
       return Parser{spec, bufferSize, encodedIriManager(), minNumThreads};
@@ -1275,7 +1285,8 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
         if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
           return Parser{ad_utility::InputRangeTypeErased{
                             std::vector<qlever::InputFileSpecification>{spec}},
-                        encodedIriManager(), minNumThreads, 40_B};
+                        encodedIriManager(), minNumThreads,
+                        minNumThreadsPerFile, 40_B};
         } else {
           return Parser{spec,
                         ad_utility::MemorySize::bytes(40),
@@ -1396,7 +1407,7 @@ TEST(RdfParserTest, multifileParser) {
     specs.emplace_back(file2, qlever::Filetype::NQuad, "defaultGraphNQ",
                        useParallelParser);
     Parser p{ad_utility::InputRangeTypeErased{std::move(specs)},
-             encodedIriManager(), minNumThreads};
+             encodedIriManager(), minNumThreads, minNumThreadsPerFile};
     std::vector<TurtleTriple> result;
     while (auto batch = p.getBatch()) {
       ql::ranges::copy(batch.value(), std::back_inserter(result));
@@ -1425,8 +1436,12 @@ TEST(RdfParserTest, multifileParserSelectsTokenizer) {
     std::vector<qlever::InputFileSpecification> specs;
     specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt, false);
     RdfMultifileParser parser{
-        ad_utility::InputRangeTypeErased{std::move(specs)}, encodedIriManager(),
-        minNumThreads, DEFAULT_PARSER_BUFFER_SIZE, useRelaxedParsing};
+        ad_utility::InputRangeTypeErased{std::move(specs)},
+        encodedIriManager(),
+        minNumThreads,
+        minNumThreadsPerFile,
+        DEFAULT_PARSER_BUFFER_SIZE,
+        useRelaxedParsing};
     std::vector<TurtleTriple> result;
     while (auto batch = parser.getBatch()) {
       ql::ranges::copy(batch.value(), std::back_inserter(result));
