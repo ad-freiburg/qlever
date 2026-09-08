@@ -73,9 +73,10 @@ struct MergeState {
 // chunk with the index `chunkIdx` and yield the result as a lazy range of
 // output blocks (see `get()`).
 //
-// The blocks of the input are read lazily and one at a time per run, so the
-// memory that a single `ChunkMerger` requires is one input block per run plus
-// a single output block.
+// The blocks of the input are read lazily and one at a time per run, and the
+// last block of a run is released as soon as that run is exhausted, so the
+// memory that a single `ChunkMerger` requires is one input block per run that
+// still contributes plus a single output block.
 //
 // The `Comparator` has to be able to compare two elements. It is also applied
 // to the bounds of the chunk, which the `InputConcept` requires to be
@@ -234,6 +235,13 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     const Comparator& comparator = state_->comparator_;
     while (cursor.it_ == cursor.end_) {
       if (cursor.nextBlockIdx_ == cursor.endBlockIdx_) {
+        // The cursor is exhausted. Release its last block right away instead
+        // of keeping it alive until the whole chunk is merged, so that a chunk
+        // whose runs finish early does not hold one dead block per such run.
+        // The iterators are reset as well, so that they never dangle.
+        cursor.block_ = input.makeEmptyBlock();
+        cursor.it_ = ql::ranges::begin(cursor.block_);
+        cursor.end_ = cursor.it_;
         return false;
       }
       size_t blockIdx = cursor.nextBlockIdx_;

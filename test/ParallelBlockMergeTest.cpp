@@ -60,6 +60,39 @@ struct CountingString {
   }
 };
 
+// An element that counts how many instances of it are alive, so that a test can
+// observe when the merge releases an input block.
+struct LiveCounted {
+  size_t value_ = 0;
+
+  static size_t& numLive() {
+    static size_t numLive = 0;
+    return numLive;
+  }
+
+  explicit LiveCounted(size_t value) : value_{value} { ++numLive(); }
+  LiveCounted(const LiveCounted& other) : value_{other.value_} { ++numLive(); }
+  LiveCounted(LiveCounted&& other) noexcept : value_{other.value_} {
+    ++numLive();
+  }
+  LiveCounted& operator=(const LiveCounted&) = default;
+  LiveCounted& operator=(LiveCounted&&) = default;
+  ~LiveCounted() { --numLive(); }
+
+  bool operator<(const LiveCounted& other) const {
+    return value_ < other.value_;
+  }
+};
+
+// Return the sorted run of the `LiveCounted` elements `first ... last - 1`.
+std::vector<LiveCounted> makeLiveCounted(size_t first, size_t last) {
+  std::vector<LiveCounted> result;
+  for (size_t i = first; i < last; ++i) {
+    result.emplace_back(i);
+  }
+  return result;
+}
+
 // An input policy that wraps a `VectorInput<size_t>` and additionally records
 // every call to `getBlock` and (optionally) throws from the `throwAtRead_`-th
 // of them. The recorded state is shared between all copies, because the merge
@@ -253,6 +286,38 @@ TEST(ParallelBlockMerge, moveOfElements) {
                            ::testing::Not(::testing::IsEmpty()))));
     }
   }
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, blockOfAnExhaustedRunIsReleasedEarly) {
+  // Run 0 is a single block of ten elements, run 1 consists of ten blocks of
+  // ten elements, all of which are greater than those of run 0. With an output
+  // block size of ten, the first output block exhausts run 0, and the merger
+  // must release that run's block right away, instead of keeping it alive until
+  // the whole chunk is merged.
+  std::vector<std::vector<LiveCounted>> runs;
+  runs.push_back(makeLiveCounted(0, 10));
+  runs.push_back(makeLiveCounted(100, 200));
+  // The `VectorInput` holds its own copy of the runs (`getBlock` then copies
+  // again), so the baseline is taken after it has been created.
+  auto input = makeVectorInput(runs, 10);
+  const size_t numLiveBefore = LiveCounted::numLive();
+  ASSERT_EQ(numLiveBefore, 220u);
+
+  auto blocks = serialBlockMergeToRange<false>(std::move(input), std::less<>{},
+                                               optionsWithBlockSize(10));
+  auto it = blocks.begin();
+  ASSERT_NE(it, blocks.end());
+  // The first output block holds the ten elements of run 0. Alive beyond the
+  // baseline are exactly that output block and the current block of run 1, but
+  // not the (exhausted) block of run 0 any more.
+  auto firstBlock = std::move(*it);
+  ASSERT_EQ(firstBlock.size(), 10u);
+  EXPECT_EQ(firstBlock.front().value_, 0u);
+  EXPECT_EQ(LiveCounted::numLive(), numLiveBefore + 10 + 10);
+  ++it;
+  ASSERT_NE(it, blocks.end());
+  EXPECT_EQ((*it).front().value_, 100u);
 }
 
 // _____________________________________________________________________________
