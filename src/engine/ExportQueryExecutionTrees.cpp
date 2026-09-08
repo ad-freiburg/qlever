@@ -16,16 +16,21 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 
+#include <future>
 #include <optional>
 #include <string_view>
+#include <thread>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "engine/ConstructDeduplicator.h"
 #include "engine/ConstructTripleGenerator.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
+#include "util/TaskQueue.h"
 #include "util/http/MediaTypes.h"
 #include "util/views/TakeUntilInclusiveView.h"
 
@@ -762,6 +767,42 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 }
 
 // _____________________________________________________________________________
+std::vector<TableWithRange> ExportQueryExecutionTrees::splitBlockIntoChunks(
+    const TableWithRange& block, size_t rowsPerChunk) {
+  AD_CONTRACT_CHECK(rowsPerChunk > 0);
+  std::vector<TableWithRange> chunks;
+  if (ql::ranges::empty(block.view_)) {
+    return chunks;
+  }
+  const uint64_t begin0 = *ql::ranges::begin(block.view_);
+  const uint64_t end = begin0 + ql::ranges::size(block.view_);
+  const auto step = static_cast<uint64_t>(rowsPerChunk);
+  for (uint64_t begin = begin0; begin < end; begin += step) {
+    const uint64_t pieceEnd = std::min(end, begin + step);
+    chunks.emplace_back(block.tableWithVocab_,
+                        ql::views::iota(begin, pieceEnd));
+  }
+  return chunks;
+}
+
+// _____________________________________________________________________________
+template <ad_utility::MediaType format>
+std::string ExportQueryExecutionTrees::serializeConstructGroup(
+    const ad_utility::sparql_types::Triples& templateTriples,
+    const VariableToColumnMap& variableColumns,
+    ad_utility::InputRangeTypeErased<TableWithRange> rowRange, size_t rowOffset,
+    const qlever::constructExport::EvaluationConfig& config) {
+  std::string output;
+  for (const std::string& triple : qlever::constructExport::
+           ConstructTripleGenerator::generateFormattedTriples(
+               templateTriples, variableColumns, std::move(rowRange), rowOffset,
+               format, config)) {
+    output += triple;
+  }
+  return output;
+}
+
+// _____________________________________________________________________________
 template <ad_utility::MediaType format>
 STREAMABLE_GENERATOR_TYPE
 ExportQueryExecutionTrees::constructQueryResultToStream(
@@ -790,15 +831,109 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
 
-  auto triples = qlever::constructExport::ConstructTripleGenerator::
-      generateFormattedTriples(
-          constructTriples, qet.getVariableColumns(), std::move(rowIndices),
-          limitAndOffset._offset, format,
-          makeConstructEvaluationConfig(qet, std::move(cancellationHandle)));
+  // The number of threads for the parallel serialization of the CONSTRUCT
+  // triples.  0 means: use all logical cores.  The parallel path walks lazy
+  // WHERE blocks, cuts each block into contiguous row chunks, and serializes
+  // those chunks on a worker pool. Outputs are yielded in row order.
 
+  size_t numThreads =
+      getRuntimeParameter<&RuntimeParameters::constructExportNumThreads_>();
+  if (numThreads == 0) {
+    numThreads = std::max(1u, std::thread::hardware_concurrency());
+  }
+  // Copy the cancellation handle (instead of moving it like the serial path),
+  // because the parallel path checks it again while collecting the results.
+  auto config = makeConstructEvaluationConfig(qet, cancellationHandle);
+
+  ConstructStreamParams streamParams{qet.getVariableColumns(), constructTriples,
+                                     limitAndOffset._offset, std::move(config)};
+  if (numThreads <= 1) {
+    STREAMABLE_YIELD_FROM(constructQueryResultSerial<format>(
+        std::move(streamParams), std::move(rowIndices), streamableYielder));
+    STREAMABLE_RETURN;
+  }
+
+  bool dedupActive =
+      !std::holds_alternative<ad_utility::DeduplicationMode::None>(
+          getRuntimeParameter<&RuntimeParameters::constructDeduplication_>()
+              .value_);
+  if (dedupActive) {
+    // When triple deduplication is active, the chunks share a single
+    // deduplicator.
+    streamParams.config_.sharedDeduplicator_ =
+        std::make_shared<qlever::constructExport::ConstructDeduplicator>(
+            streamParams.config_.mode_, *qet.getQec());
+  }
+  STREAMABLE_YIELD_FROM(constructQueryResultParallel<format>(
+      std::move(streamParams), std::move(rowIndices), numThreads,
+      cancellationHandle, streamableYielder));
+  STREAMABLE_RETURN;
+}
+
+// _____________________________________________________________________________
+template <ad_utility::MediaType format>
+STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::constructQueryResultSerial(
+    ConstructStreamParams params,
+    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
+  auto triples = qlever::constructExport::ConstructTripleGenerator::
+      generateFormattedTriples(params.constructTriples_,
+                               params.variableColumns_, std::move(rowIndices),
+                               params.rowOffset_, format, params.config_);
   for (const std::string& triple : triples) {
     STREAMABLE_YIELD(triple);
   }
+  STREAMABLE_RETURN;
+}
+
+// _____________________________________________________________________________
+template <ad_utility::MediaType format>
+STREAMABLE_GENERATOR_TYPE
+ExportQueryExecutionTrees::constructQueryResultParallel(
+    ConstructStreamParams params,
+    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+    size_t numThreads, CancellationHandle cancellationHandle,
+    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
+  // Walk lazy WHERE blocks one at a time. Workers may only touch the current
+  // block: its IdTable view dies when the generator advances. Each block is
+  // cut into contiguous chunks of `BATCH_SIZE` rows and submitted in order
+  // to a pool of `numThreads` workers. At most `2 * numThreads` chunk strings
+  // are in flight so later chunks of a large block are not all materialized
+  // before the first one is yielded.
+  const size_t rowsPerChunk =
+      qlever::constructExport::ConstructTripleGenerator::BATCH_SIZE;
+  const size_t window = 2 * numThreads;
+  ad_utility::TaskQueue<false> queue{window, numThreads,
+                                     "ConstructExportParallel"};
+
+  for (const TableWithRange& block : rowIndices) {
+    std::vector<TableWithRange> chunks =
+        splitBlockIntoChunks(block, rowsPerChunk);
+    if (chunks.empty()) {
+      continue;
+    }
+
+    std::vector<std::future<std::string>> futures(chunks.size());
+    size_t nextSubmit = 0;
+    size_t nextGet = 0;
+    while (nextGet < chunks.size()) {
+      while (nextSubmit < chunks.size() && nextSubmit - nextGet < window) {
+        futures[nextSubmit] = queue.submit(
+            [&params, chunk = std::move(chunks[nextSubmit])]() mutable {
+              std::vector<TableWithRange> one{std::move(chunk)};
+              return serializeConstructGroup<format>(
+                  params.constructTriples_, params.variableColumns_,
+                  InputRangeTypeErased(std::move(one)), params.rowOffset_,
+                  params.config_);
+            });
+        ++nextSubmit;
+      }
+      cancellationHandle->throwIfCancelled();
+      STREAMABLE_YIELD(std::move(futures[nextGet].get()));
+      ++nextGet;
+    }
+  }
+  STREAMABLE_RETURN;
 }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

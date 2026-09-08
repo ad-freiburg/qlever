@@ -28,6 +28,17 @@ IdCache ConstructTripleGenerator::makeIdCache(
 
 namespace {
 
+std::shared_ptr<ConstructDeduplicator> makeDeduplicator(
+    const EvaluationConfig& config) {
+  if (config.sharedDeduplicator_) {
+    return config.sharedDeduplicator_;
+  }
+  if (std::holds_alternative<DeduplicationMode::None>(config.mode_.value_)) {
+    return nullptr;
+  }
+  return std::make_shared<ConstructDeduplicator>(config.mode_, config.qec_);
+}
+
 // Bundles the pieces `computeBatch` needs beyond the batch itself.
 struct BatchEvalContext {
   BatchEvalContext(const PreprocessedConstructTemplate& preprocessedTemplate,
@@ -87,14 +98,13 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
 // non-owning handle (`IdTableView` + `LocalVocab` ref); the underlying result
 // storage must still outlive the whole export, as with every other CONSTRUCT
 // export path.
-auto processTableBatches(TableWithRange table, BatchEvalContext context,
+auto processTableBatches(const TableWithRange& table, BatchEvalContext context,
                          size_t tableRowOffset) {
   // Copy the cheap pieces out first so neither `chunk` nor the transform
   // lambda retain a reference into the by-value `table` parameter.
   auto rowView = table.view_;
   const TableConstRefWithVocab tableWithVocab = table.tableWithVocab_;
-  return ranges::views::chunk(std::move(rowView),
-                              ConstructTripleGenerator::BATCH_SIZE) |
+  return ranges::views::chunk(rowView, ConstructTripleGenerator::BATCH_SIZE) |
          ql::views::transform([tableWithVocab, context = std::move(context),
                                tableRowOffset](auto chunkView) {
            return computeBatch(tableWithVocab, chunkView, context,
@@ -113,11 +123,7 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
       templateTriples, variableColumns, config.index_);
   IdCache cache = makeIdCache(preprocessedTemplate);
 
-  std::shared_ptr<ConstructDeduplicator> deduplicator;
-  if (!std::holds_alternative<DeduplicationMode::None>(config.mode_.value_)) {
-    deduplicator =
-        std::make_shared<ConstructDeduplicator>(config.mode_, config.qec_);
-  }
+  auto deduplicator = makeDeduplicator(config);
 
   auto preprocessedTemplatePtr =
       std::make_shared<const PreprocessedConstructTemplate>(

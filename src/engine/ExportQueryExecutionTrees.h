@@ -14,6 +14,8 @@
 #ifndef QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
 #define QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
 
+#include <vector>
+
 #include "engine/ConstructTripleGenerator.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
@@ -210,7 +212,52 @@ class ExportQueryExecutionTrees {
   FRIEND_TEST(ExportQueryExecutionTrees,
               ensureGeneratorIsNotConsumedWhenNotRequired);
   FRIEND_TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata);
+  FRIEND_TEST(ExportQueryExecutionTrees, SplitBlockIntoChunks);
+  FRIEND_TEST(ExportQueryExecutionTrees, SerializeConstructGroup);
   FRIEND_TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause);
+
+  // The per-format serialization body of the CONSTRUCT export: instantiates
+  // `templateTriples` for every row in `rowRange` and serializes each resulting
+  // triple according to `format`, concatenated into a single output string.
+  template <ad_utility::MediaType format>
+  static std::string serializeConstructGroup(
+      const ad_utility::sparql_types::Triples& templateTriples,
+      const VariableToColumnMap& variableColumns,
+      ad_utility::InputRangeTypeErased<TableWithRange> rowRange,
+      size_t rowOffset,
+      const qlever::constructExport::EvaluationConfig& config);
+
+  // Cut one lazy `TableWithRange` into contiguous row chunks of `rowsPerChunk`
+  // rows (the last chunk may be shorter). Production uses
+  // `ConstructTripleGenerator::BATCH_SIZE`. The returned `view_` ranges keep
+  // the original global row indices, which blank-node base IDs depend on.
+  // Empty blocks yield no chunks.
+  static std::vector<TableWithRange> splitBlockIntoChunks(
+      const TableWithRange& block, size_t rowsPerChunk);
+
+  // Inputs the CONSTRUCT-stream-coroutines own in their frame.
+  struct ConstructStreamParams {
+    VariableToColumnMap variableColumns_;
+    ad_utility::sparql_types::Triples constructTriples_;
+    size_t rowOffset_;
+    qlever::constructExport::EvaluationConfig config_;
+  };
+
+  // Yield one formatted triple at a time from `rowIndices`.
+  template <ad_utility::MediaType format>
+  static STREAMABLE_GENERATOR_TYPE constructQueryResultSerial(
+      ConstructStreamParams params,
+      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+      STREAMABLE_YIELDER_ARG_DECL);
+
+  // Format each live WHERE block on a `TaskQueue` of `numThreads` workers.
+  // Join the current block before the generator advances.
+  template <ad_utility::MediaType format>
+  static STREAMABLE_GENERATOR_TYPE constructQueryResultParallel(
+      ConstructStreamParams params,
+      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+      size_t numThreads, CancellationHandle cancellationHandle,
+      STREAMABLE_YIELDER_ARG_DECL);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H

@@ -24,6 +24,8 @@
 
 namespace qlever::constructExport {
 
+class ConstructDeduplicator;
+
 using ad_utility::InputRangeTypeErased;
 using CancellationHandle = ad_utility::SharedCancellationHandle;
 using Triples = ad_utility::sparql_types::Triples;
@@ -38,6 +40,11 @@ struct EvaluationConfig {
   CancellationHandle cancellationHandle_;
   std::reference_wrapper<const QueryExecutionContext> qec_;
   ad_utility::DeduplicationMode mode_ = ad_utility::DeduplicationMode::none();
+
+  // Deduplicator shared by all chunks of a parallel CONSTRUCT export.
+  // Null means the caller did not share one; `evaluateTables` then creates
+  // a private instance when `mode_` is not `None`.
+  std::shared_ptr<ConstructDeduplicator> sharedDeduplicator_ = nullptr;
 };
 
 // Generates triples from the CONSTRUCT query results by instantiating the

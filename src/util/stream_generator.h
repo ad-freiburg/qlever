@@ -411,6 +411,12 @@ class StringBatcher {
 // 5. `STREAMABLE_RETURN` is either `co_return` (in C++20 mode) or `return` (in
 // C++17 mode).
 //
+// 6. `STREAMABLE_YIELD_FROM(expr)` consumes a nested streamable function
+// `expr`. In C++20 mode `expr` returns a `stream_generator` and each chunk
+// is `co_yield`ed. In C++17 mode `expr` is a void call that already invokes
+// `streamableYielder`. The expansion must sit in a streamable function so
+// that `STREAMABLE_YIELD` is valid.
+//
 // To see these macros in action, see the examples in `StringBatcherTest.pp`,
 // and their usage in `ExportQueryExecutionTrees.{h,cpp}`.
 
@@ -421,6 +427,13 @@ using STREAMABLE_YIELDER_TYPE = int;
   [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder = {}
 #define STREAMABLE_YIELD(...) co_yield __VA_ARGS__
 #define STREAMABLE_RETURN co_return
+#define STREAMABLE_YIELD_FROM(...)          \
+  do {                                      \
+    auto streamableNested = (__VA_ARGS__);  \
+    for (auto&& chunk : streamableNested) { \
+      STREAMABLE_YIELD(chunk);              \
+    }                                       \
+  } while (false)
 
 #else
 
@@ -430,6 +443,10 @@ using STREAMABLE_YIELDER_TYPE =
 #define STREAMABLE_YIELDER_ARG_DECL STREAMABLE_YIELDER_TYPE streamableYielder
 #define STREAMABLE_YIELD(...) streamableYielder(__VA_ARGS__)
 #define STREAMABLE_RETURN return;
+#define STREAMABLE_YIELD_FROM(...) \
+  do {                             \
+    (__VA_ARGS__);                 \
+  } while (false)
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
