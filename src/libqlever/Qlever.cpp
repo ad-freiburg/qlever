@@ -151,9 +151,6 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   if (config.geoCellGridLevel_ > 0) {
-    AD_CONTRACT_CHECK(
-        config.geoCellGridLevel_ <= std::numeric_limits<uint8_t>::max(),
-        "The geo cell grid level is too large");
     index.getImpl().setGeoCellGridForIndexBuilding(
         ad_utility::GeoCellGrid{static_cast<uint8_t>(config.geoCellGridLevel_),
                                 config.geoCellGridScheme_});
@@ -407,6 +404,17 @@ void IndexBuilderConfig::validate() const {
         "The vocabulary type \"", vocabType_.toString(),
         "\" cannot be used for index building, the supported types are ",
         ad_utility::VocabularyType::getListOfValuesForIndexBuilding()));
+  }
+  if (geoCellGridLevel_ > 0) {
+    if (vocabType_ !=
+        ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit) {
+      throw std::invalid_argument(
+          "A geo cell grid (option --geo-cell-grid-level) requires the "
+          "vocabulary type on-disk-compressed-geo-split");
+    }
+    if (geoCellGridLevel_ > std::numeric_limits<uint8_t>::max()) {
+      throw std::invalid_argument("The geo cell grid level is too large");
+    }
   }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");
