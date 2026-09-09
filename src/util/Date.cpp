@@ -9,22 +9,17 @@
 #include <absl/strings/str_format.h>
 
 #include "global/Constants.h"
+#include "util/TypeTraits.h"
 
 // _____________________________________________________________________________
 std::string Date::formatTimeZone() const {
-  auto impl = [](const auto& value) -> std::string {
-    using T = std::decay_t<decltype(value)>;
-    if constexpr (std::is_same_v<T, NoTimeZone>) {
-      return "";
-    } else if constexpr (std::is_same_v<T, TimeZoneZ>) {
-      return "Z";
-    } else {
-      static_assert(std::is_same_v<T, int>);
-      constexpr static std::string_view format = "%0+3d:00";
-      return absl::StrFormat(format, value);
-    }
-  };
-  return std::visit(impl, getTimeZone());
+  return ad_utility::visitIf(
+      getTimeZone(), [](const NoTimeZone&) { return std::string{""}; },
+      [](const TimeZoneZ&) { return std::string{"Z"}; },
+      [](int value) {
+        constexpr static std::string_view format = "%0+3d:00";
+        return absl::StrFormat(format, value);
+      });
 }
 
 // _____________________________________________________________________________
@@ -140,19 +135,9 @@ std::optional<int64_t> Date::toEpochInt() const {
 // _____________________________________________________________________________
 int8_t Date::getTimeZoneOffsetToUTCInHours(TimeZone tz) {
   // Handle different types contained in variant `TimeZone`.
-  return std::visit(
-      [](auto& value) {
-        using T = std::decay_t<decltype(value)>;
-
-        if constexpr (std::is_same_v<T, NoTimeZone>) {
-          return 0;  // Assume UTC time zone.
-        } else if constexpr (std::is_same_v<T, TimeZoneZ>) {
-          return 0;
-        } else if constexpr (std::is_same_v<T, int>) {
-          return value;
-        }
-      },
-      tz);
+  return ad_utility::visitIf(
+      tz, [](const NoTimeZone&) { return 0; },  // Assume UTC time zone.
+      [](const TimeZoneZ&) { return 0; }, [](int value) { return value; });
 }
 
 int8_t Date::getTimeZoneOffsetToUTCInHours() const {

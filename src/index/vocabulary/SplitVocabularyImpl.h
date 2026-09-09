@@ -128,17 +128,16 @@ std::optional<ad_utility::GeometryInfo> SplitVocabulary<
   // Visit the underlying vocabulary and retrieve the requested `GeometryInfo`
   // if it is a `GeoVocabulary`.
   const auto& vocab = underlying_[getMarker(indexWithMarker)];
-  return std::visit(
-      [&](const auto& v) -> std::optional<ad_utility::GeometryInfo> {
-        using T = std::decay_t<decltype(v)>;
-        if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
-          return v.getGeoInfo(getVocabIndex(indexWithMarker));
-        } else {
-          static_assert(NeverProvidesGeometryInfo<T>);
-          return std::nullopt;
-        }
+  return ad_utility::visitIf(
+      vocab,
+      CPP_template_lambda(indexWithMarker)(typename T)(const T& v)(
+          requires ad_utility::isInstantiation<T, GeoVocabulary>) {
+        return v.getGeoInfo(getVocabIndex(indexWithMarker));
       },
-      vocab);
+      [](const auto& v) -> std::optional<ad_utility::GeometryInfo> {
+        static_assert(NeverProvidesGeometryInfo<std::decay_t<decltype(v)>>);
+        return std::nullopt;
+      });
 }
 
 // _____________________________________________________________________________
