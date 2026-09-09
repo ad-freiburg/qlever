@@ -243,6 +243,14 @@ class Vocabulary {
     return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
   }
 
+  // Return a reference to the vocabulary that actually holds the words, i.e.
+  // the vocabulary below the wrapping `UnicodeVocabulary`. The latter is
+  // bypassed because its only additional state is a comparator (see
+  // `applyToUnderlyingZeroCopyVocab` below).
+  const UnderlyingVocabulary& getUnderlyingVocabulary() const {
+    return vocabulary_.getUnderlyingVocabulary();
+  }
+
   // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the
   // vocabulary and set the type of the vocabulary according to the `type`
   // argument (see the `PolymorphicVocabulary` class for details).
@@ -263,7 +271,8 @@ class Vocabulary {
   // `resetToType` that the active alternative matches the blob's format); if it
   // is a concrete type that does not support zero-copy, this fails to compile
   // (via a `static_assert`). Note that the wrapping `UnicodeVocabulary` is
-  // bypassed via `getUnderlyingVocabulary()`, so its comparator is left
+  // bypassed by `applyToUnderlyingZeroCopyVocab` (via
+  // `UnicodeVocabulary::getUnderlyingVocabulary()`), so its comparator is left
   // untouched and is not part of the blob. The vocabulary is only valid as long
   // as the memory backing `serializer`'s buffer is valid and unchanged.
   CPP_template(typename Serializer)(
