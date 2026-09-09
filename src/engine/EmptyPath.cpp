@@ -66,6 +66,12 @@ EmptyPath::CheckedChild::CheckedChild(std::shared_ptr<QueryExecutionTree> child,
                                       ColumnIndex joinColumn)
     : child_{std::move(child)}, joinColumn_{joinColumn} {
   AD_CONTRACT_CHECK(child_ != nullptr);
+  AD_CONTRACT_CHECK(joinColumn_ < child_->getResultWidth());
+}
+
+// _____________________________________________________________________________
+EmptyPath::CheckedChild EmptyPath::CheckedChild::clone() const {
+  return CheckedChild{child_->clone(), joinColumn_};
 }
 
 // _____________________________________________________________________________
@@ -90,7 +96,6 @@ EmptyPath::EmptyPath(QueryExecutionContext* qec, Variable variable,
     return;
   }
   CheckedChild& checkedChild = checkedChild_.value();
-  AD_CONTRACT_CHECK(checkedChild.joinColumn_ < child().getResultWidth());
   if (graphVariable_.has_value()) {
     checkedChild.graphColumn_ =
         child().getVariableColumnOrNullopt(graphVariable_.value());
@@ -127,7 +132,7 @@ std::vector<QueryExecutionTree*> EmptyPath::getChildren() {
   if (!checkedChild_.has_value()) {
     return {};
   }
-  return {checkedChild_.value().child_.get()};
+  return {&child()};
 }
 
 // _____________________________________________________________________________
@@ -258,9 +263,7 @@ bool EmptyPath::columnOriginatesFromGraphOrUndef(
 std::unique_ptr<Operation> EmptyPath::cloneImpl() const {
   std::optional<CheckedChild> checkedChild = std::nullopt;
   if (checkedChild_.has_value()) {
-    // The remaining members of `CheckedChild` are deduced by the constructor.
-    checkedChild =
-        CheckedChild{child().clone(), checkedChild_.value().joinColumn_};
+    checkedChild = checkedChild_.value().clone();
   }
   return std::make_unique<EmptyPath>(getExecutionContext(), variable_,
                                      activeGraphs_, graphVariable_,
@@ -302,13 +305,10 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
   IdTable result{numKgColumns(), allocator()};
   result.reserve(chunkSize_);
   // NOTE: `set_union` hands out the rows one at a time, so the result is built
-  // row by row although `IdTable`s are stored column-major (see the `TODO` for
-  // `appendRow` below). A hand-rolled merge could detect whole runs of rows
-  // that come from only one of the two scans and append those in bulk, but
-  // that is deliberately not worth its complexity here: either the `idFilter`
-  // makes the result tiny (the common case of an existence check on few
-  // values), or the whole knowledge graph is scanned, in which case
-  // decompressing the blocks of the two permutations dominates by far.
+  // row by row. Detecting runs of rows that come from only one of the two scans
+  // and appending those in bulk would be faster, but the merge is not the
+  // bottleneck: either the `idFilter` makes the result tiny, or the whole
+  // knowledge graph is scanned and decompressing its blocks dominates.
   for (const auto& row : merged) {
     result.push_back(row);
     if (result.numRows() >= chunkSize_) {
@@ -331,13 +331,10 @@ Result::Generator EmptyPath::computeAllEntities() const {
 }
 
 // _____________________________________________________________________________
-// TODO<RobinTF> This writes a single row at a time, although `IdTable`s are
-// stored in column-major order, so each of the writes below touches a different
-// column. Appending whole runs of rows per column would be considerably faster
-// (all the rows that a single input row is expanded to share their payload
-// columns, and all the rows of a single entity share their entity column). This
-// is deliberately kept simple for now, see the note at the top of the
-// `EmptyPath` class for why this is acceptable.
+// TODO<RobinTF> Rows are written one at a time, although `IdTable`s are stored
+// column-major, so each of the writes below touches a different column.
+// Appending runs of rows per column would be faster; this is not a bottleneck
+// in practice (see the note at the top of the `EmptyPath` class).
 void EmptyPath::appendRow(IdTable& result, const IdTableView<0>& input,
                           size_t inputRow, Id id, Id graph) const {
   result.emplace_back();
@@ -366,23 +363,24 @@ bool EmptyPath::graphMatches(const IdTableView<0>& input, size_t inputRow,
 }
 
 // _____________________________________________________________________________
-// TODO<RobinTF> The cross product below is computed row by row (see the `TODO`
-// for `appendRow`), although its shape is very regular: the entity column of
-// the result is the entities of the knowledge graph, each repeated
-// `undefRows.size()` times, and the payload columns are the payload columns of
-// the `undefRows`, tiled once per entity. Both could be written with a handful
-// of bulk copies per chunk instead. This is deliberately kept simple for now,
-// see the note at the top of the `EmptyPath` class; note that this case is rare
-// (and slow no matter what, because the whole knowledge graph has to be read),
-// which is why we warn about it.
+// TODO<RobinTF> The cross product below has a very regular shape: each entity
+// is repeated once per UNDEF row, and the payload columns of the UNDEF rows are
+// tiled once per entity. It could therefore be written with a few bulk copies
+// per chunk instead of row by row.
 Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
                                               IdTable& result,
-                                              YieldIfFull yieldIfFull) const {
-  addWarning(
-      "The empty path is applied to a column that contains UNDEF values. Such "
-      "a value matches every entity of the knowledge graph, so all of them "
-      "have to be read and combined with each of the affected rows, which can "
-      "be very slow.");
+                                              YieldIfFull yieldIfFull,
+                                              bool& hasWarnedAboutUndef) const {
+  // A lazy child hands out its result in several tables, each of which may
+  // contain UNDEF values, so we have to make sure that we warn only once.
+  if (!hasWarnedAboutUndef) {
+    hasWarnedAboutUndef = true;
+    addWarning(
+        "The empty path is applied to a column that contains UNDEF values. "
+        "Such a value matches every entity of the knowledge graph, so all of "
+        "them have to be read and combined with each of the affected rows, "
+        "which can be very slow.");
+  }
   ql::span<const Id> joinColumn =
       input.getColumn(checkedChild_.value().joinColumn_);
   std::vector<size_t> undefRows;
@@ -413,7 +411,8 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
 
 // _____________________________________________________________________________
 Result::Generator EmptyPath::processTable(IdTableView<0> table,
-                                          const LocalVocab& localVocab) const {
+                                          const LocalVocab& localVocab,
+                                          bool& hasWarnedAboutUndef) const {
   ql::span<const Id> joinColumn =
       table.getColumn(checkedChild_.value().joinColumn_);
   // The distinct values of the join column that have to be looked up.
@@ -431,7 +430,7 @@ Result::Generator EmptyPath::processTable(IdTableView<0> table,
   // values of the join column. This is typically tiny compared to the whole
   // knowledge graph, which is the whole point of this operation.
   IdTable matches{numKgColumns(), allocator()};
-  for (IdTable& part : scanIndex(std::move(ids))) {
+  for (const IdTable& part : scanIndex(std::move(ids))) {
     matches.insertAtEnd(part);
   }
 
@@ -473,7 +472,8 @@ Result::Generator EmptyPath::processTable(IdTableView<0> table,
   }
 
   if (hasUndef) {
-    for (auto& pair : processUndefRows(table, result, yieldIfFull)) {
+    for (auto& pair :
+         processUndefRows(table, result, yieldIfFull, hasWarnedAboutUndef)) {
       co_yield pair;
     }
   }
@@ -486,15 +486,20 @@ Result::Generator EmptyPath::processTable(IdTableView<0> table,
 // _____________________________________________________________________________
 Result::Generator EmptyPath::computeExistenceCheck(
     std::shared_ptr<const Result> childResult) const {
+  // Shared by all the tables below, such that the warning about UNDEF values is
+  // added at most once (see `processUndefRows`).
+  bool hasWarnedAboutUndef = false;
   if (childResult->isFullyMaterialized()) {
     for (auto& pair :
-         processTable(childResult->idTableView(), childResult->localVocab())) {
+         processTable(childResult->idTableView(), childResult->localVocab(),
+                      hasWarnedAboutUndef)) {
       co_yield pair;
     }
     co_return;
   }
   for (auto& [table, localVocab] : childResult->idTables()) {
-    for (auto& pair : processTable(table.asStaticView<0>(), localVocab)) {
+    for (auto& pair : processTable(table.asStaticView<0>(), localVocab,
+                                   hasWarnedAboutUndef)) {
       co_yield pair;
     }
   }

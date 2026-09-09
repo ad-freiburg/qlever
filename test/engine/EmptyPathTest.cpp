@@ -588,8 +588,7 @@ TEST(EmptyPath, theJoinColumnMustBeInsideTheChild) {
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{getId("<a>")}}), Vars{Variable{"?x"}});
-  EXPECT_THROW((EmptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
-                          EmptyPath::CheckedChild{std::move(child), 1}}),
+  EXPECT_THROW(EmptyPath::CheckedChild(std::move(child), 1),
                ad_utility::Exception);
 }
 
@@ -602,6 +601,27 @@ TEST(EmptyPath, theGraphColumnOfTheChildMustNotBeTheJoinColumn) {
   EXPECT_THROW((EmptyPath{qec, Variable{"?x"}, Graphs::All(), Variable{"?g"},
                           EmptyPath::CheckedChild{std::move(child), 0}}),
                ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, theWarningAboutUndefValuesIsAddedOnlyOnce) {
+  auto* qec = makeQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  // A lazy child that hands out its result in two tables, both of which contain
+  // an UNDEF value in the join column.
+  std::vector<IdTable> tables;
+  tables.push_back(
+      makeIdTableFromVector({{getId("<a>")}, {Id::makeUndefined()}}));
+  tables.push_back(
+      makeIdTableFromVector({{getId("<b>")}, {Id::makeUndefined()}}));
+  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(tables), Vars{Variable{"?x"}});
+  EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
+                      EmptyPath::CheckedChild{std::move(child), 0}};
+
+  computeResult(emptyPath);
+  EXPECT_THAT(emptyPath.collectWarnings(),
+              ::testing::ElementsAre(::testing::HasSubstr("UNDEF")));
 }
 
 // _____________________________________________________________________________

@@ -45,14 +45,13 @@
 // in the checked column and in the graph column) match everything and are
 // expanded accordingly.
 //
-// NOTE: Several parts of the implementation deliberately favor simplicity over
-// speed (see the `TODO`s and the notes in `EmptyPath.cpp`): the result is
-// written row by row although `IdTable`s are stored column-major, and UNDEF
-// values are expanded via a plain cross product. This is a conscious trade-off:
-// in the common case (an existence check on few values) the result is so small
-// that none of this matters, and in the cases where it would matter the runtime
-// is dominated by reading (large parts of) the index, so the query will
-// typically run into the timeout anyway.
+// NOTE: The implementation favors simplicity over speed in a few places (see
+// the `TODO`s in `EmptyPath.cpp`): the result is written row by row although
+// `IdTable`s are stored column-major, and UNDEF values are expanded via a plain
+// cross product. This is a deliberate trade-off: in the common case (an
+// existence check on few values) the result is small enough that this doesn't
+// matter, and in the cases where it would matter the runtime is dominated by
+// reading (large parts of) the index.
 class EmptyPath : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
@@ -78,9 +77,14 @@ class EmptyPath : public Operation {
 
     // The `graphColumn_` and the `payloadColumns_` are deliberately not
     // arguments here: they can only be deduced together with the graph
-    // variable, which `EmptyPath`'s constructor does.
+    // variable, which `EmptyPath`'s constructor does. The `joinColumn` has to
+    // be a column of the `child`'s result.
     CheckedChild(std::shared_ptr<QueryExecutionTree> child,
                  ColumnIndex joinColumn);
+
+    // A deep copy, with the `child_` cloned. The remaining members are deduced
+    // by `EmptyPath`'s constructor and are hence not copied.
+    CheckedChild clone() const;
   };
 
  private:
@@ -89,7 +93,10 @@ class EmptyPath : public Operation {
 
   // The variable that holds the entities. It is always written to column 0.
   Variable variable_;
-  // The graphs that are active in the current context.
+  // The graphs that the entities have to occur in. This is not necessarily all
+  // the graphs of the index: the query can restrict them via a `FROM` clause,
+  // and the property path that this operation stems from can appear inside a
+  // `GRAPH ?g { ... }` (or `GRAPH <g> { ... }`) clause.
   Graphs activeGraphs_;
   // If set, the graph IDs are written to column 1 using this variable.
   std::optional<Variable> graphVariable_;
@@ -162,10 +169,13 @@ class EmptyPath : public Operation {
 
   // Perform the existence check for a single table of the child's result. The
   // `table` is passed by value because it is a view that has to be stored in
-  // the frame of this coroutine, `localVocab` has to be kept alive by the
-  // caller.
+  // the frame of this coroutine, `localVocab` and `hasWarnedAboutUndef` have to
+  // be kept alive by the caller. The latter is shared by all the tables of a
+  // single result, such that the warning about UNDEF values is only added once
+  // (see `processUndefRows`).
   Result::Generator processTable(IdTableView<0> table,
-                                 const LocalVocab& localVocab) const;
+                                 const LocalVocab& localVocab,
+                                 bool& hasWarnedAboutUndef) const;
 
   // The type of the callback that hands out the accumulated rows of the result
   // as soon as there are enough of them (see `yieldIfFull` in `processTable`).
@@ -176,11 +186,12 @@ class EmptyPath : public Operation {
   // UNDEF. Such a value matches every entity of the knowledge graph, so the
   // full empty path has to be streamed for them. The rows are appended to
   // `result`, which is the (possibly already partially filled) result table of
-  // the calling `processTable`, and handed out via `yieldIfFull`. All the
-  // arguments have to be kept alive by the caller.
+  // the calling `processTable`, and handed out via `yieldIfFull`. A warning is
+  // added unless `hasWarnedAboutUndef` is already set. All the arguments have
+  // to be kept alive by the caller.
   Result::Generator processUndefRows(const IdTableView<0>& input,
-                                     IdTable& result,
-                                     YieldIfFull yieldIfFull) const;
+                                     IdTable& result, YieldIfFull yieldIfFull,
+                                     bool& hasWarnedAboutUndef) const;
 
   // Append a single row to `result`: `id` (and `graph` if a graph variable is
   // set), followed by the payload columns of row `inputRow` of `input`.
