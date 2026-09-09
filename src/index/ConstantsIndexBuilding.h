@@ -27,7 +27,7 @@ constexpr inline int NUM_TRIPLES_PER_PARTIAL_VOCAB = 10'000'000;
 constexpr inline size_t PARSER_BATCH_SIZE = 1'000'000;
 
 // That many triples does the turtle parser have to buffer before the call to
-// getline returns (unless our input reaches EOF). This makes parsing from
+// `getBatch` returns (unless our input reaches EOF). This makes parsing from
 // streams faster.
 constexpr inline size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 
@@ -83,6 +83,27 @@ constexpr inline size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 // mean higher memory consumption, whereas a too low value will impact the
 // performance negatively.
 constexpr inline size_t BLOCKSIZE_VOCABULARY_MERGING = 100;
+
+// The number of index mappings (which is the same as the number of merged
+// words) that are collected in a single batch of the vocabulary merging (see
+// `index/vocabulary_merger/WordBatch.h`). A single buffer of merged words
+// (see `BLOCKSIZE_VOCABULARY_MERGING`) only contains a rather small number of
+// words, which would be much too fine-grained for a task queue.
+constexpr inline size_t VOCAB_MERGER_WORD_BATCH_SIZE = 100'000;
+
+// The maximal total size of the words in a single batch of the vocabulary
+// merging. A batch is handed on as soon as one of this limit and
+// `VOCAB_MERGER_WORD_BATCH_SIZE` is reached, such that a batch of very few but
+// very long words doesn't become too large.
+constexpr inline ad_utility::MemorySize VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE =
+    ad_utility::MemorySize::megabytes(10);
+
+// The maximal number of batches that may be waiting in the queue of the thread
+// that writes the merged vocabulary. NOTE: A batch keeps all the merged words
+// alive that it was created from (at most
+// `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`, see there), so this also determines
+// the additional memory footprint of the writing.
+constexpr inline size_t VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE = 3;
 
 // A buffer size used during the second pass of the Index build.
 // It is not const, so we can set it to a much lower value for unit tests to

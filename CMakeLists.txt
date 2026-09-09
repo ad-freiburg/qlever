@@ -500,6 +500,32 @@ endif ()
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 
+# The `mold` linker (2.30, as shipped by Ubuntu 24.04, up to 2.42, the current
+# release) indexes zero-length FDEs in `.eh_frame_hdr`, which makes the runtime
+# unwinder miss the unwind information of whatever function shares their
+# address: an exception thrown there terminates the process instead of being
+# caught, and in a coroutine even the implicit `catch (...)` around the body
+# never runs. GCC produces those zero-length FDEs for the empty cold partitions
+# of `-freorder-blocks-and-partition` (on by default from `-O2`), so turning the
+# partitioning off leaves mold nothing to mis-index. GNU ld and gold are not
+# affected. See https://github.com/rui314/mold/issues/1648. Observed as an abort
+# in `MaterializedViewsTest`s `serverIntegration` in the Release Docker build.
+#
+# Ask the compiler driver which linker it would actually use, so that a
+# `-fuse-ld=mold` arriving through any of the flag variables above is caught.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    separate_arguments(QLEVER_LINKER_PROBE_FLAGS NATIVE_COMMAND
+            "${CMAKE_CXX_FLAGS} ${CMAKE_EXE_LINKER_FLAGS}")
+    execute_process(
+            COMMAND ${CMAKE_CXX_COMPILER} ${QLEVER_LINKER_PROBE_FLAGS} -Wl,--version
+            OUTPUT_VARIABLE QLEVER_LINKER_VERSION
+            ERROR_VARIABLE QLEVER_LINKER_VERSION)
+    if (QLEVER_LINKER_VERSION MATCHES "mold")
+        message(STATUS "Linking with mold, whose .eh_frame_hdr breaks unwinding through GCC's cold partitions; adding -fno-reorder-blocks-and-partition")
+        add_compile_options(-fno-reorder-blocks-and-partition)
+    endif ()
+endif ()
+
 
 if (${PERFTOOLS_PROFILER})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lprofiler")

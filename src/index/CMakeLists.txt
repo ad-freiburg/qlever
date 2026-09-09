@@ -20,7 +20,7 @@ add_library(index
         IndexMetaData.cpp MetaDataHandler.cpp
         LocatedTriples.cpp Permutation.cpp TextMetaData.cpp
         DocsDB.cpp FTSAlgorithms.cpp
-        CompressedRelation.cpp
+        CompressedRelation.cpp DistinctCol0Ids.cpp
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp

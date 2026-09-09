@@ -28,14 +28,18 @@ int main(int argc, char** argv) {
     return count++;
   };
 
+  std::vector<std::string> partialVocabularySuffixes;
+  partialVocabularySuffixes.reserve(numFiles);
+  for (size_t i = 0; i < numFiles; ++i) {
+    partialVocabularySuffixes.push_back(std::to_string(i));
+  }
+
   VocabularyOnDisk vocab;
   TripleComponentComparator comparator;
   ad_utility::vocabulary_merger::mergeVocabulary(
-      basename, numFiles,
-      [&comparator](std::string_view a, bool aIsExternal, std::string_view b,
-                    bool bIsExternal) {
-        return comparator.isLessInTotalWithExternalFlag(a, aIsExternal, b,
-                                                        bIsExternal);
+      basename, partialVocabularySuffixes,
+      [&comparator](std::string_view a, std::string_view b) {
+        return comparator(a, b, TripleComponentComparator::Level::TOTAL);
       },
       wordCallback, 4_GB);
 }

@@ -173,6 +173,8 @@ addLinkAndDiscoverTest(VariableCounterTest sparqlParser engine)
 
 addLinkAndDiscoverTest(StringUtilsTest qlever_util)
 
+addLinkAndDiscoverTest(RegexSetTest qlever_util)
+
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
 
 addLinkAndDiscoverTest(CryptographicHashUtilsTest qlever_util)
@@ -275,6 +277,8 @@ addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
 
 addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
+
+addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
 
 addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
@@ -397,6 +401,8 @@ addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
 
 addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
+addLinkAndDiscoverTestNoLibs(NoCopyNoMoveTest)
+
 addLinkAndDiscoverTestSerial(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
@@ -481,6 +487,8 @@ if (EMSCRIPTEN)
     set_source_files_properties(AsioHelpersTest.cpp PROPERTIES COMPILE_OPTIONS "-O1")
 endif ()
 
+addLinkAndDiscoverTest(AsyncResourcePoolTest)
+
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
 addLinkAndDiscoverTest(WebSocketSessionTest http)
@@ -502,6 +510,13 @@ addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
+
+addLinkAndDiscoverTestNoLibs(RunsInputPolicyTest)
+
+addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
+
+addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
+addLinkAndDiscoverTestNoLibs(MergeHelpersTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 
@@ -542,6 +557,8 @@ addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 addLinkAndDiscoverTest(TripleSerializerTest)
 
 addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
+
+addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
 
 addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 

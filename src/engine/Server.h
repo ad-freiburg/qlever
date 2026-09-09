@@ -52,6 +52,11 @@ namespace serverTestHelpers {
 class ServerForTesting;
 }
 
+// Defined in `util/ResourceMonitor.h`, which only `Server.cpp` includes.
+namespace ad_utility {
+class IndexRebuildIdTracker;
+}
+
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
@@ -75,11 +80,13 @@ class Server {
   friend serverTestHelpers::ServerForTesting;
 
  public:
-  explicit Server(unsigned short port, size_t numThreads,
-                  std::string accessToken, const qlever::EngineConfig& config,
-                  bool noAccessCheck = false,
-                  std::shared_ptr<ad_utility::metrics::MetricsReader>
-                      metricsReader = nullptr);
+  explicit Server(
+      unsigned short port, size_t numThreads, std::string accessToken,
+      const qlever::EngineConfig& config, bool noAccessCheck = false,
+      std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader =
+          nullptr,
+      std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker =
+          nullptr);
 
   virtual ~Server() = default;
 
@@ -130,6 +137,13 @@ class Server {
   // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
   // disabled (--enable-metrics not passed).
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
+
+  // Holds the ID of the currently running index rebuild, which the resource
+  // sampler reads for the `index_rebuild_id` column. The `shared_ptr` is never
+  // null, as the constructor creates a tracker even if the caller passes none.
+  // Note: This member is purely observational. Preventing a second concurrent
+  // index rebuild is the job of the `rebuildInProgress_` data member above.
+  std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker_;
 
   // Deregisters callbacks on destruction. Declared after `qlever_` so that it
   // is destroyed before `qlever_` which the callbacks access.
@@ -232,6 +246,11 @@ class Server {
   // `processLoadMaterializedView` above.
   json processDeleteMaterializedView(const ParamValueMap& parameters) const;
 
+  // Handle an `unload-materialized-view` command: unload the view named in
+  // `parameters` if loaded, keeping its on-disk files (unlike `delete`). The
+  // response tells whether the view was loaded before.
+  json processUnloadMaterializedView(const ParamValueMap& parameters) const;
+
   // Handle the `/ping` endpoint: log the alive check (with or without an
   // accompanying "msg" parameter) and return a fixed confirmation response.
   CPP_template(typename RequestT)(
@@ -317,6 +336,18 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> process(RequestT& request, SendT&& send);
 
+  // The final step of `process()`: by this point the operation type (which also
+  // can be `no-operation`) is known, so this builds the
+  // query/update/graph-store-protocol/no-operation visitors and hands them,
+  // together with `operation`, to `processOperation`.
+  CPP_template(typename RequestT, typename SendT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> processSparqlOperation(
+          SparqlOperation operation, const ParamValueMap& parameters,
+          bool accessTokenOk, const ad_utility::Timer& requestTimer,
+          SharedIndexAndView indexAndViews, RequestT& request, SendT&& send,
+          std::optional<ResponseT> response);
+
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
   CPP_template(typename VisitorT, typename RequestT, typename SendT)(
@@ -384,7 +415,8 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::MessageSender createMessageSender(
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-          const RequestT& request, std::string_view operation,
+          const RequestT& request, std::string_view operationString,
+          ad_utility::websocket::QueryOperation operationType,
           std::string_view clientIp = {});
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
@@ -404,6 +436,8 @@ class Server {
   ///
   /// \param request The HTTP request to extract the id from.
   /// \param query A string representation of the query to register an id for.
+  /// \param operationType Whether this is a query or an update. It is written
+  ///        to the `type` field of the `start` event in the query event log.
   ///
   /// \return An OwningQueryId object. It removes itself from the registry
   ///         on destruction.
@@ -411,6 +445,7 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::OwningQueryId
       getQueryId(const RequestT& request, std::string_view query,
+                 ad_utility::websocket::QueryOperation operationType,
                  std::string_view clientIp = {});
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.
