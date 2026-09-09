@@ -4,7 +4,6 @@ on:
   push:
     branches: [master]
   pull_request:
-    branches: [master]
 
 # The default GITHUB_TOKEN only needs to read the repository here.
 permissions:
