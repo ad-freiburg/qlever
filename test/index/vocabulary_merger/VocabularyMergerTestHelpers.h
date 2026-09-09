@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "../../util/FileTestHelpers.h"
 #include "../../util/IdTestHelpers.h"
 #include "global/VocabIndex.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -66,9 +67,9 @@ struct PartialVocabularyFiles {
 // vocabularies with the given `basename`, exactly as the vocabulary merger
 // derives them.
 //
-// NOTE: This only computes the names, it creates no files. Combine it with
-// `ad_utility::testing::useFreshWorkingDirectory()` (see
-// `test/util/FileTestHelpers.h`), such that the files that a test creates are
+// NOTE: This only computes the names, it creates no files. A test that
+// actually creates them should use
+// `makePartialVocabularyFilenamesInFreshDirectory` below, such that they are
 // cleaned up again.
 inline PartialVocabularyFiles makePartialVocabularyFiles(
     const std::string& basename, size_t numPartialVocabularies) {
@@ -81,6 +82,24 @@ inline PartialVocabularyFiles makePartialVocabularyFiles(
         absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
   }
   return files;
+}
+
+// Switch to a fresh working directory and return the filenames of
+// `numPartialVocabularies` partial vocabularies with the given `basename`
+// there (see `makePartialVocabularyFiles` above), together with the
+// `absl::Cleanup` that restores the previous working directory and deletes the
+// fresh one (see `ad_utility::testing::useFreshWorkingDirectory` in
+// `test/util/FileTestHelpers.h`). Use it as
+// `auto [filenames, cleanup] = makePartialVocabularyFilenamesInFreshDirectory(
+//      basename, numPartialVocabularies);`.
+//
+// NOTE: This also only computes the names, the files themselves are created by
+// the code under test.
+inline auto makePartialVocabularyFilenamesInFreshDirectory(
+    const std::string& basename, size_t numPartialVocabularies) {
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
+  return std::pair{makePartialVocabularyFiles(basename, numPartialVocabularies),
+                   std::move(cleanup)};
 }
 
 // A `WordCallback` that appends each word together with its `isExternal` flag

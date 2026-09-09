@@ -12,7 +12,6 @@
 #include <string>
 #include <vector>
 
-#include "../../util/FileTestHelpers.h"
 #include "VocabularyMergerTestHelpers.h"
 #include "index/vocabulary_merger/IdMapBatch.h"
 
@@ -26,7 +25,7 @@ using ad_utility::vocabulary_merger::detail::LocalIdxToBatchMappings;
 namespace {
 // The basename of the partial vocabularies that the tests below create. It
 // needs no test-specific part, because each test runs in its own working
-// directory (see `useFreshWorkingDirectory`).
+// directory (see `makePartialVocabularyFilenamesInFreshDirectory`).
 const std::string partialVocabBasename = "vocab-";
 
 // Create an `IdMapBatch` from the given `mappings` and `globalIds`. In
@@ -48,11 +47,11 @@ IdMapBatch makeBatch(const std::vector<LocalIdxToBatchMapping>& mappings,
 // mapping via the `globalIds_` of its batch, and keeps the order in which the
 // mappings were pushed.
 TEST(IdMapBatchWriter, writeSeveralBatches) {
-  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
-  auto files = makePartialVocabularyFiles(partialVocabBasename, 3);
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 3);
 
   {
-    IdMapBatchWriter writer{partialVocabBasename, files.suffixes_};
+    IdMapBatchWriter writer{partialVocabBasename, filenames.suffixes_};
     // The first batch has two distinct words with the global IDs `10` and
     // `11`. The first word occurs in the partial vocabularies `0` and `2`, the
     // second one only in `0`.
@@ -70,12 +69,12 @@ TEST(IdMapBatchWriter, writeSeveralBatches) {
   }
 
   EXPECT_THAT(
-      getIdMapFromFile(files.idMapFiles_[0]),
+      getIdMapFromFile(filenames.idMapFiles_[0]),
       ::testing::ElementsAre(IdMapEntry{L(7), V(10)}, IdMapEntry{L(9), V(11)},
                              IdMapEntry{L(100), V(12)}));
-  EXPECT_THAT(getIdMapFromFile(files.idMapFiles_[1]),
+  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[1]),
               ::testing::ElementsAre(IdMapEntry{L(101), V(12)}));
-  EXPECT_THAT(getIdMapFromFile(files.idMapFiles_[2]),
+  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[2]),
               ::testing::ElementsAre(IdMapEntry{L(8), V(10)},
                                      IdMapEntry{L(102), V(12)}));
 }
@@ -85,27 +84,27 @@ TEST(IdMapBatchWriter, writeSeveralBatches) {
 // per partial vocabulary. Its destructor closes those maps, so an explicit
 // call to `finish()` is not required.
 TEST(IdMapBatchWriter, noBatches) {
-  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
-  auto files = makePartialVocabularyFiles(partialVocabBasename, 1);
-  { IdMapBatchWriter writer{partialVocabBasename, files.suffixes_}; }
-  EXPECT_THAT(getIdMapFromFile(files.idMapFiles_[0]), ::testing::IsEmpty());
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
+  { IdMapBatchWriter writer{partialVocabBasename, filenames.suffixes_}; }
+  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]), ::testing::IsEmpty());
 }
 
 // _____________________________________________________________________________
 // Only the first `numMappings_` of the `mappings_` of a batch are valid; the
 // remaining (uninitialized) ones must not be written.
 TEST(IdMapBatchWriter, onlyValidMappingsAreWritten) {
-  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
-  auto files = makePartialVocabularyFiles(partialVocabBasename, 1);
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
 
   auto batch = makeBatch({LocalIdxToBatchMapping{0, 0, L(42)}}, {V(43)});
   // Allocate (but do not initialize) space for many more mappings, exactly as
   // the `WordBatchBuilder` does.
   batch.localIdxMappings_.mappings_.resize(1000);
   {
-    IdMapBatchWriter writer{partialVocabBasename, files.suffixes_};
+    IdMapBatchWriter writer{partialVocabBasename, filenames.suffixes_};
     writer.writeBatch(batch);
   }
-  EXPECT_THAT(getIdMapFromFile(files.idMapFiles_[0]),
+  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]),
               ::testing::ElementsAre(IdMapEntry{L(42), V(43)}));
 }

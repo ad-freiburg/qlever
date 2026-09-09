@@ -17,7 +17,6 @@
 #include <utility>
 #include <vector>
 
-#include "../../util/FileTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "VocabularyMergerTestHelpers.h"
 #include "index/vocabulary_merger/IdMap.h"
@@ -38,7 +37,8 @@ using ::testing::Pair;
 namespace {
 // The basename of the partial vocabularies that the tests below use. It needs
 // no test-specific part, because each test that actually creates files runs in
-// its own working directory (see `useFreshWorkingDirectory`).
+// its own working directory (see
+// `makePartialVocabularyFilenamesInFreshDirectory`).
 const std::string partialVocabBasename = "vocab-";
 
 // An ID map writer (the third stage of the pipeline) that fails on the first
@@ -110,8 +110,8 @@ void expectFailureIsPropagated(
 // second to fourth stage of the merging) and check the vocabulary that it
 // writes as well as the resulting partial ID maps.
 TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
-  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
-  auto files = makePartialVocabularyFiles(partialVocabBasename, 2);
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 2);
 
   std::vector<std::pair<std::string, bool>> vocabulary;
   auto wordCallback = makeCollectingWordCallback(vocabulary);
@@ -119,7 +119,7 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
 
   VocabularyMetaData metaData;
   {
-    VocabularyMergePipeline pipeline{partialVocabBasename, files.suffixes_};
+    VocabularyMergePipeline pipeline{partialVocabBasename, filenames.suffixes_};
     WordBatchBuilder builder;
     auto push = makePush(pipeline, wordCallback, noRegexes);
     // `"a"` is only in the first partial vocabulary, `"b"` in both (and
@@ -138,10 +138,10 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
                                      Pair("\"c\"", false)));
   EXPECT_EQ(metaData.numWordsTotal(), 3u);
   EXPECT_THAT(
-      getIdMapFromFile(files.idMapFiles_[0]),
+      getIdMapFromFile(filenames.idMapFiles_[0]),
       ::testing::ElementsAre(IdMapEntry{L(0), V(0)}, IdMapEntry{L(1), V(1)}));
   EXPECT_THAT(
-      getIdMapFromFile(files.idMapFiles_[1]),
+      getIdMapFromFile(filenames.idMapFiles_[1]),
       ::testing::ElementsAre(IdMapEntry{L(0), V(1)}, IdMapEntry{L(1), V(2)}));
 }
 
@@ -149,12 +149,12 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
 // A pipeline to which no batch was pushed creates empty ID maps and empty
 // metadata.
 TEST(VocabularyMergePipeline, noBatches) {
-  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
-  auto files = makePartialVocabularyFiles(partialVocabBasename, 1);
-  VocabularyMergePipeline pipeline{partialVocabBasename, files.suffixes_};
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
+  VocabularyMergePipeline pipeline{partialVocabBasename, filenames.suffixes_};
   auto metaData = pipeline.finish();
   EXPECT_EQ(metaData.numWordsTotal(), 0u);
-  EXPECT_THAT(getIdMapFromFile(files.idMapFiles_[0]), ::testing::IsEmpty());
+  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]), ::testing::IsEmpty());
 }
 
 // _____________________________________________________________________________
@@ -163,8 +163,8 @@ TEST(VocabularyMergePipeline, noBatches) {
 // reported by `hasFailed()` and rethrown by `finish()`, and the batches that
 // are pushed after the failure are skipped.
 TEST(VocabularyMergePipeline, exceptionFromAStageIsPropagated) {
-  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
-  auto files = makePartialVocabularyFiles(partialVocabBasename, 1);
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
 
   size_t numCalls = 0;
   auto wordCallback = [&numCalls](std::string_view, bool) -> uint64_t {
@@ -173,7 +173,7 @@ TEST(VocabularyMergePipeline, exceptionFromAStageIsPropagated) {
   };
   ad_utility::RegexSet noRegexes;
 
-  VocabularyMergePipeline pipeline{partialVocabBasename, files.suffixes_};
+  VocabularyMergePipeline pipeline{partialVocabBasename, filenames.suffixes_};
   expectFailureIsPropagated(pipeline, wordCallback, noRegexes,
                             "could not be written");
   // A batch that is pushed after the failure is skipped, so the callback is
