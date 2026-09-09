@@ -21,6 +21,7 @@
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "libqlever/Qlever.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/Random.h"
 #include "util/json.h"
 
 namespace qlever {
@@ -90,10 +91,14 @@ void writeMetadataAndFilteredVocabulary(
   // vocabulary implementation that QLever is built with by default (see
   // `detail::UnderlyingVocabRdfsVocabulary`).
   if constexpr (std::is_same_v<VocabularyImpl, PolymorphicVocabulary>) {
-    auto filtered =
-        buildFilteredVocabulary(vocabulary, excludedEntryRegexes,
-                                absl::StrCat(indexImpl.getOnDiskBase(),
-                                             ".tmp-filtered-blob-vocabulary"));
+    // Use a unique temporary basename (next to the index, because the
+    // intermediate on-disk vocabulary can become as large as the vocabulary
+    // itself), so that concurrent calls do not interfere with each other.
+    ad_utility::UuidGenerator uuidGenerator;
+    auto filtered = buildFilteredVocabulary(
+        vocabulary, excludedEntryRegexes,
+        absl::StrCat(indexImpl.getOnDiskBase(),
+                     ".tmp-filtered-blob-vocabulary.", uuidGenerator()));
     nlohmann::json metadata = indexImpl.configurationJson();
     metadata["vocabulary-type"] = filtered.type_;
     serializer << metadata.dump();
