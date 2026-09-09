@@ -23,50 +23,67 @@
 #include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"
 
+namespace {
+
+using ad_utility::testing::TestIndexConfig;
+
+// Create a `DistinctGraphs` operation for the graph variable `?g` on a test
+// index built from `config`. Without an argument, the default test index is
+// used. The `QueryExecutionContext` and the `Index` of the operation remain
+// accessible via `getExecutionContext()` and `getIndex()`.
+DistinctGraphs makeDistinctGraphs(TestIndexConfig config = TestIndexConfig{}) {
+  return DistinctGraphs{ad_utility::testing::getQec(std::move(config)),
+                        Variable{"?g"}};
+}
+
+// Same as `makeDistinctGraphs`, but the index is built from NQuad input, which
+// is required for an index that actually contains named graphs.
+DistinctGraphs makeDistinctGraphsFromQuads(std::string nquads) {
+  TestIndexConfig config{std::move(nquads)};
+  config.indexType = qlever::Filetype::NQuad;
+  return makeDistinctGraphs(std::move(config));
+}
+
+}  // namespace
+
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getChildren) {
-  auto* qec = ad_utility::testing::getQec();
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphs();
 
   EXPECT_THAT(dg.getChildren(), ::testing::IsEmpty());
 }
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getDescriptor) {
-  auto* qec = ad_utility::testing::getQec();
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphs();
 
   EXPECT_EQ(dg.getDescriptor(), "Distinct Graphs");
 }
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getResultWidth) {
-  auto* qec = ad_utility::testing::getQec();
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphs();
 
   EXPECT_EQ(dg.getResultWidth(), 1);
 }
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getMultiplicity) {
-  auto* qec = ad_utility::testing::getQec();
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphs();
 
   EXPECT_EQ(dg.getMultiplicity(0), 1.0f);
 }
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, knownEmptyResult) {
-  auto* qec = ad_utility::testing::getQec();
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphs();
 
   EXPECT_FALSE(dg.knownEmptyResult());
 }
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, isDeterministic) {
-  auto* qec = ad_utility::testing::getQec();
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphs();
 
   EXPECT_TRUE(dg.isDeterministic());
 }
@@ -74,15 +91,13 @@ TEST(DistinctGraphs, isDeterministic) {
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getCostEstimate) {
   {
-    auto* qec = ad_utility::testing::getQec(
-        "<a> <p1> <b> . <a> <p2> <c> . <b> <p1> <c> .");
-    DistinctGraphs dg{qec, Variable{"?g"}};
+    auto dg = makeDistinctGraphs(
+        TestIndexConfig{"<a> <p1> <b> . <a> <p2> <c> . <b> <p1> <c> ."});
 
     EXPECT_EQ(dg.getCostEstimate(), 3u);
   }
   {
-    auto* qec = ad_utility::testing::getQec("");
-    DistinctGraphs dg{qec, Variable{"?g"}};
+    auto dg = makeDistinctGraphs(TestIndexConfig{""});
 
     EXPECT_EQ(dg.getCostEstimate(), 0u);
   }
@@ -90,19 +105,15 @@ TEST(DistinctGraphs, getCostEstimate) {
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getSizeEstimateDefault) {
-  auto* qec = ad_utility::testing::getQec();
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphs();
 
   EXPECT_EQ(dg.getSizeEstimate(), MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA);
 }
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getSizeEstimateComputed) {
-  ad_utility::testing::TestIndexConfig config{
-      "<a> <p> <b> <g1> . <c> <p> <d> <g2> . <e> <p> <f> <g3> ."};
-  config.indexType = qlever::Filetype::NQuad;
-  auto* qec = ad_utility::testing::getQec(config);
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphsFromQuads(
+      "<a> <p> <b> <g1> . <c> <p> <d> <g2> . <e> <p> <f> <g3> .");
 
   dg.getResult();
   EXPECT_EQ(dg.getSizeEstimate(), 3u);
@@ -110,24 +121,21 @@ TEST(DistinctGraphs, getSizeEstimateComputed) {
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getCacheKey) {
-  auto* qec = ad_utility::testing::getQec();
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphs();
 
   EXPECT_EQ(dg.getCacheKey(), "DistinctGraphs");
 }
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getResultSortedOn) {
-  auto* qec = ad_utility::testing::getQec();
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphs();
 
   EXPECT_THAT(dg.getResultSortedOn(), ::testing::IsEmpty());
 }
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, clone) {
-  auto* qec = ad_utility::testing::getQec();
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphs();
 
   auto clone = dg.clone();
   ASSERT_TRUE(clone);
@@ -137,8 +145,7 @@ TEST(DistinctGraphs, clone) {
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, computeVariableToColumnMap) {
-  auto* qec = ad_utility::testing::getQec();
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg = makeDistinctGraphs();
 
   VariableToColumnMap expected{{Variable{"?g"}, makeAlwaysDefinedColumn(0)}};
   EXPECT_EQ(dg.getExternallyVisibleVariableColumns(), expected);
@@ -146,8 +153,8 @@ TEST(DistinctGraphs, computeVariableToColumnMap) {
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, computeResultExcludesDefaultGraphByDefault) {
-  auto* qec = ad_utility::testing::getQec("<a> <p1> <b> . <a> <p2> <c> .");
-  DistinctGraphs dg{qec, Variable{"?g"}};
+  auto dg =
+      makeDistinctGraphs(TestIndexConfig{"<a> <p1> <b> . <a> <p2> <c> ."});
 
   auto result = dg.getResult();
   ASSERT_TRUE(result->isFullyMaterialized());
@@ -156,13 +163,10 @@ TEST(DistinctGraphs, computeResultExcludesDefaultGraphByDefault) {
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, computeResultReturnsDistinctGraphIds) {
-  ad_utility::testing::TestIndexConfig config{
-      "<a> <p> <b> <g1> . <a> <p> <c> <g2> . <b> <p> <c> <g1> ."};
-  config.indexType = qlever::Filetype::NQuad;
-  auto* qec = ad_utility::testing::getQec(config);
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto dg = makeDistinctGraphsFromQuads(
+      "<a> <p> <b> <g1> . <a> <p> <c> <g2> . <b> <p> <c> <g1> .");
+  auto getId = ad_utility::testing::makeGetId(dg.getIndex());
 
-  DistinctGraphs dg{qec, Variable{"?g"}};
   auto result = dg.getResult();
   ASSERT_TRUE(result->isFullyMaterialized());
 
@@ -174,18 +178,17 @@ TEST(DistinctGraphs, computeResultReturnsDistinctGraphIds) {
 // _____________________________________________________________________________
 TEST(DistinctGraphs,
      computeResultIncludesDefaultGraphWhenRuntimeParameterIsSet) {
-  auto* qec = ad_utility::testing::getQec("<x> <p> <y> .");
+  auto dg = makeDistinctGraphs(TestIndexConfig{"<x> <p> <y> ."});
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::treatDefaultGraphAsNamedGraph_>(true);
 
-  DistinctGraphs dg{qec, Variable{"?g"}};
   auto result = dg.getResult();
   ASSERT_TRUE(result->isFullyMaterialized());
 
   auto defaultGraphId = toValueId(
       TripleComponent{
           ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)},
-      qec->getIndex().getImpl());
+      dg.getIndex().getImpl());
   auto column = result->idTableView().getColumn(0);
   EXPECT_THAT(std::vector<Id>(column.begin(), column.end()),
               ::testing::ElementsAre(defaultGraphId.value()));
