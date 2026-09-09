@@ -10,33 +10,29 @@
 #include <sstream>
 
 #include "rdfTypes/GeoPoint.h"
+#include "util/TypeTraits.h"
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
-  std::visit(
-      [&stream](const auto& value) -> void {
-        using T = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<T, Variable>) {
-          stream << value.name();
-        } else if constexpr (std::is_same_v<T, TripleComponent::UNDEF>) {
-          stream << "UNDEF";
-        } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
-          stream << value.toStringRepresentation();
-        } else if constexpr (std::is_same_v<T, TripleComponent::Iri>) {
-          stream << value.toStringRepresentation();
-        } else if constexpr (std::is_same_v<T, DateYearOrDuration>) {
-          stream << "DATE: " << value.toStringAndType().first;
-        } else if constexpr (std::is_same_v<T, bool>) {
-          stream << (value ? "true" : "false");
-        } else if constexpr (std::is_same_v<T, GeoPoint>) {
-          stream << Id::makeFromGeoPoint(value);
-        } else {
-          static_assert(
-              ad_utility::SameAsAny<T, Id, double, int64_t, std::string>);
-          stream << value;
-        }
+  ad_utility::visitIf(
+      obj._variant, [&stream](const Variable& v) { stream << v.name(); },
+      [&stream](const TripleComponent::UNDEF&) { stream << "UNDEF"; },
+      [&stream](const TripleComponent::Literal& v) {
+        stream << v.toStringRepresentation();
       },
-      obj._variant);
+      [&stream](const TripleComponent::Iri& v) {
+        stream << v.toStringRepresentation();
+      },
+      [&stream](const DateYearOrDuration& v) {
+        stream << "DATE: " << v.toStringAndType().first;
+      },
+      [&stream](bool v) { stream << (v ? "true" : "false"); },
+      [&stream](const GeoPoint& v) { stream << Id::makeFromGeoPoint(v); },
+      [&stream](const auto& v) {
+        static_assert(ad_utility::SameAsAny<std::decay_t<decltype(v)>, Id,
+                                            double, int64_t, std::string>);
+        stream << v;
+      });
   return stream;
 }
 
