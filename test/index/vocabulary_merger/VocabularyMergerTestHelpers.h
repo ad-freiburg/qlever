@@ -38,9 +38,7 @@ inline auto L = &VocabIndex::make;
 inline auto BN = ad_utility::testing::BlankNodeId;
 
 // A `WordComparator` that simply compares the words lexicographically.
-constexpr auto lessThan = [](std::string_view a, std::string_view b) {
-  return std::less<>{}(a, b);
-};
+constexpr std::less<> lessThan{};
 
 // Create the `QueueWord` for the occurrence of `word` with the given
 // `localIndex` in the partial vocabulary `partialFileId`.

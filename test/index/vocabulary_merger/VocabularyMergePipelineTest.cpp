@@ -9,9 +9,11 @@
 
 #include <gmock/gmock.h>
 
+#include <chrono>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -90,6 +92,8 @@ void expectFailureIsPropagated(
   // The batch is processed asynchronously, so wait for the failure. NOTE: The
   // `finish()` below would also wait, but it throws.
   while (!pipeline.hasFailed()) {
+    // Sleep a little, else this loop would needlessly burn a whole CPU core.
+    std::this_thread::sleep_for(std::chrono::microseconds{50});
   }
   checkAfterFailure();
 
