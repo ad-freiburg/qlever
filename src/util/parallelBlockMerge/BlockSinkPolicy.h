@@ -182,17 +182,22 @@ struct SharedPtrElementOrNoSink<std::shared_ptr<T>> {
 template <typename SinkFactory>
 using SinkFromFactoryT = typename SharedPtrElementOrNoSink<
     ad_utility::InvokeResultSfinaeFriendly<SinkFactory&, size_t>>::type;
-}  // namespace detail
 
-// The requirements of the `SinkFactoryConcept` below, see there for the
-// documentation.
+// The single requirement on the callable part of a `SinkFactoryConcept` (see
+// below): it can be called as `makeSink(numChunks)` on an lvalue and returns a
+// `std::shared_ptr`. This check is exact, because `SinkFromFactoryT` is
+// `NoSink` for a factory that cannot be called at all as well as for one that
+// returns something other than a `std::shared_ptr`. NOTE: This deliberately is
+// no `CPP_requires` clause with a single
+// `ql::concepts::same_as<decltype(makeSink(numChunks)), ...>` requirement,
+// because such a requirement only tests that the concept-id is a valid
+// expression and not that the concept is satisfied, which GCC rightfully warns
+// about (`-Wmissing-requires`).
 template <typename T>
-CPP_requires(
-    SinkFactoryConcept_,
-    requires(T& makeSink, size_t numChunks)(
-        // Create the sink of a merge that consists of `numChunks` chunks.
-        ql::concepts::same_as<decltype(makeSink(numChunks)),
-                              std::shared_ptr<detail::SinkFromFactoryT<T>>>));
+CPP_concept SinkFactoryIsInvocable =
+    ql::concepts::same_as<ad_utility::InvokeResultSfinaeFriendly<T&, size_t>,
+                          std::shared_ptr<SinkFromFactoryT<T>>>;
+}  // namespace detail
 
 // The factory that creates the sink of a merge, see `parallelBlockMergeToSink`.
 // It is called exactly once, as `makeSink(numChunks)` on an lvalue, and has to
@@ -209,7 +214,7 @@ CPP_requires(
 // flag) per chunk.
 template <typename T, typename Block>
 CPP_concept SinkFactoryConcept =
-    CPP_requires_ref(SinkFactoryConcept_, T) &&
+    detail::SinkFactoryIsInvocable<T> &&
     SinkConcept<detail::SinkFromFactoryT<T>, Block>;
 
 }  // namespace ad_utility::parallelBlockMerge
