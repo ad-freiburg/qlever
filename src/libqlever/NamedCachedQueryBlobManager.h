@@ -32,12 +32,12 @@ struct BlobSerializationConfig {
   // so the regex has to describe the complete entry) is omitted. Note that the
   // regexes are matched against literals as well as IRIs; to exclude only
   // IRIs, let the regex start with `<` and end with `>`. The remaining entries
-  // keep their original
-  // vocabulary indices, so that the `Id`s in the serialized `NamedResultCache`
-  // stay valid; the exported vocabulary therefore has holes (see
-  // `VocabularyInMemoryBinSearch`) and an `Id` that refers to an excluded entry
-  // resolves to `placeholderForMissingVocabIndex`. If this is empty, the
-  // complete vocabulary is exported in its original format.
+  // keep their original vocabulary indices, so that the `Id`s in the
+  // serialized `NamedResultCache` stay valid; the exported vocabulary
+  // therefore has holes (see `VocabularyInMemoryBinSearch`) and an `Id` that
+  // refers to an excluded entry resolves to
+  // `placeholderForMissingVocabIndex`. If this is empty, the complete
+  // vocabulary is exported in its original format.
   std::vector<std::string> excludedEntryRegexes_;
 };
 

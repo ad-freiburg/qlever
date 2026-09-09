@@ -191,18 +191,16 @@ class Vocabulary {
   // externalized vocabulary. Good for entity names that normally don't appear
   // in queries or results but take a lot of space (e.g. Wikidata statements)
   //
-  // StringRange prefixes can be of any type where
-  // for (const string& el : prefixes {}
-  // works
+  // `StringRange` prefixes can be of any type that can be iterated over in a
+  // range-based for loop.
   template <class StringRange>
   void initializeExternalizePrefixes(const StringRange& prefixes);
 
   // set the list of languages (in "en" language code format) that should be
   // kept internalized. By default this is just English
   //
-  // StringRange prefixes can be of any type where
-  // for (const string& el : prefixes {}
-  // works
+  // `StringRange` prefixes can be of any type that can be iterated over in a
+  // range-based for loop.
   template <class StringRange>
   void initializeInternalizedLangs(const StringRange& prefixes);
 
@@ -271,7 +269,8 @@ class Vocabulary {
   // `resetToType` that the active alternative matches the blob's format); if it
   // is a concrete type that does not support zero-copy, this fails to compile
   // (via a `static_assert`). Note that the wrapping `UnicodeVocabulary` is
-  // bypassed via `getUnderlyingVocabulary()`, so its comparator is left
+  // bypassed by `applyToUnderlyingZeroCopyVocab` (via
+  // `UnicodeVocabulary::getUnderlyingVocabulary()`), so its comparator is left
   // untouched and is not part of the blob. The vocabulary is only valid as long
   // as the memory backing `serializer`'s buffer is valid and unchanged.
   CPP_template(typename Serializer)(

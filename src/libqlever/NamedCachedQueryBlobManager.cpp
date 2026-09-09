@@ -11,12 +11,17 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <array>
+#include <cstdint>
 #include <string_view>
+#include <type_traits>
 
 #include "index/IndexImpl.h"
 #include "index/vocabulary/BuildFilteredVocabulary.h"
+#include "index/vocabulary/PolymorphicVocabulary.h"
 #include "libqlever/Qlever.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/json.h"
 
 namespace qlever {
 
@@ -94,9 +99,13 @@ void writeMetadataAndFilteredVocabulary(
     serializer << metadata.dump();
     // NOTE: This writes exactly the same format that
     // `Vocabulary::writeAsZeroCopyBlob` writes (and that
-    // `Vocabulary::loadFromZeroCopyDeserializer` reads back), because both
-    // bypass the wrapping `UnicodeVocabulary` and use the generic
-    // serialization of the active alternative of the `PolymorphicVocabulary`.
+    // `Vocabulary::loadFromZeroCopyDeserializer` reads back), because both use
+    // the generic serialization of the active alternative of the
+    // `PolymorphicVocabulary`, and no comparator is part of that format:
+    // `filtered.vocabulary_` is a bare `PolymorphicVocabulary` that has no
+    // wrapping `UnicodeVocabulary` to begin with, and
+    // `Vocabulary::writeAsZeroCopyBlob` explicitly bypasses its own wrapping
+    // `UnicodeVocabulary`.
     serializer << filtered.vocabulary_;
   } else {
     AD_THROW(
@@ -191,9 +200,13 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
 
   auto indexAndViews = qlever.indexAndViewsSnapshot();
   const auto& indexImpl = indexAndViews->index_.getImpl();
-  // Serialize the index metadata JSON, so that the blob is self-contained and
-  // the loading side can set up the vocabulary configuration without access to
-  // the on-disk index.
+  // Serialize the index metadata JSON together with the vocabulary, so that the
+  // blob is self-contained and the loading side can set up the vocabulary
+  // configuration without access to the on-disk index. Without excluded
+  // entries, the metadata JSON and the vocabulary are written as they are;
+  // with excluded entries, the vocabulary is filtered and the
+  // `"vocabulary-type"` entry of the metadata JSON is rewritten to the type of
+  // the filtered vocabulary (see `writeMetadataAndFilteredVocabulary`).
   if (config.excludedEntryRegexes_.empty()) {
     serializer << indexImpl.configurationJson().dump();
     indexImpl.writeVocabularyToZeroCopyBlob(serializer);
