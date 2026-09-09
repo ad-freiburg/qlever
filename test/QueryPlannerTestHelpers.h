@@ -19,6 +19,7 @@
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
+#include "engine/DistinctGraphs.h"
 #include "engine/ExistsJoin.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/Filter.h"
@@ -510,6 +511,11 @@ constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
       AllOf(children(childMatcher),
             AD_PROPERTY(::Distinct, getDistinctColumns,
                         UnorderedElementsAreArray(distinctColumns))));
+};
+
+// Match a `DistinctGraphs` operation.
+constexpr auto DistinctGraphs = []() -> QetMatcher {
+  return MatchTypeAndOrderedChildren<::DistinctGraphs>();
 };
 
 // Match a `DESCRIBE` operation
