@@ -191,16 +191,18 @@ class Vocabulary {
   // externalized vocabulary. Good for entity names that normally don't appear
   // in queries or results but take a lot of space (e.g. Wikidata statements)
   //
-  // `StringRange` prefixes can be of any type that can be iterated over in a
-  // range-based for loop.
+  // StringRange prefixes can be of any type where
+  // for (const string& el : prefixes {}
+  // works
   template <class StringRange>
   void initializeExternalizePrefixes(const StringRange& prefixes);
 
   // set the list of languages (in "en" language code format) that should be
   // kept internalized. By default this is just English
   //
-  // `StringRange` prefixes can be of any type that can be iterated over in a
-  // range-based for loop.
+  // StringRange prefixes can be of any type where
+  // for (const string& el : prefixes {}
+  // works
   template <class StringRange>
   void initializeInternalizedLangs(const StringRange& prefixes);
 
