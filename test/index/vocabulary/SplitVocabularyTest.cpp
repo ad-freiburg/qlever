@@ -546,6 +546,11 @@ TEST(SplitVocabulary, geoCellGridIndicesThroughSplitVocabulary) {
             wkt12);
   EXPECT_EQ(vocab[0], iri);
 
+  // An index beyond the past-the-end index of the geo vocabulary is rejected,
+  // even if its position part is valid.
+  EXPECT_ANY_THROW(vocab[SGV::addMarker(
+      grid.indexFromCellAndPosition(grid.sentinelCell(), 0), 1)]);
+
   // Exact lookup returns the index and its successor as bounds.
   auto [lo3, hi3] = vocab.getPositionOfWord(wkt3, comparator);
   EXPECT_EQ(lo3, SGV::addMarker(grid.indexFromCellAndPosition(3, 0), 1));
