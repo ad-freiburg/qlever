@@ -46,6 +46,22 @@ inline ad_utility::SharedCancellationHandle freshCancellationHandle() {
   return std::make_shared<ad_utility::CancellationHandle<>>();
 }
 
+// Run the `function`, whose only way of throwing is that an allocation (of a
+// chunk task or of a completion handler) fails, in which case the caller
+// cannot continue at all. Return `true` if the `function` ran through, and pass
+// the exception to `onException` otherwise.
+template <typename Function, typename ExceptionHandler>
+bool runAndForwardMemoryError(Function function,
+                              ExceptionHandler onException) noexcept {
+  try {
+    function();
+    return true;
+  } catch (...) {
+    onException(std::current_exception());
+    return false;
+  }
+}
+
 // The state of a parallel merge that schedules *all* of its work on a
 // Boost.Asio executor. It runs one task per chunk, and a chunk which currently
 // cannot make progress (because the sink has not caught up yet) releases its
@@ -60,10 +76,13 @@ inline ad_utility::SharedCancellationHandle freshCancellationHandle() {
 // exceeds the available parallelism are both perfectly fine.
 //
 // STRAND CONFINEMENT: The dispatch loop (`dispatchNextChunk` and its
-// continuation) as well as the teardown in `abort()` run on `strand_`, which
-// this class owns. The `sink_` and the `semaphore_` each confine their own
-// state to a strand (or a mutex) of their own, so no state is ever shared
-// between the three and none of them has to know about the others.
+// continuation) runs on `strand_`, which this class owns and which guards the
+// state of this class. The `sink_` and the `semaphore_` synchronize their own
+// state themselves — the `sink_` by a strand or a mutex of its own, the
+// `semaphore_` by its internal `concurrent_channel`, see
+// `ad_utility::AsyncResourcePool` — so no state is ever shared between the
+// three and none of them has to know about the others. The teardown in
+// `abort()` in contrast runs on no strand of this class at all, see there.
 //
 // IMPORTANT: The merging itself must *not* run on any of those strands, because
 // everything that runs on a strand is serialized. A `ChunkTask` therefore runs
@@ -92,8 +111,8 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
   // of the merge.
   using Merger = ChunkMerger<moveElements, Input, Comparator>;
   using SharedMergeState = typename Merger::State;
-  // The strand to which the dispatch loop and the teardown are confined, see
-  // the STRAND CONFINEMENT note above.
+  // The strand to which the dispatch loop is confined, see the STRAND
+  // CONFINEMENT note above.
   using Strand = net::strand<net::any_io_executor>;
   // The counting semaphore that bounds the number of chunks that are merged
   // concurrently, and one of its permits. A resource pool without resources is
@@ -107,90 +126,6 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
   // exists inside a `shared_ptr`, see the LIFETIME note above.
   struct PrivateTag {};
 
-  net::any_io_executor executor_;
-  // Both are never `nullptr`, see `create()` below.
-  std::shared_ptr<const SharedMergeState> mergeState_;
-  std::shared_ptr<Sink> sink_;
-  size_t maxInFlight_;
-  // NOTE: The order of these members matters, both of them are initialized from
-  // the members above.
-  Strand strand_;
-  // The semaphore that bounds the number of chunks that are merged
-  // concurrently. A chunk task is only posted once a permit could be taken out,
-  // and holds that permit until it is done.
-  Semaphore semaphore_;
-
- public:
-  // Create the state of a merge and start dispatching its chunks. All the work
-  // is scheduled on the `executor`, which somebody else has to run. The
-  // `mergeState` and the `sink` must not be `nullptr`, and the `sink` has to
-  // expect exactly `mergeState->chunkBoundaries_.size()` chunks.
-  static std::shared_ptr<ParallelMergeState> create(
-      net::any_io_executor executor,
-      std::shared_ptr<const SharedMergeState> mergeState,
-      std::shared_ptr<Sink> sink, size_t maxInFlight) {
-    AD_CONTRACT_CHECK(mergeState != nullptr);
-    AD_CONTRACT_CHECK(sink != nullptr);
-    auto self = std::make_shared<ParallelMergeState>(
-        PrivateTag{}, std::move(executor), std::move(mergeState),
-        std::move(sink), maxInFlight);
-    // NOTE: The dispatching can only be started once the `shared_ptr` exists,
-    // because the tasks and handlers keep this object alive via
-    // `shared_from_this`. It runs on `strand_`, see `dispatchNextChunk`.
-    net::post(self->strand_, [self] { self->dispatchNextChunk(0); });
-    return self;
-  }
-
-  // The constructor is effectively private, use `create()` instead.
-  ParallelMergeState(PrivateTag, net::any_io_executor executor,
-                     std::shared_ptr<const SharedMergeState> mergeState,
-                     std::shared_ptr<Sink> sink, size_t maxInFlight)
-      : executor_{std::move(executor)},
-        mergeState_{std::move(mergeState)},
-        sink_{std::move(sink)},
-        maxInFlight_{maxInFlight},
-        strand_{net::make_strand(executor_)},
-        semaphore_{executor_, maxInFlight} {
-    AD_CORRECTNESS_CHECK(maxInFlight_ > 0);
-    AD_CORRECTNESS_CHECK(maxInFlight_ <= numChunks());
-  }
-
-  // The number of chunks that this merge consists of, see
-  // `computeChunkBoundaries`. Always at least one.
-  size_t numChunks() const { return mergeState_->chunkBoundaries_.size(); }
-
-  // Stop the merge, so that no task is left waiting for a consumer that is
-  // gone. NOTE: This returns immediately, it does *not* wait for the tasks that
-  // are still in flight, see the LIFETIME note above.
-  void abort() noexcept {
-    ad_utility::terminateIfThrows(
-        [this] {
-          // NOTE: This function may be called synchronously from a thread that
-          // runs none of the strands involved, and it must not block. Both
-          // calls below therefore only *initiate* the teardown on the
-          // respective strand and return immediately. The `shared_ptr` that is
-          // consigned to the first one is required because the caller may drop
-          // its own `shared_ptr` right after this call; the `semaphore_` in
-          // contrast keeps its state alive itself.
-          sink_->asyncAbort(
-              net::consign(net::detached, this->shared_from_this()));
-          // Wake up the dispatch loop if it currently waits for a free permit.
-          // It sees the stop afterwards and never waits again, so the
-          // cancellation does not have to be sticky, see
-          // `ad_utility::AsyncResourcePool::cancel`.
-          //
-          // NOTE: The two halves of this teardown run on different strands and
-          // are hence not atomic with respect to the dispatch loop, which may
-          // therefore still dispatch a few chunks in between. That is benign:
-          // such a chunk sees the stop in its very first `stopRequested()` and
-          // returns its permit right away, so the loop runs through the
-          // remaining chunk indices and terminates.
-          semaphore_.cancel();
-        },
-        "Aborting a `ParallelMergeState` failed.");
-  }
-
- private:
   // The merging of a single chunk, as a handler-based loop instead of a
   // coroutine (which is not available in the C++17 backports mode): `step()`
   // merges a single output block and pushes it to the sink, and the completion
@@ -250,38 +185,32 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
         finish();
         return;
       }
-      executeAndHandleUnlikelyMemoryError([this, &block] {
-        state_->sink_->asyncPush(
-            chunkIndex_, std::move(block).value(),
-            net::bind_executor(
-                state_->executor_,
-                [self = this->shared_from_this()](std::exception_ptr exception,
-                                                  bool keepGoing) {
-                  if (exception != nullptr) {
-                    self->fail(std::move(exception));
-                  } else if (keepGoing) {
-                    self->step();
-                  } else {
-                    self->finish();
-                  }
-                }));
-      });
+      runAndForwardMemoryError(
+          [this, &block] {
+            state_->sink_->asyncPush(
+                chunkIndex_, std::move(block).value(),
+                bindToMergeExecutor(
+                    [self = this->shared_from_this()](
+                        std::exception_ptr exception, bool keepGoing) {
+                      if (exception != nullptr) {
+                        self->fail(std::move(exception));
+                      } else if (keepGoing) {
+                        self->step();
+                      } else {
+                        self->finish();
+                      }
+                    }));
+          },
+          [this](std::exception_ptr e) { fail(std::move(e)); });
     }
 
    private:
-    // Run the `function`, whose only way of throwing is that an allocation (of
-    // a completion handler) fails, in which case this chunk cannot continue at
-    // all. Return `true` if the `function` ran through, and forward the
-    // exception to the sink otherwise.
-    template <typename Function>
-    bool executeAndHandleUnlikelyMemoryError(Function function) noexcept {
-      try {
-        function();
-        return true;
-      } catch (...) {
-        fail(std::current_exception());
-        return false;
-      }
+    // Bind the `handler` to `ParallelMergeState::executor_`, so that it never
+    // runs on one of the strands, see the IMPORTANT note at the class comment
+    // above.
+    template <typename Handler>
+    auto bindToMergeExecutor(Handler handler) {
+      return net::bind_executor(state_->executor_, std::move(handler));
     }
 
     // Forward the `exception` of this chunk to the sink and then finish the
@@ -291,9 +220,11 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
       try {
         state_->sink_->asyncPushException(
             std::move(exception),
-            net::bind_executor(state_->executor_,
-                               [self = this->shared_from_this()](
-                                   std::exception_ptr) { self->finish(); }));
+            bindToMergeExecutor(
+                [self = this->shared_from_this()](
+                    [[maybe_unused]] std::exception_ptr errorFromSink) {
+                  self->finish();
+                }));
         wasForwarded = true;
       } catch (...) {
         // `asyncPushException` typically allocates the handler that it posts,
@@ -316,14 +247,101 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
             // sentinel was really sent.
             state_->sink_->asyncFinishChunk(
                 chunkIndex_,
-                net::bind_executor(state_->executor_,
-                                   [self = this->shared_from_this()](
-                                       std::exception_ptr, bool) {}));
+                bindToMergeExecutor(
+                    [self = this->shared_from_this()](
+                        [[maybe_unused]] std::exception_ptr errorFromSink,
+                        [[maybe_unused]] bool keepGoing) {}));
           },
           "Finishing a chunk of a `ParallelMergeState` failed.");
     }
   };
 
+  net::any_io_executor executor_;
+  // Both are never `nullptr`, see `create()` below.
+  std::shared_ptr<const SharedMergeState> mergeState_;
+  std::shared_ptr<Sink> sink_;
+  size_t maxInFlight_;
+  // NOTE: The order of these members matters, both of them are initialized from
+  // the members above.
+  Strand strand_;
+  // The semaphore that bounds the number of chunks that are merged
+  // concurrently. A chunk task is only posted once a permit could be taken out,
+  // and holds that permit until it is done.
+  Semaphore semaphore_;
+
+ public:
+  // The constructor is effectively private, use `create()` instead.
+  ParallelMergeState(PrivateTag, net::any_io_executor executor,
+                     std::shared_ptr<const SharedMergeState> mergeState,
+                     std::shared_ptr<Sink> sink, size_t maxInFlight)
+      : executor_{std::move(executor)},
+        mergeState_{std::move(mergeState)},
+        sink_{std::move(sink)},
+        maxInFlight_{maxInFlight},
+        strand_{net::make_strand(executor_)},
+        semaphore_{executor_, maxInFlight} {
+    AD_CORRECTNESS_CHECK(maxInFlight_ > 0);
+    AD_CORRECTNESS_CHECK(maxInFlight_ <= numChunks());
+  }
+
+  // Create the state of a merge and start dispatching its chunks. All the work
+  // is scheduled on the `executor`, which somebody else has to run. The
+  // `mergeState` and the `sink` must not be `nullptr`, and the `sink` has to
+  // expect exactly `mergeState->chunkBoundaries_.size()` chunks.
+  static std::shared_ptr<ParallelMergeState> create(
+      net::any_io_executor executor,
+      std::shared_ptr<const SharedMergeState> mergeState,
+      std::shared_ptr<Sink> sink, size_t maxInFlight) {
+    AD_CONTRACT_CHECK(mergeState != nullptr);
+    AD_CONTRACT_CHECK(sink != nullptr);
+    auto self = std::make_shared<ParallelMergeState>(
+        PrivateTag{}, std::move(executor), std::move(mergeState),
+        std::move(sink), maxInFlight);
+    // NOTE: The dispatching can only be started once the `shared_ptr` exists,
+    // because the tasks and handlers keep this object alive via
+    // `shared_from_this`. It runs on `strand_`, see `dispatchNextChunk`.
+    net::post(self->strand_, [self] { self->dispatchNextChunk(0); });
+    return self;
+  }
+
+  // The number of chunks that this merge consists of, see
+  // `computeChunkBoundaries`. Always at least one.
+  size_t numChunks() const { return mergeState_->chunkBoundaries_.size(); }
+
+  // Stop the merge, so that no task is left waiting for a consumer that is
+  // gone. NOTE: This returns immediately, it does *not* wait for the tasks that
+  // are still in flight, see the LIFETIME note above.
+  void abort() noexcept {
+    ad_utility::terminateIfThrows(
+        [this] {
+          // NOTE: This function may be called synchronously from a thread that
+          // runs none of the strands involved, and it must not block. Neither
+          // call below does: `asyncAbort` only *initiates* the teardown on the
+          // strand of the sink and returns immediately, and
+          // `AsyncResourcePool::cancel` cancels the channel of the `semaphore_`
+          // right in the calling thread, without a hop onto any executor. The
+          // `shared_ptr` that is consigned to the first one is required because
+          // the caller may drop its own `shared_ptr` right after this call; the
+          // `semaphore_` in contrast keeps its state alive itself.
+          sink_->asyncAbort(
+              net::consign(net::detached, this->shared_from_this()));
+          // Wake up the dispatch loop if it currently waits for a free permit.
+          // It sees the stop afterwards and never waits again, so the
+          // cancellation does not have to be sticky, see
+          // `ad_utility::AsyncResourcePool::cancel`.
+          //
+          // NOTE: Neither half of this teardown runs on `strand_`, so the two
+          // of them are not atomic with respect to the dispatch loop, which may
+          // therefore still dispatch a few chunks in between. That is benign:
+          // such a chunk sees the stop in its very first `stopRequested()` and
+          // returns its permit right away, so the loop runs through the
+          // remaining chunk indices and terminates.
+          semaphore_.cancel();
+        },
+        "Aborting a `ParallelMergeState` failed.");
+  }
+
+ private:
   // Dispatch the chunk with the given `chunkIndex`, and recursively all the
   // following ones: wait for a free permit of the `semaphore_`, and continue in
   // `spawnChunkAndContinue` as soon as one was taken out. Do nothing if all
@@ -345,15 +363,17 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
     if (chunkIndex >= numChunks() || sink_->stopRequested()) {
       return;
     }
-    executeAndHandleUnlikelyMemoryError([this, chunkIndex] {
-      semaphore_.asyncAcquire(net::bind_executor(
-          strand_,
-          [self = this->shared_from_this(), chunkIndex](
-              const boost::system::error_code& errorCode, Permit permit) {
-            self->spawnChunkAndContinue(errorCode, std::move(permit),
-                                        chunkIndex);
-          }));
-    });
+    runAndForwardMemoryError(
+        [this, chunkIndex] {
+          semaphore_.asyncAcquire(net::bind_executor(
+              strand_,
+              [self = this->shared_from_this(), chunkIndex](
+                  const boost::system::error_code& errorCode, Permit permit) {
+                self->spawnChunkAndContinue(errorCode, std::move(permit),
+                                            chunkIndex);
+              }));
+        },
+        [this](std::exception_ptr e) { forwardExceptionToSink(std::move(e)); });
   }
 
   // The continuation of `dispatchNextChunk`: post the task that merges the
@@ -374,8 +394,8 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
     if (errorCode || sink_->stopRequested()) {
       return;
     }
-    bool wasSpawned =
-        executeAndHandleUnlikelyMemoryError([this, chunkIndex, &permit] {
+    bool wasSpawned = runAndForwardMemoryError(
+        [this, chunkIndex, &permit] {
           // NOTE: The task is deliberately posted onto `executor_` and never
           // onto a strand, see `ChunkTask`. The `permit` is owned by the task
           // and is hence returned to the `semaphore_` as soon as the chunk is
@@ -383,26 +403,12 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
           auto task = std::make_shared<ChunkTask>(
               this->shared_from_this(), chunkIndex, std::move(permit));
           net::post(executor_, [task = std::move(task)] { task->step(); });
-        });
+        },
+        [this](std::exception_ptr e) { forwardExceptionToSink(std::move(e)); });
     if (!wasSpawned) {
       return;
     }
     dispatchNextChunk(chunkIndex + 1);
-  }
-
-  // Run the `function`, whose only way of throwing is that an allocation (of a
-  // chunk task or of a completion handler) fails, in which case the merge
-  // cannot continue at all. Return `true` if the `function` ran through, and
-  // forward the exception to the sink otherwise.
-  template <typename Function>
-  bool executeAndHandleUnlikelyMemoryError(Function function) noexcept {
-    try {
-      function();
-      return true;
-    } catch (...) {
-      forwardExceptionToSink(std::current_exception());
-      return false;
-    }
   }
 
   // Forward an `exception` that was thrown while dispatching to the sink, which

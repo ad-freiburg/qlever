@@ -33,12 +33,13 @@ namespace detail {
 // in an unevaluated context in C++17 mode, which is exactly where the concept
 // puts them.
 struct SinkBoolHandler {
-  void operator()(std::exception_ptr, bool) const {}
+  void operator()([[maybe_unused]] std::exception_ptr exception,
+                  [[maybe_unused]] bool keepGoing) const {}
 };
 
 // ___________________________________________________________________________
 struct SinkVoidHandler {
-  void operator()(std::exception_ptr) const {}
+  void operator()([[maybe_unused]] std::exception_ptr exception) const {}
 };
 }  // namespace detail
 
@@ -76,38 +77,42 @@ CPP_requires(
 // Boost.Asio operations that take a completion token, so a caller may await
 // them, attach a callback, obtain a `std::future`, or detach them, whatever
 // fits. All of them may be initiated from any thread and any executor. The
-// completion signature is `void(std::exception_ptr, bool)` for the two
-// operations that push something and `void(std::exception_ptr)` for the other
-// two, so a token such as `net::use_awaitable` rethrows on the executor of the
-// caller.
+// completion signature is `void(std::exception_ptr, bool)` for `asyncPush` and
+// `asyncFinishChunk`, where the `bool` says whether the merge should keep
+// going, and `void(std::exception_ptr)` for `asyncPushException` and
+// `asyncAbort`, so a token such as `net::use_awaitable` rethrows on the
+// executor of the caller.
 //
 // The operations in detail:
 //
-// * `bool stopRequested() const noexcept` returns whether the merge was
-//   stopped, either by `asyncAbort` or by `asyncPushException`. It is the only
-//   synchronous operation of a sink, and the merge polls it before it merges
-//   the next output block, so that it does no superfluous work. It has to be
-//   callable from any thread at any time.
+// * `bool stopRequested() const noexcept` — return whether the merge was
+//   stopped, either by `asyncAbort` or by `asyncPushException`. This is the
+//   only synchronous operation of a sink, and the merge polls it before it
+//   merges the next output block, so that it does no superfluous work. It has
+//   to be callable from any thread at any time.
 //
-// * `asyncPush(chunkIndex, block, token)` pushes a finished output `block` of
+// * `asyncPush(chunkIndex, block, token)` — push a finished output `block` of
 //   the chunk with the given `chunkIndex`. It completes with `false` if the
 //   merge was stopped, in which case the `block` may be dropped and the
 //   producer of the chunk stops producing. A sink that buffers only a bounded
 //   number of blocks per chunk suspends here until there is room again, which
 //   is the back-pressure that bounds the memory consumption of the merge.
 //
-// * `asyncFinishChunk(chunkIndex, token)` announces that no further block will
-//   be pushed for the chunk with the given `chunkIndex`. The merge calls this
-//   exactly once per chunk and on every path, also for a chunk that has no
-//   output block at all and also after the merge was stopped, so that a sink
-//   which waits for a chunk cannot wait forever.
+// * `asyncFinishChunk(chunkIndex, token)` — announce that no further block
+//   will be pushed for the chunk with the given `chunkIndex`. The merge calls
+//   this exactly once for every chunk that it dispatches at all, and on every
+//   path: also for a chunk that has no output block at all, and also for a
+//   chunk that was stopped while it was already running. A merge that was
+//   stopped in contrast does not dispatch its remaining chunks at all, so those
+//   chunks never announce anything; a sink may therefore only wait for all of
+//   its chunks if the merge was not stopped.
 //
-// * `asyncPushException(exception, token)` forwards an `exception` of a chunk.
-//   Only the first pushed exception has to be kept, and pushing an exception
-//   also has to stop the merge, so that the remaining chunks do not keep
-//   producing blocks that nobody wants any more.
+// * `asyncPushException(exception, token)` — forward an `exception` of a
+//   chunk. Only the first pushed exception has to be kept, and pushing an
+//   exception also has to stop the merge, so that the remaining chunks do not
+//   keep producing blocks that nobody wants any more.
 //
-// * `asyncAbort(token)` stops the merge from the consuming side, so that no
+// * `asyncAbort(token)` — stop the merge from the consuming side, so that no
 //   producer is left suspended forever once the consumer is gone.
 //
 // PRECONDITION: At most one `asyncPush` or `asyncFinishChunk` of a *given*

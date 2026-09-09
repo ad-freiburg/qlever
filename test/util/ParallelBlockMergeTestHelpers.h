@@ -35,10 +35,12 @@
 #include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
-// Helpers that both `ParallelBlockMergeTest.cpp` (which tests the merge itself)
-// and `MergeHelpersTest.cpp` (which tests the helpers from `MergeHelpers.h`)
-// need, in particular the in-memory `VectorInput` policy and the in-memory
-// `CollectingBlockSink`.
+// Helpers for the tests of the parallel block merge, in particular the
+// in-memory `VectorInput` input policy and the in-memory `CollectingBlockSink`
+// output policy. They are needed by `ParallelBlockMergeTest.cpp` (which tests
+// the merge itself), by `RunsInputPolicyTest.cpp` (which tests the input policy
+// from `RunsInputPolicy.h`, `VectorInput` included), and by
+// `MergeHelpersTest.cpp` (which tests the helpers from `MergeHelpers.h`).
 namespace parallelBlockMergeTestHelpers {
 
 namespace net = boost::asio;
@@ -149,6 +151,11 @@ VectorInput<T> makeVectorInput(const std::vector<std::vector<T>>& runs,
   return VectorInput<T>{std::move(blockedRuns)};
 }
 
+// Pin down that `VectorInput` models the input policy concept that it
+// documents.
+static_assert(
+    ad_utility::parallelBlockMerge::InputConcept<VectorInput<size_t>>);
+
 // ___________________________________________________________________________
 // An in-memory output policy.
 // ___________________________________________________________________________
@@ -172,8 +179,6 @@ VectorInput<T> makeVectorInput(const std::vector<std::vector<T>>& runs,
 template <typename Block>
 class CollectingBlockSink : public ad_utility::NoCopyNoMove {
  public:
-  using value_type = Block;
-
   // Everything that a single chunk pushed.
   struct Chunk {
     std::vector<Block> blocks_{};
@@ -264,9 +269,6 @@ class CollectingBlockSink : public ad_utility::NoCopyNoMove {
         AD_FWD(completionToken));
   }
 
-  // The number of chunks that this sink expects.
-  size_t numChunks() const { return chunks_.size(); }
-
   // What every chunk pushed. IMPORTANT: Only call this once the merge is
   // complete, that is once every task of the merge is done (either because
   // every chunk was finished, or because the thread pool of the merge was
@@ -338,6 +340,11 @@ class CollectingBlockSink : public ad_utility::NoCopyNoMove {
     return !stopRequested_.load();
   }
 };
+
+// Pin down that `CollectingBlockSink` models the output policy concept that it
+// documents.
+static_assert(ad_utility::parallelBlockMerge::SinkConcept<
+              CollectingBlockSink<std::vector<size_t>>, std::vector<size_t>>);
 
 // Return the elements of all blocks that the `sink` collected, in the order of
 // the chunks and, within a chunk, in the order in which the blocks were pushed.
