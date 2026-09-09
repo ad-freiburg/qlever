@@ -42,8 +42,9 @@ struct IdMapBatch {
 // `IdMapBatch` to the partial ID maps, one of which is created per partial
 // vocabulary.
 //
-// NOTE: This class is used exclusively by the thread of the
-// `idMapWriterQueue_` of the `VocabularyMergePipeline`.
+// NOTE: This class is used exclusively by the single thread of the
+// `idMapWriterQueue_` of the `VocabularyMergePipeline`. Therefore it does not
+// need to be threadsafe.
 class IdMapBatchWriter {
  private:
   // The ID map writers, one per partial vocabulary.
@@ -76,6 +77,10 @@ class IdMapBatchWriter {
     AD_LOG_TRACE << "Start writing a batch of ID map entries\n";
     const auto& globalIds = batch.globalIds_;
     const auto& localIdxMappings = batch.localIdxMappings_;
+    // NOTE: We deliberately use a manual loop and not a range-based one,
+    // because only the first `numMappings_` elements of the `mappings_` are
+    // initialized (see `LocalIdxToBatchMappings` in
+    // `index/vocabulary_merger/WordBatch.h`).
     for (size_t i = 0; i < localIdxMappings.numMappings_; ++i) {
       const auto& mapping = localIdxMappings.mappings_[i];
       idMapWriters_[mapping.partialVocabularyIndex_].push(

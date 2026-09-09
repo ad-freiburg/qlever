@@ -33,9 +33,10 @@ namespace ad_utility::vocabulary_merger::detail {
 // batch to the vocabulary (via the word callback) and thereby determine their
 // global IDs.
 //
-// NOTE: This class is used exclusively by the thread of the
+// NOTE: This class is used exclusively by the single thread of the
 // `wordWriterQueue_` of the `VocabularyMergePipeline` (see
-// `index/vocabulary_merger/MergePipeline.h`).
+// `index/vocabulary_merger/MergePipeline.h`). Therefore it does not need to be
+// threadsafe.
 class VocabularyWriter {
  private:
   // The metadata of the merged vocabulary, which is built up incrementally as
@@ -71,9 +72,6 @@ CPP_template_def(typename C)(requires WordCallback<C>)
         const ad_utility::RegexSet& blankNodeIriRegexes) {
   AD_LOG_TRACE << "Start writing a batch of merged words\n";
 
-  // TODO<optimization> If we aim to further speed this up, we could
-  // order all the write requests to _outfile _externalOutfile and all the
-  // idVecs to have a more useful external access pattern.
   std::vector<Id> globalIds;
   globalIds.reserve(uniqueWords.size());
   for (const auto& uniqueWord : uniqueWords) {
