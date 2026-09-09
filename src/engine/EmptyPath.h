@@ -92,12 +92,12 @@ class EmptyPath : public Operation {
   size_t resultWidth_;
 
  public:
-  // If `checkedChild` is `std::nullopt`, all entities of the knowledge graph
+  // If `checkedChildOpt` is `std::nullopt`, all entities of the knowledge graph
   // are returned, else the values in its join column are checked against the
   // knowledge graph (see the comment for this class above).
   EmptyPath(QueryExecutionContext* qec, Variable variable, Graphs activeGraphs,
             std::optional<Variable> graphVariable,
-            std::optional<CheckedChild> checkedChild = std::nullopt);
+            std::optional<CheckedChild> checkedChildOpt = std::nullopt);
 
   // Getters, mainly for testing.
   const Variable& variable() const { return variable_; }

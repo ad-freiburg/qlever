@@ -126,12 +126,12 @@ EmptyPath::CheckedChild::CheckedChild(std::shared_ptr<QueryExecutionTree> child,
 // _____________________________________________________________________________
 EmptyPath::EmptyPath(QueryExecutionContext* qec, Variable variable,
                      Graphs activeGraphs, std::optional<Variable> graphVariable,
-                     std::optional<CheckedChild> checkedChild)
+                     std::optional<CheckedChild> checkedChildOpt)
     : Operation{qec},
       variable_{std::move(variable)},
       activeGraphs_{std::move(activeGraphs)},
       graphVariable_{std::move(graphVariable)},
-      checkedChild_{std::move(checkedChild)} {
+      checkedChild_{std::move(checkedChildOpt)} {
   // The graph column is written in addition to the column of `variable_`, so
   // the two variables must not be the same. Callers that join on the graph
   // variable have to pass a helper variable instead.
@@ -158,7 +158,7 @@ EmptyPath::EmptyPath(QueryExecutionContext* qec, Variable variable,
   // variables.
   ql::ranges::copy_if(ad_utility::integerRange(child().getResultWidth()),
                       std::back_inserter(checkedChild.payloadColumns_),
-                      [&check](ColumnIndex column) {
+                      [&checkedChild](ColumnIndex column) {
                         return column != checkedChild.joinColumn_ &&
                                column != checkedChild.graphColumn_;
                       });
