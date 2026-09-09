@@ -13,7 +13,7 @@ qlever_target_link_libraries(basicParser qlever_util rdfTypes parserData)
 # The parser for the RDF input formats. It is used by `index` (which builds an
 # index from RDF input files), so it must not depend on `index` itself. It needs
 # the `vocabulary` library for the `EncodedIriManager`.
-add_library(rdfParser RdfParser.cpp AsyncFileBlockDriver.cpp)
+add_library(rdfParser RdfParser.cpp AsyncFileBlockDriver.cpp BlankNodeAdder.cpp)
 qlever_target_link_libraries(rdfParser basicParser vocabulary localVocab)
 
 add_library(sparqlParser
