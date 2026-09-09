@@ -56,6 +56,15 @@ void expectRtiHasDimensions(
 }  // namespace
 
 // ________________________________________________
+// _____________________________________________________________________________
+TEST(OperationTest, constructorRequiresQueryExecutionContext) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      NeutralElementOperation{nullptr},
+      ::testing::HasSubstr(
+          "An `Operation` requires a `QueryExecutionContext`"));
+}
+
+// _____________________________________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
   LimitOffsetClause l;
   {

@@ -341,7 +341,10 @@ class QueryExecutionTree {
   DEFINE_MAKE_SHARED_MEMBER(qec_->getAllocator())
 
   std::shared_ptr<QueryExecutionTree> clone() const {
-    return makeShared<QueryExecutionTree>(qec_, rootOperation_->clone());
+    // A tree without a root operation is cloned to another such tree.
+    return rootOperation_
+               ? makeShared<QueryExecutionTree>(qec_, rootOperation_->clone())
+               : makeShared<QueryExecutionTree>(qec_);
   }
 };
 

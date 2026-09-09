@@ -312,3 +312,13 @@ TEST(QueryExecutionTree, constructorRequiresQueryExecutionContext) {
       QueryExecutionTree{nullptr},
       ::testing::HasSubstr("Assertion `qec_ != nullptr` failed."));
 }
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, cloneOfEmptyTreeIsEmpty) {
+  QueryExecutionTree tree{getQec()};
+  ASSERT_TRUE(tree.isEmpty());
+  auto clone = tree.clone();
+  ASSERT_NE(clone, nullptr);
+  EXPECT_TRUE(clone->isEmpty());
+  EXPECT_EQ(clone->getQec(), tree.getQec());
+}
