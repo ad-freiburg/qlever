@@ -170,14 +170,13 @@ class QueryPlanner {
     enum Type { BASIC, OPTIONAL, MINUS };
 
     explicit SubtreePlan(QueryExecutionContext* qec)
-        : _qet(std::allocate_shared<QueryExecutionTree>(qec->getAllocator(),
-                                                        qec)) {}
+        : _qet(qec->makeShared<QueryExecutionTree>(qec)) {}
 
     template <typename Operation>
     SubtreePlan(QueryExecutionContext* qec,
                 std::shared_ptr<Operation> operation)
-        : _qet{std::allocate_shared<QueryExecutionTree>(
-              qec->getAllocator(), qec, std::move(operation))} {}
+        : _qet{qec->makeShared<QueryExecutionTree>(qec, std::move(operation))} {
+    }
 
     std::shared_ptr<QueryExecutionTree> _qet;
     std::shared_ptr<Result> _cachedResult;

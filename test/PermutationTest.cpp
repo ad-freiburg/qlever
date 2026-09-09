@@ -12,6 +12,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "util/IndexTestHelpers.h"
 
@@ -59,3 +60,48 @@ TEST(Permutation, logRegistrationCanBeDisabled) {
   EXPECT_THAT(loadAndCaptureLog(false),
               ::testing::Not(::testing::HasSubstr("Registered")));
 }
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// _____________________________________________________________________________
+TEST(Permutation, getDistinctCol0Ids) {
+  // `getDistinctCol0Ids` is only a thin wrapper around the corresponding
+  // function of the `CompressedRelationReader` (which is tested in detail in
+  // `CompressedRelationsTest.cpp`), so we only check that all the arguments are
+  // forwarded correctly.
+  Index index = ad_utility::testing::makeTestIndex(
+      gtestCurrentTestName(), "<a> <b> <c> . <a> <b> <d> . <e> <f> <g> .");
+  auto sharedSnapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  const auto& locatedTriplesState = *sharedSnapshot;
+  const Permutation& pso = index.getImpl().PSO();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ScanSpecification fullScan{std::nullopt, std::nullopt, std::nullopt};
+
+  // Concatenate all the tables that the generator yields.
+  auto getDistinctCol0Ids = [&](std::optional<std::vector<Id>> idFilter) {
+    IdTable result{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    for (const IdTable& table :
+         pso.getDistinctCol0Ids(fullScan, false, std::move(idFilter),
+                                cancellationHandle, locatedTriplesState)) {
+      result.insertAtEnd(table);
+    }
+    return result;
+  };
+
+  // Without a filter, the result has to be the same as that of the eager
+  // `getDistinctCol0IdsAndCounts`, whose first column also holds the distinct
+  // `col0Id`s.
+  IdTable expected = pso.getDistinctCol0IdsAndCounts(cancellationHandle,
+                                                     locatedTriplesState, {});
+  auto getId = ad_utility::testing::makeGetId(index);
+  EXPECT_THAT(getDistinctCol0Ids(std::nullopt).getColumn(0),
+              ::testing::ElementsAreArray(expected.getColumn(0)));
+  EXPECT_THAT(getDistinctCol0Ids(std::nullopt).getColumn(0),
+              ::testing::IsSupersetOf({getId("<b>"), getId("<f>")}));
+
+  // With a filter, only the requested `col0Id`s are returned.
+  EXPECT_THAT(getDistinctCol0Ids(std::vector{getId("<b>")}).getColumn(0),
+              ::testing::ElementsAre(getId("<b>")));
+}
+#endif

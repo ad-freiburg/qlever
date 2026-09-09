@@ -84,7 +84,7 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
     CompressedRelationReader::IdTableGeneratorInputRange gen, IndexScan& scan) {
   // Store the generator in a wrapper so we can access its details after moving
   auto generatorStorage =
-      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
+      scan.makeShared<CompressedRelationReader::IdTableGeneratorInputRange>(
           std::move(gen));
 
   using SendPriority = RuntimeInformation::SendPriority;

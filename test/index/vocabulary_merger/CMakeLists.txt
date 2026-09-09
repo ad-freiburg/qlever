@@ -1,0 +1,3 @@
+addLinkAndDiscoverTest(IdMapTest index)
+
+addLinkAndDiscoverTest(WordBatchBuilderTest index)

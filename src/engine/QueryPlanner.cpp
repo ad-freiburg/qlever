@@ -98,8 +98,7 @@ SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, Args&&... args) {
   // NOTE: The operations are allocated with the memory limited allocator of the
   // query, because the query planner creates a lot of them, most of which never
   // become part of the final execution tree.
-  return {qec, std::allocate_shared<Operation>(qec->getAllocator(), qec,
-                                               AD_FWD(args)...)};
+  return {qec, qec->makeShared<Operation>(qec, AD_FWD(args)...)};
 }
 
 // Create a `SubtreePlan` that holds the given `operation`. `Op` must be a class
@@ -946,8 +945,7 @@ auto QueryPlanner::seedWithScansAndText(
             return std::make_unique<VariableExpression>(std::move(variable));
           };
           addFilter(SparqlFilter{
-              SparqlExpressionPimpl{std::allocate_shared<EqualExpression>(
-                                        allocator_,
+              SparqlExpressionPimpl{_qec->makeShared<EqualExpression>(
                                         std::array<SparqlExpression::Ptr, 2>{
                                             makeVarExpr(graphVariable),
                                             makeVarExpr(internalVariable)}),
@@ -3350,8 +3348,8 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
   Plans candidatesOut{planner_.allocator_};
 
   for (auto& sub : candidatesIn) {
-    auto pathSearch = std::allocate_shared<PathSearch>(
-        planner_.allocator_, qec_, std::move(sub._qet), config);
+    auto pathSearch =
+        qec_->makeShared<PathSearch>(qec_, std::move(sub._qet), config);
     auto plan = makeSubtreePlan<PathSearch>(std::move(pathSearch));
     candidatesOut.push_back(std::move(plan));
   }
@@ -3399,8 +3397,8 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       if (!rightVarOutside) {
         right = std::move(sub._qet);
       }
-      auto spatialJoin = std::allocate_shared<SpatialJoin>(
-          planner_.allocator_, qec_, config, std::nullopt, right);
+      auto spatialJoin =
+          qec_->makeShared<SpatialJoin>(qec_, config, std::nullopt, right);
       auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
       candidatesOut.push_back(std::move(plan));
     };
@@ -3439,8 +3437,8 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitExternalValues(
     const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
-  auto externalValues = std::allocate_shared<ExternalValues>(
-      planner_.allocator_, qec_, externalValuesQuery);
+  auto externalValues =
+      qec_->makeShared<ExternalValues>(qec_, externalValuesQuery);
   auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
   visitGroupOptionalOrMinus(planner_.makePlans(std::move(candidate)));
 }
@@ -3534,8 +3532,7 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitDescribe(
     parsedQuery::Describe& describe) {
-  auto tree = std::allocate_shared<QueryExecutionTree>(
-      planner_.allocator_,
+  auto tree = qec_->makeShared<QueryExecutionTree>(
       planner_.createExecutionTree(describe.whereClause_.get(), true));
   auto describeOp =
       makeSubtreePlan<Describe>(planner_._qec, std::move(tree), describe);

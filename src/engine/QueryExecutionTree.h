@@ -15,6 +15,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
+#include "util/AllocateShared.h"
 #include "util/HashSet.h"
 
 // Strongly typed enum for controlling whether stripped variables are explicitly
@@ -334,12 +335,16 @@ class QueryExecutionTree {
     }
   };
 
+  // define a `makeShared` member function that has the same interface as
+  // `std::make_shared`, but allocates via the `qec_->getAllocator()` (see
+  // `util/AllocateShared.h`).
+  DEFINE_MAKE_SHARED_MEMBER(qec_->getAllocator())
+
   std::shared_ptr<QueryExecutionTree> clone() const {
+    // A tree without a root operation is cloned to another such tree.
     return rootOperation_
-               ? std::allocate_shared<QueryExecutionTree>(
-                     qec_->getAllocator(), qec_, rootOperation_->clone())
-               : std::allocate_shared<QueryExecutionTree>(qec_->getAllocator(),
-                                                          qec_);
+               ? makeShared<QueryExecutionTree>(qec_, rootOperation_->clone())
+               : makeShared<QueryExecutionTree>(qec_);
   }
 };
 
@@ -353,10 +358,8 @@ namespace ad_utility {
 template <typename Operation, typename... Args>
 std::shared_ptr<QueryExecutionTree> makeExecutionTree(
     QueryExecutionContext* qec, Args&&... args) {
-  const auto& allocator = qec->getAllocator();
-  return std::allocate_shared<QueryExecutionTree>(
-      allocator, qec,
-      std::allocate_shared<Operation>(allocator, qec, AD_FWD(args)...));
+  return qec->makeShared<QueryExecutionTree>(
+      qec, qec->makeShared<Operation>(qec, AD_FWD(args)...));
 }
 }  // namespace ad_utility
 

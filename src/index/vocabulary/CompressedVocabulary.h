@@ -45,9 +45,6 @@ CPP_template(typename UnderlyingVocabulary,
  private:
   UnderlyingVocabulary underlyingVocabulary_;
   CompressionWrapper compressionWrapper_;
-  // We need to store two files, one for the words and one for the codebooks.
-  static constexpr std::string_view wordsSuffix = ".words";
-  static constexpr std::string_view decodersSuffix = ".codebooks";
 
   // Whether the underlying vocabulary has "holes", meaning that not every index
   // in `[0, endIndex())` has a word associated with it. This currently is the
@@ -67,6 +64,12 @@ CPP_template(typename UnderlyingVocabulary,
                     UnderlyingVocabulary>);
 
  public:
+  // Two files are stored, one for the words (which is the base filename of the
+  // `UnderlyingVocabulary`) and one for the codebooks. These suffixes are
+  // appended to the base filename of this vocabulary to obtain their names.
+  static constexpr std::string_view wordsSuffix = ".words";
+  static constexpr std::string_view decodersSuffix = ".codebooks";
+
   // The vocabulary is initialized using the `open()` method, the default
   // constructor leads to an empty vocabulary.
   CompressedVocabulary() = default;
@@ -289,11 +292,12 @@ CPP_template(typename UnderlyingVocabulary,
     uint64_t counter_ = 0;
 
    public:
-    /// Constructor.
-    explicit DiskWriterFromUncompressedWords(
-        const std::string& filenameWords, const std::string& filenameDecoders)
-        : underlyingWriter_{filenameWords},
-          filenameDecoders_{filenameDecoders} {}
+    /// Constructor. The `filename` is the base filename of the vocabulary; the
+    /// names of the two files that are actually written are derived from it via
+    /// `wordsSuffix` and `decodersSuffix`.
+    explicit DiskWriterFromUncompressedWords(const std::string& filename)
+        : underlyingWriter_{absl::StrCat(filename, wordsSuffix)},
+          filenameDecoders_{absl::StrCat(filename, decodersSuffix)} {}
 
     /// Compress the `uncompressedWord` and write it to disk.
     uint64_t operator()(std::string_view uncompressedWord,
@@ -421,11 +425,12 @@ CPP_template(typename UnderlyingVocabulary,
     std::optional<uint64_t> lastIndex_ = std::nullopt;
 
    public:
-    // Constructor.
-    explicit DiskWriterWithExplicitIndices(const std::string& filenameWords,
-                                           const std::string& filenameDecoders)
-        : underlyingWriter_{filenameWords},
-          filenameDecoders_{filenameDecoders} {}
+    // Constructor. The `filename` is the base filename of the vocabulary; the
+    // names of the two files that are actually written are derived from it via
+    // `wordsSuffix` and `decodersSuffix`.
+    explicit DiskWriterWithExplicitIndices(const std::string& filename)
+        : underlyingWriter_{absl::StrCat(filename, wordsSuffix)},
+          filenameDecoders_{absl::StrCat(filename, decodersSuffix)} {}
 
     // This type can neither be copied nor moved (the user-declared destructor
     // below suppresses the implicit move operations). It is always used
@@ -504,6 +509,16 @@ CPP_template(typename UnderlyingVocabulary,
       std::conditional_t<underlyingHasHoles, DiskWriterWithExplicitIndices,
                          DiskWriterFromUncompressedWords<>>;
 
+  // The files of the underlying vocabulary, which is stored under the base
+  // filename plus `wordsSuffix`, plus the file for the codebooks.
+  static FileSuffixes fileSuffixes() {
+    FileSuffixes suffixes;
+    addFileSuffixesWithPrefix(suffixes, wordsSuffix,
+                              UnderlyingVocabulary::fileSuffixes());
+    suffixes.emplace_back(decodersSuffix);
+    return suffixes;
+  }
+
   // Return a `unique_ptr<DiskWriterFromUncompressedWords>` that can be used to
   // create the vocabulary. For an underlying vocabulary with holes this throws,
   // because such a vocabulary requires an explicit index for each word (see
@@ -521,9 +536,7 @@ CPP_template(typename UnderlyingVocabulary,
           "Such a vocabulary can only be created by filtering an existing "
           "vocabulary.");
     } else {
-      return std::make_unique<DiskWriterFromUncompressedWords<>>(
-          absl::StrCat(filename, wordsSuffix),
-          absl::StrCat(filename, decodersSuffix));
+      return std::make_unique<DiskWriterFromUncompressedWords<>>(filename);
     }
   }
 

@@ -20,6 +20,7 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
+#include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -850,6 +851,71 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
  public:
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Lazily compute the distinct `col0Id`s of a full scan of the permutation
+  // that this reader reads from (none of the columns of
+  // `scanSpecAndBlocks.scanSpec_` may be fixed).
+  //
+  // If `addGraphColumn` is false, the yielded `IdTable`s have a single column
+  // that contains the distinct `col0Id`s. If it is true, they have a second
+  // column with the graph IDs, and the pairs of `col0Id` and graph ID are
+  // distinct. In both cases the yielded tables are sorted, and their
+  // concatenation is sorted and free of duplicates.
+  //
+  // If `idFilter` is specified, only `col0Id`s that are contained in it are
+  // returned. It has to be sorted in ascending order and must neither contain
+  // duplicates nor undefined IDs. Blocks that cannot contain any of the
+  // requested IDs are then not read at all.
+  //
+  // Blocks whose contribution can already be determined from their metadata
+  // alone (which is the case for almost all blocks that only contain a single
+  // `col0Id`, see `columnValuesAreKnownFromMetadata`) are never read, which
+  // makes this much cheaper than a full scan followed by a `DISTINCT`.
+  //
+  // The `LazyScanMetadata` of the returned generator is that of the inner scan
+  // over the blocks that actually had to be read, with `numBlocksAll_` set to
+  // the total number of blocks of the scan.
+  //
+  // NOTE: This reader and `locatedTriplesPerBlock` have to be kept alive until
+  // the returned generator has been fully consumed.
+  //
+  // The helper classes for the implementation live in `DistinctCol0Ids.h`.
+  cppcoro::generator<IdTable, LazyScanMetadata> getDistinctCol0Ids(
+      ScanSpecAndBlocks scanSpecAndBlocks, bool addGraphColumn,
+      std::optional<std::vector<Id>> idFilter,
+      CancellationHandle cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+#endif
+
+  // Return true iff the values of the first `numColumns` columns of all the
+  // triples of the given block are already known from its metadata alone,
+  // which is the case iff
+  // 1. All the triples of the block agree on those columns. The metadata knows
+  //    this because it stores the first and the last triple of the block,
+  //    including the delta triples that were inserted into it (see
+  //    `LocatedTriplesPerBlock::updateAugmentedMetadata`), so if those agree,
+  //    then so do all the triples in between.
+  // 2. The block still contains at least one triple. Delta triples might have
+  //    deleted all of them, but we can rule that out if there are fewer delta
+  //    triples for the block than it has rows, as each delta triple can delete
+  //    at most one of them.
+  //
+  // NOTE: The *number* of triples of the block is not known in this case, as
+  // delta triples may have deleted some of them (and inserted others). Use
+  // `contentsAreKnownFromMetadata` if you need that.
+  static bool columnValuesAreKnownFromMetadata(
+      const CompressedBlockMetadata& block, size_t numColumns,
+      const LocatedTriplesPerBlock& locatedTriples);
+
+  // Return true iff the complete contents of the given block, restricted to
+  // its first `numColumns` columns, are already known from its metadata alone,
+  // including the number of triples. In addition to
+  // `columnValuesAreKnownFromMetadata` this requires that there are no delta
+  // triples for the block at all.
+  static bool contentsAreKnownFromMetadata(
+      const CompressedBlockMetadata& block, size_t numColumns,
+      const LocatedTriplesPerBlock& locatedTriples);
+
   // Determine the distinct values and their counts for the column at
   // `columnIndex` (must be 0 or 1). Used for GROUP BY optimizations.
   IdTable getDistinctColIdsAndCounts(
