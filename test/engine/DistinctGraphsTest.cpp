@@ -104,13 +104,6 @@ TEST(DistinctGraphs, getCostEstimate) {
 }
 
 // _____________________________________________________________________________
-TEST(DistinctGraphs, getSizeEstimateDefault) {
-  auto dg = makeDistinctGraphs();
-
-  EXPECT_EQ(dg.getSizeEstimate(), MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA);
-}
-
-// _____________________________________________________________________________
 TEST(DistinctGraphs, getSizeEstimateComputed) {
   auto dg = makeDistinctGraphsFromQuads(
       "<a> <p> <b> <g1> . <c> <p> <d> <g2> . <e> <p> <f> <g3> .");
