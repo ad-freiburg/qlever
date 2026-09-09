@@ -1807,8 +1807,7 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsAcrossMultipleBlocks) {
       "<a> <p> <b> <g1> . <c> <p> <d> <g2> . <e> <p> <f> <g1> . <g> <p> <h> "
       "<g2> ."};
   config.indexType = qlever::Filetype::NQuad;
-  auto index = ad_utility::testing::makeTestIndex(
-      "computeUniqueGraphIdsAcrossMultipleBlocks", config);
+  auto index = ad_utility::testing::makeTestIndex(config);
   auto getId = ad_utility::testing::makeGetId(index);
 
   auto graphIds = computeUniqueGraphIdsForIndex(index);
