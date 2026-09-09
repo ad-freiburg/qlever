@@ -13,12 +13,27 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <array>
+
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "util/Views.h"
 
 namespace {
+// One entity of the knowledge graph and the graph it occurs in. Without a graph
+// column an undefined ID stands in for the graph (as in `graphsOf` below),
+// which affects neither the order nor the deduplication. The merge in
+// `scanIndex` needs such values because copying an `IdTable` row reference is
+// deliberately forbidden (see `RowReference`).
+using EntityAndGraph = std::array<Id, 2>;
+
+// Build an `EntityAndGraph` from a row that has `numColumns` (1 or 2) columns.
+template <typename Row>
+EntityAndGraph entityAndGraph(const Row& row, size_t numColumns) {
+  return {row[0], numColumns == 1 ? Id::makeUndefined() : row[1]};
+}
+
 // Return the graph IDs that `id` occurs in according to the `matches` table
 // (see `EmptyPath::processTable`).
 //
@@ -52,12 +67,10 @@ ql::span<const Id> graphsOf(const IdTable& matches, Id id) {
 // uniformly (as in `graphsOf` above). The returned range refers to the `table`,
 // which hence has to outlive it.
 auto entitiesAndGraphs(const IdTable& table) {
-  return ql::views::transform(ad_utility::integerRange(table.numRows()),
-                              [&table](size_t row) -> std::pair<Id, Id> {
-                                return {table(row, 0), table.numColumns() == 1
-                                                           ? Id::makeUndefined()
-                                                           : table(row, 1)};
-                              });
+  return ql::views::transform(
+      ad_utility::integerRange(table.numRows()), [&table](size_t row) {
+        return entityAndGraph(table[row], table.numColumns());
+      });
 }
 }  // namespace
 
@@ -291,9 +304,14 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
             .getDistinctCol0Ids(scanSpec, addGraphColumn, std::move(ids),
                                 cancellationHandle_, locatedTriplesState())};
   };
-  // The rows of one of the scans above, as a flat range.
-  auto rows = [](ad_utility::InputRangeTypeErased<IdTable> range) {
-    return ql::views::join(ad_utility::OwningView{std::move(range)});
+  // The rows of one of the scans above, as a flat range of `EntityAndGraph`.
+  auto rows = [numColumns = numKgColumns()](
+                  ad_utility::InputRangeTypeErased<IdTable> range) {
+    return ql::views::transform(
+        ql::views::join(ad_utility::OwningView{std::move(range)}),
+        [numColumns](const auto& row) {
+          return entityAndGraph(row, numColumns);
+        });
   };
   // Separate statements, because the second scan moves out of `idFilter` and
   // argument evaluation order is unspecified.
@@ -312,8 +330,8 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
   // and appending those in bulk would be faster, but the merge is not the
   // bottleneck: either the `idFilter` makes the result tiny, or the whole
   // knowledge graph is scanned and decompressing its blocks dominates.
-  for (const auto& row : merged) {
-    result.push_back(row);
+  for (const EntityAndGraph& row : merged) {
+    result.push_back(ql::span<const Id>{row.data(), numKgColumns()});
     if (result.numRows() >= chunkSize_) {
       checkCancellation();
       co_yield std::move(result);
