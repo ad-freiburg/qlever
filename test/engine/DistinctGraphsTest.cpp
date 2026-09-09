@@ -148,6 +148,8 @@ TEST(DistinctGraphs, computeVariableToColumnMap) {
 TEST(DistinctGraphs, computeResultExcludesDefaultGraphByDefault) {
   auto dg =
       makeDistinctGraphs(TestIndexConfig{"<a> <p1> <b> . <a> <p2> <c> ."});
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::treatDefaultGraphAsNamedGraph_>(false);
 
   auto result = dg.getResult();
   ASSERT_TRUE(result->isFullyMaterialized());
