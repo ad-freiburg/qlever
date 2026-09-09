@@ -313,13 +313,13 @@ TEST_F(LoadTest, Integration) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp(qec, cancellationHandle);
   auto executionTree = qp.createExecutionTree(parsedUpdate[0]);
-  Load* load = dynamic_cast<Load*>(executionTree.getRootOperation().get());
+  Load* load = dynamic_cast<Load*>(executionTree->getRootOperation().get());
   ASSERT_THAT(load, testing::NotNull()) << "Root operation is not a Load";
   load->resetGetResultFunctionForTesting(
       getResultFunctionFactory("<a> <b> <c> . <d> <e> <f>",
                                boost::beast::http::status::ok, "text/turtle"));
   DeltaTriples deltaTriples{qec->getIndex()};
-  ExecuteUpdate::executeUpdate(qec->getIndex(), parsedUpdate[0], executionTree,
+  ExecuteUpdate::executeUpdate(qec->getIndex(), parsedUpdate[0], *executionTree,
                                deltaTriples, cancellationHandle);
   EXPECT_THAT(deltaTriples, deltaTriplesTestHelpers::NumTriples(2, 0, 2));
 }

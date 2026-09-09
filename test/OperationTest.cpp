@@ -55,7 +55,6 @@ void expectRtiHasDimensions(
 }
 }  // namespace
 
-// ________________________________________________
 // _____________________________________________________________________________
 TEST(OperationTest, constructorRequiresQueryExecutionContext) {
   AD_EXPECT_THROW_WITH_MESSAGE(
