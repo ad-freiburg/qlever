@@ -22,7 +22,6 @@
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
 #include "util/CopyableSynchronization.h"
-#include "util/Exception.h"
 #include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
@@ -74,15 +73,6 @@ class Operation {
       std::chrono::steady_clock::time_point::max();
 
  private:
-  // Return the given `executionContext`, or throw if it is `nullptr` (see the
-  // constructor below).
-  static QueryExecutionContext* checkNotNull(
-      QueryExecutionContext* executionContext) {
-    AD_CONTRACT_CHECK(executionContext != nullptr,
-                      "An `Operation` requires a `QueryExecutionContext`");
-    return executionContext;
-  }
-
   // Holds a precomputed Result of this operation if it is the sibling of a
   // Service operation.
   std::optional<std::shared_ptr<const Result>>
@@ -146,11 +136,10 @@ class Operation {
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
 
-  // Constructor. The `executionContext` must not be `nullptr`, as it is
-  // required by the default member initializers of the members above, so it
-  // is checked before those are initialized.
+  // Constructor. Note that `executionContext` must not be `nullptr`, as it is
+  // required by the default member initializers of the members above.
   explicit Operation(QueryExecutionContext* executionContext)
-      : _executionContext(checkNotNull(executionContext)) {}
+      : _executionContext(executionContext) {}
 
   // Destructor.
   virtual ~Operation() {
