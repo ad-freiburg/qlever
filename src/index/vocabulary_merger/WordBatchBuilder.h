@@ -175,10 +175,12 @@ CPP_template_def(typename F)(
   if (currentBatch_.empty()) {
     return;
   }
-  // The `pendingWord_` is a view into one of the buffers of the current batch,
-  // which the writing thread destroys as soon as the batch has been handed on,
-  // so we have to create the copy that the next batch owns *before* handing
-  // the current batch on.
+  // The `pendingWord_` is a view into one of the `mergedWordBuffers_` of the
+  // current batch, which the fourth stage of the pipeline destroys
+  // asynchronously as soon as the batch has been handed on (see the
+  // `mergedWordsDestructionQueue_` in
+  // `index/vocabulary_merger/MergePipeline.h`), so we have to create the copy
+  // that the next batch owns *before* handing the current batch on.
   std::unique_ptr<std::string> carriedOverWord;
   if (hasPendingWord_) {
     carriedOverWord = std::make_unique<std::string>(pendingWord_);

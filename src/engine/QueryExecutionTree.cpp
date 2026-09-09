@@ -27,7 +27,11 @@ using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
 QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
-    : qec_(qec) {}
+    : qec_(qec) {
+  // A `QueryExecutionTree` always needs a `QueryExecutionContext`, if only to
+  // obtain the memory limited allocator of the query.
+  AD_CONTRACT_CHECK(qec_ != nullptr);
+}
 
 // _____________________________________________________________________________
 std::string QueryExecutionTree::getCacheKey() const {
@@ -227,6 +231,11 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     // created re-sorted operation, which was removed by the re-sorting.
     sortedRootOperation->setLimitOffsetDirectlyWithoutTriggeringHooks(
         rootOperation->getLimitOffset());
+    // Restoring the limit/offset must not have changed the sort order again.
+    // This holds because it is not propagated to the children, so no size
+    // estimate that an algorithm choice depends on changes (see the caution
+    // note on `Operation::applyLimitOffset`).
+    AD_CORRECTNESS_CHECK(sortedRootOperation->isSortedBy(sortColumns));
     return std::move(sortedQet).value();
   }
 

@@ -76,7 +76,7 @@ struct PlannedQuery {
       : qec_{qec.shared_from_this()},
         parsedQuery_{std::move(pq)},
         queryExecutionTree_{
-            std::make_shared<QueryExecutionTree>(std::move(qet))} {
+            qec.makeShared<QueryExecutionTree>(std::move(qet))} {
     AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_->getQec());
   }
 

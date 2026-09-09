@@ -12,16 +12,17 @@
 
 #include <array>
 #include <cstdint>
-#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
+#include "VocabularyMergerTestHelpers.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary_merger/WordBatchBuilder.h"
 
 using namespace ad_utility::vocabulary_merger;
+using namespace vocabularyMergerTestHelpers;
 using ad_utility::vocabulary_merger::detail::QueueWord;
 using ad_utility::vocabulary_merger::detail::WordBatch;
 using ad_utility::vocabulary_merger::detail::WordBatchBuilder;
@@ -31,20 +32,6 @@ namespace {
 // An index mapping of a batch, in the order `(partial vocabulary, index of the
 // word within the batch, index of the word in the partial vocabulary)`.
 using Mapping = std::array<uint64_t, 3>;
-
-// A `WordComparator` that simply compares the words lexicographically.
-constexpr auto lessThan = [](std::string_view a, std::string_view b) {
-  return std::less<>{}(a, b);
-};
-
-// Create the `QueueWord` for the occurrence of `word` with the given
-// `localIndex` in the partial vocabulary `partialFileId`.
-QueueWord makeQueueWord(std::string word, bool isExternal, size_t partialFileId,
-                        uint64_t localIndex) {
-  return QueueWord{
-      TripleComponentWithIndex{std::move(word), isExternal, localIndex},
-      partialFileId};
-}
 
 // The distinct words of a `batch`, each with its `isExternal` flag.
 std::vector<std::pair<std::string, bool>> wordsOf(const WordBatch& batch) {

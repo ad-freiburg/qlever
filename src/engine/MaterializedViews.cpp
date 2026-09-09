@@ -821,7 +821,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   // no join occurs if multiple materialized views are requested in a single
   // query.
   auto scanTriple = makeScanConfig(viewQuery);
-  return std::make_shared<IndexScan>(
+  return qec->makeShared<IndexScan>(
       qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
       std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
       viewQuery.getVarsToKeep());
@@ -858,7 +858,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
                                 std::move(additionalCols)};
   auto v = varToCol | ql::ranges::views::keys;
   ad_utility::HashSet<Variable> varsToKeep{v.begin(), v.end()};
-  return std::make_shared<IndexScan>(
+  return qec->makeShared<IndexScan>(
       qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
       std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
       std::move(varsToKeep));
