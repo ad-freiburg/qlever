@@ -353,8 +353,12 @@ void testGeoCellGridIndices(const std::string& fn) {
   }
   EXPECT_TRUE(geoVocab.getGeoInfo(expectedIndices[0]).has_value());
   EXPECT_FALSE(geoVocab.getGeoInfo(expectedIndices[3]).has_value());
+  // NOTE: `lookupBatch` takes `size_t` indices, which is not the same type as
+  // `uint64_t` on all platforms.
+  std::vector<size_t> batchIndices(expectedIndices.begin(),
+                                   expectedIndices.end());
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
-      geoVocab, geoVocab.lookupBatch(expectedIndices), expectedIndices);
+      geoVocab, geoVocab.lookupBatch(batchIndices), batchIndices);
 
   // An index whose position part is out of range is rejected.
   EXPECT_ANY_THROW(geoVocab[grid.indexFromCellAndPosition(3, words.size())]);
