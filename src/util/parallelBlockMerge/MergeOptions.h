@@ -32,6 +32,11 @@ constexpr inline size_t DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_SIZE = 100'000;
 constexpr inline MemorySize DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY =
     MemorySize::megabytes(1);
 
+// The default number of chunks that are created per available thread. Values
+// greater than one lead to a finer granularity, which in turn improves the load
+// balancing if the individual chunks require different amounts of work.
+constexpr inline size_t DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD = 4;
+
 // The criterion for when a single output block of the merge is complete. A
 // block is finished as soon as it either contains a given number of elements or
 // occupies a given amount of memory. Use the named constructors below to
@@ -94,6 +99,18 @@ struct MergeOptions {
   OutputBlockSize outputBlockSize =
       OutputBlockSize::both(DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_SIZE,
                             DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY);
+
+  // The remaining knobs only affect a merge that actually distributes its
+  // chunks over several threads, see `parallelBlockMergeToSink`. The serial
+  // merge ignores all of them.
+
+  // Aim for that many independent chunks per thread. Larger values improve the
+  // load balancing at the cost of a larger scheduling overhead.
+  size_t targetChunksPerThread = DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD;
+
+  // Never keep more than that many chunks in flight at the same time. The value
+  // `0` means "as many as the `parallelismHint` of the merge".
+  size_t maxInFlightChunks = 0;
 };
 
 }  // namespace ad_utility::parallelBlockMerge

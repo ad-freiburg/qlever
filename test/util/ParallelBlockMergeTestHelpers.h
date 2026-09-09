@@ -11,25 +11,37 @@
 #define QLEVER_TEST_UTIL_PARALLELBLOCKMERGETESTHELPERS_H
 
 #include <algorithm>
+#include <atomic>
+#include <boost/asio/any_io_executor.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <future>
+#include <mutex>
 #include <range/v3/range/conversion.hpp>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Random.h"
+#include "util/parallelBlockMerge/BlockSinkPolicy.h"
 #include "util/parallelBlockMerge/MergeHelpers.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
 // Helpers that both `ParallelBlockMergeTest.cpp` (which tests the merge itself)
 // and `MergeHelpersTest.cpp` (which tests the helpers from `MergeHelpers.h`)
-// need, in particular the in-memory `VectorInput` policy.
+// need, in particular the in-memory `VectorInput` policy and the in-memory
+// `CollectingBlockSink`.
 namespace parallelBlockMergeTestHelpers {
+
+namespace net = boost::asio;
 
 // ___________________________________________________________________________
 // An in-memory input policy.
@@ -135,6 +147,213 @@ VectorInput<T> makeVectorInput(const std::vector<std::vector<T>>& runs,
     }
   }
   return VectorInput<T>{std::move(blockedRuns)};
+}
+
+// ___________________________________________________________________________
+// An in-memory output policy.
+// ___________________________________________________________________________
+
+// Collect the output blocks of a merge in memory, one `std::vector` of blocks
+// per chunk, as an `ad_utility::parallelBlockMerge::SinkConcept`.
+//
+// NOTE: This lives in the test directory on purpose, just like `VectorInput`
+// above. A production sink hands the blocks on to a consumer (and drops them
+// afterwards) instead of keeping all of them.
+//
+// This sink is deliberately as simple as a sink can be: it buffers *every*
+// block, so that a producer is never suspended and the back-pressure of the
+// merge is never exercised, it guards its state with a plain mutex instead of a
+// strand, and it makes no attempt to hand the blocks on in the global order.
+// What it does give the tests is the complete record of what the merge pushed:
+// the blocks of every chunk in the order in which they were pushed, how often
+// each chunk was finished, and the first exception. Concatenating the blocks in
+// the order of their chunk index (see `mergedElements` below) therefore yields
+// exactly the globally sorted output.
+template <typename Block>
+class CollectingBlockSink : public ad_utility::NoCopyNoMove {
+ public:
+  using value_type = Block;
+
+  // Everything that a single chunk pushed.
+  struct Chunk {
+    std::vector<Block> blocks_{};
+    // The number of end-of-chunk sentinels that this chunk sent. The merge
+    // sends exactly one per chunk that it dispatches at all, so a test can
+    // detect both a missing and a superfluous sentinel.
+    size_t numSentinels_ = 0;
+  };
+
+ private:
+  // The executor on which the state of this sink is modified, and to which the
+  // completion handlers are posted if they have no executor of their own.
+  net::any_io_executor executor_;
+  // Stop the merge as soon as that many blocks were pushed in total, which is
+  // how a test simulates a consumer that abandons the merge. The value `0`
+  // means "never stop".
+  size_t stopAfterNumBlocks_;
+  mutable std::mutex mutex_;
+  // The following members are all guarded by `mutex_`.
+  std::vector<Chunk> chunks_;
+  size_t numPushedBlocks_ = 0;
+  size_t numFinishedChunks_ = 0;
+  std::exception_ptr exception_;
+  std::promise<void> allChunksFinished_;
+  std::future<void> allChunksFinishedFuture_ = allChunksFinished_.get_future();
+  // NOTE: This is only ever *written* under the `mutex_`, so that
+  // `stopRequested()` can be read from anywhere without locking, just like in a
+  // production sink.
+  std::atomic<bool> stopRequested_{false};
+
+ public:
+  // Construct a sink for a merge with `numChunks` chunks, all operations of
+  // which run on the `executor`. Pass a positive `stopAfterNumBlocks` to make
+  // the sink stop the merge as soon as that many blocks were pushed.
+  CollectingBlockSink(net::any_io_executor executor, size_t numChunks,
+                      size_t stopAfterNumBlocks = 0)
+      : executor_{std::move(executor)},
+        stopAfterNumBlocks_{stopAfterNumBlocks},
+        chunks_(numChunks) {
+    AD_CONTRACT_CHECK(numChunks > 0);
+  }
+
+  // ________________________________________________________________________
+  bool stopRequested() const noexcept { return stopRequested_.load(); }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncPush(size_t chunkIndex, Block block,
+                 CompletionToken&& completionToken) {
+    return runOnExecutor(
+        [this, chunkIndex, block = std::move(block)]() mutable {
+          return pushBlock(chunkIndex, std::move(block));
+        },
+        AD_FWD(completionToken));
+  }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncFinishChunk(size_t chunkIndex, CompletionToken&& completionToken) {
+    return runOnExecutor([this, chunkIndex] { return finishChunk(chunkIndex); },
+                         AD_FWD(completionToken));
+  }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncPushException(std::exception_ptr exception,
+                          CompletionToken&& completionToken) {
+    return runOnExecutor(
+        [this, exception = std::move(exception)]() mutable {
+          std::lock_guard<std::mutex> lock{mutex_};
+          // Only the first exception is kept, and it also stops the merge.
+          if (exception_ == nullptr) {
+            exception_ = std::move(exception);
+            stopRequested_.store(true);
+          }
+        },
+        AD_FWD(completionToken));
+  }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncAbort(CompletionToken&& completionToken) {
+    return runOnExecutor(
+        [this] {
+          std::lock_guard<std::mutex> lock{mutex_};
+          stopRequested_.store(true);
+        },
+        AD_FWD(completionToken));
+  }
+
+  // The number of chunks that this sink expects.
+  size_t numChunks() const { return chunks_.size(); }
+
+  // What every chunk pushed. IMPORTANT: Only call this once the merge is
+  // complete, that is once every task of the merge is done (either because
+  // every chunk was finished, or because the thread pool of the merge was
+  // joined).
+  const std::vector<Chunk>& chunks() const { return chunks_; }
+
+  // Rethrow the first exception that a chunk pushed, if there is one. The same
+  // IMPORTANT note as at `chunks()` applies.
+  void rethrowIfException() const {
+    if (exception_ != nullptr) {
+      std::rethrow_exception(exception_);
+    }
+  }
+
+  // Block until every chunk has sent its end-of-chunk sentinel.
+  //
+  // IMPORTANT: Only call this for a merge that was not stopped. A merge that is
+  // stopped (by `asyncAbort`, by an exception, or by `stopAfterNumBlocks`) does
+  // not dispatch its remaining chunks at all, so those chunks never send a
+  // sentinel and this would wait forever. Join the thread pool of such a merge
+  // instead.
+  void waitUntilAllChunksAreFinished() const {
+    allChunksFinishedFuture_.wait();
+  }
+
+ private:
+  // Run the `function` on `executor_` and complete the token afterwards, see
+  // `ad_utility::runFunctionOnExecutor`. This is what makes every completion
+  // handler of this sink run via a `net::post` and never inline, which the
+  // `SinkConcept` requires.
+  //
+  // NOTE: The named `token` is needed because `runFunctionOnExecutor` takes its
+  // completion token by non-const lvalue reference.
+  template <typename Function, typename CompletionToken>
+  auto runOnExecutor(Function function, CompletionToken&& completionToken) {
+    std::decay_t<CompletionToken> token{AD_FWD(completionToken)};
+    return ad_utility::runFunctionOnExecutor(executor_, std::move(function),
+                                             token);
+  }
+
+  // Store the `block` as the next block of the chunk with the given
+  // `chunkIndex` and return whether the merge should keep going.
+  bool pushBlock(size_t chunkIndex, Block block) {
+    std::lock_guard<std::mutex> lock{mutex_};
+    if (stopRequested_.load()) {
+      return false;
+    }
+    chunks_.at(chunkIndex).blocks_.push_back(std::move(block));
+    ++numPushedBlocks_;
+    if (stopAfterNumBlocks_ != 0 && numPushedBlocks_ >= stopAfterNumBlocks_) {
+      stopRequested_.store(true);
+      return false;
+    }
+    return true;
+  }
+
+  // Record the end-of-chunk sentinel of the chunk with the given `chunkIndex`
+  // and return whether the merge was not stopped.
+  bool finishChunk(size_t chunkIndex) {
+    std::lock_guard<std::mutex> lock{mutex_};
+    Chunk& chunk = chunks_.at(chunkIndex);
+    ++chunk.numSentinels_;
+    if (chunk.numSentinels_ == 1) {
+      ++numFinishedChunks_;
+      if (numFinishedChunks_ == chunks_.size()) {
+        allChunksFinished_.set_value();
+      }
+    }
+    return !stopRequested_.load();
+  }
+};
+
+// Return the elements of all blocks that the `sink` collected, in the order of
+// the chunks and, within a chunk, in the order in which the blocks were pushed.
+// For a merge that ran to completion this is exactly the globally sorted
+// output. The same IMPORTANT note as at `CollectingBlockSink::chunks()`
+// applies.
+template <typename Block>
+std::vector<ql::ranges::range_value_t<Block>> mergedElements(
+    const CollectingBlockSink<Block>& sink) {
+  std::vector<ql::ranges::range_value_t<Block>> result;
+  for (const auto& chunk : sink.chunks()) {
+    for (const auto& block : chunk.blocks_) {
+      result.insert(result.end(), block.begin(), block.end());
+    }
+  }
+  return result;
 }
 
 // ___________________________________________________________________________
