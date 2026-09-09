@@ -47,10 +47,12 @@ class VocabularyMergePipelineImpl {
   // NOTE: The order of the following declarations is important, because the
   // members are destroyed in the reverse order of their declaration, and the
   // destructor of a queue blocks until all its pending tasks have been run. The
-  // `wordWriterQueue_` pushes to the two other queues, and the
-  // `idMapWriterQueue_` writes to the `idMapBatchWriter_`, so this is the only
-  // order in which no task can be pushed to (or run on) an already destroyed
-  // object.
+  // rule is that a queue has to be declared after every member that its tasks
+  // use, and after every queue that its tasks push to: the tasks of the
+  // `wordWriterQueue_` use the `vocabularyWriter_` and push to both of the
+  // other queues, and the tasks of the `idMapWriterQueue_` use the
+  // `idMapBatchWriter_`. The relative order of the `idMapWriterQueue_` and the
+  // `mergedWordsDestructionQueue_` is therefore arbitrary.
   IdMapBatchWriterT idMapBatchWriter_;
   VocabularyWriter vocabularyWriter_;
   // The first exception that one of the stages threw, if any, and a flag that
@@ -153,10 +155,12 @@ class VocabularyMergePipelineImpl {
   //
   // NOTE: Of the two stages that are wrapped in this, only the writing of the
   // words can currently fail (via the `wordCallback`); the writing of the ID
-  // maps cannot, because a failed write to a file is silently ignored (see
-  // `ad_utility::File::write`). The wrapping of the latter is deliberate
-  // nevertheless, so that a future ID map writer that does report its errors
-  // doesn't terminate the process.
+  // maps cannot, because a failed write to a file is silently ignored
+  // (`FileWriteSerializer::serializeBytes` in
+  // `util/Serializer/FileSerializer.h` discards the number of bytes that
+  // `ad_utility::File::write` returns). The wrapping of the latter is
+  // deliberate nevertheless, so that a future ID map writer that does report
+  // its errors doesn't terminate the process.
   template <typename F>
   void runAndCatchException(const F& task) {
     if (hasFailed_) {

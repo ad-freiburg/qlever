@@ -7,42 +7,37 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <absl/cleanup/cleanup.h>
-#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
-#include <functional>
-#include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "../../util/FileTestHelpers.h"
 #include "../../util/GTestHelpers.h"
-#include "../../util/IdTestHelpers.h"
-#include "index/ConstantsIndexBuilding.h"
+#include "VocabularyMergerTestHelpers.h"
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/MergePipeline.h"
 #include "index/vocabulary_merger/WordBatchBuilder.h"
-#include "util/File.h"
+#include "util/SourceLocation.h"
+#include "util/TransparentFunctors.h"
 
 using namespace ad_utility::vocabulary_merger;
+using namespace vocabularyMergerTestHelpers;
 using ad_utility::vocabulary_merger::detail::IdMapBatch;
-using ad_utility::vocabulary_merger::detail::QueueWord;
 using ad_utility::vocabulary_merger::detail::VocabularyMergePipeline;
 using ad_utility::vocabulary_merger::detail::VocabularyMergePipelineImpl;
 using ad_utility::vocabulary_merger::detail::WordBatch;
 using ad_utility::vocabulary_merger::detail::WordBatchBuilder;
+using ::testing::Pair;
 
 namespace {
-auto V = ad_utility::testing::VocabId;
-// Shorthand for the local index that a word has inside a partial vocabulary.
-auto L = &VocabIndex::make;
-
-// A `WordComparator` that simply compares the words lexicographically.
-constexpr auto lessThan = [](std::string_view a, std::string_view b) {
-  return std::less<>{}(a, b);
-};
+// The basename of the partial vocabularies that the tests below use. It needs
+// no test-specific part, because each test that actually creates files runs in
+// its own working directory (see `useFreshWorkingDirectory`).
+const std::string partialVocabBasename = "vocab-";
 
 // An ID map writer (the third stage of the pipeline) that fails on the first
 // batch. The real `IdMapBatchWriter` cannot fail (see
@@ -50,10 +45,6 @@ constexpr auto lessThan = [](std::string_view a, std::string_view b) {
 // to test that a failure of that stage is propagated.
 class ThrowingIdMapBatchWriter {
  public:
-  // The number of batches that were handed to this writer, including the one
-  // that threw.
-  size_t numBatches_ = 0;
-
   // Same interface as the `IdMapBatchWriter`, but the arguments are ignored
   // (nothing is written, so there also are no files to clean up).
   ThrowingIdMapBatchWriter([[maybe_unused]] const std::string& basename,
@@ -61,20 +52,52 @@ class ThrowingIdMapBatchWriter {
                                partialVocabularySuffixes) {}
 
   void writeBatch([[maybe_unused]] const IdMapBatch& batch) {
-    ++numBatches_;
     throw std::runtime_error{"The ID map could not be written"};
   }
 
   void finish() {}
 };
 
-// Create the `QueueWord` for the occurrence of `word` with the given
-// `localIndex` in the partial vocabulary `partialFileId`.
-QueueWord makeQueueWord(std::string word, bool isExternal, size_t partialFileId,
-                        uint64_t localIndex) {
-  return QueueWord{
-      TripleComponentWithIndex{std::move(word), isExternal, localIndex},
-      partialFileId};
+// Return the `WordBatchCallback` that pushes the batches of a
+// `WordBatchBuilder` into the given `pipeline`. This is a template, because the
+// tests use different instantiations of the `VocabularyMergePipelineImpl`.
+template <typename Pipeline, typename WordCallback>
+auto makePush(Pipeline& pipeline, WordCallback& wordCallback,
+              const ad_utility::RegexSet& regexes) {
+  return [&pipeline, &wordCallback, &regexes](WordBatch batch) {
+    pipeline.push(std::move(batch), wordCallback, regexes);
+  };
+}
+
+// Push a batch with the single word `"a"` into the `pipeline`, wait for the
+// failure that this triggers, and then check that a batch that is pushed after
+// the failure is skipped and that `finish()` rethrows a `std::runtime_error`
+// whose message contains `expectedMessage`. Call `checkAfterFailure` in
+// between, that is after the failure of the first batch, but before the second
+// batch is pushed. This is a template for the same reason as `makePush` above.
+template <typename Pipeline, typename WordCallback,
+          typename CheckAfterFailure = ad_utility::Noop>
+void expectFailureIsPropagated(
+    Pipeline& pipeline, WordCallback& wordCallback,
+    const ad_utility::RegexSet& regexes, std::string_view expectedMessage,
+    const CheckAfterFailure& checkAfterFailure = ad_utility::noop,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
+  WordBatchBuilder builder;
+  auto push = makePush(pipeline, wordCallback, regexes);
+  builder.addMergedWords({makeQueueWord("\"a\"", false, 0, 0)}, lessThan, push);
+  builder.finish(push);
+  // The batch is processed asynchronously, so wait for the failure. NOTE: The
+  // `finish()` below would also wait, but it throws.
+  while (!pipeline.hasFailed()) {
+  }
+  checkAfterFailure();
+
+  builder.addMergedWords({makeQueueWord("\"b\"", false, 0, 1)}, lessThan, push);
+  builder.finish(push);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(pipeline.finish(),
+                                        ::testing::HasSubstr(expectedMessage),
+                                        std::runtime_error);
 }
 }  // namespace
 
@@ -83,34 +106,18 @@ QueueWord makeQueueWord(std::string word, bool isExternal, size_t partialFileId,
 // second to fourth stage of the merging) and check the vocabulary that it
 // writes as well as the resulting partial ID maps.
 TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
-  static constexpr size_t numFiles = 2;
-  std::vector<std::string> suffixes{"0", "1"};
-  std::string basename = absl::StrCat(gtestCurrentTestName(), "-");
-  std::vector<std::string> filenames;
-  for (size_t i = 0; i < numFiles; ++i) {
-    filenames.push_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
-  }
-  absl::Cleanup cleanup = [&filenames] {
-    for (const auto& filename : filenames) {
-      ad_utility::deleteFile(filename, false);
-    }
-  };
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
+  auto files = makePartialVocabularyFiles(partialVocabBasename, 2);
 
   std::vector<std::pair<std::string, bool>> vocabulary;
-  auto wordCallback = [&vocabulary](std::string_view word,
-                                    bool isExternal) -> uint64_t {
-    vocabulary.emplace_back(word, isExternal);
-    return vocabulary.size() - 1;
-  };
+  auto wordCallback = makeCollectingWordCallback(vocabulary);
   ad_utility::RegexSet noRegexes;
 
   VocabularyMetaData metaData;
   {
-    VocabularyMergePipeline pipeline{basename, suffixes};
+    VocabularyMergePipeline pipeline{partialVocabBasename, files.suffixes_};
     WordBatchBuilder builder;
-    auto push = [&pipeline, &wordCallback, &noRegexes](WordBatch batch) {
-      pipeline.push(std::move(batch), wordCallback, noRegexes);
-    };
+    auto push = makePush(pipeline, wordCallback, noRegexes);
     // `"a"` is only in the first partial vocabulary, `"b"` in both (and
     // externalized in the second one), `"c"` only in the second one.
     builder.addMergedWords({makeQueueWord("\"a\"", false, 0, 0),
@@ -123,15 +130,14 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
   }
 
   EXPECT_THAT(vocabulary,
-              ::testing::ElementsAre(::testing::Pair("\"a\"", false),
-                                     ::testing::Pair("\"b\"", true),
-                                     ::testing::Pair("\"c\"", false)));
+              ::testing::ElementsAre(Pair("\"a\"", false), Pair("\"b\"", true),
+                                     Pair("\"c\"", false)));
   EXPECT_EQ(metaData.numWordsTotal(), 3u);
   EXPECT_THAT(
-      getIdMapFromFile(filenames[0]),
+      getIdMapFromFile(files.idMapFiles_[0]),
       ::testing::ElementsAre(IdMapEntry{L(0), V(0)}, IdMapEntry{L(1), V(1)}));
   EXPECT_THAT(
-      getIdMapFromFile(filenames[1]),
+      getIdMapFromFile(files.idMapFiles_[1]),
       ::testing::ElementsAre(IdMapEntry{L(0), V(1)}, IdMapEntry{L(1), V(2)}));
 }
 
@@ -139,15 +145,12 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
 // A pipeline to which no batch was pushed creates empty ID maps and empty
 // metadata.
 TEST(VocabularyMergePipeline, noBatches) {
-  std::string basename = absl::StrCat(gtestCurrentTestName(), "-");
-  std::string filename = absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, 0);
-  absl::Cleanup cleanup = [&filename] {
-    ad_utility::deleteFile(filename, false);
-  };
-  VocabularyMergePipeline pipeline{basename, {"0"}};
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
+  auto files = makePartialVocabularyFiles(partialVocabBasename, 1);
+  VocabularyMergePipeline pipeline{partialVocabBasename, files.suffixes_};
   auto metaData = pipeline.finish();
   EXPECT_EQ(metaData.numWordsTotal(), 0u);
-  EXPECT_THAT(getIdMapFromFile(filename), ::testing::IsEmpty());
+  EXPECT_THAT(getIdMapFromFile(files.idMapFiles_[0]), ::testing::IsEmpty());
 }
 
 // _____________________________________________________________________________
@@ -156,11 +159,8 @@ TEST(VocabularyMergePipeline, noBatches) {
 // reported by `hasFailed()` and rethrown by `finish()`, and the batches that
 // are pushed after the failure are skipped.
 TEST(VocabularyMergePipeline, exceptionFromAStageIsPropagated) {
-  std::string basename = absl::StrCat(gtestCurrentTestName(), "-");
-  std::string filename = absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, 0);
-  absl::Cleanup cleanup = [&filename] {
-    ad_utility::deleteFile(filename, false);
-  };
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
+  auto files = makePartialVocabularyFiles(partialVocabBasename, 1);
 
   size_t numCalls = 0;
   auto wordCallback = [&numCalls](std::string_view, bool) -> uint64_t {
@@ -169,25 +169,11 @@ TEST(VocabularyMergePipeline, exceptionFromAStageIsPropagated) {
   };
   ad_utility::RegexSet noRegexes;
 
-  VocabularyMergePipeline pipeline{basename, {"0"}};
-  WordBatchBuilder builder;
-  auto push = [&pipeline, &wordCallback, &noRegexes](WordBatch batch) {
-    pipeline.push(std::move(batch), wordCallback, noRegexes);
-  };
-  builder.addMergedWords({makeQueueWord("\"a\"", false, 0, 0)}, lessThan, push);
-  builder.finish(push);
-  // The words of the single batch are written asynchronously, so wait for the
-  // failure. NOTE: The `finish()` below would also wait, but it throws.
-  while (!pipeline.hasFailed()) {
-  }
-
+  VocabularyMergePipeline pipeline{partialVocabBasename, files.suffixes_};
+  expectFailureIsPropagated(pipeline, wordCallback, noRegexes,
+                            "could not be written");
   // A batch that is pushed after the failure is skipped, so the callback is
   // called exactly once.
-  builder.addMergedWords({makeQueueWord("\"b\"", false, 0, 1)}, lessThan, push);
-  builder.finish(push);
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      pipeline.finish(), ::testing::HasSubstr("could not be written"),
-      std::runtime_error);
   EXPECT_EQ(numCalls, 1u);
 }
 
@@ -197,33 +183,20 @@ TEST(VocabularyMergePipeline, exceptionFromAStageIsPropagated) {
 // thread of the `idMapWriterQueue_`. It is reported by `hasFailed()` and
 // rethrown by `finish()`, and no further batch is handed to that stage.
 TEST(VocabularyMergePipeline, exceptionFromTheIdMapWritingIsPropagated) {
-  std::vector<std::string> vocabulary;
-  auto wordCallback = [&vocabulary](std::string_view word, bool) -> uint64_t {
-    vocabulary.emplace_back(word);
-    return vocabulary.size() - 1;
-  };
+  std::vector<std::pair<std::string, bool>> vocabulary;
+  auto wordCallback = makeCollectingWordCallback(vocabulary);
   ad_utility::RegexSet noRegexes;
 
-  VocabularyMergePipelineImpl<ThrowingIdMapBatchWriter> pipeline{"basename",
-                                                                 {"0"}};
-  WordBatchBuilder builder;
-  auto push = [&pipeline, &wordCallback, &noRegexes](WordBatch batch) {
-    pipeline.push(std::move(batch), wordCallback, noRegexes);
-  };
-  builder.addMergedWords({makeQueueWord("\"a\"", false, 0, 0)}, lessThan, push);
-  builder.finish(push);
-  // The batch is written asynchronously, so wait for the failure. NOTE: The
-  // `finish()` below would also wait, but it throws.
-  while (!pipeline.hasFailed()) {
-  }
-
-  // The word itself was written by the second stage before the third one
-  // failed, but the batch that is pushed after the failure is skipped.
-  EXPECT_THAT(vocabulary, ::testing::ElementsAre("\"a\""));
-  builder.addMergedWords({makeQueueWord("\"b\"", false, 0, 1)}, lessThan, push);
-  builder.finish(push);
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      pipeline.finish(), ::testing::HasSubstr("ID map could not be written"),
-      std::runtime_error);
-  EXPECT_THAT(vocabulary, ::testing::ElementsAre("\"a\""));
+  VocabularyMergePipelineImpl<ThrowingIdMapBatchWriter> pipeline{
+      partialVocabBasename, {"0"}};
+  expectFailureIsPropagated(
+      pipeline, wordCallback, noRegexes, "ID map could not be written",
+      [&vocabulary] {
+        // The word itself was written by the second stage before the third one
+        // failed.
+        EXPECT_THAT(vocabulary, ::testing::ElementsAre(Pair("\"a\"", false)));
+      });
+  // The batch that was pushed after the failure was skipped, so no further
+  // word was written.
+  EXPECT_THAT(vocabulary, ::testing::ElementsAre(Pair("\"a\"", false)));
 }

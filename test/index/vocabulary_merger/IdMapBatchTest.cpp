@@ -7,29 +7,27 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <absl/cleanup/cleanup.h>
-#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include <string>
 #include <vector>
 
-#include "../../util/GTestHelpers.h"
-#include "../../util/IdTestHelpers.h"
-#include "index/ConstantsIndexBuilding.h"
+#include "../../util/FileTestHelpers.h"
+#include "VocabularyMergerTestHelpers.h"
 #include "index/vocabulary_merger/IdMapBatch.h"
-#include "util/File.h"
 
 using namespace ad_utility::vocabulary_merger;
+using namespace vocabularyMergerTestHelpers;
 using ad_utility::vocabulary_merger::detail::IdMapBatch;
 using ad_utility::vocabulary_merger::detail::IdMapBatchWriter;
 using ad_utility::vocabulary_merger::detail::LocalIdxToBatchMapping;
 using ad_utility::vocabulary_merger::detail::LocalIdxToBatchMappings;
 
 namespace {
-auto V = ad_utility::testing::VocabId;
-// Shorthand for the local index that a word has inside a partial vocabulary.
-auto L = &VocabIndex::make;
+// The basename of the partial vocabularies that the tests below create. It
+// needs no test-specific part, because each test runs in its own working
+// directory (see `useFreshWorkingDirectory`).
+const std::string partialVocabBasename = "vocab-";
 
 // Create an `IdMapBatch` from the given `mappings` and `globalIds`. In
 // contrast to the `WordBatchBuilder` (which allocates the mappings in
@@ -50,22 +48,11 @@ IdMapBatch makeBatch(const std::vector<LocalIdxToBatchMapping>& mappings,
 // mapping via the `globalIds_` of its batch, and keeps the order in which the
 // mappings were pushed.
 TEST(IdMapBatchWriter, writeSeveralBatches) {
-  static constexpr size_t numFiles = 3;
-  std::string basename = absl::StrCat(gtestCurrentTestName(), "-");
-  std::vector<std::string> suffixes;
-  std::vector<std::string> filenames;
-  for (size_t i = 0; i < numFiles; ++i) {
-    suffixes.push_back(std::to_string(i));
-    filenames.push_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
-  }
-  absl::Cleanup cleanup = [&filenames] {
-    for (const auto& filename : filenames) {
-      ad_utility::deleteFile(filename, false);
-    }
-  };
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
+  auto files = makePartialVocabularyFiles(partialVocabBasename, 3);
 
   {
-    IdMapBatchWriter writer{basename, suffixes};
+    IdMapBatchWriter writer{partialVocabBasename, files.suffixes_};
     // The first batch has two distinct words with the global IDs `10` and
     // `11`. The first word occurs in the partial vocabularies `0` and `2`, the
     // second one only in `0`.
@@ -83,12 +70,12 @@ TEST(IdMapBatchWriter, writeSeveralBatches) {
   }
 
   EXPECT_THAT(
-      getIdMapFromFile(filenames[0]),
+      getIdMapFromFile(files.idMapFiles_[0]),
       ::testing::ElementsAre(IdMapEntry{L(7), V(10)}, IdMapEntry{L(9), V(11)},
                              IdMapEntry{L(100), V(12)}));
-  EXPECT_THAT(getIdMapFromFile(filenames[1]),
+  EXPECT_THAT(getIdMapFromFile(files.idMapFiles_[1]),
               ::testing::ElementsAre(IdMapEntry{L(101), V(12)}));
-  EXPECT_THAT(getIdMapFromFile(filenames[2]),
+  EXPECT_THAT(getIdMapFromFile(files.idMapFiles_[2]),
               ::testing::ElementsAre(IdMapEntry{L(8), V(10)},
                                      IdMapEntry{L(102), V(12)}));
 }
@@ -98,33 +85,27 @@ TEST(IdMapBatchWriter, writeSeveralBatches) {
 // per partial vocabulary. Its destructor closes those maps, so an explicit
 // call to `finish()` is not required.
 TEST(IdMapBatchWriter, noBatches) {
-  std::string basename = absl::StrCat(gtestCurrentTestName(), "-");
-  std::string filename = absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, 0);
-  absl::Cleanup cleanup = [&filename] {
-    ad_utility::deleteFile(filename, false);
-  };
-  { IdMapBatchWriter writer{basename, {"0"}}; }
-  EXPECT_THAT(getIdMapFromFile(filename), ::testing::IsEmpty());
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
+  auto files = makePartialVocabularyFiles(partialVocabBasename, 1);
+  { IdMapBatchWriter writer{partialVocabBasename, files.suffixes_}; }
+  EXPECT_THAT(getIdMapFromFile(files.idMapFiles_[0]), ::testing::IsEmpty());
 }
 
 // _____________________________________________________________________________
 // Only the first `numMappings_` of the `mappings_` of a batch are valid; the
 // remaining (uninitialized) ones must not be written.
 TEST(IdMapBatchWriter, onlyValidMappingsAreWritten) {
-  std::string basename = absl::StrCat(gtestCurrentTestName(), "-");
-  std::string filename = absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, 0);
-  absl::Cleanup cleanup = [&filename] {
-    ad_utility::deleteFile(filename, false);
-  };
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
+  auto files = makePartialVocabularyFiles(partialVocabBasename, 1);
 
   auto batch = makeBatch({LocalIdxToBatchMapping{0, 0, L(42)}}, {V(43)});
   // Allocate (but do not initialize) space for many more mappings, exactly as
   // the `WordBatchBuilder` does.
   batch.localIdxMappings_.mappings_.resize(1000);
   {
-    IdMapBatchWriter writer{basename, {"0"}};
+    IdMapBatchWriter writer{partialVocabBasename, files.suffixes_};
     writer.writeBatch(batch);
   }
-  EXPECT_THAT(getIdMapFromFile(filename),
+  EXPECT_THAT(getIdMapFromFile(files.idMapFiles_[0]),
               ::testing::ElementsAre(IdMapEntry{L(42), V(43)}));
 }

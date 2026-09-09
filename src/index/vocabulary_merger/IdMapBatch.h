@@ -22,7 +22,6 @@
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/WordBatch.h"
 #include "util/Log.h"
-#include "util/Views.h"
 
 // The third stage of the merging pipeline of the vocabulary merger (see the
 // comment above `mergeVocabulary` in `index/VocabularyMerger.h`), which writes
@@ -73,6 +72,14 @@ class IdMapBatchWriter {
   }
 
   // Write all the mappings of the `batch` to their respective ID maps.
+  //
+  // TODO<optimization> The `mappings_` are in merge order, so the loop below
+  // round-robins over the `idMapWriters_` instead of grouping the entries by
+  // the file they belong to. Stably partitioning (or sorting) the mappings by
+  // their `partialVocabularyIndex_` before the loop would give each
+  // `IdMapWriter` one contiguous run per batch and thus a more useful external
+  // access pattern. This is local to this stage and doesn't affect any of the
+  // other stages of the pipeline.
   void writeBatch(const IdMapBatch& batch) {
     AD_LOG_TRACE << "Start writing a batch of ID map entries\n";
     const auto& globalIds = batch.globalIds_;

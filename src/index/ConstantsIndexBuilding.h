@@ -98,11 +98,13 @@ constexpr inline size_t VOCAB_MERGER_WORD_BATCH_SIZE = 100'000;
 constexpr inline ad_utility::MemorySize VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE =
     ad_utility::MemorySize::megabytes(10);
 
-// The maximal number of batches that may be waiting in the queue of the thread
-// that writes the merged vocabulary. NOTE: A batch keeps all the merged words
-// alive that it was created from (at most
-// `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`, see there), so this also determines
-// the additional memory footprint of the writing.
+// The maximal number of batches that may be waiting in each of the queues of
+// the merging pipeline of the vocabulary merger (see the comment above
+// `mergeVocabulary` in `index/VocabularyMerger.h`). NOTE: A batch keeps all
+// the merged words alive that it was created from (at most
+// `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`, see there), and all of the queues can
+// be full at the same time, so the additional memory footprint of the merging
+// is a multiple of this number of batches.
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE = 3;
 
 // A buffer size used during the second pass of the Index build.

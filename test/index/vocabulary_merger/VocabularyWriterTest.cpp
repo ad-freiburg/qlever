@@ -8,29 +8,21 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
-#include <re2/re2.h>
 
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "../../util/IdTestHelpers.h"
+#include "VocabularyMergerTestHelpers.h"
 #include "index/vocabulary_merger/VocabularyWriter.h"
 
 using namespace ad_utility::vocabulary_merger;
+using namespace vocabularyMergerTestHelpers;
 using ad_utility::vocabulary_merger::detail::LocalIdxToBatchMapping;
 using ad_utility::vocabulary_merger::detail::LocalIdxToBatchMappings;
 using ad_utility::vocabulary_merger::detail::UniqueWord;
 using ad_utility::vocabulary_merger::detail::VocabularyWriter;
 using ::testing::Pair;
-
-namespace {
-auto V = ad_utility::testing::VocabId;
-auto BN = [](uint64_t index) {
-  return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(index));
-};
-}  // namespace
 
 // _____________________________________________________________________________
 // The words of a batch are written to the vocabulary in order, and the
@@ -40,11 +32,7 @@ auto BN = [](uint64_t index) {
 TEST(VocabularyWriter, writeWordsAndBlankNodes) {
   VocabularyWriter writer;
   std::vector<std::pair<std::string, bool>> written;
-  auto wordCallback = [&written](std::string_view word,
-                                 bool isExternal) -> uint64_t {
-    written.emplace_back(word, isExternal);
-    return written.size() - 1;
-  };
+  auto wordCallback = makeCollectingWordCallback(written);
   ad_utility::RegexSet blankNodeIriRegexes{{"<http://ex/bn_.*>"},
                                            "for the test"};
 
@@ -85,9 +73,7 @@ TEST(VocabularyWriter, writeWordsAndBlankNodes) {
 TEST(VocabularyWriter, stateIsCarriedOverBetweenBatches) {
   VocabularyWriter writer;
   size_t numWords = 0;
-  auto wordCallback = [&numWords](std::string_view, bool) -> uint64_t {
-    return numWords++;
-  };
+  auto wordCallback = makeCountingWordCallback(numWords);
   ad_utility::RegexSet noRegexes;
 
   auto firstBatch = writer.writeWordsToVocabulary(
