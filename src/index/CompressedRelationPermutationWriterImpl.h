@@ -210,7 +210,7 @@ struct CompressedRelationWriter::PermutationWriter {
   // This also resets counters and buffers for writing the next relation.
   void finishRelation() {
     // The relation was already written completely by
-    // `writeCompleteSmallRelation` below, which has also already done all the
+    // `writeCompleteSmallRelations` below, which has also already done all the
     // bookkeeping, so there is nothing left to do.
     if (!col0IdCurrentRelation_.has_value()) {
       AD_CORRECTNESS_CHECK(relation_.empty() && numBlocksCurrentRel_ == 0);
@@ -364,32 +364,92 @@ struct CompressedRelationWriter::PermutationWriter {
                0.8 * static_cast<double>(blocksize_);
   }
 
-  // Write the rows `[begin, end)` of `permutedCols`, which form a complete
-  // small relation (see `isCompleteSmallRelation` above), directly to
-  // `writer1_`. This bypasses the `relation_` buffer, so that the rows are
-  // copied only once (into the buffer for the small relations inside
-  // `writer1_`) instead of twice. All the bookkeeping that `finishRelation`
+  // Return the end of the run of rows of the input block that starts at row
+  // `begin` and consists of all rows that have the same `col0` ID as that row.
+  // Such a run is exactly the part of one relation that is contained in the
+  // current input block.
+  template <typename Col0>
+  static size_t findEndOfRun(const Col0& col0, size_t begin) {
+    Id col0Id = col0[begin];
+    auto it = ql::ranges::find_if(col0.begin() + begin, col0.end(),
+                                  [col0Id](Id id) { return id != col0Id; });
+    return static_cast<size_t>(it - col0.begin());
+  }
+
+  // Write the maximal batch of consecutive complete small relations that
+  // starts with the rows `[begin, firstRunEnd)` of `permutedCols` directly to
+  // `writer1_`, and return the first row of the input block that is not part
+  // of that batch. The batch consists of the relation `[begin, firstRunEnd)`,
+  // which the caller has to have checked to be a complete small relation (see
+  // `isCompleteSmallRelation` above), plus all directly following complete
+  // small relations that still fit into the current block of small relations
+  // of `writer1_`.
+  //
+  // Writing the batch has two advantages over writing its relations one by
+  // one: All its rows are copied into `writer1_`'s buffer with a single
+  // `insertAtEnd`, which is much faster for relations with only a handful of
+  // rows, and the `relation_` buffer is bypassed completely, so that the rows
+  // are copied only once in total. All the bookkeeping that `finishRelation`
   // does for a small relation is performed here as well.
-  template <typename PermutedCols>
-  void writeCompleteSmallRelation(const PermutedCols& permutedCols,
-                                  size_t begin, size_t end) {
-    AD_CORRECTNESS_CHECK(begin < end);
-    ++numDistinctCol0_;
+  template <typename PermutedCols, typename Col0>
+  size_t writeCompleteSmallRelations(const PermutedCols& permutedCols,
+                                     const Col0& col0, size_t begin,
+                                     size_t firstRunEnd,
+                                     size_t numRowsOfBlock) {
+    AD_CORRECTNESS_CHECK(begin < firstRunEnd);
+    // The number of rows that the batch may hold at most. Note that
+    // `addSmallRelations` starts a new block if the batch doesn't fit into the
+    // current one. So if not even the first relation fits, then that new block
+    // is started in any case, and the capacity of a complete fresh block is
+    // available for the batch. That way a batch is never cut short just
+    // because the current block happens to be almost full, while the resulting
+    // blocks are still exactly the same as if the relations were written one
+    // by one.
+    size_t capacity = writer1_->numRowsUntilSmallRelationBlockIsFull();
+    if (firstRunEnd - begin > capacity) {
+      capacity = writer1_->smallRelationBlockCapacity();
+    }
+
+    // Greedily extend the batch by the following relations, as long as they
+    // are complete small relations that still fit. Note that the first
+    // relation is always part of the batch, even in the (currently impossible,
+    // see `isCompleteSmallRelation`) case that it exceeds the capacity all by
+    // itself. The loop is always left via one of the `break`s, because a run
+    // that reaches the end of the input block is never a complete small
+    // relation; the condition only makes the indexing of `col0` inside
+    // `findEndOfRun` safe.
+    size_t end = firstRunEnd;
+    size_t numRelations = 1;
+    Id lastCol0Id = col0[begin];
+    while (end < numRowsOfBlock) {
+      size_t nextEnd = findEndOfRun(col0, end);
+      if (!isCompleteSmallRelation(end, nextEnd, numRowsOfBlock) ||
+          nextEnd - begin > capacity) {
+        break;
+      }
+      lastCol0Id = col0[end];
+      end = nextEnd;
+      ++numRelations;
+    }
+
+    numDistinctCol0_ += numRelations;
     // Note: The distinct `col1` IDs are deliberately not counted here, because
-    // no metadata is stored for small relations (see `addSmallRelation`). The
-    // counter cannot have been fed for this relation, but reset it anyway, so
-    // that a future relaxation of `isCompleteSmallRelation` cannot silently
+    // no metadata is stored for small relations (see `addSmallRelations`). The
+    // counter cannot have been fed for these relations, but reset it anyway,
+    // so that a future relaxation of `isCompleteSmallRelation` cannot silently
     // corrupt the count of the next large relation.
     distinctCol1Counter_.reset();
-    writer1_->addSmallRelation(col0IdCurrentRelation_.value(), permutedCols,
-                               begin, end);
+    writer1_->addSmallRelations(col0IdCurrentRelation_.value(), lastCol0Id,
+                                permutedCols, begin, end);
     // We don't need to do anything for the twin permutation and writer2,
     // because we have set up `writer1.smallBlocksCallback_` to do that work
     // for us (see above).
     increaseTripleCounter(end - begin);
-    // The relation is complete, so the next run of the input starts a new
-    // relation and `finishRelation` has nothing left to do for this one.
+    // All relations of the batch are complete, so the next run of the input
+    // starts a new relation and `finishRelation` has nothing left to do for
+    // the last relation of the batch.
     col0IdCurrentRelation_.reset();
+    return end;
   }
 
   // ___________________________________________________________________________
@@ -447,18 +507,18 @@ struct CompressedRelationWriter::PermutationWriter {
           finishRelation();
           col0IdCurrentRelation_ = col0Id;
         }
-        size_t runEnd =
-            ql::ranges::find_if(firstCol.begin() + runBegin, firstCol.end(),
-                                [col0Id](Id id) { return id != col0Id; }) -
-            firstCol.begin();
+        size_t runEnd = findEndOfRun(firstCol, runBegin);
         // If the complete relation is already known here, and it is small,
-        // then we can write it without buffering it in `relation_` first.
+        // then we can write it without buffering it in `relation_` first,
+        // together with as many of the directly following relations as
+        // possible.
         if (isCompleteSmallRelation(runBegin, runEnd, block.numRows())) {
-          writeCompleteSmallRelation(permutedCols, runBegin, runEnd);
+          runBegin = writeCompleteSmallRelations(
+              permutedCols, firstCol, runBegin, runEnd, block.numRows());
         } else {
           addRowsOfCurrentRelation(permutedCols, runBegin, runEnd);
+          runBegin = runEnd;
         }
-        runBegin = runEnd;
       }
       blockCallbackManager_.passToBlockCallbacks(std::move(block));
       inputWaitTimer_.cont();
