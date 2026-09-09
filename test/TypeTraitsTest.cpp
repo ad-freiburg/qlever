@@ -450,4 +450,21 @@ TEST(TypeTraits, visitIf) {
   ad_utility::visitIf(v, [&numCalls](const std::string&) { ++numCalls; });
   ad_utility::visitIf(v, [&numCalls](int) { ++numCalls; });
   EXPECT_EQ(numCalls, 1);
+
+  // More than two functions: tried in order, first invocable one wins. Note
+  // that this relies on the parameter types not being implicitly convertible
+  // to each other (e.g. `int` and `double` would not work: a `double`
+  // alternative is also invocable via an `int` parameter).
+  auto describe = [](const auto& variant) {
+    return ad_utility::visitIf(
+        variant, [](int) { return "int"; },
+        [](const std::vector<int>&) { return "vector"; },
+        [](const std::string&) { return "string"; });
+  };
+  std::variant<int, std::vector<int>, std::string> v3{std::string{"x"}};
+  EXPECT_STREQ(describe(v3), "string");
+  v3 = std::vector<int>{1, 2};
+  EXPECT_STREQ(describe(v3), "vector");
+  v3 = 42;
+  EXPECT_STREQ(describe(v3), "int");
 }
