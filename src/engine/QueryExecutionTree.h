@@ -49,8 +49,6 @@ class QueryExecutionTree {
 
   std::shared_ptr<Operation> getRootOperation() const { return rootOperation_; }
 
-  bool isEmpty() const { return !rootOperation_; }
-
   // Get the column index that the given `variable` will have in the result of
   // this query. Throw if the variable is not part of the `VariableToColumnMap`.
   size_t getVariableColumn(const Variable& variable) const;
