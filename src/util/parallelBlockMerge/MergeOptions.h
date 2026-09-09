@@ -16,10 +16,11 @@
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 
-// The tuning knobs of the parallel block merge (see
-// `util/parallelBlockMerge/ParallelBlockMerge.h`) together with their defaults.
-// These are shared configuration and not a policy, which is why they live in a
-// header of their own.
+// The tuning knobs of the block merge together with their defaults. These are
+// shared configuration and not a policy, which is why they live in a header of
+// their own. For the terminology (runs, blocks, and chunks) see
+// `util/parallelBlockMerge/ParallelBlockMerge.h`, which is the header to read
+// first.
 namespace ad_utility::parallelBlockMerge {
 
 // The default number of elements in a single output block of the merge.
@@ -29,7 +30,7 @@ constexpr inline size_t DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_SIZE = 100'000;
 // merge may occupy. An output block is finished as soon as either this limit or
 // `DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_SIZE` is reached.
 constexpr inline MemorySize DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY =
-    MemorySize::megabytes(16);
+    MemorySize::megabytes(1);
 
 // The default number of chunks that are created per available thread. Values
 // greater than one lead to a finer granularity, which in turn improves the load
@@ -97,14 +98,17 @@ class OutputBlockSize {
   }
 };
 
-// The tuning knobs of the parallel merge. All of them have sensible defaults,
-// so that a caller typically only has to set the values it actually cares
-// about.
+// The tuning knobs of the merge. All of them have sensible defaults, so that a
+// caller typically only has to set the values it actually cares about.
 struct MergeOptions {
   // When to finish a single output block, see `OutputBlockSize`.
   OutputBlockSize outputBlockSize =
       OutputBlockSize::both(DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_SIZE,
                             DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY);
+
+  // The remaining knobs only affect a merge that actually distributes its
+  // chunks over several threads, see `parallelBlockMergeAsync`. The serial
+  // merge ignores all of them.
 
   // Aim for that many independent chunks per thread. Larger values improve the
   // load balancing at the cost of a larger scheduling overhead.

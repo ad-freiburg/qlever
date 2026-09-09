@@ -25,12 +25,6 @@ TEST(MergeOptions, Defaults) {
             DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_SIZE);
   EXPECT_EQ(options.outputBlockSize.maxMemory(),
             DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY);
-  EXPECT_EQ(options.targetChunksPerThread,
-            DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD);
-  EXPECT_EQ(options.maxInFlightChunks, 0u);
-  EXPECT_EQ(options.serialNumElementsThreshold,
-            DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD);
-  EXPECT_EQ(options.bufferedBlocksPerChunk, 2u);
 }
 
 // _____________________________________________________________________________

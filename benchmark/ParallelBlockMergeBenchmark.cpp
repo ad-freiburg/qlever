@@ -10,6 +10,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <boost/asio/any_io_executor.hpp>
@@ -33,7 +34,10 @@
 #include "global/IndexTypes.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
+#include "util/Exception.h"
+#include "util/Forward.h"
 #include "util/Log.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 
@@ -141,20 +145,95 @@ struct ExpensiveStringComparator {
 };
 
 // The presorted runs of a single configuration. The `spans_` refer into the
-// `storage_`, such that handing the runs to a `VectorRunsInput` does not copy
-// the actual data.
+// `storage_`, such that handing the runs to an `Input` does not copy the actual
+// data.
 template <typename T>
 struct Runs {
   std::vector<std::vector<T>> storage_;
   std::vector<ql::span<const T>> spans_;
 };
 
-// The input policy for the runs of type `T`.
+// An in-memory input policy that exposes a set of sorted spans as runs of
+// fixed-size *virtual* blocks. The number of elements as well as the first and
+// the last element of such a block are directly available from the underlying
+// span, so neither I/O nor stored metadata is needed.
+//
+// NOTE: The tests use `parallelBlockMergeTestHelpers::VectorInput` instead,
+// which owns its blocks. That is deliberately not reused here: this benchmark
+// constructs the input *inside* the measured function (the merge takes its
+// input by value), so an input that owns the elements would copy the whole
+// input on every single measurement.
 template <typename T>
-using Input = VectorRunsInput<ql::span<const T>>;
+class Input {
+ public:
+  using value_type = T;
+  using Element = T;
+  using Block = std::vector<T>;
 
-static_assert(BlockedRunsInput<Input<size_t>>);
-static_assert(BlockedRunsInput<Input<std::string>>);
+ private:
+  std::vector<ql::span<const T>> runs_;
+  size_t virtualBlockSize_;
+
+ public:
+  // Construct from the `runs` (each of which has to be sorted) and the number
+  // of elements in a single virtual block.
+  Input(std::vector<ql::span<const T>> runs, size_t virtualBlockSize)
+      : runs_{std::move(runs)}, virtualBlockSize_{virtualBlockSize} {
+    AD_CONTRACT_CHECK(virtualBlockSize > 0);
+  }
+
+  // ________________________________________________________________________
+  size_t numRuns() const { return runs_.size(); }
+
+  // ________________________________________________________________________
+  size_t numBlocks(size_t runIdx) const {
+    size_t numElements = runs_[runIdx].size();
+    return (numElements + virtualBlockSize_ - 1) / virtualBlockSize_;
+  }
+
+  // ________________________________________________________________________
+  size_t numElementsInBlock(size_t runIdx, size_t blockIdx) const {
+    size_t begin = blockIdx * virtualBlockSize_;
+    return std::min(virtualBlockSize_, runs_[runIdx].size() - begin);
+  }
+
+  // ________________________________________________________________________
+  const Element& firstElement(size_t runIdx, size_t blockIdx) const {
+    return runs_[runIdx][blockIdx * virtualBlockSize_];
+  }
+
+  // ________________________________________________________________________
+  const Element& lastElement(size_t runIdx, size_t blockIdx) const {
+    size_t begin = blockIdx * virtualBlockSize_;
+    return runs_[runIdx][begin + numElementsInBlock(runIdx, blockIdx) - 1];
+  }
+
+  // ________________________________________________________________________
+  Block getBlock(size_t runIdx, size_t blockIdx) const {
+    size_t begin = blockIdx * virtualBlockSize_;
+    auto block =
+        runs_[runIdx].subspan(begin, numElementsInBlock(runIdx, blockIdx));
+    return Block{block.begin(), block.end()};
+  }
+
+  // ________________________________________________________________________
+  Block makeEmptyBlock() const { return Block{}; }
+
+  // ________________________________________________________________________
+  template <typename U>
+  void appendToBlock(Block& block, U&& element) const {
+    block.push_back(AD_FWD(element));
+  }
+
+  // ________________________________________________________________________
+  ad_utility::MemorySize memorySizeOfElement(
+      [[maybe_unused]] const value_type& element) const {
+    return ad_utility::MemorySize::bytes(sizeof(value_type));
+  }
+};
+
+static_assert(InputConcept<Input<size_t>>);
+static_assert(InputConcept<Input<std::string>>);
 
 // Distribute the elements of the globally `sorted` vector randomly over
 // `numRuns` runs. Every resulting run is sorted, because the elements are

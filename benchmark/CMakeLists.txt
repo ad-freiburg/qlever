@@ -38,6 +38,8 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
 
+    addAndLinkBenchmark(SparqlExpressionBenchmark engine testUtil gtest gmock)
+
     # A standalone benchmark for a single large external sort. It has a `main`
     # function of its own (with a `boost::program_options` interface), so it
     # deliberately does not use the benchmark infrastructure above.

@@ -41,6 +41,13 @@
 namespace ad_utility::parallelBlockMerge {
 namespace detail {
 
+// A fresh cancellation handle, which is the default for a caller of the
+// parallel merge that does not want to cancel it. NOTE: The merge requires a
+// handle that is not `nullptr`, see `MergeState`.
+inline ad_utility::SharedCancellationHandle freshCancellationHandle() {
+  return std::make_shared<ad_utility::CancellationHandle<>>();
+}
+
 // The state of a parallel merge that schedules *all* of its work on a
 // Boost.Asio executor. It runs one task per chunk, and a chunk which currently
 // cannot make progress (because the consumer has not caught up yet) releases
@@ -72,14 +79,19 @@ namespace detail {
 // instead of waiting for a consumer that is gone. `ParallelMergeRange` below
 // does this in its destructor.
 CPP_template(bool moveElements, typename Input, typename Comparator)(
-    requires BlockedRunsInput<Input>) class ParallelMergeState
+    requires InputConcept<Input>) class ParallelMergeState
     : public std::enable_shared_from_this<
           ParallelMergeState<moveElements, Input, Comparator>>,
       public ad_utility::NoCopyNoMove {
  public:
   using Block = typename Input::Block;
-  using Key = typename Input::Key;
   using Sink = InOrderBlockSink<Block>;
+  // The merger of a single chunk, and the state that the mergers of all chunks
+  // share (see `ChunkMerger`). The latter is the single owner of the input, the
+  // comparator, the options, the cancellation handle, and the chunk boundaries
+  // of the merge.
+  using Merger = ChunkMerger<moveElements, Input, Comparator>;
+  using SharedMergeState = typename Merger::State;
   // The strand to which the dispatch loop and the teardown are confined, see
   // the STRAND CONFINEMENT note above.
   using Strand = net::strand<net::any_io_executor>;
@@ -96,11 +108,8 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   struct PrivateTag {};
 
   net::any_io_executor executor_;
-  Input input_;
-  Comparator comparator_;
-  MergeOptions options_;
-  ad_utility::SharedCancellationHandle cancellationHandle_;
-  Splitters<Key> splitters_;
+  // Never `nullptr`, see `create()` below.
+  std::shared_ptr<const SharedMergeState> mergeState_;
   size_t maxInFlight_;
   // NOTE: The order of these members matters, all three of them are initialized
   // from the members above.
@@ -113,17 +122,15 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
 
  public:
   // Create the state of a merge and start dispatching its chunks. All the work
-  // is scheduled on the `executor`, which somebody else has to run.
+  // is scheduled on the `executor`, which somebody else has to run. The
+  // `mergeState` must not be `nullptr`.
   static std::shared_ptr<ParallelMergeState> create(
-      net::any_io_executor executor, Input input, Comparator comparator,
-      MergeOptions options,
-      ad_utility::SharedCancellationHandle cancellationHandle,
-      Splitters<Key> splitters, size_t maxInFlight,
+      net::any_io_executor executor,
+      std::shared_ptr<const SharedMergeState> mergeState, size_t maxInFlight,
       BlockStorageFactory<Block> blockStorageFactory = {}) {
+    AD_CONTRACT_CHECK(mergeState != nullptr);
     auto self = std::make_shared<ParallelMergeState>(
-        PrivateTag{}, std::move(executor), std::move(input),
-        std::move(comparator), std::move(options),
-        std::move(cancellationHandle), std::move(splitters), maxInFlight,
+        PrivateTag{}, std::move(executor), std::move(mergeState), maxInFlight,
         std::move(blockStorageFactory));
     // NOTE: The dispatching can only be started once the `shared_ptr` exists,
     // because the tasks and handlers keep this object alive via
@@ -133,29 +140,25 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   }
 
   // The constructor is effectively private, use `create()` instead.
-  ParallelMergeState(PrivateTag, net::any_io_executor executor, Input input,
-                     Comparator comparator, MergeOptions options,
-                     ad_utility::SharedCancellationHandle cancellationHandle,
-                     Splitters<Key> splitters, size_t maxInFlight,
+  ParallelMergeState(PrivateTag, net::any_io_executor executor,
+                     std::shared_ptr<const SharedMergeState> mergeState,
+                     size_t maxInFlight,
                      BlockStorageFactory<Block> blockStorageFactory)
       : executor_{std::move(executor)},
-        input_{std::move(input)},
-        comparator_{std::move(comparator)},
-        options_{std::move(options)},
-        cancellationHandle_{std::move(cancellationHandle)},
-        splitters_{std::move(splitters)},
+        mergeState_{std::move(mergeState)},
         maxInFlight_{maxInFlight},
         strand_{net::make_strand(executor_)},
         // NOTE: An empty `blockStorageFactory` means "keep the blocks in
         // memory", which is what bounds the memory consumption of the merge via
         // back-pressure, see `InMemoryBlockStorage`.
-        sink_{executor_, splitters_.numChunks(),
-              blockStorageFactory ? std::move(blockStorageFactory)
-                                  : Sink::makeInMemoryStorageFactory(
-                                        options_.bufferedBlocksPerChunk)},
+        sink_{executor_, numChunks(),
+              blockStorageFactory
+                  ? std::move(blockStorageFactory)
+                  : Sink::makeInMemoryStorageFactory(
+                        mergeState_->options_.bufferedBlocksPerChunk)},
         semaphore_{executor_, maxInFlight} {
     AD_CORRECTNESS_CHECK(maxInFlight_ > 0);
-    AD_CORRECTNESS_CHECK(maxInFlight_ <= splitters_.numChunks());
+    AD_CORRECTNESS_CHECK(maxInFlight_ <= numChunks());
   }
 
   // Complete with the next block in the global order, or with `std::nullopt` if
@@ -209,6 +212,10 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   }
 
  private:
+  // The number of chunks that this merge consists of, see
+  // `computeChunkBoundaries`. Always at least one.
+  size_t numChunks() const { return mergeState_->chunkBoundaries_.size(); }
+
   // The merging of a single chunk, as a handler-based loop instead of a
   // coroutine (which is not available in the C++17 backports mode): `step()`
   // merges a single output block and pushes it to the sink, and the completion
@@ -230,7 +237,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     std::shared_ptr<ParallelMergeState> state_;
     size_t chunkIndex_;
     Permit permit_;
-    ChunkMerger<moveElements, Input, Comparator> merger_;
+    Merger merger_;
 
    public:
     // Construct from the `state` of the merge, the index of the chunk to merge,
@@ -240,9 +247,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
         : state_{std::move(state)},
           chunkIndex_{chunkIndex},
           permit_{std::move(permit)},
-          merger_{&state_->input_, &state_->comparator_, state_->options_,
-                  state_->splitters_.getSplittersAt(chunkIndex),
-                  state_->cancellationHandle_} {}
+          merger_{state_->mergeState_, chunkIndex} {}
 
     // Merge the next output block of this chunk and push it to the sink, or
     // finish the chunk if it is exhausted or the merge was stopped. This never
@@ -363,7 +368,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   // PRECONDITION: This runs on `strand_`, and so does its continuation.
   void dispatchNextChunk(size_t chunkIndex) noexcept {
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
-    if (chunkIndex >= splitters_.numChunks() || sink_.stopRequested()) {
+    if (chunkIndex >= numChunks() || sink_.stopRequested()) {
       return;
     }
     executeAndHandleUnlikelyMemoryError([this, chunkIndex] {
@@ -453,7 +458,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
 // over this range is blocked while it waits for the next block and can
 // therefore not run any of the merge's tasks itself.
 CPP_template(bool moveElements, typename Input, typename Comparator)(
-    requires BlockedRunsInput<Input>) class ParallelMergeRange
+    requires InputConcept<Input>) class ParallelMergeRange
     : public ad_utility::InputRangeFromGet<typename Input::Block>,
       public ad_utility::NoCopyNoMove {
  public:

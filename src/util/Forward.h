@@ -43,7 +43,7 @@ struct MoveIf {
     if constexpr (move) {
       return std::move(x);
     } else {
-      return (x);
+      return x;
     }
   }
 };

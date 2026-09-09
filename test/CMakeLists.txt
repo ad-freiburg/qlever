@@ -278,6 +278,8 @@ addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
 
 addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
 
+addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
+
 addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
@@ -522,6 +524,7 @@ addLinkAndDiscoverTestNoLibs(BlockStorageTest)
 addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
+addLinkAndDiscoverTestNoLibs(MergeHelpersTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 

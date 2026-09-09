@@ -21,6 +21,7 @@
 #include "engine/idTable/CompressedIdTableBlocks.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
+#include "util/CancellationHandle.h"
 #include "util/CompressedBlockFile.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -465,7 +466,7 @@ inline MemorySize memoryForBlocksize(size_t blocksize, size_t numColumns) {
 
 // An input policy for `ad_utility::parallelBlockMerge` that reads the blocks of
 // the `IdTable`s (= presorted runs) stored in a
-// `CompressedExternalIdTableWriter`. The `Key` is a dynamic, owning `Row`,
+// `CompressedExternalIdTableWriter`. The `Element` is a dynamic, owning `Row`,
 // which can be compared against the (proxy) row references of an
 // `IdTableStatic<NumStaticCols>` because all comparators used in QLever are
 // templated on both of their argument types.
@@ -477,7 +478,7 @@ template <size_t NumStaticCols>
 class CompressedIdTableRunsInput : public ad_utility::NoCopy {
  public:
   using Block = IdTableStatic<NumStaticCols>;
-  using Key = IdTable::row_type;
+  using Element = IdTable::row_type;
   using value_type = typename Block::row_type;
 
  private:
@@ -527,19 +528,19 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   }
 
   // ________________________________________________________________________
-  const Key& firstKey(size_t run, size_t block) const {
+  const Element& firstElement(size_t run, size_t block) const {
     return writer_->firstRowOfBlock(run, block);
   }
 
   // ________________________________________________________________________
-  const Key& lastKey(size_t run, size_t block) const {
+  const Element& lastElement(size_t run, size_t block) const {
     return writer_->lastRowOfBlock(run, block);
   }
 
   // Read and decompress a single block. This is the only function that performs
   // I/O; it is thread-safe, because it only takes a shared lock on the
   // underlying file.
-  Block readBlock(size_t run, size_t block) const {
+  Block getBlock(size_t run, size_t block) const {
     return writer_->template readBlockOfIdTable<NumStaticCols>(run, block);
   }
 
@@ -561,11 +562,9 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   }
 };
 
-// Make a mismatch with the `BlockedRunsInput` concept a clear compile error.
-static_assert(
-    parallelBlockMerge::BlockedRunsInput<CompressedIdTableRunsInput<0>>);
-static_assert(
-    parallelBlockMerge::BlockedRunsInput<CompressedIdTableRunsInput<3>>);
+// Make a mismatch with the `InputConcept` a clear compile error.
+static_assert(parallelBlockMerge::InputConcept<CompressedIdTableRunsInput<0>>);
+static_assert(parallelBlockMerge::InputConcept<CompressedIdTableRunsInput<3>>);
 
 // The common base implementation of `CompressedExternalIdTable` and
 // `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
@@ -1143,7 +1142,11 @@ class CompressedExternalIdTableSorter
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
             mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
             this->comparator_, makeMergeOptions(parameters), mergeParallelism_,
-            /*cancellationHandle=*/nullptr, makeBlockStorageFactory<N>());
+            // NOTE: The sorter has no cancellation handle of its own, and the
+            // merge requires one that is not `nullptr`, so this is a fresh
+            // handle that is never cancelled.
+            std::make_shared<ad_utility::CancellationHandle<>>(),
+            makeBlockStorageFactory<N>());
     return ad_utility::InputRangeTypeErased{
         checkedMergeResult<N>(std::move(merged))};
   }
