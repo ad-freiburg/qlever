@@ -133,17 +133,20 @@ class ValueId {
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
   // All types that store strings. Together, the IDs of all the items of these
-  // types form a consecutive range of IDs when sorted. Within this range, the
-  // IDs are ordered by their string values, not by their IDs (and hence also
-  // not by their types).
-  // TODO<joka921> `SecondaryVocabIndex` also stores strings, but it is
-  // deliberately not listed here (yet): the IDs of that type are directly
-  // adjacent to the ones listed here, but they are *not* ordered by their
-  // string value, so listing them here would break the semantic (that is, by
-  // string value) comparison of IDs in `ValueIdComparators.h`. Teaching that
-  // comparison about the secondary vocabulary is a separate step.
-  static constexpr std::array<Datatype, 2> stringTypes_{
-      Datatype::VocabIndex, Datatype::LocalVocabIndex};
+  // types form a consecutive range of IDs when sorted.
+  //
+  // NOTE: Within that range the IDs are NOT ordered by their string values. For
+  // `VocabIndex` and `LocalVocabIndex` alone they are, but the IDs of a
+  // secondary vocabulary (see `index/vocabulary/SecondaryVocabulary.h`) are all
+  // sorted after the IDs of the main vocabulary, no matter what their words
+  // are. That order (call it the *internal* order, see `compareThreeWay` below)
+  // is the order in which the index scans emit their IDs; the semantic (that
+  // is, by string value) comparison that SPARQL requires is a separate
+  // comparison that does not use the order of the IDs, but the words behind
+  // them, see `LocalVocabContext::compareIdsSemantically`.
+  static constexpr std::array<Datatype, 3> stringTypes_{
+      Datatype::VocabIndex, Datatype::LocalVocabIndex,
+      Datatype::SecondaryVocabIndex};
 
   // The datatypes that the position of a word in the vocabularies of an index
   // can have, see `LocalVocabEntry::positionInVocab()`. The comparison of an

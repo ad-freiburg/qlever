@@ -12,6 +12,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "global/Id.h"
@@ -56,11 +57,22 @@ class LocalVocabContextImpl : public LocalVocabContext {
 
   int compareWords(std::string_view a, std::string_view b) const override;
   VocabBounds getPositionOfWord(std::string_view word) const override;
+  int compareIdsSemantically(Id a, Id b) const override;
+  VocabBounds getSemanticPositionInMainVocab(Id id) const override;
   bool hasSecondaryVocabulary() const override;
   std::optional<SecondaryVocabIndex> getSecondaryVocabIndex(
       std::string_view word) const override;
   std::optional<Id> encodeAsId(std::string_view word) const override;
   ad_utility::BlankNodeManager* getBlankNodeManager() const override;
+
+ private:
+  // Return the word of the given `Id`, which has to be of one of the
+  // `ValueId::stringTypes_`.
+  std::string getWordOfStringTypedId(Id id) const;
+
+  // Semantically compare the word of `secondaryId`, which has to be of type
+  // `Datatype::SecondaryVocabIndex`, to the word of `other`.
+  int compareSecondaryVocabIdTo(Id secondaryId, Id other) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_LOCALVOCABCONTEXTIMPL_H

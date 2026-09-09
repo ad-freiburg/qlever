@@ -9,6 +9,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
+#include "index/LocalVocabContext.h"
 
 namespace sparqlExpression {
 using valueIdComparators::Comparison;
@@ -66,30 +67,6 @@ template <typename A, typename B>
 CPP_concept AreComparable =
     !AtLeastOneIsBoolean<A, B> && !AreIncomparable<A, B> &&
     (StoresValueId<A> || !StoresValueId<B>);
-
-// Apply the given `Comparison` to `a` and `b`. For example, if the `Comparison`
-// is `LT`, returns `a < b`. Note that the second template argument `Dummy` is
-// only needed to make the static check for the exhaustiveness of the if-else
-// cascade possible.
-template <Comparison Comp, typename Dummy = int, typename A, typename B>
-bool applyComparison(const A& a, const B& b) {
-  using enum Comparison;
-  if constexpr (Comp == LT) {
-    return a < b;
-  } else if constexpr (Comp == LE) {
-    return a <= b;
-  } else if constexpr (Comp == EQ) {
-    return a == b;
-  } else if constexpr (Comp == NE) {
-    return a != b;
-  } else if constexpr (Comp == GE) {
-    return a >= b;
-  } else if constexpr (Comp == GT) {
-    return a > b;
-  } else {
-    static_assert(ad_utility::alwaysFalse<Dummy>);
-  }
-}
 
 // Get the comparison that yields the same result when the arguments are
 // swapped. For example the swapped comparison of `less than` is `greater than`
@@ -176,36 +153,51 @@ inline const auto compareIdsOrStrings =
   using U = std::decay_t<decltype(b)>;
   if constexpr (ad_utility::isSimilar<LocalVocabEntry, T> &&
                 ad_utility::isSimilar<LocalVocabEntry, U>) {
-    return valueIdComparators::fromBool(applyComparison<Comp>(a, b));
+    // NOTE: We must not use the ordinary comparison operators of
+    // `LocalVocabEntry` here, because those implement the *internal* order,
+    // which is not the semantic (that is, by string value) order that SPARQL
+    // requires as soon as the index has a secondary vocabulary, see
+    // `index/LocalVocabEntry.h`.
+    return valueIdComparators::fromBool(valueIdComparators::comparisonHolds(
+        a.compareThreeWaySemantically(b), Comp));
   } else {
     auto x = makeValueId(a, ctx);
     auto y = makeValueId(b, ctx);
+    // The `LocalVocabContext` of the index, which is required for the
+    // semantically correct comparison of `Id`s, see
+    // `global/ValueIdComparators.h`.
+    const LocalVocabContext* localVocabContext = &ctx->getLocalVocabContext();
     if constexpr (ranges::invocable<decltype(valueIdComparators::compareIds<
                                              comparisonForIncompatibleTypes>),
                                     decltype(x), decltype(y),
-                                    valueIdComparators::Comparison>) {
+                                    valueIdComparators::Comparison,
+                                    const LocalVocabContext*>) {
       // Compare two `ValueId`s
       return valueIdComparators::compareIds<comparisonForIncompatibleTypes>(
-          x, y, Comp);
+          x, y, Comp, localVocabContext);
     } else if constexpr (ranges::invocable<
                              decltype(valueIdComparators::compareWithEqualIds<
                                       comparisonForIncompatibleTypes>),
                              decltype(x), decltype(y.first), decltype(y.second),
-                             valueIdComparators::Comparison>) {
+                             valueIdComparators::Comparison,
+                             const LocalVocabContext*>) {
       // Compare `ValueId` with range of equal `ValueId`s (used when `value2`
       // is `string` or `vector<string>`.
       return valueIdComparators::compareWithEqualIds<
-          comparisonForIncompatibleTypes>(x, y.first, y.second, Comp);
+          comparisonForIncompatibleTypes>(x, y.first, y.second, Comp,
+                                          localVocabContext);
     } else if constexpr (ranges::invocable<
                              decltype(valueIdComparators::compareWithEqualIds<
                                       comparisonForIncompatibleTypes>),
                              decltype(y), decltype(x.first), decltype(x.second),
-                             valueIdComparators::Comparison>) {
+                             valueIdComparators::Comparison,
+                             const LocalVocabContext*>) {
       // Compare `ValueId` with range of equal `ValueId`s (used when `value2`
       // is `string` or `vector<string>`.
       return valueIdComparators::compareWithEqualIds<
           comparisonForIncompatibleTypes>(
-          y, x.first, x.second, getComparisonForSwappedArguments(Comp));
+          y, x.first, x.second, getComparisonForSwappedArguments(Comp),
+          localVocabContext);
     } else {
       // The `variant` is such that both types are shown in the compiler error
       // message once the `static_assert` fails.

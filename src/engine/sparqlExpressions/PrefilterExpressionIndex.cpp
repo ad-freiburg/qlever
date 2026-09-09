@@ -295,6 +295,10 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     // ValueIds representing LocalVocab and Vocab entries are contained in mixed
     // and sorted order over the CompressedBlockMetadata values. Thus, we don't
     // discard them if they contain a mix of LocalVocab and Vocab ValueIds.
+    // NOTE: `SecondaryVocabIndex` is deliberately not part of this whitelist,
+    // so a block that mixes an `Id` of a secondary vocabulary with an `Id` of
+    // the main vocabulary is (conservatively, but always safely) treated as
+    // mixed and hence kept.
     if ((dType1 == VocabIndex && dType2 == LocalVocabIndex) ||
         (dType1 == LocalVocabIndex && dType2 == VocabIndex)) {
       return false;
@@ -310,6 +314,51 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
                        });
   return detail::mapping::mapValueIdItRangesToBlockItRanges(
       mixedDatatypeRanges, idRange, blockRange);
+}
+
+// Return the `BlockRange`s of the `CompressedBlockMetadata` values that may
+// contain `Id`s of a secondary vocabulary (see
+// `index/vocabulary/SecondaryVocabulary.h`). Those `Id`s are ordered by their
+// index within that vocabulary and not by their string value, so the first and
+// the last `Id` of a block say nothing about which of its `Id`s match, and such
+// a block therefore always has to be kept. NOTE: If the index has no secondary
+// vocabulary, then the returned range is empty and this costs nothing but the
+// three binary searches below (`getRangeForDatatype` is an `std::equal_range`,
+// which is two of them).
+//
+// NOTE: This deliberately also keeps the blocks that contain an `Id` of type
+// `LocalVocabIndex` whose word is positioned in the secondary vocabulary (such
+// `Id`s are ordered by the position of their word, see
+// `ValueId::compareThreeWay`, and hence fall into the range determined below).
+// That is not an imprecision but exactly what we want: such a block may
+// likewise contain matches that its first and its last `Id` do not reveal.
+static BlockMetadataRanges getRangesSecondaryVocabBlocks(
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
+  // The `Id`s of a secondary vocabulary are the tail of the range of the string
+  // types (`Datatype::SecondaryVocabIndex` is one of `ValueId::stringTypes_`,
+  // and it is the largest of them), so we first determine the range of the
+  // string types and then binary-search for the beginning of the secondary
+  // vocabulary within it.
+  auto [beginStringTypes, endStringTypes] =
+      valueIdComparators::getRangeForDatatype(idRange.begin(), idRange.end(),
+                                              Datatype::SecondaryVocabIndex);
+  auto beginSecondaryVocab = valueIdComparators::lowerBoundOfSecondaryVocabIds(
+      beginStringTypes, endStringTypes);
+  // Return early for an empty range. This is not just defensive tidiness:
+  // `mapValueIdItPairToBlockRange` rounds the end offset up, so an empty
+  // `ValueId` range that starts at an odd index (that is, at the `lastTriple_`
+  // of a block) would otherwise map to a block range of size one. Reporting
+  // that block would still be safe (keeping a block never changes the result of
+  // a prefilter, it only costs performance), and it is in fact always kept
+  // anyway, because such a block necessarily mixes two datatypes, see
+  // `getRangesMixedDatatypeBlocks`. But there is no reason to report it here.
+  if (beginSecondaryVocab == endStringTypes) {
+    return {};
+  }
+  std::vector<ValueIdItPair> secondaryVocabRanges{
+      {beginSecondaryVocab, endStringTypes}};
+  return detail::mapping::mapValueIdItRangesToBlockItRanges(
+      secondaryVocabRanges, idRange, blockRange);
 }
 
 // Return `CompOp`s as string.
@@ -413,6 +462,10 @@ BlockMetadataRanges PrefilterExpression::evaluate(
         evaluateImpl(index, idRange, blockRange, false),
         // always add mixed datatype blocks
         getRangesMixedDatatypeBlocks(idRange, blockRange));
+    // Always add the blocks that may contain `Id`s of a secondary vocabulary,
+    // for which no prefiltering is possible at all, see the helper for details.
+    result = detail::logicalOps::mergeRelevantBlockItRanges<true>(
+        result, getRangesSecondaryVocabBlocks(idRange, blockRange));
   }
 
   if (firstBlockRange.has_value()) {
@@ -546,7 +599,7 @@ RelationalExpression<Comparison>::logicalComplement() const {
 //______________________________________________________________________________
 template <CompOp Comparison>
 BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
-    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
+    const IndexImpl& index, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange, bool getTotalComplement) const {
   using namespace valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
@@ -560,11 +613,23 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
   // Reason: The referenceId could be contained within the bounds formed by
   // the IDs of firstTriple_ and lastTriple_ (set false flag to keep
   // empty ranges).
-  auto relevantIdRanges = Comparison != CompOp::EQ
-                              ? getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison)
-                              : getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison, false);
+  //
+  // NOTE: We deliberately use only the ranges that were found by binary search
+  // and ignore `secondaryVocabMatches_`. The reason is that a prefilter only
+  // ever sees the first and the last `Id` of a block, but the `Id`s of a
+  // secondary vocabulary are not ordered by their string value, so a block that
+  // contains any of them may contain an arbitrary subset of the matches and
+  // hence always has to be kept. That is handled globally (for all prefilters
+  // at once) by `getRangesSecondaryVocabBlocks` in
+  // `PrefilterExpression::evaluate` above.
+  const auto* localVocabContext = &index.getLocalVocabContext();
+  auto rangesAndSecondaryMatches =
+      Comparison != CompOp::EQ
+          ? getRangesForId(idRange.begin(), idRange.end(), referenceId,
+                           Comparison, localVocabContext)
+          : getRangesForId(idRange.begin(), idRange.end(), referenceId,
+                           Comparison, localVocabContext, false);
+  const auto& relevantIdRanges = rangesAndSecondaryMatches.ranges_;
   return getTotalComplement
              ? detail::mapping::mapValueIdItRangesToBlockItRangesComplemented(
                    relevantIdRanges, idRange, blockRange)
@@ -705,16 +770,11 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // `VocabIndex`/`LocalVocabIndex`) and encoded IRIs (datatype `EncodedVal`).
   // We therefore have to keep the blocks for *both* representations.
   //
-  // TODO<joka921> There is a third range: the IRIs of a secondary vocabulary
-  // (datatype `SecondaryVocabIndex`, see
-  // `index/vocabulary/SecondaryVocabulary.h`). Those sort after all of the
-  // ranges below, so neither the `> <>` prefilter nor the datatype range of
-  // the encoded IRIs covers them, which means that blocks consisting entirely
-  // of such IRIs are incorrectly pruned. This is deliberate for now, because
-  // nothing but a unit test can currently create a secondary vocabulary, but
-  // it has to be fixed *before* anything else does, together with the semantic
-  // comparison of those `Id`s (see the detailed note at
-  // `valueIdComparators::detail::compareIdsImpl`).
+  // NOTE: There is a third range: the IRIs of a secondary vocabulary (datatype
+  // `SecondaryVocabIndex`, see `index/vocabulary/SecondaryVocabulary.h`). Those
+  // are not covered here, but by `getRangesSecondaryVocabBlocks` in
+  // `PrefilterExpression::evaluate`, which unconditionally keeps all blocks
+  // that may contain such an `Id`.
   //
   // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
   // in order. The smallest possible IRI is represented by "<>", we use its
@@ -757,9 +817,9 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
   // the beginning of IRI values as an upper bound and add all the value types
   // that are literals inlined into a compact representation.
   //
-  // TODO<joka921> Just as for `IsDatatype::IRI` above, the literals of a
-  // secondary vocabulary are not covered, because their `Id`s sort after the
-  // `< <>` bound that is used here. See the note there.
+  // NOTE: Just as for `IsDatatype::IRI` above, the literals of a secondary
+  // vocabulary are not covered here, but by `getRangesSecondaryVocabBlocks` in
+  // `PrefilterExpression::evaluate`.
   std::array datatypes{Datatype::Int, Datatype::Double, Datatype::Date,
                        Datatype::Bool, Datatype::GeoPoint};
   auto inlinedRanges =

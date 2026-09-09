@@ -83,8 +83,9 @@ using ValueIdIt = ad_utility::IteratorForAccessOperator<
 // the containerized `ql::span<const CompressedBlockMetadata> input`:
 using ValueIdSubrange = ql::ranges::subrange<ValueIdIt>;
 
-// Required because `valueIdComparators::getRangesForId` directly returns pairs
-// of `ValueIdIt`s, and not sub ranges (`ValueIdSubrange`).
+// Required because the `ranges_` of the result of
+// `valueIdComparators::getRangesForId` are pairs of `ValueIdIt`s, and not sub
+// ranges (`ValueIdSubrange`).
 // Remark: The pair defines a relevant range of `ValueId`s over containerized
 // `ql::span<const CompressedBlockMetadata> input` by iterators.
 using ValueIdItPair = std::pair<ValueIdIt, ValueIdIt>;

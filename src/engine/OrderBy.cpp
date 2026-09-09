@@ -100,9 +100,16 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // only contains a single datatype, then we can use more efficient
   // implementations here.
 
+  // The `LocalVocabContext` is required for the semantically correct comparison
+  // of `Id`s that are positioned in a secondary vocabulary (see
+  // `global/ValueIdComparators.h`). We look it up once here, because the
+  // comparator below is called once per pair of rows.
+  const LocalVocabContext* localVocabContext = &getLocalVocabContext();
+
   // Return true iff `rowA` comes before `rowB` in the sort order specified by
   // `sortIndices_`.
-  auto comparison = [this](const auto& row1, const auto& row2) -> bool {
+  auto comparison = [this, localVocabContext](const auto& row1,
+                                              const auto& row2) -> bool {
     for (auto& [column, isDescending] : sortIndices_) {
       if (row1[column] == row2[column]) {
         continue;
@@ -110,8 +117,9 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
       bool isLessThan =
           toBoolNotUndef(valueIdComparators::compareIds<
                          valueIdComparators::ComparisonForIncompatibleTypes::
-                             CompareByType>(
-              row1[column], row2[column], valueIdComparators::Comparison::LT));
+                             CompareByType>(row1[column], row2[column],
+                                            valueIdComparators::Comparison::LT,
+                                            localVocabContext));
       return isLessThan != isDescending;
     }
     return false;

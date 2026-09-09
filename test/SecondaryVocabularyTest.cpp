@@ -17,6 +17,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -134,6 +135,21 @@ TEST(SecondaryVocabulary, wordsHaveToBeSortedAndDistinct) {
                                HasSubstr("have to be sorted"));
   AD_EXPECT_THROW_WITH_MESSAGE((SecondaryVocabulary{{"<b>", "<b>"}}),
                                HasSubstr("have to be distinct"));
+}
+
+// _____________________________________________________________________________
+// The semantic comparison of the words needs the comparator of the vocabulary
+// of the main index, which a freshly constructed vocabulary does not have yet
+// (`IndexImpl::setSecondaryVocabForTesting` attaches it, see the test below).
+TEST(SecondaryVocabulary, semanticComparisonNeedsTheMainVocabComparator) {
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  auto message =
+      HasSubstr("comparator of the vocabulary of the main index has been set");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      vocab.compareWordTo(SecondaryVocabIndex::make(0), "<a>"), message);
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.compareWords(SecondaryVocabIndex::make(0),
+                                                  SecondaryVocabIndex::make(1)),
+                               message);
 }
 
 // _____________________________________________________________________________
@@ -341,6 +357,164 @@ TEST(SecondaryVocabIndex, localVocabEntryWithoutSecondaryVocabulary) {
   ql::ranges::sort(entries);
   EXPECT_THAT(entries, ::testing::ElementsAre(entry("<a>"), entry("<b>"),
                                               entry("<c>"), entry("<d>")));
+}
+
+// _____________________________________________________________________________
+// The semantic comparison of the words of the secondary vocabulary uses the
+// comparator of the vocabulary of the main index, which the index attaches to
+// the vocabulary when it is set.
+TEST_F(SecondaryVocabIndexTest, semanticComparisonOfWords) {
+  const SecondaryVocabulary* vocab = index_.getImpl().secondaryVocab();
+  ASSERT_NE(vocab, nullptr);
+  auto at = [](uint64_t i) { return SecondaryVocabIndex::make(i); };
+
+  // Compare the words to words of the main vocabulary and to a word that is in
+  // neither vocabulary. The words are `"a"` (index 0), `<b>` (1), and `<d>`
+  // (2), see `secondaryVocabWords`.
+  EXPECT_EQ(vocab->compareWordTo(at(1), "<b>"), 0);
+  EXPECT_LT(vocab->compareWordTo(at(1), "<c>"), 0);
+  EXPECT_GT(vocab->compareWordTo(at(1), "<a>"), 0);
+  EXPECT_LT(vocab->compareWordTo(at(2), "<e>"), 0);
+  EXPECT_GT(vocab->compareWordTo(at(2), "<c>"), 0);
+  // A literal is smaller than every IRI in the order of the main vocabulary.
+  EXPECT_LT(vocab->compareWordTo(at(0), "<a>"), 0);
+
+  // Compare the words to each other.
+  EXPECT_LT(vocab->compareWords(at(0), at(1)), 0);
+  EXPECT_LT(vocab->compareWords(at(1), at(2)), 0);
+  EXPECT_EQ(vocab->compareWords(at(1), at(1)), 0);
+  EXPECT_GT(vocab->compareWords(at(2), at(0)), 0);
+}
+
+// _____________________________________________________________________________
+// The semantic comparison of `Id`s, for all combinations of `VocabIndex`,
+// `LocalVocabIndex`, and `SecondaryVocabIndex`. This is the comparison that
+// SPARQL requires, and it deliberately differs from the *internal* order of the
+// `Id`s, which the second half of this test pins down.
+TEST_F(SecondaryVocabIndexTest, compareIdsSemantically) {
+  // `"a"`, `<b>`, and `<d>` are words of the secondary vocabulary, `<a>`,
+  // `<c>`, and `<p>` are words of the main vocabulary, and `<e>` is in neither.
+  auto entryA = entry("<a>");
+  auto entryB = entry("<b>");
+  auto entryE = entry("<e>");
+  Id idA = getId_("<a>");
+  Id idC = getId_("<c>");
+  Id idP = getId_("<p>");
+  Id secLiteralA = secondaryVocabId(0);
+  Id secB = secondaryVocabId(1);
+  Id secD = secondaryVocabId(2);
+  Id idOfA = idOf(entryA);
+  Id idOfB = idOf(entryB);
+  Id idOfE = idOf(entryE);
+
+  // The sign of the semantic comparison, which is what the assertions below
+  // are on.
+  auto semantic = [this](Id a, Id b) {
+    int result = context_.compareIdsSemantically(a, b);
+    return result < 0 ? -1 : (result > 0 ? 1 : 0);
+  };
+
+  // Two `Id`s of the main vocabulary.
+  EXPECT_EQ(semantic(idA, idC), -1);
+  EXPECT_EQ(semantic(idC, idA), 1);
+  EXPECT_EQ(semantic(idC, idC), 0);
+
+  // An `Id` of the secondary vocabulary against one of the main vocabulary.
+  EXPECT_EQ(semantic(secB, idA), 1);
+  EXPECT_EQ(semantic(secB, idC), -1);
+  EXPECT_EQ(semantic(idA, secB), -1);
+  EXPECT_EQ(semantic(idC, secB), 1);
+  EXPECT_EQ(semantic(secD, idP), -1);
+  // A literal of the secondary vocabulary is smaller than every IRI.
+  EXPECT_EQ(semantic(secLiteralA, idA), -1);
+  EXPECT_EQ(semantic(idA, secLiteralA), 1);
+
+  // Two `Id`s of the secondary vocabulary.
+  EXPECT_EQ(semantic(secB, secD), -1);
+  EXPECT_EQ(semantic(secD, secB), 1);
+  EXPECT_EQ(semantic(secB, secB), 0);
+  EXPECT_EQ(semantic(secLiteralA, secB), -1);
+
+  // A `LocalVocabIndex` whose word is stored in the main vocabulary, one whose
+  // word is stored in the secondary vocabulary, and one whose word is in
+  // neither.
+  EXPECT_EQ(semantic(idOfA, idA), 0);
+  EXPECT_EQ(semantic(idOfB, secB), 0);
+  EXPECT_EQ(semantic(idOfB, idA), 1);
+  EXPECT_EQ(semantic(idOfB, idC), -1);
+  EXPECT_EQ(semantic(idOfB, idOfE), -1);
+  EXPECT_EQ(semantic(idOfE, secB), 1);
+  EXPECT_EQ(semantic(idOfE, secD), 1);
+  EXPECT_EQ(semantic(idOfE, idP), -1);
+  EXPECT_EQ(semantic(idOfE, idOfE), 0);
+
+  // The internal order is a different one: ALL words of the secondary
+  // vocabulary come after ALL words of the main vocabulary, and after all words
+  // that are in neither.
+  for (Id secondary : {secLiteralA, secB, secD}) {
+    SCOPED_TRACE(secondary);
+    for (Id other : {idA, idC, idP, idOfA, idOfE}) {
+      SCOPED_TRACE(other);
+      EXPECT_LT(other, secondary);
+    }
+  }
+  // In particular, the two orders disagree for `<a>` (main vocabulary) versus
+  // `"a"` (secondary vocabulary), and for `<e>` (neither vocabulary) versus
+  // `<b>` (secondary vocabulary).
+  EXPECT_EQ(semantic(secLiteralA, idA), -1);
+  EXPECT_LT(idA, secLiteralA);
+  EXPECT_EQ(semantic(idOfE, secB), 1);
+  EXPECT_LT(idOfE, secB);
+}
+
+// _____________________________________________________________________________
+// `getSemanticPositionInMainVocab` always returns a position in the vocabulary
+// of the MAIN index, also for a word that is stored in the secondary
+// vocabulary. That position is what the binary search in
+// `valueIdComparators::getRangesForId` needs.
+TEST_F(SecondaryVocabIndexTest, getSemanticPositionInMainVocab) {
+  auto entryA = entry("<a>");
+  auto entryB = entry("<b>");
+  auto entryE = entry("<e>");
+  auto positionOf = [this](Id id) {
+    return context_.getSemanticPositionInMainVocab(id);
+  };
+  auto vocabIndexOf = [this](const std::string& word) {
+    return getId_(word).getVocabIndex();
+  };
+
+  // A word of the main vocabulary is at exactly its own position, so the range
+  // consists of that single word. The same holds for a local vocab entry whose
+  // word is stored there.
+  auto positionA = positionOf(getId_("<a>"));
+  EXPECT_EQ(positionA.first, vocabIndexOf("<a>"));
+  EXPECT_EQ(positionA.second, VocabIndex::make(positionA.first.get() + 1));
+  EXPECT_EQ(positionOf(idOf(entryA)), positionA);
+
+  // A word that is not stored in the main vocabulary yields the empty range at
+  // which it would be sorted into that vocabulary. For `<b>`, which is a word
+  // of the secondary vocabulary, that is between `<a>` and `<c>`, no matter
+  // whether it is addressed by its `SecondaryVocabIndex` or by a local vocab
+  // entry.
+  for (Id id : {secondaryVocabId(1), idOf(entryB)}) {
+    SCOPED_TRACE(id);
+    auto position = positionOf(id);
+    EXPECT_EQ(position.first, position.second);
+    EXPECT_GT(position.first.get(), vocabIndexOf("<a>").get());
+    EXPECT_LE(position.first.get(), vocabIndexOf("<c>").get());
+  }
+
+  // For `<e>`, which is in neither vocabulary, it is between `<c>` and `<p>`.
+  auto positionE = positionOf(idOf(entryE));
+  EXPECT_EQ(positionE.first, positionE.second);
+  EXPECT_GT(positionE.first.get(), vocabIndexOf("<c>").get());
+  EXPECT_LE(positionE.first.get(), vocabIndexOf("<p>").get());
+
+  // The literal `"a"` of the secondary vocabulary is positioned before all the
+  // IRIs of the main vocabulary.
+  auto positionLiteral = positionOf(secondaryVocabId(0));
+  EXPECT_EQ(positionLiteral.first, positionLiteral.second);
+  EXPECT_LE(positionLiteral.first.get(), vocabIndexOf("<a>").get());
 }
 
 // _____________________________________________________________________________
@@ -632,20 +806,138 @@ TEST(SecondaryVocabIndex, updateWithWordOfTheSecondaryVocabulary) {
   runUpdate(context, "INSERT DATA { <s> <p> <e> }");
   EXPECT_THAT(objectsOfS(), UnorderedElementsAre("<a>", "<b>", "<c>", "<e>"));
 
-  // WARNING: The following assertion pins down the *order* of the result, which
-  // currently is the internal order (see the warning in
-  // `index/LocalVocabEntry.h`): a word of the secondary vocabulary is
-  // positioned after all words of the main vocabulary and after all words that
-  // are in none of the vocabularies, no matter what its string value is. So
-  // `<b>` comes last here, instead of between `<a>` and `<c>` where its string
-  // value belongs.
-  //
-  // This is deliberately NOT the order that SPARQL requires, see the detailed
-  // note at `valueIdComparators::detail::compareIdsImpl`. The follow-up PR that
-  // implements the semantic comparison (see the `TODO<joka921>` there) has to
-  // change this expectation to `<a>, <b>, <c>, <e>`. A failure of this
-  // assertion is that fix landing, not a regression.
-  EXPECT_THAT(objectsOfS(), ElementsAre("<a>", "<c>", "<e>", "<b>"));
+  // The following assertion pins down the *order* of the result. `ORDER BY`
+  // uses the semantic order (see `valueIdComparators::detail::compareIdsImpl`),
+  // so the words are sorted by their string value, no matter which vocabulary
+  // each of them lives in: `<a>` and `<c>` are words of the main vocabulary,
+  // `<b>` is a word of the secondary vocabulary, and `<e>` is in neither. This
+  // is deliberately NOT the internal order, in which `<b>` would come last
+  // because a word of the secondary vocabulary is positioned after all words of
+  // the main vocabulary, see the warning in `index/LocalVocabEntry.h`.
+  EXPECT_THAT(objectsOfS(), ElementsAre("<a>", "<b>", "<c>", "<e>"));
+}
+
+// _____________________________________________________________________________
+// `FILTER`s that compare against a word of the secondary vocabulary, against a
+// word of the main vocabulary, and against a word that is in neither. This is
+// the end-to-end test of the semantic comparison: the result must only depend
+// on the string values, and not on which vocabulary each word is stored in.
+TEST(SecondaryVocabIndex, filterWithWordsOfBothVocabularies) {
+  ContextWithSecondaryVocab context{gtestCurrentTestName()};
+  // Make `<b>` (secondary vocabulary) and `<e>` (neither vocabulary) part of
+  // the data, next to `<a>` and `<c>` (main vocabulary).
+  runUpdate(context, "INSERT DATA { <s> <p> <b> . <s> <p> <e> }");
+
+  // The objects of `<s> <p> ?o` for which the given `filter` holds. NOTE: The
+  // order is deliberately not asserted here, so that a failure of this test is
+  // a failure of the `FILTER` and not of the `ORDER BY` (which the test below
+  // covers).
+  auto objectsWithFilter = [&context](const std::string& filter) {
+    return runQueryAndGetRows(
+        &context.qec_,
+        absl::StrCat("SELECT ?o WHERE { <s> <p> ?o . FILTER(", filter, ") }"));
+  };
+  ASSERT_THAT(objectsWithFilter("BOUND(?o)"),
+              UnorderedElementsAre("<a>", "<b>", "<c>", "<e>"));
+
+  // The semantic order of the four words is `<a> < <b> < <c> < <e>`.
+  // Comparisons against `<b>`, which is stored in the secondary vocabulary.
+  EXPECT_THAT(objectsWithFilter("?o < <b>"), UnorderedElementsAre("<a>"));
+  EXPECT_THAT(objectsWithFilter("?o <= <b>"),
+              UnorderedElementsAre("<a>", "<b>"));
+  EXPECT_THAT(objectsWithFilter("?o = <b>"), UnorderedElementsAre("<b>"));
+  EXPECT_THAT(objectsWithFilter("?o != <b>"),
+              UnorderedElementsAre("<a>", "<c>", "<e>"));
+  EXPECT_THAT(objectsWithFilter("?o >= <b>"),
+              UnorderedElementsAre("<b>", "<c>", "<e>"));
+  EXPECT_THAT(objectsWithFilter("?o > <b>"),
+              UnorderedElementsAre("<c>", "<e>"));
+
+  // Comparisons against `<c>`, which is stored in the main vocabulary.
+  EXPECT_THAT(objectsWithFilter("?o < <c>"),
+              UnorderedElementsAre("<a>", "<b>"));
+  EXPECT_THAT(objectsWithFilter("?o <= <c>"),
+              UnorderedElementsAre("<a>", "<b>", "<c>"));
+  EXPECT_THAT(objectsWithFilter("?o = <c>"), UnorderedElementsAre("<c>"));
+  EXPECT_THAT(objectsWithFilter("?o != <c>"),
+              UnorderedElementsAre("<a>", "<b>", "<e>"));
+  EXPECT_THAT(objectsWithFilter("?o >= <c>"),
+              UnorderedElementsAre("<c>", "<e>"));
+  EXPECT_THAT(objectsWithFilter("?o > <c>"), UnorderedElementsAre("<e>"));
+
+  // Comparisons against `<e>`, which is stored in neither vocabulary.
+  EXPECT_THAT(objectsWithFilter("?o < <e>"),
+              UnorderedElementsAre("<a>", "<b>", "<c>"));
+  EXPECT_THAT(objectsWithFilter("?o <= <e>"),
+              UnorderedElementsAre("<a>", "<b>", "<c>", "<e>"));
+  EXPECT_THAT(objectsWithFilter("?o = <e>"), UnorderedElementsAre("<e>"));
+  EXPECT_THAT(objectsWithFilter("?o != <e>"),
+              UnorderedElementsAre("<a>", "<b>", "<c>"));
+  EXPECT_THAT(objectsWithFilter("?o >= <e>"), UnorderedElementsAre("<e>"));
+  EXPECT_THAT(objectsWithFilter("?o > <e>"), ::testing::IsEmpty());
+}
+
+// _____________________________________________________________________________
+// `ORDER BY` interleaves the words of both vocabularies by their string values.
+TEST(SecondaryVocabIndex, orderByInterleavesBothVocabularies) {
+  ContextWithSecondaryVocab context{gtestCurrentTestName()};
+  // Insert all three words of the secondary vocabulary (`"a"`, `<b>`, and
+  // `<d>`) and one word that is in neither vocabulary (`<e>`), so that the
+  // objects of `<s> <p> ?o` are a mix of all three cases.
+  runUpdate(context,
+            "INSERT DATA { <s> <p> \"a\" . <s> <p> <b> . <s> <p> <d> . "
+            "<s> <p> <e> }");
+  auto objectsOfS = [&context](const std::string& orderBy) {
+    return runQueryAndGetRows(
+        &context.qec_,
+        absl::StrCat("SELECT ?o WHERE { <s> <p> ?o } ORDER BY ", orderBy));
+  };
+
+  // A literal is smaller than every IRI, and the IRIs are ordered by their
+  // string values, no matter which vocabulary each of them lives in.
+  EXPECT_THAT(objectsOfS("?o"),
+              ElementsAre("\"a\"", "<a>", "<b>", "<c>", "<d>", "<e>"));
+  EXPECT_THAT(objectsOfS("DESC(?o)"),
+              ElementsAre("<e>", "<d>", "<c>", "<b>", "<a>", "\"a\""));
+}
+
+// _____________________________________________________________________________
+// A `FILTER` that is pushed into the index scan as a prefilter must not prune a
+// block that contains `Id`s of the secondary vocabulary: those `Id`s are
+// ordered by their index within that vocabulary and not by their string value,
+// so the first and the last `Id` of a block say nothing about which of its
+// `Id`s match (see `getRangesSecondaryVocabBlocks` in
+// `PrefilterExpressionIndex.cpp`). Assert this by comparing the results with
+// and without prefiltering, which have to be identical.
+TEST(SecondaryVocabIndex, prefilterKeepsBlocksOfTheSecondaryVocabulary) {
+  ContextWithSecondaryVocab context{gtestCurrentTestName()};
+  runUpdate(context,
+            "INSERT DATA { <s> <p> \"a\" . <s> <p> <b> . <s> <p> <d> . "
+            "<s> <p> <e> }");
+  auto objectsWithFilter = [&context](const std::string& filter) {
+    return runQueryAndGetRows(
+        &context.qec_, absl::StrCat("SELECT ?o WHERE { <s> <p> ?o . FILTER(",
+                                    filter, ") } ORDER BY ?o"));
+  };
+  for (const std::string& filter :
+       {"?o < <b>"s, "?o <= <b>"s, "?o = <b>"s, "?o != <b>"s, "?o >= <b>"s,
+        "?o > <b>"s, "?o > <a>"s, "?o < <e>"s, "isIRI(?o)"s,
+        "isLiteral(?o)"s}) {
+    SCOPED_TRACE(filter);
+    // The result of the query with prefiltering on index scans enabled or
+    // disabled. The two have to agree: a block that holds words of the
+    // secondary vocabulary must never be pruned.
+    auto resultWithPrefiltering = [&](bool enabled) {
+      auto cleanup = setRuntimeParameterForTest<
+          &RuntimeParameters::enablePrefilterOnIndexScans_>(enabled);
+      return objectsWithFilter(filter);
+    };
+    auto withPrefilter = resultWithPrefiltering(true);
+    auto withoutPrefilter = resultWithPrefiltering(false);
+    EXPECT_EQ(withPrefilter, withoutPrefilter);
+    // A filter that matches nothing would make the comparison above vacuous.
+    EXPECT_FALSE(withPrefilter.empty());
+  }
 }
 
 // _____________________________________________________________________________
