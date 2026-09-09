@@ -40,15 +40,16 @@ namespace detail {
 //
 // NOTE: These are named types and not lambdas, because a lambda may not appear
 // in an unevaluated context in C++17 mode, which is exactly where the concept
-// puts them.
+// puts them. Their `operator()` is only declared and deliberately not defined,
+// because the concept never calls it; a handler that is actually invoked is
+// always one of the completion tokens of the caller.
 struct SinkBoolHandler {
-  void operator()([[maybe_unused]] std::exception_ptr exception,
-                  [[maybe_unused]] bool keepGoing) const {}
+  void operator()(std::exception_ptr exception, bool keepGoing) const;
 };
 
 // ___________________________________________________________________________
 struct SinkVoidHandler {
-  void operator()([[maybe_unused]] std::exception_ptr exception) const {}
+  void operator()(std::exception_ptr exception) const;
 };
 }  // namespace detail
 

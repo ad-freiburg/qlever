@@ -188,8 +188,8 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
       ql::any_io_executor executor,
       std::shared_ptr<const SharedMergeState> mergeState,
       std::shared_ptr<Sink> sink, size_t maxNumChunksInFlight) {
-    AD_CONTRACT_CHECK(mergeState != nullptr);
-    AD_CONTRACT_CHECK(sink != nullptr);
+    AD_CORRECTNESS_CHECK(mergeState != nullptr);
+    AD_CORRECTNESS_CHECK(sink != nullptr);
     auto self = std::make_shared<ParallelMergeState>(
         PrivateTag{}, std::move(executor), std::move(mergeState),
         std::move(sink), maxNumChunksInFlight);
@@ -248,13 +248,27 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
   // consumer sees the end of the output instead of the exception.
   net::awaitable<void> dispatchChunks() {
     std::exception_ptr exception = co_await exceptionOf(dispatchChunksImpl());
-    if (exception != nullptr) {
-      logIgnoredException(
-          co_await exceptionOf(sink_->asyncPushException(std::move(exception),
-                                                         net::use_awaitable)),
-          "Forwarding an exception of the chunk dispatcher to the sink of a "
-          "`ParallelMergeState` failed.");
+    co_await forwardExceptionToSink(
+        std::move(exception),
+        "Forwarding an exception of the chunk dispatcher to the sink of a "
+        "`ParallelMergeState` failed.");
+  }
+
+  // Forward the `exception` to the sink, or do nothing if there is none.
+  // Pushing an exception to the sink can itself fail, in which case that
+  // failure is logged together with the `note` instead of being propagated,
+  // because there is nobody left to report it to.
+  //
+  // NOTE: Pushing the exception also stops the merge, so that the chunks that
+  // are still running do not keep producing blocks that nobody wants any more.
+  net::awaitable<void> forwardExceptionToSink(std::exception_ptr exception,
+                                              std::string_view note) {
+    if (exception == nullptr) {
+      co_return;
     }
+    logIgnoredException(co_await exceptionOf(sink_->asyncPushException(
+                            std::move(exception), net::use_awaitable)),
+                        note);
   }
 
   // The actual dispatch loop, see `dispatchChunks` above. Stop dispatching as
@@ -306,15 +320,10 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
     co_await net::post(executor_, net::use_awaitable);
     std::exception_ptr exception =
         co_await exceptionOf(mergeAndPushChunk(chunkIndex));
-    if (exception != nullptr) {
-      // NOTE: Pushing the exception also stops the merge, so that the remaining
-      // chunks do not keep producing blocks that nobody wants any more.
-      logIgnoredException(
-          co_await exceptionOf(sink_->asyncPushException(std::move(exception),
-                                                         net::use_awaitable)),
-          "Forwarding the exception of a chunk to the sink of a "
-          "`ParallelMergeState` failed.");
-    }
+    co_await forwardExceptionToSink(
+        std::move(exception),
+        "Forwarding the exception of a chunk to the sink of a "
+        "`ParallelMergeState` failed.");
     // NOTE: The end-of-chunk sentinel has to be sent on every path, because a
     // sink that waits for this chunk would wait forever otherwise.
     logIgnoredException(co_await exceptionOf(sink_->asyncFinishChunk(
