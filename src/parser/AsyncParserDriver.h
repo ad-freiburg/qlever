@@ -10,10 +10,12 @@
 #ifndef QLEVER_SRC_PARSER_ASYNCPARSERDRIVER_H
 #define QLEVER_SRC_PARSER_ASYNCPARSERDRIVER_H
 
+#include <absl/cleanup/cleanup.h>
+
 #include <atomic>
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <cstddef>
@@ -85,10 +87,11 @@ class AsyncParserDriver : public RdfParserBase {
   // (created but never consumed, e.g. in tests) do not leave in-flight
   // asynchronous operations that would delay the destructor.
   std::optional<std::vector<TurtleTriple>> getBatch() override {
+    namespace net = boost::asio;
     if (!taskChainsStarted_.exchange(true)) {
       numActiveTaskChains_ = NUM_PARALLEL_PARSER_THREADS;
       for (size_t i = 0; i < NUM_PARALLEL_PARSER_THREADS; ++i) {
-        startTaskChain();
+        net::co_spawn(pool_.get_executor(), runTaskChain(), net::detached);
       }
     }
     return queue_.pop();
@@ -99,33 +102,29 @@ class AsyncParserDriver : public RdfParserBase {
  private:
   // One task chain: repeatedly get the next batch and push it into `queue_`,
   // until the input is exhausted or `queue_` no longer accepts batches. A parse
-  // error propagates out of this coroutine and is handled by the completion
-  // handler in `startTaskChain` below.
+  // error is forwarded to `queue_`, and the last chain to stop signals EOF via
+  // `queue_.finish()`. In particular no exception ever leaves this coroutine,
+  // so that it can safely be `co_spawn`ed with `boost::asio::detached`.
   boost::asio::awaitable<void> runTaskChain() {
     namespace net = boost::asio;
-    while (auto batch =
-               co_await asyncParser_.asyncGetBatch(net::use_awaitable)) {
-      if (!queue_.push(std::move(batch).value())) {
-        break;
+    // Declared before the `try` block below and hence destroyed after it, so
+    // that a possible exception is pushed before the queue is finished. Both
+    // operations are non-throwing, as required in a destructor.
+    absl::Cleanup taskChainStopped{[this]() noexcept {
+      if (--numActiveTaskChains_ == 0) {
+        queue_.finish();
       }
+    }};
+    try {
+      while (auto batch =
+                 co_await asyncParser_.asyncGetBatch(net::use_awaitable)) {
+        if (!queue_.push(std::move(batch).value())) {
+          break;
+        }
+      }
+    } catch (...) {
+      queue_.pushException(std::current_exception());
     }
-  }
-
-  // Start one task chain on `pool_`, and when it has stopped, forward a
-  // possible parse error to `queue_` and signal EOF via `queue_.finish()` if
-  // this was the last active chain.
-  void startTaskChain() {
-    namespace net = boost::asio;
-    net::co_spawn(pool_.get_executor(), runTaskChain(),
-                  net::bind_executor(pool_.get_executor(),
-                                     [this](std::exception_ptr eptr) {
-                                       if (eptr) {
-                                         queue_.pushException(std::move(eptr));
-                                       }
-                                       if (--numActiveTaskChains_ == 0) {
-                                         queue_.finish();
-                                       }
-                                     }));
   }
 };
 
