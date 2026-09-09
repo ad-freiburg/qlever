@@ -235,6 +235,13 @@ TEST(IndexBuilderConfig, validate) {
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be between"));
 
   c = IndexBuilderConfig{};
+  c.numThreads_ = 0;
+  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
+                               HasSubstr("--num-threads must be greater"));
+  c.numThreads_ = 1;
+  EXPECT_NO_THROW(c.validate());
+
+  c = IndexBuilderConfig{};
   c.wordsfile_ = "blibb";
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
                                HasSubstr("Only specified wordsfile"));

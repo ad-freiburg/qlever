@@ -653,17 +653,24 @@ class RdfParallelParser : public RdfParserBase {
  public:
   // Construct a parser that reads from an `InputFileSpecification`. The parser
   // creates its own I/O thread and `AsyncBlockSource` internally. The
-  // `blocksize` parameter controls the size of the underlying I/O block buffer.
+  // `blocksize` parameter controls the size of the underlying I/O block buffer,
+  // and `numParsingThreads` is the number of worker threads that this parser
+  // uses for parsing the blocks. NOTE: This is the number of threads for *this*
+  // parser, not the total number of threads of the index build; for how the
+  // latter is divided, see `ConstantsIndexBuilding.h` and
+  // `numParserThreadsPerFile` in `IndexImpl.cpp`.
   RdfParallelParser(const qlever::InputFileSpecification& spec,
                     ad_utility::MemorySize blocksize,
-                    const EncodedIriManager* ev,
+                    const EncodedIriManager* ev, uint32_t numParsingThreads,
                     const TripleComponent& defaultGraphIri =
                         qlever::specialIds().at(DEFAULT_GRAPH_IRI),
                     std::chrono::milliseconds sleepTimeForTesting =
                         std::chrono::milliseconds{0})
       : RdfParserBase{ev},
         defaultGraphIri_{defaultGraphIri},
-        sleepTimeForTesting_(sleepTimeForTesting) {
+        sleepTimeForTesting_(sleepTimeForTesting),
+        parallelParser_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING, numParsingThreads,
+                        "parallel parser"} {
     initialize(spec, blocksize);
   }
 
@@ -733,9 +740,8 @@ class RdfParallelParser : public RdfParserBase {
   // by those threads) are destroyed.
   ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
       tripleCollector_{QUEUE_SIZE_AFTER_PARALLEL_PARSING};
-  ad_utility::TaskQueue<true> parallelParser_{
-      QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
-      "parallel parser"};
+  // Initialized by the constructor, which is the only one this class has.
+  ad_utility::TaskQueue<true> parallelParser_;
   std::future<void> parseFuture_;
 };
 
@@ -743,18 +749,30 @@ class RdfParallelParser : public RdfParserBase {
 // file is specified by an  `InputFileSpecification`.
 class RdfMultifileParser : public RdfParserBase {
  public:
-  // Default construction needed for tests
-  explicit RdfMultifileParser(const EncodedIriManager* encodedIriManager)
-      : RdfParserBase{encodedIriManager} {}
+  // Construct a parser without any input, which is only useful for testing the
+  // functions that don't depend on the input.
+  RdfMultifileParser(const EncodedIriManager* encodedIriManager,
+                     uint32_t numThreads)
+      : RdfParserBase{encodedIriManager},
+        parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
+                      numParserThreads(numThreads)},
+        numParsingThreadsPerFile_{numParserThreads(numThreads)} {}
 
   // Construct the parser from a type-erased input range of file specifications
   // and eagerly start parsing them on background threads. If
   // `useRelaxedParsing` is true, the faster `TokenizerCtre` is used for all
   // files instead of the standard-compliant `Tokenizer` (see the comment on
   // `TurtleParser` above for the limitations of the relaxed mode).
+  // `numThreads` is the total number of threads of the index build, of which
+  // this parser uses `numParserThreads` many to parse that many files
+  // concurrently (see `ConstantsIndexBuilding.h`). Each of those files is
+  // parsed with `numParsingThreadsPerFile` threads. That number is computed by
+  // the caller (see `IndexImpl.cpp`), because only the caller knows how many
+  // input files there are, and this parser consumes `files` lazily.
   RdfMultifileParser(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-      const EncodedIriManager* encodedIriManager,
+      const EncodedIriManager* encodedIriManager, uint32_t numThreads,
+      uint32_t numParsingThreadsPerFile,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
       bool useRelaxedParsing = false);
 
@@ -787,13 +805,17 @@ class RdfMultifileParser : public RdfParserBase {
   // `parsingQueue_` is declared *after* the `finishedBatchQueue_`, s.t. when
   // destroying the parser, the threads from the `parsingQueue_` are all joined
   // before the `finishedBatchQueue_` (which they are using!) is destroyed.
-  ad_utility::TaskQueue<false> parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
-                                             NUM_PARALLEL_PARSER_THREADS};
+  // Initialized by every constructor.
+  ad_utility::TaskQueue<false> parsingQueue_;
 
   // If true, all files are parsed with the relaxed `TokenizerCtre` instead of
   // the standard-compliant `Tokenizer`. Only read by the parsing threads, and
   // never modified after construction.
   bool useRelaxedParsing_ = false;
+
+  // The number of threads that the parser for a single file gets. Only read by
+  // the parsing threads, and never modified after construction.
+  uint32_t numParsingThreadsPerFile_;
 
   // A thread that feeds the file specifications to the actual parser threads.
   ad_utility::JThread feederThread_;

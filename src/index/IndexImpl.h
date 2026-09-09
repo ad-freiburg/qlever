@@ -107,6 +107,11 @@ class IndexImpl {
   ad_utility::MemorySize memoryLimitIndexBuilding_ =
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
+  // The number of threads that the index build uses for the steps that run in
+  // parallel (see `--num-threads` in `IndexBuilderMain.cpp`). Currently, it is
+  // divided between the parser threads and the workers that build the partial
+  // vocabularies via hash maps.
+  uint32_t numThreads_ = defaultNumThreads();
   ad_utility::MemorySize blocksizePermutationPerColumn_ =
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   nlohmann::json configurationJson_;
@@ -248,8 +253,13 @@ class IndexImpl {
   // by createFromOnDiskIndex after this call.
   void createFromFiles(std::vector<Index::InputFileSpecification> files);
 
+  // Same as above, but for a lazy range of input files. Because the range is
+  // consumed lazily, the number of input files is not known here and has to be
+  // passed in via `numParsingThreadsPerFile`, see `numParserThreadsPerFile` in
+  // `IndexImpl.cpp`.
   void createFromFiles(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      uint32_t numParsingThreadsPerFile);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -542,6 +552,16 @@ class IndexImpl {
     return parserBufferSize_;
   }
 
+  // Set the number of threads for the parallel steps of the index build.
+  // Currently, they are divided between the parser threads and the workers
+  // that build the partial vocabularies (see `numParserThreads` and
+  // `numItemMapThreads` in `ConstantsIndexBuilding.h`).
+  void setNumThreads(uint32_t numThreads) {
+    AD_CONTRACT_CHECK(numThreads > 0,
+                      "The number of threads must be greater than zero");
+    numThreads_ = numThreads;
+  }
+
   ad_utility::MemorySize& blocksizePermutationPerColumn() {
     return blocksizePermutationPerColumn_;
   }
@@ -636,7 +656,7 @@ class IndexImpl {
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
       std::shared_ptr<RdfParserBase> parser);
 
-  // Parse all triples from `parser` using `NUM_PARALLEL_ITEM_MAPS` worker
+  // Parse all triples from `parser` using `numItemMapThreads` worker
   // threads that work completely independently of each other. Each of them
   // processes batches of `linesPerPartial` triples, and for each batch writes
   // one partial vocabulary file and stores the corresponding ID triples in its
@@ -673,10 +693,11 @@ class IndexImpl {
   // Return a Turtle parser that parses the given files. The parser will be
   // configured to either parse in parallel or not (per input file), and to
   // either use the CTRE-based relaxed parser or not (via the
-  // `ascii-prefixes-only` setting, see `onlyAsciiTurtlePrefixes_`).
+  // `ascii-prefixes-only` setting, see `onlyAsciiTurtlePrefixes_`). Each of the
+  // files is parsed with `numParsingThreadsPerFile` threads.
   std::unique_ptr<RdfParserBase> makeRdfParser(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
-      const;
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      uint32_t numParsingThreadsPerFile) const;
 
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(

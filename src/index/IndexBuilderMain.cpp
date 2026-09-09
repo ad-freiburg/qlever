@@ -308,6 +308,12 @@ int main(int argc, char** argv) {
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
+  add("num-threads,j",
+      po::value(&config.numThreads_)->default_value(defaultNumThreads()),
+      "The number of threads that the index build uses for the steps that run "
+      "in parallel. The default is the number of hardware threads of this "
+      "machine (including SMT threads, and regardless of the CPU limits of a "
+      "container). Values below 4 still use 4 threads.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),

@@ -12,6 +12,7 @@
 #include <absl/time/time.h>
 #include <sys/stat.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <functional>
@@ -93,8 +94,8 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
-    const {
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    uint32_t numParsingThreadsPerFile) const {
   AD_CONTRACT_CHECK(
       parserBufferSize().getBytes() > 0,
       "The buffer size of the RDF parser must be greater than zero");
@@ -102,8 +103,8 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
   return std::make_unique<RdfMultifileParser>(
-      std::move(files), &encodedIriManager(), parserBufferSize(),
-      onlyAsciiTurtlePrefixes_);
+      std::move(files), &encodedIriManager(), numThreads_,
+      numParsingThreadsPerFile, parserBufferSize(), onlyAsciiTurtlePrefixes_);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -387,16 +388,33 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
   }
 }
 
-// _____________________________________________________________________________
-void IndexImpl::createFromFiles(
-    std::vector<Index::InputFileSpecification> files) {
-  updateInputFileSpecificationsAndLog(files, useParallelParser_);
-  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)});
+// The number of threads that the parser for a single input file gets, given the
+// total number of threads `numThreads` for the index build and the number
+// `numFiles` of input files. An `RdfMultifileParser` parses `numParserThreads`
+// files concurrently (but of course never more files than there are), and the
+// `numParserThreads` are divided evenly among those, such that the total number
+// of threads used for parsing stays roughly the same, no matter how many input
+// files there are. At least one thread is used per file.
+static uint32_t numParserThreadsPerFile(uint32_t numThreads, size_t numFiles) {
+  auto numConcurrentFiles =
+      std::clamp<size_t>(numFiles, 1, numParserThreads(numThreads));
+  return std::max<uint32_t>(1,
+                            numParserThreads(numThreads) / numConcurrentFiles);
 }
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files) {
+    std::vector<Index::InputFileSpecification> files) {
+  updateInputFileSpecificationsAndLog(files, useParallelParser_);
+  auto numThreadsPerFile = numParserThreadsPerFile(numThreads_, files.size());
+  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)},
+                  numThreadsPerFile);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createFromFiles(
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    uint32_t numParsingThreadsPerFile) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -411,7 +429,8 @@ void IndexImpl::createFromFiles(
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeRdfParser(std::move(files)));
+      createIdTriplesAndVocab(
+          makeRdfParser(std::move(files), numParsingThreadsPerFile));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
@@ -527,11 +546,15 @@ IndexImpl::runPartialVocabularyWorker(
     // That's why we use the `CachingMemoryResource` as an underlying memory
     // pool for the allocator of the hash map to make the allocation and
     // deallocation of these hash maps (that are newly created for each batch)
-    // much cheaper (see `CachingMemoryResource.h`). Note: The division is
-    // deliberate. Reserving space for all the words that a batch could
-    // possibly contain would mean that the memory reserved upfront grows with
-    // the number of workers.
-    itemMap.map_.map_.reserve(5 * linesPerPartial / NUM_PARALLEL_ITEM_MAPS);
+    // much cheaper (see `CachingMemoryResource.h`). NOTE: The factor of one
+    // half is purely empirical. It is the value that this expression
+    // effectively had back when the number of workers was a hard-coded
+    // constant, and reserving that much was measurably faster than reserving
+    // space for all the words that a batch could possibly contain. There is
+    // no deeper reason for this particular number, it just works well in
+    // practice, which is also why it is deliberately independent of the
+    // number of workers.
+    itemMap.map_.map_.reserve(linesPerPartial / 2);
     std::vector<IdRow> localWriter;
     size_t numInputTriples = 0;
     while (numInputTriples < linesPerPartial) {
@@ -572,7 +595,9 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
-                 "per batch ..."
+                 "per batch, using "
+              << numItemMapThreads(numThreads_) << " worker threads and "
+              << numParserThreads(numThreads_) << " parser threads ..."
               << std::endl;
 
   // Show progress and statistics for the number of triples parsed. The total
@@ -587,7 +612,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   std::atomic<size_t> numHasWordTriples = 0;
 
   using WorkerResult = BuildPartialVocabulariesResult::WorkerResult;
-  auto tasks = ad_utility::integerRange(NUM_PARALLEL_ITEM_MAPS) |
+  auto tasks = ad_utility::integerRange(numItemMapThreads(numThreads_)) |
                ql::views::transform([this, linesPerPartial, &parser, itemAlloc,
                                      &numHasWordTriples,
                                      &progressBar](size_t workerIdx) {

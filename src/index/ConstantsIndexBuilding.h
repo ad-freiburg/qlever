@@ -5,9 +5,11 @@
 #ifndef QLEVER_SRC_INDEX_CONSTANTSINDEXBUILDING_H
 #define QLEVER_SRC_INDEX_CONSTANTSINDEXBUILDING_H
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <thread>
 
 #include "util/MemorySize/MemorySize.h"
 
@@ -59,15 +61,41 @@ constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 
 // _________________________________________________________________
-// The degree of parallelism that is used for the index building step, where the
-// unique elements of the vocabulary are identified via hash maps. Typically, 6
-// is a good value. On systems with very few CPUs, a lower value might be
-// beneficial.
-constexpr inline size_t NUM_PARALLEL_ITEM_MAPS = 10;
+// The default value for the number of threads that the index build uses for
+// the steps that run in parallel: the number of hardware threads of this
+// machine (including SMT threads, and regardless of the CPU limits of a
+// container), or `1` if that number cannot be determined. It can be
+// overridden via `--num-threads`, see `IndexBuilderMain.cpp`. The two
+// functions below divide this number between the two steps that currently run
+// in parallel.
+inline uint32_t defaultNumThreads() {
+  return std::max(1u, std::thread::hardware_concurrency());
+}
 
-// The number of threads that are parsing in parallel, when the parallel Turtle
-// parser is used.
-constexpr inline size_t NUM_PARALLEL_PARSER_THREADS = 8;
+// The number of worker threads that build the partial vocabularies via hash
+// maps, given the total number of threads `numThreads` for the index build.
+// Building the hash maps is roughly half as expensive as parsing, so the item
+// maps get about a third of the threads (the rest goes to the parsers, see
+// `numParserThreads` below). At least two threads are used.
+inline uint32_t numItemMapThreads(uint32_t numThreads) {
+  return std::max<uint32_t>(2, (numThreads + 1) / 3);
+}
+
+// The number of threads that are used for parsing, given the total number of
+// threads `numThreads` for the index build: the threads that are left after
+// `numItemMapThreads`, but at least two. When several input files are parsed
+// concurrently, these threads are divided among them, see
+// `numParserThreadsPerFile` in `IndexImpl.cpp`.
+//
+// NOTE: The subtraction is saturating, because on machines with very few
+// hardware threads `numItemMapThreads` may exceed `numThreads`. Because of the
+// minimum of two for both functions, fewer than four threads in total are
+// never used.
+inline uint32_t numParserThreads(uint32_t numThreads) {
+  return std::max<uint32_t>(
+      2, numThreads -
+             std::min<uint32_t>(numThreads, numItemMapThreads(numThreads)));
+}
 
 // Increasing the following two constants increases the RAM usage without much
 // benefit to the performance.
