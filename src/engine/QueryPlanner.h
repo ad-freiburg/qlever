@@ -54,8 +54,8 @@ class QueryPlanner {
 
   // Create the best execution tree for the given query according to the
   // optimization algorithm and cost estimates of the QueryPlanner.
-  QueryExecutionTree createExecutionTree(ParsedQuery& pq,
-                                         bool isSubquery = false);
+  std::shared_ptr<QueryExecutionTree> createExecutionTree(
+      ParsedQuery& pq, bool isSubquery = false);
 
   class TripleGraph {
    public:

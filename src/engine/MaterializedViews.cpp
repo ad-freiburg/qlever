@@ -948,7 +948,7 @@ MaterializedView::computeCacheKey(
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     QueryPlanner qp{&qec, handle};
 
-    std::optional<QueryExecutionTree> executionTree;
+    std::shared_ptr<QueryExecutionTree> executionTree;
     try {
       executionTree = qp.createExecutionTree(parsed);
     } catch (const MaterializedViewConfigException&) {

@@ -126,14 +126,14 @@ TEST(NamedResultCache, E2E) {
       "SORT BY ?s";
   qec->pinResultWithName() = {"dummyQuery"};
   auto qet = queryPlannerTestHelpers::parseAndPlan(pinnedQuery, qec);
-  [[maybe_unused]] auto pinnedResult = qet.getResult();
+  [[maybe_unused]] auto pinnedResult = qet->getResult();
 
   qec->pinResultWithName() = std::nullopt;
   std::string query =
       "SELECT ?s { SERVICE ql:cached-result-with-name-dummyQuery {}}";
   qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
   // `false` means `not lazy` so `fully materialized`.
-  auto result = qet.getResult(false);
+  auto result = qet->getResult(false);
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   LocalVocab dummyVocab;
@@ -148,7 +148,7 @@ TEST(NamedResultCache, E2E) {
   EXPECT_THAT(result->sortedBy(), ::testing::ElementsAre(0));
   VariableToColumnMap expectedVars{
       {Variable{"?s"}, makeAlwaysDefinedColumn(0)}};
-  EXPECT_THAT(qet.getVariableColumns(),
+  EXPECT_THAT(qet->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVars));
 }
 }  // namespace

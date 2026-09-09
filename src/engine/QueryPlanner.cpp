@@ -250,14 +250,14 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
 }
 
 // _____________________________________________________________________________
-QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
-                                                     bool isSubquery) {
+std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
+    ParsedQuery& pq, bool isSubquery) {
   try {
     auto lastRow = createExecutionTrees(pq, isSubquery);
     auto minInd = findCheapestExecutionTree(lastRow);
     AD_LOG_DEBUG << "Done creating execution plan" << std::endl;
-    auto result = std::move(*lastRow[minInd]._qet);
-    auto& rootOperation = *result.getRootOperation();
+    auto result = std::move(lastRow[minInd]._qet);
+    auto& rootOperation = *result->getRootOperation();
     // Collect all the warnings and pass them to the created tree such that
     // they become visible to the user once the query is executed.
     for (const auto& warning : warnings_) {
@@ -3521,8 +3521,7 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitDescribe(
     parsedQuery::Describe& describe) {
-  auto tree = std::make_shared<QueryExecutionTree>(
-      planner_.createExecutionTree(describe.whereClause_.get(), true));
+  auto tree = planner_.createExecutionTree(describe.whereClause_.get(), true);
   auto describeOp =
       makeSubtreePlan<Describe>(planner_._qec, std::move(tree), describe);
   candidatePlans_.push_back(std::vector{std::move(describeOp)});
