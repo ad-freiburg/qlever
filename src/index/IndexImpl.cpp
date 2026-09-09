@@ -660,10 +660,9 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
-    auto sortPred = [&cmp = vocab_.getCaseComparator()](
-                        std::string_view a, bool aIsExternal,
-                        std::string_view b, bool bIsExternal) {
-      return cmp.isLessInTotalWithExternalFlag(a, aIsExternal, b, bIsExternal);
+    auto sortPred = [&cmp = vocab_.getCaseComparator()](std::string_view a,
+                                                        std::string_view b) {
+      return cmp(a, b, TripleComponentComparator::Level::TOTAL);
     };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
@@ -748,16 +747,13 @@ auto IndexImpl::convertPartialToGlobalIds(
   // For all rows find their mapping from partial to global ids.
   auto transformRow = [](ql::span<Id> row, const auto& idMap) {
     for (auto& id : row) {
-      // TODO<joka92> Since the mapping only maps `VocabIndex->VocabIndex`,
-      // probably the mapping should also be defined as `HashMap<VocabIndex,
-      // VocabIndex>` instead of `HashMap<Id, Id>`
       if (id.getDatatype() != Datatype::VocabIndex) {
         // Check that all the internal, special IDs which we have introduced
         // for performance reasons are eliminated.
         AD_CORRECTNESS_CHECK(id.getDatatype() != Datatype::Undefined);
         continue;
       }
-      auto iterator = idMap.find(id);
+      auto iterator = idMap.find(id.getVocabIndex());
       AD_CORRECTNESS_CHECK(iterator != idMap.end());
       id = iterator->second;
     }
