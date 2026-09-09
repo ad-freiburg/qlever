@@ -78,8 +78,8 @@ EmptyPath makeExistenceCheck(QueryExecutionContext* qec,
                            : std::vector<ColumnIndex>{};
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(input), std::move(vars), false, std::move(sortedColumns));
-  return EmptyPath{qec,           Variable{"?x"},   Graphs::All(),
-                   graphVariable, std::move(child), joinColumn};
+  return EmptyPath{qec, Variable{"?x"}, Graphs::All(), graphVariable,
+                   EmptyPath::CheckedChild{std::move(child), joinColumn}};
 }
 }  // namespace
 
@@ -164,8 +164,8 @@ TEST(EmptyPath, existenceCheckIsFilteredByTheActiveGraphs) {
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{getId("<a>")}, {getId("<c>")}}),
       Vars{Variable{"?x"}});
-  EmptyPath emptyPath{qec,          Variable{"?x"},   singleGraph("g1"),
-                      std::nullopt, std::move(child), 0};
+  EmptyPath emptyPath{qec, Variable{"?x"}, singleGraph("g1"), std::nullopt,
+                      EmptyPath::CheckedChild{std::move(child), 0}};
 
   // `<c>` only occurs in `<g2>`.
   auto result = computeResult(emptyPath);
@@ -218,6 +218,11 @@ TEST(EmptyPath, existenceCheckExpandsUndefValues) {
                            {getId("<b>"), getId("<p>")},
                            {getId("<c>"), getId("<p>")},
                            {getId("<z>"), getId("<p>")}})));
+
+  // Expanding UNDEF values requires reading all the entities of the knowledge
+  // graph, which is expensive, so a warning is emitted.
+  EXPECT_THAT(emptyPath.collectWarnings(),
+              ::testing::Contains(::testing::HasSubstr("UNDEF")));
 }
 
 // _____________________________________________________________________________
@@ -304,8 +309,8 @@ TEST(EmptyPath, sortednessIsPreservedForSortedChildrenWithoutUndef) {
         qec, makeIdTableFromVector({{getId("<a>"), getId("<b>")}}),
         Vars{Variable{"?x"}, Variable{"?y"}}, false,
         std::vector<ColumnIndex>{1});
-    EmptyPath emptyPath{qec,          Variable{"?x"},   Graphs::All(),
-                        std::nullopt, std::move(child), 0};
+    EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
+                        EmptyPath::CheckedChild{std::move(child), 0}};
     EXPECT_THAT(emptyPath.getResultSortedOn(), ::testing::IsEmpty());
   }
   {
@@ -339,6 +344,31 @@ TEST(EmptyPath, cacheKeyAndDescriptor) {
   EXPECT_NE(withoutChild.getCacheKey(), withGraph.getCacheKey());
   EXPECT_NE(withoutChild.getCacheKey(), withGraphFilter.getCacheKey());
   EXPECT_NE(withoutChild.getCacheKey(), withChild.getCacheKey());
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, theCacheKeyIsBasedOnColumnsAndNotOnVariableNames) {
+  auto* qec = makeQec(nquads, true);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  // The names of the entity variable and of the graph variable are not part of
+  // the cache key, because the result only depends on the columns that those
+  // variables denote.
+  EmptyPath first{qec, Variable{"?x"}, Graphs::All(), Variable{"?g"}};
+  EmptyPath second{qec, Variable{"?y"}, Graphs::All(), Variable{"?h"}};
+  EXPECT_EQ(first.getCacheKey(), second.getCacheKey());
+
+  // The graph column of the child is part of the cache key, because it does
+  // change the result: if the child provides the graph variable, then pairs of
+  // entity and graph are checked, else the graph column is added.
+  auto makeCheck = [qec, &getId](const Variable& graphVariable) {
+    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{getId("<a>"), getId("<g1>")}}),
+        Vars{Variable{"?x"}, Variable{"?g1"}});
+    return EmptyPath{qec, Variable{"?x"}, Graphs::All(), graphVariable,
+                     EmptyPath::CheckedChild{std::move(child), 0}};
+  };
+  EXPECT_NE(makeCheck(Variable{"?g1"}).getCacheKey(),
+            makeCheck(Variable{"?g2"}).getCacheKey());
 }
 
 // _____________________________________________________________________________
@@ -524,8 +554,8 @@ TEST(EmptyPath, fullyMaterializedChildrenAreSupported) {
       qec, makeIdTableFromVector({{getId("<a>")}, {getId("<p>")}}),
       Vars{Variable{"?x"}}, false, std::vector<ColumnIndex>{}, LocalVocab{},
       std::nullopt, true);
-  EmptyPath emptyPath{qec,          Variable{"?x"},   Graphs::All(),
-                      std::nullopt, std::move(child), 0};
+  EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
+                      EmptyPath::CheckedChild{std::move(child), 0}};
 
   EXPECT_THAT(computeResult(emptyPath).getColumn(0),
               ElementsAreArray({getId("<a>")}));
@@ -540,11 +570,16 @@ TEST(EmptyPath, lazyChildrenWithMultipleTablesAreSupported) {
   tables.push_back(makeIdTableFromVector({{getId("<z>")}}));
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(tables), Vars{Variable{"?x"}});
-  EmptyPath emptyPath{qec,          Variable{"?x"},   Graphs::All(),
-                      std::nullopt, std::move(child), 0};
+  EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
+                      EmptyPath::CheckedChild{std::move(child), 0}};
 
   EXPECT_THAT(computeResult(emptyPath).getColumn(0),
               ElementsAreArray({getId("<a>"), getId("<z>")}));
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, theCheckedChildMustNotBeNull) {
+  EXPECT_THROW(EmptyPath::CheckedChild(nullptr, 0), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
@@ -554,7 +589,7 @@ TEST(EmptyPath, theJoinColumnMustBeInsideTheChild) {
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{getId("<a>")}}), Vars{Variable{"?x"}});
   EXPECT_THROW((EmptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
-                          std::move(child), 1}),
+                          EmptyPath::CheckedChild{std::move(child), 1}}),
                ad_utility::Exception);
 }
 
@@ -565,7 +600,7 @@ TEST(EmptyPath, theGraphColumnOfTheChildMustNotBeTheJoinColumn) {
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{getId("<a>")}}), Vars{Variable{"?g"}});
   EXPECT_THROW((EmptyPath{qec, Variable{"?x"}, Graphs::All(), Variable{"?g"},
-                          std::move(child), 0}),
+                          EmptyPath::CheckedChild{std::move(child), 0}}),
                ad_utility::Exception);
 }
 
@@ -585,8 +620,8 @@ TEST(EmptyPath, theResultOfTheExistenceCheckIsYieldedInChunks) {
 
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(input), Vars{Variable{"?x"}});
-  EmptyPath emptyPath{qec,          Variable{"?x"},   Graphs::All(),
-                      std::nullopt, std::move(child), 0};
+  EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
+                      EmptyPath::CheckedChild{std::move(child), 0}};
 
   auto result = emptyPath.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());

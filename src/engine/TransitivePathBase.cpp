@@ -109,7 +109,7 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::checkValueExistsInGraph(
   auto valuesClause = makeValuesForSingleValue(qec, variable, tripleComponent);
   return ad_utility::makeExecutionTree<EmptyPath>(
       qec, std::move(variable), std::move(activeGraphs), graphVariable,
-      std::move(valuesClause), 0);
+      EmptyPath::CheckedChild{std::move(valuesClause), 0});
 }
 
 // _____________________________________________________________________________
@@ -445,7 +445,8 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
 
   leftOrRightOp = ad_utility::makeExecutionTree<EmptyPath>(
       getExecutionContext(), originalVar, activeGraphs_,
-      std::move(graphVariable), std::move(leftOrRightOp), inputCol);
+      std::move(graphVariable),
+      EmptyPath::CheckedChild{std::move(leftOrRightOp), inputCol});
   inputCol = leftOrRightOp->getVariableColumn(originalVar);
   return leftOrRightOp;
 }

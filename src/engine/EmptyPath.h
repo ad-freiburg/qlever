@@ -12,6 +12,8 @@
 #ifndef QLEVER_SRC_ENGINE_EMPTYPATH_H
 #define QLEVER_SRC_ENGINE_EMPTYPATH_H
 
+#include <absl/functional/function_ref.h>
+
 #include <memory>
 #include <optional>
 #include <vector>
@@ -46,6 +48,32 @@ class EmptyPath : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
 
+  // The child whose result is checked against the knowledge graph, together
+  // with the columns of that result that this operation has to know about (see
+  // the comment for this class above). These belong together: either all or
+  // none of them are present, and the columns are meaningless without the
+  // child they refer to.
+  struct CheckedChild {
+    // The child. Only those values of its `joinColumn_` that occur in the
+    // knowledge graph are part of the result. Must not be `nullptr`.
+    std::shared_ptr<QueryExecutionTree> child_;
+    // The column of the child's result that is checked.
+    ColumnIndex joinColumn_;
+    // The column of `child_` that holds the graph IDs, if the child already
+    // provides them. In this case pairs of value and graph ID are checked
+    // instead of only the value.
+    std::optional<ColumnIndex> graphColumn_ = std::nullopt;
+    // The columns of `child_` that are simply carried over, in ascending
+    // order.
+    std::vector<ColumnIndex> payloadColumns_ = {};
+
+    // The `graphColumn_` and the `payloadColumns_` are deliberately not
+    // arguments here: they can only be deduced together with the graph
+    // variable, which `EmptyPath`'s constructor does.
+    CheckedChild(std::shared_ptr<QueryExecutionTree> child,
+                 ColumnIndex joinColumn);
+  };
+
  private:
   // The number of rows after which a new `IdTable` is yielded.
   static constexpr size_t chunkSize_ = 100'000;
@@ -56,29 +84,20 @@ class EmptyPath : public Operation {
   Graphs activeGraphs_;
   // If set, the graph IDs are written to column 1 using this variable.
   std::optional<Variable> graphVariable_;
-  // If set, only the values of the `joinColumn_` of this child's result that
-  // occur in the knowledge graph are part of the result (see the comment for
-  // this class above). If it is `nullptr`, all entities of the knowledge graph
-  // are returned.
-  std::shared_ptr<QueryExecutionTree> child_;
-  ColumnIndex joinColumn_;
-  // The column of `child_` that holds the graph IDs, if the child already
-  // provides them. In this case pairs of value and graph ID are checked instead
-  // of only the value.
-  std::optional<ColumnIndex> childGraphColumn_;
-  // The columns of `child_` that are simply carried over, in ascending order.
-  std::vector<ColumnIndex> payloadColumns_;
+  // If set, the result is the existence check on this child's result (see the
+  // comment for this class above). If it is `std::nullopt`, all entities of
+  // the knowledge graph are returned.
+  std::optional<CheckedChild> checkedChild_;
   VariableToColumnMap variableColumns_;
   size_t resultWidth_;
 
  public:
-  // If `child` is `nullptr`, all entities of the knowledge graph are returned,
-  // else the values in the `joinColumn` of the child's result are checked
-  // against the knowledge graph (see the comment for this class above).
+  // If `checkedChild` is `std::nullopt`, all entities of the knowledge graph
+  // are returned, else the values in its join column are checked against the
+  // knowledge graph (see the comment for this class above).
   EmptyPath(QueryExecutionContext* qec, Variable variable, Graphs activeGraphs,
             std::optional<Variable> graphVariable,
-            std::shared_ptr<QueryExecutionTree> child = nullptr,
-            ColumnIndex joinColumn = 0);
+            std::optional<CheckedChild> checkedChild = std::nullopt);
 
   // Getters, mainly for testing.
   const Variable& variable() const { return variable_; }
@@ -106,23 +125,29 @@ class EmptyPath : public Operation {
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // The number of columns that come from the knowledge graph (1 or 2).
-  size_t numIdColumns() const { return graphVariable_.has_value() ? 2 : 1; }
+  // The execution tree of the `checkedChild_`. Must only be called if that is
+  // set. Note that the constness of this `EmptyPath` doesn't propagate through
+  // the `shared_ptr`, so the child can be used for the (non-const) estimates
+  // as well.
+  QueryExecutionTree& child() const { return *checkedChild_.value().child_; }
 
-  // The index of the first column that is carried over from `child_`.
-  size_t firstPayloadColumn() const { return numIdColumns(); }
+  // The number of columns that come from the knowledge graph (1 or 2).
+  size_t numKgColumns() const { return graphVariable_.has_value() ? 2 : 1; }
+
+  // The index of the first column that is carried over from the child.
+  size_t firstPayloadColumn() const { return numKgColumns(); }
 
   // Return all distinct entities of the knowledge graph (as tables with
-  // `numIdColumns()` columns), sorted and without duplicates. If `idFilter` is
-  // set, only the entities contained in it are returned. It has to be sorted
-  // and must neither contain duplicates nor undefined IDs.
+  // `numKgColumns()` columns), sorted and without duplicates. If `idFilter` is
+  // set, only the entities contained in it are returned. `idFilter` has to be
+  // sorted and must neither contain duplicates nor undefined IDs.
   cppcoro::generator<IdTable> scanIndex(
       std::optional<std::vector<Id>> idFilter) const;
 
-  // Implementation of `computeResult` for the case that no `child_` is set.
+  // Implementation of `computeResult` for the case that no child is set.
   Result::Generator computeAllEntities() const;
 
-  // Implementation of `computeResult` for the case that a `child_` is set.
+  // Implementation of `computeResult` for the case that a child is set.
   Result::Generator computeExistenceCheck(
       std::shared_ptr<const Result> childResult) const;
 
@@ -132,6 +157,21 @@ class EmptyPath : public Operation {
   // caller.
   Result::Generator processTable(IdTableView<0> table,
                                  const LocalVocab& localVocab) const;
+
+  // The type of the callback that hands out the accumulated rows of the result
+  // as soon as there are enough of them (see `yieldIfFull` in `processTable`).
+  using YieldIfFull =
+      absl::FunctionRef<std::optional<Result::IdTableVocabPair>()>;
+
+  // Yield the result rows for those rows of `input` whose join column is
+  // UNDEF. Such a value matches every entity of the knowledge graph, so the
+  // full empty path has to be streamed for them. The rows are appended to
+  // `result`, which is the (possibly already partially filled) result table of
+  // the calling `processTable`, and handed out via `yieldIfFull`. All the
+  // arguments have to be kept alive by the caller.
+  Result::Generator processUndefRows(const IdTableView<0>& input,
+                                     IdTable& result,
+                                     YieldIfFull yieldIfFull) const;
 
   // Append a single row to `result`: `id` (and `graph` if a graph variable is
   // set), followed by the payload columns of row `inputRow` of `input`.

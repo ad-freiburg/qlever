@@ -25,21 +25,21 @@ namespace {
 class RowCursor {
   ad_utility::InputRangeTypeErased<IdTable> range_;
   std::optional<IdTable> table_ = std::nullopt;
-  size_t row_ = 0;
+  size_t rowIdx_ = 0;
   bool isExhausted_ = false;
 
   // The rows of the current table that haven't been consumed yet.
   auto remainingRows() const {
-    return ql::ranges::subrange{table_.value().begin() + row_,
+    return ql::ranges::subrange{table_.value().begin() + rowIdx_,
                                 table_.value().end()};
   }
 
-  // Append the rows `[row_, end)` of the current table to `result` and make
+  // Append the rows `[rowIdx_, end)` of the current table to `result` and make
   // them consumed. Return the number of appended rows.
   size_t append(IdTable& result, size_t end) {
-    size_t numRows = end - row_;
-    result.insertAtEnd(table_.value(), row_, end);
-    row_ = end;
+    size_t numRows = end - rowIdx_;
+    result.insertAtEnd(table_.value(), rowIdx_, end);
+    rowIdx_ = end;
     return numRows;
   }
 
@@ -50,12 +50,12 @@ class RowCursor {
   // Make the cursor point at the next row that hasn't been consumed yet. Return
   // false if all rows have been consumed.
   bool findNextRow() {
-    while (!table_.has_value() || row_ == table_.value().numRows()) {
+    while (!table_.has_value() || rowIdx_ == table_.value().numRows()) {
       if (isExhausted_) {
         return false;
       }
       table_ = range_.get();
-      row_ = 0;
+      rowIdx_ = 0;
       isExhausted_ = !table_.has_value();
     }
     return true;
@@ -67,14 +67,14 @@ class RowCursor {
   }
 
   // Append the current row to `result` and consume it.
-  void appendCurrentRow(IdTable& result) { append(result, row_ + 1); }
+  void appendCurrentRow(IdTable& result) { append(result, rowIdx_ + 1); }
 
   // Consume the current row without appending it anywhere.
-  void skipCurrentRow() { ++row_; }
+  void skipCurrentRow() { ++rowIdx_; }
 
   // The row that this cursor currently points at.
   IdTable::const_row_reference currentRow() const {
-    return table_.value()[row_];
+    return table_.value()[rowIdx_];
   }
 
   // Append all the rows of the current table that are strictly smaller than the
@@ -84,16 +84,25 @@ class RowCursor {
     auto rows = remainingRows();
     auto end = ql::ranges::lower_bound(rows, other.currentRow(),
                                        ql::ranges::lexicographical_compare);
-    return append(result, row_ + (end - rows.begin()));
+    return append(result, rowIdx_ + (end - rows.begin()));
   }
 };
 
 // Return the graph IDs that `id` occurs in according to the `matches` table
-// (see `EmptyPath::processTable`), which is sorted and has the `id`s in its
-// first column. If `matches` has no graph column, the result is a single
-// undefined graph ID if `id` occurs in `matches` at all, and empty otherwise.
-// Note that the graph IDs are returned as a subspan of the graph column, which
-// works because `IdTable`s are stored in column-major order.
+// (see `EmptyPath::processTable`).
+//
+// The `matches` table is sorted and holds the entity IDs in its column 0. If
+// graph IDs were requested, it has a second column that holds the graph that
+// the entity in the same row occurs in; the same entity then appears once per
+// graph. The occurrences of `id` in column 0 hence form a contiguous range,
+// and the result is the corresponding range of column 1 (returned as a subspan
+// of that column, which works because `IdTable`s are stored in column-major
+// order).
+//
+// If `matches` has no graph column, then a single undefined ID stands in for
+// the graphs, such that the caller can treat both cases uniformly: The result
+// is a single undefined ID if `id` occurs in `matches` at all, and empty
+// otherwise.
 ql::span<const Id> graphsOf(const IdTable& matches, Id id) {
   ql::span<const Id> ids = matches.getColumn(0);
   auto matching = ql::ranges::equal_range(ids, id);
@@ -108,16 +117,21 @@ ql::span<const Id> graphsOf(const IdTable& matches, Id id) {
 }  // namespace
 
 // _____________________________________________________________________________
+EmptyPath::CheckedChild::CheckedChild(std::shared_ptr<QueryExecutionTree> child,
+                                      ColumnIndex joinColumn)
+    : child_{std::move(child)}, joinColumn_{joinColumn} {
+  AD_CONTRACT_CHECK(child_ != nullptr);
+}
+
+// _____________________________________________________________________________
 EmptyPath::EmptyPath(QueryExecutionContext* qec, Variable variable,
                      Graphs activeGraphs, std::optional<Variable> graphVariable,
-                     std::shared_ptr<QueryExecutionTree> child,
-                     ColumnIndex joinColumn)
+                     std::optional<CheckedChild> checkedChild)
     : Operation{qec},
       variable_{std::move(variable)},
       activeGraphs_{std::move(activeGraphs)},
       graphVariable_{std::move(graphVariable)},
-      child_{std::move(child)},
-      joinColumn_{joinColumn} {
+      checkedChild_{std::move(checkedChild)} {
   // The graph column is written in addition to the column of `variable_`, so
   // the two variables must not be the same. Callers that join on the graph
   // variable have to pass a helper variable instead.
@@ -126,34 +140,38 @@ EmptyPath::EmptyPath(QueryExecutionContext* qec, Variable variable,
   if (graphVariable_.has_value()) {
     variableColumns_[graphVariable_.value()] = makeAlwaysDefinedColumn(1);
   }
-  if (child_ == nullptr) {
-    resultWidth_ = numIdColumns();
+  if (!checkedChild_.has_value()) {
+    resultWidth_ = numKgColumns();
     return;
   }
-  AD_CONTRACT_CHECK(joinColumn_ < child_->getResultWidth());
+  CheckedChild& checkedChild = checkedChild_.value();
+  AD_CONTRACT_CHECK(checkedChild.joinColumn_ < child().getResultWidth());
   if (graphVariable_.has_value()) {
-    childGraphColumn_ =
-        child_->getVariableColumnOrNullopt(graphVariable_.value());
-    AD_CORRECTNESS_CHECK(childGraphColumn_ != joinColumn_);
+    checkedChild.graphColumn_ =
+        child().getVariableColumnOrNullopt(graphVariable_.value());
+    AD_CORRECTNESS_CHECK(checkedChild.graphColumn_ != checkedChild.joinColumn_);
   }
   // All columns of the child except for the join column and the graph column
   // (which are both replaced by the values from the knowledge graph) are
   // carried over. Note that the child might have columns without a variable
   // attached to them, so we iterate over the column indices and not over the
   // variables.
-  ql::ranges::copy_if(
-      ad_utility::integerRange(child_->getResultWidth()),
-      std::back_inserter(payloadColumns_), [this](ColumnIndex column) {
-        return column != joinColumn_ && column != childGraphColumn_;
-      });
-  resultWidth_ = firstPayloadColumn() + payloadColumns_.size();
-  for (const auto& [variable, info] : child_->getVariableColumns()) {
-    auto column = ql::ranges::find(payloadColumns_, info.columnIndex_);
-    if (column == payloadColumns_.end()) {
+  ql::ranges::copy_if(ad_utility::integerRange(child().getResultWidth()),
+                      std::back_inserter(checkedChild.payloadColumns_),
+                      [&check](ColumnIndex column) {
+                        return column != checkedChild.joinColumn_ &&
+                               column != checkedChild.graphColumn_;
+                      });
+  resultWidth_ = firstPayloadColumn() + checkedChild.payloadColumns_.size();
+  for (const auto& [variable, info] : child().getVariableColumns()) {
+    auto column =
+        ql::ranges::find(checkedChild.payloadColumns_, info.columnIndex_);
+    if (column == checkedChild.payloadColumns_.end()) {
       continue;
     }
-    size_t index = firstPayloadColumn() +
-                   ql::ranges::distance(payloadColumns_.begin(), column);
+    size_t index =
+        firstPayloadColumn() +
+        ql::ranges::distance(checkedChild.payloadColumns_.begin(), column);
     AD_CORRECTNESS_CHECK(!variableColumns_.contains(variable));
     variableColumns_[variable] = {index, info.mightContainUndef_};
   }
@@ -161,16 +179,16 @@ EmptyPath::EmptyPath(QueryExecutionContext* qec, Variable variable,
 
 // _____________________________________________________________________________
 std::vector<QueryExecutionTree*> EmptyPath::getChildren() {
-  if (child_ == nullptr) {
+  if (!checkedChild_.has_value()) {
     return {};
   }
-  return {child_.get()};
+  return {checkedChild_.value().child_.get()};
 }
 
 // _____________________________________________________________________________
 std::string EmptyPath::getDescriptor() const {
   return absl::StrCat("EmptyPath for ", variable_.name(),
-                      child_ == nullptr ? "" : " (existence check)");
+                      checkedChild_.has_value() ? " (existence check)" : "");
 }
 
 // _____________________________________________________________________________
@@ -179,26 +197,30 @@ size_t EmptyPath::getResultWidth() const { return resultWidth_; }
 // _____________________________________________________________________________
 std::string EmptyPath::getCacheKeyImpl() const {
   std::ostringstream os;
-  os << "EMPTY PATH for " << variable_.name();
+  os << "EMPTY PATH";
   if (graphVariable_.has_value()) {
-    os << " with graph " << graphVariable_.value().name();
+    os << " with graph column";
   }
   os << ' ';
   activeGraphs_.format(os, &toRdfLiteral);
-  if (child_ != nullptr) {
-    os << "\nExistence check on column " << joinColumn_ << " of:\n"
-       << child_->getCacheKey();
+  if (checkedChild_.has_value()) {
+    const CheckedChild& checkedChild = checkedChild_.value();
+    os << "\nExistence check on column " << checkedChild.joinColumn_;
+    if (checkedChild.graphColumn_.has_value()) {
+      os << " and graph column " << checkedChild.graphColumn_.value();
+    }
+    os << " of:\n" << child().getCacheKey();
   }
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
 uint64_t EmptyPath::getSizeEstimateBeforeLimit() {
-  if (child_ != nullptr) {
+  if (checkedChild_.has_value()) {
     // The existence check can only remove rows, but adding the graph column can
     // multiply them. We have no information about the number of graphs per
     // entity, so we simply use the child's estimate.
-    return child_->getSizeEstimate();
+    return child().getSizeEstimate();
   }
   const auto& index = getIndex();
   // We don't know how much the subjects and the objects overlap, so we use the
@@ -208,7 +230,7 @@ uint64_t EmptyPath::getSizeEstimateBeforeLimit() {
 
 // _____________________________________________________________________________
 size_t EmptyPath::getCostEstimate() {
-  if (child_ == nullptr) {
+  if (!checkedChild_.has_value()) {
     // In the worst case both the subject and the object permutation have to be
     // read completely, so the cost is proportional to the number of triples and
     // not to the (typically much smaller) number of distinct entities.
@@ -216,12 +238,12 @@ size_t EmptyPath::getCostEstimate() {
   }
   // Checking a value only requires reading very few blocks, so the cost is
   // dominated by the cost of the child.
-  return child_->getCostEstimate() + getSizeEstimateBeforeLimit();
+  return child().getCostEstimate() + getSizeEstimateBeforeLimit();
 }
 
 // _____________________________________________________________________________
 float EmptyPath::getMultiplicity(size_t col) {
-  if (child_ == nullptr) {
+  if (!checkedChild_.has_value()) {
     // Without a child the entities are distinct, and for the (much rarer) case
     // with a graph column the number of graphs per entity is unknown, so 1 is
     // still a reasonable guess.
@@ -231,34 +253,35 @@ float EmptyPath::getMultiplicity(size_t col) {
   // are a good approximation. The values of the graph column don't come from
   // the child, so we know nothing about them.
   if (col == 0) {
-    return child_->getMultiplicity(joinColumn_);
+    return child().getMultiplicity(checkedChild_.value().joinColumn_);
   }
   if (col < firstPayloadColumn()) {
     return 1;
   }
-  return child_->getMultiplicity(
-      payloadColumns_.at(col - firstPayloadColumn()));
+  return child().getMultiplicity(
+      checkedChild_.value().payloadColumns_.at(col - firstPayloadColumn()));
 }
 
 // _____________________________________________________________________________
 bool EmptyPath::knownEmptyResult() {
-  return child_ != nullptr && child_->knownEmptyResult();
+  return checkedChild_.has_value() && child().knownEmptyResult();
 }
 
 // _____________________________________________________________________________
 std::vector<ColumnIndex> EmptyPath::resultSortedOn() const {
-  if (child_ == nullptr) {
+  if (!checkedChild_.has_value()) {
     return {0};
   }
   // The rows of the child are processed in order, so the sort order of the join
   // column is preserved. The only exception are UNDEF values, which match every
   // entity of the knowledge graph and are therefore expanded separately.
-  const auto& childSortedOn = child_->resultSortedOn();
+  ColumnIndex joinColumn = checkedChild_.value().joinColumn_;
+  const auto& childSortedOn = child().resultSortedOn();
+  const auto& info = child().getVariableAndInfoByColumnIndex(joinColumn).second;
   bool joinColumnMightBeUndef =
-      child_->getVariableAndInfoByColumnIndex(joinColumn_)
-          .second.mightContainUndef_ !=
+      info.mightContainUndef_ !=
       ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-  if (childSortedOn.empty() || childSortedOn.at(0) != joinColumn_ ||
+  if (childSortedOn.empty() || childSortedOn.at(0) != joinColumn ||
       joinColumnMightBeUndef) {
     return {};
   }
@@ -288,9 +311,15 @@ bool EmptyPath::columnOriginatesFromGraphOrUndef(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> EmptyPath::cloneImpl() const {
-  return std::make_unique<EmptyPath>(
-      getExecutionContext(), variable_, activeGraphs_, graphVariable_,
-      child_ == nullptr ? nullptr : child_->clone(), joinColumn_);
+  std::optional<CheckedChild> checkedChild = std::nullopt;
+  if (checkedChild_.has_value()) {
+    // The remaining members of `CheckedChild` are deduced by the constructor.
+    checkedChild =
+        CheckedChild{child().clone(), checkedChild_.value().joinColumn_};
+  }
+  return std::make_unique<EmptyPath>(getExecutionContext(), variable_,
+                                     activeGraphs_, graphVariable_,
+                                     std::move(checkedChild));
 }
 
 // _____________________________________________________________________________
@@ -319,7 +348,7 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
   RowCursor subjects{scan(Permutation::SPO, idFilter)};
   RowCursor objects{scan(Permutation::OPS, std::move(idFilter))};
 
-  IdTable result{numIdColumns(), allocator()};
+  IdTable result{numKgColumns(), allocator()};
   result.reserve(chunkSize_);
   for (;;) {
     bool hasSubject = subjects.findNextRow();
@@ -343,7 +372,7 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
     if (result.numRows() >= chunkSize_) {
       checkCancellation();
       co_yield std::move(result);
-      result = IdTable{numIdColumns(), allocator()};
+      result = IdTable{numKgColumns(), allocator()};
       result.reserve(chunkSize_);
     }
   }
@@ -369,7 +398,7 @@ void EmptyPath::appendRow(IdTable& result, const IdTableView<0>& input,
     result(row, 1) = graph;
   }
   for (const auto& [column, inputColumn] :
-       ::ranges::views::enumerate(payloadColumns_)) {
+       ::ranges::views::enumerate(checkedChild_.value().payloadColumns_)) {
     result(row, firstPayloadColumn() + column) = input(inputRow, inputColumn);
   }
 }
@@ -377,18 +406,58 @@ void EmptyPath::appendRow(IdTable& result, const IdTableView<0>& input,
 // _____________________________________________________________________________
 bool EmptyPath::graphMatches(const IdTableView<0>& input, size_t inputRow,
                              Id graph) const {
-  if (!childGraphColumn_.has_value()) {
+  const std::optional<ColumnIndex>& graphColumn =
+      checkedChild_.value().graphColumn_;
+  if (!graphColumn.has_value()) {
     return true;
   }
-  Id childGraph = input(inputRow, childGraphColumn_.value());
+  Id childGraph = input(inputRow, graphColumn.value());
   // An UNDEF graph matches all the graphs that the entity occurs in.
   return childGraph.isUndefined() || childGraph == graph;
 }
 
 // _____________________________________________________________________________
+Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
+                                              IdTable& result,
+                                              YieldIfFull yieldIfFull) const {
+  addWarning(
+      "The empty path is applied to a column that contains UNDEF values. Such "
+      "a value matches every entity of the knowledge graph, so all of them "
+      "have to be read and combined with each of the affected rows, which can "
+      "be very slow.");
+  ql::span<const Id> joinColumn =
+      input.getColumn(checkedChild_.value().joinColumn_);
+  std::vector<size_t> undefRows;
+  ql::ranges::copy_if(
+      ad_utility::integerRange(input.numRows()), std::back_inserter(undefRows),
+      [&joinColumn](size_t i) { return joinColumn[i].isUndefined(); });
+  // Note that this doesn't preserve the sort order, which is accounted for by
+  // `resultSortedOn`.
+  for (IdTable& part : scanIndex(std::nullopt)) {
+    checkCancellation();
+    for (size_t partRow : ad_utility::integerRange(part.numRows())) {
+      Id id = part(partRow, 0);
+      Id graph =
+          graphVariable_.has_value() ? part(partRow, 1) : Id::makeUndefined();
+      for (size_t row : undefRows) {
+        if (graphMatches(input, row, graph)) {
+          appendRow(result, input, row, id, graph);
+        }
+        // The check has to happen in the innermost loop, because a single
+        // entity can be combined with arbitrarily many rows of the input.
+        if (auto pair = yieldIfFull()) {
+          co_yield pair.value();
+        }
+      }
+    }
+  }
+}
+
+// _____________________________________________________________________________
 Result::Generator EmptyPath::processTable(IdTableView<0> table,
                                           const LocalVocab& localVocab) const {
-  ql::span<const Id> joinColumn = table.getColumn(joinColumn_);
+  ql::span<const Id> joinColumn =
+      table.getColumn(checkedChild_.value().joinColumn_);
   // The distinct values of the join column that have to be looked up.
   std::vector<Id> ids;
   ids.reserve(joinColumn.size());
@@ -403,7 +472,7 @@ Result::Generator EmptyPath::processTable(IdTableView<0> table,
   // The entities (and graphs) of the knowledge graph that match one of the
   // values of the join column. This is typically tiny compared to the whole
   // knowledge graph, which is the whole point of this operation.
-  IdTable matches{numIdColumns(), allocator()};
+  IdTable matches{numKgColumns(), allocator()};
   for (IdTable& part : scanIndex(std::move(ids))) {
     matches.insertAtEnd(part);
   }
@@ -431,7 +500,8 @@ Result::Generator EmptyPath::processTable(IdTableView<0> table,
     }
     Id id = joinColumn[row];
     if (id.isUndefined()) {
-      // Handled below, because a single UNDEF value matches every entity.
+      // Handled by `processUndefRows` below, because a single UNDEF value
+      // matches every entity.
       continue;
     }
     for (Id graph : graphsOf(matches, id)) {
@@ -445,32 +515,8 @@ Result::Generator EmptyPath::processTable(IdTableView<0> table,
   }
 
   if (hasUndef) {
-    // Rows with an UNDEF value in the join column match every entity of the
-    // knowledge graph, so we have to stream the full empty path for them. Note
-    // that this doesn't preserve the sort order, which is accounted for by
-    // `resultSortedOn`.
-    std::vector<size_t> undefRows;
-    ql::ranges::copy_if(ad_utility::integerRange(table.numRows()),
-                        std::back_inserter(undefRows), [&joinColumn](size_t i) {
-                          return joinColumn[i].isUndefined();
-                        });
-    for (IdTable& part : scanIndex(std::nullopt)) {
-      checkCancellation();
-      for (size_t partRow : ad_utility::integerRange(part.numRows())) {
-        Id id = part(partRow, 0);
-        Id graph =
-            graphVariable_.has_value() ? part(partRow, 1) : Id::makeUndefined();
-        for (size_t row : undefRows) {
-          if (graphMatches(table, row, graph)) {
-            appendRow(result, table, row, id, graph);
-          }
-          // The check has to happen in the innermost loop, because a single
-          // entity can be combined with arbitrarily many rows of the input.
-          if (auto pair = yieldIfFull()) {
-            co_yield pair.value();
-          }
-        }
-      }
+    for (auto& pair : processUndefRows(table, result, yieldIfFull)) {
+      co_yield pair;
     }
   }
 
@@ -501,10 +547,10 @@ Result EmptyPath::computeResult(bool requestLaziness) {
   // The only consumer of this operation is `TransitivePathImpl`, which always
   // requests the result lazily.
   AD_CORRECTNESS_CHECK(requestLaziness);
-  if (child_ == nullptr) {
+  if (!checkedChild_.has_value()) {
     return {computeAllEntities(), resultSortedOn()};
   }
-  return {computeExistenceCheck(child_->getResult(true)), resultSortedOn()};
+  return {computeExistenceCheck(child().getResult(true)), resultSortedOn()};
 }
 
 #endif
