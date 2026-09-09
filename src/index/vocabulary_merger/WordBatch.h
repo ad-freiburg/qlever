@@ -25,8 +25,11 @@
 
 // A batch of merged words, which is the unit of work that the first stage of
 // the vocabulary merger (see `index/vocabulary_merger/WordBatchBuilder.h`)
-// hands to the stage that writes the words and the partial ID maps. This is
-// not part of the public interface of `index/VocabularyMerger.h`.
+// hands to the second stage, which writes the words to the vocabulary (see
+// `index/vocabulary_merger/VocabularyWriter.h`). The entries of the partial ID
+// maps are written by the separate third stage (see
+// `index/vocabulary_merger/IdMapBatch.h`). This is not part of the public
+// interface of `index/VocabularyMerger.h`.
 namespace ad_utility::vocabulary_merger::detail {
 
 // A mapping from an `indexOfWordInPartialVocabulary_` (an index of a word in
