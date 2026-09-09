@@ -2654,8 +2654,7 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
 // _____________________________________________________________________________
 TEST(QueryPlanner, emptyGraphPattern) {
   h::expect("SELECT ?g WHERE { GRAPH ?g {} }",
-            h::CartesianProductJoin(::testing::A<const QueryExecutionTree&>(),
-                                    h::NeutralElement()));
+            h::CartesianProductJoin(h::DistinctGraphs(), h::NeutralElement()));
 }
 
 // _____________________________________________________________________________
