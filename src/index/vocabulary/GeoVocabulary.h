@@ -235,7 +235,9 @@ class GeoVocabulary {
   // filename itself, plus the file with the geometry information.
   static FileSuffixes fileSuffixes() {
     FileSuffixes suffixes = UnderlyingVocabulary::fileSuffixes();
-    suffixes.emplace_back(geoInfoSuffix);
+    // NOTE: The explicit `std::string` avoids a false positive
+    // `-Warray-bounds` of GCC 13 for `emplace_back(geoInfoSuffix)`.
+    suffixes.push_back(std::string{geoInfoSuffix});
     return suffixes;
   }
 
