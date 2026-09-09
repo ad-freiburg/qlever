@@ -19,15 +19,12 @@
 #include <vector>
 
 #include "backports/algorithm.h"
-#include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/Serializer/Serializer.h"
-#include "util/TypeTraits.h"
 #include "util/Views.h"
 
 // A `GeoVocabulary` holds Well-Known Text (WKT) literals. In contrast to the
@@ -53,13 +50,6 @@ class GeoVocabulary {
  private:
   using GeometryInfo = ad_utility::GeometryInfo;
   using GeoCellGrid = ad_utility::GeoCellGrid;
-
-  // The index of a word is computed from its position in the underlying
-  // vocabulary (see `indexFromPosition`), so the positions must be contiguous,
-  // which they are not for the vocabularies with "holes".
-  static_assert(!ad_utility::SameAsAny<
-                UnderlyingVocabulary, VocabularyInMemoryBinSearch,
-                CompressedVocabulary<VocabularyInMemoryBinSearch>>);
 
   UnderlyingVocabulary literals_;
 
@@ -92,7 +82,10 @@ class GeoVocabulary {
       sizeof(ad_utility::GEOMETRY_INFO_VERSION);
 
  public:
-  GeoVocabulary() = default;
+  // The constructor is defined in the `.cpp` file, where it checks the
+  // underlying vocabulary type, so that every instantiation goes through
+  // that check.
+  GeoVocabulary();
 
   // Load the precomputed `GeometryInfo` object for the literal with
   // the given index from disk. Return `std::nullopt` for invalid geometries.

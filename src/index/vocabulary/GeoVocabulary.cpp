@@ -13,6 +13,7 @@
 #include <stdexcept>
 
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "rdfTypes/GeoPoint.h"
@@ -21,6 +22,16 @@
 #include "util/File.h"
 
 using ad_utility::GeometryInfo;
+
+// ____________________________________________________________________________
+template <typename V>
+GeoVocabulary<V>::GeoVocabulary() {
+  // The index of a word is computed from its position in the underlying
+  // vocabulary (see `indexFromPosition`), which requires contiguous positions
+  // and a plain `getPositionOfWord`. The vocabularies with "holes" and the
+  // composite vocabularies do not qualify.
+  static_assert(!HasSpecialGetPositionOfWord<V>);
+}
 
 // ____________________________________________________________________________
 template <typename V>
