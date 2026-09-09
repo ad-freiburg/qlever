@@ -11,6 +11,7 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_BINARYEXPRESSION_H
 
 #include <array>
+#include <utility>
 
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
@@ -75,6 +76,7 @@ template <typename Function, typename LeftValueGetter,
           typename RightValueGetter, typename Left, typename Right>
 ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
     Left&& left, Right&& right, EvaluationContext* context) {
+  using namespace homogeneousNumeric;
   using LeftType = std::decay_t<Left>;
   using RightType = std::decay_t<Right>;
 
@@ -90,39 +92,24 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                         isConstantResult<LeftType>) &&
                        (isVectorResult<RightType> ||
                         isConstantResult<RightType>)) {
-    if constexpr (homogeneousNumeric::supportsHomogeneousNumericFastPath<
-                      LeftValueGetter> &&
-                  homogeneousNumeric::supportsHomogeneousNumericFastPath<
-                      RightValueGetter> &&
-                  homogeneousNumeric::supportsHomogeneousNumericOperand<
-                      Left>() &&
-                  homogeneousNumeric::supportsHomogeneousNumericOperand<
-                      Right>()) {
-      const auto types =
-          homogeneousNumeric::classifyNumericOperands(left, right, context);
+    if constexpr (supportsHomogeneousNumericFastPath<LeftValueGetter> &&
+                  supportsHomogeneousNumericFastPath<RightValueGetter> &&
+                  supportsHomogeneousNumericOperand<Left>() &&
+                  supportsHomogeneousNumericOperand<Right>()) {
+      const auto types = classifyNumericOperands(left, right, context);
 
-      if (types.left == homogeneousNumeric::HomogeneousNumericType::Int &&
-          types.right == homogeneousNumeric::HomogeneousNumericType::Int) {
-        return homogeneousNumeric::evaluateHomogeneousNumericOperation<
-            Function, int64_t, int64_t>(left, right, context);
-      }
+      if (types.left != HomogeneousNumericType::Other &&
+          types.right != HomogeneousNumericType::Other) {
+        return dispatchHomogeneousNumericTypes(
+            std::array{types.left, types.right},
+            [&](auto leftType, auto rightType) -> ExpressionResult {
+              using LeftNumericType = typename decltype(leftType)::type;
+              using RightNumericType = typename decltype(rightType)::type;
 
-      if (types.left == homogeneousNumeric::HomogeneousNumericType::Int &&
-          types.right == homogeneousNumeric::HomogeneousNumericType::Double) {
-        return homogeneousNumeric::evaluateHomogeneousNumericOperation<
-            Function, int64_t, double>(left, right, context);
-      }
-
-      if (types.left == homogeneousNumeric::HomogeneousNumericType::Double &&
-          types.right == homogeneousNumeric::HomogeneousNumericType::Int) {
-        return homogeneousNumeric::evaluateHomogeneousNumericOperation<
-            Function, double, int64_t>(left, right, context);
-      }
-
-      if (types.left == homogeneousNumeric::HomogeneousNumericType::Double &&
-          types.right == homogeneousNumeric::HomogeneousNumericType::Double) {
-        return homogeneousNumeric::evaluateHomogeneousNumericOperation<
-            Function, double, double>(left, right, context);
+              return evaluateHomogeneousNumericOperation<
+                  Function, LeftNumericType, RightNumericType>(
+                  std::tie(left, right), context);
+            });
       }
     }
     auto getLeft =

@@ -16,6 +16,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "engine/CallFixedSize.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/ChunkedForLoop.h"
@@ -46,18 +47,10 @@ struct HomogeneousNumericTypes {
 };
 
 // Whether a value getter can participate in the homogeneous numeric fast path.
-// Only getters whose numeric values can be represented directly as `int64_t`
-// or `double` opt in.
 template <typename ValueGetter>
-inline constexpr bool supportsHomogeneousNumericFastPath = false;
-
-template <>
-inline constexpr bool supportsHomogeneousNumericFastPath<NumericValueGetter> =
-    true;
-
-template <>
-inline constexpr bool
-    supportsHomogeneousNumericFastPath<NumericOrDateValueGetter> = true;
+inline constexpr bool supportsHomogeneousNumericFastPath =
+    ad_utility::SameAsAny<ValueGetter, NumericValueGetter,
+                          NumericOrDateValueGetter>;
 
 // Return whether `Operand` has a representation that can be inspected directly
 // by the homogeneous numeric classifier. Currently this is restricted to
@@ -69,17 +62,15 @@ constexpr bool supportsHomogeneousNumericOperand() {
   if constexpr (ad_utility::isSimilar<OperandType, ValueId>) {
     return true;
   } else if constexpr (isVectorResult<OperandType>) {
-    using ElementType =
-        std::decay_t<decltype(std::declval<const OperandType&>()[size_t{}])>;
-
+    using ElementType = ql::ranges::range_value_t<OperandType>;
     return ad_utility::isSimilar<ElementType, ValueId>;
   } else {
     return false;
   }
 }
 
-// Classify an entire vector as integer, double, or other. The complete vector
-// is scanned without datatype-dependent early exits so that a successful
+// Classify all values in a span as integer, double, or other. The complete
+// span is scanned without datatype-dependent early exits so that a successful
 // classification enables a single typed dispatch for the subsequent
 // evaluation loop.
 inline HomogeneousNumericType classifyNumericOperand(
@@ -113,6 +104,7 @@ inline HomogeneousNumericType classifyNumericOperand(
   return HomogeneousNumericType::Other;
 }
 
+// Classify a single `ValueId` by its numeric datatype.
 inline HomogeneousNumericType classifyNumericOperand(ValueId value) {
   switch (value.getDatatype()) {
     case Datatype::Int:
@@ -124,6 +116,8 @@ inline HomogeneousNumericType classifyNumericOperand(ValueId value) {
   }
 }
 
+// Classify a supported operand representation. Constants are classified
+// directly, while vector-like operands are viewed as spans of `ValueId`.
 template <typename Operand>
 inline HomogeneousNumericType classifyNumericOperand(
     const Operand& operand, EvaluationContext* context) {
@@ -141,6 +135,7 @@ inline HomogeneousNumericType classifyNumericOperand(
   }
 }
 
+// Classify both operands by their homogeneous numeric datatype.
 template <typename Left, typename Right>
 inline HomogeneousNumericTypes classifyNumericOperands(
     const Left& left, const Right& right, EvaluationContext* context) {
@@ -150,6 +145,8 @@ inline HomogeneousNumericTypes classifyNumericOperands(
   };
 }
 
+// Extract the primitive numeric value from a `ValueId` whose datatype was
+// already established by homogeneous classification.
 template <typename NumericType>
 NumericType getHomogeneousNumericValue(ValueId value) {
   if constexpr (std::same_as<NumericType, int64_t>) {
@@ -162,6 +159,8 @@ NumericType getHomogeneousNumericValue(ValueId value) {
   }
 }
 
+// Return an indexed getter that extracts already-classified primitive numeric
+// values from either a vector-like operand or a constant.
 template <typename NumericType, typename Operand>
 auto makeHomogeneousNumericGetter(const Operand& operand) {
   using OperandType = std::decay_t<Operand>;
@@ -181,52 +180,99 @@ auto makeHomogeneousNumericGetter(const Operand& operand) {
   }
 }
 
-// Map functions wrapped in `MakeNumericExpression` to a function that accepts
-// primitive numeric types directly while preserving the usual conversion to
-// `ValueId` and the handling of NaN/Inf.
+// Select the function used for evaluation on primitive numeric types.
+// By default, use the original function directly for primitive numeric inputs.
 template <typename Function>
 struct RawNumericFunction {
   using type = Function;
 };
 
+// Unwrap `MakeNumericExpression` so that the fast path operates directly on
+// primitive numeric types while preserving numeric `ValueId` construction.
 template <typename Function, bool NanOrInfToUndef>
 struct RawNumericFunction<MakeNumericExpression<Function, NanOrInfToUndef>> {
   using type = NumericIdWrapper<Function, NanOrInfToUndef>;
 };
 
+// The function type used by the homogeneous numeric evaluation loop.
 template <typename Function>
 using RawNumericFunctionT = typename RawNumericFunction<Function>::type;
 
-// Evaluate a binary operation after both operands have been classified as
-// homogeneous numeric types. The value getters below extract primitive C++
-// values directly, avoiding per-row variant dispatch.
-template <typename Function, typename LeftNumericType,
-          typename RightNumericType, typename Left, typename Right>
+// Map a homogeneous numeric type to the corresponding compile-time index used
+// for dispatching to the primitive C++ numeric type.
+inline int homogeneousNumericTypeToIndex(HomogeneousNumericType type) {
+  AD_CORRECTNESS_CHECK(type != HomogeneousNumericType::Other);
+  return type == HomogeneousNumericType::Int ? 0 : 1;
+}
+
+// The primitive C++ type corresponding to a homogeneous numeric type index.
+template <int I>
+using NumericTypeFromIndex = std::conditional_t<I == 0, int64_t, double>;
+
+// Dispatch runtime homogeneous numeric types to compile-time primitive numeric
+// types and invoke the supplied function with those types.
+template <size_t N, typename Function>
+decltype(auto) dispatchHomogeneousNumericTypes(
+    const std::array<HomogeneousNumericType, N>& types, Function&& function) {
+  std::array<int, N> indices;
+
+  ql::ranges::transform(types, indices.begin(),
+                        [](HomogeneousNumericType type) {
+                          return homogeneousNumericTypeToIndex(type);
+                        });
+
+  return ad_utility::callFixedSizeVi<1>(indices, [function = AD_FWD(function)](
+                                                     auto... typeIndices) {
+    return function(std::type_identity<
+                    NumericTypeFromIndex<decltype(typeIndices)::value>>{}...);
+  });
+}
+
+// Evaluate a homogeneous numeric operation when at least one operand is
+// non-constant. For the currently supported operand representations, this
+// means that at least one operand is vector-like.
+template <typename Function, typename... NumericTypes, typename... Operands>
 ExpressionResult evaluateHomogeneousNumericOperation(
-    const Left& left, const Right& right, EvaluationContext* context) {
-  using LeftType = std::decay_t<Left>;
-  using RightType = std::decay_t<Right>;
+    std::tuple<Operands...> operands, EvaluationContext* context) {
+  static_assert(sizeof...(NumericTypes) == sizeof...(Operands));
+  static_assert((... || isVectorResult<std::decay_t<Operands>>),
+                "At least one operand must be vector-like");
 
-  if constexpr (isVectorResult<LeftType>) {
-    AD_CORRECTNESS_CHECK(left.size() == context->size());
-  }
-
-  if constexpr (isVectorResult<RightType>) {
-    AD_CORRECTNESS_CHECK(right.size() == context->size());
-  }
+  // Check the size of every vector-like operand.
+  std::apply(
+      [context](const auto&... operand) {
+        (
+            [&] {
+              using OperandType = std::decay_t<decltype(operand)>;
+              if constexpr (isVectorResult<OperandType>) {
+                AD_CORRECTNESS_CHECK(operand.size() == context->size());
+              }
+            }(),
+            ...);
+      },
+      operands);
 
   using FastFunction = RawNumericFunctionT<Function>;
   FastFunction function;
 
-  auto getLeft = makeHomogeneousNumericGetter<LeftNumericType>(left);
-  auto getRight = makeHomogeneousNumericGetter<RightNumericType>(right);
+  // Create one primitive numeric getter for every operand.
+  auto getters = [&]<size_t... Is>(std::index_sequence<Is...>) {
+    return std::tuple{
+        makeHomogeneousNumericGetter<NumericTypes>(std::get<Is>(operands))...};
+  }(std::index_sequence_for<Operands...>{});
 
   VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(context->size());
 
   ad_utility::chunkedForLoop<1000>(
       0, context->size(),
-      [&](size_t i) { result.push_back(function(getLeft(i), getRight(i))); },
+      [&](size_t i) {
+        std::apply(
+            [&](const auto&... getter) {
+              result.push_back(function(getter(i)...));
+            },
+            getters);
+      },
       [context]() { context->cancellationHandle_->throwIfCancelled(); });
 
   return result;
