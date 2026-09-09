@@ -34,6 +34,7 @@
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
@@ -452,6 +453,42 @@ TEST(IndexTest, emptyTextIndex) {
         qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
     EXPECT_EQ(result.size(), 0);
   }
+}
+
+// Test that the geo cell grid (see `GeoVocabulary`) is read from the index
+// configuration when an index is loaded, with `flat` as the default scheme.
+// NOTE: Building an index with a grid is a follow-up change, so the
+// configuration of an index built without a grid is edited by hand here.
+TEST(IndexTest, geoCellGridFromConfiguration) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> \"LINESTRING(7 48, 8 49)\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral> ."};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& base = qec->getIndex().getOnDiskBase();
+  EXPECT_FALSE(qec->getIndex().getVocab().getGeoCellGrid().has_value());
+
+  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
+  auto loadWithConfiguration = [&](const nlohmann::json& additionalKeys) {
+    nlohmann::json configuration;
+    {
+      std::ifstream in{configFilename};
+      in >> configuration;
+    }
+    configuration.update(additionalKeys);
+    {
+      auto out = ad_utility::makeOfstream(configFilename);
+      out << configuration;
+    }
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.createFromOnDiskIndex(base, false);
+    return index.getVocab().getGeoCellGrid();
+  };
+  EXPECT_EQ(loadWithConfiguration({{"geo-cell-grid-level", 2}}),
+            std::optional{ad_utility::GeoCellGrid{2}});
+  EXPECT_EQ(loadWithConfiguration(
+                {{"geo-cell-grid-level", 3}, {"geo-cell-grid-scheme", "flat"}}),
+            std::optional{ad_utility::GeoCellGrid{3}});
 }
 
 // Regression test for #3191.
