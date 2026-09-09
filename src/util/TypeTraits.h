@@ -295,6 +295,41 @@ inline auto visitWithVariantsAndParameters =
       return std::visit(f, liftToVariant(AD_FWD(parametersOrVariants))...);
     };
 
+namespace detail {
+// Default `elseFunc` for `visitIf` below: silently ignore alternatives that
+// `ifFunc` doesn't handle.
+struct IgnoreUnmatchedAlternative {
+  template <typename T>
+  void operator()(T&&) const noexcept {}
+};
+}  // namespace detail
+
+/// A generic helper for the common `std::visit` idiom of checking (typically
+/// via `if constexpr (isSame<T, ...>)` / `isInstantiation<T, ...>`) whether
+/// the currently active alternative of `variant` matches some condition,
+/// running `ifFunc` for it, and `elseFunc` (which defaults to a no-op)
+/// otherwise. Which alternative(s) `ifFunc` applies to is determined simply
+/// by which types it is invocable with, so `ifFunc` is typically a
+/// non-generic lambda that takes the concrete, expected alternative type
+/// directly (no `decay_t`/`if constexpr` boilerplate needed at the call
+/// site). Only use this for the binary "one alternative vs. all others"
+/// case; a multi-way dispatch is still clearer as a plain `std::visit` with
+/// several `if constexpr` branches.
+template <typename Variant, typename IfFunc,
+          typename ElseFunc = detail::IgnoreUnmatchedAlternative>
+decltype(auto) visitIf(Variant&& variant, IfFunc&& ifFunc,
+                       ElseFunc&& elseFunc = {}) {
+  return std::visit(
+      [&](auto&& value) -> decltype(auto) {
+        if constexpr (std::is_invocable_v<IfFunc&, decltype(value)>) {
+          return ifFunc(AD_FWD(value));
+        } else {
+          return elseFunc(AD_FWD(value));
+        }
+      },
+      AD_FWD(variant));
+}
+
 /// Apply `Function f` to each element of tuple. Returns a tuple of the results.
 /// Note: 1. The `Function` must not return void (otherwise this doesn't
 /// compile)

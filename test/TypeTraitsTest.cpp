@@ -431,3 +431,23 @@ TEST(TypeTraits, getInvokeResultImpl) {
       (std::is_same_v<typename decltype(tp2)::type,
                       InvalidInvokeResult<decltype(lambda), const char*>>));
 }
+
+TEST(TypeTraits, visitIf) {
+  std::variant<int, std::string> v{42};
+  EXPECT_EQ(ad_utility::visitIf(
+                v, [](int i) { return i + 1; },
+                [](const std::string&) { return -1; }),
+            43);
+
+  v = "hello";
+  EXPECT_EQ(ad_utility::visitIf(
+                v, [](int i) { return i + 1; },
+                [](const std::string&) { return -1; }),
+            -1);
+
+  // `elseFunc` defaults to a no-op.
+  int numCalls = 0;
+  ad_utility::visitIf(v, [&numCalls](const std::string&) { ++numCalls; });
+  ad_utility::visitIf(v, [&numCalls](int) { ++numCalls; });
+  EXPECT_EQ(numCalls, 1);
+}
