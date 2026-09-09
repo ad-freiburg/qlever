@@ -348,8 +348,8 @@ class SplitVocabulary {
   // plus the corresponding one of the `FilenameSuffixes`.
   void open(const std::string& filename);
 
-  // Forward the geo cell grid to any underlying `GeoVocabulary` (see there
-  // for the effect). No-op if there is none.
+  // Forward the geo cell grid to the underlying `GeoVocabulary`, if there is
+  // one (see there for the effect). No-op otherwise.
   void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
     for (auto& vocab : underlying_) {
       std::visit(
@@ -363,8 +363,9 @@ class SplitVocabulary {
     }
   }
 
-  // The geo cell grid of an underlying `GeoVocabulary`, or `std::nullopt` if
-  // there is none or it has no grid.
+  // The geo cell grid of the underlying `GeoVocabulary` (there is at most
+  // one, see the `static_assert` above), or `std::nullopt` if there is none
+  // or it has no grid.
   std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
     std::optional<ad_utility::GeoCellGrid> result = std::nullopt;
     for (const auto& vocab : underlying_) {
@@ -372,9 +373,7 @@ class SplitVocabulary {
           [&result](const auto& v) {
             using T = std::decay_t<decltype(v)>;
             if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
-              if (v.getGeoCellGrid().has_value()) {
-                result = v.getGeoCellGrid();
-              }
+              result = v.getGeoCellGrid();
             }
           },
           vocab);

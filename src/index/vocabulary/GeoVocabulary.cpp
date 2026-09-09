@@ -11,6 +11,7 @@
 #include "index/vocabulary/GeoVocabulary.h"
 
 #include <stdexcept>
+#include <vector>
 
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyConstraints.h"
@@ -146,11 +147,11 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
     AD_CORRECTNESS_CHECK(index == numWords_);
     // Keep one position free, so that `endIndex` (the past-the-end position
     // combined with the cell of the last word) is always a valid index.
-    AD_CORRECTNESS_CHECK(numWords_ + 1 < grid_->maxNumWords(),
-                         "Too many WKT literals for the configured geo cell "
-                         "grid, please rebuild with a smaller grid level");
+    AD_CONTRACT_CHECK(numWords_ + 1 < grid_->maxNumWords(),
+                      "Too many WKT literals for the configured geo cell "
+                      "grid, please rebuild with a smaller grid level");
     auto cellIndex = cellIndexOfWord(grid_.value(), info, word);
-    AD_CORRECTNESS_CHECK(
+    AD_CONTRACT_CHECK(
         !lastCellIndex_.has_value() || lastCellIndex_.value() <= cellIndex,
         "WKT literals were not passed to the GeoVocabulary in the order of "
         "their geo grid cells");

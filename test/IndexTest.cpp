@@ -489,6 +489,11 @@ TEST(IndexTest, geoCellGridFromConfiguration) {
   EXPECT_EQ(loadWithConfiguration(
                 {{"geo-cell-grid-level", 3}, {"geo-cell-grid-scheme", "flat"}}),
             std::optional{ad_utility::GeoCellGrid{3}});
+
+  // A level that does not fit the grid is rejected.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration({{"geo-cell-grid-level", 300}}),
+      ::testing::HasSubstr("Invalid value 300"));
 }
 
 // Regression test for #3191.

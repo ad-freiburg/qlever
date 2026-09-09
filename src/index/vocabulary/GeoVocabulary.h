@@ -16,7 +16,6 @@
 #include <optional>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -31,9 +30,10 @@
 // regular vocabulary classes it does not only store the strings. Instead it
 // stores both preprocessed and original forms of its input words. Preprocessing
 // includes for example the computation of bounding boxes for accelerated
-// spatial queries. See the `GeometryInfo` class for details. Note: A
-// `GeoVocabulary` is only suitable for WKT literals, therefore it should be
-// used as part of a `SplitVocabulary`.
+// spatial queries. See the `GeometryInfo` class for details.
+//
+// NOTE: A `GeoVocabulary` is only suitable for WKT literals, therefore it
+// should be used as part of a `SplitVocabulary`.
 //
 // With a `GeoCellGrid` (see `setGeoCellGrid`), the index of a word is no
 // longer its position in the vocabulary: the upper bits of the index hold the
@@ -51,6 +51,7 @@ class GeoVocabulary {
   using GeometryInfo = ad_utility::GeometryInfo;
   using GeoCellGrid = ad_utility::GeoCellGrid;
 
+  // The underlying vocabulary, which stores the WKT literals as strings.
   UnderlyingVocabulary literals_;
 
   // The file in which the additional information on the geometries (like
@@ -83,8 +84,9 @@ class GeoVocabulary {
 
  public:
   // The constructor is defined in the `.cpp` file, where it checks the
-  // underlying vocabulary type, so that every instantiation goes through
-  // that check.
+  // underlying vocabulary type of the explicit instantiations (the check
+  // cannot be in this header, because the header of the concept it uses
+  // includes the `SplitVocabulary`, which includes this class).
   GeoVocabulary();
 
   // Load the precomputed `GeometryInfo` object for the literal with
@@ -104,7 +106,7 @@ class GeoVocabulary {
   // building one). Changing the grid of an opened vocabulary would change the
   // meaning of all its indices, so this is an error.
   void setGeoCellGrid(std::optional<GeoCellGrid> grid) {
-    AD_CONTRACT_CHECK(!literals_.size(),
+    AD_CONTRACT_CHECK(!geoInfoFile_.isOpen(),
                       "The geo cell grid must be set before the vocabulary is "
                       "opened");
     grid_ = grid;
@@ -130,13 +132,14 @@ class GeoVocabulary {
   // the upper bound for valid indices).
   uint64_t endIndex() const { return endIndex_; }
 
-  // Forward all the standard operations to the underlying literal vocabulary.
-  // See there for more details.
+  // The standard vocabulary operations. They translate between indices and
+  // positions (see above) and otherwise forward to the underlying vocabulary,
+  // see there for details.
 
   // ___________________________________________________________________________
   decltype(auto) operator[](uint64_t id) const {
     auto position = positionFromIndex(id);
-    AD_CORRECTNESS_CHECK(position < size());
+    AD_CONTRACT_CHECK(position < size());
     return literals_[position];
   }
 
@@ -150,6 +153,10 @@ class GeoVocabulary {
   }
 
   // Iterate over all words together with their index.
+  //
+  // NOTE: With a grid, this reads the geometry info of every word from disk
+  // to compute its index, one small read per word. If a scan of a large
+  // vocabulary with a grid ever matters, read the geometry info in blocks.
   auto scanAll() const {
     return ad_utility::OwningView{literals_.scanAll()} |
            ql::views::transform([this](IndexAndWord indexAndWord) {
@@ -192,8 +199,10 @@ class GeoVocabulary {
   // cell and puts the cell index into the upper bits of the returned indices.
   class WordWriter : public WordWriterBase {
    private:
+    // The writer of the underlying vocabulary, which stores the strings.
     std::unique_ptr<typename UnderlyingVocabulary::WordWriter>
         underlyingWordWriter_;
+    // The file for the geometry info, one record per word.
     ad_utility::File geoInfoFile_;
     // The grid, or `std::nullopt` if the index of a word is its position.
     std::optional<GeoCellGrid> grid_;
@@ -201,6 +210,7 @@ class GeoVocabulary {
     std::optional<GeoCellGrid::CellIndex> lastCellIndex_;
     // The number of words written so far (the position of the next word).
     uint64_t numWords_ = 0;
+    // Counters for the warnings that `finishImpl` prints.
     size_t numInvalidGeometries_ = 0;
     size_t numInvalidPolygonArea_ = 0;
 

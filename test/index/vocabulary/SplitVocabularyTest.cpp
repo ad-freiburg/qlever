@@ -494,12 +494,13 @@ TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
 
 // Test that the indices of a `GeoVocabulary` with a geo cell grid (cell index
 // in the upper bits) pass correctly through a `SplitGeoVocabulary`: they carry
-// the marker bit, exceed the size of the geo vocabulary by construction, and
-// the past-the-end bounds come from `GeoVocabulary::endIndex`.
+// the marker bit, and the past-the-end bounds come from
+// `GeoVocabulary::endIndex`.
 TEST(SplitVocabulary, geoCellGridIndicesThroughSplitVocabulary) {
   using SGV = SplitGeoVocabulary<VocabularyInMemory>;
   ad_utility::GeoCellGrid grid{2};
-  const std::string fn = "geocellsplitvocab-test.dat";
+  const std::string fn = absl::StrCat(gtestCurrentTestName(), ".dat");
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<SGV>(fn);
   auto wkt = [](std::string_view content) {
     return absl::StrCat("\"", content, GEO_LITERAL_SUFFIX);
   };
