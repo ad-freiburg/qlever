@@ -44,6 +44,15 @@
 // value and graph actually occurs in the knowledge graph). UNDEF values (both
 // in the checked column and in the graph column) match everything and are
 // expanded accordingly.
+//
+// NOTE: Several parts of the implementation deliberately favor simplicity over
+// speed (see the `TODO`s and the notes in `EmptyPath.cpp`): the result is
+// written row by row although `IdTable`s are stored column-major, and UNDEF
+// values are expanded via a plain cross product. This is a conscious trade-off:
+// in the common case (an existence check on few values) the result is so small
+// that none of this matters, and in the cases where it would matter the runtime
+// is dominated by reading (large parts of) the index, so the query will
+// typically run into the timeout anyway.
 class EmptyPath : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;

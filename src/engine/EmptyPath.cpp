@@ -19,75 +19,6 @@
 #include "util/Views.h"
 
 namespace {
-// A cursor over the rows of a lazy range of sorted `IdTable`s, which allows to
-// merge several such ranges. Rows are appended to the result in bulk wherever
-// possible, because `IdTable`s are stored in column-major order.
-class RowCursor {
-  ad_utility::InputRangeTypeErased<IdTable> range_;
-  std::optional<IdTable> table_ = std::nullopt;
-  size_t rowIdx_ = 0;
-  bool isExhausted_ = false;
-
-  // The rows of the current table that haven't been consumed yet.
-  auto remainingRows() const {
-    return ql::ranges::subrange{table_.value().begin() + rowIdx_,
-                                table_.value().end()};
-  }
-
-  // Append the rows `[rowIdx_, end)` of the current table to `result` and make
-  // them consumed. Return the number of appended rows.
-  size_t append(IdTable& result, size_t end) {
-    size_t numRows = end - rowIdx_;
-    result.insertAtEnd(table_.value(), rowIdx_, end);
-    rowIdx_ = end;
-    return numRows;
-  }
-
- public:
-  explicit RowCursor(ad_utility::InputRangeTypeErased<IdTable> range)
-      : range_{std::move(range)} {}
-
-  // Make the cursor point at the next row that hasn't been consumed yet. Return
-  // false if all rows have been consumed.
-  bool findNextRow() {
-    while (!table_.has_value() || rowIdx_ == table_.value().numRows()) {
-      if (isExhausted_) {
-        return false;
-      }
-      table_ = range_.get();
-      rowIdx_ = 0;
-      isExhausted_ = !table_.has_value();
-    }
-    return true;
-  }
-
-  // Append all the remaining rows of the current table to `result`.
-  void appendRemainingRows(IdTable& result) {
-    append(result, table_.value().numRows());
-  }
-
-  // Append the current row to `result` and consume it.
-  void appendCurrentRow(IdTable& result) { append(result, rowIdx_ + 1); }
-
-  // Consume the current row without appending it anywhere.
-  void skipCurrentRow() { ++rowIdx_; }
-
-  // The row that this cursor currently points at.
-  IdTable::const_row_reference currentRow() const {
-    return table_.value()[rowIdx_];
-  }
-
-  // Append all the rows of the current table that are strictly smaller than the
-  // current row of `other` to `result`. Return the number of appended rows,
-  // which is zero iff the current row is not smaller than `other`'s.
-  size_t appendRowsSmallerThan(IdTable& result, const RowCursor& other) {
-    auto rows = remainingRows();
-    auto end = ql::ranges::lower_bound(rows, other.currentRow(),
-                                       ql::ranges::lexicographical_compare);
-    return append(result, rowIdx_ + (end - rows.begin()));
-  }
-};
-
 // Return the graph IDs that `id` occurs in according to the `matches` table
 // (see `EmptyPath::processTable`).
 //
@@ -113,6 +44,20 @@ ql::span<const Id> graphsOf(const IdTable& matches, Id id) {
   }
   return matches.getColumn(1).subspan(matching.begin() - ids.begin(),
                                       numMatches);
+}
+
+// The rows of a `table` from `EmptyPath::scanIndex` as a range of
+// `(entity, graph)` pairs. If the table has no graph column, then an undefined
+// ID stands in for the graph, such that the callers can treat both cases
+// uniformly (as in `graphsOf` above). The returned range refers to the `table`,
+// which hence has to outlive it.
+auto entitiesAndGraphs(const IdTable& table) {
+  return ql::views::transform(ad_utility::integerRange(table.numRows()),
+                              [&table](size_t row) -> std::pair<Id, Id> {
+                                return {table(row, 0), table.numColumns() == 1
+                                                           ? Id::makeUndefined()
+                                                           : table(row, 1)};
+                              });
 }
 }  // namespace
 
@@ -343,32 +288,29 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
             .getDistinctCol0Ids(scanSpec, addGraphColumn, std::move(ids),
                                 cancellationHandle_, locatedTriplesState())};
   };
+  // The rows of one of the scans above, as a flat range.
+  auto rows = [](ad_utility::InputRangeTypeErased<IdTable> range) {
+    return ql::views::join(ad_utility::OwningView{std::move(range)});
+  };
   // Merge the distinct subjects and the distinct objects. Both ranges are
-  // sorted and free of duplicates, so a simple sorted merge suffices.
-  RowCursor subjects{scan(Permutation::SPO, idFilter)};
-  RowCursor objects{scan(Permutation::OPS, std::move(idFilter))};
+  // sorted and free of duplicates, so `set_union` yields each row exactly once.
+  auto merged = ::ranges::views::set_union(
+      rows(scan(Permutation::SPO, idFilter)),
+      rows(scan(Permutation::OPS, std::move(idFilter))),
+      ql::ranges::lexicographical_compare);
 
   IdTable result{numKgColumns(), allocator()};
   result.reserve(chunkSize_);
-  for (;;) {
-    bool hasSubject = subjects.findNextRow();
-    bool hasObject = objects.findNextRow();
-    if (!hasSubject && !hasObject) {
-      break;
-    }
-    if (!hasObject) {
-      subjects.appendRemainingRows(result);
-    } else if (!hasSubject) {
-      objects.appendRemainingRows(result);
-    } else if (subjects.appendRowsSmallerThan(result, objects) == 0 &&
-               objects.appendRowsSmallerThan(result, subjects) == 0) {
-      // Neither of the two rows is smaller than the other one, so they are
-      // equal and we only yield them once.
-      subjects.appendCurrentRow(result);
-      objects.skipCurrentRow();
-    }
-    // The chunk size is only a lower bound, because we append whole runs of
-    // rows at once (which is much cheaper than appending them one by one).
+  // NOTE: `set_union` hands out the rows one at a time, so the result is built
+  // row by row although `IdTable`s are stored column-major (see the `TODO` for
+  // `appendRow` below). A hand-rolled merge could detect whole runs of rows
+  // that come from only one of the two scans and append those in bulk, but
+  // that is deliberately not worth its complexity here: either the `idFilter`
+  // makes the result tiny (the common case of an existence check on few
+  // values), or the whole knowledge graph is scanned, in which case
+  // decompressing the blocks of the two permutations dominates by far.
+  for (const auto& row : merged) {
+    result.push_back(row);
     if (result.numRows() >= chunkSize_) {
       checkCancellation();
       co_yield std::move(result);
@@ -389,6 +331,13 @@ Result::Generator EmptyPath::computeAllEntities() const {
 }
 
 // _____________________________________________________________________________
+// TODO<RobinTF> This writes a single row at a time, although `IdTable`s are
+// stored in column-major order, so each of the writes below touches a different
+// column. Appending whole runs of rows per column would be considerably faster
+// (all the rows that a single input row is expanded to share their payload
+// columns, and all the rows of a single entity share their entity column). This
+// is deliberately kept simple for now, see the note at the top of the
+// `EmptyPath` class for why this is acceptable.
 void EmptyPath::appendRow(IdTable& result, const IdTableView<0>& input,
                           size_t inputRow, Id id, Id graph) const {
   result.emplace_back();
@@ -417,6 +366,15 @@ bool EmptyPath::graphMatches(const IdTableView<0>& input, size_t inputRow,
 }
 
 // _____________________________________________________________________________
+// TODO<RobinTF> The cross product below is computed row by row (see the `TODO`
+// for `appendRow`), although its shape is very regular: the entity column of
+// the result is the entities of the knowledge graph, each repeated
+// `undefRows.size()` times, and the payload columns are the payload columns of
+// the `undefRows`, tiled once per entity. Both could be written with a handful
+// of bulk copies per chunk instead. This is deliberately kept simple for now,
+// see the note at the top of the `EmptyPath` class; note that this case is rare
+// (and slow no matter what, because the whole knowledge graph has to be read),
+// which is why we warn about it.
 Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
                                               IdTable& result,
                                               YieldIfFull yieldIfFull) const {
@@ -433,21 +391,21 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
       [&joinColumn](size_t i) { return joinColumn[i].isUndefined(); });
   // Note that this doesn't preserve the sort order, which is accounted for by
   // `resultSortedOn`.
-  for (IdTable& part : scanIndex(std::nullopt)) {
+  for (const IdTable& part : scanIndex(std::nullopt)) {
     checkCancellation();
-    for (size_t partRow : ad_utility::integerRange(part.numRows())) {
-      Id id = part(partRow, 0);
-      Id graph =
-          graphVariable_.has_value() ? part(partRow, 1) : Id::makeUndefined();
-      for (size_t row : undefRows) {
-        if (graphMatches(input, row, graph)) {
-          appendRow(result, input, row, id, graph);
-        }
-        // The check has to happen in the innermost loop, because a single
-        // entity can be combined with arbitrarily many rows of the input.
-        if (auto pair = yieldIfFull()) {
-          co_yield pair.value();
-        }
+    // Each entity of the knowledge graph has to be combined with each of the
+    // rows that have an UNDEF value in the join column.
+    // TODO<C++23> Use `ql::views::cartesian_product`.
+    for (const auto& [entityAndGraph, row] : ::ranges::views::cartesian_product(
+             entitiesAndGraphs(part), undefRows)) {
+      auto [id, graph] = entityAndGraph;
+      if (graphMatches(input, row, graph)) {
+        appendRow(result, input, row, id, graph);
+      }
+      // The check has to happen for every single pair, because a single entity
+      // can be combined with arbitrarily many rows of the input.
+      if (auto pair = yieldIfFull()) {
+        co_yield pair.value();
       }
     }
   }
