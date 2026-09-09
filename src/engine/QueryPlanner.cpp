@@ -433,8 +433,8 @@ std::vector<SubtreePlan> QueryPlanner::getGroupByRow(
     }
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
-    SubtreePlan groupByPlan{makeExecutionTree<GroupBy>(
-        _qec, groupVariables, std::move(aliases), parent._qet)};
+    SubtreePlan groupByPlan = makeSubtreePlan<GroupBy>(
+        _qec, groupVariables, std::move(aliases), parent._qet);
     assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     added.push_back(std::move(groupByPlan));
   }
@@ -466,7 +466,7 @@ std::vector<SubtreePlan> QueryPlanner::getOrderByRow(
       return previous;
     }
 
-    auto tree = [this, &pq, &parent, &sortIndices]() {
+    auto plan = [this, &pq, &parent, &sortIndices]() -> SubtreePlan {
       if (pq._isInternalSort == IsInternalSort::True) {
         std::vector<ColumnIndex> sortColumns;
         for (auto& [index, isDescending] : sortIndices) {
@@ -476,16 +476,15 @@ std::vector<SubtreePlan> QueryPlanner::getOrderByRow(
         // An explicit `INTERNAL SORT BY` requests the complete sorted result,
         // so we must not let the `Sort` propagate a `LIMIT`/`OFFSET` to its
         // subtree.
-        return QueryExecutionTree::createSortedTree(parent._qet, sortColumns,
-                                                    true);
+        return SubtreePlan{QueryExecutionTree::createSortedTree(
+            parent._qet, sortColumns, true)};
       }
       AD_CONTRACT_CHECK(pq._isInternalSort == IsInternalSort::False);
       // Note: As the internal ordering is different from the semantic ordering
       // needed by `OrderBy`, we always have to instantiate the `OrderBy`
       // operation.
-      return makeExecutionTree<OrderBy>(_qec, parent._qet, sortIndices);
+      return makeSubtreePlan<OrderBy>(_qec, parent._qet, sortIndices);
     }();
-    SubtreePlan plan{std::move(tree)};
     assignNodesFilterAndTextLimitIds(plan, parent);
     added.push_back(std::move(plan));
   }
@@ -3436,8 +3435,8 @@ void QueryPlanner::GraphPatternPlanner::visitExternalValues(
 void QueryPlanner::GraphPatternPlanner::visitNamedCachedResult(
     const parsedQuery::NamedCachedResult& arg) {
   auto candidate =
-      SubtreePlan{planner_._qec, planner_._qec->namedResultCache().getOperation(
-                                     arg.identifier(), planner_._qec)};
+      makeSubtreePlan(planner_._qec->namedResultCache().getOperation(
+          arg.identifier(), planner_._qec));
   visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 
