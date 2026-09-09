@@ -41,6 +41,8 @@ void GeoVocabulary<V>::open(const std::string& filename) {
         ad_utility::GEOMETRY_INFO_VERSION,
         " as required by this version of QLever. Please rebuild your index."));
   }
+
+  endIndex_ = computeEndIndex();
 }
 
 // ____________________________________________________________________________
@@ -48,6 +50,7 @@ template <typename V>
 void GeoVocabulary<V>::close() {
   literals_.close();
   geoInfoFile_.close();
+  endIndex_ = 0;
 }
 
 // ____________________________________________________________________________
@@ -64,7 +67,7 @@ uint64_t GeoVocabulary<V>::indexFromPosition(uint64_t position,
 
 // ____________________________________________________________________________
 template <typename V>
-uint64_t GeoVocabulary<V>::endIndex() const {
+uint64_t GeoVocabulary<V>::computeEndIndex() const {
   auto numWords = size();
   if (!grid_.has_value() || numWords == 0) {
     return numWords;

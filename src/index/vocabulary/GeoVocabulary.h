@@ -60,6 +60,9 @@ class GeoVocabulary {
   // The grid, or `std::nullopt` if the index of a word is its position.
   std::optional<GeoCellGrid> grid_;
 
+  // See `endIndex`, computed once when the vocabulary is opened.
+  uint64_t endIndex_ = 0;
+
   // TODO<ullingerc> Possibly add in-memory cache of bounding boxes here
 
   // Filename suffix for geometry information file
@@ -118,8 +121,9 @@ class GeoVocabulary {
   uint64_t indexFromPosition(uint64_t position, std::string_view word) const;
 
   // The index that is larger than the index of every word in this vocabulary
-  // (used to represent "past the end" positions of binary searches).
-  uint64_t endIndex() const;
+  // (used to represent "past the end" positions of binary searches, and as
+  // the upper bound for valid indices).
+  uint64_t endIndex() const { return endIndex_; }
 
   // Forward all the standard operations to the underlying literal vocabulary.
   // See there for more details.
@@ -256,6 +260,9 @@ class GeoVocabulary {
 
   // The precomputed `GeometryInfo` of the word at the given position.
   std::optional<GeometryInfo> geoInfoAtPosition(uint64_t position) const;
+
+  // Compute `endIndex_` for the opened vocabulary.
+  uint64_t computeEndIndex() const;
 
   // Replace the position in a non-end `WordAndIndex` by the index.
   WordAndIndex withIndexFromPosition(WordAndIndex wordAndIndex) const {
