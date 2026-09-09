@@ -1,15 +1,17 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+#include "engine/sparqlExpressions/BinaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
 
 namespace sparqlExpression {
 namespace detail {
+
 // Multiplication.
 using Multiply = MakeNumericExpression<std::multiplies<>>;
-NARY_EXPRESSION(MultiplyExpression, 2, FV<Multiply, NumericValueGetter>);
+BINARY_EXPRESSION(MultiplyExpression, FV<Multiply, NumericValueGetter>);
 
 // Division.
 //
@@ -29,12 +31,11 @@ struct DivideImpl {
 };
 
 using Divide1 = MakeNumericExpression<DivideImpl, true>;
-NARY_EXPRESSION(DivideExpressionByZeroIsUndef, 2,
-                FV<Divide1, NumericValueGetter>);
+BINARY_EXPRESSION(DivideExpressionByZeroIsUndef,
+                  FV<Divide1, NumericValueGetter>);
 
 using Divide2 = MakeNumericExpression<DivideImpl, false>;
-NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
-                FV<Divide2, NumericValueGetter>);
+BINARY_EXPRESSION(DivideExpressionByZeroIsNan, FV<Divide2, NumericValueGetter>);
 
 // _____________________________________________________________________________
 // Addition.
@@ -74,7 +75,7 @@ struct AddImpl {
     return Id::makeUndefined();
   }
 };
-NARY_EXPRESSION(AddExpression, 2, FV<AddImpl, NumericOrDateValueGetter>);
+BINARY_EXPRESSION(AddExpression, FV<AddImpl, NumericOrDateValueGetter>);
 
 // _____________________________________________________________________________
 // Subtraction.
@@ -114,8 +115,8 @@ struct SubtractImpl {
     return Id::makeUndefined();
   }
 };
-NARY_EXPRESSION(SubtractExpression, 2,
-                FV<SubtractImpl, NumericOrDateValueGetter>);
+BINARY_EXPRESSION(SubtractExpression,
+                  FV<SubtractImpl, NumericOrDateValueGetter>);
 
 // _____________________________________________________________________________
 // Power.
@@ -125,7 +126,7 @@ struct PowImpl {
   }
 };
 using Pow = MakeNumericExpression<PowImpl>;
-NARY_EXPRESSION(PowExpression, 2, FV<Pow, NumericValueGetter>);
+BINARY_EXPRESSION(PowExpression, FV<Pow, NumericValueGetter>);
 
 // OR and AND
 // _____________________________________________________________________________

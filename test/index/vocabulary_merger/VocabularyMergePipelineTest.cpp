@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -121,4 +122,45 @@ TEST(VocabularyMergePipeline, noBatches) {
   auto metaData = pipeline.finish();
   EXPECT_EQ(metaData.numWordsTotal(), 0u);
   EXPECT_THAT(getIdMapFromFile(filename), ::testing::IsEmpty());
+}
+
+// _____________________________________________________________________________
+// An exception that is thrown by one of the stages (here by the word callback
+// on the thread of the `wordWriterQueue_`) must not escape that thread. It is
+// reported by `hasFailed()` and rethrown by `finish()`, and the batches that
+// are pushed after the failure are skipped.
+TEST(VocabularyMergePipeline, exceptionFromAStageIsPropagated) {
+  std::string basename = absl::StrCat(gtestCurrentTestName(), "-");
+  std::string filename = absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, 0);
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+
+  size_t numCalls = 0;
+  auto wordCallback = [&numCalls](std::string_view, bool) -> uint64_t {
+    ++numCalls;
+    throw std::runtime_error{"The vocabulary could not be written"};
+  };
+  ad_utility::RegexSet noRegexes;
+
+  VocabularyMergePipeline pipeline{basename, {"0"}};
+  WordBatchBuilder builder;
+  auto push = [&pipeline, &wordCallback, &noRegexes](WordBatch batch) {
+    pipeline.push(std::move(batch), wordCallback, noRegexes);
+  };
+  builder.addMergedWords({makeQueueWord("\"a\"", false, 0, 0)}, lessThan, push);
+  builder.finish(push);
+  // The words of the single batch are written asynchronously, so wait for the
+  // failure. NOTE: The `finish()` below would also wait, but it throws.
+  while (!pipeline.hasFailed()) {
+  }
+
+  // A batch that is pushed after the failure is skipped, so the callback is
+  // called exactly once.
+  builder.addMergedWords({makeQueueWord("\"b\"", false, 0, 1)}, lessThan, push);
+  builder.finish(push);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      pipeline.finish(), ::testing::HasSubstr("could not be written"),
+      std::runtime_error);
+  EXPECT_EQ(numCalls, 1u);
 }

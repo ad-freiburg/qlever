@@ -18,10 +18,10 @@
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary_merger/WordBatchBuilder.h"
 
 using namespace ad_utility::vocabulary_merger;
-using ad_utility::vocabulary_merger::detail::idMapEntryBatchSize;
 using ad_utility::vocabulary_merger::detail::QueueWord;
 using ad_utility::vocabulary_merger::detail::WordBatch;
 using ad_utility::vocabulary_merger::detail::WordBatchBuilder;
@@ -148,19 +148,20 @@ TEST(WordBatchBuilder, externalizationAcrossBatchBoundary) {
   // Exactly enough distinct words to fill a whole batch, followed by the word
   // that will be split by the batch boundary.
   std::vector<QueueWord> buffer;
-  for (size_t i = 0; i < idMapEntryBatchSize; ++i) {
+  for (size_t i = 0; i < VOCAB_MERGER_WORD_BATCH_SIZE; ++i) {
     buffer.push_back(makeQueueWord(fillWord(i), false, 0, i));
   }
-  buffer.push_back(makeQueueWord("\"zzz\"", false, 0, idMapEntryBatchSize));
+  buffer.push_back(
+      makeQueueWord("\"zzz\"", false, 0, VOCAB_MERGER_WORD_BATCH_SIZE));
   builder.addMergedWords(std::move(buffer), lessThan, collect);
 
   // The first batch was handed on. It contains exactly the words that can no
   // longer change, i.e. all but the last one.
   ASSERT_EQ(batches.size(), 1u);
-  ASSERT_EQ(batches[0].uniqueWords_.size(), idMapEntryBatchSize);
+  ASSERT_EQ(batches[0].uniqueWords_.size(), VOCAB_MERGER_WORD_BATCH_SIZE);
   EXPECT_EQ(batches[0].uniqueWords_.back().word_,
-            fillWord(idMapEntryBatchSize - 1));
-  EXPECT_EQ(mappingsOf(batches[0]).size(), idMapEntryBatchSize);
+            fillWord(VOCAB_MERGER_WORD_BATCH_SIZE - 1));
+  EXPECT_EQ(mappingsOf(batches[0]).size(), VOCAB_MERGER_WORD_BATCH_SIZE);
 
   // Another occurrence of the held-back word, this time marked as external.
   builder.addMergedWords({makeQueueWord("\"zzz\"", true, 1, 0)}, lessThan,
@@ -171,16 +172,17 @@ TEST(WordBatchBuilder, externalizationAcrossBatchBoundary) {
   // Destroy the merged words of the first batch, exactly as the pipeline does
   // once that batch has been written. The held-back word must survive this,
   // because the second batch owns its own copy of it.
-  batches[0] = WordBatch{};
+  batches[0] = WordBatch{0};
 
   // The word was externalized, although its first occurrence (which arrived
   // before the batch boundary) was not marked as external.
   EXPECT_THAT(wordsOf(batches[1]),
               ::testing::ElementsAre(Pair("\"zzz\"", true)));
   // Both occurrences are in the second batch and refer to its only word.
-  EXPECT_THAT(mappingsOf(batches[1]),
-              ::testing::ElementsAre(Mapping{0, 0, idMapEntryBatchSize},
-                                     Mapping{1, 0, 0}));
+  EXPECT_THAT(
+      mappingsOf(batches[1]),
+      ::testing::ElementsAre(Mapping{0, 0, VOCAB_MERGER_WORD_BATCH_SIZE},
+                             Mapping{1, 0, 0}));
 }
 
 // _____________________________________________________________________________
@@ -189,7 +191,7 @@ TEST(WordBatchBuilder, externalizationAcrossBatchBoundary) {
 // batch, the words of the batches concatenate to the input, and every
 // occurrence yields exactly one mapping.
 TEST(WordBatchBuilder, severalBatches) {
-  static constexpr size_t numWords = 5 * idMapEntryBatchSize / 2;
+  static constexpr size_t numWords = 5 * VOCAB_MERGER_WORD_BATCH_SIZE / 2;
   std::vector<WordBatch> batches;
   auto collect = [&batches](WordBatch batch) {
     batches.push_back(std::move(batch));
@@ -226,6 +228,53 @@ TEST(WordBatchBuilder, severalBatches) {
   }
   EXPECT_EQ(numWordsSeen, numWords);
   EXPECT_EQ(numMappingsSeen, numWords);
+}
+
+// _____________________________________________________________________________
+// A batch is also handed on when the total size of its words reaches
+// `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`, long before
+// `VOCAB_MERGER_WORD_BATCH_SIZE` words have been merged.
+TEST(WordBatchBuilder, batchIsAlsoLimitedByTheMemorySize) {
+  std::vector<WordBatch> batches;
+  auto collect = [&batches](WordBatch batch) {
+    batches.push_back(std::move(batch));
+  };
+  WordBatchBuilder builder;
+
+  // Words that are so long that ten of them exceed the memory limit. The
+  // prefix makes them ascending wrt the comparator.
+  static constexpr size_t wordSize =
+      VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes() / 10;
+  auto longWord = [](size_t i) {
+    return absl::StrFormat("\"%08d%s\"", i, std::string(wordSize, 'a'));
+  };
+
+  // Hand the words to the builder one at a time, until the first batch is
+  // complete. None of them is a duplicate.
+  size_t numWordsAdded = 0;
+  while (batches.empty()) {
+    builder.addMergedWords(
+        {makeQueueWord(longWord(numWordsAdded), false, 0, numWordsAdded)},
+        lessThan, collect);
+    ++numWordsAdded;
+    ASSERT_LT(numWordsAdded, VOCAB_MERGER_WORD_BATCH_SIZE);
+  }
+  // The batch was handed on because of the size of its words, and it contains
+  // all of them but the one that is still held back.
+  EXPECT_EQ(numWordsAdded, 10u);
+  ASSERT_EQ(batches.size(), 1u);
+  EXPECT_EQ(batches[0].uniqueWords_.size(), numWordsAdded - 1);
+  EXPECT_EQ(mappingsOf(batches[0]).size(), numWordsAdded - 1);
+
+  // The size that is accumulated is reset for the new batch, so the held-back
+  // word alone doesn't immediately complete it.
+  builder.addMergedWords(
+      {makeQueueWord(longWord(numWordsAdded), false, 0, numWordsAdded)},
+      lessThan, collect);
+  EXPECT_EQ(batches.size(), 1u);
+  builder.finish(collect);
+  ASSERT_EQ(batches.size(), 2u);
+  EXPECT_EQ(batches[1].uniqueWords_.size(), 2u);
 }
 
 // _____________________________________________________________________________

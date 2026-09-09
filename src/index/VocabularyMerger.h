@@ -22,6 +22,7 @@
 #include "index/vocabulary_merger/MergePipeline.h"
 #include "index/vocabulary_merger/QueueWord.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
+#include "index/vocabulary_merger/WordBatch.h"
 #include "index/vocabulary_merger/WordBatchBuilder.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"

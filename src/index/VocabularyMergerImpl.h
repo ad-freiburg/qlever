@@ -5,7 +5,9 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 
+#include <cstdint>
 #include <future>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -61,6 +63,13 @@ auto mergeVocabulary(const std::string& basename,
   };
   std::vector<decltype(makeWordRangeFromFile(0))> generators;
   generators.reserve(partialVocabularySuffixes.size());
+  // The index of the partial vocabulary that a merged word comes from is
+  // stored in 32 bits (see `detail::LocalIdxToBatchMapping`). NOTE: This check
+  // is done here (and not per merged word, which would be on the hot path of
+  // the merging), because `partialFileId_` is always one of the indices below.
+  AD_CORRECTNESS_CHECK(partialVocabularySuffixes.size() <=
+                       std::numeric_limits<uint32_t>::max());
+
   for (std::size_t i :
        ad_utility::integerRange(partialVocabularySuffixes.size())) {
     generators.push_back(makeWordRangeFromFile(i));
@@ -85,14 +94,20 @@ auto mergeVocabulary(const std::string& basename,
                                         decltype(detail::sizeOfQueueWord)>(
           0.8 * memoryToUse, std::move(generators), lessThanForQueue);
   for (std::vector<QueueWord>& currentWords : mergedWords) {
+    // Stop merging as soon as one of the stages of the pipeline has failed,
+    // the exception is rethrown by `finish()` below.
+    if (pipeline.hasFailed()) {
+      break;
+    }
     batchBuilder.addMergedWords(std::move(currentWords), comparator,
                                 batchCallback);
   }
-  // Hand the remaining words to the pipeline and wait until all of them have
-  // actually been written.
+  // Hand the remaining words (including the one that is still held back) to
+  // the pipeline and wait until all of them have actually been written.
   batchBuilder.finish(batchCallback);
   return pipeline.finish();
 }
+
 // ____________________________________________________________________________________________________________
 inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
   HashMap<uint64_t, uint64_t> res;

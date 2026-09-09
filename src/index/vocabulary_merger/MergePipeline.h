@@ -10,12 +10,15 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_MERGEPIPELINE_H
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_MERGEPIPELINE_H
 
-#include <cstddef>
+#include <atomic>
+#include <exception>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "backports/concepts.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary_merger/Concepts.h"
 #include "index/vocabulary_merger/IdMapBatch.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
@@ -46,12 +49,24 @@ class VocabularyMergePipeline {
   // object.
   IdMapBatchWriter idMapBatchWriter_;
   VocabularyWriter vocabularyWriter_;
-  ad_utility::TaskQueue<false> idMapWriterQueue_{queueSize, 1,
-                                                 "Writing the ID maps"};
+  // The first exception that one of the stages threw, if any, and a flag that
+  // says whether that has happened. An exception must not escape the thread of
+  // a queue (that would terminate the process), so it is stored here and
+  // rethrown by `finish()`. The flag is checked by all the threads (see
+  // `hasFailed()`), so that the merging stops early and the batches that are
+  // still queued are skipped; the `exception_ptr` itself is only read after all
+  // the queues have been finished.
+  std::atomic<bool> hasFailed_{false};
+  std::exception_ptr exception_;
+  // Only the first exception is stored, and the stages run on different
+  // threads, so the storing has to be synchronized.
+  std::mutex exceptionMutex_;
+  ad_utility::TaskQueue<false> idMapWriterQueue_{
+      VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Writing the ID maps"};
   ad_utility::TaskQueue<false> mergedWordsDestructionQueue_{
-      queueSize, 1, "Destroying the merged words"};
+      VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Destroying the merged words"};
   ad_utility::TaskQueue<false> wordWriterQueue_{
-      queueSize, 1, "Writing the merged vocabulary"};
+      VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Writing the merged vocabulary"};
 
  public:
   // Create the pipeline. The `basename` and the `partialVocabularySuffixes`
@@ -74,10 +89,36 @@ class VocabularyMergePipeline {
       WordBatch batch, C& wordCallback,
       const ad_utility::RegexSet& blankNodeIriRegexes);
 
+  // Whether one of the stages has thrown an exception. The caller should then
+  // stop pushing batches; the exception is rethrown by `finish()`.
+  bool hasFailed() const { return hasFailed_; }
+
   // Wait until all the batches that were pushed have been processed
   // completely, close the ID maps, and return the metadata of the merged
-  // vocabulary. After this, no more batches may be pushed.
+  // vocabulary. Rethrow the first exception that one of the stages threw, if
+  // any. After this, no more batches may be pushed.
   VocabularyMetaData finish();
+
+ private:
+  // Run the `task` on the thread of one of the queues, and store the exception
+  // that it throws (if any) instead of letting it escape that thread (see
+  // `exception_`). Once a batch has failed, the remaining batches are skipped,
+  // because their words could no longer be written consistently anyway.
+  template <typename F>
+  void runAndCatchException(const F& task) {
+    if (hasFailed_) {
+      return;
+    }
+    try {
+      task();
+    } catch (...) {
+      std::lock_guard lock{exceptionMutex_};
+      if (!exception_) {
+        exception_ = std::current_exception();
+      }
+      hasFailed_ = true;
+    }
+  }
 };
 
 // _____________________________________________________________________________
@@ -87,22 +128,26 @@ CPP_template_def(typename C)(
          const ad_utility::RegexSet& blankNodeIriRegexes) {
   wordWriterQueue_.push([this, batch = std::move(batch), &wordCallback,
                          &blankNodeIriRegexes]() mutable {
-    auto idMapBatch = vocabularyWriter_.writeWordsToVocabulary(
-        batch.uniqueWords_, std::move(batch.localIdxMappings_), wordCallback,
-        blankNodeIriRegexes);
+    runAndCatchException([this, &batch, &wordCallback, &blankNodeIriRegexes]() {
+      auto idMapBatch = vocabularyWriter_.writeWordsToVocabulary(
+          batch.uniqueWords_, std::move(batch.localIdxMappings_), wordCallback,
+          blankNodeIriRegexes);
 
-    // The merged words are no longer needed. Their destruction (which involves
-    // freeing one string per word) is expensive enough to be done by yet
-    // another thread. NOTE: The `clear()` is the actual work of this task; it
-    // happens on the queue's thread, as does the destruction of the (then
-    // empty) buffers.
-    mergedWordsDestructionQueue_.push(
-        [buffers = std::move(batch.mergedWordBuffers_)]() mutable {
-          buffers.clear();
+      // The merged words are no longer needed. Their destruction (which
+      // involves freeing one string per word) is expensive enough to be done
+      // by yet another thread. NOTE: The `clear()` is the actual work of this
+      // task; it happens on the queue's thread, as does the destruction of the
+      // (then empty) buffers.
+      mergedWordsDestructionQueue_.push(
+          [buffers = std::move(batch.mergedWordBuffers_)]() mutable {
+            buffers.clear();
+          });
+
+      idMapWriterQueue_.push([this, idMapBatch = std::move(idMapBatch)]() {
+        runAndCatchException([this, &idMapBatch]() {
+          idMapBatchWriter_.writeBatch(idMapBatch);
         });
-
-    idMapWriterQueue_.push([this, idMapBatch = std::move(idMapBatch)]() {
-      idMapBatchWriter_.writeBatch(idMapBatch);
+      });
     });
   });
 }
@@ -113,6 +158,14 @@ inline VocabularyMetaData VocabularyMergePipeline::finish() {
   wordWriterQueue_.finish();
   mergedWordsDestructionQueue_.finish();
   idMapWriterQueue_.finish();
+  // Propagate an exception from one of the stages to the caller. NOTE: All the
+  // queues have been joined, so reading `exception_` here is safe. The ID maps
+  // are deliberately not finished on this path (their destructors do that, and
+  // they do not throw), so that a failure of that cleanup cannot hide the
+  // original exception.
+  if (exception_) {
+    std::rethrow_exception(exception_);
+  }
   idMapBatchWriter_.finish();
   vocabularyWriter_.logFinalProgress();
   return std::move(vocabularyWriter_.metaData());

@@ -13,54 +13,22 @@
 #include <absl/strings/str_cat.h>
 
 #include <cstddef>
-#include <cstdint>
-#include <limits>
 #include <string>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "global/Id.h"
-#include "global/VocabIndex.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary_merger/IdMap.h"
-#include "util/Exception.h"
+#include "index/vocabulary_merger/WordBatch.h"
 #include "util/Log.h"
-#include "util/UninitializedAllocator.h"
 #include "util/Views.h"
 
-// The intermediate stages of the vocabulary merger (see
-// `index/VocabularyMerger.h`) that deal with the mapping from local indices
-// (local to a partial vocabulary) to the index in a merged batch of words, for
-// which the global ID is not yet known.
+// The third stage of the merging pipeline of the vocabulary merger (see the
+// comment above `mergeVocabulary` in `index/VocabularyMerger.h`), which writes
+// the entries of the partial ID maps. This is not part of the public interface
+// of that header.
 namespace ad_utility::vocabulary_merger::detail {
-
-// A mapping from an `indexOfWordInPartialVocabulary_` (an index of a word in
-// the `partialVocabularyIndex_`-th partial vocabulary) to the corresponding
-// index of the word in a merged batch (`indexOfWordInBatch_`) of words (for
-// which the global IDs are not yet known).
-//
-// NOTE: The declaration order deliberately deviates from the logical order of
-// the members, such that the struct is exactly 16 and not 24 bytes large.
-// There is one such mapping per merged word, and they are written scattered
-// over all the partial ID maps, so both the memory footprint and the cache
-// pressure of this struct matter.
-struct LocalIdxToBatchMapping {
-  uint32_t partialVocabularyIndex_;
-  uint32_t indexOfWordInBatch_;
-  VocabIndex indexOfWordInPartialVocabulary_;
-};
-static_assert(sizeof(LocalIdxToBatchMapping) == 16,
-              "The members of a `LocalIdxToBatchMapping` have to be declared "
-              "such that no padding is required, see the comment above");
-
-// All the `LocalIdxToBatchMapping`s for a single batch of merged words. NOTE:
-// We deliberately do not use a plain vector with `push_back`, but a plain
-// array with a manual index for maximal performance (the `push_back` overhead
-// was measurable on the hot path).
-struct LocalIdxToBatchMappings {
-  ad_utility::UninitializedVector<LocalIdxToBatchMapping> mappings_;
-  size_t numMappings_ = 0;
-};
 
 // The index mappings for a complete merged batch of words. `globalIds_` stores
 // the global IDs for the words in this batch,
@@ -85,12 +53,11 @@ class IdMapBatchWriter {
   // Create the ID map for each of the partial vocabularies. The filenames are
   // `basename + PARTIAL_VOCAB_IDMAP_INFIX + suffix` for each `suffix` in
   // `partialVocabularySuffixes`.
+  // NOTE: That the number of partial vocabularies fits into the `uint32_t` of
+  // a `LocalIdxToBatchMapping` is checked by `mergeVocabulary` (see
+  // `index/VocabularyMergerImpl.h`).
   IdMapBatchWriter(const std::string& basename,
                    const std::vector<std::string>& partialVocabularySuffixes) {
-    // The index of the partial vocabulary is stored in a `uint32_t` for each of
-    // the (very many) mappings, see `LocalIdxToBatchMapping`.
-    AD_CORRECTNESS_CHECK(partialVocabularySuffixes.size() <=
-                         std::numeric_limits<uint32_t>::max());
     // NOTE: We deliberately use the range constructor of `std::vector` and not
     // `::ranges::to_vector`. The latter goes via `std::vector::assign`, which
     // requires the elements to be assignable, which an `IdMapWriter`
