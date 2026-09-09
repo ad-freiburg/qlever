@@ -1448,6 +1448,30 @@ TEST(RdfParserTest, asyncParallelParserHaltsOnFirstError) {
   forAllAsyncParallelParsers(testWithParser);
 }
 
+// Test that the parallel parsers report a parse position of 0, because they
+// parse several blocks at once and hence have no single meaningful position
+// (see `AsyncParserDriver::getParsePosition`).
+// _____________________________________________________________________________
+TEST(RdfParserTest, parallelParserGetParsePosition) {
+  std::string filename{absl::StrCat(gtestCurrentTestName(), ".dat")};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  {
+    auto of = ad_utility::makeOfstream(filename);
+    of << "<subject> <predicate> <object> .\n";
+  }
+  auto testWithParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    Parser parser{qlever::InputFileSpecification{
+                      filename, qlever::Filetype::Turtle, std::nullopt},
+                  1_kB, encodedIriManager()};
+    EXPECT_EQ(parser.getParsePosition(), 0u);
+    // The position also stays 0 once the input has actually been parsed.
+    EXPECT_THAT(parser.getBatch(), ::testing::Optional(::testing::SizeIs(1)));
+    EXPECT_EQ(parser.getParsePosition(), 0u);
+  };
+  forAllParallelParsers(testWithParser);
+}
+
 // _____________________________________________________________________________
 TEST(RdfParserTest, nQuadParser) {
   auto runTestsForParser = [](auto parser) {

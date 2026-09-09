@@ -62,7 +62,8 @@ class AsyncParserDriver : public RdfParserBase {
   // derived class only has to supply whatever the concrete parser needs (see
   // `RdfParallelParserViaAsync`).
   template <typename... Args>
-  AsyncParserDriver(const EncodedIriManager* encodedIriManager, Args&&... args)
+  explicit AsyncParserDriver(const EncodedIriManager* encodedIriManager,
+                             Args&&... args)
       : RdfParserBase{encodedIriManager},
         asyncParser_{pool_.get_executor(), AD_FWD(args)...} {}
 
