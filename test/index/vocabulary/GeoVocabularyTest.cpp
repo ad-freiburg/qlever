@@ -366,7 +366,7 @@ void testGeoCellGridIndices(const std::string& fn) {
       geoVocab.getGeoInfo(grid.indexFromCellAndPosition(3, words.size())));
 
   // The grid of an opened vocabulary cannot be changed anymore.
-  geoVocab.setGeoCellGrid(std::nullopt);
+  EXPECT_ANY_THROW(geoVocab.setGeoCellGrid(std::nullopt));
   EXPECT_EQ(geoVocab.getGeoCellGrid(), std::optional{grid});
 
   // The past-the-end index is larger than every valid index.

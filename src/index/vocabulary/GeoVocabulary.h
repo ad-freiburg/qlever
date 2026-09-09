@@ -108,11 +108,13 @@ class GeoVocabulary {
 
   // Set the grid. Must be called before `open` (when loading a vocabulary
   // that was built with this grid) or before `makeDiskWriterPtr` (when
-  // building one); it has no effect on an already opened vocabulary.
+  // building one). Changing the grid of an opened vocabulary would change the
+  // meaning of all its indices, so this is an error.
   void setGeoCellGrid(std::optional<GeoCellGrid> grid) {
-    if (!literals_.size()) {
-      grid_ = grid;
-    }
+    AD_CONTRACT_CHECK(!literals_.size(),
+                      "The geo cell grid must be set before the vocabulary is "
+                      "opened");
+    grid_ = grid;
   }
 
   // The grid, or `std::nullopt` if the index of a word is its position.
