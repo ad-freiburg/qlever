@@ -45,13 +45,11 @@
 // in the checked column and in the graph column) match everything and are
 // expanded accordingly.
 //
-// NOTE: The implementation favors simplicity over speed in a few places (see
-// the `TODO`s in `EmptyPath.cpp`): the result is written row by row although
-// `IdTable`s are stored column-major, and UNDEF values are expanded via a plain
-// cross product. This is a deliberate trade-off: in the common case (an
-// existence check on few values) the result is small enough that this doesn't
-// matter, and in the cases where it would matter the runtime is dominated by
-// reading (large parts of) the index.
+// NOTE: The implementation deliberately favors simplicity over speed in a few
+// places (see the `TODO`s in `EmptyPath.cpp`): the result is written row by row
+// although `IdTable`s are stored column-major, and UNDEF values are expanded
+// via a plain cross product. Either the result is small (an existence check on
+// few values), or the runtime is dominated by reading the index anyway.
 class EmptyPath : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
@@ -141,10 +139,9 @@ class EmptyPath : public Operation {
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // The execution tree of the `checkedChild_`. Must only be called if that is
-  // set. Note that the constness of this `EmptyPath` doesn't propagate through
-  // the `shared_ptr`, so the child can be used for the (non-const) estimates
-  // as well.
+  // The execution tree of the `checkedChild_`, which must be set. Constness of
+  // this `EmptyPath` doesn't propagate through the `shared_ptr`, so the child
+  // can also be used for the (non-const) estimates.
   QueryExecutionTree& child() const { return *checkedChild_.value().child_; }
 
   // The number of columns that come from the knowledge graph (1 or 2).
@@ -169,10 +166,8 @@ class EmptyPath : public Operation {
 
   // Perform the existence check for a single table of the child's result. The
   // `table` is passed by value because it is a view that has to be stored in
-  // the frame of this coroutine, `localVocab` and `hasWarnedAboutUndef` have to
-  // be kept alive by the caller. The latter is shared by all the tables of a
-  // single result, such that the warning about UNDEF values is only added once
-  // (see `processUndefRows`).
+  // the frame of this coroutine; `localVocab` and `hasWarnedAboutUndef` (see
+  // `processUndefRows`) have to be kept alive by the caller.
   Result::Generator processTable(IdTableView<0> table,
                                  const LocalVocab& localVocab,
                                  bool& hasWarnedAboutUndef) const;
@@ -182,13 +177,12 @@ class EmptyPath : public Operation {
   using YieldIfFull =
       absl::FunctionRef<std::optional<Result::IdTableVocabPair>()>;
 
-  // Yield the result rows for those rows of `input` whose join column is
-  // UNDEF. Such a value matches every entity of the knowledge graph, so the
-  // full empty path has to be streamed for them. The rows are appended to
-  // `result`, which is the (possibly already partially filled) result table of
-  // the calling `processTable`, and handed out via `yieldIfFull`. A warning is
-  // added unless `hasWarnedAboutUndef` is already set. All the arguments have
-  // to be kept alive by the caller.
+  // Yield the result rows for those rows of `input` whose join column is UNDEF.
+  // Such a value matches every entity of the knowledge graph, so the full empty
+  // path has to be streamed for them. The rows are appended to `result` (the
+  // partially filled table of the calling `processTable`) and handed out via
+  // `yieldIfFull`; a warning is added unless `hasWarnedAboutUndef` is set. All
+  // arguments have to be kept alive by the caller.
   Result::Generator processUndefRows(const IdTableView<0>& input,
                                      IdTable& result, YieldIfFull yieldIfFull,
                                      bool& hasWarnedAboutUndef) const;

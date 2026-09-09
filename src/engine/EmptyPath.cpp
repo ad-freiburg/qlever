@@ -62,10 +62,8 @@ ql::span<const Id> graphsOf(const IdTable& matches, Id id) {
 }
 
 // The rows of a `table` from `EmptyPath::scanIndex` as a range of
-// `(entity, graph)` pairs. If the table has no graph column, then an undefined
-// ID stands in for the graph, such that the callers can treat both cases
-// uniformly (as in `graphsOf` above). The returned range refers to the `table`,
-// which hence has to outlive it.
+// `EntityAndGraph`. The returned range refers to `table`, which hence has to
+// outlive it.
 auto entitiesAndGraphs(const IdTable& table) {
   return ql::views::transform(
       ad_utility::integerRange(table.numRows()), [&table](size_t row) {
@@ -325,11 +323,10 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
 
   IdTable result{numKgColumns(), allocator()};
   result.reserve(chunkSize_);
-  // NOTE: `set_union` hands out the rows one at a time, so the result is built
-  // row by row. Detecting runs of rows that come from only one of the two scans
-  // and appending those in bulk would be faster, but the merge is not the
-  // bottleneck: either the `idFilter` makes the result tiny, or the whole
-  // knowledge graph is scanned and decompressing its blocks dominates.
+  // NOTE: `set_union` hands out single rows, so the result is built row by row.
+  // Appending runs from a single scan in bulk would be faster, but the merge is
+  // never the bottleneck: either the `idFilter` makes the result tiny, or the
+  // whole knowledge graph is scanned and decompressing its blocks dominates.
   for (const EntityAndGraph& row : merged) {
     result.push_back(ql::span<const Id>{row.data(), numKgColumns()});
     if (result.numRows() >= chunkSize_) {
@@ -353,9 +350,8 @@ Result::Generator EmptyPath::computeAllEntities() const {
 
 // _____________________________________________________________________________
 // TODO<RobinTF> Rows are written one at a time, although `IdTable`s are stored
-// column-major, so each of the writes below touches a different column.
-// Appending runs of rows per column would be faster; this is not a bottleneck
-// in practice (see the note at the top of the `EmptyPath` class).
+// column-major. Appending runs of rows per column would be faster, but this is
+// not a bottleneck in practice (see the note at the top of the class).
 void EmptyPath::appendRow(IdTable& result, const IdTableView<0>& input,
                           size_t inputRow, Id id, Id graph) const {
   result.emplace_back();
@@ -384,16 +380,15 @@ bool EmptyPath::graphMatches(const IdTableView<0>& input, size_t inputRow,
 }
 
 // _____________________________________________________________________________
-// TODO<RobinTF> The cross product below has a very regular shape: each entity
-// is repeated once per UNDEF row, and the payload columns of the UNDEF rows are
-// tiled once per entity. It could therefore be written with a few bulk copies
-// per chunk instead of row by row.
+// TODO<RobinTF> The cross product below has a very regular shape (each entity
+// repeated once per UNDEF row, the payload columns tiled once per entity), so
+// it could be written with a few bulk copies per chunk instead of row by row.
 Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
                                               IdTable& result,
                                               YieldIfFull yieldIfFull,
                                               bool& hasWarnedAboutUndef) const {
-  // A lazy child hands out its result in several tables, each of which may
-  // contain UNDEF values, so we have to make sure that we warn only once.
+  // A lazy child hands out several tables, each of which may contain UNDEF
+  // values, so warn only once.
   if (!hasWarnedAboutUndef) {
     hasWarnedAboutUndef = true;
     addWarning(
