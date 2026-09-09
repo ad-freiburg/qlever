@@ -300,13 +300,14 @@ TEST(GeoVocabularyTest, WordWriterDestructor) {
 
 // Test that a `GeoVocabulary` with a geo cell grid hands out indices with the
 // cell index in the upper bits and translates between indices and positions
-// in all its operations.
-TEST(GeoVocabulary, geoCellGridIndices) {
-  using GV = GeoVocabulary<VocabularyInMemory>;
+// in all its operations. Templated on the underlying vocabulary, see the
+// `TEST` below.
+template <typename UnderlyingVocabulary>
+void testGeoCellGridIndices(const std::string& fn) {
+  using GV = GeoVocabulary<UnderlyingVocabulary>;
   GeoCellGrid grid{2};
-  const std::string fn = "geocellvocab-test.dat";
   auto wkt = [](std::string_view content) {
-    return absl::StrCat("\"", content, "\"", GEO_LITERAL_SUFFIX);
+    return absl::StrCat("\"", content, GEO_LITERAL_SUFFIX);
   };
 
   // Words in (cell index, lexicographic) order: cell 3, cell 12 (twice), the
@@ -352,6 +353,17 @@ TEST(GeoVocabulary, geoCellGridIndices) {
   }
   EXPECT_TRUE(geoVocab.getGeoInfo(expectedIndices[0]).has_value());
   EXPECT_FALSE(geoVocab.getGeoInfo(expectedIndices[3]).has_value());
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      geoVocab, geoVocab.lookupBatch(expectedIndices), expectedIndices);
+
+  // An index whose position part is out of range is rejected.
+  EXPECT_ANY_THROW(geoVocab[grid.indexFromCellAndPosition(3, words.size())]);
+  EXPECT_ANY_THROW(
+      geoVocab.getGeoInfo(grid.indexFromCellAndPosition(3, words.size())));
+
+  // The grid of an opened vocabulary cannot be changed anymore.
+  geoVocab.setGeoCellGrid(std::nullopt);
+  EXPECT_EQ(geoVocab.getGeoCellGrid(), std::optional{grid});
 
   // The past-the-end index is larger than every valid index.
   EXPECT_EQ(geoVocab.endIndex(),
@@ -379,6 +391,9 @@ TEST(GeoVocabulary, geoCellGridIndices) {
     EXPECT_EQ(wordAndIndex.index(), expectedIndices[i]);
     EXPECT_EQ(wordAndIndex.word(), words[i]);
   }
+  // A word larger than all words (same sentinel cell, but lexicographically
+  // larger) yields the past-the-end result.
+  EXPECT_TRUE(geoVocab.lower_bound(wkt("ZZZ"), comparator).isEnd());
 
   // Without the grid, the same files are read with plain positions as
   // indices.
@@ -395,12 +410,43 @@ TEST(GeoVocabulary, geoCellGridIndices) {
   {
     GV badVocab;
     badVocab.setGeoCellGrid(grid);
-    auto ww = badVocab.makeDiskWriterPtr("geocellvocab-test-bad.dat");
+    auto ww = badVocab.makeDiskWriterPtr(fn + ".bad");
     ww->readableName() = "test";
     (*ww)(w1, false);
     EXPECT_ANY_THROW((*ww)(w0, false));
     ww->finish();
   }
+
+  // The past-the-end index of an empty vocabulary with a grid is 0.
+  {
+    GV emptyVocab;
+    emptyVocab.setGeoCellGrid(grid);
+    emptyVocab.makeDiskWriterPtr(fn + ".empty")->finish();
+    emptyVocab.open(fn + ".empty");
+    EXPECT_EQ(emptyVocab.endIndex(), 0u);
+  }
+
+  // The finest grid leaves only two position bits, so the fourth word does
+  // not fit anymore (one position stays free for the past-the-end index).
+  {
+    GV fullVocab;
+    fullVocab.setGeoCellGrid(GeoCellGrid{28});
+    auto ww = fullVocab.makeDiskWriterPtr(fn + ".full");
+    ww->readableName() = "test";
+    for (size_t i = 0; i < 3; ++i) {
+      (*ww)(w0, false);
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE((*ww)(w0, false),
+                                 ::testing::HasSubstr("Too many WKT literals"));
+    ww->finish();
+  }
+}
+
+// Run the test above for both underlying vocabularies of a `GeoVocabulary`.
+TEST(GeoVocabulary, geoCellGridIndices) {
+  testGeoCellGridIndices<VocabularyInMemory>("geocellvocab-test-inmemory.dat");
+  testGeoCellGridIndices<CompressedVocabulary<VocabularyInternalExternal>>(
+      "geocellvocab-test-compressed.dat");
 }
 
 }  // namespace

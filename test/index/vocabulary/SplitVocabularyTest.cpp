@@ -501,7 +501,7 @@ TEST(SplitVocabulary, geoCellGridIndicesThroughSplitVocabulary) {
   ad_utility::GeoCellGrid grid{2};
   const std::string fn = "geocellsplitvocab-test.dat";
   auto wkt = [](std::string_view content) {
-    return absl::StrCat("\"", content, "\"", GEO_LITERAL_SUFFIX);
+    return absl::StrCat("\"", content, GEO_LITERAL_SUFFIX);
   };
 
   std::string iri = "<http://example.org/a>";
@@ -534,8 +534,10 @@ TEST(SplitVocabulary, geoCellGridIndicesThroughSplitVocabulary) {
   }
 
   SGV vocab;
+  EXPECT_FALSE(vocab.getGeoCellGrid().has_value());
   vocab.setGeoCellGrid(grid);
   vocab.open(fn);
+  EXPECT_EQ(vocab.getGeoCellGrid(), std::optional{grid});
 
   // Retrieval by marked index.
   EXPECT_EQ(vocab[SGV::addMarker(grid.indexFromCellAndPosition(3, 0), 1)],
