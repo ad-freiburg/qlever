@@ -295,12 +295,15 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
   auto rows = [](ad_utility::InputRangeTypeErased<IdTable> range) {
     return ql::views::join(ad_utility::OwningView{std::move(range)});
   };
+  // Separate statements, because the second scan moves out of `idFilter` and
+  // argument evaluation order is unspecified.
+  auto subjectRows = rows(scan(Permutation::SPO, idFilter));
+  auto objectRows = rows(scan(Permutation::OPS, std::move(idFilter)));
   // Merge the distinct subjects and the distinct objects. Both ranges are
   // sorted and free of duplicates, so `set_union` yields each row exactly once.
-  auto merged = ::ranges::views::set_union(
-      rows(scan(Permutation::SPO, idFilter)),
-      rows(scan(Permutation::OPS, std::move(idFilter))),
-      ql::ranges::lexicographical_compare);
+  auto merged =
+      ::ranges::views::set_union(std::move(subjectRows), std::move(objectRows),
+                                 ql::ranges::lexicographical_compare);
 
   IdTable result{numKgColumns(), allocator()};
   result.reserve(chunkSize_);
