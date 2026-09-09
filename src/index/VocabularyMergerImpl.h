@@ -49,16 +49,20 @@ auto VocabularyMerger::mergeVocabulary(
     const ad_utility::RegexSet& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
-  // Return true iff p1 >= p2 according to the lexicographic order of the IRI
-  // or literal.
-  auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
-                                const TripleComponentWithIndex& t2) {
+  // The order of the merge: by geo sort key first (all keys are 0 without a
+  // geo cell grid), then by `comparator`.
+  auto lessThan = [&comparator](
+                      uint64_t key1, const TripleComponentWithIndex& t1,
+                      uint64_t key2, const TripleComponentWithIndex& t2) {
+    if (key1 != key2) {
+      return key1 < key2;
+    }
     return comparator(t1.iriOrLiteral_, t1.isExternal_, t2.iriOrLiteral_,
                       t2.isExternal_);
   };
   auto lessThanForQueue = [&lessThan](const QueueWord& p1,
                                       const QueueWord& p2) {
-    return lessThan(p1.entry_, p2.entry_);
+    return lessThan(p1.geoSortKey_, p1.entry_, p2.geoSortKey_, p2.entry_);
   };
 
   // Open and prepare all infiles and file-based output vectors.
@@ -76,7 +80,9 @@ auto VocabularyMerger::mergeVocabulary(
             [[maybe_unused]] const std::size_t i) mutable {
           TripleComponentWithIndex val;
           infile >> val;
-          return QueueWord{std::move(val), fileIndex};
+          uint64_t geoSortKey;
+          infile >> geoSortKey;
+          return QueueWord{std::move(val), fileIndex, geoSortKey};
         }};
   };
   std::vector<decltype(makeWordRangeFromFile(0))> generators;
@@ -115,7 +121,7 @@ auto VocabularyMerger::mergeVocabulary(
 // ________________________________________________________________________________
 CPP_template_def(typename C, typename L)(
     requires WordCallback<C> CPP_and_def
-        ranges::predicate<L, TripleComponentWithIndex,
+        ranges::predicate<L, uint64_t, TripleComponentWithIndex, uint64_t,
                           TripleComponentWithIndex>) void VocabularyMerger::
     writeQueueWordsToIdMap(std::vector<QueueWord>& buffer, C& wordCallback,
                            const L& lessThan,
@@ -128,14 +134,16 @@ CPP_template_def(typename C, typename L)(
     if (!lastTripleComponent_.has_value() ||
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
       if (lastTripleComponent_.has_value()) {
-        AD_CORRECTNESS_CHECK(lessThan(lastTripleComponent_.value(), top.entry_),
-                             "Total vocabulary order violated for ",
-                             lastTripleComponent_->iriOrLiteral(), " and ",
-                             top.iriOrLiteral());
+        AD_CORRECTNESS_CHECK(
+            lessThan(lastGeoSortKey_, lastTripleComponent_.value(),
+                     top.geoSortKey_, top.entry_),
+            "Total vocabulary order violated for ",
+            lastTripleComponent_->iriOrLiteral(), " and ", top.iriOrLiteral());
       }
       lastTripleComponent_ =
           TripleComponentWithIndex{std::move(top.iriOrLiteral()),
                                    top.isExternal(), metaData_.numWordsTotal()};
+      lastGeoSortKey_ = top.geoSortKey_;
       lastTripleComponentIsBlankNode_ =
           lastTripleComponent_.value().isBlankNode(blankNodeIriRegexes);
 
@@ -174,17 +182,18 @@ CPP_template_def(typename C, typename L)(
 }
 
 // ____________________________________________________________________________________________________________
-inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
+inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& entries) {
   HashMap<uint64_t, uint64_t> res;
-  res.reserve(els.size());
+  res.reserve(entries.size());
   std::optional<std::string_view> lastWord;
   // This value will overflow on the first entry.
   size_t nextWordId = -1;
-  for (auto& [word, idAndExternal] : els) {
+  for (auto& entry : entries) {
+    auto& idAndExternal = entry.idAndFlag_;
     auto id = idAndExternal.id();
-    if (lastWord != word) {
+    if (lastWord != entry.word_) {
       nextWordId++;
-      lastWord = word;
+      lastWord = entry.word_;
     }
     auto inserted = res.try_emplace(id, nextWordId).second;
     AD_CORRECTNESS_CHECK(inserted);
@@ -220,7 +229,7 @@ inline void writeMappedIdsToExtVec(
 }
 
 // _________________________________________________________________________________________________________
-inline void writePartialVocabularyToFile(const ItemVec& els,
+inline void writePartialVocabularyToFile(const ItemVec& entries,
                                          const std::string& fileName) {
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
 
@@ -232,19 +241,20 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   serialization::BufferedWriteSerializer serializer{
       serialization::FileWriteSerializer{fileName}, 16_MB};
 
-  uint64_t size = els.size();
+  uint64_t size = entries.size();
   serializer << size;
 
   // This is essentially a `VectorIncrementalSerializer` with a custom
   // serialization function, which the infrastructure currently does not
   // support.
-  for (const auto& [word, idAndExternal] : els) {
+  for (const auto& entry : entries) {
     // When merging the vocabulary, we need the actual word, the (internal) id
-    // we have assigned to this word, and the information, whether this word
-    // belongs to the internal or external vocabulary.
-    serializer << word;
-    serializer << idAndExternal.isExternal();
-    serializer << idAndExternal.id();
+    // we have assigned to this word, the information, whether this word
+    // belongs to the internal or external vocabulary, and its geo sort key.
+    serializer << entry.word_;
+    serializer << entry.idAndFlag_.isExternal();
+    serializer << entry.idAndFlag_.id();
+    serializer << entry.geoSortKey_;
   }
 
   serializer.close();
@@ -253,29 +263,39 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
-  ItemVec els;
-  els.resize(map.map_.size());
+template <typename GeoSortKeyFn>
+ItemVec vocabMapsToVector(const ItemMapAndBuffer& map,
+                          const GeoSortKeyFn& geoSortKeyFn) {
+  ItemVec entries;
+  entries.resize(map.map_.size());
   using T = ItemVec::value_type;
-  ql::ranges::transform(map.map_, els.begin(),
-                        [](auto& el) -> T { return {el.first, el.second}; });
-  return els;
+  ql::ranges::transform(map.map_, entries.begin(),
+                        [&geoSortKeyFn](auto& el) -> T {
+                          return {el.first, el.second, geoSortKeyFn(el.first)};
+                        });
+  return entries;
+}
+
+// _____________________________________________________________________________
+inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
+  return vocabMapsToVector(map, [](std::string_view) { return uint64_t{0}; });
 }
 
 // _______________________________________________________________________________________________________________________
 template <class StringSortComparator>
 void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
                      const bool doParallelSort) {
-  auto& els = *vecPtr;
+  auto& entries = *vecPtr;
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
-      ad_utility::parallel_sort(ql::ranges::begin(els), ql::ranges::end(els),
-                                comp, ad_utility::parallel_tag(10));
+      ad_utility::parallel_sort(ql::ranges::begin(entries),
+                                ql::ranges::end(entries), comp,
+                                ad_utility::parallel_tag(10));
     } else {
-      ql::ranges::sort(els, comp);
+      ql::ranges::sort(entries, comp);
     }
   } else {
-    ql::ranges::sort(els, comp);
+    ql::ranges::sort(entries, comp);
     (void)doParallelSort;  // avoid compiler warning for unused value.
   }
 }

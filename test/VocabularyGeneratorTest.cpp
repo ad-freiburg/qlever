@@ -46,6 +46,7 @@ void writePartialVocabularyFile(const std::string& path, const Range& words) {
     partialVocab << std::string_view{word};
     partialVocab << false;
     partialVocab << localIdx;
+    partialVocab << uint64_t{0};  // the geo sort key
     ++localIdx;
   }
 }
@@ -141,6 +142,7 @@ class MergeVocabularyTest : public ::testing::Test {
         auto globalId = w.index_;
         w.index_ = localIdx;
         partialVocab << w;
+        partialVocab << uint64_t{0};  // the geo sort key
         if (idMap) {
           if (w.isBlankNode({})) {
             idMap->push_back(
@@ -335,6 +337,63 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
                                {L(4), V(2)}}));  // <http://ex/cherry>
 }
 
+// Test that the merge orders by the geo sort keys stored in the partial
+// vocabularies first (see `ItemVecEntry`) and by the comparator second, and
+// that the order check considers the keys.
+TEST(MergeVocabulary, geoSortKeyOrder) {
+  std::string basePath = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&basePath] {
+    for (std::string_view infix :
+         {PARTIAL_VOCAB_WORDS_INFIX, PARTIAL_VOCAB_IDMAP_INFIX}) {
+      for (std::string_view suffix : {"0", "1"}) {
+        ad_utility::deleteFile(absl::StrCat(basePath, infix, suffix), false);
+      }
+    }
+  };
+  // Write the given (word, geo sort key) pairs as a partial vocabulary file.
+  auto writeFile = [](const std::string& path, const auto& wordsAndKeys) {
+    ad_utility::serialization::FileWriteSerializer partialVocab(path);
+    partialVocab << wordsAndKeys.size();
+    size_t localIdx = 0;
+    for (const auto& [word, key] : wordsAndKeys) {
+      partialVocab << std::string_view{word};
+      partialVocab << false;
+      partialVocab << localIdx;
+      partialVocab << key;
+      ++localIdx;
+    }
+  };
+  std::string file0 = absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0);
+  std::string file1 = absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1);
+  auto lessThan = [](std::string_view a, bool, std::string_view b, bool) {
+    return std::less{}(a, b);
+  };
+  std::vector<std::string> mergedWords;
+  auto wordCallback = [&mergedWords](std::string_view word, bool) -> uint64_t {
+    mergedWords.emplace_back(word);
+    return mergedWords.size() - 1;
+  };
+
+  // Each file is sorted by (key, word). In the merged vocabulary, the words
+  // with key 0 come first, then the word with key 4, then those with key 13,
+  // although "\"z\"" is lexicographically the largest word.
+  using P = std::pair<std::string_view, uint64_t>;
+  writeFile(file0, std::vector<P>{{"\"a\"", 0}, {"\"z\"", 0}, {"\"x\"", 13}});
+  writeFile(file1, std::vector<P>{{"\"b\"", 0}, {"\"w\"", 4}, {"\"y\"", 13}});
+  mergeVocabulary(basePath, {"0", "1"}, lessThan, wordCallback, 1_GB);
+  EXPECT_THAT(mergedWords, ::testing::ElementsAre("\"a\"", "\"b\"", "\"z\"",
+                                                  "\"w\"", "\"x\"", "\"y\""));
+
+  // Keys out of order within a file violate the vocabulary order, even
+  // though the words are in lexicographic order.
+  mergedWords.clear();
+  writeFile(file0, std::vector<P>{{"\"a\"", 13}, {"\"b\"", 4}});
+  writeFile(file1, std::vector<P>{});
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      mergeVocabulary(basePath, {"0", "1"}, lessThan, wordCallback, 1_GB),
+      ::testing::HasSubstr("vocabulary order violated"), ad_utility::Exception);
+}
+
 TEST(VocabularyGeneratorTest, createInternalMapping) {
   ItemVec input;
   using S = PartialVocabIndexWithExternalFlag;
@@ -347,13 +406,13 @@ TEST(VocabularyGeneratorTest, createInternalMapping) {
   input.emplace_back("xenon", S{0, false});
 
   auto res = createInternalMapping(input);
-  ASSERT_EQ(0u, input[0].second.id());
-  ASSERT_EQ(1u, input[1].second.id());
-  ASSERT_EQ(1u, input[2].second.id());
-  ASSERT_EQ(2u, input[3].second.id());
-  ASSERT_EQ(3u, input[4].second.id());
-  ASSERT_EQ(3u, input[5].second.id());
-  ASSERT_EQ(4u, input[6].second.id());
+  ASSERT_EQ(0u, input[0].idAndFlag_.id());
+  ASSERT_EQ(1u, input[1].idAndFlag_.id());
+  ASSERT_EQ(1u, input[2].idAndFlag_.id());
+  ASSERT_EQ(2u, input[3].idAndFlag_.id());
+  ASSERT_EQ(3u, input[4].idAndFlag_.id());
+  ASSERT_EQ(3u, input[5].idAndFlag_.id());
+  ASSERT_EQ(4u, input[6].idAndFlag_.id());
 
   ASSERT_EQ(0u, res[5]);
   ASSERT_EQ(1u, res[4]);
@@ -384,12 +443,12 @@ TEST(VocabularyGeneratorTest, createInternalMappingFirstWordDuplicates) {
 
   auto res = createInternalMapping(input);
   // All three "alpha"s must collapse to the same id (0).
-  EXPECT_EQ(0u, input[0].second.id());
-  EXPECT_EQ(0u, input[1].second.id());
-  EXPECT_EQ(0u, input[2].second.id());
+  EXPECT_EQ(0u, input[0].idAndFlag_.id());
+  EXPECT_EQ(0u, input[1].idAndFlag_.id());
+  EXPECT_EQ(0u, input[2].idAndFlag_.id());
   // Both "beta"s must collapse to the next id (1).
-  EXPECT_EQ(1u, input[3].second.id());
-  EXPECT_EQ(1u, input[4].second.id());
+  EXPECT_EQ(1u, input[3].idAndFlag_.id());
+  EXPECT_EQ(1u, input[4].idAndFlag_.id());
 
   EXPECT_EQ(0u, res[7]);
   EXPECT_EQ(0u, res[12]);

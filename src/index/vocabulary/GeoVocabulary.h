@@ -39,9 +39,10 @@
 // longer its position in the vocabulary: the upper bits of the index hold the
 // grid cell of the word, the lower `GeoCellGrid::numPositionBits()` bits hold
 // the position. The words must then arrive at the `WordWriter` ordered by
-// their grid cell (a follow-up change lets the `TripleComponentComparator`
-// produce this order), so that all words of one cell form a contiguous index
-// range that can be computed from the cell index alone. This is the basis for
+// their grid cell (the `TripleComponentComparator` produces this order once
+// its grid is set, see `setGeoCellGrid` there), so that all words of one cell
+// form a contiguous index range that can be computed from the cell index
+// alone. This is the basis for
 // the geo cell prefilter of spatial joins. The grid itself is not stored by
 // this class; the index configuration provides it before the vocabulary is
 // opened.

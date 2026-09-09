@@ -2,11 +2,14 @@
 // Structures.
 // Author: Johannes Kalmbach (johannes.kalmbach@gmail.com)
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include "./util/GTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "global/Constants.h"
 #include "index/vocabulary/StringSortComparator.h"
+#include "rdfTypes/GeoCellGrid.h"
 using namespace std::literals;
 using ad_utility::source_location;
 
@@ -139,6 +142,72 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
 }
 
 // ______________________________________________________________________________________________
+// Test that with a geo cell grid, WKT literals sort after all other words
+// and by their grid cell, and that the variants with precomputed geo sort
+// keys and the purely lexicographic variants behave as documented.
+TEST(StringSortComparatorTest, GeoCellGridOrder) {
+  TripleComponentComparator comp("en", "US", false);
+  auto wkt = [](std::string_view content) {
+    return absl::StrCat("\"", content, GEO_LITERAL_SUFFIX);
+  };
+  // With a grid of level 2 (4 x 4 cells), the first literal is in cell 3, the
+  // next two in cell 12, and the last one, which cannot be parsed, gets the
+  // sentinel cell.
+  std::string w3 = wkt("LINESTRING(170 -80, 171 -81)");
+  std::string w12 = wkt("LINESTRING(-170 80, -171 81)");
+  std::string w12b = wkt("LINESTRING(-170 80, -172 82)");
+  std::string bad = wkt("NOTAGEOMETRY");
+  std::string lit = "\"zzz\"";
+  std::string iri = "<zzz>";
+
+  // Without a grid, all keys are 0 and the order is lexicographic, where
+  // `w12` comes before `w3`.
+  EXPECT_EQ(comp.geoSortKey(w3), 0u);
+  EXPECT_TRUE(comp(w12, w3));
+  EXPECT_TRUE(comp(w3, lit));
+
+  ad_utility::GeoCellGrid grid{2};
+  comp.setGeoCellGrid(grid);
+  ASSERT_TRUE(comp.getGeoCellGrid().has_value());
+  EXPECT_EQ(comp.getGeoCellGrid().value(), grid);
+  EXPECT_EQ(comp.geoSortKey(lit), 0u);
+  EXPECT_EQ(comp.geoSortKey(iri), 0u);
+  EXPECT_EQ(comp.geoSortKey(w3), 4u);
+  EXPECT_EQ(comp.geoSortKey(w12), 13u);
+  EXPECT_EQ(comp.geoSortKey(bad), 1 + grid.sentinelCell());
+
+  // WKT literals come after all other words, by cell first, and within a
+  // cell lexicographically.
+  EXPECT_TRUE(comp(lit, w3));
+  EXPECT_TRUE(comp(iri, w3));
+  EXPECT_TRUE(comp(w3, w12));
+  EXPECT_FALSE(comp(w12, w3));
+  EXPECT_TRUE(comp(w12, w12b));
+  EXPECT_TRUE(comp(w12b, bad));
+  EXPECT_TRUE(comp.isLessInTotalWithExternalFlag(w3, false, w12, false));
+  EXPECT_FALSE(comp.isLessInTotalWithExternalFlag(w12, false, w3, false));
+
+  // The comparison as if no grid were set ignores the grid.
+  EXPECT_LT(comp.compareWithoutGeoCellGrid(w12, w3), 0);
+  EXPECT_TRUE(comp.isLessInTotalWithExternalFlagAndGeoSortKeys(w12, false, 0,
+                                                               w3, false, 0));
+
+  // The variant with precomputed keys orders by the given keys first, and
+  // among equal keys lexicographically with the external flag as tiebreaker.
+  EXPECT_TRUE(comp.isLessInTotalWithExternalFlagAndGeoSortKeys(w3, false, 4,
+                                                               w12, false, 13));
+  EXPECT_FALSE(comp.isLessInTotalWithExternalFlagAndGeoSortKeys(w12, false, 13,
+                                                                w3, false, 4));
+  EXPECT_TRUE(comp.isLessInTotalWithExternalFlagAndGeoSortKeys(
+      w12, false, 13, w12b, false, 13));
+  EXPECT_TRUE(comp.isLessInTotalWithExternalFlagAndGeoSortKeys(w12, true, 13,
+                                                               w12, false, 13));
+
+  // Removing the grid restores the lexicographic order.
+  comp.setGeoCellGrid(std::nullopt);
+  EXPECT_TRUE(comp(w12, w3));
+}
+
 TEST(StringSortComparatorTest, IsLessInTotalWithExternalFlag) {
   TripleComponentComparator comp("en", "US", false);
 

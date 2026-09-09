@@ -459,6 +459,13 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     const std::string& logFileName) {
   using namespace indexRebuilder;
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
+  // TODO<hannahbast> Support this. The remap of the old IDs below adds an
+  // offset to a vocabulary index, which is wrong for a WKT literal whose index
+  // carries its grid cell in the upper bits (only the position part must be
+  // shifted).
+  AD_CONTRACT_CHECK(!index.getVocab().getGeoCellGrid().has_value(),
+                    "Rebuilding an index whose vocabulary has a geo cell grid "
+                    "is not supported yet");
 
   // The rebuilt index gets its own build date, namely the time when the
   // rebuild started (the statistics below are derived from the configuration
