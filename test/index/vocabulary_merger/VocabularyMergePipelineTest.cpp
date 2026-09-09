@@ -27,8 +27,10 @@
 #include "util/File.h"
 
 using namespace ad_utility::vocabulary_merger;
+using ad_utility::vocabulary_merger::detail::IdMapBatch;
 using ad_utility::vocabulary_merger::detail::QueueWord;
 using ad_utility::vocabulary_merger::detail::VocabularyMergePipeline;
+using ad_utility::vocabulary_merger::detail::VocabularyMergePipelineImpl;
 using ad_utility::vocabulary_merger::detail::WordBatch;
 using ad_utility::vocabulary_merger::detail::WordBatchBuilder;
 
@@ -40,6 +42,30 @@ auto L = &VocabIndex::make;
 // A `WordComparator` that simply compares the words lexicographically.
 constexpr auto lessThan = [](std::string_view a, std::string_view b) {
   return std::less<>{}(a, b);
+};
+
+// An ID map writer (the third stage of the pipeline) that fails on the first
+// batch. The real `IdMapBatchWriter` cannot fail (see
+// `VocabularyMergePipelineImpl::runAndCatchException`), so this is the only way
+// to test that a failure of that stage is propagated.
+class ThrowingIdMapBatchWriter {
+ public:
+  // The number of batches that were handed to this writer, including the one
+  // that threw.
+  size_t numBatches_ = 0;
+
+  // Same interface as the `IdMapBatchWriter`, but the arguments are ignored
+  // (nothing is written, so there also are no files to clean up).
+  ThrowingIdMapBatchWriter([[maybe_unused]] const std::string& basename,
+                           [[maybe_unused]] const std::vector<std::string>&
+                               partialVocabularySuffixes) {}
+
+  void writeBatch([[maybe_unused]] const IdMapBatch& batch) {
+    ++numBatches_;
+    throw std::runtime_error{"The ID map could not be written"};
+  }
+
+  void finish() {}
 };
 
 // Create the `QueueWord` for the occurrence of `word` with the given
@@ -163,4 +189,41 @@ TEST(VocabularyMergePipeline, exceptionFromAStageIsPropagated) {
       pipeline.finish(), ::testing::HasSubstr("could not be written"),
       std::runtime_error);
   EXPECT_EQ(numCalls, 1u);
+}
+
+// _____________________________________________________________________________
+// An exception that is thrown by the third stage (the writing of the partial
+// ID maps, here simulated by a `ThrowingIdMapBatchWriter`) must not escape the
+// thread of the `idMapWriterQueue_`. It is reported by `hasFailed()` and
+// rethrown by `finish()`, and no further batch is handed to that stage.
+TEST(VocabularyMergePipeline, exceptionFromTheIdMapWritingIsPropagated) {
+  std::vector<std::string> vocabulary;
+  auto wordCallback = [&vocabulary](std::string_view word, bool) -> uint64_t {
+    vocabulary.emplace_back(word);
+    return vocabulary.size() - 1;
+  };
+  ad_utility::RegexSet noRegexes;
+
+  VocabularyMergePipelineImpl<ThrowingIdMapBatchWriter> pipeline{"basename",
+                                                                 {"0"}};
+  WordBatchBuilder builder;
+  auto push = [&pipeline, &wordCallback, &noRegexes](WordBatch batch) {
+    pipeline.push(std::move(batch), wordCallback, noRegexes);
+  };
+  builder.addMergedWords({makeQueueWord("\"a\"", false, 0, 0)}, lessThan, push);
+  builder.finish(push);
+  // The batch is written asynchronously, so wait for the failure. NOTE: The
+  // `finish()` below would also wait, but it throws.
+  while (!pipeline.hasFailed()) {
+  }
+
+  // The word itself was written by the second stage before the third one
+  // failed, but the batch that is pushed after the failure is skipped.
+  EXPECT_THAT(vocabulary, ::testing::ElementsAre("\"a\""));
+  builder.addMergedWords({makeQueueWord("\"b\"", false, 0, 1)}, lessThan, push);
+  builder.finish(push);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      pipeline.finish(), ::testing::HasSubstr("ID map could not be written"),
+      std::runtime_error);
+  EXPECT_THAT(vocabulary, ::testing::ElementsAre("\"a\""));
 }

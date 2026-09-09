@@ -33,12 +33,16 @@
 namespace ad_utility::vocabulary_merger::detail {
 
 // The stages of the merging pipeline that run asynchronously to the merging
-// thread (stages 2 to 4 in the comment above `mergeVocabulary`).
+// thread (stages 2 to 4 in the comment above `mergeVocabulary`). Use the
+// `VocabularyMergePipeline` alias below; the type of the third stage is a
+// template parameter only so that the tests can inject a writer that fails
+// (the real `IdMapBatchWriter` cannot, see `runAndCatchException`).
 //
 // NOTE: Each of the queues has exactly one worker thread, so the batches are
 // processed in exactly the order in which the merging thread creates them, and
 // the state of the individual stages requires no further synchronization.
-class VocabularyMergePipeline {
+template <typename IdMapBatchWriterT>
+class VocabularyMergePipelineImpl {
  private:
   // NOTE: The order of the following declarations is important, because the
   // members are destroyed in the reverse order of their declaration, and the
@@ -47,7 +51,7 @@ class VocabularyMergePipeline {
   // `idMapWriterQueue_` writes to the `idMapBatchWriter_`, so this is the only
   // order in which no task can be pushed to (or run on) an already destroyed
   // object.
-  IdMapBatchWriter idMapBatchWriter_;
+  IdMapBatchWriterT idMapBatchWriter_;
   VocabularyWriter vocabularyWriter_;
   // The first exception that one of the stages threw, if any, and a flag that
   // says whether that has happened. An exception must not escape the thread of
@@ -71,7 +75,7 @@ class VocabularyMergePipeline {
  public:
   // Create the pipeline. The `basename` and the `partialVocabularySuffixes`
   // determine the files of the partial ID maps (see `IdMapBatchWriter`).
-  VocabularyMergePipeline(
+  VocabularyMergePipelineImpl(
       const std::string& basename,
       const std::vector<std::string>& partialVocabularySuffixes)
       : idMapBatchWriter_{basename, partialVocabularySuffixes} {}
@@ -85,9 +89,35 @@ class VocabularyMergePipeline {
   // reference* into the asynchronous task, so both of them have to stay alive
   // (and must not be modified from the outside) until `finish()` has
   // returned.
-  CPP_template(typename C)(requires WordCallback<C>) void push(
+  CPP_template_2(typename C)(requires WordCallback<C>) void push(
       WordBatch batch, C& wordCallback,
-      const ad_utility::RegexSet& blankNodeIriRegexes);
+      const ad_utility::RegexSet& blankNodeIriRegexes) {
+    wordWriterQueue_.push([this, batch = std::move(batch), &wordCallback,
+                           &blankNodeIriRegexes]() mutable {
+      runAndCatchException([this, &batch, &wordCallback,
+                            &blankNodeIriRegexes]() {
+        auto idMapBatch = vocabularyWriter_.writeWordsToVocabulary(
+            batch.uniqueWords_, std::move(batch.localIdxMappings_),
+            wordCallback, blankNodeIriRegexes);
+
+        // The merged words are no longer needed. Their destruction (which
+        // involves freeing one string per word) is expensive enough to be done
+        // by yet another thread. NOTE: The `clear()` is the actual work of this
+        // task; it happens on the queue's thread, as does the destruction of
+        // the (then empty) buffers.
+        mergedWordsDestructionQueue_.push(
+            [buffers = std::move(batch.mergedWordBuffers_)]() mutable {
+              buffers.clear();
+            });
+
+        idMapWriterQueue_.push([this, idMapBatch = std::move(idMapBatch)]() {
+          runAndCatchException([this, &idMapBatch]() {
+            idMapBatchWriter_.writeBatch(idMapBatch);
+          });
+        });
+      });
+    });
+  }
 
   // Whether one of the stages has thrown an exception. The caller should then
   // stop pushing batches; the exception is rethrown by `finish()`.
@@ -97,13 +127,36 @@ class VocabularyMergePipeline {
   // completely, close the ID maps, and return the metadata of the merged
   // vocabulary. Rethrow the first exception that one of the stages threw, if
   // any. After this, no more batches may be pushed.
-  VocabularyMetaData finish();
+  VocabularyMetaData finish() {
+    // NOTE: The order is important, see the declaration of the members.
+    wordWriterQueue_.finish();
+    mergedWordsDestructionQueue_.finish();
+    idMapWriterQueue_.finish();
+    // Propagate an exception from one of the stages to the caller. NOTE: All
+    // the queues have been joined, so reading `exception_` here is safe. The ID
+    // maps are deliberately not finished on this path (their destructors do
+    // that, and they do not throw), so that a failure of that cleanup cannot
+    // hide the original exception.
+    if (exception_) {
+      std::rethrow_exception(exception_);
+    }
+    idMapBatchWriter_.finish();
+    vocabularyWriter_.logFinalProgress();
+    return std::move(vocabularyWriter_.metaData());
+  }
 
  private:
   // Run the `task` on the thread of one of the queues, and store the exception
   // that it throws (if any) instead of letting it escape that thread (see
   // `exception_`). Once a batch has failed, the remaining batches are skipped,
   // because their words could no longer be written consistently anyway.
+  //
+  // NOTE: Of the two stages that are wrapped in this, only the writing of the
+  // words can currently fail (via the `wordCallback`); the writing of the ID
+  // maps cannot, because a failed write to a file is silently ignored (see
+  // `ad_utility::File::write`). The wrapping of the latter is deliberate
+  // nevertheless, so that a future ID map writer that does report its errors
+  // doesn't terminate the process.
   template <typename F>
   void runAndCatchException(const F& task) {
     if (hasFailed_) {
@@ -121,55 +174,8 @@ class VocabularyMergePipeline {
   }
 };
 
-// _____________________________________________________________________________
-CPP_template_def(typename C)(
-    requires WordCallback<C>) void VocabularyMergePipeline::
-    push(WordBatch batch, C& wordCallback,
-         const ad_utility::RegexSet& blankNodeIriRegexes) {
-  wordWriterQueue_.push([this, batch = std::move(batch), &wordCallback,
-                         &blankNodeIriRegexes]() mutable {
-    runAndCatchException([this, &batch, &wordCallback, &blankNodeIriRegexes]() {
-      auto idMapBatch = vocabularyWriter_.writeWordsToVocabulary(
-          batch.uniqueWords_, std::move(batch.localIdxMappings_), wordCallback,
-          blankNodeIriRegexes);
-
-      // The merged words are no longer needed. Their destruction (which
-      // involves freeing one string per word) is expensive enough to be done
-      // by yet another thread. NOTE: The `clear()` is the actual work of this
-      // task; it happens on the queue's thread, as does the destruction of the
-      // (then empty) buffers.
-      mergedWordsDestructionQueue_.push(
-          [buffers = std::move(batch.mergedWordBuffers_)]() mutable {
-            buffers.clear();
-          });
-
-      idMapWriterQueue_.push([this, idMapBatch = std::move(idMapBatch)]() {
-        runAndCatchException([this, &idMapBatch]() {
-          idMapBatchWriter_.writeBatch(idMapBatch);
-        });
-      });
-    });
-  });
-}
-
-// _____________________________________________________________________________
-inline VocabularyMetaData VocabularyMergePipeline::finish() {
-  // NOTE: The order is important, see the declaration of the members.
-  wordWriterQueue_.finish();
-  mergedWordsDestructionQueue_.finish();
-  idMapWriterQueue_.finish();
-  // Propagate an exception from one of the stages to the caller. NOTE: All the
-  // queues have been joined, so reading `exception_` here is safe. The ID maps
-  // are deliberately not finished on this path (their destructors do that, and
-  // they do not throw), so that a failure of that cleanup cannot hide the
-  // original exception.
-  if (exception_) {
-    std::rethrow_exception(exception_);
-  }
-  idMapBatchWriter_.finish();
-  vocabularyWriter_.logFinalProgress();
-  return std::move(vocabularyWriter_.metaData());
-}
+// The pipeline as it is used by `mergeVocabulary`.
+using VocabularyMergePipeline = VocabularyMergePipelineImpl<IdMapBatchWriter>;
 }  // namespace ad_utility::vocabulary_merger::detail
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_MERGER_MERGEPIPELINE_H
