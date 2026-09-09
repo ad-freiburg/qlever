@@ -12,6 +12,7 @@
 
 #include <array>
 
+#include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "util/ChunkedForLoop.h"
 
@@ -25,17 +26,6 @@ namespace sparqlExpression::detail {
 // binary expressions because the operation is applied in direct loops over
 // vector or constant operands, avoiding the generator-based per-element
 // abstraction.
-
-enum class HomogeneousNumericType {
-  Int,
-  Double,
-  Other,
-};
-
-struct HomogeneousNumericTypes {
-  HomogeneousNumericType left;
-  HomogeneousNumericType right;
-};
 
 // Convert an expression result into either a vector-like or constant
 // representation that can be handled directly by the binary evaluation loop.
@@ -80,185 +70,6 @@ auto makeIndexedValueGetter(Operand&& operand, EvaluationContext* context) {
   }
 }
 
-// Specialized path for homogeneous numeric operands.
-//
-// Numeric value getters normally produce variants whose alternatives are
-// dispatched for every row. For operands that consist entirely of `int64_t`
-// or `double` values, classify the operand once and dispatch to a loop over the
-// corresponding primitive types. Non-homogeneous operands use the generic
-// value-getter-based implementation below.
-
-template <typename ValueGetter>
-inline constexpr bool supportsHomogeneousNumericFastPath = false;
-
-template <>
-inline constexpr bool supportsHomogeneousNumericFastPath<NumericValueGetter> =
-    true;
-
-template <>
-inline constexpr bool
-    supportsHomogeneousNumericFastPath<NumericOrDateValueGetter> = true;
-
-template <typename Operand>
-constexpr bool supportsHomogeneousNumericOperand() {
-  using OperandType = std::decay_t<Operand>;
-
-  if constexpr (ad_utility::isSimilar<OperandType, ValueId>) {
-    return true;
-  } else if constexpr (isVectorResult<OperandType>) {
-    using ElementType =
-        std::decay_t<decltype(std::declval<const OperandType&>()[size_t{}])>;
-
-    return ad_utility::isSimilar<ElementType, ValueId>;
-  } else {
-    return false;
-  }
-}
-
-inline HomogeneousNumericType classifyNumericOperand(
-    ql::span<const ValueId> values, EvaluationContext* context) {
-  // An empty vector has no meaningful homogeneous numeric type.
-  if (values.empty()) {
-    return HomogeneousNumericType::Other;
-  }
-
-  bool allInt = true;
-  bool allDouble = true;
-
-  ad_utility::chunkedForLoop<1000>(
-      0, values.size(),
-      [&](size_t i) {
-        const auto type = values[i].getDatatype();
-
-        allInt &= type == Datatype::Int;
-        allDouble &= type == Datatype::Double;
-      },
-      [context]() { context->cancellationHandle_->throwIfCancelled(); });
-
-  if (allInt) {
-    return HomogeneousNumericType::Int;
-  }
-
-  if (allDouble) {
-    return HomogeneousNumericType::Double;
-  }
-
-  return HomogeneousNumericType::Other;
-}
-
-inline HomogeneousNumericType classifyNumericOperand(ValueId value) {
-  switch (value.getDatatype()) {
-    case Datatype::Int:
-      return HomogeneousNumericType::Int;
-    case Datatype::Double:
-      return HomogeneousNumericType::Double;
-    default:
-      return HomogeneousNumericType::Other;
-  }
-}
-
-template <typename Operand>
-inline HomogeneousNumericType classifyNumericOperand(
-    const Operand& operand, EvaluationContext* context) {
-  using OperandType = std::decay_t<Operand>;
-
-  static_assert(supportsHomogeneousNumericOperand<Operand>(),
-                "Unsupported operand representation for homogeneous numeric "
-                "classification");
-
-  if constexpr (ad_utility::isSimilar<OperandType, ValueId>) {
-    return classifyNumericOperand(operand);
-  } else {
-    return classifyNumericOperand(
-        ql::span<const ValueId>{operand.data(), operand.size()}, context);
-  }
-}
-
-template <typename Left, typename Right>
-inline HomogeneousNumericTypes classifyNumericOperands(
-    const Left& left, const Right& right, EvaluationContext* context) {
-  return {
-      classifyNumericOperand(left, context),
-      classifyNumericOperand(right, context),
-  };
-}
-
-template <typename NumericType>
-NumericType getHomogeneousNumericValue(ValueId value) {
-  if constexpr (std::same_as<NumericType, int64_t>) {
-    return value.getInt();
-  } else if constexpr (std::same_as<NumericType, double>) {
-    return value.getDouble();
-  } else {
-    static_assert(ad_utility::alwaysFalse<NumericType>,
-                  "Unsupported homogeneous numeric type");
-  }
-}
-
-template <typename NumericType, typename Operand>
-auto makeHomogeneousNumericGetter(const Operand& operand) {
-  using OperandType = std::decay_t<Operand>;
-
-  if constexpr (isVectorResult<OperandType>) {
-    return [&operand](size_t i) {
-      return getHomogeneousNumericValue<NumericType>(operand[i]);
-    };
-  } else {
-    static_assert(ad_utility::isSimilar<OperandType, ValueId>,
-                  "Homogeneous numeric fast path currently supports "
-                  "ValueId constants");
-
-    const auto value = getHomogeneousNumericValue<NumericType>(operand);
-
-    return [value](size_t) { return value; };
-  }
-}
-
-template <typename Function>
-struct RawNumericFunction {
-  using type = Function;
-};
-
-template <typename Function, bool NanOrInfToUndef>
-struct RawNumericFunction<MakeNumericExpression<Function, NanOrInfToUndef>> {
-  using type = NumericIdWrapper<Function, NanOrInfToUndef>;
-};
-
-template <typename Function>
-using RawNumericFunctionT = typename RawNumericFunction<Function>::type;
-
-template <typename Function, typename LeftNumericType,
-          typename RightNumericType, typename Left, typename Right>
-ExpressionResult evaluateHomogeneousNumericOperation(
-    const Left& left, const Right& right, EvaluationContext* context) {
-  using LeftType = std::decay_t<Left>;
-  using RightType = std::decay_t<Right>;
-
-  if constexpr (isVectorResult<LeftType>) {
-    AD_CORRECTNESS_CHECK(left.size() == context->size());
-  }
-
-  if constexpr (isVectorResult<RightType>) {
-    AD_CORRECTNESS_CHECK(right.size() == context->size());
-  }
-
-  using FastFunction = RawNumericFunctionT<Function>;
-  FastFunction function;
-
-  auto getLeft = makeHomogeneousNumericGetter<LeftNumericType>(left);
-  auto getRight = makeHomogeneousNumericGetter<RightNumericType>(right);
-
-  VectorWithMemoryLimit<Id> result{context->_allocator};
-  result.reserve(context->size());
-
-  ad_utility::chunkedForLoop<1000>(
-      0, context->size(),
-      [&](size_t i) { result.push_back(function(getLeft(i), getRight(i))); },
-      [context]() { context->cancellationHandle_->throwIfCancelled(); });
-
-  return result;
-}
-
 // Evaluate a binary operation whose operands are already vectors or constants.
 template <typename Function, typename LeftValueGetter,
           typename RightValueGetter, typename Left, typename Right>
@@ -279,34 +90,39 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                         isConstantResult<LeftType>) &&
                        (isVectorResult<RightType> ||
                         isConstantResult<RightType>)) {
-    if constexpr (supportsHomogeneousNumericFastPath<LeftValueGetter> &&
-                  supportsHomogeneousNumericFastPath<RightValueGetter> &&
-                  supportsHomogeneousNumericOperand<Left>() &&
-                  supportsHomogeneousNumericOperand<Right>()) {
-      const auto types = classifyNumericOperands(left, right, context);
+    if constexpr (homogeneousNumeric::supportsHomogeneousNumericFastPath<
+                      LeftValueGetter> &&
+                  homogeneousNumeric::supportsHomogeneousNumericFastPath<
+                      RightValueGetter> &&
+                  homogeneousNumeric::supportsHomogeneousNumericOperand<
+                      Left>() &&
+                  homogeneousNumeric::supportsHomogeneousNumericOperand<
+                      Right>()) {
+      const auto types =
+          homogeneousNumeric::classifyNumericOperands(left, right, context);
 
-      if (types.left == HomogeneousNumericType::Int &&
-          types.right == HomogeneousNumericType::Int) {
-        return evaluateHomogeneousNumericOperation<Function, int64_t, int64_t>(
-            left, right, context);
+      if (types.left == homogeneousNumeric::HomogeneousNumericType::Int &&
+          types.right == homogeneousNumeric::HomogeneousNumericType::Int) {
+        return homogeneousNumeric::evaluateHomogeneousNumericOperation<
+            Function, int64_t, int64_t>(left, right, context);
       }
 
-      if (types.left == HomogeneousNumericType::Int &&
-          types.right == HomogeneousNumericType::Double) {
-        return evaluateHomogeneousNumericOperation<Function, int64_t, double>(
-            left, right, context);
+      if (types.left == homogeneousNumeric::HomogeneousNumericType::Int &&
+          types.right == homogeneousNumeric::HomogeneousNumericType::Double) {
+        return homogeneousNumeric::evaluateHomogeneousNumericOperation<
+            Function, int64_t, double>(left, right, context);
       }
 
-      if (types.left == HomogeneousNumericType::Double &&
-          types.right == HomogeneousNumericType::Int) {
-        return evaluateHomogeneousNumericOperation<Function, double, int64_t>(
-            left, right, context);
+      if (types.left == homogeneousNumeric::HomogeneousNumericType::Double &&
+          types.right == homogeneousNumeric::HomogeneousNumericType::Int) {
+        return homogeneousNumeric::evaluateHomogeneousNumericOperation<
+            Function, double, int64_t>(left, right, context);
       }
 
-      if (types.left == HomogeneousNumericType::Double &&
-          types.right == HomogeneousNumericType::Double) {
-        return evaluateHomogeneousNumericOperation<Function, double, double>(
-            left, right, context);
+      if (types.left == homogeneousNumeric::HomogeneousNumericType::Double &&
+          types.right == homogeneousNumeric::HomogeneousNumericType::Double) {
+        return homogeneousNumeric::evaluateHomogeneousNumericOperation<
+            Function, double, double>(left, right, context);
       }
     }
     auto getLeft =

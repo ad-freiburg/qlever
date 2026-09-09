@@ -14,6 +14,7 @@
 
 #include "../test/util/IndexTestHelpers.h"
 #include "engine/sparqlExpressions/BinaryExpression.h"
+#include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
@@ -190,7 +191,8 @@ void evaluateGenericBinaryAddCoreRepeatedly(const Left& left,
   }
 }
 
-using NumericType = sparqlExpression::detail::HomogeneousNumericType;
+using NumericType =
+    sparqlExpression::detail::homogeneousNumeric::HomogeneousNumericType;
 
 template <typename Left, typename Right>
 void classifyRepeatedly(const Left& left, const Right& right,
@@ -198,8 +200,8 @@ void classifyRepeatedly(const Left& left, const Right& right,
                         NumericType expectedLeft, NumericType expectedRight) {
   for (size_t repetition = 0; repetition < repetitions; ++repetition) {
     const auto classification =
-        sparqlExpression::detail::classifyNumericOperands(left, right,
-                                                          &context);
+        sparqlExpression::detail::homogeneousNumeric::classifyNumericOperands(
+            left, right, &context);
 
     AD_CORRECTNESS_CHECK(classification.left == expectedLeft);
     AD_CORRECTNESS_CHECK(classification.right == expectedRight);
