@@ -10,22 +10,13 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <boost/asio/post.hpp>
-#include <cstddef>
 #include <future>
 #include <thread>
 
 #include "util/parallelBlockMerge/MergeExecutor.h"
 
 using namespace ad_utility::parallelBlockMerge;
-
-// _____________________________________________________________________________
-TEST(MergeExecutor, defaultParallelismIsAtLeastOne) {
-  EXPECT_GE(defaultMergeParallelism(), 1u);
-  EXPECT_EQ(defaultMergeParallelism(),
-            std::max<size_t>(1, std::thread::hardware_concurrency()));
-}
 
 // _____________________________________________________________________________
 TEST(MergeExecutor, defaultExecutorIsSharedAndRuns) {

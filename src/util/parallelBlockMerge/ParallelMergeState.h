@@ -10,7 +10,6 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_PARALLELMERGESTATE_H
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_PARALLELMERGESTATE_H
 
-#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/consign.hpp>
 #include <boost/asio/detached.hpp>
@@ -23,6 +22,7 @@
 #include <optional>
 #include <utility>
 
+#include "backports/asio.h"
 #include "backports/concepts.h"
 #include "util/AsyncResourcePool.h"
 #include "util/CancellationHandle.h"
@@ -70,10 +70,10 @@ bool runAndForwardMemoryError(Function function,
 // `SinkConcept`.
 //
 // The number of chunks that are merged concurrently is bounded by
-// `maxInFlight`, which is enforced by the `semaphore_`. This bound is a pure
-// *memory* bound (every live chunk holds one input block per run plus its heap)
-// and not a correctness requirement: a value of `1` and a value that far
-// exceeds the available parallelism are both perfectly fine.
+// `maxNumChunksInFlight`, which is enforced by the `semaphore_`. This bound is
+// a pure *memory* bound (every live chunk holds one input block per run plus
+// its heap) and not a correctness requirement: a value of `1` and a value that
+// far exceeds the available parallelism are both perfectly fine.
 //
 // STRAND CONFINEMENT: The dispatch loop (`dispatchNextChunk` and its
 // continuation) runs on `strand_`, which this class owns and which guards the
@@ -82,7 +82,7 @@ bool runAndForwardMemoryError(Function function,
 // `semaphore_` by its internal `concurrent_channel`, see
 // `ad_utility::AsyncResourcePool` — so no state is ever shared between the
 // three and none of them has to know about the others. The teardown in
-// `abort()` in contrast runs on no strand of this class at all, see there.
+// `stop()` in contrast runs on no strand of this class at all, see there.
 //
 // IMPORTANT: The merging itself must *not* run on any of those strands, because
 // everything that runs on a strand is serialized. A `ChunkTask` therefore runs
@@ -94,7 +94,7 @@ bool runAndForwardMemoryError(Function function,
 // `shared_ptr` to this object, so that this object simply outlives all of them;
 // this is also why it can only be created via `create()`. This object in turn
 // holds the `shared_ptr` to the `sink_`, which therefore outlives them as well.
-// A consumer that abandons the merge has to call `abort()`, so that those tasks
+// A consumer that abandons the merge has to call `stop()`, so that those tasks
 // actually finish instead of waiting for a consumer that is gone.
 CPP_template(bool moveElements, typename Input, typename Comparator,
              typename Sink)(
@@ -113,7 +113,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
   using SharedMergeState = typename Merger::State;
   // The strand to which the dispatch loop is confined, see the STRAND
   // CONFINEMENT note above.
-  using Strand = net::strand<net::any_io_executor>;
+  using Strand = net::strand<ql::any_io_executor>;
   // The counting semaphore that bounds the number of chunks that are merged
   // concurrently, and one of its permits. A resource pool without resources is
   // exactly a counting semaphore, see `ad_utility::AsyncResourcePool`.
@@ -256,11 +256,11 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
     }
   };
 
-  net::any_io_executor executor_;
+  ql::any_io_executor executor_;
   // Both are never `nullptr`, see `create()` below.
   std::shared_ptr<const SharedMergeState> mergeState_;
   std::shared_ptr<Sink> sink_;
-  size_t maxInFlight_;
+  size_t maxNumChunksInFlight_;
   // NOTE: The order of these members matters, both of them are initialized from
   // the members above.
   Strand strand_;
@@ -271,17 +271,17 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
 
  public:
   // The constructor is effectively private, use `create()` instead.
-  ParallelMergeState(PrivateTag, net::any_io_executor executor,
+  ParallelMergeState(PrivateTag, ql::any_io_executor executor,
                      std::shared_ptr<const SharedMergeState> mergeState,
-                     std::shared_ptr<Sink> sink, size_t maxInFlight)
+                     std::shared_ptr<Sink> sink, size_t maxNumChunksInFlight)
       : executor_{std::move(executor)},
         mergeState_{std::move(mergeState)},
         sink_{std::move(sink)},
-        maxInFlight_{maxInFlight},
+        maxNumChunksInFlight_{maxNumChunksInFlight},
         strand_{net::make_strand(executor_)},
-        semaphore_{executor_, maxInFlight} {
-    AD_CORRECTNESS_CHECK(maxInFlight_ > 0);
-    AD_CORRECTNESS_CHECK(maxInFlight_ <= numChunks());
+        semaphore_{executor_, maxNumChunksInFlight} {
+    AD_CORRECTNESS_CHECK(maxNumChunksInFlight_ > 0);
+    AD_CORRECTNESS_CHECK(maxNumChunksInFlight_ <= numChunks());
   }
 
   // Create the state of a merge and start dispatching its chunks. All the work
@@ -289,14 +289,14 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
   // `mergeState` and the `sink` must not be `nullptr`, and the `sink` has to
   // expect exactly `mergeState->chunkBoundaries_.size()` chunks.
   static std::shared_ptr<ParallelMergeState> create(
-      net::any_io_executor executor,
+      ql::any_io_executor executor,
       std::shared_ptr<const SharedMergeState> mergeState,
-      std::shared_ptr<Sink> sink, size_t maxInFlight) {
+      std::shared_ptr<Sink> sink, size_t maxNumChunksInFlight) {
     AD_CONTRACT_CHECK(mergeState != nullptr);
     AD_CONTRACT_CHECK(sink != nullptr);
     auto self = std::make_shared<ParallelMergeState>(
         PrivateTag{}, std::move(executor), std::move(mergeState),
-        std::move(sink), maxInFlight);
+        std::move(sink), maxNumChunksInFlight);
     // NOTE: The dispatching can only be started once the `shared_ptr` exists,
     // because the tasks and handlers keep this object alive via
     // `shared_from_this`. It runs on `strand_`, see `dispatchNextChunk`.
@@ -311,19 +311,19 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
   // Stop the merge, so that no task is left waiting for a consumer that is
   // gone. NOTE: This returns immediately, it does *not* wait for the tasks that
   // are still in flight, see the LIFETIME note above.
-  void abort() noexcept {
+  void stop() noexcept {
     ad_utility::terminateIfThrows(
         [this] {
           // NOTE: This function may be called synchronously from a thread that
           // runs none of the strands involved, and it must not block. Neither
-          // call below does: `asyncAbort` only *initiates* the teardown on the
+          // call below does: `asyncStop` only *initiates* the teardown on the
           // strand of the sink and returns immediately, and
           // `AsyncResourcePool::cancel` cancels the channel of the `semaphore_`
           // right in the calling thread, without a hop onto any executor. The
           // `shared_ptr` that is consigned to the first one is required because
           // the caller may drop its own `shared_ptr` right after this call; the
           // `semaphore_` in contrast keeps its state alive itself.
-          sink_->asyncAbort(
+          sink_->asyncStop(
               net::consign(net::detached, this->shared_from_this()));
           // Wake up the dispatch loop if it currently waits for a free permit.
           // It sees the stop afterwards and never waits again, so the
@@ -338,7 +338,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
           // remaining chunk indices and terminates.
           semaphore_.cancel();
         },
-        "Aborting a `ParallelMergeState` failed.");
+        "Stopping a `ParallelMergeState` failed.");
   }
 
  private:

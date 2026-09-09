@@ -12,10 +12,11 @@
 
 #include <cstddef>
 #include <exception>
-#include <type_traits>
+#include <memory>
 #include <utility>
 
 #include "backports/concepts.h"
+#include "util/TypeTraits.h"
 
 // The output policy of the parallel block merge: the `SinkConcept` that the
 // sink of a merge has to fulfill. It is the counterpart of the `InputConcept`
@@ -27,7 +28,9 @@ namespace ad_utility::parallelBlockMerge {
 namespace detail {
 // The completion handlers with which the `SinkConcept` below probes the
 // asynchronous operations of a sink, so that the concept pins down their
-// completion signatures as well.
+// completion signatures as well. What those signatures mean, and in particular
+// what the `std::exception_ptr` and the `keepGoing` of a single operation
+// stand for, is documented in detail at the `SinkConcept` further down.
 //
 // NOTE: These are named types and not lambdas, because a lambda may not appear
 // in an unevaluated context in C++17 mode, which is exactly where the concept
@@ -51,15 +54,15 @@ CPP_requires(
              std::exception_ptr exception)(
         // Poll whether the merge was stopped.
         ql::concepts::convertible_to<decltype(sink.stopRequested()), bool>,
-        // Push a finished output block of a chunk, and announce that a chunk
-        // has no further blocks.
+        // Push a finished output block of a chunk.
         sink.asyncPush(chunkIndex, std::move(block), detail::SinkBoolHandler{}),
+        // Announce that a chunk has no further block.
         sink.asyncFinishChunk(chunkIndex, detail::SinkBoolHandler{}),
-        // Forward an exception of a chunk to the consumer, and stop the merge
-        // from the consuming side.
+        // Forward an exception of a chunk to the consumer.
         sink.asyncPushException(std::move(exception),
                                 detail::SinkVoidHandler{}),
-        sink.asyncAbort(detail::SinkVoidHandler{})));
+        // Stop the merge from the consuming side.
+        sink.asyncStop(detail::SinkVoidHandler{})));
 
 // The output policy of the merge: the sink to which the merge writes its
 // output blocks. The merge itself only ever *pushes* into a sink, one block at
@@ -80,13 +83,13 @@ CPP_requires(
 // completion signature is `void(std::exception_ptr, bool)` for `asyncPush` and
 // `asyncFinishChunk`, where the `bool` says whether the merge should keep
 // going, and `void(std::exception_ptr)` for `asyncPushException` and
-// `asyncAbort`, so a token such as `net::use_awaitable` rethrows on the
+// `asyncStop`, so a token such as `net::use_awaitable` rethrows on the
 // executor of the caller.
 //
 // The operations in detail:
 //
 // * `bool stopRequested() const noexcept` — return whether the merge was
-//   stopped, either by `asyncAbort` or by `asyncPushException`. This is the
+//   stopped, either by `asyncStop` or by `asyncPushException`. This is the
 //   only synchronous operation of a sink, and the merge polls it before it
 //   merges the next output block, so that it does no superfluous work. It has
 //   to be callable from any thread at any time.
@@ -112,8 +115,11 @@ CPP_requires(
 //   exception also has to stop the merge, so that the remaining chunks do not
 //   keep producing blocks that nobody wants any more.
 //
-// * `asyncAbort(token)` — stop the merge from the consuming side, so that no
-//   producer is left suspended forever once the consumer is gone.
+// * `asyncStop(token)` — stop the merge from the consuming side, so that no
+//   producer is left suspended forever once the consumer is gone. This is a
+//   graceful stop and not a hard tear-down: it only makes `stopRequested()`
+//   return `true`, and the chunks that are already running then wind down on
+//   their own.
 //
 // PRECONDITION: At most one `asyncPush` or `asyncFinishChunk` of a *given*
 // chunk is in flight at a time, because two concurrent ones could complete in
@@ -140,12 +146,65 @@ template <typename T, typename Block>
 CPP_concept SinkConcept = CPP_requires_ref(SinkConcept_, T, Block);
 
 namespace detail {
-// The type of the sink that a sink factory creates, see
-// `parallelBlockMergeToSink`.
+// The stand-in for the sink type of a `SinkFactory` that is not a sink factory
+// at all, either because it cannot be called with a `size_t` or because it does
+// not return a `std::shared_ptr`. It is a complete type, so that the
+// `SinkConcept` above can be evaluated for it (and is then simply `false`)
+// instead of being a compilation error. Such a stand-in is needed because in
+// C++17 mode the concepts are emulated via variable templates, for which SFINAE
+// does not apply to the template arguments; this is the same reason as for
+// `detail::BlockTypeOrVoid` in `RunsInputPolicy.h`.
+struct NoSink {};
+
+// Extract `T` from a `std::shared_ptr<T>`, and `NoSink` from every other type.
+template <typename T>
+struct SharedPtrElementOrNoSink {
+  using type = NoSink;
+};
+
+// ___________________________________________________________________________
+template <typename T>
+struct SharedPtrElementOrNoSink<std::shared_ptr<T>> {
+  using type = T;
+};
+
+// The type of the sink that a sink factory creates, or `NoSink` if the
+// `SinkFactory` is not a sink factory, see `SinkFactoryConcept` below. NOTE:
+// The factory is called on an lvalue, and `InvokeResultSfinaeFriendly` (instead
+// of `std::invoke_result_t`) is what makes this well-formed for a type that
+// cannot be called at all.
 template <typename SinkFactory>
-using SinkFromFactoryT =
-    typename std::invoke_result_t<SinkFactory&, size_t>::element_type;
+using SinkFromFactoryT = typename SharedPtrElementOrNoSink<
+    ad_utility::InvokeResultSfinaeFriendly<SinkFactory&, size_t>>::type;
 }  // namespace detail
+
+// The requirements of the `SinkFactoryConcept` below, see there for the
+// documentation.
+template <typename T>
+CPP_requires(
+    SinkFactoryConcept_,
+    requires(T& makeSink, size_t numChunks)(
+        // Create the sink of a merge that consists of `numChunks` chunks.
+        ql::concepts::same_as<decltype(makeSink(numChunks)),
+                              std::shared_ptr<detail::SinkFromFactoryT<T>>>));
+
+// The factory that creates the sink of a merge, see `parallelBlockMergeToSink`.
+// It is called exactly once, as `makeSink(numChunks)` on an lvalue, and has to
+// return a `std::shared_ptr` (which must not be `nullptr`) to a sink that
+// expects exactly that many chunks, see the `SinkConcept` above for what a sink
+// is and its LIFETIME note for why the sink is owned by a `shared_ptr`.
+//
+// The single argument is the number of chunks that the merge consists of, and
+// it is the reason why the merge takes a *factory* and not simply a sink: that
+// number is only known once the chunk boundaries have been computed, which
+// happens inside `parallelBlockMergeToSink` and hence after the point at which
+// a caller could have created a sink itself. A sink typically does need the
+// number in advance, because it keeps state (a block buffer, an end-of-chunk
+// flag) per chunk.
+template <typename T, typename Block>
+CPP_concept SinkFactoryConcept =
+    CPP_requires_ref(SinkFactoryConcept_, T) &&
+    SinkConcept<detail::SinkFromFactoryT<T>, Block>;
 
 }  // namespace ad_utility::parallelBlockMerge
 

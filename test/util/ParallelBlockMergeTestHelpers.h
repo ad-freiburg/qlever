@@ -12,7 +12,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <boost/asio/any_io_executor.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -24,6 +23,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/asio.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -191,7 +191,7 @@ class CollectingBlockSink : public ad_utility::NoCopyNoMove {
  private:
   // The executor on which the state of this sink is modified, and to which the
   // completion handlers are posted if they have no executor of their own.
-  net::any_io_executor executor_;
+  ql::any_io_executor executor_;
   // Stop the merge as soon as that many blocks were pushed in total, which is
   // how a test simulates a consumer that abandons the merge. The value `0`
   // means "never stop".
@@ -213,7 +213,7 @@ class CollectingBlockSink : public ad_utility::NoCopyNoMove {
   // Construct a sink for a merge with `numChunks` chunks, all operations of
   // which run on the `executor`. Pass a positive `stopAfterNumBlocks` to make
   // the sink stop the merge as soon as that many blocks were pushed.
-  CollectingBlockSink(net::any_io_executor executor, size_t numChunks,
+  CollectingBlockSink(ql::any_io_executor executor, size_t numChunks,
                       size_t stopAfterNumBlocks = 0)
       : executor_{std::move(executor)},
         stopAfterNumBlocks_{stopAfterNumBlocks},
@@ -260,7 +260,7 @@ class CollectingBlockSink : public ad_utility::NoCopyNoMove {
 
   // ________________________________________________________________________
   template <typename CompletionToken>
-  auto asyncAbort(CompletionToken&& completionToken) {
+  auto asyncStop(CompletionToken&& completionToken) {
     return runOnExecutor(
         [this] {
           std::lock_guard<std::mutex> lock{mutex_};
@@ -286,7 +286,7 @@ class CollectingBlockSink : public ad_utility::NoCopyNoMove {
   // Block until every chunk has sent its end-of-chunk sentinel.
   //
   // IMPORTANT: Only call this for a merge that was not stopped. A merge that is
-  // stopped (by `asyncAbort`, by an exception, or by `stopAfterNumBlocks`) does
+  // stopped (by `asyncStop`, by an exception, or by `stopAfterNumBlocks`) does
   // not dispatch its remaining chunks at all, so those chunks never send a
   // sentinel and this would wait forever. Join the thread pool of such a merge
   // instead.

@@ -10,11 +10,10 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEEXECUTOR_H
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEEXECUTOR_H
 
-#include <algorithm>
-#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/thread_pool.hpp>
-#include <cstddef>
-#include <thread>
+
+#include "backports/asio.h"
+#include "util/parallelBlockMerge/MergeOptions.h"
 
 // The default source of parallelism of the parallel block merge (see
 // `util/parallelBlockMerge/ParallelBlockMerge.h`), for callers that do not
@@ -23,16 +22,10 @@ namespace ad_utility::parallelBlockMerge {
 
 namespace net = boost::asio;
 
-// Return the number of threads that `defaultMergeExecutor()` below runs, which
-// is one per hardware thread.
-inline size_t defaultMergeParallelism() {
-  return std::max<size_t>(1, std::thread::hardware_concurrency());
-}
-
 // Return the executor of the process-wide default thread pool of the parallel
-// merge. The pool has `defaultMergeParallelism()` threads, is created lazily on
-// the first call, and is shared by all merges that do not specify an executor
-// of their own.
+// merge. The pool has `defaultMergeParallelism()` threads (see
+// `MergeOptions.h`), is created lazily on the first call, and is shared by all
+// merges that do not specify an executor of their own.
 //
 // NOTE: Sharing a single pool between concurrent merges is safe, because a
 // chunk that cannot make progress suspends instead of occupying its thread, so
@@ -40,7 +33,7 @@ inline size_t defaultMergeParallelism() {
 // a merge in contrast must not *block* one of the threads of that pool, because
 // that thread is then no longer available to produce the very block that the
 // consumer waits for.
-inline net::any_io_executor defaultMergeExecutor() {
+inline ql::any_io_executor defaultMergeExecutor() {
   static net::thread_pool pool{defaultMergeParallelism()};
   return pool.get_executor();
 }

@@ -11,7 +11,6 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
-#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <chrono>
 #include <cstddef>
@@ -26,6 +25,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/asio.h"
 #include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
@@ -677,7 +677,7 @@ namespace {
 // happens inside `parallelBlockMergeToSink` and hence before that function
 // returns.
 template <typename Sink>
-auto collectingSinkFactory(net::any_io_executor executor,
+auto collectingSinkFactory(ql::any_io_executor executor,
                            std::shared_ptr<Sink>& out,
                            size_t stopAfterNumBlocks = 0) {
   return [executor = std::move(executor), &out,
@@ -687,23 +687,49 @@ auto collectingSinkFactory(net::any_io_executor executor,
   };
 }
 
+// Pin down that the factory above models the `SinkFactoryConcept`, and that
+// that concept is SFINAE-friendly: for a type that is not a sink factory it has
+// to be a plain `false` instead of a compilation error, no matter which of its
+// requirements is violated.
+using CollectingSinkFactory =
+    decltype(collectingSinkFactory<CollectingBlockSink<SizeVec>>(
+        ql::any_io_executor{},
+        std::declval<std::shared_ptr<CollectingBlockSink<SizeVec>>&>()));
+static_assert(SinkFactoryConcept<CollectingSinkFactory, SizeVec>);
+// Not callable with a `size_t` at all.
+static_assert(!SinkFactoryConcept<int, SizeVec>);
+// Callable, but does not return a `std::shared_ptr`.
+struct NotAFactory {
+  int operator()(size_t) const { return 0; }
+};
+static_assert(!SinkFactoryConcept<NotAFactory, SizeVec>);
+// Returns a `std::shared_ptr`, but not to something that models the
+// `SinkConcept`.
+struct FactoryOfNonSink {
+  std::shared_ptr<int> operator()(size_t) const { return nullptr; }
+};
+static_assert(!SinkFactoryConcept<FactoryOfNonSink, SizeVec>);
+// A sink, but for the wrong block type.
+static_assert(!SinkFactoryConcept<CollectingSinkFactory, std::vector<Pair>>);
+
 // Start a parallel merge of the `input` on the `executor` and return its state
 // together with the `CollectingBlockSink` that collects its output blocks. Pass
 // a positive `stopAfterNumBlocks` to make the sink stop the merge as soon as
 // that many blocks were pushed.
 template <bool moveElements = false, typename Input, typename Comparator>
 auto startParallelMerge(
-    net::any_io_executor executor, Input input, Comparator comparator,
+    ql::any_io_executor executor, Input input, Comparator comparator,
     MergeOptions options, size_t parallelismHint,
     ad_utility::SharedCancellationHandle cancellationHandle =
         detail::freshCancellationHandle(),
     size_t stopAfterNumBlocks = 0) {
   using Sink = CollectingBlockSink<typename Input::Block>;
   std::shared_ptr<Sink> sink;
+  options.parallelismHint = parallelismHint;
   auto state = parallelBlockMergeToSink<moveElements>(
       executor, std::move(input), std::move(comparator),
       collectingSinkFactory(executor, sink, stopAfterNumBlocks),
-      std::move(options), parallelismHint, std::move(cancellationHandle));
+      std::move(options), std::move(cancellationHandle));
   AD_CORRECTNESS_CHECK(sink != nullptr);
   return std::pair{std::move(state), std::move(sink)};
 }
@@ -867,11 +893,11 @@ TEST(ParallelBlockMerge, singleInFlightChunk) {
   auto runs = makeRandomRuns(16, 200, 300);
   auto expected = sortedConcatenation(runs);
   MergeOptions options = parallelOptions(16);
-  options.maxInFlightChunks = 1;
+  options.maxNumChunksInFlight = 1;
   EXPECT_THAT(parallelMergeToVector(makeVectorInput(runs, 16), std::less<>{},
                                     options, 4),
               ::testing::ElementsAreArray(expected));
-  options.maxInFlightChunks = 2;
+  options.maxNumChunksInFlight = 2;
   EXPECT_THAT(parallelMergeToVector(makeVectorInput(runs, 16), std::less<>{},
                                     options, 4),
               ::testing::ElementsAreArray(expected));
@@ -948,7 +974,7 @@ TEST(ParallelBlockMerge, chunksOverlapForAllOfTheirOutputBlocks) {
 }
 
 // _____________________________________________________________________________
-TEST(ParallelBlockMerge, abortStopsTheMerge) {
+TEST(ParallelBlockMerge, stopStopsTheMerge) {
   auto runs = makeRandomRuns(50, 2000, 2000);
   net::thread_pool pool{8};
   auto stateAndSink =
@@ -958,7 +984,7 @@ TEST(ParallelBlockMerge, abortStopsTheMerge) {
   // the tasks that are still in flight have to finish instead of waiting for a
   // consumer that is gone, and the state has to stay alive until the last of
   // them is done.
-  stateAndSink.first->abort();
+  stateAndSink.first->stop();
   stateAndSink.first.reset();
   pool.join();
   const auto& sink = *stateAndSink.second;
@@ -1034,18 +1060,18 @@ TEST(ParallelBlockMerge, chunksWithoutAnyOutputBlockStillSendTheirSentinel) {
 
 // _____________________________________________________________________________
 TEST(ParallelBlockMerge, defaultExecutorAndParallelism) {
-  // A default-constructed executor and a `parallelismHint` of zero mean "use
-  // the process-wide default thread pool of the merge with one thread per
-  // hardware thread", see `MergeExecutor.h`.
+  // A default-constructed executor and a `MergeOptions::parallelismHint` of
+  // zero mean "use the process-wide default thread pool of the merge with one
+  // thread per hardware thread", see `MergeExecutor.h`.
   auto runs = makeRandomRuns(4, 200, 300);
   auto expected = sortedConcatenation(runs);
   using Sink = CollectingBlockSink<SizeVec>;
   std::shared_ptr<Sink> sink;
   // NOTE: The merge is set up by hand (and not via `startParallelMerge`),
   // because it is exactly the default-constructed executor and the default
-  // `parallelismHint` that are tested here.
+  // `MergeOptions::parallelismHint` that are tested here.
   auto state = parallelBlockMergeToSink<false>(
-      net::any_io_executor{}, makeVectorInput(runs, 16), std::less<>{},
+      ql::any_io_executor{}, makeVectorInput(runs, 16), std::less<>{},
       collectingSinkFactory(defaultMergeExecutor(), sink), parallelOptions(16));
   EXPECT_GT(state->numChunks(), 1u);
   // The default pool is shared, so it cannot be joined; wait for the merge

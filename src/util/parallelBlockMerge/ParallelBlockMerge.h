@@ -10,14 +10,13 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_PARALLELBLOCKMERGE_H
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_PARALLELBLOCKMERGE_H
 
-#include <algorithm>
-#include <boost/asio/any_io_executor.hpp>
 #include <cstddef>
 #include <memory>
 #include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/asio.h"
 #include "backports/concepts.h"
 #include "util/CancellationHandle.h"
 #include "util/InputRangeUtils.h"
@@ -130,41 +129,51 @@ CPP_template(bool moveElements, typename Input,
 // somebody else has to run; a default-constructed `executor` means "use
 // `defaultMergeExecutor()`". The output blocks of every chunk are pushed to the
 // sink that `makeSink` creates, see `SinkConcept`. Return the state of the
-// merge, see `detail::ParallelMergeState` for the details and in particular for
-// its lifetime requirements.
+// merge, see `detail::ParallelMergeState` for the details.
 //
 // `makeSink` is called exactly once, as `makeSink(numChunks)`, and has to
 // return a `std::shared_ptr` to a sink that expects that many chunks. It is a
 // factory (and not simply a sink) because the number of chunks is only known
-// once the chunk boundaries have been computed, which typically happens inside
-// this function.
+// once the chunk boundaries have been computed, which happens inside
+// this function. See `SinkFactoryConcept` for the exact requirements.
 //
-// The result is deterministic for a fixed configuration (the same `options` and
-// the same `parallelismHint` always yield the same blocks in the same chunks,
-// also for elements that the `comparator` considers equal). The relative order
-// of tied elements is however *not* specified and in particular may depend on
-// the number of chunks, so a caller that cares about the order of equal
-// elements has to make the `comparator` a total order.
+// LIFETIME: The returned `shared_ptr` may be dropped at any time, also while
+// the merge is still running: every task and every completion handler of the
+// merge holds the state alive, and the state in turn holds the sink alive. The
+// flip side is that there is deliberately no destructor that waits, so a
+// consumer that abandons the merge (instead of reading it to the end) has to
+// call `stop()` on the returned state, which makes the tasks that are still in
+// flight finish instead of waiting for a consumer that is gone. The `input`,
+// the `comparator` and the `cancellationHandle` are moved into the state and
+// hence share its lifetime.
 //
-// The `parallelismHint` is the number of threads that are expected to run the
-// `executor`; it is only used to derive the number of chunks and the number of
-// chunks that are in flight, both of which may safely exceed the actual
-// parallelism. A value of `0` means "as many threads as the hardware offers".
+// The result is deterministic for a fixed configuration (the same `options`
+// always yield the same blocks in the same chunks, also for elements that the
+// `comparator` considers equal). The relative order of tied elements is however
+// *not* specified and in particular may depend on the number of chunks, so a
+// caller that cares about the order of equal elements has to make the
+// `comparator` a total order.
+//
+// How many chunks the merge creates, and how many of them it merges
+// concurrently, is derived from the `options`, see `MergeOptions`; in
+// particular its `parallelismHint` is the number of threads that are expected
+// to run the `executor`.
 //
 // The requirements on the `comparator` and the meaning of `moveElements` are
 // the same as for `serialBlockMergeToRange` above. Note that a merge with a
 // single chunk is already the serial merge, just performed by a single task on
 // the `executor`, so there is deliberately no serial fast path here.
 CPP_template(bool moveElements, typename Input, typename Comparator,
-             typename SinkFactory)(requires InputConcept<Input>)
+             typename SinkFactory)(
+    requires InputConcept<Input> CPP_and
+        SinkFactoryConcept<SinkFactory, typename Input::Block>)
     std::shared_ptr<detail::ParallelMergeStateFor<
         moveElements, Input, Comparator,
-        SinkFactory>> parallelBlockMergeToSink(net::any_io_executor executor,
+        SinkFactory>> parallelBlockMergeToSink(ql::any_io_executor executor,
                                                Input input,
                                                Comparator comparator,
                                                SinkFactory makeSink,
                                                MergeOptions options = {},
-                                               size_t parallelismHint = 0,
                                                ad_utility::SharedCancellationHandle
                                                    cancellationHandle = detail::
                                                        freshCancellationHandle()) {
@@ -174,18 +183,10 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
   if (!executor) {
     executor = defaultMergeExecutor();
   }
-  if (parallelismHint == 0) {
-    parallelismHint = defaultMergeParallelism();
-  }
-  auto chunkBoundaries = computeChunkBoundaries(
-      input, comparator, parallelismHint * options.targetChunksPerThread);
+  auto chunkBoundaries =
+      computeChunkBoundaries(input, comparator, options.targetNumChunks());
   size_t numChunks = chunkBoundaries.size();
-  size_t requested = options.maxInFlightChunks == 0 ? parallelismHint
-                                                    : options.maxInFlightChunks;
-  // NOTE: The number of in-flight chunks is deliberately *not* bounded by the
-  // available parallelism, because a chunk that has to wait suspends instead of
-  // blocking a thread. A single in-flight chunk is legal as well.
-  size_t maxInFlight = std::min(requested, numChunks);
+  size_t maxNumChunksInFlight = options.numChunksInFlight(numChunks);
   // NOTE: The input, the comparator, the options, the cancellation handle, and
   // the chunk boundaries are shared by the mergers of all chunks, see
   // `detail::MergeState`.
@@ -193,7 +194,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
       std::move(input), std::move(comparator), std::move(options),
       std::move(cancellationHandle), std::move(chunkBoundaries));
   return State::create(std::move(executor), std::move(mergeState),
-                       makeSink(numChunks), maxInFlight);
+                       makeSink(numChunks), maxNumChunksInFlight);
 }
 
 }  // namespace ad_utility::parallelBlockMerge
