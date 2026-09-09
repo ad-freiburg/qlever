@@ -317,7 +317,7 @@ std::shared_ptr<const Result> Operation::getResult(
 
   if (isRoot) {
     // Reset runtime info, tests may reuse Operation objects.
-    _runtimeInfo = std::make_shared<RuntimeInformation>();
+    _runtimeInfo = makeShared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
     signalQueryUpdate(RuntimeInformation::SendPriority::Always);
@@ -360,7 +360,7 @@ std::shared_ptr<const Result> Operation::getResult(
       if (computationMode == ComputationMode::ONLY_IF_CACHED) {
         return nullptr;
       }
-      return std::make_shared<Result>(runComputation(timer, computationMode));
+      return makeShared<Result>(runComputation(timer, computationMode));
     }
 
     auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
