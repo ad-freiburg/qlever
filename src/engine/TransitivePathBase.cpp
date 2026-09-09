@@ -305,17 +305,11 @@ size_t TransitivePathBase::numJoinColumnsWith(
     const std::shared_ptr<QueryExecutionTree>& tree, ColumnIndex joinColumn,
     std::optional<ColumnIndex> otherJoinColumn) const {
   auto graphCol = getActualGraphColumnIndex(tree);
-  if (otherJoinColumn.has_value() && graphCol.has_value()) {
-    if (otherJoinColumn.value() == graphCol.value() &&
-        otherJoinColumn.value() == joinColumn) {
-      return 1;
-    } else if (otherJoinColumn.value() != graphCol.value() &&
-               otherJoinColumn.value() != joinColumn &&
-               graphCol.value() != joinColumn) {
-      return 3;
-    }
+  if (otherJoinColumn.has_value() && graphCol.has_value() &&
+      otherJoinColumn.value() != graphCol.value() &&
+      otherJoinColumn.value() != joinColumn && graphCol.value() != joinColumn) {
+    return 3;
   }
-
   if ((otherJoinColumn.has_value() && joinColumn == otherJoinColumn.value()) ||
       (graphCol.has_value() && joinColumn == graphCol.value()) ||
       (!graphCol.has_value() && !otherJoinColumn.has_value())) {
