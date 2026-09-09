@@ -14,11 +14,12 @@ qlever_target_link_libraries(basicParser qlever_util rdfTypes parserData)
 # index from RDF input files), so it must not depend on `index` itself. It needs
 # the `vocabulary` library for the `EncodedIriManager`.
 set(RDF_PARSER_SOURCES RdfParser.cpp AsyncFileBlockDriver.cpp)
-# `RdfAsyncParallelParser` uses `ad_utility::AsyncResourcePool`, which needs
+# `RdfAsyncParallelParser` is implemented using C++20 coroutines, and it uses
+# `ad_utility::AsyncResourcePool`, which needs
 # `boost::asio::experimental::concurrent_channel` (Boost 1.80 or newer), whereas
-# the `REDUCED_FEATURE_SET_FOR_CPP17` build targets Boost 1.71. Nothing inside
-# `src` uses that parser yet (it is only exercised by the unit tests), so it is
-# simply excluded there.
+# the `REDUCED_FEATURE_SET_FOR_CPP17` build targets C++17 and Boost 1.71.
+# Nothing inside `src` uses that parser yet (it is only exercised by the unit
+# tests), so it is simply excluded there.
 if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
     list(APPEND RDF_PARSER_SOURCES RdfAsyncParallelParser.cpp)
 endif ()

@@ -11,8 +11,11 @@
 #define QLEVER_SRC_PARSER_ASYNCPARSERDRIVER_H
 
 #include <atomic>
+#include <boost/asio/awaitable.hpp>
 #include <boost/asio/bind_executor.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <cstddef>
 #include <exception>
 #include <optional>
@@ -35,13 +38,13 @@
 //
 // `NUM_PARALLEL_PARSER_THREADS` task chains each keep one `asyncGetBatch()`
 // call in flight concurrently and push the parsed batches into a bounded
-// `ThreadSafeQueue`. A task chain is not a thread of its own: it is a sequence
-// of asynchronous operations, each of which schedules its successor onto the
-// thread pool once it has completed. `getBatch()` pops from that queue,
-// propagating errors via exception and signalling EOF via `nullopt`. When any
-// task chain encounters an error, `ThreadSafeQueue::pushException` forwards it
-// to the next `getBatch()` call; batches from still-in-flight sibling chains
-// are silently discarded once the queue is finished.
+// `ThreadSafeQueue`. A task chain is not a thread of its own: it is the
+// coroutine `runTaskChain()`, which suspends (without blocking a thread) while
+// it waits for its batch. `getBatch()` pops from that queue, propagating
+// errors via exception and signalling EOF via `nullopt`. When any task chain
+// encounters an error, `ThreadSafeQueue::pushException` forwards it to the
+// next `getBatch()` call; batches from still-in-flight sibling chains are
+// silently discarded once the queue is finished.
 template <typename AsyncParser>
 class AsyncParserDriver : public RdfParserBase {
  private:
@@ -94,38 +97,35 @@ class AsyncParserDriver : public RdfParserBase {
   size_t getParsePosition() const override { return 0; }
 
  private:
-  // Decrement the number of active task chains and signal EOF via
-  // `queue_.finish()` when the last one has stopped.
-  void taskChainFinished() {
-    if (--numActiveTaskChains_ == 0) {
-      queue_.finish();
+  // One task chain: repeatedly get the next batch and push it into `queue_`,
+  // until the input is exhausted or `queue_` no longer accepts batches. A parse
+  // error propagates out of this coroutine and is handled by the completion
+  // handler in `startTaskChain` below.
+  boost::asio::awaitable<void> runTaskChain() {
+    namespace net = boost::asio;
+    while (auto batch =
+               co_await asyncParser_.asyncGetBatch(net::use_awaitable)) {
+      if (!queue_.push(std::move(batch).value())) {
+        break;
+      }
     }
   }
 
-  // Schedule one link of a task chain: call `asyncGetBatch` and, on completion,
-  // push the result into `queue_` and schedule the next link, or stop the
-  // chain via `taskChainFinished()` on EOF or queue rejection.
+  // Start one task chain on `pool_`, and when it has stopped, forward a
+  // possible parse error to `queue_` and signal EOF via `queue_.finish()` if
+  // this was the last active chain.
   void startTaskChain() {
     namespace net = boost::asio;
-    asyncParser_.asyncGetBatch(net::bind_executor(
-        pool_.get_executor(),
-        [this](std::exception_ptr eptr,
-               std::optional<std::vector<TurtleTriple>> batch) mutable {
-          if (eptr) {
-            queue_.pushException(eptr);
-            taskChainFinished();
-            return;
-          }
-          if (batch.has_value()) {
-            if (queue_.push(std::move(*batch))) {
-              startTaskChain();
-            } else {
-              taskChainFinished();
-            }
-          } else {
-            taskChainFinished();
-          }
-        }));
+    net::co_spawn(pool_.get_executor(), runTaskChain(),
+                  net::bind_executor(pool_.get_executor(),
+                                     [this](std::exception_ptr eptr) {
+                                       if (eptr) {
+                                         queue_.pushException(std::move(eptr));
+                                       }
+                                       if (--numActiveTaskChains_ == 0) {
+                                         queue_.finish();
+                                       }
+                                     }));
   }
 };
 
