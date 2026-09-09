@@ -148,8 +148,8 @@ class QueryPlanner {
    public:
     enum Type { BASIC, OPTIONAL, MINUS };
 
-    explicit SubtreePlan(QueryExecutionContext* qec)
-        : _qet(std::make_shared<QueryExecutionTree>(qec)) {}
+    explicit SubtreePlan(std::shared_ptr<QueryExecutionTree> qet)
+        : _qet{std::move(qet)} {}
 
     template <typename Operation>
     SubtreePlan(QueryExecutionContext* qec,

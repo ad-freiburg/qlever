@@ -326,7 +326,6 @@ std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
   vector<SubtreePlan> added;
   added.reserve(previous.size());
   for (const auto& parent : previous) {
-    SubtreePlan distinctPlan(_qec);
     vector<ColumnIndex> keepIndices;
     ad_utility::HashSet<ColumnIndex> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
@@ -341,9 +340,8 @@ std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
         }
       }
     }
-    distinctPlan._qet =
-        QueryExecutionTree::createDistinctTree(parent._qet, keepIndices);
-    added.push_back(distinctPlan);
+    added.push_back(SubtreePlan{
+        QueryExecutionTree::createDistinctTree(parent._qet, keepIndices)});
   }
   return added;
 }
@@ -418,10 +416,6 @@ std::vector<SubtreePlan> QueryPlanner::getGroupByRow(
   vector<SubtreePlan> added;
   added.reserve(previous.size());
   for (auto& parent : previous) {
-    // Create a group by operation to determine on which columns the input
-    // needs to be sorted
-    SubtreePlan groupByPlan(_qec);
-    assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     std::vector<Alias> aliases;
     if (pq.hasSelectClause()) {
       aliases = pq.selectClause().getAliases();
@@ -437,9 +431,12 @@ std::vector<SubtreePlan> QueryPlanner::getGroupByRow(
           "should have thrown an exception earlier");
       groupVariables.push_back(activeGraphVariable_.value());
     }
-    groupByPlan._qet = makeExecutionTree<GroupBy>(
-        _qec, groupVariables, std::move(aliases), parent._qet);
-    added.push_back(groupByPlan);
+    // Create a group by operation to determine on which columns the input
+    // needs to be sorted
+    SubtreePlan groupByPlan{makeExecutionTree<GroupBy>(
+        _qec, groupVariables, std::move(aliases), parent._qet)};
+    assignNodesFilterAndTextLimitIds(groupByPlan, parent);
+    added.push_back(std::move(groupByPlan));
   }
   return added;
 }
@@ -451,9 +448,6 @@ std::vector<SubtreePlan> QueryPlanner::getOrderByRow(
   vector<SubtreePlan> added;
   added.reserve(previous.size());
   for (const auto& parent : previous) {
-    SubtreePlan plan(_qec);
-    auto& tree = plan._qet;
-    assignNodesFilterAndTextLimitIds(plan, parent);
     vector<std::pair<ColumnIndex, bool>> sortIndices;
     // Collect the variables of the ORDER BY or INTERNAL SORT BY clause. Ignore
     // variables that are not visible in the query body (according to the
@@ -472,24 +466,28 @@ std::vector<SubtreePlan> QueryPlanner::getOrderByRow(
       return previous;
     }
 
-    if (pq._isInternalSort == IsInternalSort::True) {
-      std::vector<ColumnIndex> sortColumns;
-      for (auto& [index, isDescending] : sortIndices) {
-        AD_CONTRACT_CHECK(!isDescending);
-        sortColumns.push_back(index);
+    auto tree = [this, &pq, &parent, &sortIndices]() {
+      if (pq._isInternalSort == IsInternalSort::True) {
+        std::vector<ColumnIndex> sortColumns;
+        for (auto& [index, isDescending] : sortIndices) {
+          AD_CONTRACT_CHECK(!isDescending);
+          sortColumns.push_back(index);
+        }
+        // An explicit `INTERNAL SORT BY` requests the complete sorted result,
+        // so we must not let the `Sort` propagate a `LIMIT`/`OFFSET` to its
+        // subtree.
+        return QueryExecutionTree::createSortedTree(parent._qet, sortColumns,
+                                                    true);
       }
-      // An explicit `INTERNAL SORT BY` requests the complete sorted result, so
-      // we must not let the `Sort` propagate a `LIMIT`/`OFFSET` to its subtree.
-      tree =
-          QueryExecutionTree::createSortedTree(parent._qet, sortColumns, true);
-    } else {
       AD_CONTRACT_CHECK(pq._isInternalSort == IsInternalSort::False);
       // Note: As the internal ordering is different from the semantic ordering
       // needed by `OrderBy`, we always have to instantiate the `OrderBy`
       // operation.
-      tree = makeExecutionTree<OrderBy>(_qec, parent._qet, sortIndices);
-    }
-    added.push_back(plan);
+      return makeExecutionTree<OrderBy>(_qec, parent._qet, sortIndices);
+    }();
+    SubtreePlan plan{std::move(tree)};
+    assignNodesFilterAndTextLimitIds(plan, parent);
+    added.push_back(std::move(plan));
   }
   return added;
 }
@@ -1192,32 +1190,31 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
     TextLimitMap& textLimits) const {
   AD_CONTRACT_CHECK(node.wordPart_.has_value());
   std::string word = node.wordPart_.value();
-  SubtreePlan plan(_qec);
   const auto& cvar = node.cvar_.value();
   if (!textLimits.contains(cvar)) {
     textLimits[cvar] = parsedQuery::TextLimitMetaObject{{}, {}, 0};
   }
-  if (node.triple_.getSimplePredicate() == CONTAINS_ENTITY_PREDICATE) {
+  auto plan = [this, &node, &textLimits, &cvar, &word]() {
+    if (node.triple_.getSimplePredicate() != CONTAINS_ENTITY_PREDICATE) {
+      return makeSubtreePlan<TextIndexScanForWord>(_qec, cvar, word);
+    }
     if (node._variables.size() == 2) {
       // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
       // to make these checks more explicitly.
       Variable evar = *(node._variables.begin()) == cvar
                           ? *(++node._variables.begin())
                           : *(node._variables.begin());
-      plan = makeSubtreePlan<TextIndexScanForEntity>(_qec, cvar, evar, word);
       textLimits[cvar].entityVars_.push_back(evar);
       textLimits[cvar].scoreVars_.push_back(cvar.getEntityScoreVariable(evar));
-    } else {
-      // Fixed entity case
-      AD_CORRECTNESS_CHECK(node._variables.size() == 1);
-      plan = makeSubtreePlan<TextIndexScanForEntity>(
-          _qec, cvar, node.triple_.o_.toString(), word);
-      textLimits[cvar].scoreVars_.push_back(
-          cvar.getEntityScoreVariable(node.triple_.o_.toString()));
+      return makeSubtreePlan<TextIndexScanForEntity>(_qec, cvar, evar, word);
     }
-  } else {
-    plan = makeSubtreePlan<TextIndexScanForWord>(_qec, cvar, word);
-  }
+    // Fixed entity case
+    AD_CORRECTNESS_CHECK(node._variables.size() == 1);
+    textLimits[cvar].scoreVars_.push_back(
+        cvar.getEntityScoreVariable(node.triple_.o_.toString()));
+    return makeSubtreePlan<TextIndexScanForEntity>(
+        _qec, cvar, node.triple_.o_.toString(), word);
+  }();
   textLimits[cvar].idsOfMustBeFinishedOperations_ |= (size_t(1) << node.id_);
   plan._idsOfIncludedNodes |= (size_t(1) << node.id_);
   return plan;

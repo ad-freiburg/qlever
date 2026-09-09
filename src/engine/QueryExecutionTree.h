@@ -28,24 +28,14 @@ enum class HideStrippedColumns { False, True };
 // operations needed to solve a query.
 class QueryExecutionTree {
  public:
-  explicit QueryExecutionTree(QueryExecutionContext* qec);
   QueryExecutionTree(QueryExecutionContext* qec,
-                     std::shared_ptr<Operation> operation)
-      : QueryExecutionTree(qec) {
-    rootOperation_ = std::move(operation);
-    resultWidth_ = rootOperation_->getResultWidth();
-    cacheKey_ = rootOperation_->getCacheKey();
-    if (!readFromCache()) {
-      readFromMaterializedView();
-    }
-  }
+                     std::shared_ptr<Operation> operation);
 
   std::string getCacheKey() const;
 
   const QueryExecutionContext* getQec() const { return qec_; }
 
   const VariableToColumnMap& getVariableColumns() const {
-    AD_CONTRACT_CHECK(rootOperation_);
     return rootOperation_->getExternallyVisibleVariableColumns();
   }
 
