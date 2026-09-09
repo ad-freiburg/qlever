@@ -294,8 +294,7 @@ class TransitivePathBase : public Operation {
 
   // Calculate the correct offsets and copy the payload columns from `op` into
   // the `plan`. `leftCol` and/or `rightCol` are the sides to which the
-  // transitive path is bound to. This method is called from withing
-  // `bindSides`.
+  // transitive path is bound to. This method is called from within `bindSides`.
   void copyPayloadColumnsToPlan(auto& op, auto& plan,
                                 std::optional<size_t> leftCol,
                                 std::optional<size_t> rightCol) const;
