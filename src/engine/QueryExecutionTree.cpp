@@ -201,25 +201,34 @@ QueryExecutionTree::createSortedTreeAnyPermutation(
       sortColumns, [relevantSortedCols](ColumnIndex distinctCol) {
         return ad_utility::contains(relevantSortedCols, distinctCol);
       });
-  return isSorted ? qet : createSortedTree(std::move(qet), sortColumns);
+  if (isSorted) {
+    return qet;
+  }
+  auto allocator = qet->getRootOperation()->allocator();
+  return createSortedTree(
+      std::move(qet),
+      qlever::vector<ColumnIndex>(sortColumns.begin(), sortColumns.end(),
+                                  allocator));
 }
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::vector<ColumnIndex>& sortColumns, bool explicitSort) {
+    const qlever::vector<ColumnIndex>& sortColumns, bool explicitSort) {
+  std::vector<ColumnIndex> sortColumnsVec(sortColumns.begin(),
+                                          sortColumns.end());
   const auto& rootOperation = qet->getRootOperation();
-  if (rootOperation->isSortedBy(sortColumns)) {
+  if (rootOperation->isSortedBy(sortColumnsVec)) {
     return qet;
   }
-  auto sortedQet = rootOperation->makeSortedTree(sortColumns);
+  auto sortedQet = rootOperation->makeSortedTree(sortColumnsVec);
 
   if (sortedQet.has_value()) {
     AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
     AD_CORRECTNESS_CHECK(qet->getVariableColumns() ==
                          sortedQet.value()->getVariableColumns());
     const auto& sortedRootOperation = sortedQet.value()->getRootOperation();
-    AD_CORRECTNESS_CHECK(sortedRootOperation->isSortedBy(sortColumns));
+    AD_CORRECTNESS_CHECK(sortedRootOperation->isSortedBy(sortColumnsVec));
     AD_CORRECTNESS_CHECK(
         sortedRootOperation->getLimitOffset().isUnconstrained(),
         "`LIMIT` and `OFFSET` are applied by "
@@ -235,18 +244,20 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   }
 
   return ad_utility::makeExecutionTree<Sort>(
-      rootOperation->getExecutionContext(), std::move(qet), sortColumns,
+      rootOperation->getExecutionContext(), std::move(qet), sortColumnsVec,
       explicitSort);
 }
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::vector<ColumnIndex>& distinctIndices) {
+    const qlever::vector<ColumnIndex>& distinctIndices) {
+  std::vector<ColumnIndex> distinctIndicesVec(distinctIndices.begin(),
+                                              distinctIndices.end());
   const auto& rootOperation = qet->getRootOperation();
   // If the result is already distinct wrt the `distinctIndices`, the `DISTINCT`
   // would be a no-op and we can simply return the tree unchanged.
-  if (rootOperation->isDistinctBy(distinctIndices)) {
+  if (rootOperation->isDistinctBy(distinctIndicesVec)) {
     return qet;
   }
 
@@ -256,7 +267,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
   // before applying the limit, because `qet` (and its root operation) may be
   // shared with other query execution trees and `applyLimitOffset` mutates the
   // operation in place.
-  if (distinctIndices.empty()) {
+  if (distinctIndicesVec.empty()) {
     auto limitedQet = qet->clone();
     limitedQet->applyLimitOffset(LimitOffsetClause{._limit = 1});
     return limitedQet;
@@ -264,7 +275,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
 
   // Give the root operation the chance to push the `DISTINCT` down into its
   // subtree(s) more efficiently (e.g. `CartesianProductJoin`).
-  auto distinctQet = rootOperation->makeDistinctTree(distinctIndices);
+  auto distinctQet = rootOperation->makeDistinctTree(distinctIndicesVec);
   if (distinctQet.has_value()) {
     AD_CORRECTNESS_CHECK(distinctQet.value() != nullptr);
     // Pushing the `DISTINCT` down must preserve the set of visible variables,
@@ -285,20 +296,22 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
     // layout of the rewritten tree via the variable names before checking.
     std::vector<ColumnIndex> translatedIndices;
     for (const auto& [variable, info] : before) {
-      if (ad_utility::contains(distinctIndices, info.columnIndex_)) {
+      if (ad_utility::contains(distinctIndicesVec, info.columnIndex_)) {
         translatedIndices.push_back(after.at(variable).columnIndex_);
       }
     }
     // The sizes can only match because `distinctIndices` contains no
     // duplicates (a documented precondition of this function).
-    AD_CORRECTNESS_CHECK(translatedIndices.size() == distinctIndices.size());
+    AD_CORRECTNESS_CHECK(translatedIndices.size() ==
+                         distinctIndicesVec.size());
     AD_CORRECTNESS_CHECK(distinctQet.value()->getRootOperation()->isDistinctBy(
         translatedIndices));
     return std::move(distinctQet).value();
   }
 
   return ad_utility::makeExecutionTree<Distinct>(
-      rootOperation->getExecutionContext(), std::move(qet), distinctIndices);
+      rootOperation->getExecutionContext(), std::move(qet),
+      distinctIndicesVec);
 }
 
 // _____________________________________________________________________________
@@ -356,9 +369,10 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
 }
 
 // _____________________________________________________________________________
-std::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
+qlever::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
     const QueryExecutionTree& qetA, const QueryExecutionTree& qetB) {
-  std::vector<std::array<ColumnIndex, 2>> jcs;
+  qlever::vector<std::array<ColumnIndex, 2>> jcs{
+      qetA.getRootOperation()->allocator()};
   const auto& aVarCols = qetA.getVariableColumns();
   const auto& bVarCols = qetB.getVariableColumns();
   for (const auto& aVarCol : aVarCols) {
@@ -379,8 +393,11 @@ std::pair<std::shared_ptr<QueryExecutionTree>,
 QueryExecutionTree::createSortedTrees(
     std::shared_ptr<QueryExecutionTree> qetA,
     std::shared_ptr<QueryExecutionTree> qetB,
-    const std::vector<std::array<ColumnIndex, 2>>& sortColumns) {
-  std::vector<ColumnIndex> sortColumnsA, sortColumnsB;
+    ql::span<const std::array<ColumnIndex, 2>> sortColumns) {
+  auto allocatorA = qetA->getRootOperation()->allocator();
+  auto allocatorB = qetB->getRootOperation()->allocator();
+  qlever::vector<ColumnIndex> sortColumnsA{allocatorA};
+  qlever::vector<ColumnIndex> sortColumnsB{allocatorB};
   for (auto [sortColumnA, sortColumnB] : sortColumns) {
     sortColumnsA.push_back(sortColumnA);
     sortColumnsB.push_back(sortColumnB);

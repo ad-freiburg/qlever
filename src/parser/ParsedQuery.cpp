@@ -18,6 +18,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "util/Allocator.h"
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
 
@@ -246,7 +247,7 @@ const std::vector<Variable>& ParsedQuery::getVisibleVariables() const {
 
 // _____________________________________________________________________________
 void ParsedQuery::registerVariablesVisibleInQueryBody(
-    const vector<Variable>& variables) {
+    ql::span<const Variable> variables) {
   for (const auto& var : variables) {
     registerVariableVisibleInQueryBody(var);
   }
@@ -268,7 +269,8 @@ ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 // __________________________________________________________________________
 bool ParsedQuery::GraphPattern::addLanguageFilter(
     const Variable& variable,
-    const ad_utility::HashSet<std::string>& langTags) {
+    const ad_utility::HashSet<std::string>& langTags,
+    qlever::Allocator<Id> allocator) {
   AD_CORRECTNESS_CHECK(!langTags.empty());
   // Since most literals have an empty language tag we don't create extra
   // triples for them, so we can't use this optimization.
@@ -316,7 +318,7 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
     AD_CORRECTNESS_CHECK(std::holds_alternative<PropertyPath>(triplePtr->p_));
     auto& predicate = std::get<PropertyPath>(triplePtr->p_);
     AD_CORRECTNESS_CHECK(predicate.isIri());
-    std::vector<PropertyPath> predicates;
+    PropertyPath::ChildrenVec predicates{allocator};
     for (const std::string& langTag : langTags) {
       predicates.push_back(
           PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(

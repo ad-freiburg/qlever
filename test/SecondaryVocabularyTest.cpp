@@ -485,7 +485,8 @@ struct ContextWithSecondaryVocab {
   QueryResultCache cache_{};
   NamedResultCache namedResultCache_{};
   std::shared_ptr<MaterializedViewsManager> materializedViews_ =
-      std::make_shared<MaterializedViewsManager>();
+      std::make_shared<MaterializedViewsManager>(
+          ad_utility::testing::makeAllocator());
   QueryExecutionContext qec_;
 
   explicit ContextWithSecondaryVocab(std::string indexBasename)
@@ -520,7 +521,8 @@ std::string runQuery(QueryExecutionContext* qec, const std::string& query) {
   static const EncodedIriManager encodedIriManager;
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query);
+  auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query, {},
+                                              qec->getAllocator());
   QueryPlanner queryPlanner{qec, cancellationHandle};
   auto executionTree = queryPlanner.createExecutionTree(parsedQuery);
   ad_utility::Timer timer{ad_utility::Timer::Started};
@@ -553,8 +555,9 @@ void runUpdate(ContextWithSecondaryVocab& context, const std::string& update) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   ad_utility::BlankNodeManager blankNodeManager;
-  auto parsedQueries =
-      SparqlParser::parseUpdate(&blankNodeManager, &encodedIriManager, update);
+  auto parsedQueries = SparqlParser::parseUpdate(
+      &blankNodeManager, &encodedIriManager, update, {},
+      context.qec_.getAllocator());
   context.index_->deltaTriplesManager().modify<void>(
       [&context, &parsedQueries,
        &cancellationHandle](DeltaTriples& deltaTriples) {

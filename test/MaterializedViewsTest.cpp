@@ -49,6 +49,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerWarnings.h"
@@ -228,7 +229,8 @@ TEST_F(MaterializedViewsTest, ParserConfigChecks) {
     auto trace = generateLocationTrace(location);
     EncodedIriManager encodedIriManager;
     AD_EXPECT_THROW_WITH_MESSAGE(
-        SparqlParser::parseQuery(&encodedIriManager, std::move(query), {}),
+        SparqlParser::parseQuery(&encodedIriManager, std::move(query), {},
+                                 ad_utility::testing::makeAllocator()),
         ::testing::HasSubstr(expectedError));
   };
 
@@ -249,7 +251,8 @@ TEST_F(MaterializedViewsTest, ParserConfigChecks) {
 TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
   // Simple materialized view for testing the checks when querying.
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
   manager.writeViewToDisk("testView1", plan);
 
   // Helper that parses a query, but doesn't feed it to the `QueryPlanner` but
@@ -263,8 +266,8 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 
     // Parse query.
     EncodedIriManager encodedIriManager;
-    auto parsed =
-        SparqlParser::parseQuery(&encodedIriManager, std::move(query), {});
+    auto parsed = SparqlParser::parseQuery(&encodedIriManager, std::move(query),
+                                           {}, ad_utility::testing::makeAllocator());
     ASSERT_TRUE(parsed.hasSelectClause());
     ASSERT_EQ(parsed.children().size(), 1);
 
@@ -400,7 +403,8 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ColumnPermutation) {
   ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
 
   // Helper to get all column names from a view via its `VariableToColumnMap`.
   auto columnNames = [](const MaterializedView& view) {
@@ -424,7 +428,8 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
         "SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) }";
     manager.writeViewToDisk("testView3",
                             qlv().parseAndPlanQuery(reorderedQuery));
-    MaterializedView view{testIndexBase_, "testView3"};
+    MaterializedView view{testIndexBase_, "testView3",
+                          ad_utility::testing::makeAllocator()};
     EXPECT_EQ(columnNames(view).at(0), V{"?p"});
     const auto& map = view.variableToColumnMap();
     EXPECT_EQ(map.at(V{"?p"}).columnIndex_, 0);
@@ -445,7 +450,8 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr("Query result rows for materialized view "
                                      "\"testView4\" are already sorted"));
-    MaterializedView view{testIndexBase_, "testView4"};
+    MaterializedView view{testIndexBase_, "testView4",
+                          ad_utility::testing::makeAllocator()};
     EXPECT_EQ(columnNames(view).at(0), V{"?p"});
     auto res = qlv().query(
         "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
@@ -460,7 +466,8 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     clearLog();
     manager.writeViewToDisk("testView5",
                             qlv().parseAndPlanQuery("SELECT * { <s1> ?p ?o }"));
-    MaterializedView view{testIndexBase_, "testView5"};
+    MaterializedView view{testIndexBase_, "testView5",
+                          ad_utility::testing::makeAllocator()};
     EXPECT_THAT(columnNames(view),
                 ::testing::ElementsAreArray(std::vector<V>{V{"?p"}, V{"?o"}}));
     EXPECT_THAT(log_.str(), ::testing::HasSubstr("2 empty column(s)"));
@@ -531,7 +538,8 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       manager.writeViewToDisk("Something Out!of~the.ordinary",
@@ -603,7 +611,8 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ManualConfigurations) {
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
   manager.writeViewToDisk("testView1", plan);
   auto view = manager.getView("testView1", nullptr);
@@ -627,7 +636,8 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   EXPECT_THAT(view->originalQuery(),
               ::testing::Optional(::testing::Eq(simpleWriteQuery_)));
 
-  MaterializedViewsManager managerNoBaseName;
+  MaterializedViewsManager managerNoBaseName{
+      ad_utility::testing::makeAllocator()};
   AD_EXPECT_THROW_WITH_MESSAGE(
       managerNoBaseName.getView("testView1", nullptr),
       ::testing::HasSubstr("index base filename was not set"));
@@ -640,6 +650,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   auto iri = [](const std::string& ref) {
     return ad_utility::triple_component::Iri::fromIriref(ref);
   };
+  auto qec = getQec();
 
   const V placeholderP{"?_ql_materialized_view_p"};
   const V placeholderO{"?_ql_materialized_view_o"};
@@ -651,8 +662,10 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-g>"),
         V{"?o"}}};
 
-    auto t = view->makeScanConfig(query);
-    Triple expected{V{"?s"}, placeholderP, placeholderO, {{3, V{"?o"}}}};
+    auto t = view->makeScanConfig(qec.get(), query);
+    Triple expected{V{"?s"}, placeholderP, placeholderO,
+                    toQVec(std::vector<std::pair<ColumnIndex, Variable>>{
+                        {3, V{"?o"}}})};
     EXPECT_EQ(t, expected);
   }
   {
@@ -668,8 +681,10 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         ::testing::HasSubstr("Unknown parameter"));
     EXPECT_EQ(query.name(), "materialized view query");
 
-    auto t = view->makeScanConfig(query);
-    Triple expected{V{"?s"}, placeholderP, placeholderO, {{3, V{"?o"}}}};
+    auto t = view->makeScanConfig(qec.get(), query);
+    Triple expected{V{"?s"}, placeholderP, placeholderO,
+                    toQVec(std::vector<std::pair<ColumnIndex, Variable>>{
+                        {3, V{"?o"}}})};
     EXPECT_EQ(t, expected);
   }
 
@@ -681,7 +696,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-o>"),
         V{"?o"}}};
 
-    auto t = view->makeScanConfig(query);
+    auto t = view->makeScanConfig(qec.get(), query);
     Triple expected{V{"?s"}, placeholderP, V{"?o"}};
     EXPECT_EQ(t, expected);
     std::vector<Variable> expectedVars{V{"?s"}, V{"?o"}};
@@ -695,7 +710,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
         iri("<s1>"),
         iri("<https://qlever.cs.uni-freiburg.de/materializedView/testView1-p>"),
         V{"?p"}}};
-    auto t = view->makeScanConfig(query);
+    auto t = view->makeScanConfig(qec.get(), query);
     Triple expected{iri("<s1>"), V{"?p"}, placeholderO};
     EXPECT_EQ(t, expected);
     std::vector<Variable> expectedVars{V{"?p"}};
@@ -758,7 +773,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     query.addParameter(
         SparqlTriple{iri("<config>"), iri("<column-s>"), V{"?x"}});
     AD_EXPECT_THROW_WITH_MESSAGE(
-        view->makeScanConfig(query),
+        view->makeScanConfig(qec.get(), query),
         ::testing::HasSubstr(
             "The first column of a materialized view may not be requested "
             "twice, but '?x' violated this requirement."));
@@ -797,7 +812,8 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
           << viewInfo.dump() << std::endl;
     }
     AD_EXPECT_THROW_WITH_MESSAGE(
-        MaterializedView(testIndexBase_, "testView5"),
+        MaterializedView(testIndexBase_, "testView5",
+                         ad_utility::testing::makeAllocator()),
         ::testing::HasSubstr(
             "The materialized view 'testView5' is saved with format version "
             "0, however this version of QLever expects"));
@@ -858,7 +874,8 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   // View with no parsed query is skipped by `QueryPatternCache::analyzeView`.
   {
     qlv().writeMaterializedView("testView7", simpleWriteQuery_);
-    auto view = std::make_shared<MaterializedView>(testIndexBase_, "testView7");
+    auto view = std::make_shared<MaterializedView>(
+        testIndexBase_, "testView7", ad_utility::testing::makeAllocator());
     view->parsedQuery_ = std::nullopt;
     materializedViewsQueryAnalysis::QueryPatternCache c;
     EXPECT_FALSE(c.analyzeView(view, nullptr));
@@ -1129,7 +1146,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, Deletion) {
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
 
   // Write and load a view, then delete it.
@@ -1170,7 +1188,8 @@ TEST_F(MaterializedViewsTest, Deletion) {
 // stay usable, so that queries that still hold a snapshot of the old index can
 // finish.
 TEST_F(MaterializedViewsTest, RetireOnDiskFiles) {
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
 
   // The view written below deliberately outlives the retirement (a retired
@@ -1217,7 +1236,8 @@ TEST_F(MaterializedViewsTest, RetireOnDiskFiles) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, DeletionFailureThrows) {
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
   manager.writeViewToDisk("testViewBroken", plan);
 
@@ -1259,7 +1279,8 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
   auto writePlan = qlv().parseAndPlanQuery(
       "SELECT * { ?s ?p ?o ."
       " VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }");
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
   manager.writeViewToDisk("testView1", writePlan);
   auto view = manager.getView("testView1", nullptr);
   using ViewQuery = parsedQuery::MaterializedViewQuery;
@@ -1313,7 +1334,8 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, BindToColumnMap) {
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
   auto view = manager.getView("testView1", nullptr);
   EXPECT_TRUE(view->parsedQuery().has_value());
 
@@ -1994,7 +2016,8 @@ TEST(MaterializedViewsSpatialJoinTest, FixedValueFilterOnFullyCoveredView) {
 TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
   // Regression test for #2866.
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
   manager.writeViewToDisk("testView1", plan);
 
   // Test that the placeholder variable for the third column of both views,
@@ -2075,7 +2098,8 @@ TEST_F(MaterializedViewsTest, GroupByOptimizations) {
       } INTERNAL SORT BY ?s ?p ?o LIMIT 1
     }
   )");
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
   manager.writeViewToDisk("groupByTestView", plan);
 
   // Matcher for an `IdTable` containing a single integer.
@@ -2149,7 +2173,8 @@ TEST_F(MaterializedViewsTest,
        GetPermutationForThreeVariableTripleMaterializedView) {
   // Write a three-variable view (writing auto-loads it).
   auto plan = qlv().parseAndPlanQuery("SELECT ?s ?p ?o { ?s ?p ?o }");
-  MaterializedViewsManager manager{testIndexBase_};
+  MaterializedViewsManager manager{testIndexBase_,
+                                  ad_utility::testing::makeAllocator()};
   manager.writeViewToDisk("threeVarPermTestView", plan);
 
   // Create a three-variable scan on the view binding all three columns.

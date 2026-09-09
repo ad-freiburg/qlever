@@ -422,9 +422,12 @@ const Variable& MaterializedView::dummyObject() {
 }
 
 // _____________________________________________________________________________
-MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
+MaterializedView::MaterializedView(std::string onDiskBase, std::string name,
+                                   qlever::Allocator<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
+      permutation_{std::make_shared<Permutation>(Permutation::Enum::SPO,
+                                                 allocator, name_)},
       locatedTriplesState_{makeEmptyLocatedTriplesState()} {
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
@@ -490,7 +493,8 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
     // interested in analyzing the query structure, not in converting its
     // components to `ValueId`s.
     EncodedIriManager e;
-    parsedQuery_ = SparqlParser::parseQuery(&e, originalQuery_.value(), {});
+    parsedQuery_ =
+        SparqlParser::parseQuery(&e, originalQuery_.value(), {}, allocator);
 
     // Compute the `BIND`-to-column map.
     coveredBinds_ = materializedViewsQueryAnalysis::extractBindExpressions(
@@ -528,7 +532,8 @@ MaterializedViewsManager::loadViewIntoLockedState(
   if (auto it = state.views_.find(name); it != state.views_.end()) {
     return it->second;
   }
-  auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
+  auto view =
+      std::make_shared<MaterializedView>(onDiskBase_, name, allocator_);
   view->connectPermutationBackReference();
   state.views_.insert({name, view});
   // If we would analyze the view at the time of writing and (de)serialize an
@@ -710,6 +715,7 @@ void MaterializedView::throwIfVariableUsedTwice(
 
 // _____________________________________________________________________________
 SparqlTripleSimple MaterializedView::makeScanConfig(
+    QueryExecutionContext* qec,
     const parsedQuery::MaterializedViewQuery& viewQuery) const {
   AD_CORRECTNESS_CHECK(viewQuery.viewName_ == name_);
   if (viewQuery.childGraphPattern_.has_value()) {
@@ -725,7 +731,7 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
   // contains multiple instances of `MaterializedViewQuery`.
   TripleComponent p{dummyPredicate()};
   TripleComponent o{dummyObject()};
-  AdditionalScanColumns additionalCols;
+  AdditionalScanColumns additionalCols{qec->getAllocator()};
 
   // Assemble which columns should be bound to which variables
   ad_utility::HashSet<Variable> variablesSeen;
@@ -820,7 +826,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   // by the user. Therefore despite using hard-coded placeholder variable names,
   // no join occurs if multiple materialized views are requested in a single
   // query.
-  auto scanTriple = makeScanConfig(viewQuery);
+  auto scanTriple = makeScanConfig(qec, viewQuery);
   return qec->makeShared<IndexScan>(
       qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
       std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
@@ -834,7 +840,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   TripleComponent s{dummySubject()};
   TripleComponent p{dummyPredicate()};
   TripleComponent o{dummyObject()};
-  AdditionalScanColumns additionalCols;
+  AdditionalScanColumns additionalCols{qec->getAllocator()};
   for (const auto& [v, i] : varToCol) {
     // This is only correct if the `QueryExecutionTree` uses the cache key and
     // `VariableToColumnMap` of the new `IndexScan`.
@@ -939,7 +945,8 @@ MaterializedView::computeCacheKey(
   // The query needs to be parsed again to take the `EncodedIriManager` into
   // account.
   auto parsedQuery =
-      SparqlParser::parseQuery(&encodedIriManager, originalQuery_.value());
+      SparqlParser::parseQuery(&encodedIriManager, originalQuery_.value(), {},
+                               qec.getAllocator());
   const auto& viewCols = variableToColumnMap();
 
   auto planAndComputeMapping =

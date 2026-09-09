@@ -44,7 +44,8 @@ TEST(QueryExecutionTree, sortedUnionSpecialCase) {
       qec, makeIdTableFromVector({{0}}), Vars{Var{"?a"}});
 
   auto sortedTree = QueryExecutionTree::createSortedTree(
-      ad_utility::makeExecutionTree<Union>(qec, leftT, rightT), {0});
+      ad_utility::makeExecutionTree<Union>(qec, leftT, rightT),
+      qlever::vector<ColumnIndex>({0}, qec->getAllocator()));
 
   // Ensure no `Sort` is added on top
   EXPECT_TRUE(std::dynamic_pointer_cast<Union>(sortedTree->getRootOperation()));
@@ -97,7 +98,7 @@ TEST(QueryExecutionTree, createSortedTreeAnyPermutation) {
 // _____________________________________________________________________________
 TEST(QueryExecutionTree, createDistinctTreeReturnsInputWhenAlreadyDistinct) {
   using Vars = std::vector<std::optional<Variable>>;
-  using SC = std::vector<ColumnIndex>;
+  using SC = qlever::vector<ColumnIndex>;
   auto* qec = getQec();
 
   // When the root operation is already distinct wrt `distinctIndices`, the
@@ -107,14 +108,18 @@ TEST(QueryExecutionTree, createDistinctTreeReturnsInputWhenAlreadyDistinct) {
       qec, makeIdTableFromVector({{0}, {1}}), Vars{Variable{"?x"}});
   values->applyLimitOffset(LimitOffsetClause{._limit = 1});
 
-  EXPECT_EQ(QueryExecutionTree::createDistinctTree(values, SC{0}), values);
-  EXPECT_EQ(QueryExecutionTree::createDistinctTree(values, SC{}), values);
+  EXPECT_EQ(QueryExecutionTree::createDistinctTree(
+                values, SC({0}, qec->getAllocator())),
+            values);
+  EXPECT_EQ(QueryExecutionTree::createDistinctTree(values,
+                                                   SC(qec->getAllocator())),
+            values);
 }
 
 // _____________________________________________________________________________
 TEST(QueryExecutionTree, createDistinctTreeFallbackAddsDistinct) {
   using Vars = std::vector<std::optional<Variable>>;
-  using SC = std::vector<ColumnIndex>;
+  using SC = qlever::vector<ColumnIndex>;
   auto* qec = getQec();
 
   // A generic operation that is not known to be distinct (and cannot push the
@@ -123,16 +128,18 @@ TEST(QueryExecutionTree, createDistinctTreeFallbackAddsDistinct) {
       qec, makeIdTableFromVector({{0, 1}, {0, 1}, {2, 3}}),
       Vars{Variable{"?x"}, Variable{"?y"}});
 
-  auto tree = QueryExecutionTree::createDistinctTree(values, SC{0, 1});
+  auto tree = QueryExecutionTree::createDistinctTree(
+      values, SC({0, 1}, qec->getAllocator()));
   auto distinct = std::dynamic_pointer_cast<Distinct>(tree->getRootOperation());
   ASSERT_TRUE(distinct);
-  EXPECT_EQ(distinct->getDistinctColumns(), (SC{0, 1}));
+  // `Distinct::getDistinctColumns()` returns a plain `std::vector`, not `SC`.
+  EXPECT_EQ(distinct->getDistinctColumns(), (std::vector<ColumnIndex>{0, 1}));
 }
 
 // _____________________________________________________________________________
 TEST(QueryExecutionTree, createDistinctTreeEmptyIndicesUsesLimitOne) {
   using Vars = std::vector<std::optional<Variable>>;
-  using SC = std::vector<ColumnIndex>;
+  using SC = qlever::vector<ColumnIndex>;
   auto* qec = getQec();
 
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -140,7 +147,8 @@ TEST(QueryExecutionTree, createDistinctTreeEmptyIndicesUsesLimitOne) {
 
   // `DISTINCT` over zero columns keeps at most one row and is realized as a
   // `LIMIT 1`, not as a `Distinct`.
-  auto tree = QueryExecutionTree::createDistinctTree(values, SC{});
+  auto tree = QueryExecutionTree::createDistinctTree(values,
+                                                     SC(qec->getAllocator()));
   EXPECT_FALSE(std::dynamic_pointer_cast<Distinct>(tree->getRootOperation()));
   EXPECT_EQ(tree->getRootOperation()->getLimitOffset()._limit, 1u);
 
@@ -211,7 +219,8 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
   auto unionTree = ad_utility::makeExecutionTree<Union>(qec, leftT, rightT);
   unionTree->applyLimitOffset(limitOffset);
 
-  auto sortedTree = QueryExecutionTree::createSortedTree(unionTree, {0});
+  auto sortedTree = QueryExecutionTree::createSortedTree(
+      unionTree, qlever::vector<ColumnIndex>({0}, qec->getAllocator()));
   ASSERT_TRUE(std::dynamic_pointer_cast<Union>(sortedTree->getRootOperation()));
   EXPECT_EQ(sortedTree->getRootOperation()->getLimitOffset(), limitOffset);
 
@@ -221,8 +230,8 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
       qec, makeIdTableFromVector({{1}, {0}}), Vars{Var{"?a"}});
   valuesForTesting->applyLimitOffset(limitOffset);
 
-  auto sortedValues =
-      QueryExecutionTree::createSortedTree(valuesForTesting, {0});
+  auto sortedValues = QueryExecutionTree::createSortedTree(
+      valuesForTesting, qlever::vector<ColumnIndex>({0}, qec->getAllocator()));
   ASSERT_TRUE(
       std::dynamic_pointer_cast<Sort>(sortedValues->getRootOperation()));
   EXPECT_TRUE(

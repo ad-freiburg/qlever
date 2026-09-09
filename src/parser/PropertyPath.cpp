@@ -37,26 +37,29 @@ PropertyPath PropertyPath::makeWithLength(PropertyPath child, size_t min,
 }
 
 // _____________________________________________________________________________
-PropertyPath PropertyPath::makeAlternative(std::vector<PropertyPath> children) {
+PropertyPath PropertyPath::makeAlternative(ChildrenVec children) {
   AD_CONTRACT_CHECK(children.size() > 1,
                     "Alternative paths must have at least two children.");
   return PropertyPath{ModifiedPath{std::move(children), Modifier::ALTERNATIVE}};
 }
 
 // _____________________________________________________________________________
-PropertyPath PropertyPath::makeSequence(std::vector<PropertyPath> children) {
+PropertyPath PropertyPath::makeSequence(ChildrenVec children) {
   AD_CONTRACT_CHECK(children.size() > 1,
                     "Sequence paths must have at least two children.");
   return PropertyPath{ModifiedPath{std::move(children), Modifier::SEQUENCE}};
 }
 
 // _____________________________________________________________________________
-PropertyPath PropertyPath::makeInverse(PropertyPath child) {
-  return PropertyPath{ModifiedPath{{std::move(child)}, Modifier::INVERSE}};
+PropertyPath PropertyPath::makeInverse(PropertyPath child,
+                                       qlever::Allocator<Id> allocator) {
+  ChildrenVec children{std::move(allocator)};
+  children.push_back(std::move(child));
+  return PropertyPath{ModifiedPath{std::move(children), Modifier::INVERSE}};
 }
 
 // _____________________________________________________________________________
-PropertyPath PropertyPath::makeNegated(std::vector<PropertyPath> children) {
+PropertyPath PropertyPath::makeNegated(ChildrenVec children) {
   return PropertyPath{ModifiedPath{std::move(children), Modifier::NEGATED}};
 }
 
@@ -131,7 +134,7 @@ bool PropertyPath::isIri() const {
 }
 
 // _____________________________________________________________________________
-const std::vector<PropertyPath>& PropertyPath::getSequence() const {
+const PropertyPath::ChildrenVec& PropertyPath::getSequence() const {
   AD_CONTRACT_CHECK(isSequence());
   return std::get<ModifiedPath>(path_).children_;
 }

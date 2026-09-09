@@ -29,6 +29,8 @@
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 #include "util/HashMap.h"
 #include "util/Synchronized.h"
 
@@ -169,8 +171,7 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
  private:
   std::string onDiskBase_;
   std::string name_;
-  std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
-      Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>(), name_)};
+  std::shared_ptr<Permutation> permutation_;
   VariableToColumnMap varToColMap_;
   std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
   std::optional<std::string> originalQuery_;
@@ -192,8 +193,11 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
  public:
   // Load a materialized view from disk given the filename components. The
   // constructor will throw an exception if the name is invalid or the view does
-  // not exist.
-  MaterializedView(std::string onDiskBase, std::string name);
+  // not exist. `allocator` is the real allocator that the view's permutation
+  // and internal query analysis are routed through; there is no implicit
+  // unlimited-allocator fallback.
+  MaterializedView(std::string onDiskBase, std::string name,
+                   qlever::Allocator<Id> allocator);
 
   // Connect the permutation's back-reference to this view. Must be called
   // after the `MaterializedView` is managed by a `shared_ptr`.
@@ -240,7 +244,10 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   // Given a `MaterializedViewQuery` obtained from a special `SERVICE` or
   // predicate, compute the `SparqlTripleSimple` to be passed to the constructor
   // of `IndexScan` such that the columns requested by the user are returned.
+  // `qec` is used to obtain the (memory-limited) allocator for the additional
+  // scan columns.
   SparqlTripleSimple makeScanConfig(
+      QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
 
   // Helpers for checking metadata-dependent invariants of
@@ -313,6 +320,10 @@ class MaterializedViewsManager {
  private:
   std::string onDiskBase_;
 
+  // The real allocator that views loaded by this manager are routed through
+  // (see `MaterializedView`'s own `allocator` parameter).
+  qlever::Allocator<Id> allocator_;
+
   // Set by `retireOnDiskFiles` (see there) once the files of the index this
   // manager belongs to have been moved away by an index rebuild, after which
   // this manager must not create or delete any file under `onDiskBase_`
@@ -372,9 +383,12 @@ class MaterializedViewsManager {
       const QueryExecutionContext* qec) const;
 
  public:
-  MaterializedViewsManager() = default;
-  explicit MaterializedViewsManager(std::string onDiskBase)
-      : onDiskBase_{std::move(onDiskBase)} {}
+  MaterializedViewsManager() = delete;
+  explicit MaterializedViewsManager(qlever::Allocator<Id> allocator)
+      : allocator_{std::move(allocator)} {}
+  MaterializedViewsManager(std::string onDiskBase,
+                           qlever::Allocator<Id> allocator)
+      : onDiskBase_{std::move(onDiskBase)}, allocator_{std::move(allocator)} {}
 
   // For use with the default constructor: set the index basename after creation
   // of the `MaterializedViewsManager`. This should only be called once and

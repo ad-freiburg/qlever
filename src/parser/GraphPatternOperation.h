@@ -24,6 +24,8 @@
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 #include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
 
@@ -43,10 +45,18 @@ class GraphPattern;
 /// the query planner.
 struct SparqlValues {
  public:
+  // `allocator` is the real, query-execution-bound allocator that
+  // `_variables`/`_values` are routed through. Callers must always supply
+  // this explicitly (sourced from a `QueryExecutionContext` where one is
+  // available, or from a test allocator otherwise) -- there is no implicit
+  // unlimited-allocator fallback.
+  explicit SparqlValues(qlever::Allocator<Id> allocator)
+      : _variables{allocator}, _values{allocator} {}
+
   // The variables to which the values will be bound
-  std::vector<Variable> _variables;
+  qlever::vector<Variable> _variables;
   // A table storing the values in their string form
-  std::vector<std::vector<TripleComponent>> _values;
+  qlever::vector<qlever::vector<TripleComponent>> _values;
   // The `_variables` as a string, in the format like so: "?x ?y ?z".
   std::string variablesToString() const;
   // The `_values` as a string, in the format like so: "(<v12> <v12> <v13>)
@@ -92,6 +102,11 @@ struct Values {
   SparqlValues _inlineValues;
   // This value will be overwritten later.
   size_t _id = std::numeric_limits<size_t>::max();
+
+  // Deliberately not `explicit`: a `Values` is constructed implicitly from a
+  // `SparqlValues` in several places (e.g. `Visitor::visitAlternative<Values>`
+  // when parsing `VALUES` clauses).
+  Values(SparqlValues inlineValues) : _inlineValues{std::move(inlineValues)} {}
 };
 
 /// A `GroupGraphPattern` is anything enclosed in `{}`.
@@ -159,7 +174,7 @@ class Subquery {
   // `Subquery` is like a `ParsedQuery`, just with an own type).
   Subquery(const ParsedQuery&);
   Subquery(ParsedQuery&&) noexcept;
-  Subquery();
+  explicit Subquery(qlever::Allocator<Id> allocator);
   ~Subquery();
   Subquery(const Subquery&);
   Subquery(Subquery&&) noexcept;

@@ -421,7 +421,8 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntitiesWithDeltaTriples) {
                                  makeAllocator(),
                                  SortPerformanceEstimator{},
                                  &namedResultCache,
-                                 std::make_shared<MaterializedViewsManager>()};
+                                 std::make_shared<MaterializedViewsManager>(
+                                     makeAllocator())};
   };
 
   // Read the `ql:has-pattern` entry of `<z>` (subject, pattern, and the
@@ -440,8 +441,10 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntitiesWithDeltaTriples) {
           Variable{"?s"},
           ad_utility::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
           Variable{"?p"},
-          {std::pair{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID},
-                     Variable{"?g"}}}});
+          SparqlTripleSimple::AdditionalScanColumns{
+              {std::pair{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID},
+                        Variable{"?g"}}},
+              qecBefore.getAllocator()}});
   auto before = scanBefore->getResult();
   std::optional<Id> zPattern;
   std::optional<Id> graphOfHasPattern;

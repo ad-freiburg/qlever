@@ -30,6 +30,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
+#include "util/MemorySize/MemorySize.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
@@ -94,7 +95,7 @@ namespace {
 // arguments.
 template <typename F, size_t... Idxs>
 ExpressionPtr invokeWithMovedArgs(F& function,
-                                  std::vector<ExpressionPtr>& argList,
+                                  qlever::vector<ExpressionPtr>& argList,
                                   std::index_sequence<Idxs...>) {
   return function(std::move(argList[Idxs])...);
 }
@@ -189,7 +190,7 @@ std::string Visitor::currentTimeAsXsdString() {
 
 // ___________________________________________________________________________
 ExpressionPtr Visitor::processIriFunctionCall(
-    const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
+    const TripleComponent::Iri& iri, qlever::vector<ExpressionPtr> argList,
     const antlr4::ParserRuleContext* ctx) {
   std::string_view functionName = asStringViewUnsafe(iri.getContent());
   std::string_view prefixName;
@@ -412,7 +413,7 @@ void SparqlQleverVisitor::resetStateForMultipleUpdates() {
   // - activeDatasetClauses_: if `datasetsAreFixed_` is true
   _blankNodeCounter = 0;
   numGraphPatterns_ = 0;
-  visibleVariables_ = {};
+  visibleVariables_.clear();
   // When fixed datasets are given for a request (see SPARQL Protocol), these
   // cannot be changed by a SPARQL operation but are also constant for chained
   // updates.
@@ -420,7 +421,7 @@ void SparqlQleverVisitor::resetStateForMultipleUpdates() {
     activeDatasetClauses_ = {};
   }
   prologueString_ = {};
-  parsedQuery_ = {};
+  parsedQuery_ = ParsedQuery{allocator()};
   treatBlankNodesAs_ = TreatBlankNodesAs::InternalVariables;
   allBlankNodeLabels_.clear();
   blankNodeLabelsInCurrentBasicGraphPattern_.clear();
@@ -510,7 +511,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
 
 // ____________________________________________________________________________________
 const parsedQuery::DatasetClauses& SparqlQleverVisitor::setAndGetDatasetClauses(
-    const std::vector<DatasetClause>& clauses) {
+    const qlever::vector<DatasetClause>& clauses) {
   if (!datasetsAreFixed_) {
     activeDatasetClauses_ = parsedQuery::DatasetClauses::fromClauses(clauses);
   }
@@ -518,10 +519,17 @@ const parsedQuery::DatasetClauses& SparqlQleverVisitor::setAndGetDatasetClauses(
 }
 
 // ____________________________________________________________________________________
+qlever::vector<DatasetClause> SparqlQleverVisitor::toPmrDatasetClauses(
+    std::vector<DatasetClause> clauses) const {
+  return qlever::vector<DatasetClause>(clauses.begin(), clauses.end(),
+                                       allocator());
+}
+
+// ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
-  ParsedQuery query;
+  ParsedQuery query{allocator()};
   query.datasetClauses_ =
-      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
+      setAndGetDatasetClauses(toPmrDatasetClauses(visitVector(ctx->datasetClause())));
   if (ctx->constructTemplate()) {
     query._clause = visit(ctx->constructTemplate())
                         .value_or(parsedQuery::ConstructClause{});
@@ -544,7 +552,8 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
-  auto describeClause = parsedQuery::Describe{};
+  auto describeClause =
+      parsedQuery::Describe{{}, {}, parsedQuery::Subquery{allocator()}};
   auto describedResources = visitVector(ctx->varOrIri());
 
   // Convert the describe resources (variables or IRIs) from the format that the
@@ -564,7 +573,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
 
   // Parse the FROM and FROM NAMED clauses.
   describeClause.datasetClauses_ =
-      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
+      setAndGetDatasetClauses(toPmrDatasetClauses(visitVector(ctx->datasetClause())));
 
   // Parse the WHERE clause and construct a SELECT query from it. For `DESCRIBE
   // *`, add each visible variable as a resource to describe.
@@ -591,7 +600,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // DESCRIBE), and once in `parsedQuery_.describeClause_.datasetClauses_`
   // (which pertains to the SELECT query that computes the resources to be
   // described).
-  parsedQuery_ = ParsedQuery{};
+  parsedQuery_ = ParsedQuery{allocator()};
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
                                     makeInternalVariableGenerator());
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
@@ -611,7 +620,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
 ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
   parsedQuery_._clause = ParsedQuery::AskClause{};
   parsedQuery_.datasetClauses_ =
-      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
+      setAndGetDatasetClauses(toPmrDatasetClauses(visitVector(ctx->datasetClause())));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
   // NOTE: It can make sense to have solution modifiers with an ASK query, for
   // example, a GROUP BY with a HAVING.
@@ -703,8 +712,8 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________
-std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
-  std::vector<ParsedQuery> updates{};
+qlever::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
+  qlever::vector<ParsedQuery> updates{allocator()};
 
   AD_CORRECTNESS_CHECK(ctx->prologue().size() >= ctx->update1().size());
   for (size_t i = 0; i < ctx->update1().size(); ++i) {
@@ -727,7 +736,7 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
     ql::ranges::for_each(thisUpdates, [updateStringRepr](ParsedQuery& update) {
       update._originalString = updateStringRepr;
     });
-    ad_utility::appendVector(updates, thisUpdates);
+    ql::ranges::move(thisUpdates, std::back_inserter(updates));
     resetStateForMultipleUpdates();
   }
 
@@ -735,19 +744,47 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
-  if (ctx->deleteWhere() || ctx->modify() || ctx->clear() || ctx->drop() ||
-      ctx->create() || ctx->copy() || ctx->move() || ctx->add() ||
-      ctx->load()) {
-    return visitAlternative<std::vector<ParsedQuery>>(
-        ctx->deleteWhere(), ctx->modify(), ctx->clear(), ctx->drop(),
-        ctx->create(), ctx->copy(), ctx->move(), ctx->add(), ctx->load());
+qlever::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
+  // `visitAlternative`'s generic single-value-to-vector wrapping (via
+  // `Intermediate{singleValue}`) relies on a default-constructible allocator,
+  // which `qlever::vector` deliberately does not have. The alternatives below
+  // mix single-`ParsedQuery`- and vector-returning `visit` overloads, so they
+  // are dispatched manually instead, threading the real allocator through.
+  auto wrapSingle = [this](ParsedQuery pq) {
+    return qlever::vector<ParsedQuery>({std::move(pq)}, allocator());
+  };
+  if (ctx->deleteWhere()) {
+    return wrapSingle(visit(ctx->deleteWhere()));
+  }
+  if (ctx->modify()) {
+    return wrapSingle(visit(ctx->modify()));
+  }
+  if (ctx->clear()) {
+    return wrapSingle(visit(ctx->clear()));
+  }
+  if (ctx->drop()) {
+    return wrapSingle(visit(ctx->drop()));
+  }
+  if (ctx->create()) {
+    return visit(ctx->create());
+  }
+  if (ctx->copy()) {
+    return visit(ctx->copy());
+  }
+  if (ctx->move()) {
+    return visit(ctx->move());
+  }
+  if (ctx->add()) {
+    return visit(ctx->add());
+  }
+  if (ctx->load()) {
+    return wrapSingle(visit(ctx->load()));
   }
   AD_CORRECTNESS_CHECK(ctx->insertData() || ctx->deleteData());
   parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
       ctx->insertData(), ctx->deleteData());
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
-  return {std::move(parsedQuery_)};
+  return qlever::vector<ParsedQuery>({std::move(parsedQuery_)}, allocator());
 }
 
 // ____________________________________________________________________________________
@@ -879,29 +916,30 @@ ParsedQuery Visitor::visit(Parser::DropContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::vector<ParsedQuery> Visitor::visit(const Parser::CreateContext*) {
+qlever::vector<ParsedQuery> Visitor::visit(const Parser::CreateContext*) {
   // Create is a no-op because we don't explicitly record the existence of empty
   // graphs.
-  return {};
+  return qlever::vector<ParsedQuery>{allocator()};
 }
 
 // ____________________________________________________________________________________
-std::vector<ParsedQuery> Visitor::visit(Parser::AddContext* ctx) {
+qlever::vector<ParsedQuery> Visitor::visit(Parser::AddContext* ctx) {
   AD_CORRECTNESS_CHECK(ctx->graphOrDefault().size() == 2);
   auto from = visit(ctx->graphOrDefault()[0]);
   auto to = visit(ctx->graphOrDefault()[1]);
 
   if (from == to) {
-    return {};
+    return qlever::vector<ParsedQuery>{allocator()};
   }
 
-  return {makeAdd(from, to)};
+  return qlever::vector<ParsedQuery>({makeAdd(from, to)}, allocator());
 }
 
 // _____________________________________________________________________________
-std::vector<ParsedQuery> Visitor::makeCopy(const GraphOrDefault& from,
-                                           const GraphOrDefault& to) {
-  std::vector<ParsedQuery> updates{makeClear(transformGraph(to))};
+qlever::vector<ParsedQuery> Visitor::makeCopy(const GraphOrDefault& from,
+                                              const GraphOrDefault& to) {
+  qlever::vector<ParsedQuery> updates({makeClear(transformGraph(to))},
+                                      allocator());
   resetStateForMultipleUpdates();
   updates.push_back(makeAdd(from, to));
 
@@ -916,14 +954,14 @@ std::pair<GraphOrDefault, GraphOrDefault> Visitor::visitFromTo(
 }
 
 // ____________________________________________________________________________________
-std::vector<ParsedQuery> Visitor::visit(Parser::MoveContext* ctx) {
+qlever::vector<ParsedQuery> Visitor::visit(Parser::MoveContext* ctx) {
   auto [from, to] = visitFromTo(ctx->graphOrDefault());
 
   if (from == to) {
-    return {};
+    return qlever::vector<ParsedQuery>{allocator()};
   }
 
-  std::vector<ParsedQuery> updates = makeCopy(from, to);
+  qlever::vector<ParsedQuery> updates = makeCopy(from, to);
   resetStateForMultipleUpdates();
   updates.push_back(makeClear(transformGraph(from)));
 
@@ -931,11 +969,11 @@ std::vector<ParsedQuery> Visitor::visit(Parser::MoveContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
+qlever::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
   auto [from, to] = visitFromTo(ctx->graphOrDefault());
 
   if (from == to) {
-    return {};
+    return qlever::vector<ParsedQuery>{allocator()};
   }
 
   return makeCopy(from, to);
@@ -1013,7 +1051,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
 
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   parsedQuery_.datasetClauses_ =
-      setAndGetDatasetClauses(visitVector(ctx->usingClause()));
+      setAndGetDatasetClauses(toPmrDatasetClauses(visitVector(ctx->usingClause())));
 
   // If there is no USING clause, but a WITH clause, then the graph specified in
   // the WITH clause is used as the default graph in the WHERE clause of this
@@ -1109,7 +1147,7 @@ Quads Visitor::visit(Parser::QuadDataContext* ctx) {
 Quads Visitor::visit(Parser::QuadsContext* ctx) {
   // The ordering of the individual triplesTemplate and quadsNotTriples is not
   // relevant and also not known.
-  Quads quads;
+  Quads quads{allocator()};
   quads.freeTriples_ = ad_utility::flatten(visitVector(ctx->triplesTemplate()));
   for (auto& [graph, triples] : visitVector(ctx->quadsNotTriples())) {
     quads.graphTriples_.emplace_back(std::move(graph), std::move(triples));
@@ -1160,7 +1198,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
                                      visibleVariablesSoFar.end());
           });
   if (ctx->subSelect()) {
-    auto parsedQuerySoFar = std::exchange(parsedQuery_, ParsedQuery{});
+    auto parsedQuerySoFar = std::exchange(parsedQuery_, ParsedQuery{allocator()});
     auto [subquery, valuesOpt] = visit(ctx->subSelect());
     pattern._graphPatterns.emplace_back(std::move(subquery));
     if (valuesOpt.has_value()) {
@@ -1182,7 +1220,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
     if (auto langFilterData = filter.expression_.getLanguageFilterExpression();
         langFilterData.has_value()) {
       const auto& [variable, language] = langFilterData.value();
-      if (pattern.addLanguageFilter(variable, language)) {
+      if (pattern.addLanguageFilter(variable, language, allocator())) {
         continue;
       }
     }
@@ -1194,7 +1232,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
 Visitor::OperationsAndFilters Visitor::visit(
     Parser::GroupGraphPatternSubContext* ctx) {
   std::vector<GraphPatternOperation> ops;
-  std::vector<SparqlFilter> filters;
+  qlever::vector<SparqlFilter> filters{allocator()};
 
   auto filter = [&filters](SparqlFilter filter) {
     filters.emplace_back(std::move(filter));
@@ -1343,16 +1381,16 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
                  varOrIri);
 
   if (serviceIri.toStringRepresentation() == PATH_SEARCH_IRI) {
-    return visitMagicServiceQuery<parsedQuery::PathQuery>(ctx);
+    return visitMagicServiceQuery<parsedQuery::PathQuery>(ctx, allocator());
   } else if (serviceIri.toStringRepresentation() == SPATIAL_SEARCH_IRI) {
-    return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx);
+    return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx, allocator());
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == EXTERNAL_VALUES_IRI ||
              ql::starts_with(serviceIri.toStringRepresentation(),
                              EXTERNAL_VALUES_IRI_PREFIX)) {
-    return visitMagicServiceQuery<parsedQuery::ExternalValuesQuery>(ctx,
-                                                                    serviceIri);
+    return visitMagicServiceQuery<parsedQuery::ExternalValuesQuery>(
+        ctx, serviceIri, allocator());
   } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
                              CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitMagicServiceQuery<parsedQuery::NamedCachedResult>(ctx,
@@ -1366,7 +1404,7 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // SERVICE clause to the visible variables so far, but also remember them
   // separately (with duplicates removed) because we need them in `Service.cpp`
   // when computing the result for this operation.
-  std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
+  auto visibleVariablesSoFar = std::move(visibleVariables_);
   parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
   // Note: The `visit` call in the line above has filled the `visibleVariables_`
   // member with all the variables visible inside the graph pattern.
@@ -1418,7 +1456,7 @@ Visitor::PatternAndVisibleVariables Visitor::visit(
   // variables so far because they might not all be visible in the outer query.
   // Adding appropriately to the visible variables so far is then taken care of
   // in `visit(SubSelectContext*)`.
-  std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
+  auto visibleVariablesSoFar = std::move(visibleVariables_);
   auto graphPatternWhereClause = visit(ctx->groupGraphPattern());
   // Using `std::exchange` as per Johannes' suggestion. I am slightly irritated
   // that this calls the move constructor AND the move assignment operator for
@@ -1615,7 +1653,7 @@ void Visitor::visit(Parser::PrefixDeclContext* ctx) {
 ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_._clause = visit(ctx->selectClause());
   parsedQuery_.datasetClauses_ =
-      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
+      setAndGetDatasetClauses(toPmrDatasetClauses(visitVector(ctx->datasetClause())));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
                                     makeInternalVariableGenerator());
@@ -1627,8 +1665,9 @@ template <typename Ctx>
 auto Visitor::visitInFreshQueryContext(Ctx* ctx)
     -> FreshQueryContextResult<
         decltype(std::declval<SparqlQleverVisitor&>().visit(ctx))> {
-  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
-  auto variablesBackup = std::exchange(visibleVariables_, {});
+  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{allocator()});
+  auto variablesBackup =
+      std::exchange(visibleVariables_, qlever::vector<Variable>{allocator()});
   // The visited group starts a basic graph pattern of its own, but the basic
   // graph pattern of the outer query continues afterwards (an `EXISTS` is part
   // of a `FILTER`, which does not end it), so its blank node labels must be
@@ -1638,7 +1677,7 @@ auto Visitor::visitInFreshQueryContext(Ctx* ctx)
   // The restoring assignments are moves and cannot throw, so the cleanup
   // is safe also during stack unwinding.
   static_assert(std::is_nothrow_move_assignable_v<ParsedQuery>);
-  static_assert(std::is_nothrow_move_assignable_v<std::vector<Variable>>);
+  static_assert(std::is_nothrow_move_assignable_v<qlever::vector<Variable>>);
   static_assert(std::is_nothrow_move_assignable_v<
                 decltype(blankNodeLabelsInCurrentBasicGraphPattern_)>);
   absl::Cleanup restoreBackups{
@@ -1832,19 +1871,34 @@ uint64_t Visitor::visit(Parser::TextLimitClauseContext* ctx) {
 
 // ____________________________________________________________________________________
 SparqlValues Visitor::visit(Parser::InlineDataOneVarContext* ctx) {
-  SparqlValues values;
+  SparqlValues values{allocator()};
   values._variables.push_back(visit(ctx->var()));
   for (auto& dataBlockValue : ctx->dataBlockValue()) {
-    values._values.push_back({visit(dataBlockValue)});
+    qlever::vector<TripleComponent> row{allocator()};
+    row.push_back(visit(dataBlockValue));
+    values._values.push_back(std::move(row));
   }
   return values;
 }
 
 // ____________________________________________________________________________________
 SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
-  SparqlValues values;
-  values._variables = visitVector(ctx->var());
-  values._values = visitVector(ctx->dataBlockSingle());
+  SparqlValues values{allocator()};
+  {
+    auto vars = visitVector(ctx->var());
+    values._variables = qlever::vector<Variable>(
+        std::make_move_iterator(vars.begin()),
+        std::make_move_iterator(vars.end()), allocator());
+  }
+  {
+    auto rows = visitVector(ctx->dataBlockSingle());
+    values._values.reserve(rows.size());
+    for (auto& row : rows) {
+      values._values.emplace_back(
+          std::make_move_iterator(row.begin()),
+          std::make_move_iterator(row.end()), allocator());
+    }
+  }
   if (std::any_of(values._values.begin(), values._values.end(),
                   [numVars = values._variables.size()](const auto& inner) {
                     return inner.size() != numVars;
@@ -1857,12 +1911,15 @@ SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::vector<TripleComponent> Visitor::visit(
+qlever::vector<TripleComponent> Visitor::visit(
     Parser::DataBlockSingleContext* ctx) {
   if (ctx->NIL()) {
-    return {};
+    return qlever::vector<TripleComponent>{allocator()};
   }
-  return visitVector(ctx->dataBlockValue());
+  auto values = visitVector(ctx->dataBlockValue());
+  return qlever::vector<TripleComponent>(
+      std::make_move_iterator(values.begin()),
+      std::make_move_iterator(values.end()), allocator());
 }
 
 // ____________________________________________________________________________________
@@ -1985,11 +2042,11 @@ ExpressionPtr Visitor::visit(Parser::FunctionCallContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::vector<Visitor::ExpressionPtr> Visitor::visit(
+qlever::vector<Visitor::ExpressionPtr> Visitor::visit(
     Parser::ArgListContext* ctx) {
   // If no arguments, return empty expression vector.
   if (ctx->NIL()) {
-    return std::vector<ExpressionPtr>{};
+    return qlever::vector<ExpressionPtr>{allocator()};
   }
   // The grammar allows an optional DISTINCT before the argument list (the
   // whole list, not the individual arguments), but we currently don't support
@@ -1999,7 +2056,10 @@ std::vector<Visitor::ExpressionPtr> Visitor::visit(
         ctx, "DISTINCT for the argument lists of an IRI functions is ");
   }
   // Visit the expression of each argument.
-  return visitVector(ctx->expression());
+  auto args = visitVector(ctx->expression());
+  return qlever::vector<ExpressionPtr>(std::make_move_iterator(args.begin()),
+                                       std::make_move_iterator(args.end()),
+                                       allocator());
 }
 
 // ____________________________________________________________________________________
@@ -2328,7 +2388,9 @@ PropertyPath Visitor::visit(Parser::PathAlternativeContext* ctx) {
   if (alternatives.size() == 1) {
     return std::move(alternatives.at(0));
   }
-  return PropertyPath::makeAlternative(std::move(alternatives));
+  return PropertyPath::makeAlternative(PropertyPath::ChildrenVec(
+      std::make_move_iterator(alternatives.begin()),
+      std::make_move_iterator(alternatives.end()), allocator()));
 }
 
 // ____________________________________________________________________________________
@@ -2337,7 +2399,9 @@ PropertyPath Visitor::visit(Parser::PathSequenceContext* ctx) {
   if (sequence.size() == 1) {
     return std::move(sequence.at(0));
   }
-  return PropertyPath::makeSequence(std::move(sequence));
+  return PropertyPath::makeSequence(PropertyPath::ChildrenVec(
+      std::make_move_iterator(sequence.begin()),
+      std::make_move_iterator(sequence.end()), allocator()));
 }
 
 // ____________________________________________________________________________________
@@ -2356,7 +2420,7 @@ PropertyPath Visitor::visit(Parser::PathEltOrInverseContext* ctx) {
   PropertyPath p = visit(ctx->pathElt());
 
   if (ctx->negationOperator) {
-    p = PropertyPath::makeInverse(std::move(p));
+    p = PropertyPath::makeInverse(std::move(p), allocator());
   }
 
   return p;
@@ -2428,7 +2492,10 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
-  return PropertyPath::makeNegated(visitVector(ctx->pathOneInPropertySet()));
+  auto children = visitVector(ctx->pathOneInPropertySet());
+  return PropertyPath::makeNegated(PropertyPath::ChildrenVec(
+      std::make_move_iterator(children.begin()),
+      std::make_move_iterator(children.end()), allocator()));
 }
 
 // ____________________________________________________________________________________
@@ -2443,7 +2510,7 @@ PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
   }();
   auto propertyPath = PropertyPath::fromIri(std::move(iri));
   if (ql::starts_with(text, "^")) {
-    return PropertyPath::makeInverse(propertyPath);
+    return PropertyPath::makeInverse(propertyPath, allocator());
   }
   return propertyPath;
 }

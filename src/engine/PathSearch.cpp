@@ -16,6 +16,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
 #include "util/Algorithm.h"
+#include "util/AllocatorTypes.h"
 #include "util/AllocatorWithLimit.h"
 
 using namespace pathSearch;
@@ -80,7 +81,9 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
 
   auto startCol = subtree_->getVariableColumn(config_.start_);
   auto endCol = subtree_->getVariableColumn(config_.end_);
-  subtree_ = QueryExecutionTree::createSortedTree(subtree_, {startCol, endCol});
+  subtree_ = QueryExecutionTree::createSortedTree(
+      subtree_,
+      qlever::vector<ColumnIndex>({startCol, endCol}, allocator()));
 
   resultWidth_ = 4 + config_.edgeProperties_.size();
 

@@ -231,12 +231,8 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   }
 
   // Payload variables
-  PayloadVariables pv;
-  if (!childGraphPattern_.has_value()) {
-    pv = PayloadVariables::all();
-  } else {
-    pv = payloadVariables_;
-  }
+  PayloadVariables pv = childGraphPattern_.has_value() ? payloadVariables_
+                                                       : PayloadVariables::all();
 
   // Task specification
   SpatialJoinTask task;
@@ -255,7 +251,9 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
 }
 
 // ____________________________________________________________________________
-SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
+SpatialQuery::SpatialQuery(const SparqlTriple& triple,
+                          qlever::Allocator<Id> allocator)
+    : payloadVariables_{std::move(allocator)} {
   auto predicate = triple.getSimplePredicate();
   AD_CONTRACT_CHECK(predicate.has_value(),
                     "The config triple for SpatialJoin must have a special IRI "

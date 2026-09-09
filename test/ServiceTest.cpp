@@ -25,6 +25,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
@@ -409,15 +410,16 @@ TEST_F(ServiceTest, computeResult) {
     using TC = TripleComponent;
 
     auto sibling = std::make_shared<Values>(
-        testQec, (parsedQuery::SparqlValues){
-                     {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
-                     {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
-                      {TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z2>"))},
-                      {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))},
-                      // This row will be ignored in the created Values Clause
-                      // as it contains a blank node.
-                      {TC(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))),
-                       TC(iri("<bl>")), TC(iri("<ank>"))}}});
+        testQec,
+        ad_utility::testing::makeSparqlValues(
+            {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+            {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
+             {TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z2>"))},
+             {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))},
+             // This row will be ignored in the created Values Clause
+             // as it contains a blank node.
+             {TC(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))),
+              TC(iri("<bl>")), TC(iri("<ank>"))}}));
 
     auto parsedServiceClause5 = parsedServiceClause;
     parsedServiceClause5.graphPatternAsString_ =
@@ -487,8 +489,8 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
   using TC = TripleComponent;
 
   auto sibling = std::make_shared<Values>(
-      testQec,
-      (parsedQuery::SparqlValues){{Variable{"?a"}}, {{TC(iri("<a>"))}}});
+      testQec, ad_utility::testing::makeSparqlValues(
+                   {Variable{"?a"}}, {{TC(iri("<a>"))}}));
 
   parsedQuery::Service parsedServiceClause{
       {Variable{"?a"}},
@@ -864,9 +866,10 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   auto iri = ad_utility::testing::iri;
   using TC = TripleComponent;
   auto siblingOperation = std::make_shared<MockValues>(
-      testQec, parsedQuery::SparqlValues{{Variable{"?x"}, Variable{"?y"}},
-                                         {{TC(iri("<x>")), TC(iri("<y>"))},
-                                          {TC(iri("<z>")), TC(iri("<a>"))}}});
+      testQec, ad_utility::testing::makeSparqlValues(
+                   {Variable{"?x"}, Variable{"?y"}},
+                   {{TC(iri("<x>")), TC(iri("<y>"))},
+                    {TC(iri("<z>")), TC(iri("<a>"))}}));
   auto sibling = std::make_shared<Sort>(
       testQec, std::make_shared<QueryExecutionTree>(testQec, siblingOperation),
       std::vector<ColumnIndex>{});

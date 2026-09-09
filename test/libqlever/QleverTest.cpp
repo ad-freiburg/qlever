@@ -13,6 +13,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/ParsedQueryTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExternalValues.h"
@@ -404,10 +405,13 @@ TEST(LibQlever, externallySpecifiedValues) {
 
     // Supply values and execute the query.
     using TC = TripleComponent;
-    parsedQuery::SparqlValues newValues;
-    newValues._variables = {Variable{"?x"}};
-    newValues._values = {{TC::Iri::fromIriref("<s1>")},
-                         {TC::Iri::fromIriref("<s3>")}};
+    parsedQuery::SparqlValues newValues{qec.getAllocator()};
+    newValues._variables = ad_utility::testing::toQVec(
+        std::vector<Variable>{Variable{"?x"}});
+    newValues._values.push_back(ad_utility::testing::toQVec(
+        std::vector<TripleComponent>{TC::Iri::fromIriref("<s1>")}));
+    newValues._values.push_back(ad_utility::testing::toQVec(
+        std::vector<TripleComponent>{TC::Iri::fromIriref("<s3>")}));
     externalValues[0]->updateValues(std::move(newValues));
 
     auto res = qet.getResult();
@@ -458,7 +462,8 @@ RebuildSetup setUpRebuild(const std::string& baseFolder) {
     ql::filesystem::remove(rebuiltBase + suffix);
   }
   auto indexAndViews = std::make_shared<qlever::Qlever::IndexAndViews>(
-      std::move(rebuilt), MaterializedViewsManager{rebuiltBase});
+      std::move(rebuilt),
+      MaterializedViewsManager{rebuiltBase, ad_utility::testing::makeAllocator()});
   return {std::move(oldBase), std::move(rebuiltBase), std::move(indexAndViews)};
 }
 }  // namespace
@@ -539,10 +544,13 @@ TEST(LibQlever, planQueryOfParsedQueryAndCloneQetInPlace) {
     std::vector<ExternalValues*> values;
     plan.queryExecutionTree().getRootOperation()->getExternalValues(values);
     AD_CONTRACT_CHECK(values.size() == 1);
-    parsedQuery::SparqlValues newValues;
-    newValues._variables = {Variable{"?x"}};
+    parsedQuery::SparqlValues newValues{
+        plan.queryExecutionContext().getAllocator()};
+    newValues._variables = ad_utility::testing::toQVec(
+        std::vector<Variable>{Variable{"?x"}});
     for (const auto& iri : iris) {
-      newValues._values.push_back({TripleComponent::Iri::fromIriref(iri)});
+      newValues._values.push_back(ad_utility::testing::toQVec(
+          std::vector<TripleComponent>{TripleComponent::Iri::fromIriref(iri)}));
     }
     values.at(0)->updateValues(std::move(newValues));
 
@@ -742,7 +750,8 @@ TEST(LibQlever, applyUpdate) {
   ad_utility::BlankNodeManager bnm;
   auto parsedUpdates =
       SparqlParser::parseUpdate(&bnm, ad_utility::testing::encodedIriManager(),
-                                "INSERT DATA { <a> <b> <c> }");
+                                "INSERT DATA { <a> <b> <c> }", {},
+                                engine.allocator());
   ASSERT_THAT(parsedUpdates, SizeIs(1));
   auto plannedUpdate =
       engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
@@ -787,7 +796,8 @@ namespace {
 UpdateMetadata applyUpdateToEngine(Qlever& engine, const std::string& update) {
   ad_utility::BlankNodeManager bnm;
   auto parsedUpdates = SparqlParser::parseUpdate(
-      &bnm, ad_utility::testing::encodedIriManager(), update);
+      &bnm, ad_utility::testing::encodedIriManager(), update, {},
+      engine.allocator());
   AD_CORRECTNESS_CHECK(parsedUpdates.size() == 1);
   auto plannedUpdate =
       engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));

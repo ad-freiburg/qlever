@@ -28,9 +28,12 @@ Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
 // ____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
     QueryExecutionContext* qec, Variable variable, TripleComponent value) {
-  return ad_utility::makeExecutionTree<Values>(
-      qec,
-      parsedQuery::SparqlValues{{std::move(variable)}, {{std::move(value)}}});
+  parsedQuery::SparqlValues sparqlValues{qec->getAllocator()};
+  sparqlValues._variables.push_back(std::move(variable));
+  qlever::vector<TripleComponent> row{qec->getAllocator()};
+  row.push_back(std::move(value));
+  sparqlValues._values.push_back(std::move(row));
+  return ad_utility::makeExecutionTree<Values>(qec, std::move(sparqlValues));
 }
 
 // ____________________________________________________________________________

@@ -48,7 +48,8 @@ TEST(ExecuteUpdate, executeUpdate) {
             std::make_shared<ad_utility::CancellationHandle<>>();
         const std::vector<DatasetClause> datasets = {};
         ad_utility::BlankNodeManager bnm;
-        auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
+        auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update,
+                                             {}, qec.getAllocator());
         index.deltaTriplesManager().modify<void>(
             [&index, &sharedHandle, &pqs, &qec](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
@@ -77,7 +78,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
         auto materializedViewsManager =
-            std::make_shared<MaterializedViewsManager>();
+            std::make_shared<MaterializedViewsManager>(ad_utility::testing::makeAllocator());
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
@@ -99,7 +100,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
         auto materializedViewsManager =
-            std::make_shared<MaterializedViewsManager>();
+            std::make_shared<MaterializedViewsManager>(ad_utility::testing::makeAllocator());
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
@@ -236,7 +237,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
     ad_utility::BlankNodeManager bnm;
-    auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
+    auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update, {},
+                                         qec->getAllocator());
     std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                           ExecuteUpdate::IdTriplesAndLocalVocab>>
         results;

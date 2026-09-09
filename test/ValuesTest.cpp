@@ -14,12 +14,14 @@
 #include "engine/idTable/IdTable.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 
 using TC = TripleComponent;
 using ValuesComponents = std::vector<std::vector<TripleComponent>>;
 
 namespace {
 auto iri = ad_utility::testing::iri;
+using ad_utility::testing::makeSparqlValues;
 }
 
 // Check the basic methods of the `Values` clause.
@@ -30,7 +32,9 @@ TEST(Values, basicMethods) {
                           {TC{7}, TC{42}, TC{3}},
                           {TC{7}, TC{42}, TC::UNDEF{}}};
   Values valuesOp(testQec,
-                  {{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}}, values});
+                  makeSparqlValues(
+                      {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+                      values));
   EXPECT_FALSE(valuesOp.knownEmptyResult());
   EXPECT_EQ(valuesOp.getSizeEstimate(), 4u);
   EXPECT_EQ(valuesOp.getCostEstimate(), 4u);
@@ -58,7 +62,8 @@ TEST(Values, basicMethods) {
 // Check some corner cases for an empty VALUES clause.
 TEST(Values, emptyValuesClause) {
   auto testQec = ad_utility::testing::getQec();
-  Values emptyValuesOp(testQec, {});
+  Values emptyValuesOp(testQec,
+                       parsedQuery::SparqlValues{testQec->getAllocator()});
   EXPECT_TRUE(emptyValuesOp.knownEmptyResult());
   // The current implementation always returns `1.0` for nonexisting columns.
   EXPECT_FLOAT_EQ(emptyValuesOp.getMultiplicity(32), 1.0);
@@ -70,7 +75,9 @@ TEST(Values, computeResult) {
   auto testQec = ad_utility::testing::getQec("<x> <x> <x> .");
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
-  Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});
+  Values valuesOperation(
+      testQec,
+      makeSparqlValues({Variable{"?x"}, Variable{"?y"}}, values));
   auto result = valuesOperation.getResult();
   const auto& table = result->idTableView();
   Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
@@ -90,7 +97,8 @@ TEST(Values, computeResult) {
 TEST(Values, illegalInput) {
   auto qec = ad_utility::testing::getQec();
   ValuesComponents values{{TC{12}, TC{"<x>"}}, {TC::UNDEF{}}};
-  ASSERT_ANY_THROW(Values(qec, {{Variable{"?x"}, Variable{"?y"}}, values}));
+  ASSERT_ANY_THROW(Values(
+      qec, makeSparqlValues({Variable{"?x"}, Variable{"?y"}}, values)));
 }
 
 // _____________________________________________________________________________
@@ -98,7 +106,9 @@ TEST(Values, clone) {
   auto testQec = ad_utility::testing::getQec("<x> <x> <x> .");
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
-  Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});
+  Values valuesOperation(
+      testQec,
+      makeSparqlValues({Variable{"?x"}, Variable{"?y"}}, values));
 
   auto clone = valuesOperation.clone();
   ASSERT_TRUE(clone);

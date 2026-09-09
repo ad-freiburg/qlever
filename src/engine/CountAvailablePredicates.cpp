@@ -9,6 +9,7 @@
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
 #include "global/RuntimeParameters.h"
+#include "util/AllocatorTypes.h"
 #include "util/ParallelExecutor.h"
 
 // _____________________________________________________________________________
@@ -17,8 +18,10 @@ CountAvailablePredicates::CountAvailablePredicates(
     size_t subjectColumnIndex, Variable predicateVariable,
     Variable countVariable)
     : Operation(qec),
-      subtree_(QueryExecutionTree::createSortedTree(std::move(subtree),
-                                                    {subjectColumnIndex})),
+      subtree_(QueryExecutionTree::createSortedTree(
+          std::move(subtree),
+          qlever::vector<ColumnIndex>({subjectColumnIndex},
+                                      qec->getAllocator()))),
       subjectColumnIndex_(subjectColumnIndex),
       predicateVariable_(std::move(predicateVariable)),
       countVariable_(std::move(countVariable)) {}

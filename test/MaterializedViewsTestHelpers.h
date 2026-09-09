@@ -246,7 +246,7 @@ class MaterializedViewsPatternMatchingTest
     qlever::EngineConfig config;
     config.baseName_ = onDiskBase_;
     qlv_.emplace(config);
-    manager_.emplace(onDiskBase_);
+    manager_.emplace(onDiskBase_, qlv_->allocator());
     qec_ = qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot());
   }
 
@@ -266,7 +266,8 @@ class MaterializedViewsPatternMatchingTest
   // Parse `query`'s single basic graph pattern, without going through full
   // query planning.
   parsedQuery::BasicGraphPattern parseTriples(const std::string& query) {
-    auto parsed = SparqlParser::parseQuery(&encodedIriManager_, query, {});
+    auto parsed = SparqlParser::parseQuery(&encodedIriManager_, query, {},
+                                           qlv_->allocator());
     return parsed._rootGraphPattern._graphPatterns.at(0).getBasic();
   }
 

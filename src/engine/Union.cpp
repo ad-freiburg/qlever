@@ -10,6 +10,7 @@
 #include "backports/span.h"
 #include "engine/CallFixedSize.h"
 #include "engine/SortedUnionImpl.h"
+#include "util/AllocatorTypes.h"
 #include "util/ChunkedForLoop.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
@@ -63,7 +64,7 @@ Union::Union(QueryExecutionContext* qec,
 
   if (!targetOrder_.empty()) {
     auto computeSortOrder = [this](bool left) {
-      std::vector<ColumnIndex> specificSortOrder;
+      qlever::vector<ColumnIndex> specificSortOrder{allocator()};
       for (ColumnIndex index : targetOrder_) {
         ColumnIndex realIndex = _columnOrigins.at(index).at(!left);
         if (realIndex != NO_COLUMN) {

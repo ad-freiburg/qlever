@@ -487,7 +487,8 @@ TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars);
 
-  auto tree = QueryExecutionTree::createSortedTree(subtree, {0}, true);
+  auto tree = QueryExecutionTree::createSortedTree(
+      subtree, qlever::vector<ColumnIndex>({0}, qec->getAllocator()), true);
   auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
   ASSERT_NE(sort, nullptr);
   EXPECT_EQ(sort->handlesLimitOffset(), LimitOffsetHandling::NONE);

@@ -28,7 +28,7 @@ std::string SparqlValues::variablesToString() const {
 // _____________________________________________________________________________
 std::string SparqlValues::valuesToString() const {
   auto tripleComponentVectorAsValueTuple =
-      [](const std::vector<TripleComponent>& v) -> std::string {
+      [](const qlever::vector<TripleComponent>& v) -> std::string {
     return absl::StrCat(
         "(",
         absl::StrJoin(v, " ",
@@ -39,7 +39,7 @@ std::string SparqlValues::valuesToString() const {
   };
   return absl::StrJoin(
       _values, " ",
-      [&](std::string* out, const std::vector<TripleComponent>& v) {
+      [&](std::string* out, const qlever::vector<TripleComponent>& v) {
         out->append(tripleComponentVectorAsValueTuple(v));
       });
 }
@@ -54,7 +54,8 @@ auto m(Args&&... args) {
 }  // namespace
 
 // Special member functions for the `Subquery` class
-Subquery::Subquery() : _subquery{m()} {}
+Subquery::Subquery(qlever::Allocator<Id> allocator)
+    : _subquery{std::make_unique<ParsedQuery>(std::move(allocator))} {}
 Subquery::Subquery(const ParsedQuery& pq) : _subquery{m(pq)} {}
 Subquery::Subquery(ParsedQuery&& pq) noexcept : _subquery{m(std::move(pq))} {}
 Subquery::Subquery(Subquery&& pq) noexcept

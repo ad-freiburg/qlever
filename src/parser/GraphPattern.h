@@ -10,6 +10,8 @@
 
 #include "parser/data/SparqlFilter.h"
 #include "rdfTypes/Variable.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 #include "util/HashSet.h"
 
 namespace parsedQuery {
@@ -44,10 +46,12 @@ class GraphPattern {
   // predicate that only returns matching literals if applicable. `variable` is
   // the variable to filter on, `langTags` represent a whitelist of languages,
   // indicating that the desired literals have to be of any of the specified
-  // languages. Return `true` if it could successfully be applied, false
-  // otherwise.
+  // languages. `allocator` is the real, query-execution-bound allocator (when
+  // available) that the rewritten property path is routed through. Return
+  // `true` if it could successfully be applied, false otherwise.
   bool addLanguageFilter(const Variable& variable,
-                         const ad_utility::HashSet<std::string>& langTags);
+                        const ad_utility::HashSet<std::string>& langTags,
+                        qlever::Allocator<Id> allocator);
 
   bool _optional;
 

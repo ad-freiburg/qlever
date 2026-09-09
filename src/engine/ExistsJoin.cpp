@@ -15,6 +15,7 @@
 #include "util/ChunkedForLoop.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/VectorWithMemoryLimit.h"
 
 // _____________________________________________________________________________
@@ -258,7 +259,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // the way `QueryExecutionTree::getJoinColumns` expects, so that
     // `ExistsJoin`'s constructor does not have to add an extra `Sort`.
     pq._isInternalSort = IsInternalSort::True;
-    pq._orderBy = subtree->getVariableColumns() | ql::views::keys |
+    auto orderBy = subtree->getVariableColumns() | ql::views::keys |
                   ql::views::filter([&visibleVars = pq.getVisibleVariables()](
                                         const Variable& variable) {
                     return ad_utility::contains(visibleVars, variable);
@@ -267,6 +268,8 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
                     return VariableOrderKey{variable};
                   }) |
                   ::ranges::to<std::vector>;
+    pq._orderBy = qlever::vector<VariableOrderKey>(
+        orderBy.begin(), orderBy.end(), qec->getAllocator());
     // Ensure we have the same ordering `QueryExecutionTree::getJoinColumns`
     // would produce.
     ql::ranges::sort(pq._orderBy, {},

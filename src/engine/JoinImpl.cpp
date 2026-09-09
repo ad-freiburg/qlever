@@ -31,6 +31,8 @@
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 #include "util/HashMap.h"
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -47,12 +49,16 @@ JoinImpl::JoinImpl(QueryExecutionContext* qec,
                    ColumnIndex t1JoinCol, ColumnIndex t2JoinCol,
                    bool keepJoinColumn,
                    bool allowSwappingChildrenOnlyForTesting)
-    : Operation(qec), keepJoinColumn_{keepJoinColumn} {
+    : Operation(qec),
+      multiplicities_{allocator()},
+      keepJoinColumn_{keepJoinColumn} {
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
-  t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
-  t2 = QueryExecutionTree::createSortedTree(std::move(t2), {t2JoinCol});
+  t1 = QueryExecutionTree::createSortedTree(
+      std::move(t1), qlever::vector<ColumnIndex>({t1JoinCol}, allocator()));
+  t2 = QueryExecutionTree::createSortedTree(
+      std::move(t2), qlever::vector<ColumnIndex>({t2JoinCol}, allocator()));
 
   // Make the order of the two subtrees deterministic. That way, queries that
   // are identical except for the order of the join operands, are easier to
@@ -189,10 +195,11 @@ Result JoinImpl::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 VariableToColumnMap JoinImpl::computeVariableToColumnMap() const {
+  std::array<std::array<ColumnIndex, 2>, 1> joinColumns{
+      {{leftJoinCol_, rightJoinCol_}}};
   return makeVarToColMapForJoinOperation(
-      left_->getVariableColumns(), right_->getVariableColumns(),
-      {{leftJoinCol_, rightJoinCol_}}, BinOpType::Join, left_->getResultWidth(),
-      keepJoinColumn_);
+      left_->getVariableColumns(), right_->getVariableColumns(), joinColumns,
+      BinOpType::Join, left_->getResultWidth(), keepJoinColumn_);
 }
 
 // _____________________________________________________________________________
@@ -430,7 +437,8 @@ Result JoinImpl::lazyJoin(std::shared_ptr<const Result> a,
 template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
 void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
                             const IdTable& dynB, ColumnIndex jc2,
-                            IdTable* dynRes) {
+                            IdTable* dynRes,
+                            const qlever::Allocator<Id>& allocator) {
   const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
@@ -449,13 +457,26 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
 
   // Puts the rows of the given table into a hash map, with the value of
   // the join column of a row as the key, and returns the hash map.
-  auto idTableToHashMap = [](const auto& table, const ColumnIndex jc) {
+  auto idTableToHashMap = [&allocator](const auto& table,
+                                       const ColumnIndex jc) {
     // This declaration works, because generic lambdas are just syntactic sugar
     // for templates.
     using Table = std::decay_t<decltype(table)>;
-    ad_utility::HashMap<Id, std::vector<typename Table::row_type>> map;
+    using RowType = typename Table::row_type;
+    // Note: We use parenthesized (rather than brace) initialization, because
+    // `std::unordered_map`'s single-allocator constructor is not selected
+    // for brace-init in this context. The implicit converting constructor of
+    // `qlever::Allocator` takes care of adapting the allocator's value type.
+    // Note: The bucket lists are `qlever::vector<RowType>`. Since
+    // `PmrAllocator<T>` has no default constructor, we cannot rely on
+    // `map[...]` (which default-constructs the mapped value on first
+    // access); instead we use `try_emplace` to explicitly construct a new,
+    // allocator-aware bucket only when the key is not yet present.
+    ad_utility::HashMapWithMemoryLimit<Id, qlever::vector<RowType>> map(
+        allocator);
     for (const auto& row : table) {
-      map[row[jc]].push_back(row);
+      map.try_emplace(row[jc], qlever::vector<RowType>{allocator})
+          .first->second.push_back(row);
     }
     return map;
   };
@@ -525,11 +546,13 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
 
 // ______________________________________________________________________________
 void JoinImpl::hashJoin(const IdTable& dynA, ColumnIndex jc1,
-                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes) {
+                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes,
+                        const qlever::Allocator<Id>& allocator) {
   ad_utility::callFixedSizeVi(
       (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
       [&](auto l, auto r, auto o) {
-        return JoinImpl::hashJoinImpl<l, r, o>(dynA, jc1, dynB, jc2, dynRes);
+        return JoinImpl::hashJoinImpl<l, r, o>(dynA, jc1, dynB, jc2, dynRes,
+                                               allocator);
       });
 }
 
@@ -725,8 +748,9 @@ Result JoinImpl::createEmptyResult() const {
 
 // _____________________________________________________________________________
 ad_utility::JoinColumnMapping JoinImpl::getJoinColumnMapping() const {
-  return ad_utility::JoinColumnMapping{{{leftJoinCol_, rightJoinCol_}},
-                                       left_->getResultWidth(),
+  std::array<std::array<ColumnIndex, 2>, 1> joinColumns{
+      {{leftJoinCol_, rightJoinCol_}}};
+  return ad_utility::JoinColumnMapping{joinColumns, left_->getResultWidth(),
                                        right_->getResultWidth(),
                                        keepJoinColumn_};
 }

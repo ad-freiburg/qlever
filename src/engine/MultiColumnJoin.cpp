@@ -19,7 +19,7 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> t1,
                                  std::shared_ptr<QueryExecutionTree> t2,
                                  bool allowSwappingChildrenOnlyForTesting)
-    : Operation{qec} {
+    : Operation{qec}, _joinColumns{qec->getAllocator()} {
   // Make sure subtrees are ordered so that identical queries can be identified.
   if (allowSwappingChildrenOnlyForTesting &&
       t1->getCacheKey() > t2->getCacheKey()) {
@@ -207,7 +207,7 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
 // _______________________________________________________________________
 void MultiColumnJoin::computeMultiColumnJoin(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns,
     IdTable* result) {
   // check for trivial cases
   if (left.empty() || right.empty()) {

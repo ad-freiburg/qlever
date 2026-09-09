@@ -61,8 +61,11 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
 inline auto makeHashJoinLambda() {
   return ad_utility::ApplyAsValueIdentity{
       [](auto /*valueIdentityA*/, auto /*valueIdentityB*/,
-         auto /*valueIdentityC*/,
-         auto&&... args) { return JoinImpl::hashJoin(AD_FWD(args)...); }};
+         auto /*valueIdentityC*/, const IdTable& a, ColumnIndex jc1,
+         const IdTable& b, ColumnIndex jc2, IdTable* result) {
+        return JoinImpl::hashJoin(a, jc1, b, jc2, result,
+                                   ad_utility::testing::makeAllocator());
+      }};
 }
 
 /*

@@ -585,8 +585,8 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
   using QueryPlanner::QueryPlanner;
 
   FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      const std::vector<SparqlFilter>& filters) override {
-    FiltersAndOptionalSubstitutes plans;
+      const qlever::vector<SparqlFilter>& filters) override {
+    FiltersAndOptionalSubstitutes plans{getQec()->getAllocator()};
     plans.reserve(filters.size());
 
     const auto equalTo =

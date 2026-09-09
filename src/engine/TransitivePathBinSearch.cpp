@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "engine/TransitivePathBase.h"
+#include "util/AllocatorTypes.h"
 
 // _____________________________________________________________________________
 BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
@@ -138,7 +139,7 @@ TransitivePathBinSearch::TransitivePathBinSearch(
   auto [startSide, targetSide] = decideDirection();
   auto makeSortColumns = [this, &graphVariable](ColumnIndex first,
                                                 ColumnIndex second) {
-    std::vector<ColumnIndex> sortColumns;
+    qlever::vector<ColumnIndex> sortColumns{allocator()};
     if (graphVariable.has_value()) {
       sortColumns.push_back(subtree_->getVariableColumn(graphVariable.value()));
     }

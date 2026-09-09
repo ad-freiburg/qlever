@@ -145,7 +145,7 @@ Set depthFirstSearchWithLimit(const GraphSearchProblem<T>& gsp,
   }
 
   sparqlExpression::VectorWithMemoryLimit<std::pair<Id, size_t>> stack{
-      ep.allocator_.as<std::pair<Id, size_t>>()};
+      ep.allocator_};
   ad_utility::HashMapWithMemoryLimit<Id, size_t> marks{ep.allocator_};
 
   stack.emplace_back(gsp.startNode_, 0);

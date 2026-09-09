@@ -399,12 +399,16 @@ inline auto VariableOrderKeyVariant =
 };
 
 inline auto VariableOrderKeys =
-    [](const std::vector<std::pair<::Variable, bool>>& orderKeys)
-    -> Matcher<const std::vector<::VariableOrderKey>&> {
+    [](const std::vector<std::pair<::Variable, bool>>& orderKeys) {
   std::vector<Matcher<const ::VariableOrderKey&>> matchers;
   for (auto [key, desc] : orderKeys) {
     matchers.push_back(VariableOrderKey(key, desc));
   }
+  // Deliberately not annotated with an explicit `Matcher<const
+  // std::vector<...>&>` return type: `_orderBy` is a `qlever::vector` (a
+  // PMR-allocator-backed container), so the matcher must stay polymorphic
+  // (as returned by `ElementsAreArray`) until it is bound to the concrete
+  // field type inside `AD_FIELD`/`testing::Field`.
   return testing::ElementsAreArray(matchers);
 };
 
@@ -510,8 +514,11 @@ inline auto Values = [](const std::vector<::Variable>& vars,
   using SparqlValues = p::SparqlValues;
   return testing::AllOf(AD_FIELD(
       p::Values, _inlineValues,
-      testing::AllOf(AD_FIELD(SparqlValues, _variables, testing::Eq(vars)),
-                     AD_FIELD(SparqlValues, _values, testing::Eq(values)))));
+      testing::AllOf(
+          AD_FIELD(SparqlValues, _variables,
+                   testing::Eq(ad_utility::testing::toQVec(vars))),
+          AD_FIELD(SparqlValues, _values,
+                   testing::Eq(ad_utility::testing::toQVecOfVec(values))))));
 };
 
 inline auto InlineData =
@@ -659,10 +666,16 @@ inline auto stringMatchesFilter =
 // the given `vector` of `SparqlFilter`s  matches the given
 // `expectedDescriptors`.
 inline auto stringsMatchFilters =
-    [](const std::vector<std::string>& expectedDescriptors)
-    -> Matcher<const std::vector<SparqlFilter>&> {
+    [](const std::vector<std::string>& expectedDescriptors) {
   auto matchers =
       ad_utility::transform(expectedDescriptors, stringMatchesFilter);
+  // Deliberately not annotated with an explicit `Matcher<const
+  // std::vector<SparqlFilter>&>` return type: this is used both for plain
+  // `std::vector<SparqlFilter>` fields (e.g. `SolutionModifiers::
+  // havingClauses_`) and for the `qlever::vector<SparqlFilter>` field
+  // `ParsedQuery::_havingClauses`, so the matcher must stay polymorphic (as
+  // returned by `ElementsAreArray`) until it is bound to the concrete field
+  // type inside `AD_FIELD`/`testing::Field`.
   return testing::ElementsAreArray(matchers);
 };
 
@@ -1235,7 +1248,8 @@ auto parse =
       static ad_utility::BlankNodeManager blankNodeManager;
       ParserAndVisitor p{
           &blankNodeManager,   encodedIriManager(), input,
-          std::move(prefixes), std::move(clauses),  disableSomeChecks};
+          std::move(prefixes), std::move(clauses),  disableSomeChecks,
+          ad_utility::testing::makeAllocator()};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }

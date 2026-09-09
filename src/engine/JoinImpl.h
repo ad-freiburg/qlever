@@ -17,6 +17,8 @@
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
 
@@ -33,7 +35,7 @@ class JoinImpl : public Operation {
   bool sizeEstimateComputed_;
   size_t sizeEstimate_;
 
-  std::vector<float> multiplicities_;
+  qlever::vector<float> multiplicities_;
 
   // If set to false, the join column will not be part of the result.
   bool keepJoinColumn_ = true;
@@ -117,7 +119,8 @@ class JoinImpl : public Operation {
    * Otherwise it is not sorted.
    **/
   static void hashJoin(const IdTable& dynA, ColumnIndex jc1,
-                       const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
+                       const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes,
+                       const qlever::Allocator<Id>& allocator);
 
   std::string getCacheKeyImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
@@ -185,7 +188,8 @@ class JoinImpl : public Operation {
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   static void hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
                            const IdTable& dynB, ColumnIndex jc2,
-                           IdTable* dynRes);
+                           IdTable* dynRes,
+                           const qlever::Allocator<Id>& allocator);
 
   // Commonly used code for the various known-to-be-empty cases.
   Result createEmptyResult() const;

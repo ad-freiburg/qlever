@@ -529,8 +529,10 @@ inline BoundingBoxAlgorithm getDummySpatialJoinAlgsForWrapperTesting(
                                    nullptr,
                                    0,
                                    0,
-                                   std::vector<ColumnIndex>{},
-                                   std::vector<ColumnIndex>{},
+                                   qlever::vector<ColumnIndex>{
+                                       qec.value()->getAllocator()},
+                                   qlever::vector<ColumnIndex>{
+                                       qec.value()->getAllocator()},
                                    1};
 
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};

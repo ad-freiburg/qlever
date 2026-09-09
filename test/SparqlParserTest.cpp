@@ -26,6 +26,13 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
 auto iriV = ad_utility::testing::iriV;
 
+auto toChildren = [](std::vector<PropertyPath> children) {
+  return PropertyPath::ChildrenVec(
+      std::make_move_iterator(children.begin()),
+      std::make_move_iterator(children.end()),
+      qlever::makeUnlimitedAllocator<PropertyPath>());
+};
+
 const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {
   const auto& tripleComponent = std::get<PropertyPath>(varOrPath).getIri();
@@ -266,14 +273,14 @@ TEST(ParserTest, testParse) {
     const auto& values2 = std::get<p::Values>(pq.children()[1])._inlineValues;
 
     std::vector<Variable> vvars = {Var{"?a"}};
-    ASSERT_EQ(vvars, values1._variables);
+    ASSERT_EQ(ad_utility::testing::toQVec(vvars), values1._variables);
     std::vector<std::vector<TripleComponent>> vvals = {{iri("<1>")}, {2}};
-    ASSERT_EQ(vvals, values1._values);
+    ASSERT_EQ(ad_utility::testing::toQVecOfVec(vvals), values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
-    ASSERT_EQ(vvars, values2._variables);
+    ASSERT_EQ(ad_utility::testing::toQVec(vvars), values2._variables);
     vvals = {{iri("<1>"), iri("<2>")}, {1, 2}};
-    ASSERT_EQ(vvals, values2._values);
+    ASSERT_EQ(ad_utility::testing::toQVecOfVec(vvals), values2._values);
   }
 
   {
@@ -291,16 +298,16 @@ TEST(ParserTest, testParse) {
     const auto& values2 = std::get<p::Values>(pq.children()[1])._inlineValues;
 
     std::vector<Variable> vvars = {Var{"?a"}};
-    ASSERT_EQ(vvars, values1._variables);
+    ASSERT_EQ(ad_utility::testing::toQVec(vvars), values1._variables);
     std::vector<std::vector<TripleComponent>> vvals = {
         {iri("<Albert_Einstein>")}};
-    ASSERT_EQ(vvals, values1._values);
+    ASSERT_EQ(ad_utility::testing::toQVecOfVec(vvals), values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
-    ASSERT_EQ(vvars, values2._variables);
+    ASSERT_EQ(ad_utility::testing::toQVec(vvars), values2._variables);
     vvals = {{iri("<Marie_Curie>"), iri("<Joseph_Jacobson>")},
              {iri("<Freiherr>"), iri("<Lord_of_the_Isles>")}};
-    ASSERT_EQ(vvals, values2._values);
+    ASSERT_EQ(ad_utility::testing::toQVecOfVec(vvals), values2._values);
   }
 
   {
@@ -325,11 +332,11 @@ TEST(ParserTest, testParse) {
 
     const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
     std::vector<Variable> vvars = {Var{"?citytype"}};
-    ASSERT_EQ(vvars, values1._variables);
+    ASSERT_EQ(ad_utility::testing::toQVec(vvars), values1._variables);
     std::vector<std::vector<TripleComponent>> vvals = {
         {iri("<http://www.wikidata.org/entity/Q515>")},
         {iri("<http://www.wikidata.org/entity/Q262166>")}};
-    ASSERT_EQ(vvals, values1._values);
+    ASSERT_EQ(ad_utility::testing::toQVecOfVec(vvals), values1._values);
   }
 
   // TODO @joaomarques90: Finish when the required functionalities
@@ -1243,13 +1250,13 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     // account for that.
     SparqlTriple variantA{
         Var{"?x"},
-        PropertyPath::makeAlternative(
-            {makeTaggedPath("<label>", "de"), makeTaggedPath("<label>", "en")}),
+        PropertyPath::makeAlternative(toChildren(
+            {makeTaggedPath("<label>", "de"), makeTaggedPath("<label>", "en")})),
         Var{"?y"}};
     SparqlTriple variantB{
         Var{"?x"},
-        PropertyPath::makeAlternative(
-            {makeTaggedPath("<label>", "en"), makeTaggedPath("<label>", "de")}),
+        PropertyPath::makeAlternative(toChildren(
+            {makeTaggedPath("<label>", "en"), makeTaggedPath("<label>", "de")})),
         Var{"?y"}};
     EXPECT_THAT(triples,
                 ::testing::ElementsAre(::testing::AnyOf(variantA, variantB)));
@@ -1265,13 +1272,13 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     // account for that.
     SparqlTriple variantA{
         Var{"?x"},
-        PropertyPath::makeAlternative(
-            {makeTaggedPath("<label>", "de"), makeTaggedPath("<label>", "en")}),
+        PropertyPath::makeAlternative(toChildren(
+            {makeTaggedPath("<label>", "de"), makeTaggedPath("<label>", "en")})),
         Var{"?y"}};
     SparqlTriple variantB{
         Var{"?x"},
-        PropertyPath::makeAlternative(
-            {makeTaggedPath("<label>", "en"), makeTaggedPath("<label>", "de")}),
+        PropertyPath::makeAlternative(toChildren(
+            {makeTaggedPath("<label>", "en"), makeTaggedPath("<label>", "de")})),
         Var{"?y"}};
     EXPECT_THAT(triples,
                 ::testing::ElementsAre(::testing::AnyOf(variantA, variantB)));
@@ -1603,7 +1610,8 @@ TEST(ParserTest, parseWithDatasets) {
       SparqlParser::parseUpdate(&bnm, &ev,
                                 "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
                                 "?z FILTER EXISTS {?a ?b ?c} }",
-                                {{{iri("<h>"), false}}}),
+                                {{{iri("<h>"), false}}},
+                                ad_utility::testing::makeAllocator()),
       ::testing::HasSubstr("`USING [NAMED]` is disallowed"));
   // Same goes for `WITH`
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1611,7 +1619,8 @@ TEST(ParserTest, parseWithDatasets) {
                                 "WITH <g> DELETE { ?x <b> <c> } WHERE { "
                                 "?x ?y ?z "
                                 "FILTER EXISTS {?a ?b ?c} }",
-                                {{{iri("<h>"), false}}}),
+                                {{{iri("<h>"), false}}},
+                                ad_utility::testing::makeAllocator()),
       ::testing::HasSubstr("`WITH` is disallowed"));
   EXPECT_THAT(
       parseQuery(
@@ -1649,7 +1658,8 @@ TEST(ParserTest, parseWithDatasets) {
       SparqlParser::parseUpdate(
           &bnm, &ev, "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
           {DatasetClause{iri("<foo>"), false},
-           DatasetClause{iri("<bar>"), true}}),
+           DatasetClause{iri("<bar>"), true}},
+          ad_utility::testing::makeAllocator()),
       testing::ElementsAre(
           m::UpdateClause(
               deleteWhereOp, deleteWherePattern,
@@ -1685,8 +1695,8 @@ TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples({SparqlTriple{
               TripleComponent{Variable{"?s"}},
-              PropertyPath::makeNegated({PropertyPath::fromIri(
-                  iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
+              PropertyPath::makeNegated(toChildren({PropertyPath::fromIri(
+                  iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))})),
               TripleComponent{Variable{"?o"}}}}))));
 
   // Other tests for similar variants.
@@ -1696,8 +1706,8 @@ TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples({SparqlTriple{
               TripleComponent{Variable{"?s"}},
-              PropertyPath::makeNegated({PropertyPath::fromIri(
-                  iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
+              PropertyPath::makeNegated(toChildren({PropertyPath::fromIri(
+                  iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))})),
               TripleComponent{Variable{"?o"}}}}))));
   EXPECT_THAT(
       parseQuery("SELECT * { ?s !^a ?o }"),
@@ -1705,8 +1715,9 @@ TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples({SparqlTriple{
               TripleComponent{Variable{"?s"}},
-              PropertyPath::makeNegated({PropertyPath::makeInverse(
+              PropertyPath::makeNegated(toChildren({PropertyPath::makeInverse(
                   PropertyPath::fromIri(iri("<http://www.w3.org/1999/02/"
-                                            "22-rdf-syntax-ns#type>")))}),
+                                            "22-rdf-syntax-ns#type>")),
+                  qlever::makeUnlimitedAllocator<PropertyPath>())})),
               TripleComponent{Variable{"?o"}}}}))));
 }

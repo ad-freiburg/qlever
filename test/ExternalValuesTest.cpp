@@ -20,6 +20,7 @@
 #include "engine/idTable/IdTable.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 
 using TC = TripleComponent;
 using ValuesComponents = std::vector<std::vector<TripleComponent>>;
@@ -34,7 +35,9 @@ TEST(ExternalValues, basicMethods) {
   ValuesComponents values{
       {TC{1}, TC{2}, TC{3}}, {TC{5}, TC{2}, TC{3}}, {TC{7}, TC{42}, TC{3}}};
   ExternalValues externalValuesOp(
-      testQec, {{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}}, values},
+      testQec,
+      ad_utility::testing::makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}}, values),
       "test-id");
 
   // Check name.
@@ -62,8 +65,9 @@ TEST(ExternalValues, basicMethods) {
 TEST(ExternalValues, isDeterministic) {
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
   ValuesComponents values{{TC{1}}, {TC{2}}};
-  ExternalValues externalValuesOp(testQec, {{Variable{"?x"}}, values},
-                                  "det-id");
+  ExternalValues externalValuesOp(
+      testQec, ad_utility::testing::makeSparqlValues({Variable{"?x"}}, values),
+      "det-id");
   EXPECT_FALSE(externalValuesOp.isDeterministic());
 }
 
@@ -72,7 +76,10 @@ TEST(ExternalValues, knownEmptyResultWithEmptyValues) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents emptyValues{};
   ExternalValues externalValuesOp(
-      testQec, {{Variable{"?x"}, Variable{"?y"}}, emptyValues}, "empty-id");
+      testQec,
+      ad_utility::testing::makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}}, emptyValues),
+      "empty-id");
 
   // Should return false even though values are empty.
   EXPECT_FALSE(externalValuesOp.knownEmptyResult());
@@ -89,7 +96,10 @@ TEST(ExternalValues, computeResult) {
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
   ExternalValues valuesOperation(
-      testQec, {{Variable{"?x"}, Variable{"?y"}}, values}, "result-test");
+      testQec,
+      ad_utility::testing::makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}}, values),
+      "result-test");
 
   auto result = valuesOperation.getResult();
   const auto& table = result->idTableView();
@@ -115,7 +125,9 @@ TEST(ExternalValues, updateValues) {
     }
     ValuesComponents initialValues{{TC{1}, TC{2}}, {TC{3}, TC{4}}};
     ExternalValues externalValuesOp(
-        testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues},
+        testQec,
+        ad_utility::testing::makeSparqlValues(
+            {Variable{"?x"}, Variable{"?y"}}, initialValues),
         "update-test");
 
     // Check initial size.
@@ -124,8 +136,9 @@ TEST(ExternalValues, updateValues) {
     // Update with new values (same variables).
     ValuesComponents newValues{
         {TC{10}, TC{20}}, {TC{30}, TC{40}}, {TC{50}, TC{60}}};
-    parsedQuery::SparqlValues updatedSparqlValues{
-        {Variable{"?x"}, Variable{"?y"}}, newValues};
+    parsedQuery::SparqlValues updatedSparqlValues =
+        ad_utility::testing::makeSparqlValues(
+            {Variable{"?x"}, Variable{"?y"}}, newValues);
 
     externalValuesOp.updateValues(std::move(updatedSparqlValues));
 
@@ -151,13 +164,16 @@ TEST(ExternalValues, updateValuesFailsWithDifferentVariables) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents initialValues{{TC{1}, TC{2}}};
   ExternalValues externalValuesOp(
-      testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues},
+      testQec,
+      ad_utility::testing::makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}}, initialValues),
       "mismatch-test");
 
   // Try to update with different variables - should fail.
   ValuesComponents newValues{{TC{10}, TC{20}, TC{30}}};
-  parsedQuery::SparqlValues wrongSparqlValues{
-      {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}}, newValues};
+  parsedQuery::SparqlValues wrongSparqlValues =
+      ad_utility::testing::makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}}, newValues);
 
   EXPECT_ANY_THROW(externalValuesOp.updateValues(std::move(wrongSparqlValues)));
 }
@@ -167,12 +183,16 @@ TEST(ExternalValues, updateValuesFailsWithDifferentOrder) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents initialValues{{TC{1}, TC{2}}};
   ExternalValues externalValuesOp(
-      testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues}, "order-test");
+      testQec,
+      ad_utility::testing::makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}}, initialValues),
+      "order-test");
 
   // Try to update with variables in different order - should fail.
   ValuesComponents newValues{{TC{10}, TC{20}}};
-  parsedQuery::SparqlValues wrongOrderSparqlValues{
-      {Variable{"?y"}, Variable{"?x"}}, newValues};
+  parsedQuery::SparqlValues wrongOrderSparqlValues =
+      ad_utility::testing::makeSparqlValues(
+          {Variable{"?y"}, Variable{"?x"}}, newValues);
 
   EXPECT_ANY_THROW(
       externalValuesOp.updateValues(std::move(wrongOrderSparqlValues)));
@@ -188,7 +208,10 @@ TEST(ExternalValues, clone) {
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
   ExternalValues valuesOperation(
-      testQec, {{Variable{"?x"}, Variable{"?y"}}, values}, "clone-test");
+      testQec,
+      ad_utility::testing::makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}}, values),
+      "clone-test");
 
   auto clone = valuesOperation.clone();
   ASSERT_TRUE(clone);
@@ -206,7 +229,10 @@ TEST(ExternalValues, getExternalValues) {
   auto testQec = ad_utility::testing::getQec();
   ValuesComponents values{{TC{1}, TC{2}}};
   ExternalValues externalValuesOp(
-      testQec, {{Variable{"?x"}, Variable{"?y"}}, values}, "collect-test");
+      testQec,
+      ad_utility::testing::makeSparqlValues(
+          {Variable{"?x"}, Variable{"?y"}}, values),
+      "collect-test");
 
   std::vector<ExternalValues*> collected;
   externalValuesOp.getExternalValues(collected);

@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
 #include "engine/Result.h"
@@ -240,10 +241,10 @@ class IndexNestedLoopJoin {
   std::shared_ptr<const Result> rightResult_;
 
  public:
-  IndexNestedLoopJoin(std::vector<std::array<ColumnIndex, 2>> joinColumns,
+  IndexNestedLoopJoin(ql::span<const std::array<ColumnIndex, 2>> joinColumns,
                       std::shared_ptr<const Result> leftResult,
                       std::shared_ptr<const Result> rightResult)
-      : joinColumns_{std::move(joinColumns)},
+      : joinColumns_{joinColumns.begin(), joinColumns.end()},
         leftResult_{std::move(leftResult)},
         rightResult_{std::move(rightResult)} {}
 

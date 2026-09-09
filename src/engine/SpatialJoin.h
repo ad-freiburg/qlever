@@ -20,6 +20,8 @@
 #include "engine/SpatialJoinConfig.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 
 using SpatialJoinBoundingBoxColumns =
     std::optional<std::pair<ColumnIndex, ColumnIndex>>;
@@ -33,8 +35,8 @@ struct PreparedSpatialJoinParams {
   std::shared_ptr<const Result> resultRight_;
   ColumnIndex leftJoinCol_;
   ColumnIndex rightJoinCol_;
-  std::vector<ColumnIndex> leftSelectedCols_;
-  std::vector<ColumnIndex> rightSelectedCols_;
+  qlever::vector<ColumnIndex> leftSelectedCols_;
+  qlever::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
 };
 

@@ -644,7 +644,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
        &requestTimer, &plannedQuery, &indexAndViews,
-       this](std::vector<ParsedQuery> operations, std::string operationName,
+       this](qlever::vector<ParsedQuery> operations, std::string operationName,
              const std::string operationString,
              SharedTimeTracer tracer = nullptr) -> Awaitable<void> {
     auto timeLimit = verifyUserSubmittedQueryTimeout(
@@ -704,21 +704,25 @@ CPP_template_def(typename RequestT, typename SendT)(
       throw;
     }
   };
-  auto visitQuery = [&index, &visitOperation](Query query) -> Awaitable<void> {
+  auto visitQuery = [this, &index,
+                     &visitOperation](Query query) -> Awaitable<void> {
     // We need to copy the query string because `visitOperation` below also
     // needs it.
     auto parsedQuery = SparqlParser::parseQuery(
-        &index.encodedIriManager(), query.query_, query.datasetClauses_);
+        &index.encodedIriManager(), query.query_, query.datasetClauses_,
+        qlever().allocator());
     if (parsedQuery.hasUpdateClause()) {
       throw std::runtime_error(absl::StrCat(
           "SPARQL QUERY was requested via the HTTP request, but the "
           "following update was sent instead of an query: ",
           ad_utility::truncateOperationString(query.query_)));
     }
-    return visitOperation({std::move(parsedQuery)}, "SPARQL query",
-                          std::move(query.query_));
+    return visitOperation(
+        qlever::vector<ParsedQuery>({std::move(parsedQuery)},
+                                    qlever().allocator()),
+        "SPARQL query", std::move(query.query_));
   };
-  auto visitUpdate = [&index, &visitOperation, &requireValidAccessToken](
+  auto visitUpdate = [this, &index, &visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
@@ -727,7 +731,7 @@ CPP_template_def(typename RequestT, typename SendT)(
     tracer->beginTrace("parsing");
     auto parsedUpdates = SparqlParser::parseUpdate(
         index.getBlankNodeManager(), &index.encodedIriManager(), update.update_,
-        update.datasetClauses_);
+        update.datasetClauses_, qlever().allocator());
     tracer->endTrace("parsing");
     if (!ql::ranges::all_of(parsedUpdates, &ParsedQuery::hasUpdateClause)) {
       throw std::runtime_error(absl::StrCat(
@@ -739,13 +743,13 @@ CPP_template_def(typename RequestT, typename SendT)(
                           std::move(update.update_), tracer);
   };
   auto visitGraphStore =
-      [&request, &visitOperation, &requireValidAccessToken,
+      [this, &request, &visitOperation, &requireValidAccessToken,
        &index](GraphStoreOperation operation) -> Awaitable<void> {
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
-    std::vector<ParsedQuery> parsedOperations =
-        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
-                                                        request, index);
+    qlever::vector<ParsedQuery> parsedOperations =
+        GraphStoreProtocol::transformGraphStoreProtocol(
+            std::move(operation), request, index, qlever().allocator());
     tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
@@ -1252,7 +1256,7 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
 CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
-        MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
+        MakeQueryExecutionContext makeQec, qlever::vector<ParsedQuery>&& updates,
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         const RequestT& request, SendT&& send, TimeLimit timeLimit,

@@ -20,6 +20,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/ParsedQueryTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -241,11 +242,13 @@ std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
       &encodedIriManager,
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?a {VALUES "
       "(?a) {(\"POLYGON((8.529 47.375, 8.549 47.375, 8.549 47.395, 8.529 "
-      "47.395, 8.529 47.375))\"^^geo:wktLiteral) (\"garbage\") (5) (<>)}}");
+      "47.395, 8.529 47.375))\"^^geo:wktLiteral) (\"garbage\") (5) (<>)}}",
+      {}, qec->getAllocator());
   auto pqRight = SparqlParser::parseQuery(
       &encodedIriManager,
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?b {VALUES "
-      "(?b) {(\"POINT(8.542 47.385)\"^^geo:wktLiteral)}}");
+      "(?b) {(\"POINT(8.542 47.385)\"^^geo:wktLiteral)}}",
+      {}, qec->getAllocator());
   QueryPlanner qp{qec, sharedHandle};
 
   auto leftChild =
@@ -579,7 +582,8 @@ class SpatialJoinVarColParamTest
             // Test the regular and valid payloadVars
             auto exp = makeExpected(leftSideBigChild, rightSideBigChild,
                                     addDist, withObj, withName, withGeo);
-            computeAndCompareVarToColMaps(addDist, payloadVars, exp);
+            computeAndCompareVarToColMaps(
+                addDist, PayloadVariables{toQVec(payloadVars)}, exp);
 
             // Also test the PayloadAllVariables version
             if (withGeo && withObj && (withName || !rightSideBigChild)) {
@@ -591,33 +595,35 @@ class SpatialJoinVarColParamTest
             if (withObj) {
               payloadVars.push_back(Variable{"?obj2"});
               // Variable ?obj2 is now contained twice
-              computeAndCompareVarToColMaps(addDist, payloadVars, exp);
+              computeAndCompareVarToColMaps(
+                  addDist, PayloadVariables{toQVec(payloadVars)}, exp);
               payloadVars.pop_back();
             }
 
             // Test contained right variable in payloadVars
             payloadVars.push_back(Variable{"?point2"});
-            computeAndCompareVarToColMaps(addDist, payloadVars, exp);
+            computeAndCompareVarToColMaps(
+                addDist, PayloadVariables{toQVec(payloadVars)}, exp);
             payloadVars.pop_back();
 
             // Test warnings for unbound variables
             payloadVars.push_back(Variable{"?point1"});
             computeAndCompareVarToColMaps(
-                addDist, payloadVars, exp,
+                addDist, PayloadVariables{toQVec(payloadVars)}, exp,
                 "Variable '?point1' selected as payload to "
                 "spatial join but not present in right child");
             payloadVars.pop_back();
 
             payloadVars.push_back(Variable{"?obj1"});
             computeAndCompareVarToColMaps(
-                addDist, payloadVars, exp,
+                addDist, PayloadVariables{toQVec(payloadVars)}, exp,
                 "Variable '?obj1' selected as payload to "
                 "spatial join but not present in right child");
             payloadVars.pop_back();
 
             payloadVars.push_back(Variable{"?isThereSomebodyHere"});
             computeAndCompareVarToColMaps(
-                addDist, payloadVars, exp,
+                addDist, PayloadVariables{toQVec(payloadVars)}, exp,
                 "Variable '?isThereSomebodyHere' selected as payload to "
                 "spatial join but not present in right child");
             payloadVars.pop_back();
@@ -626,7 +632,7 @@ class SpatialJoinVarColParamTest
             if (addDist) {
               payloadVars.push_back(distVar);
               computeAndCompareVarToColMaps(
-                  addDist, payloadVars, exp,
+                  addDist, PayloadVariables{toQVec(payloadVars)}, exp,
                   "Variable '?distOfTheTwoObjectsAddedInternally' selected "
                   "as payload to spatial join but not present in right "
                   "child");
@@ -701,7 +707,8 @@ TEST(SpatialJoinVarColTest, ChildResultWidth) {
       qec,
       SpatialJoinConfiguration{
           LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?a"},
-          Variable{"?c"}, std::nullopt, PayloadVariables{{V{"?c"}}},
+          Variable{"?c"}, std::nullopt,
+          PayloadVariables{toQVec(std::vector<V>{V{"?c"}})},
           SpatialJoinAlgorithm::LIBSPATIALJOIN},
       qet1, qet2);
 

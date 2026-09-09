@@ -12,7 +12,10 @@
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
+#include "global/Id.h"
 #include "rdfTypes/Iri.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 #include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
@@ -31,12 +34,16 @@ class PropertyPath {
     NEGATED
   };
 
+  // The vector type used for the children of alternative, sequence, and
+  // negated property paths.
+  using ChildrenVec = qlever::vector<PropertyPath>;
+
  private:
   // Represent a modified path that can have multiple children and a modifier.
   // This is used to represent sequence paths, alternative paths, inverse paths,
   // and negated paths.
   struct ModifiedPath {
-    std::vector<PropertyPath> children_;
+    ChildrenVec children_;
     Modifier modifier_;
 
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ModifiedPath, children_,
@@ -105,18 +112,19 @@ class PropertyPath {
                                      size_t max);
 
   // Create an alternative property path with the given children.
-  static PropertyPath makeAlternative(std::vector<PropertyPath> children);
+  static PropertyPath makeAlternative(ChildrenVec children);
 
   // Create a sequence property path with the given children.
-  static PropertyPath makeSequence(std::vector<PropertyPath> children);
+  static PropertyPath makeSequence(ChildrenVec children);
 
   // Create an inverse property path with the given child.
-  static PropertyPath makeInverse(PropertyPath child);
+  static PropertyPath makeInverse(PropertyPath child,
+                                  qlever::Allocator<Id> allocator);
 
   // Create a negated property path with the given children, for multiple
   // children the semantics are equivalent to `!(<a> | <b>)`, applying the union
   // before the negation.
-  static PropertyPath makeNegated(std::vector<PropertyPath> children);
+  static PropertyPath makeNegated(ChildrenVec children);
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PropertyPath, path_)
 
@@ -136,7 +144,7 @@ class PropertyPath {
 
   // If the path is a sequence, return the children (that is, the parts of the
   // sequence). If the path is not a sequence this will throw.
-  const std::vector<PropertyPath>& getSequence() const;
+  const ChildrenVec& getSequence() const;
 
   // Check if the path is a sequence.
   bool isSequence() const;
@@ -153,7 +161,8 @@ class PropertyPath {
       requires ad_utility::InvocableWithConvertibleReturnType<
           IriFunc, T, const ad_utility::triple_component::Iri&>
           CPP_and ad_utility::InvocableWithConvertibleReturnType<
-              ModifiedPathFunc, T, const std::vector<PropertyPath>&, Modifier>
+              ModifiedPathFunc, T, const ChildrenVec&,
+              Modifier>
               CPP_and ad_utility::InvocableWithConvertibleReturnType<
                   MinMaxPathFunc, T, const PropertyPath&, size_t, size_t>) T
       handlePath(const IriFunc& iriFunc,

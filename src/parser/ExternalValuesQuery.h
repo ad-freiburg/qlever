@@ -11,6 +11,8 @@
 #define QLEVER_SRC_PARSER_EXTERNALVALUESQUERY_H
 
 #include "parser/MagicServiceQuery.h"
+#include "util/Allocator.h"
+#include "util/AllocatorTypes.h"
 
 class SparqlTriple;
 
@@ -36,13 +38,20 @@ class ExternalValuesException : public std::runtime_error {
 // compatibility with code already deployed by BMW.
 struct ExternalValuesQuery : MagicServiceQuery {
   std::string name_;
-  std::vector<Variable> variables_;
+  qlever::vector<Variable> variables_;
 
-  explicit ExternalValuesQuery(const TripleComponent::Iri& serviceIri)
-      : name_(extractName(serviceIri.toStringRepresentation())) {}
+  // `allocator` is the real, query-execution-bound allocator that
+  // `variables_` is routed through. Every caller that constructs an
+  // `ExternalValuesQuery` must supply this explicitly (there is no implicit
+  // unlimited-allocator fallback).
+  ExternalValuesQuery(const TripleComponent::Iri& serviceIri,
+                      qlever::Allocator<Id> allocator)
+      : name_(extractName(serviceIri.toStringRepresentation())),
+        variables_{std::move(allocator)} {}
 
-  // Default constructor, mainly used for testing.
-  ExternalValuesQuery() = default;
+  // Mainly used for testing.
+  explicit ExternalValuesQuery(qlever::Allocator<Id> allocator)
+      : variables_{std::move(allocator)} {}
 
   // See MagicServiceQuery - processes configuration triples.
   void addParameter(const SparqlTriple& triple) override;

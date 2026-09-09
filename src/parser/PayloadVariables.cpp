@@ -9,14 +9,16 @@
 #include "util/Exception.h"
 
 // ____________________________________________________________________________
-PayloadVariables::PayloadVariables(std::vector<Variable> variables)
+PayloadVariables::PayloadVariables(qlever::Allocator<Variable> allocator)
+    : variables_{qlever::vector<Variable>{std::move(allocator)}} {}
+
+// ____________________________________________________________________________
+PayloadVariables::PayloadVariables(qlever::vector<Variable> variables)
     : variables_{std::move(variables)} {}
 
 // ____________________________________________________________________________
 PayloadVariables PayloadVariables::all() {
-  PayloadVariables pv{};
-  pv.setToAll();
-  return pv;
+  return PayloadVariables{detail::PayloadAllVariables{}};
 }
 
 // ____________________________________________________________________________
@@ -25,7 +27,7 @@ void PayloadVariables::addVariable(const Variable& variable) {
   // and a variable can be added. If yes, add it.
   auto addVarVisitor = [&](auto& value) {
     using T = std::decay_t<decltype(value)>;
-    if constexpr (std::is_same_v<T, std::vector<Variable>>) {
+    if constexpr (std::is_same_v<T, qlever::vector<Variable>>) {
       value.push_back(variable);
     }
   };
@@ -46,7 +48,7 @@ bool PayloadVariables::empty() const {
     if constexpr (std::is_same_v<T, detail::PayloadAllVariables>) {
       return false;
     } else {
-      static_assert(std::is_same_v<T, std::vector<Variable>>);
+      static_assert(std::is_same_v<T, qlever::vector<Variable>>);
       return value.empty();
     }
   };
@@ -60,12 +62,12 @@ bool PayloadVariables::isAll() const {
 }
 
 // ____________________________________________________________________________
-const std::vector<Variable>& PayloadVariables::getVariables() const {
+const qlever::vector<Variable>& PayloadVariables::getVariables() const {
   // Helper visitor to check if the payload variables has been set to all: then
   // throw, otherwise return the vector
-  auto getVarVisitor = [](const auto& value) -> const std::vector<Variable>& {
+  auto getVarVisitor = [](const auto& value) -> const qlever::vector<Variable>& {
     using T = std::decay_t<decltype(value)>;
-    if constexpr (std::is_same_v<T, std::vector<Variable>>) {
+    if constexpr (std::is_same_v<T, qlever::vector<Variable>>) {
       return value;
     } else {
       AD_THROW(

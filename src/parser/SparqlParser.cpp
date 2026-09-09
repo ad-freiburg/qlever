@@ -19,7 +19,8 @@ auto parseOperation(BnodeMgr bnodeMgr,
                     const EncodedIriManager* encodedIriManager,
                     ContextType* (SparqlAutomaticParser::*f)(void),
                     std::string operation,
-                    const std::vector<DatasetClause>& datasets) {
+                    const std::vector<DatasetClause>& datasets,
+                    qlever::Allocator<Id> allocator) {
   using S = std::string;
   // The second argument is the `PrefixMap` for QLever's internal IRIs.
   // The third argument are the datasets from outside the query, which override
@@ -31,7 +32,9 @@ auto parseOperation(BnodeMgr bnodeMgr,
       {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}},
       datasets.empty()
           ? std::nullopt
-          : std::optional(parsedQuery::DatasetClauses::fromClauses(datasets))};
+          : std::optional(parsedQuery::DatasetClauses::fromClauses(datasets)),
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False,
+      std::move(allocator)};
   auto resultOfParseAndRemainingText = p.parseTypesafe(f);
   // The query rule ends with <EOF> so the parse always has to consume the whole
   // input. If this is not the case a ParseException should have been thrown at
@@ -44,10 +47,11 @@ auto parseOperation(BnodeMgr bnodeMgr,
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(
     const EncodedIriManager* encodedIriManager, std::string query,
-    const std::vector<DatasetClause>& datasets) {
+    const std::vector<DatasetClause>& datasets,
+    qlever::Allocator<Id> allocator) {
   ad_utility::BlankNodeManager bnodeMgr;
   auto res = parseOperation(&bnodeMgr, encodedIriManager, &AntlrParser::query,
-                            std::move(query), datasets);
+                            std::move(query), datasets, std::move(allocator));
   // Queries never contain blank nodes in the body since they are always turned
   // into internal variables.
   AD_CORRECTNESS_CHECK(bnodeMgr.numBlocksUsed() == 0);
@@ -55,9 +59,10 @@ ParsedQuery SparqlParser::parseQuery(
 }
 
 // _____________________________________________________________________________
-std::vector<ParsedQuery> SparqlParser::parseUpdate(
+qlever::vector<ParsedQuery> SparqlParser::parseUpdate(
     BnodeMgr bnodeMgr, const EncodedIriManager* encodedIriManager,
-    std::string update, const std::vector<DatasetClause>& datasets) {
+    std::string update, const std::vector<DatasetClause>& datasets,
+    qlever::Allocator<Id> allocator) {
   return parseOperation(bnodeMgr, encodedIriManager, &AntlrParser::update,
-                        std::move(update), datasets);
+                        std::move(update), datasets, std::move(allocator));
 }

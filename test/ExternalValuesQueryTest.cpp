@@ -13,6 +13,7 @@
 #include "parser/ExternalValuesQuery.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/GTestHelpers.h"
 
 namespace {
@@ -46,7 +47,7 @@ static SparqlTriple varTriple(TripleComponent object) {
 
 struct ExternalValuesQueryTest : public ::testing::Test {
  protected:
-  ExternalValuesQuery query;
+  ExternalValuesQuery query{ad_utility::testing::makeAllocator()};
   SparqlTriple defaultIdTriple = idTriple(lit("myId"));
   SparqlTriple defaultVarTriple = varTriple(V{"?x"});
 };
@@ -102,7 +103,7 @@ TEST_F(ExternalValuesQueryTest, addParameterVariableNonVariable) {
 
 // Test addParameter with unknown predicate throws.
 TEST(ExternalValuesQuery, addParameterUnknownPredicate) {
-  ExternalValuesQuery query;
+  ExternalValuesQuery query{ad_utility::testing::makeAllocator()};
   auto triple = makeTriple("<unknown>", Variable{"?x"});
   AD_EXPECT_THROW_WITH_MESSAGE(query.addParameter(triple),
                                HasSubstr("Unknown parameter"));
@@ -132,15 +133,20 @@ TEST_F(ExternalValuesQueryTest, validateMissingVariables) {
 
 // Test the (deprecated) specification of the name via the IRI directly.
 TEST_F(ExternalValuesQueryTest, deprecatedNameSpecification) {
-  query = ExternalValuesQuery{iri(EXTERNAL_VALUES_IRI)};
+  query = ExternalValuesQuery{iri(EXTERNAL_VALUES_IRI),
+                              ad_utility::testing::makeAllocator()};
   EXPECT_TRUE(query.name_.empty());
-  AD_EXPECT_THROW_WITH_MESSAGE(ExternalValuesQuery(iri("<invalidServiceIri>")),
-                               ::testing::HasSubstr("unexpected SERVICE IRI"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ExternalValuesQuery(iri(absl::StrCat(EXTERNAL_VALUES_IRI_PREFIX, ">"))),
+      ExternalValuesQuery(iri("<invalidServiceIri>"),
+                          ad_utility::testing::makeAllocator()),
+      ::testing::HasSubstr("unexpected SERVICE IRI"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ExternalValuesQuery(iri(absl::StrCat(EXTERNAL_VALUES_IRI_PREFIX, ">")),
+                          ad_utility::testing::makeAllocator()),
       ::testing::HasSubstr("must not be empty"));
   ExternalValuesQuery query2(
-      iri(absl::StrCat(EXTERNAL_VALUES_IRI_PREFIX, "blubb>")));
+      iri(absl::StrCat(EXTERNAL_VALUES_IRI_PREFIX, "blubb>")),
+      ad_utility::testing::makeAllocator());
   EXPECT_EQ(query2.name_, "blubb");
 }
 }  // namespace

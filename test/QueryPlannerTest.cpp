@@ -20,6 +20,7 @@
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
+#include "util/AllocatorTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
 namespace {
@@ -51,26 +52,30 @@ TEST(QueryPlanner, createTripleGraph) {
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(
         &pq._rootGraphPattern._graphPatterns[0].getBasic());
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
-            {std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     0, SparqlTriple(Var{"?x"},
-                                     iri("<http://rdf.myprefix.com/myrel>"),
-                                     Var{"?y"})),
-                 {1, 2}),
-             std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     1, SparqlTriple(Var{"?y"},
-                                     iri("<http://rdf.myprefix.com/ns/myrel>"),
-                                     Var{"?z"})),
-                 {0, 2}),
-             std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     2, SparqlTriple(Var{"?y"},
-                                     iri("<http://rdf.myprefix.com/xxx/rel2>"),
-                                     iri("<http://abc.de>"))),
-                 {0, 1})}));
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>{
+            std::make_pair<Node, vector<size_t>>(
+                QueryPlanner::TripleGraph::Node(
+                    0, SparqlTriple(Var{"?x"},
+                                    iri("<http://rdf.myprefix.com/myrel>"),
+                                    Var{"?y"}),
+                    ad_utility::testing::makeAllocator()),
+                {1, 2}),
+            std::make_pair<Node, vector<size_t>>(
+                QueryPlanner::TripleGraph::Node(
+                    1, SparqlTriple(Var{"?y"},
+                                    iri("<http://rdf.myprefix.com/ns/myrel>"),
+                                    Var{"?z"}),
+                    ad_utility::testing::makeAllocator()),
+                {0, 2}),
+            std::make_pair<Node, vector<size_t>>(
+                QueryPlanner::TripleGraph::Node(
+                    2, SparqlTriple(Var{"?y"},
+                                    iri("<http://rdf.myprefix.com/xxx/rel2>"),
+                                    iri("<http://abc.de>")),
+                    ad_utility::testing::makeAllocator()),
+                {0, 1})},
+        ad_utility::testing::makeAllocator());
 
     ASSERT_TRUE(tg.isSimilar(expected));
   }
@@ -80,20 +85,24 @@ TEST(QueryPlanner, createTripleGraph) {
         parseQuery("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
-            {std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     0, SparqlTriple(Var{"?x"}, Var{"?p"}, iri("<X>"))),
-                 {1, 2}),
-             std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     1, SparqlTriple(Var{"?x"}, Var{"?p2"}, iri("<Y>"))),
-                 {0}),
-             std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     2, SparqlTriple(iri("<X>"), Var{"?p"}, iri("<Y>"))),
-                 {0})}));
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>{
+            std::make_pair<Node, vector<size_t>>(
+                QueryPlanner::TripleGraph::Node(
+                    0, SparqlTriple(Var{"?x"}, Var{"?p"}, iri("<X>")),
+                    ad_utility::testing::makeAllocator()),
+                {1, 2}),
+            std::make_pair<Node, vector<size_t>>(
+                QueryPlanner::TripleGraph::Node(
+                    1, SparqlTriple(Var{"?x"}, Var{"?p2"}, iri("<Y>")),
+                    ad_utility::testing::makeAllocator()),
+                {0}),
+            std::make_pair<Node, vector<size_t>>(
+                QueryPlanner::TripleGraph::Node(
+                    2, SparqlTriple(iri("<X>"), Var{"?p"}, iri("<Y>")),
+                    ad_utility::testing::makeAllocator()),
+                {0})},
+        ad_utility::testing::makeAllocator());
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 
@@ -104,18 +113,21 @@ TEST(QueryPlanner, createTripleGraph) {
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
 
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>{
             std::make_pair<Node, vector<size_t>>(
                 QueryPlanner::TripleGraph::Node(
-                    0, SparqlTriple(Var{"?x"}, iri("<is-a>"), iri("<Book>"))),
+                    0, SparqlTriple(Var{"?x"}, iri("<is-a>"), iri("<Book>")),
+                    ad_utility::testing::makeAllocator()),
                 {1}),
             std::make_pair<Node, vector<size_t>>(
                 QueryPlanner::TripleGraph::Node(
                     1, SparqlTriple(Var{"?x"}, iri("<Author>"),
-                                    iri("<Anthony_Newman_(Author)>"))),
+                                    iri("<Anthony_Newman_(Author)>")),
+                    ad_utility::testing::makeAllocator()),
                 {0}),
-        }));
+        },
+        ad_utility::testing::makeAllocator());
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 }
@@ -135,12 +147,12 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
         "2 {s: <X>, p: ?p, o: <Y>} : (0)",
         tg.asString());
     {
-      std::vector<size_t> keep;
+      qlever::vector<size_t> keep{tg._nodeMap.get_allocator()};
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("", tgnew.asString());
     }
     {
-      std::vector<size_t> keep;
+      qlever::vector<size_t> keep{tg._nodeMap.get_allocator()};
       keep.push_back(0);
       keep.push_back(1);
       keep.push_back(2);
@@ -155,14 +167,14 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
       ASSERT_EQ(1u, tgnew._nodeMap.find(2)->second->_variables.size());
     }
     {
-      std::vector<size_t> keep;
+      qlever::vector<size_t> keep{tg._nodeMap.get_allocator()};
       keep.push_back(0);
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
       ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
     }
     {
-      std::vector<size_t> keep;
+      qlever::vector<size_t> keep{tg._nodeMap.get_allocator()};
       keep.push_back(0);
       keep.push_back(1);
       QueryPlanner::TripleGraph tgnew(tg, keep);
@@ -183,7 +195,8 @@ TEST(QueryPlanner, testBFSLeaveOut) {
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     ASSERT_EQ(3u, tg._adjLists.size());
-    ad_utility::HashSet<size_t> lo;
+    ad_utility::HashSetWithMemoryLimit<size_t> lo{
+        ad_utility::testing::makeAllocator()};
     auto out = tg.bfsLeaveOut(0, lo);
     ASSERT_EQ(3u, out.size());
     lo.insert(1);
@@ -202,7 +215,8 @@ TEST(QueryPlanner, testBFSLeaveOut) {
         parseQuery("SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}");
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-    ad_utility::HashSet<size_t> lo;
+    ad_utility::HashSetWithMemoryLimit<size_t> lo{
+        ad_utility::testing::makeAllocator()};
     auto out = tg.bfsLeaveOut(0, lo);
     ASSERT_EQ(3u, out.size());
     lo.insert(1);

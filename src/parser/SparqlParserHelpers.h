@@ -11,6 +11,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/ParserAndVisitorBase.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
+#include "util/Allocator.h"
 #include "util/BlankNodeManager.h"
 
 namespace sparqlParserHelpers {
@@ -30,16 +31,16 @@ struct ParserAndVisitor : public ParserAndVisitorBase<SparqlQleverVisitor> {
   ParserAndVisitor(
       ad_utility::BlankNodeManager* blankNodeManager,
       const EncodedIriManager* encodedIriManager, std::string input,
-      std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
-      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-          SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
+      std::optional<ParsedQuery::DatasetClauses> datasetClauses,
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks,
+      qlever::Allocator<Id> allocator);
   ParserAndVisitor(
       ad_utility::BlankNodeManager* blankNodeManager,
       const EncodedIriManager* encodedIriManager, std::string input,
       SparqlQleverVisitor::PrefixMap prefixes,
-      std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
-      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-          SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
+      std::optional<ParsedQuery::DatasetClauses> datasetClauses,
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks,
+      qlever::Allocator<Id> allocator);
 };
 }  // namespace sparqlParserHelpers
 
