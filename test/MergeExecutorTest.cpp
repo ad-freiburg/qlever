@@ -10,6 +10,12 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+// The default executor exists only for the parallel merge, which is not
+// available in the C++17 backports mode, see
+// `util/parallelBlockMerge/ParallelMergeState.h`. This test file is therefore
+// empty in that mode.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include <boost/asio/post.hpp>
 #include <future>
 #include <thread>
@@ -32,3 +38,5 @@ TEST(MergeExecutor, defaultExecutorIsSharedAndRuns) {
             [&promise] { promise.set_value(std::this_thread::get_id()); });
   EXPECT_NE(future.get(), std::this_thread::get_id());
 }
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

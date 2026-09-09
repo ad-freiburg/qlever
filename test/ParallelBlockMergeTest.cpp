@@ -652,8 +652,13 @@ TEST(ParallelBlockMerge, outputBlockMemoryLimit) {
 }
 
 // ___________________________________________________________________________
-// The parallel merge.
-//
+// The parallel merge. NOTE: It is not available in the C++17 backports mode,
+// see `util/parallelBlockMerge/ParallelMergeState.h`, so everything from here
+// to the end of this file is C++20 only.
+// ___________________________________________________________________________
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 // The tests above pin down the chunking and the merging itself, both of which
 // the parallel merge shares with the serial one. The tests below therefore only
 // cover what the parallelization adds: that the chunks really are merged
@@ -734,11 +739,11 @@ auto startParallelMerge(
   return std::pair{std::move(state), std::move(sink)};
 }
 
-// Check the invariants that hold for the sink of every merge all of whose tasks
-// are done: a chunk never sends more than one end-of-chunk sentinel, and if the
-// merge was not stopped, then every chunk sends exactly one. A merge that was
-// stopped in contrast does not dispatch its remaining chunks at all, so those
-// send no sentinel.
+// Check the invariants that hold for the sink of every merge all of whose
+// coroutines are done: a chunk never sends more than one end-of-chunk sentinel,
+// and if the merge was not stopped, then every chunk sends exactly one. A merge
+// that was stopped in contrast does not dispatch its remaining chunks at all,
+// so those send no sentinel.
 template <typename Sink>
 void expectSentinelsAreConsistent(const Sink& sink) {
   for (const auto& chunk : sink.chunks()) {
@@ -781,8 +786,8 @@ std::vector<typename Input::value_type> parallelMergeToVector(
                   pool.get_executor(), std::move(input), std::move(comparator),
                   std::move(options), numThreads, std::move(cancellationHandle))
                   .second;
-  // All the tasks that are still in flight have to finish, otherwise this
-  // hangs.
+  // All the coroutines that are still in flight have to finish, otherwise
+  // this hangs.
   pool.join();
   expectSentinelsAreConsistent(*sink);
   sink->rethrowIfException();
@@ -981,9 +986,9 @@ TEST(ParallelBlockMerge, stopStopsTheMerge) {
       startParallelMerge<false>(pool.get_executor(), makeVectorInput(runs, 64),
                                 std::less<>{}, parallelOptions(16), 8);
   // Abandon the merge right away. This must neither hang, nor crash, nor leak:
-  // the tasks that are still in flight have to finish instead of waiting for a
-  // consumer that is gone, and the state has to stay alive until the last of
-  // them is done.
+  // the coroutines that are still in flight have to finish instead of waiting
+  // for a consumer that is gone, and the state has to stay alive until the last
+  // of them is done.
   stateAndSink.first->stop();
   stateAndSink.first.reset();
   pool.join();
@@ -1078,3 +1083,5 @@ TEST(ParallelBlockMerge, defaultExecutorAndParallelism) {
   // itself instead.
   EXPECT_THAT(awaitAndCollect(*sink), ::testing::ElementsAreArray(expected));
 }
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

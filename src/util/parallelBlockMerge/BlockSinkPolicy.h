@@ -10,6 +10,12 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_BLOCKSINKPOLICY_H
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_BLOCKSINKPOLICY_H
 
+// A sink is only ever pushed to by the *parallel* merge, which is implemented
+// with coroutines, so this whole header is only available in C++20 mode and
+// empty when `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is set, see
+// `util/parallelBlockMerge/ParallelMergeState.h`.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include <cstddef>
 #include <exception>
 #include <memory>
@@ -125,21 +131,21 @@ CPP_requires(
 // chunk is in flight at a time, because two concurrent ones could complete in
 // either order and the order within the chunk would be lost. The merge honors
 // this, because each of its chunks has a single producer that pushes the blocks
-// of that chunk in a handler chain. Operations of *different* chunks in
+// of that chunk one after the other. Operations of *different* chunks in
 // contrast do run concurrently, and so do the other two operations, so a sink
 // has to synchronize its own state.
 //
 // IMPORTANT: A sink must not invoke a completion handler *inline*, that is from
 // within the initiating function, but always via a `net::post` to the executor
 // that is associated with the completion token. Two reasons: the producer of a
-// chunk continues in the completion handler of its `asyncPush` (so an inline
+// chunk is resumed by the completion handler of its `asyncPush` (so an inline
 // completion would let the stack grow with every output block), and it merges
 // the next output block right there (which is ordinary blocking work that may
 // even do I/O, so it must not run on a strand that serializes the sink).
 //
 // LIFETIME: A sink has to stay alive until the last operation on it is
 // complete. The merge takes care of that (it holds the sink by a `shared_ptr`
-// that outlives all of its tasks and handlers, see
+// that outlives all of its coroutines, see
 // `detail::ParallelMergeState`), so a caller may safely drop its own
 // `shared_ptr` to the sink at any time.
 template <typename T, typename Block>
@@ -207,5 +213,7 @@ CPP_concept SinkFactoryConcept =
     SinkConcept<detail::SinkFromFactoryT<T>, Block>;
 
 }  // namespace ad_utility::parallelBlockMerge
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #endif  // QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_BLOCKSINKPOLICY_H

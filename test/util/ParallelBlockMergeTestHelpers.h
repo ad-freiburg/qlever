@@ -11,29 +11,37 @@
 #define QLEVER_TEST_UTIL_PARALLELBLOCKMERGETESTHELPERS_H
 
 #include <algorithm>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
-#include <future>
-#include <mutex>
 #include <range/v3/range/conversion.hpp>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
-#include "backports/asio.h"
-#include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/NoCopyNoMove.h"
 #include "util/Random.h"
-#include "util/parallelBlockMerge/BlockSinkPolicy.h"
 #include "util/parallelBlockMerge/MergeHelpers.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
+
+// The output policy below (`CollectingBlockSink`) exists only for the parallel
+// merge, which is not available in the C++17 backports mode, see
+// `util/parallelBlockMerge/ParallelMergeState.h`. These are the includes that
+// only it needs.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include <atomic>
+#include <exception>
+#include <future>
+#include <mutex>
+#include <type_traits>
+
+#include "backports/asio.h"
+#include "util/AsioHelpers.h"
+#include "util/NoCopyNoMove.h"
+#include "util/parallelBlockMerge/BlockSinkPolicy.h"
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // Helpers for the tests of the parallel block merge, in particular the
 // in-memory `VectorInput` input policy and the in-memory `CollectingBlockSink`
@@ -42,8 +50,6 @@
 // from `RunsInputPolicy.h`, `VectorInput` included), and by
 // `MergeHelpersTest.cpp` (which tests the helpers from `MergeHelpers.h`).
 namespace parallelBlockMergeTestHelpers {
-
-namespace net = boost::asio;
 
 // ___________________________________________________________________________
 // An in-memory input policy.
@@ -157,8 +163,14 @@ static_assert(
     ad_utility::parallelBlockMerge::InputConcept<VectorInput<size_t>>);
 
 // ___________________________________________________________________________
-// An in-memory output policy.
+// An in-memory output policy. NOTE: Only the parallel merge pushes to a sink,
+// so everything until the end of this section is C++20 only, see the note at
+// the includes above.
 // ___________________________________________________________________________
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+namespace net = boost::asio;
 
 // Collect the output blocks of a merge in memory, one `std::vector` of blocks
 // per chunk, as an `ad_utility::parallelBlockMerge::SinkConcept`.
@@ -270,9 +282,9 @@ class CollectingBlockSink : public ad_utility::NoCopyNoMove {
   }
 
   // What every chunk pushed. IMPORTANT: Only call this once the merge is
-  // complete, that is once every task of the merge is done (either because
-  // every chunk was finished, or because the thread pool of the merge was
-  // joined).
+  // complete, that is once every coroutine of the merge is done (either
+  // because every chunk was finished, or because the thread pool of the merge
+  // was joined).
   const std::vector<Chunk>& chunks() const { return chunks_; }
 
   // Rethrow the first exception that a chunk pushed, if there is one. The same
@@ -362,6 +374,8 @@ std::vector<ql::ranges::range_value_t<Block>> mergedElements(
   }
   return result;
 }
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // ___________________________________________________________________________
 // Inputs and other helpers for the individual tests.

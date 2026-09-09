@@ -60,14 +60,19 @@
 // concurrently, which is what the splitting is for.
 //
 // That is what `parallelBlockMergeToSink` does: it schedules all of its work on
-// a Boost.Asio executor, one task per chunk, and pushes the output blocks of
-// every chunk to a sink (see `SinkConcept` in `BlockSinkPolicy.h`). A chunk
+// a Boost.Asio executor, one coroutine per chunk, and pushes the output blocks
+// of every chunk to a sink (see `SinkConcept` in `BlockSinkPolicy.h`). A chunk
 // that currently cannot make progress, because the sink has no room for its
 // next block, suspends instead of occupying a thread. The corresponding
 // back-pressure, as well as the order in which the blocks of the individual
 // chunks are handed on to a consumer, live in the sink and not in the merge;
 // the merging itself is done by the very same `detail::ChunkMerger` that the
 // serial merge uses.
+//
+// NOTE: The parallel merge is implemented with coroutines and hence only
+// available in C++20 mode, that is when `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17`
+// is not set. Everything else in this directory, `serialBlockMergeToRange`
+// included, is available in both modes.
 namespace ad_utility::parallelBlockMerge {
 
 // ___________________________________________________________________________
@@ -124,6 +129,8 @@ CPP_template(bool moveElements, typename Input,
       ql::views::join(std::move(chunks))};
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 // Set up a parallel merge of the presorted runs of `input` according to
 // `comparator` and start it. All the work is scheduled on the `executor`, which
 // somebody else has to run; a default-constructed `executor` means "use
@@ -138,14 +145,14 @@ CPP_template(bool moveElements, typename Input,
 // this function. See `SinkFactoryConcept` for the exact requirements.
 //
 // LIFETIME: The returned `shared_ptr` may be dropped at any time, also while
-// the merge is still running: every task and every completion handler of the
-// merge holds the state alive, and the state in turn holds the sink alive. The
-// flip side is that there is deliberately no destructor that waits, so a
-// consumer that abandons the merge (instead of reading it to the end) has to
-// call `stop()` on the returned state, which makes the tasks that are still in
-// flight finish instead of waiting for a consumer that is gone. The `input`,
-// the `comparator` and the `cancellationHandle` are moved into the state and
-// hence share its lifetime.
+// the merge is still running: every coroutine of the merge holds the state
+// alive, and the state in turn holds the sink alive. The flip side is that
+// there is deliberately no destructor that waits, so a consumer that abandons
+// the merge (instead of reading it to the end) has to call `stop()` on the
+// returned state, which makes the coroutines that are still in flight finish
+// instead of waiting for a consumer that is gone. The `input`, the
+// `comparator` and the `cancellationHandle` are moved into the state and hence
+// share its lifetime.
 //
 // The result is deterministic for a fixed configuration (the same `options`
 // always yield the same blocks in the same chunks, also for elements that the
@@ -161,8 +168,9 @@ CPP_template(bool moveElements, typename Input,
 //
 // The requirements on the `comparator` and the meaning of `moveElements` are
 // the same as for `serialBlockMergeToRange` above. Note that a merge with a
-// single chunk is already the serial merge, just performed by a single task on
-// the `executor`, so there is deliberately no serial fast path here.
+// single chunk is already the serial merge, just performed by a single
+// coroutine on the `executor`, so there is deliberately no serial fast path
+// here.
 CPP_template(bool moveElements, typename Input, typename Comparator,
              typename SinkFactory)(
     requires InputConcept<Input> CPP_and
@@ -196,6 +204,8 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
   return State::create(std::move(executor), std::move(mergeState),
                        makeSink(numChunks), maxNumChunksInFlight);
 }
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 }  // namespace ad_utility::parallelBlockMerge
 

@@ -10,6 +10,12 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEEXECUTOR_H
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEEXECUTOR_H
 
+// Only the *parallel* merge needs an executor, so this whole header is only
+// available in C++20 mode and empty when
+// `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is set, see
+// `util/parallelBlockMerge/ParallelMergeState.h`.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 #include <boost/asio/thread_pool.hpp>
 
 #include "backports/asio.h"
@@ -39,5 +45,7 @@ inline ql::any_io_executor defaultMergeExecutor() {
 }
 
 }  // namespace ad_utility::parallelBlockMerge
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #endif  // QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEEXECUTOR_H
