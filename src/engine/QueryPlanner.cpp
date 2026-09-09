@@ -3523,8 +3523,26 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   auto candidatesForSubquery = planner_.createExecutionTrees(subquery, true);
   // Make sure that variables that are not selected by the subquery are not
   // visible.
+
+  // Conceptually this just "renames" the internal graph variable to the
+  // outer graph variable. Using a `Bind` for this is more expensive than
+  // necessary, but it's the best we can do for now.
+  auto renameInternalVariable = [&internalGraphVariable, &outerGraphVariable,
+                                 this](SubtreePlan& plan) {
+    if (internalGraphVariable.has_value() &&
+        plan._qet->getVariableColumns().contains(
+            internalGraphVariable.value())) {
+      using namespace sparqlExpression;
+      parsedQuery::Bind bindGraphVar{
+          SparqlExpressionPimpl{std::make_unique<VariableExpression>(
+                                    internalGraphVariable.value()),
+                                internalGraphVariable.value().name()},
+          outerGraphVariable.value()};
+      plan._qet = makeExecutionTree<Bind>(qec_, plan._qet, bindGraphVar);
+    }
+  };
   auto setSelectedVariables = [&select, &internalGraphVariable,
-                               &outerGraphVariable, this](SubtreePlan& plan) {
+                               &renameInternalVariable](SubtreePlan& plan) {
     const auto& selected = select.getSelectedVariables();
     std::set<Variable> selectedVariables{selected.begin(), selected.end()};
     if (internalGraphVariable.has_value()) {
@@ -3537,20 +3555,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
       plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
           {selectedVariables.begin(), selectedVariables.end()});
     }
-    // Conceptually this just "renames" the internal graph variable to the
-    // outer graph variable. Using a `Bind` for this is more expensive than
-    // necessary, but it's the best we can do for now.
-    if (internalGraphVariable.has_value() &&
-        plan._qet->getVariableColumns().contains(
-            internalGraphVariable.value())) {
-      using namespace sparqlExpression;
-      parsedQuery::Bind bindGraphVar{
-          SparqlExpressionPimpl{std::make_unique<VariableExpression>(
-                                    internalGraphVariable.value()),
-                                internalGraphVariable.value().name()},
-          outerGraphVariable.value()};
-      plan._qet = makeExecutionTree<Bind>(qec_, plan._qet, bindGraphVar);
-    }
+    renameInternalVariable(plan);
   };
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
