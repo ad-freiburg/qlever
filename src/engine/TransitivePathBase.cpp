@@ -582,6 +582,31 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
   auto& plan = *ql::ranges::min_element(
       candidates, {}, [](const auto& tree) { return tree->getCostEstimate(); });
 
+  copyPayloadColumnsToPlan(op, plan, leftCol, rightCol);
+  // Since we also put the side column(s) and graph variables in the result,
+  // we only have to add the amount of new (payload) columns to the resulting
+  // output table's width.
+  plan->resultWidth_ +=
+      op->getResultWidth() -
+      numJoinColumnsWith(op, leftCol.has_value() ? *leftCol : *rightCol,
+                         leftCol.has_value() ? rightCol : leftCol);
+
+  // Make sure mapping actually points to the last column if it's not one of
+  // the regular variables.
+  if (graphVariable_.has_value()) {
+    auto& graphIndex =
+        plan->variableColumns_[graphVariable_.value()].columnIndex_;
+    if (graphIndex == 2) {
+      graphIndex = plan->resultWidth_ - 1;
+    }
+  }
+  return std::move(plan);
+}
+
+// _____________________________________________________________________________
+void TransitivePathBase::copyPayloadColumnsToPlan(
+    auto& op, auto& plan, std::optional<size_t> leftCol,
+    std::optional<size_t> rightCol) const {
   // Copy the payload columns to the plan.
   // Note: The `variable` in the following structured binding is `const`, even
   // if we bind by value. We deliberately make one unnecessary copy of the
@@ -608,7 +633,8 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
     auto bothColsBoundIndexShift = [](size_t columnIndex, size_t colL,
                                       size_t colR) {
       AD_CORRECTNESS_CHECK(colL != columnIndex && colR != columnIndex);
-      return columnIndex < colR ? (columnIndex < colL ? 2 : 1) : 0;
+      auto leftOrMiddle = columnIndex < colL ? 2 : 1;
+      return columnIndex < colR ? leftOrMiddle : 0;
     };
     if (!leftCol.has_value() || !rightCol.has_value()) {
       // Single side is bound case.
@@ -635,25 +661,6 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
     AD_CORRECTNESS_CHECK(!plan->variableColumns_.contains(variable));
     plan->variableColumns_[variable] = columnIndexWithType;
   }
-
-  // Since we also put the side column(s) and graph variables in the result,
-  // we only have to add the amount of new (payload) columns to the resulting
-  // output table's width.
-  plan->resultWidth_ +=
-      op->getResultWidth() -
-      numJoinColumnsWith(op, leftCol.has_value() ? *leftCol : *rightCol,
-                         leftCol.has_value() ? rightCol : leftCol);
-
-  // Make sure mapping actually points to the last column if it's not one of
-  // the regular variables.
-  if (graphVariable_.has_value()) {
-    auto& graphIndex =
-        plan->variableColumns_[graphVariable_.value()].columnIndex_;
-    if (graphIndex == 2) {
-      graphIndex = plan->resultWidth_ - 1;
-    }
-  }
-  return std::move(plan);
 }
 
 // _____________________________________________________________________________

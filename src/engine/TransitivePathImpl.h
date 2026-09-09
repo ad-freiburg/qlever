@@ -396,8 +396,8 @@ class TransitivePathImpl : public TransitivePathBase {
 
     // If it is bound, get the nodes on the target side inside a simple
     // `ql::span`. Otherwise, the span is empty.
-    const auto targetNodes = [&targetSide, joinColumn,
-                              targetJoinColumn](const auto& idTable) {
+    auto targetNodes = [&targetSide, joinColumn,
+                        targetJoinColumn](const auto& idTable) {
       if (!targetSide.isBoundVariable()) {
         return ql::span<const Id>();
       }
