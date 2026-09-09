@@ -187,8 +187,8 @@ TEST(StringSortComparatorTest, GeoCellGridOrder) {
   EXPECT_TRUE(comp.isLessInTotalWithExternalFlag(w3, false, w12, false));
   EXPECT_FALSE(comp.isLessInTotalWithExternalFlag(w12, false, w3, false));
 
-  // The comparison without the geo cell layer ignores the grid.
-  EXPECT_LT(comp.compareWithoutGeoCellLayer(w12, w3), 0);
+  // The comparison as if no grid were set ignores the grid.
+  EXPECT_LT(comp.compareWithoutGeoCellGrid(w12, w3), 0);
   EXPECT_TRUE(comp.isLessInTotalWithExternalFlagAndGeoSortKeys(w12, false, 0,
                                                                w3, false, 0));
 

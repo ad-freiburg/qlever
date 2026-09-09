@@ -182,13 +182,13 @@ CPP_template_def(typename C, typename L)(
 }
 
 // ____________________________________________________________________________________________________________
-inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
+inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& entries) {
   HashMap<uint64_t, uint64_t> res;
-  res.reserve(els.size());
+  res.reserve(entries.size());
   std::optional<std::string_view> lastWord;
   // This value will overflow on the first entry.
   size_t nextWordId = -1;
-  for (auto& entry : els) {
+  for (auto& entry : entries) {
     auto& idAndExternal = entry.idAndFlag_;
     auto id = idAndExternal.id();
     if (lastWord != entry.word_) {
@@ -229,7 +229,7 @@ inline void writeMappedIdsToExtVec(
 }
 
 // _________________________________________________________________________________________________________
-inline void writePartialVocabularyToFile(const ItemVec& els,
+inline void writePartialVocabularyToFile(const ItemVec& entries,
                                          const std::string& fileName) {
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
 
@@ -241,13 +241,13 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   serialization::BufferedWriteSerializer serializer{
       serialization::FileWriteSerializer{fileName}, 16_MB};
 
-  uint64_t size = els.size();
+  uint64_t size = entries.size();
   serializer << size;
 
   // This is essentially a `VectorIncrementalSerializer` with a custom
   // serialization function, which the infrastructure currently does not
   // support.
-  for (const auto& entry : els) {
+  for (const auto& entry : entries) {
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, the information, whether this word
     // belongs to the internal or external vocabulary, and its geo sort key.
@@ -266,13 +266,14 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
 template <typename GeoSortKeyFn>
 ItemVec vocabMapsToVector(const ItemMapAndBuffer& map,
                           const GeoSortKeyFn& geoSortKeyFn) {
-  ItemVec els;
-  els.resize(map.map_.size());
+  ItemVec entries;
+  entries.resize(map.map_.size());
   using T = ItemVec::value_type;
-  ql::ranges::transform(map.map_, els.begin(), [&geoSortKeyFn](auto& el) -> T {
-    return {el.first, el.second, geoSortKeyFn(el.first)};
-  });
-  return els;
+  ql::ranges::transform(map.map_, entries.begin(),
+                        [&geoSortKeyFn](auto& el) -> T {
+                          return {el.first, el.second, geoSortKeyFn(el.first)};
+                        });
+  return entries;
 }
 
 // _____________________________________________________________________________
@@ -284,16 +285,17 @@ inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
 template <class StringSortComparator>
 void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
                      const bool doParallelSort) {
-  auto& els = *vecPtr;
+  auto& entries = *vecPtr;
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
-      ad_utility::parallel_sort(ql::ranges::begin(els), ql::ranges::end(els),
-                                comp, ad_utility::parallel_tag(10));
+      ad_utility::parallel_sort(ql::ranges::begin(entries),
+                                ql::ranges::end(entries), comp,
+                                ad_utility::parallel_tag(10));
     } else {
-      ql::ranges::sort(els, comp);
+      ql::ranges::sort(entries, comp);
     }
   } else {
-    ql::ranges::sort(els, comp);
+    ql::ranges::sort(entries, comp);
     (void)doParallelSort;  // avoid compiler warning for unused value.
   }
 }

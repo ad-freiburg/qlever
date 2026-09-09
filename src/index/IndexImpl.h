@@ -418,6 +418,9 @@ class IndexImpl {
     if (grid.has_value()) {
       configurationJson_["geo-cell-grid-level"] = grid->level();
       configurationJson_["geo-cell-grid-scheme"] = grid->scheme();
+    } else {
+      configurationJson_.erase("geo-cell-grid-level");
+      configurationJson_.erase("geo-cell-grid-scheme");
     }
   }
 

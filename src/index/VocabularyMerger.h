@@ -152,10 +152,10 @@ ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
  * strings that were connected to x and y in the input were identical. Also
  * modifies the input Ids to their mapped values.
  *
- * @param els  Must be sorted(at least duplicates must be adjacent) according to
- * the strings and the Ids must be unique to work correctly.
+ * @param entries  Must be sorted(at least duplicates must be adjacent)
+ * according to the strings and the Ids must be unique to work correctly.
  */
-ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
+ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& entries);
 
 /**
  * @brief for each of the IdTriples in <input>: map the three Ids using the
@@ -172,10 +172,10 @@ void writeMappedIdsToExtVec(
  * size and then its content, without a trailing zero), the external flag, the
  * index, and the geo sort key.
  *
- * @param els The input
+ * @param entries The input
  * @param fileName will write to this file. If it exists it will be overwritten
  */
-void writePartialVocabularyToFile(const ItemVec& els,
+void writePartialVocabularyToFile(const ItemVec& entries,
                                   const std::string& fileName);
 
 /**
