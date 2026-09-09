@@ -198,9 +198,9 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
     serializer << indexImpl.configurationJson().dump();
     indexImpl.writeVocabularyToZeroCopyBlob(serializer);
   } else {
-    writeMetadataAndFilteredVocabulary(serializer, indexImpl,
-                                       indexImpl.getUnderlyingVocabulary(),
-                                       config.excludedEntryRegexes_);
+    writeMetadataAndFilteredVocabulary(
+        serializer, indexImpl, indexImpl.getVocab().getUnderlyingVocabulary(),
+        config.excludedEntryRegexes_);
   }
   qlever.namedResultCache_.writeToSerializer(serializer);
   auto uncompressed = std::move(serializer).data();
