@@ -671,6 +671,11 @@ class RdfParallelParsingState {
   qlever::parser::ByteBlock remainderFromInitialization_;
   std::atomic_bool remainderWasTaken_{false};
 
+  // The parser that parses the leading declarations. It has to live across
+  // several calls to `parseHeaderStep`, because the declarations may be spread
+  // over several blocks. It is reset as soon as the header is complete.
+  std::optional<RdfStringParser<Parser>> declarationParser_;
+
  public:
   RdfParallelParsingState(const EncodedIriManager* encodedIriManager,
                           TripleComponent defaultGraphIri)
@@ -689,6 +694,16 @@ class RdfParallelParsingState {
   void parseHeader(
       absl::AnyInvocable<std::optional<qlever::parser::ByteBlock>()>
           getNextBlock);
+
+  // The incremental version of `parseHeader` for callers that cannot
+  // synchronously pull the next block (see `RdfAsyncParallelParser`). Feed the
+  // blocks of the input one by one (`nullopt` meaning the end of the input);
+  // return `true` as long as another block is needed, and `false` once the
+  // header is complete and `takeRemainderFromInitialization` may be called.
+  //
+  // NOTE: The thread-safety of this function is that of `parseHeader`: the
+  // sequence of calls has to be finished before any worker calls `parseBatch`.
+  bool parseHeaderStep(std::optional<qlever::parser::ByteBlock> block);
 
   // Hand out the block remainder that `parseHeader` has left over. The first
   // caller becomes its sole owner, every subsequent call returns `nullopt`, so

@@ -1141,24 +1141,38 @@ template <typename Parser>
 void RdfParallelParsingState<Parser>::parseHeader(
     absl::AnyInvocable<std::optional<qlever::parser::ByteBlock>()>
         getNextBlock) {
-  RdfStringParser<Parser> declarationParser{encodedIriManager_};
+  while (parseHeaderStep(getNextBlock())) {
+  }
+}
+
+// ____________________________________________________________________________
+template <typename Parser>
+bool RdfParallelParsingState<Parser>::parseHeaderStep(
+    std::optional<qlever::parser::ByteBlock> block) {
+  if (!declarationParser_.has_value()) {
+    declarationParser_.emplace(encodedIriManager_);
+  }
+  auto& declarationParser = declarationParser_.value();
   std::string_view remainder;
-  while (remainder.empty()) {
-    auto block = getNextBlock();
-    if (!block.has_value()) {
-      AD_LOG_WARN
-          << "Empty input to the TURTLE parser, is this what you intended?"
-          << std::endl;
-      break;
-    }
+  if (block.has_value()) {
     declarationParser.setInputStream(std::move(block.value()));
     while (declarationParser.parseDirectiveManually()) {
     }
     remainder = declarationParser.getUnparsedRemainder();
+    // The declarations span more than this block, so we need the next one.
+    if (remainder.empty()) {
+      return true;
+    }
+  } else {
+    AD_LOG_WARN
+        << "Empty input to the TURTLE parser, is this what you intended?"
+        << std::endl;
   }
   header_ = std::move(declarationParser.header());
   remainderFromInitialization_.reserve(remainder.size());
   ql::ranges::copy(remainder, std::back_inserter(remainderFromInitialization_));
+  declarationParser_.reset();
+  return false;
 }
 
 // ____________________________________________________________________________

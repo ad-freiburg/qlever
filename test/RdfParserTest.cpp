@@ -977,9 +977,9 @@ TEST(RdfParserTest, TurtleStreamAndParallelParser) {
   {
     auto of = ad_utility::makeOfstream(filename);
     for (size_t i = 0; i < 1'000; ++i) {
-      auto subject = absl::StrCat("<", i / 1000, ">");
-      auto predicate = absl::StrCat("<", i / 100, ">");
-      auto object = absl::StrCat("<", i / 10, ">");
+      auto subject = absl::StrCat("<", i / 100, ">");
+      auto predicate = absl::StrCat("<", i / 10, ">");
+      auto object = absl::StrCat("<", i, ">");
       of << subject << ' ' << predicate << ' ' << object << ".\n";
       expectedTriples.emplace_back(iri(subject), iri(predicate), iri(object));
     }
@@ -1309,7 +1309,7 @@ template <typename AsyncParser>
 std::vector<TurtleTriple> parseFromFileAsync(
     const std::string& filename, ad_utility::MemorySize bufferSize = 1_kB,
     size_t concurrency = 4) {
-  boost::asio::thread_pool pool{4};
+  boost::asio::thread_pool pool{concurrency};
   AsyncParser parser{pool.get_executor(),
                      qlever::InputFileSpecification{
                          filename, qlever::Filetype::Turtle, std::nullopt},
@@ -1357,9 +1357,9 @@ TEST(RdfParserTest, asyncParallelParserBasic) {
   {
     auto of = ad_utility::makeOfstream(filename);
     for (size_t i = 0; i < 1'000; ++i) {
-      auto subject = absl::StrCat("<", i / 1000, ">");
-      auto predicate = absl::StrCat("<", i / 100, ">");
-      auto object = absl::StrCat("<", i / 10, ">");
+      auto subject = absl::StrCat("<", i / 100, ">");
+      auto predicate = absl::StrCat("<", i / 10, ">");
+      auto object = absl::StrCat("<", i, ">");
       of << subject << ' ' << predicate << ' ' << object << ".\n";
       expectedTriples.emplace_back(iri(subject), iri(predicate), iri(object));
     }

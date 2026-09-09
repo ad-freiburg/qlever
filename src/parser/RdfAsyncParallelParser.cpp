@@ -9,7 +9,6 @@
 
 #include "parser/RdfAsyncParallelParser.h"
 
-#include <boost/asio/use_future.hpp>
 #include <string>
 
 #include "parser/Tokenizer.h"
@@ -18,7 +17,7 @@
 // ____________________________________________________________________________
 template <typename Parser>
 RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
-    const boost::asio::any_io_executor& executor,
+    const ql::any_io_executor& executor,
     const qlever::InputFileSpecification& spec,
     ad_utility::MemorySize blocksize,
     const EncodedIriManager* encodedIriManager,
@@ -29,12 +28,49 @@ RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
                    detail::findEndOfLastStatement,
                    std::string{detail::statementBoundaryDescription}},
       blockFetchPermit_{executor, 1} {
-  // NOTE: The header is parsed eagerly and synchronously, so the `executor`
-  // has to be running already (which it is for a `boost::asio::thread_pool`,
-  // the intended use of this class).
-  state_.parseHeader([this]() {
-    return blockSource_.asyncGetNextBlock(boost::asio::use_future).get();
-  });
+  parseHeaderAsync();
+}
+
+// ____________________________________________________________________________
+template <typename Parser>
+void RdfAsyncParallelParser<Parser>::parseHeaderAsync() {
+  namespace net = boost::asio;
+  blockFetchPermit_.asyncAcquire(net::bind_executor(
+      executor_, [this](const boost::system::error_code& errorCode,
+                        Permit permit) mutable {
+        // Nothing ever cancels `blockFetchPermit_`, so acquiring a permit
+        // cannot fail. In particular this is the very first acquisition.
+        AD_CORRECTNESS_CHECK(!errorCode && permit.isValid());
+        continueParsingHeader(std::move(permit));
+      }));
+}
+
+// ____________________________________________________________________________
+template <typename Parser>
+void RdfAsyncParallelParser<Parser>::continueParsingHeader(Permit permit) {
+  namespace net = boost::asio;
+  blockSource_.asyncGetNextBlock(net::bind_executor(
+      executor_, [this, permit = std::move(permit)](
+                     std::exception_ptr fetchEptr,
+                     std::optional<qlever::parser::ByteBlock> block) mutable {
+        try {
+          if (fetchEptr) {
+            std::rethrow_exception(fetchEptr);
+          }
+          if (state_.parseHeaderStep(std::move(block))) {
+            // The declarations span more than the blocks that we have seen so
+            // far. Keep holding the permit (so that no `asyncGetBatch()` call
+            // can interleave) and fetch the next block.
+            continueParsingHeader(std::move(permit));
+            return;
+          }
+        } catch (...) {
+          initializationError_ = std::current_exception();
+        }
+        // The header is complete (or has failed); let the waiting
+        // `asyncGetBatch()` calls proceed.
+        permit.release();
+      }));
 }
 
 template class RdfAsyncParallelParser<TurtleParser<Tokenizer>>;
