@@ -56,3 +56,7 @@ To get started with QLever, use our native packages released for [Debian, Ubuntu
 
 For the official documentation, see [docs.qlever.dev](https://docs.qlever.dev/). Additional
 information (though potentially outdated) can be found on the [QLever Wiki](https://github.com/ad-freiburg/qlever/wiki).
+
+QLever is built with CMake. There is also an alternative
+[Bazel configuration](docs/bazel.md), which produces the same libraries,
+executables and unit tests.

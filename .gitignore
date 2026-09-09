@@ -2,6 +2,11 @@
 build/
 cmake-build*
 
+# Bazel: the convenience symlinks into the output base, and the machine-specific
+# settings that `.bazelrc` imports at the end.
+/bazel-*
+/user.bazelrc
+
 # End-to-End data
 e2e_data/*
 # Compiled Object files

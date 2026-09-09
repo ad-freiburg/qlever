@@ -1,0 +1,83 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+// The template for the generated `CompilationInfo.cpp`, which defines the
+// constants declared in `src/CompilationInfo.h`. This is the Bazel counterpart
+// of `CompilationInfo.cmake`.
+//
+// `//bazel:compilation_info.bzl` prepends the definitions of the four
+// `QLEVER_*_STR` macros below to this file. Their values come from the workspace
+// status, see `//bazel:workspace_status.sh`, because a build rule must not run
+// `git` itself: that would make the build depend on state Bazel cannot track.
+//
+// The compiler, its version and the C++ standard are handled differently from
+// `CompilationInfo.cmake`, which substitutes the strings that CMake's own
+// detection produced. Here they are derived from the predefined preprocessor
+// macros, which yields the same strings and cannot go stale when the toolchain
+// changes without the rule noticing.
+
+#include "CompilationInfo.h"
+
+#define QLEVER_STRINGIFY_IMPL(x) #x
+#define QLEVER_STRINGIFY(x) QLEVER_STRINGIFY_IMPL(x)
+
+// `CMAKE_CXX_COMPILER_ID` and `CMAKE_CXX_COMPILER_VERSION`.
+#if defined(__apple_build_version__)
+#define QLEVER_COMPILER_ID "AppleClang"
+#define QLEVER_COMPILER_VERSION                           \
+  QLEVER_STRINGIFY(__clang_major__)                       \
+  "." QLEVER_STRINGIFY(__clang_minor__) "." QLEVER_STRINGIFY(__clang_patchlevel__)
+#elif defined(__clang__)
+#define QLEVER_COMPILER_ID "Clang"
+#define QLEVER_COMPILER_VERSION                           \
+  QLEVER_STRINGIFY(__clang_major__)                       \
+  "." QLEVER_STRINGIFY(__clang_minor__) "." QLEVER_STRINGIFY(__clang_patchlevel__)
+#elif defined(__GNUC__)
+#define QLEVER_COMPILER_ID "GNU"
+#define QLEVER_COMPILER_VERSION                           \
+  QLEVER_STRINGIFY(__GNUC__)                              \
+  "." QLEVER_STRINGIFY(__GNUC_MINOR__) "." QLEVER_STRINGIFY(__GNUC_PATCHLEVEL__)
+#else
+#define QLEVER_COMPILER_ID "unknown"
+#define QLEVER_COMPILER_VERSION "unknown"
+#endif
+
+// `CMAKE_CXX_STANDARD`.
+#if __cplusplus >= 202302L
+#define QLEVER_CXX_STANDARD "23"
+#elif __cplusplus >= 202002L
+#define QLEVER_CXX_STANDARD "20"
+#elif __cplusplus >= 201703L
+#define QLEVER_CXX_STANDARD "17"
+#else
+#define QLEVER_CXX_STANDARD "unknown"
+#endif
+
+namespace qlever::version {
+constexpr std::string_view GitHash = QLEVER_GIT_HASH_STR;
+constexpr std::string_view GitShortHash = GitHash.substr(0, 7);
+constexpr std::string_view DatetimeOfCompilation =
+    QLEVER_DATETIME_OF_COMPILATION_STR;
+constexpr std::string_view TimeOfCompilationUnix =
+    QLEVER_TIME_OF_COMPILATION_UNIX_STR;
+constexpr std::string_view ProjectVersion = QLEVER_PROJECT_VERSION_STR;
+constexpr std::string_view Compiler = QLEVER_COMPILER_ID;
+constexpr std::string_view CompilerVersion = QLEVER_COMPILER_VERSION;
+constexpr std::string_view CxxStandard = QLEVER_CXX_STANDARD;
+
+void copyVersionInfo() {
+  *gitShortHashWithoutLinking.wlock() = GitShortHash;
+  *datetimeOfCompilationWithoutLinking.wlock() = DatetimeOfCompilation;
+  *timeOfCompilationUnixWithoutLinking.wlock() = TimeOfCompilationUnix;
+  *projectVersionWithoutLinking.wlock() = ProjectVersion;
+  *compilerWithoutLinking.wlock() = Compiler;
+  *compilerVersionWithoutLinking.wlock() = CompilerVersion;
+  *cxxStandardWithoutLinking.wlock() = CxxStandard;
+}
+}  // namespace qlever::version

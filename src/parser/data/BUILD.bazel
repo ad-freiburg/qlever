@@ -1,0 +1,32 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `src/parser/data/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory, see `//src:qlever_hdrs`.
+cc_library(
+    name = "headers",
+    hdrs = glob(["**/*.h"]),
+    strip_include_prefix = "/src",
+)
+
+# `src/parser/CMakeLists.txt` compiles `data/SparqlFilter.cpp` into the `parser`
+# library rather than into `parserData`. In Bazel a target may only use sources
+# from its own package, so the file is exported for `//src/parser:parser`.
+exports_files(["SparqlFilter.cpp"])
+
+qlever_cc_library(
+    name = "parserData",
+    srcs = ["BlankNode.cpp"],
+)

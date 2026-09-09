@@ -1,0 +1,93 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `src/parser/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory, see `//src:qlever_hdrs`.
+cc_library(
+    name = "headers",
+    hdrs = glob(["**/*.h"]),
+    strip_include_prefix = "/src",
+)
+
+# `src/index/CMakeLists.txt` compiles these three files into the `index` library
+# instead of into a library of their own, because a separate library would be a
+# cyclic dependency; see the long comment there. In Bazel a target may only use
+# sources from its own package, so they are exported for `//src/index:index`.
+exports_files([
+    "AsyncFileBlockDriver.cpp",
+    "RdfParser.cpp",
+    "TripleComponent.cpp",
+])
+
+# These files are needed by `index`, but the `parser` library below itself
+# depends on `index`, so the dependency chain is
+# `parser` -> `index` -> `basicParser`. They therefore have to live in their own
+# library instead of in `parser`.
+qlever_cc_library(
+    name = "basicParser",
+    srcs = [
+        "AsyncBlockSource.cpp",
+        "LiteralOrIri.cpp",
+        "Tokenizer.cpp",
+        "WordsAndDocsFileParser.cpp",
+    ],
+    deps = [
+        "//src/parser/data:parserData",
+        "//src/rdfTypes",
+        "//src/util:qlever_util",
+    ],
+)
+
+# TODO: Consider moving files that don't depend on the engine (sparqlExpressions,
+# index) into basicParser or a new intermediate library to clean up the
+# dependency graph.
+qlever_cc_library(
+    name = "parser",
+    srcs = [
+        "DatasetClauses.cpp",
+        "ExternalValuesQuery.cpp",
+        "GraphPattern.cpp",
+        "GraphPatternAnalysis.cpp",
+        "GraphPatternOperation.cpp",
+        "MagicServiceQuery.cpp",
+        "MaterializedViewQuery.cpp",
+        "NamedCachedResult.cpp",
+        "ParsedQuery.cpp",
+        "PathQuery.cpp",
+        "PayloadVariables.cpp",
+        "PropertyPath.cpp",
+        "Quads.cpp",
+        "SelectClause.cpp",
+        "SparqlParser.cpp",
+        "SparqlParserHelpers.cpp",
+        "SpatialQuery.cpp",
+        "TextSearchQuery.cpp",
+        "UpdateTriples.cpp",
+        "VariableCounter.cpp",
+        "//src/parser/data:SparqlFilter.cpp",
+        "//src/parser/sparqlParser:SparqlQleverVisitor.cpp",
+    ],
+    deps = [
+        ":basicParser",
+        "//src/engine/sparqlExpressions",
+        "//src/global",
+        "//src/index",
+        "//src/parser/data:parserData",
+        "//src/parser/sparqlParser",
+        "//src/rdfTypes",
+        "//src/rdfTypes:rdfEscaping",
+        "//src/util:qlever_util",
+    ],
+)

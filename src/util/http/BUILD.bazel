@@ -1,0 +1,70 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `src/util/http/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory, see `//src:qlever_hdrs`.
+cc_library(
+    name = "headers",
+    hdrs = glob(["**/*.h"]),
+    strip_include_prefix = "/src",
+)
+
+qlever_cc_library(
+    name = "mediaTypes",
+    srcs = ["MediaTypes.cpp"],
+    # `CMakeLists.txt` sets this as a `PUBLIC` compile option, i.e. it also
+    # applies to everything that links `mediaTypes`. Bazel does not propagate
+    # `copts`, so this only covers `MediaTypes.cpp` itself. That is enough
+    # because QLever does not compile with `-Werror`.
+    copts = ["-Wno-attributes"],
+    deps = [
+        "//src/util:qlever_util",
+        "//src/util/http/HttpParser:httpParser",
+    ],
+)
+
+# When `--//bazel:reduced_feature_set_for_cpp17` is set, this library is empty.
+# `CMakeLists.txt` does not define it at all in that case, but a Bazel target
+# cannot be defined conditionally, because the build settings are only resolved
+# after the `BUILD` files have been loaded. Emptying the sources has the same
+# effect: the C++20-only code is not compiled, and nothing refers to its symbols
+# because the two operations that use them, `Service` and `Load`, are disabled by
+# the same setting.
+qlever_cc_library(
+    name = "http",
+    srcs = select({
+        "//bazel:reduced_feature_set_for_cpp17_enabled": [],
+        "//conditions:default": [
+            "HttpClient.cpp",
+            "HttpServer.cpp",
+            "HttpUtils.cpp",
+            "UrlParser.cpp",
+            "websocket/MessageSender.cpp",
+            "websocket/QueryHub.cpp",
+            "websocket/QueryToSocketDistributor.cpp",
+            "websocket/UpdateFetcher.cpp",
+            "websocket/WebSocketSession.cpp",
+        ],
+    }),
+    deps = [
+        ":mediaTypes",
+        "//src/parser",
+        "//src/util:qlever_util",
+        "//src/util/http/HttpParser:httpParser",
+        "//src/util/metrics",
+        "@boost.iostreams",
+        "@openssl",
+    ],
+)
