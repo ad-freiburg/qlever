@@ -20,6 +20,7 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/ChunkedForLoop.h"
+#include "util/TypeIdentity.h"
 
 namespace sparqlExpression::detail::homogeneousNumeric {
 
@@ -41,10 +42,11 @@ enum class HomogeneousNumericType {
   Other,
 };
 
-struct HomogeneousNumericTypes {
-  HomogeneousNumericType left;
-  HomogeneousNumericType right;
-};
+// Map homogeneous numeric datatypes to their primitive C++ types.
+using ad_utility::use_type_identity::ti;
+inline constexpr auto homogeneousNumericTypeMap =
+    std::tuple{std::pair{HomogeneousNumericType::Int, ti<int64_t>},
+               std::pair{HomogeneousNumericType::Double, ti<double>}};
 
 // Whether a value getter can participate in the homogeneous numeric fast path.
 template <typename ValueGetter>
@@ -135,14 +137,12 @@ inline HomogeneousNumericType classifyNumericOperand(
   }
 }
 
-// Classify both operands by their homogeneous numeric datatype.
-template <typename Left, typename Right>
-inline HomogeneousNumericTypes classifyNumericOperands(
-    const Left& left, const Right& right, EvaluationContext* context) {
-  return {
-      classifyNumericOperand(left, context),
-      classifyNumericOperand(right, context),
-  };
+// Classify all operands by their homogeneous numeric datatype.
+template <typename... Operands>
+inline auto classifyNumericOperands(EvaluationContext* context,
+                                    const Operands&... operands) {
+  return std::array<HomogeneousNumericType, sizeof...(Operands)>{
+      classifyNumericOperand(operands, context)...};
 }
 
 // Extract the primitive numeric value from a `ValueId` whose datatype was
@@ -200,14 +200,17 @@ using RawNumericFunctionT = typename RawNumericFunction<Function>::type;
 
 // Map a homogeneous numeric type to the corresponding compile-time index used
 // for dispatching to the primitive C++ numeric type.
+template <size_t I = 0>
 inline int homogeneousNumericTypeToIndex(HomogeneousNumericType type) {
-  AD_CORRECTNESS_CHECK(type != HomogeneousNumericType::Other);
-  return type == HomogeneousNumericType::Int ? 0 : 1;
+  if constexpr (I == std::tuple_size_v<decltype(homogeneousNumericTypeMap)>) {
+    AD_FAIL();
+  } else {
+    if (std::get<I>(homogeneousNumericTypeMap).first == type) {
+      return static_cast<int>(I);
+    }
+    return homogeneousNumericTypeToIndex<I + 1>(type);
+  }
 }
-
-// The primitive C++ type corresponding to a homogeneous numeric type index.
-template <int I>
-using NumericTypeFromIndex = std::conditional_t<I == 0, int64_t, double>;
 
 // Dispatch runtime homogeneous numeric types to compile-time primitive numeric
 // types and invoke the supplied function with those types.
@@ -221,11 +224,15 @@ decltype(auto) dispatchHomogeneousNumericTypes(
                           return homogeneousNumericTypeToIndex(type);
                         });
 
-  return ad_utility::callFixedSizeVi<1>(indices, [function = AD_FWD(function)](
-                                                     auto... typeIndices) {
-    return function(std::type_identity<
-                    NumericTypeFromIndex<decltype(typeIndices)::value>>{}...);
-  });
+  constexpr int maxIndex =
+      std::tuple_size_v<decltype(homogeneousNumericTypeMap)> - 1;
+
+  return ad_utility::callFixedSizeVi<maxIndex>(
+      indices, [function = AD_FWD(function)](auto... typeIndices) {
+        return function(
+            std::get<decltype(typeIndices)::value>(homogeneousNumericTypeMap)
+                .second...);
+      });
 }
 
 // Evaluate a homogeneous numeric operation when at least one operand is
@@ -256,10 +263,12 @@ ExpressionResult evaluateHomogeneousNumericOperation(
   FastFunction function;
 
   // Create one primitive numeric getter for every operand.
-  auto getters = [&]<size_t... Is>(std::index_sequence<Is...>) {
-    return std::tuple{
-        makeHomogeneousNumericGetter<NumericTypes>(std::get<Is>(operands))...};
-  }(std::index_sequence_for<Operands...>{});
+  auto getters = std::apply(
+      [](const auto&... operand) {
+        return std::tuple{
+            makeHomogeneousNumericGetter<NumericTypes>(operand)...};
+      },
+      operands);
 
   VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(context->size());

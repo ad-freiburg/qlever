@@ -96,13 +96,13 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                   supportsHomogeneousNumericFastPath<RightValueGetter> &&
                   supportsHomogeneousNumericOperand<Left>() &&
                   supportsHomogeneousNumericOperand<Right>()) {
-      const auto types = classifyNumericOperands(left, right, context);
+      const auto types = classifyNumericOperands(context, left, right);
 
-      if (types.left != HomogeneousNumericType::Other &&
-          types.right != HomogeneousNumericType::Other) {
+      if (ql::ranges::all_of(types, [](HomogeneousNumericType type) {
+            return type != HomogeneousNumericType::Other;
+          })) {
         return dispatchHomogeneousNumericTypes(
-            std::array{types.left, types.right},
-            [&](auto leftType, auto rightType) -> ExpressionResult {
+            types, [&](auto leftType, auto rightType) -> ExpressionResult {
               using LeftNumericType = typename decltype(leftType)::type;
               using RightNumericType = typename decltype(rightType)::type;
 

@@ -66,8 +66,10 @@ class HomogeneousNumericExpressionHelpersTest : public ::testing::Test {
 
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedValueGetters) {
+  struct UnsupportedValueGetter {};
   static_assert(supportsHomogeneousNumericFastPath<NumericValueGetter>);
   static_assert(supportsHomogeneousNumericFastPath<NumericOrDateValueGetter>);
+  static_assert(!supportsHomogeneousNumericFastPath<UnsupportedValueGetter>);
 }
 
 // _____________________________________________________________________________
@@ -112,14 +114,21 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifyOperands) {
   std::array<ValueId, 3> ints{I(1), I(2), I(3)};
   std::array<ValueId, 3> doubles{D(1.0), D(2.0), D(3.0)};
 
-  const auto types =
-      classifyNumericOperands(ql::span<const ValueId>{ints},
-                              ql::span<const ValueId>{doubles}, &context_);
+  auto intsSpan = ql::span<const ValueId>{ints};
+  auto doublesSpan = ql::span<const ValueId>{doubles};
 
-  EXPECT_EQ(types.left, HomogeneousNumericType::Int);
-  EXPECT_EQ(types.right, HomogeneousNumericType::Double);
+  const auto types = classifyNumericOperands(&context_, intsSpan, doublesSpan);
+
+  EXPECT_EQ(types[0], HomogeneousNumericType::Int);
+  EXPECT_EQ(types[1], HomogeneousNumericType::Double);
+
+  const auto ternaryTypes =
+      classifyNumericOperands(&context_, intsSpan, doublesSpan, I(1));
+
+  EXPECT_EQ(ternaryTypes[0], HomogeneousNumericType::Int);
+  EXPECT_EQ(ternaryTypes[1], HomogeneousNumericType::Double);
+  EXPECT_EQ(ternaryTypes[2], HomogeneousNumericType::Int);
 }
-
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, GetHomogeneousNumericValue) {
   EXPECT_EQ(getHomogeneousNumericValue<int64_t>(I(-42)), -42);

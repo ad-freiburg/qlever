@@ -200,11 +200,10 @@ void classifyRepeatedly(const Left& left, const Right& right,
                         NumericType expectedLeft, NumericType expectedRight) {
   for (size_t repetition = 0; repetition < repetitions; ++repetition) {
     const auto classification =
-        sparqlExpression::detail::homogeneousNumeric::classifyNumericOperands(
-            left, right, &context);
+        sparqlExpression::detail::homogeneousNumeric::classifyNumericOperands(&context, left, right);
 
-    AD_CORRECTNESS_CHECK(classification.left == expectedLeft);
-    AD_CORRECTNESS_CHECK(classification.right == expectedRight);
+    AD_CORRECTNESS_CHECK(classification[0] == expectedLeft);
+    AD_CORRECTNESS_CHECK(classification[1] == expectedRight);
   }
 }
 
