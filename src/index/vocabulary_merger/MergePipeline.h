@@ -75,12 +75,11 @@ class VocabularyMergePipelineImpl {
       VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Writing the merged vocabulary"};
 
  public:
-  // Create the pipeline. The `basename` and the `partialVocabularySuffixes`
+  // Create the pipeline. The `basename` and the `numPartialVocabularies`
   // determine the files of the partial ID maps (see `IdMapBatchWriter`).
-  VocabularyMergePipelineImpl(
-      const std::string& basename,
-      const std::vector<std::string>& partialVocabularySuffixes)
-      : idMapBatchWriter_{basename, partialVocabularySuffixes} {}
+  VocabularyMergePipelineImpl(const std::string& basename,
+                              size_t numPartialVocabularies)
+      : idMapBatchWriter_{basename, numPartialVocabularies} {}
 
   // Asynchronously process a single `batch` of merged words: write its
   // distinct words to the vocabulary (via the `wordCallback` and the

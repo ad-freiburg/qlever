@@ -57,8 +57,9 @@ constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
 
 // The infix of the (compressed) files that hold the parsed triples with their
 // partial IDs, before they are sorted into the permutations. There is one such
-// file per worker thread; it is written batch by batch (one batch per partial
-// vocabulary) and read back in the same order.
+// file per partial vocabulary, holding exactly the triples that were mapped
+// using it (see `unsortedTriplesFilename` in
+// `index/PartialVocabularyFilenames.h`).
 constexpr inline std::string_view UNSORTED_TRIPLES_INFIX = ".unsorted-triples.";
 
 // _________________________________________________________________

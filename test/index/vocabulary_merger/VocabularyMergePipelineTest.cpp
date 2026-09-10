@@ -50,8 +50,7 @@ class ThrowingIdMapBatchWriter {
   // Same interface as the `IdMapBatchWriter`, but the arguments are ignored
   // (nothing is written, so there also are no files to clean up).
   ThrowingIdMapBatchWriter([[maybe_unused]] const std::string& basename,
-                           [[maybe_unused]] const std::vector<std::string>&
-                               partialVocabularySuffixes) {}
+                           [[maybe_unused]] size_t numPartialVocabularies) {}
 
   void writeBatch([[maybe_unused]] const IdMapBatch& batch) {
     throw std::runtime_error{"The ID map could not be written"};
@@ -119,7 +118,8 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
 
   VocabularyMetaData metaData;
   {
-    VocabularyMergePipeline pipeline{partialVocabBasename, filenames.suffixes_};
+    VocabularyMergePipeline pipeline{partialVocabBasename,
+                                     filenames.numPartialVocabularies_};
     WordBatchBuilder builder;
     auto push = makePush(pipeline, wordCallback, noRegexes);
     // `"a"` is only in the first partial vocabulary, `"b"` in both (and
@@ -151,7 +151,8 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
 TEST(VocabularyMergePipeline, noBatches) {
   auto [filenames, cleanup] =
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
-  VocabularyMergePipeline pipeline{partialVocabBasename, filenames.suffixes_};
+  VocabularyMergePipeline pipeline{partialVocabBasename,
+                                   filenames.numPartialVocabularies_};
   auto metaData = pipeline.finish();
   EXPECT_EQ(metaData.numWordsTotal(), 0u);
   EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]), ::testing::IsEmpty());
@@ -173,7 +174,8 @@ TEST(VocabularyMergePipeline, exceptionFromAStageIsPropagated) {
   };
   ad_utility::RegexSet noRegexes;
 
-  VocabularyMergePipeline pipeline{partialVocabBasename, filenames.suffixes_};
+  VocabularyMergePipeline pipeline{partialVocabBasename,
+                                   filenames.numPartialVocabularies_};
   expectFailureIsPropagated(pipeline, wordCallback, noRegexes,
                             "could not be written");
   // A batch that is pushed after the failure is skipped, so the callback is
@@ -192,7 +194,7 @@ TEST(VocabularyMergePipeline, exceptionFromTheIdMapWritingIsPropagated) {
   ad_utility::RegexSet noRegexes;
 
   VocabularyMergePipelineImpl<ThrowingIdMapBatchWriter> pipeline{
-      partialVocabBasename, {"0"}};
+      partialVocabBasename, 1};
   expectFailureIsPropagated(
       pipeline, wordCallback, noRegexes, "ID map could not be written",
       [&vocabulary] {

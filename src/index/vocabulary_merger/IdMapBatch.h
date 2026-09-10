@@ -10,15 +10,13 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_IDMAPBATCH_H
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_IDMAPBATCH_H
 
-#include <absl/strings/str_cat.h>
-
 #include <cstddef>
 #include <string>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "global/Id.h"
-#include "index/ConstantsIndexBuilding.h"
+#include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/WordBatch.h"
 #include "util/Log.h"
@@ -50,23 +48,22 @@ class IdMapBatchWriter {
   std::vector<IdMapWriter> idMapWriters_;
 
  public:
-  // Create the ID map for each of the partial vocabularies. The filenames are
-  // `basename + PARTIAL_VOCAB_IDMAP_INFIX + suffix` for each `suffix` in
-  // `partialVocabularySuffixes`.
+  // Create the ID map for each of the partial vocabularies, in the files
+  // `partialVocabularyIdMapFilename(basename, idx)` for each `idx` in
+  // `[0, numPartialVocabularies)`.
   // NOTE: That the number of partial vocabularies fits into the `uint32_t` of
   // a `LocalIdxToBatchMapping` is checked by `mergeVocabulary` (see
   // `index/VocabularyMergerImpl.h`).
-  IdMapBatchWriter(const std::string& basename,
-                   const std::vector<std::string>& partialVocabularySuffixes) {
+  IdMapBatchWriter(const std::string& basename, size_t numPartialVocabularies) {
     // NOTE: We deliberately use the range constructor of `std::vector` and not
     // `::ranges::to_vector`. The latter goes via `std::vector::assign`, which
     // requires the elements to be assignable, which an `IdMapWriter`
     // deliberately is not (see `index/vocabulary_merger/IdMap.h`).
-    auto writers = partialVocabularySuffixes |
-                   ql::views::transform([&basename](const std::string& suffix) {
-                     return makeIdMapWriter(absl::StrCat(
-                         basename, PARTIAL_VOCAB_IDMAP_INFIX, suffix));
-                   });
+    auto writers =
+        partialVocabularyIdMapFilenames(basename, numPartialVocabularies) |
+        ql::views::transform([](const std::string& filename) {
+          return makeIdMapWriter(filename);
+        });
     idMapWriters_ = std::vector<IdMapWriter>(ql::ranges::begin(writers),
                                              ql::ranges::end(writers));
   }

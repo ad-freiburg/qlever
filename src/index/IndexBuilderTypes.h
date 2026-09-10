@@ -15,7 +15,6 @@
 #define QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 
 #include <absl/container/inlined_vector.h>
-#include <absl/strings/str_cat.h>
 
 #include <atomic>
 #include <memory>
@@ -382,48 +381,15 @@ MappedTriples mapTripleToIds(
 
 // Return type of `IndexImpl::buildPartialVocabularies`.
 struct BuildPartialVocabulariesResult {
-  // The partial vocabularies that a single worker thread has created. The
-  // workers work completely independently of each other, so each of them
-  // writes its triples to its own file (see
-  // `IndexImpl::unsortedTriplesFilename`).
-  struct WorkerResult {
-    // The file to which this worker has serialized its triples.
-    std::string triplesFilename_;
-    // The suffixes of the partial vocabularies (see `partialVocabularySuffix`)
-    // that this worker has written, in the order in which the corresponding
-    // batches of triples appear in `triplesFilename_`. A batch consists of a
-    // partial vocabulary and the triples that were mapped using it; each batch
-    // is prefixed with its number of triples, so that the reader doesn't need
-    // any further bookkeeping.
-    std::vector<std::string> partialVocabularySuffixes_;
-    // The total number of triples that this worker has written. Only used for
-    // logging.
-    size_t numTriples_ = 0;
-  };
-  // One entry per worker, in the order of the worker indices.
-  std::vector<WorkerResult> workerResults_;
-
-  // The suffix of the filenames of the `partialVocabIdx`-th partial vocabulary
-  // of the worker with index `workerIdx`. The partial vocabularies are named
-  // after the worker that created them, so that the workers don't need a shared
-  // counter for the filenames.
-  static std::string partialVocabularySuffix(size_t workerIdx,
-                                             size_t partialVocabIdx) {
-    return absl::StrCat(workerIdx, ".", partialVocabIdx);
-  }
-
-  // The suffixes of all partial vocabularies that were written, in the order in
-  // which the corresponding triples are stored (that is, first all the partial
-  // vocabularies of the first worker, then those of the second worker, etc.).
-  std::vector<std::string> partialVocabularySuffixes() const {
-    std::vector<std::string> suffixes;
-    for (const auto& workerResult : workerResults_) {
-      const auto& workerSuffixes = workerResult.partialVocabularySuffixes_;
-      suffixes.insert(suffixes.end(), workerSuffixes.begin(),
-                      workerSuffixes.end());
-    }
-    return suffixes;
-  }
+  // The number of partial vocabularies that were written. Each partial
+  // vocabulary has exactly one file with the ID triples that were mapped using
+  // it (see `IndexImpl::unsortedTriplesFilename`), so the partial vocabulary
+  // with index `i` and the triples in the file with index `i` always belong
+  // together. The workers that write those pairs work completely independently
+  // of each other; they only share the counter for the indices.
+  size_t numPartialVocabularies_ = 0;
+  // The total number of triples that were written. Only used for logging.
+  size_t numTriples_ = 0;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H

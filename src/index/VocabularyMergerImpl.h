@@ -31,8 +31,7 @@
 namespace ad_utility::vocabulary_merger {
 // _________________________________________________________________
 template <typename W, typename C>
-auto mergeVocabulary(const std::string& basename,
-                     const std::vector<std::string>& partialVocabularySuffixes,
+auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      W comparator, C& wordCallback,
                      ad_utility::MemorySize memoryToUse,
                      const ad_utility::RegexSet& blankNodeIriRegexes)
@@ -47,11 +46,9 @@ auto mergeVocabulary(const std::string& basename,
   };
 
   // Open and prepare all the input files.
-  auto makeWordRangeFromFile = [&basename,
-                                &partialVocabularySuffixes](size_t fileIndex) {
+  auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
     ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX,
-                     partialVocabularySuffixes.at(fileIndex))};
+        partialVocabularyWordsFilename(basename, fileIndex)};
     uint64_t numWords;
     infile >> numWords;
 
@@ -65,23 +62,22 @@ auto mergeVocabulary(const std::string& basename,
         }};
   };
   std::vector<decltype(makeWordRangeFromFile(0))> generators;
-  generators.reserve(partialVocabularySuffixes.size());
+  generators.reserve(numPartialVocabularies);
   // The index of the partial vocabulary that a merged word comes from is
   // stored in 32 bits (see `detail::LocalIdxToBatchMapping`). NOTE: This check
   // is done here (and not per merged word, which would be on the hot path of
   // the merging), because `partialFileId_` is always one of the indices below.
-  AD_CORRECTNESS_CHECK(partialVocabularySuffixes.size() <=
+  AD_CORRECTNESS_CHECK(numPartialVocabularies <=
                        std::numeric_limits<uint32_t>::max());
 
-  for (std::size_t i :
-       ad_utility::integerRange(partialVocabularySuffixes.size())) {
+  for (std::size_t i : ad_utility::integerRange(numPartialVocabularies)) {
     generators.push_back(makeWordRangeFromFile(i));
   }
 
   // The stages of the pipeline. The `batchBuilder` (the first stage) runs on
   // this thread, the `pipeline` owns the three stages that run concurrently to
   // it.
-  detail::VocabularyMergePipeline pipeline{basename, partialVocabularySuffixes};
+  detail::VocabularyMergePipeline pipeline{basename, numPartialVocabularies};
   detail::WordBatchBuilder batchBuilder;
   auto batchCallback = [&pipeline, &wordCallback,
                         &blankNodeIriRegexes](detail::WordBatch batch) {
@@ -135,7 +131,7 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
 // ________________________________________________________________________________________________________
 inline void writeMappedIdsToExtVec(
     std::vector<std::array<Id, NumColumnsIndexBuilding>> input,
-    const HashMap<uint64_t, uint64_t>& map, TripleWriter& writer) {
+    const HashMap<uint64_t, uint64_t>& map, const std::string& filename) {
   for (auto& curTriple : input) {
     for (Id& id : curTriple) {
       if (id.getDatatype() != Datatype::VocabIndex) {
@@ -149,10 +145,14 @@ inline void writeMappedIdsToExtVec(
       id = Id::makeFromVocabIndex(VocabIndex::make(iterator->second));
     }
   }
+  TripleWriter writer{ad_utility::serialization::FileWriteSerializer{filename}};
   // Serialize the whole batch as a single vector. This prepends the number of
   // triples, so that the reader can read back exactly this batch without any
   // external bookkeeping (see `IndexImpl::convertPartialToGlobalIds`).
   writer << input;
+  // Flush the remaining buffered triples and close the file, so that it can be
+  // read back by `IndexImpl::convertPartialToGlobalIds`.
+  writer.close();
 }
 
 // _________________________________________________________________________________________________________
