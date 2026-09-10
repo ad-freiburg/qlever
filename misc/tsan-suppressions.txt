@@ -16,5 +16,10 @@
 # commit 92410f933e ("Fix thread sanitizer warnings due to atomic thread
 # fences"), which is contained in Boost 1.92. Remove the following two entries
 # once the CI uses at least that version.
+# NOTE: Either entry alone suffices, because a `race:` entry matches any frame
+# of either of the two reported stacks. The second one is a fallback for the
+# case that TSAN cannot restore the stack of the previous access (the
+# decrementing thread), because `ref_count_down` has already returned when the
+# other thread runs `delete`, so it does not appear in the deleting stack.
 race:boost::asio::detail::ref_count_down
 race:boost::asio::execution::detail::shared_target_executor::~shared_target_executor
