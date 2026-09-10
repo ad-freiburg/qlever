@@ -11,6 +11,7 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_BINARYEXPRESSION_H
 
 #include <array>
+#include <tuple>
 #include <utility>
 
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
@@ -92,6 +93,8 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                         isConstantResult<LeftType>) &&
                        (isVectorResult<RightType> ||
                         isConstantResult<RightType>)) {
+    // Use the homogeneous numeric fast path when both operands and value
+    // getters support it.
     if constexpr (supportsHomogeneousNumericFastPath<LeftValueGetter> &&
                   supportsHomogeneousNumericFastPath<RightValueGetter> &&
                   supportsHomogeneousNumericOperand<Left>() &&

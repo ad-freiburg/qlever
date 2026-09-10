@@ -200,7 +200,8 @@ void classifyRepeatedly(const Left& left, const Right& right,
                         NumericType expectedLeft, NumericType expectedRight) {
   for (size_t repetition = 0; repetition < repetitions; ++repetition) {
     const auto classification =
-        sparqlExpression::detail::homogeneousNumeric::classifyNumericOperands(&context, left, right);
+        sparqlExpression::detail::homogeneousNumeric::classifyNumericOperands(
+            &context, left, right);
 
     AD_CORRECTNESS_CHECK(classification[0] == expectedLeft);
     AD_CORRECTNESS_CHECK(classification[1] == expectedRight);
@@ -292,6 +293,37 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     validateResult(*newVectorVector, benchmarkContext.context, numRows);
     validateResult(*legacyVectorConstant, benchmarkContext.context, numRows);
     validateResult(*newVectorConstant, benchmarkContext.context, numRows);
+
+    // Warm up the homogeneous numeric benchmark paths.
+    auto warmUpHomogeneousCase = [&](const auto& left, const auto& right,
+                                     NumericType leftType,
+                                     NumericType rightType) {
+      evaluateGenericBinaryAddCoreRepeatedly(left, right,
+                                             benchmarkContext.context, 1);
+      evaluateBinaryAddCoreRepeatedly(left, right, benchmarkContext.context, 1);
+      classifyRepeatedly(left, right, benchmarkContext.context, 1, leftType,
+                         rightType);
+    };
+
+    warmUpHomogeneousCase(leftIds, rightIds, NumericType::Int,
+                          NumericType::Int);
+    warmUpHomogeneousCase(doubleLeft, doubleRight, NumericType::Double,
+                          NumericType::Double);
+    warmUpHomogeneousCase(leftIds, constantTwo, NumericType::Int,
+                          NumericType::Int);
+    warmUpHomogeneousCase(doubleLeft, constantTwoDouble, NumericType::Double,
+                          NumericType::Double);
+
+    // Warm up the generic fallback benchmark paths.
+    auto warmUpMixedCase = [&](const auto& left, const auto& right) {
+      evaluateGenericBinaryAddCoreRepeatedly(left, right,
+                                             benchmarkContext.context, 1);
+      evaluateBinaryAddCoreRepeatedly(left, right, benchmarkContext.context, 1);
+    };
+
+    warmUpMixedCase(mismatchEarly, rightIds);
+    warmUpMixedCase(mismatchMiddle, rightIds);
+    warmUpMixedCase(mismatchLate, rightIds);
 
     BenchmarkResults results{};
 

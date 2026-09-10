@@ -492,14 +492,21 @@ TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
   testPlus(V<Id>{{D(1.5), D(0.0), D(1.5)}, alloc}, ints, doubles);
   testPlus(V<Id>{{D(1.0), D(4.0), D(-3.0)}, alloc}, doubles, doubles);
 
-  // Vector-constant and constant-vector. `testPlus` is commutative, so each
-  // call checks both operand orders.
+  // Vector-constant and constant-vector. `testPlus` checks both operand orders.
   testPlus(V<Id>{{I(3), I(0), I(5)}, alloc}, ints, I(2));
   testPlus(V<Id>{{D(2.5), D(4.0), D(0.5)}, alloc}, doubles, D(2.0));
 
-  // Exercise the MakeNumericExpression -> NumericIdWrapper fast-path mapping.
+  // Exercise the `MakeNumericExpression` -> `NumericIdWrapper` fast-path
+  // mapping.
   testMultiply(V<Id>{{I(2), I(-4), I(6)}, alloc}, ints, I(2));
   testMultiply(V<Id>{{D(0.5), D(-4.0), D(-4.5)}, alloc}, ints, doubles);
+
+  // Preserve `NanOrInfToUndef` in the homogeneous numeric fast path.
+  testDivide(V<Id>{{U, U, U}, alloc}, ints, I(0));
+
+  // A mixed numeric vector must fall back to the generic path.
+  V<Id> mixed{{I(1), D(2.0), I(3)}, alloc};
+  testPlus(V<Id>{{I(2), D(3.0), I(4)}, alloc}, mixed, I(1));
 }
 
 // _____________________________________________________________________________________

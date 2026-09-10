@@ -10,9 +10,11 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_HOMOGENEOUSNUMERICEXPRESSIONHELPERS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_HOMOGENEOUSNUMERICEXPRESSIONHELPERS_H
 
+#include <array>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -32,7 +34,7 @@ namespace sparqlExpression::detail::homogeneousNumeric {
 // integers or only doubles, these helpers first classify the complete operand
 // and then evaluate the expression using the corresponding primitive C++
 // types. Mixed or non-numeric operands are handled by the generic
-// BinaryExpression path.
+// `BinaryExpression` path.
 
 // The numeric type shared by all elements of an operand. `Other` represents
 // mixed numeric types as well as non-numeric values.
@@ -43,10 +45,11 @@ enum class HomogeneousNumericType {
 };
 
 // Map homogeneous numeric datatypes to their primitive C++ types.
-using ad_utility::use_type_identity::ti;
 inline constexpr auto homogeneousNumericTypeMap =
-    std::tuple{std::pair{HomogeneousNumericType::Int, ti<int64_t>},
-               std::pair{HomogeneousNumericType::Double, ti<double>}};
+    std::tuple{std::pair{HomogeneousNumericType::Int,
+                         ad_utility::use_type_identity::ti<int64_t>},
+               std::pair{HomogeneousNumericType::Double,
+                         ad_utility::use_type_identity::ti<double>}};
 
 // Whether a value getter can participate in the homogeneous numeric fast path.
 template <typename ValueGetter>
@@ -71,10 +74,7 @@ constexpr bool supportsHomogeneousNumericOperand() {
   }
 }
 
-// Classify all values in a span as integer, double, or other. The complete
-// span is scanned without datatype-dependent early exits so that a successful
-// classification enables a single typed dispatch for the subsequent
-// evaluation loop.
+// Classify all values in a span as integer, double, or other.
 inline HomogeneousNumericType classifyNumericOperand(
     ql::span<const ValueId> values, EvaluationContext* context) {
   // An empty vector has no meaningful homogeneous numeric type.
@@ -176,7 +176,7 @@ auto makeHomogeneousNumericGetter(const Operand& operand) {
 
     const auto value = getHomogeneousNumericValue<NumericType>(operand);
 
-    return [value](size_t) { return value; };
+    return [value]([[maybe_unused]] size_t index) { return value; };
   }
 }
 
@@ -289,4 +289,4 @@ ExpressionResult evaluateHomogeneousNumericOperation(
 
 }  // namespace sparqlExpression::detail::homogeneousNumeric
 
-#endif
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_HOMOGENEOUSNUMERICEXPRESSIONHELPERS_H

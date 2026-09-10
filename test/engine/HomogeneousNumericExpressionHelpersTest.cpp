@@ -9,6 +9,11 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+#include <memory>
+#include <tuple>
+#include <variant>
+
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
@@ -129,6 +134,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifyOperands) {
   EXPECT_EQ(ternaryTypes[1], HomogeneousNumericType::Double);
   EXPECT_EQ(ternaryTypes[2], HomogeneousNumericType::Int);
 }
+
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, GetHomogeneousNumericValue) {
   EXPECT_EQ(getHomogeneousNumericValue<int64_t>(I(-42)), -42);
@@ -174,6 +180,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   EXPECT_EQ((*resultVector)[2], I(9));
 }
 
+// _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        DispatchHomogeneousNumericTypes) {
   auto result = dispatchHomogeneousNumericTypes(
