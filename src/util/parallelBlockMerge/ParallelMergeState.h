@@ -33,7 +33,6 @@
 #include <utility>
 
 #include "backports/asio.h"
-#include "backports/concepts.h"
 #include "util/AsyncResourcePool.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
@@ -126,10 +125,9 @@ inline void logIgnoredException(std::exception_ptr exception,
 // outlives them as well. A consumer that abandons the merge has to call
 // `stop()`, so that those coroutines actually finish instead of waiting for a
 // consumer that is gone.
-CPP_template(bool moveElements, typename Input, typename Comparator,
-             typename Sink)(
-    requires InputConcept<Input> CPP_and
-        SinkConcept<Sink, typename Input::Block>) class ParallelMergeState
+template <bool moveElements, typename Input, typename Comparator, typename Sink>
+requires InputConcept<Input> && SinkConcept<Sink, typename Input::Block>
+class ParallelMergeState
     : public std::enable_shared_from_this<
           ParallelMergeState<moveElements, Input, Comparator, Sink>>,
       public ad_utility::NoCopyNoMove {
@@ -292,6 +290,17 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
       // to the chunk.
       auto [errorCode, permit] =
           co_await semaphore_.asyncAcquire(net::as_tuple(net::use_awaitable));
+      // The two conditions below cover the two ways in which a merge ends
+      // early, and this loop is the only waiter on the `semaphore_`, so
+      // whichever of them happens is seen right here:
+      //
+      // * A chunk failed. Its `runChunk` forwards the exception to the sink
+      //   (which stops the merge, see `forwardExceptionToSink`) and only then
+      //   returns its permit, so the acquisition above succeeds and
+      //   `stopRequested()` is `true`.
+      // * The consumer abandoned the merge and called `stop()`. That cancels
+      //   the `semaphore_`, so the acquisition above fails with an `errorCode`
+      //   instead of waiting for a permit that may never come.
       if (errorCode || sink_->stopRequested()) {
         co_return;
       }

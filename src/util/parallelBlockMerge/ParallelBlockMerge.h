@@ -19,12 +19,12 @@
 #include "backports/asio.h"
 #include "backports/concepts.h"
 #include "util/CancellationHandle.h"
+#include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/Views.h"
 #include "util/parallelBlockMerge/BlockSinkPolicy.h"
 #include "util/parallelBlockMerge/ChunkMerger.h"
-#include "util/parallelBlockMerge/MergeExecutor.h"
 #include "util/parallelBlockMerge/MergeHelpers.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/ParallelMergeState.h"
@@ -133,10 +133,16 @@ CPP_template(bool moveElements, typename Input,
 
 // Set up a parallel merge of the presorted runs of `input` according to
 // `comparator` and start it. All the work is scheduled on the `executor`, which
-// somebody else has to run; a default-constructed `executor` means "use
-// `defaultMergeExecutor()`". The output blocks of every chunk are pushed to the
-// sink that `makeSink` creates, see `SinkConcept`. Return the state of the
-// merge, see `detail::ParallelMergeState` for the details.
+// must not be empty and which somebody else has to run. The output blocks of
+// every chunk are pushed to the sink that `makeSink` creates, see
+// `SinkConcept`. Return the state of the merge, see
+// `detail::ParallelMergeState` for the details.
+//
+// NOTE: There deliberately is no default executor, so that the caller stays in
+// control of the threads that its merges run on, and in particular of their
+// shutdown. A caller that has no executor of its own has to create a thread
+// pool (and to keep it alive for at least as long as the merge, see the
+// LIFETIME note below).
 //
 // `makeSink` is called exactly once, as `makeSink(numChunks)`, and has to
 // return a `std::shared_ptr` to a sink that expects that many chunks. It is a
@@ -171,26 +177,22 @@ CPP_template(bool moveElements, typename Input,
 // single chunk is already the serial merge, just performed by a single
 // coroutine on the `executor`, so there is deliberately no serial fast path
 // here.
-CPP_template(bool moveElements, typename Input, typename Comparator,
-             typename SinkFactory)(
-    requires InputConcept<Input> CPP_and
-        SinkFactoryConcept<SinkFactory, typename Input::Block>)
-    std::shared_ptr<detail::ParallelMergeStateFor<
-        moveElements, Input, Comparator,
-        SinkFactory>> parallelBlockMergeToSink(ql::any_io_executor executor,
-                                               Input input,
-                                               Comparator comparator,
-                                               SinkFactory makeSink,
-                                               MergeOptions options = {},
-                                               ad_utility::SharedCancellationHandle
-                                                   cancellationHandle = detail::
-                                                       freshCancellationHandle()) {
+template <bool moveElements, typename Input, typename Comparator,
+          typename SinkFactory>
+requires InputConcept<Input> &&
+             SinkFactoryConcept<SinkFactory, typename Input::Block>
+auto parallelBlockMergeToSink(
+    ql::any_io_executor executor, Input input, Comparator comparator,
+    SinkFactory makeSink, MergeOptions options = {},
+    ad_utility::SharedCancellationHandle cancellationHandle =
+        detail::freshCancellationHandle())
+    -> std::shared_ptr<detail::ParallelMergeStateFor<moveElements, Input,
+                                                     Comparator, SinkFactory>> {
   using Sink = detail::SinkFromFactoryT<SinkFactory>;
   using State =
       detail::ParallelMergeState<moveElements, Input, Comparator, Sink>;
-  if (!executor) {
-    executor = defaultMergeExecutor();
-  }
+  AD_CONTRACT_CHECK(static_cast<bool>(executor),
+                    "The executor of a parallel block merge must not be empty");
   auto chunkBoundaries =
       computeChunkBoundaries(input, comparator, options.targetNumChunks());
   size_t numChunks = chunkBoundaries.size();

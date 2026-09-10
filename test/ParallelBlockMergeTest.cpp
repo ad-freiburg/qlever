@@ -819,6 +819,7 @@ TEST(ParallelBlockMerge, parallelMergeOfElementsThatAreMoved) {
   std::vector<std::vector<CountingString>> runs;
   for (size_t run = 0; run < 4; ++run) {
     std::vector<std::string> values;
+    values.reserve(100);
     for (size_t i = 0; i < 100; ++i) {
       // The runs interleave, so that all of them contribute to (almost) every
       // chunk.
@@ -1064,24 +1065,39 @@ TEST(ParallelBlockMerge, chunksWithoutAnyOutputBlockStillSendTheirSentinel) {
 }
 
 // _____________________________________________________________________________
-TEST(ParallelBlockMerge, defaultExecutorAndParallelism) {
-  // A default-constructed executor and a `MergeOptions::parallelismHint` of
-  // zero mean "use the process-wide default thread pool of the merge with one
-  // thread per hardware thread", see `MergeExecutor.h`.
+TEST(ParallelBlockMerge, defaultParallelismHint) {
+  // A `MergeOptions::parallelismHint` of zero means "as many threads as the
+  // hardware offers", see `defaultMergeParallelism()`.
   auto runs = makeRandomRuns(4, 200, 300);
   auto expected = sortedConcatenation(runs);
   using Sink = CollectingBlockSink<SizeVec>;
   std::shared_ptr<Sink> sink;
   // NOTE: The merge is set up by hand (and not via `startParallelMerge`),
-  // because it is exactly the default-constructed executor and the default
-  // `MergeOptions::parallelismHint` that are tested here.
+  // because it is exactly the default `MergeOptions::parallelismHint` that is
+  // tested here.
   auto state = parallelBlockMergeToSink<false>(
-      ql::any_io_executor{}, makeVectorInput(runs, 16), std::less<>{},
-      collectingSinkFactory(defaultMergeExecutor(), sink), parallelOptions(16));
+      sharedTestExecutor(), makeVectorInput(runs, 16), std::less<>{},
+      collectingSinkFactory(sharedTestExecutor(), sink), parallelOptions(16));
   EXPECT_GT(state->numChunks(), 1u);
-  // The default pool is shared, so it cannot be joined; wait for the merge
-  // itself instead.
+  // The shared pool of the tests cannot be joined; wait for the merge itself
+  // instead.
   EXPECT_THAT(awaitAndCollect(*sink), ::testing::ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, emptyExecutorIsRejected) {
+  // There deliberately is no default executor, so an empty one is a contract
+  // violation and not an implicit "use some pool of your own".
+  auto runs = makeRandomRuns(2, 20, 30);
+  std::shared_ptr<CollectingBlockSink<SizeVec>> sink;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parallelBlockMergeToSink<false>(
+          ql::any_io_executor{}, makeVectorInput(runs, 8), std::less<>{},
+          collectingSinkFactory(sharedTestExecutor(), sink),
+          parallelOptions(8)),
+      ::testing::HasSubstr("executor of a parallel block merge must not be"));
+  // The merge never got as far as creating its sink.
+  EXPECT_EQ(sink, nullptr);
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

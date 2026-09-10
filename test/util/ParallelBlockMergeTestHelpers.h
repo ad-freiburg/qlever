@@ -32,6 +32,7 @@
 // only it needs.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <atomic>
+#include <boost/asio/thread_pool.hpp>
 #include <exception>
 #include <future>
 #include <mutex>
@@ -171,6 +172,25 @@ static_assert(
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 namespace net = boost::asio;
+
+// Return the executor of a process-wide thread pool with
+// `defaultMergeParallelism()` threads, created lazily on the first call and
+// shared by all callers. It is meant for a test that must not join the pool of
+// its merge, because it waits for that merge via the sink instead (see
+// `CollectingBlockSink::waitUntilAllChunksAreFinished`).
+//
+// NOTE: This is deliberately a test helper and not part of the merge itself.
+// The merge requires an executor that its caller owns and runs, so that the
+// caller stays in control of the threads and of their shutdown; a process-wide
+// pool would take that control away. The threads of the pool here are idle
+// (parked in a condition variable inside Boost.Asio, so they cost no CPU) for
+// as long as there is no work, and the pool is stopped and joined by the
+// destructor of the function-local static at the end of the process.
+inline ql::any_io_executor sharedTestExecutor() {
+  static net::thread_pool pool{
+      ad_utility::parallelBlockMerge::defaultMergeParallelism()};
+  return pool.get_executor();
+}
 
 // Collect the output blocks of a merge in memory, one `std::vector` of blocks
 // per chunk, as an `ad_utility::parallelBlockMerge::SinkConcept`.

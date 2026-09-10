@@ -40,12 +40,10 @@ constexpr inline MemorySize DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY =
 constexpr inline size_t DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD = 4;
 
 // Return the parallelism that a merge assumes if its `MergeOptions` do not
-// specify one, which is one thread per hardware thread. This also is the number
-// of threads that `defaultMergeExecutor()` runs, see `MergeExecutor.h`.
-//
-// NOTE: This lives here (and not next to that executor) because it is the
-// default of a tuning knob, and because it must be available to the
-// `MergeOptions` below, which know nothing about executors.
+// specify one, which is one thread per hardware thread. NOTE: This is a pure
+// tuning default and says nothing about the executor that a merge actually
+// runs on; that executor is always supplied (and owned) by the caller, see
+// `parallelBlockMergeToSink`.
 inline size_t defaultMergeParallelism() {
   return std::max<size_t>(1, std::thread::hardware_concurrency());
 }
