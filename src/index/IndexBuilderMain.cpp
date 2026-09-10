@@ -285,6 +285,18 @@ int main(int argc, char** argv) {
       "among non-encoded IRIs is correct, but the order between encoded "
       "and non-encoded IRIs is not");
 
+  add("encode-as-id-wide",
+      po::value(&config.widePrefixesForIdEncodedIris_)
+          ->composing()
+          ->multitoken(),
+      "Same as `--encode-as-id`, but the digits are stored as a plain binary "
+      "number, which fits longer digit sequences (17 instead of 13 decimal "
+      "digits), at the price of a much smaller prefix budget (at most 4 "
+      "prefixes) and of the order among the affected IRIs being the numeric "
+      "order of the digit sequences, not the lexical order. Digit sequences "
+      "with leading zeros are not encoded. Useful for prefixes whose IRIs "
+      "have more than 13 digits.");
+
   add("iri-as-blank-node-regexes",
       po::value(&config.blankNodeIriRegexes_)->composing()->multitoken(),
       "Space-separated list of regexes. An IRI that is fully matched by one of "

@@ -245,6 +245,116 @@ TEST(EncodedIriManager, cannotAddHarcodedPrefixes) {
 }
 
 // _____________________________________________________________________________
+TEST(EncodedIriManager, WideSimpleExample) {
+  EncodedIriManager em{{"http://narrow.org/N"}, {"http://wide.org/W"}};
+  // A 17-digit number, too long for the narrow layout.
+  std::string wideIri{"<http://wide.org/W10203040506070809>"};
+  auto id = em.encode(wideIri);
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(em.toString(id.value()), wideIri);
+  // The layout bit (the highest of the `NumBitsTotal` data bits) is set.
+  EXPECT_NE(id.value().getEncodedVal() & EncodedIriManager::layoutBitMask_, 0);
+
+  // Narrow prefixes still work and don't set the layout bit.
+  auto narrowId = em.encode("<http://narrow.org/N123>");
+  ASSERT_TRUE(narrowId.has_value());
+  EXPECT_EQ(em.toString(narrowId.value()), "<http://narrow.org/N123>");
+  EXPECT_EQ(
+      narrowId.value().getEncodedVal() & EncodedIriManager::layoutBitMask_, 0);
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, WideEncodingAndDecoding) {
+  EncodedIriManager em{{}, {"http://wide.org/A", "http://wide.org/B"}};
+  uint64_t maxValue = 1;
+  for (size_t i = 0; i < EncodedIriManager::NumDigitsWide; ++i) {
+    maxValue *= 10;
+  }
+  --maxValue;
+  auto values = getRandomIndices(0, maxValue, 10'000);
+  for (auto prefix : {"http://wide.org/A", "http://wide.org/B"}) {
+    std::vector<std::pair<uint64_t, uint64_t>> valuesAndEncodings;
+    for (auto value : values) {
+      std::string iri = absl::StrCat("<", prefix, value, ">");
+      auto id = em.encode(iri);
+      ASSERT_TRUE(id.has_value()) << iri;
+      EXPECT_EQ(em.toString(id.value()), iri);
+      valuesAndEncodings.emplace_back(value, id.value().getBits());
+    }
+    // In the wide layout, the bitwise order is the numeric order.
+    auto cpy = valuesAndEncodings;
+    ql::ranges::sort(valuesAndEncodings, ql::ranges::less{}, ad_utility::first);
+    ql::ranges::sort(cpy, ql::ranges::less{}, ad_utility::second);
+    EXPECT_THAT(valuesAndEncodings, ::testing::ElementsAreArray(cpy));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, WideUnencodable) {
+  EncodedIriManager em{{}, {"http://wide.org/W"}};
+  std::vector<std::string> unencodable = {
+      // Leading zeros cannot be represented in the binary payload.
+      "<http://wide.org/W042>",
+      "<http://wide.org/W00>",
+      // Too many digits (> NumDigitsWide).
+      "<http://wide.org/W123456789012345678>",
+      // Non-digit characters after the prefix.
+      "<http://wide.org/W42a3>",
+      "<notAValidPrefix>",
+      // Missing trailing '>'.
+      "<http://wide.org/W42",
+  };
+  for (const auto& s : unencodable) {
+    EXPECT_FALSE(em.encode(s).has_value()) << s;
+  }
+  // A single "0" has no leading zero and is encodable.
+  auto id = em.encode("<http://wide.org/W0>");
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(em.toString(id.value()), "<http://wide.org/W0>");
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, WideIllegalPrefixes) {
+  using V = std::vector<std::string>;
+  using namespace ::testing;
+  // Too many wide prefixes.
+  V tooMany{"a1x", "a2x", "a3x", "a4x", "a5x"};
+  AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager(V{}, tooMany),
+                               HasSubstr("which is too many"));
+  // The prefix-of-another check also works across the two lists.
+  AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager(V{"blubb"}, V{"blubbi"}),
+                               HasSubstr("may be a prefix"));
+  AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager(V{"blubbi"}, V{"blubb"}),
+                               HasSubstr("may be a prefix"));
+  AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager(V{"blubb"}, V{"blubb"}),
+                               HasSubstr("may be a prefix"));
+  AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager(V{}, V{"<blubb>"}),
+                               HasSubstr("enclosed in angle brackets"));
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, WideJson) {
+  EncodedIriManager em{{"http://narrow.org/N"}, {"http://wide.org/W"}};
+  nlohmann::json j = em;
+  auto em2 = j.get<EncodedIriManager>();
+  EXPECT_EQ(em, em2);
+  auto id = em2.encode("<http://wide.org/W12345678901234567>");
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(em2.toString(id.value()), "<http://wide.org/W12345678901234567>");
+
+  // JSON from an index built before the wide layout existed (no wide key)
+  // deserializes to a manager without wide prefixes.
+  nlohmann::json oldJson;
+  oldJson[EncodedIriManager::jsonKey_] =
+      std::vector<std::string>{"<http://narrow.org/N"};
+  auto emOld = oldJson.get<EncodedIriManager>();
+  EXPECT_TRUE(emOld.widePrefixes_.empty());
+  auto narrowId = emOld.encode("<http://narrow.org/N123>");
+  ASSERT_TRUE(narrowId.has_value());
+  EXPECT_EQ(emOld.toString(narrowId.value()), "<http://narrow.org/N123>");
+}
+
+// _____________________________________________________________________________
 TEST(EncodedIriManager, HardcodedPrefixesJson) {
   using Manager =
       EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
