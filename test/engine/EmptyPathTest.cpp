@@ -10,6 +10,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
+#include "../QueryPlannerTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
@@ -474,6 +475,45 @@ TEST(EmptyPath, theResultCanBePinned) {
   ASSERT_TRUE(result->isFullyMaterialized());
   EXPECT_EQ(result->idTableView().numRows(), 4);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
+}
+
+// _____________________________________________________________________________
+// The same through a complete query, as the QLever UI's "pin subtrees" option
+// runs it: the `EmptyPath` is then a child of the transitive path, and the
+// results of all the operations of the query are pinned.
+TEST(EmptyPath, pathWithPinnedSubresultsEndToEnd) {
+  auto* qec = makeQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  qec->getQueryTreeCache().clearAll();
+  absl::Cleanup restorePinSubtrees{[qec]() {
+    qec->_pinSubtrees = false;
+    qec->getQueryTreeCache().clearAll();
+  }};
+  qec->_pinSubtrees = true;
+
+  // `<a>` is checked against the knowledge graph (an `EmptyPath` with the
+  // `VALUES` clause as its child), `<notInTheIndex>` is filtered out by that
+  // check.
+  auto qet = queryPlannerTestHelpers::parseAndPlan(
+      "SELECT ?s ?o WHERE { VALUES ?s { <a> <notInTheIndex> } ?s <p>* ?o }",
+      qec);
+  auto result = qet->getResult(false);
+  ASSERT_TRUE(result->isFullyMaterialized());
+  const auto& table = result->idTableView();
+  ColumnIndex s = qet->getVariableColumn(Variable{"?s"});
+  ColumnIndex o = qet->getVariableColumn(Variable{"?o"});
+  std::vector<std::pair<Id, Id>> rows;
+  for (size_t i : ad_utility::integerRange(table.numRows())) {
+    rows.emplace_back(table(i, s), table(i, o));
+  }
+  // `<a>` reaches itself via the empty path and `<b>` and `<z>` via `<p>`.
+  EXPECT_THAT(rows, ::testing::UnorderedElementsAre(
+                        ::testing::Pair(getId("<a>"), getId("<a>")),
+                        ::testing::Pair(getId("<a>"), getId("<b>")),
+                        ::testing::Pair(getId("<a>"), getId("<z>"))));
+  // The `VALUES` clause, the `EmptyPath`, the index scan of `<p>`, and the
+  // transitive path itself.
+  EXPECT_GE(qec->getQueryTreeCache().numPinnedEntries(), 4);
 }
 
 // _____________________________________________________________________________
