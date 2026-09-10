@@ -491,7 +491,7 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
       "SELECT ?x ?y ?m WHERE { ?x <Spouse_(or_domestic_partner)> ?y . "
       "?x <Film_performance> ?m . ?y <Film_performance> ?m }");
   QueryPlanner qp = makeQueryPlanner();
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  auto qet = qp.createExecutionTree(pq);
 
   // There are four possible outcomes of this test with the same size
   // estimate. It is currently very hard to make the query planning
@@ -584,7 +584,7 @@ qet-width: 3
 }
 )xxx");
 
-  auto actual = strip(qet.getCacheKey());
+  auto actual = strip(qet->getCacheKey());
 
   if (actual != possible1 && actual != possible2 && actual != possible3 &&
       actual != possible4 && actual != possible5) {
@@ -592,7 +592,7 @@ qet-width: 3
     /*
     FAIL() << "query execution tree is none of the possible trees, it is "
               "actually "
-           << qet.getCacheKey() << '\n' << actual << '\n'
+           << qet->getCacheKey() << '\n' << actual << '\n'
            */
   }
 }
@@ -612,9 +612,9 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
       "FILTER (?1 != fb:m.018mts)"
       "} LIMIT 300");
   QueryPlanner qp = makeQueryPlanner();
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_TRUE(qet.isVariableCovered(Variable{"?1"}));
-  ASSERT_TRUE(qet.isVariableCovered(Variable{"?0"}));
+  auto qet = qp.createExecutionTree(pq);
+  ASSERT_TRUE(qet->isVariableCovered(Variable{"?1"}));
+  ASSERT_TRUE(qet->isVariableCovered(Variable{"?0"}));
 }
 
 TEST(QueryPlanner, testSimpleOptional) {
@@ -3918,9 +3918,9 @@ TEST(QueryPlanner, SubqueryColumnStripping) {
 
     // The root should have no stripped variables (it's not created via
     // makeTreeWithStrippedColumns)
-    EXPECT_THAT(qet, h::HasNoStrippedVariables());
-    EXPECT_THAT(qet, h::hasVariables({"?x", "?y"}));
-    EXPECT_EQ(qet.getResultWidth(), doStrip ? 2 : 4);
+    EXPECT_THAT(*qet, h::HasNoStrippedVariables());
+    EXPECT_THAT(*qet, h::hasVariables({"?x", "?y"}));
+    EXPECT_EQ(qet->getResultWidth(), doStrip ? 2 : 4);
   }
 }
 
@@ -3969,7 +3969,7 @@ TEST(QueryPlanner, NamedCachedResult) {
       "<s> <p> <o>. <s> <p> <o2> . <s2> <p> <o2>. <s3> <p2> <o2>.");
   qec->pinResultWithName() = {"dummyQuery"};
   auto plan = h::parseAndPlan(queryToPin, qec);
-  [[maybe_unused]] auto pinResult = plan.getResult();
+  [[maybe_unused]] auto pinResult = plan->getResult();
 
   query = "SELECT * { SERVICE ql:cached-result-with-name-dummyQuery {}}";
   // We only check the size estimate (which in this case is exact), because
