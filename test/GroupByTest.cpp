@@ -18,7 +18,6 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
-#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/StripColumns.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
