@@ -97,9 +97,11 @@ CPP_template(typename Serializer)(
 // words: write exactly the format of `serializeLocalVocab` above, with the
 // number of words set to zero, such that `deserializeLocalVocab` reads it back
 // as a local vocab that holds only the blank node blocks (and returns an empty
-// mapping). Use this for a caller that stores the words elsewhere, e.g. in a
-// persistent vocabulary, and that has rewritten the `Id`s that refer to those
-// words accordingly, so that the words must not be written a second time here.
+// mapping). Use this if the caller has stored the words elsewhere, as
+// `NamedCachedQueryBlobManager` does: it moves the words of the local vocab of
+// a named cache entry to the secondary vocabulary of the blob, and rewrites
+// the `Id`s of the entry accordingly, so that the words must not be written a
+// second time here.
 CPP_template(typename Serializer)(
     requires serialization::WriteSerializer<
         Serializer>) void serializeLocalVocabWithoutWords(Serializer&

@@ -33,10 +33,10 @@
 // *segments* (see `appendSegment`). The `Id` of a word is its position in that
 // insertion order (the global index over the concatenation of all segments,
 // in the order in which they were appended), and it never changes when
-// further segments are appended. This is what allows persisted data (in
-// particular the blobs of `NamedCachedQueryBlobManager`, in a follow-up
-// change) to add words incrementally, one segment at a time, without
-// invalidating the `Id`s of the earlier segments.
+// further segments are appended. That is what allows a blob (see
+// `NamedCachedQueryBlobManager`) to add words to the secondary vocabulary
+// incrementally, one segment at a time, without invalidating the `Id`s that
+// were already handed out for the words of the earlier segments.
 //
 // There is no *semantic* (that is, by string value) order among the words of
 // this vocabulary; they compare by their `Id`s alone, which is why all `Id`s
@@ -78,9 +78,8 @@ class SecondaryVocabulary {
   // ones of the previously last segment. None of `segment`'s words may already
   // be contained in this vocabulary (across all of its segments), and the
   // words within `segment` itself have to be pairwise distinct; both of these
-  // are checked. This is the operation that will let persisted data (in
-  // particular the blobs of `NamedCachedQueryBlobManager`, in a follow-up
-  // change) load its segments into the secondary vocabulary of the
+  // are checked. This is the operation that `NamedCachedQueryBlobManager` uses
+  // to load the segments of a blob into the secondary vocabulary of the
   // corresponding index, one segment at a time. NOTE: If `segment` is a
   // zero-copy view (see `CompactVectorOfStrings::fromZeroCopyDeserializer`),
   // the buffer that it points into has to outlive this `SecondaryVocabulary`.

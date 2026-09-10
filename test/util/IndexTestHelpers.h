@@ -84,8 +84,8 @@ struct TestIndexConfig {
   // order is arbitrary, see `SecondaryVocabulary`), and must not be contained
   // in `turtleInput`, because the secondary vocabulary is disjoint from the
   // vocabulary of the main index. NOTE: A secondary vocabulary is currently
-  // only created for testing (see `IndexImpl::setSecondaryVocab`), which is
-  // what this member does.
+  // created either here for testing (see `IndexImpl::setSecondaryVocab`), which
+  // is what this member does, or by `NamedCachedQueryBlobManager::deserialize`.
   std::optional<std::vector<std::string>> secondaryVocabWords = std::nullopt;
 
   // A very typical use case is to only specify the turtle input, and leave all

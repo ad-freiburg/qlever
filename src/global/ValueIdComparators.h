@@ -531,9 +531,12 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 // (`FILTER`, `ORDER BY`, the range filters above, and the prefilters in
 // `PrefilterExpressionIndex.cpp`) silently yield wrong results.
 //
-// This is deliberate for now: nothing but a unit test can currently create a
-// secondary vocabulary (see `IndexImpl::setSecondaryVocab`), so no
-// query is affected. It has to be fixed *before* anything else creates one.
+// This is deliberate for now: currently only unit tests and
+// `NamedCachedQueryBlobManager::deserialize` (for a blob whose named cache
+// entries contain new words) create a secondary vocabulary (see
+// `IndexImpl::setSecondaryVocab`), so only queries on such a blob-loaded
+// instance are affected, and the resulting inconsistency is accepted there.
+// It has to be fixed *before* anything else creates one.
 // The fix requires the semantically correct position of each word of the
 // secondary vocabulary within the main vocabulary, which the secondary
 // vocabulary will store, and it will most likely mean that this function must

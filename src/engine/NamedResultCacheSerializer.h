@@ -112,14 +112,14 @@ namespace namedResultCacheSerializer {
 //
 // The `columns` (a range of ranges of `Id`, one per column of the result) and
 // the `resultSortedOn` are passed separately, so that a caller can write a
-// *rewritten* version of the `value`: a caller may for example replace the
-// `Id`s that refer to local vocab entries by `Id`s of the main or of a
-// persistent vocabulary, which also invalidates a part of the sort order. The
+// *rewritten* version of the `value`: `NamedCachedQueryBlobManager` replaces
+// the `Id`s that refer to local vocab entries by `Id`s of the main or the
+// secondary vocabulary, which also invalidates a part of the sort order. The
 // `columns` therefore only have to agree with `value.result_` in their number
 // and in the number of rows, which is checked. If `writeLocalVocabWords` is
 // `false`, the words of the local vocab of the `value` are not written (only
-// its blank node blocks, see `serializeLocalVocabWithoutWords`), because such
-// a caller has stored them elsewhere.
+// its blank node blocks, see `serializeLocalVocabWithoutWords`), because the
+// caller has stored them elsewhere.
 template <typename Serializer, typename Columns>
 void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
                 const Columns& columns,

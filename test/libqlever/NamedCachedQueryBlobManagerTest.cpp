@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -22,8 +23,12 @@
 #include <vector>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
+#include "QleverTestHelpers.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "index/IndexImpl.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
@@ -152,13 +157,22 @@ auto makeBlobReader(ql::span<const char> data) {
       true, ql::span<const char>>{data};
 }
 
-// Decompress the `compressedBlob`, skip its header, and return the index
-// metadata JSON that is stored directly after that header (see
-// `NamedCachedQueryBlobManager::serialize`).
+// Return a read serializer for the payload of the given chunk `region` of the
+// (already decompressed) blob in `data`. Note that the payload of a chunk
+// begins at a multiple of `alignof(std::max_align_t)`, so the returned
+// serializer is properly aligned.
+auto makeChunkPayloadReader(ql::span<const char> data,
+                            const Manager::BlobLayout::Region& region) {
+  return makeBlobReader(region.payloadSpan(data));
+}
+
+// Decompress the `compressedBlob` and return the index metadata JSON that is
+// stored in its first chunk (see
+// `NamedCachedQueryBlobManager::parseBlobLayout`).
 nlohmann::json metadataFromBlob(ql::span<const char> compressedBlob) {
   auto uncompressed = Manager::decompressBlob(compressedBlob, {});
-  auto reader = makeBlobReader(uncompressed);
-  Manager::skipAndVerifyBlobHeader(reader);
+  auto layout = Manager::parseBlobLayout(uncompressed);
+  auto reader = makeChunkPayloadReader(uncompressed, layout.metadata_);
   std::string metadataJson;
   reader >> metadataJson;
   return nlohmann::json::parse(metadataJson);
@@ -629,4 +643,179 @@ TEST(NamedCachedQueryBlobManager, blobWithExcludedEntriesRejectsGeoSplitVocab) {
       source.serializeVocabAndNamedCacheToCompressedBlob(
           excludeConfig({std::string{droppedEntriesRegex}})),
       HasSubstr("on-disk-compressed-geo-split"));
+}
+
+// `applyUpdateToEngine` (used below) is defined in `QleverTestHelpers.h`; see
+// the comment there for why the update has to be parsed separately and for
+// the thread-safety caveat of taking the snapshot only here.
+using ad_utility::testing::applyUpdateToEngine;
+
+namespace {
+// The media type in which the tests below export their query results.
+constexpr ad_utility::MediaType tsv = ad_utility::MediaType::tsv;
+
+// The turtle data used by the tests below, which write a blob after an update
+// and inspect the chunk layout of a blob.
+constexpr std::string_view updateTestData =
+    "<s1> <p1> \"l1\".\n"
+    "<s2> <p1> \"l2\".\n"
+    "<s1> <p2> <o1>.";
+
+// The queries whose results the tests below pin (under the names `q1` and
+// `q2`), and the corresponding queries that return those pinned results.
+constexpr std::string_view sourceQuery1 = "SELECT ?s ?o WHERE { ?s <p1> ?o }";
+constexpr std::string_view sourceQuery2 = "SELECT ?s ?o WHERE { ?s <p2> ?o }";
+constexpr std::string_view cachedQuery1 =
+    "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-q1 {} }";
+constexpr std::string_view cachedQuery2 =
+    "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-q2 {} }";
+
+// Pin the results of `sourceQuery1` and `sourceQuery2` under the names `q1` and
+// `q2`. Note that the pinning has to be repeated after every update, because
+// the results (and not only the query result cache) change.
+void pinSourceQueries(Qlever& engine) {
+  engine.queryAndPinResultWithName("q1", std::string{sourceQuery1});
+  engine.queryAndPinResultWithName("q2", std::string{sourceQuery2});
+}
+
+// Open a `Qlever` instance on the index described by `builderConfig`, with the
+// persisting of updates switched off (the tests apply updates in memory only).
+Qlever makeSourceEngine(const IndexBuilderConfig& builderConfig) {
+  EngineConfig config{builderConfig};
+  config.persistUpdates_ = false;
+  return Qlever{config};
+}
+
+// Build the test index (`updateTestData`), open a `Qlever` instance on it via
+// `makeSourceEngine`, and pin the queries via `pinSourceQueries`.
+Qlever makePinnedSourceEngine() {
+  auto builderConfig = buildTestIndex(updateTestData);
+  Qlever source = makeSourceEngine(builderConfig);
+  pinSourceQueries(source);
+  return source;
+}
+
+// Run the two cached queries (see `cachedQuery1`, `cachedQuery2`) on `engine`
+// and return their results in TSV format.
+std::pair<std::string, std::string> cachedResultsOf(Qlever& engine) {
+  return {engine.query(std::string{cachedQuery1}, tsv),
+          engine.query(std::string{cachedQuery2}, tsv)};
+}
+
+// Load `blob` into a fresh `Qlever` instance that has NO index files on disk at
+// all (constructed with `skipLoading`).
+std::unique_ptr<Qlever> loadBlob(ql::span<const char> blob) {
+  auto target = std::make_unique<Qlever>(EngineConfig{}, /*skipLoading=*/true);
+  target->deserializeVocabAndNamedCacheFromCompressedBlob(blob);
+  return target;
+}
+
+// Return the secondary vocabulary of the index of `engine`, which must have
+// one.
+const SecondaryVocabulary& secondaryVocabularyOf(const Qlever& engine) {
+  const auto* secondaryVocabulary =
+      engine.indexAndViewsSnapshot()->index_.getImpl().secondaryVocab();
+  AD_CONTRACT_CHECK(secondaryVocabulary != nullptr);
+  return *secondaryVocabulary;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Test that a complete blob can be written even after an update that introduced
+// new words, which previously threw ("cannot be serialized") because those
+// words only existed as local vocab entries. They are now stored in the
+// secondary vocabulary of the blob, which the loaded instance picks up.
+TEST(NamedCachedQueryBlobManager, fullBlobAfterUpdate) {
+  auto builderConfig = buildTestIndex(updateTestData);
+  Qlever source = makeSourceEngine(builderConfig);
+  applyUpdateToEngine(source,
+                      "INSERT DATA { <newSubject> <p1> \"new literal\" }");
+  pinSourceQueries(source);
+
+  std::vector<char> blob;
+  EXPECT_NO_THROW(blob = source.serializeVocabAndNamedCacheToCompressedBlob());
+  auto target = loadBlob(blob);
+  EXPECT_EQ(cachedResultsOf(*target), cachedResultsOf(source));
+  EXPECT_EQ(secondaryVocabularyOf(*target).numSegments(), 1u);
+}
+
+// _____________________________________________________________________________
+// Test that a word which an update introduced (and which hence is not part of
+// the vocabulary of the index) is found in the secondary vocabulary of the
+// loaded blob, so that a `FILTER` on that word inside a cached result works,
+// i.e. the `Id` of the secondary vocabulary is found for the IRI of the query.
+TEST(NamedCachedQueryBlobManager, newWordsInSecondaryVocabularyOfBlob) {
+  auto builderConfig = buildTestIndex(updateTestData);
+  Qlever source = makeSourceEngine(builderConfig);
+  applyUpdateToEngine(source,
+                      "INSERT DATA { <newSubject> <p1> \"new literal\" }");
+  pinSourceQueries(source);
+  std::vector<char> blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+
+  auto target = loadBlob(blob);
+  EXPECT_TRUE(secondaryVocabularyOf(*target).getId("<newSubject>").has_value());
+  EXPECT_EQ(target->query("SELECT ?s ?o WHERE { SERVICE "
+                          "ql:cached-result-with-name-q1 {} FILTER(?s = "
+                          "<newSubject>) }",
+                          tsv),
+            "?s\t?o\n<newSubject>\t\"new literal\"\n");
+}
+
+// _____________________________________________________________________________
+// Test that a blob cannot be created from an index that already has a secondary
+// vocabulary of its own (which in particular is the case for an instance that
+// was itself loaded from a blob that contained new words).
+TEST(NamedCachedQueryBlobManager, serializeRejectsSecondaryVocabulary) {
+  Qlever source = makePinnedSourceEngine();
+
+  auto snapshot = source.indexAndViewsSnapshot();
+  snapshot->index_.getImpl().setSecondaryVocab(
+      std::make_shared<const SecondaryVocabulary>(
+          std::vector<std::string>{"<aWordThatIsNotInTheIndex>"}));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      source.serializeVocabAndNamedCacheToCompressedBlob(),
+      HasSubstr("without a secondary vocabulary"));
+}
+
+// _____________________________________________________________________________
+// Whitebox test of the chunk layout of a blob: the chunks are found in the
+// expected order, and every one of them begins at a multiple of the alignment
+// that makes them position independent (see
+// `NamedCachedQueryBlobManager::parseBlobLayout`).
+TEST(NamedCachedQueryBlobManager, parseBlobLayoutOfFullBlob) {
+  auto builderConfig = buildTestIndex(updateTestData);
+  std::vector<char> blob;
+  {
+    Qlever source = makeSourceEngine(builderConfig);
+    pinSourceQueries(source);
+    blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  }
+  auto uncompressed = Manager::decompressBlob(blob, {});
+  auto layout = Manager::parseBlobLayout(uncompressed);
+
+  // No update was applied, so all words are contained in the vocabulary of the
+  // index and the secondary vocabulary of the blob is empty.
+  EXPECT_THAT(layout.segments_, IsEmpty());
+  std::vector<std::string> keys;
+  for (const auto& entry : layout.entries_) {
+    keys.push_back(entry.key_);
+  }
+  EXPECT_THAT(keys, ElementsAre("q1", "q2"));
+
+  std::vector<Manager::BlobLayout::Region> regions{
+      layout.metadata_, layout.vocabulary_, layout.segmentCount_,
+      layout.entryCount_};
+  for (const auto& entry : layout.entries_) {
+    regions.push_back(entry.region_);
+  }
+  size_t previousEnd = 0;
+  for (const Manager::BlobLayout::Region& region : regions) {
+    EXPECT_EQ(region.begin_ % alignof(std::max_align_t), 0u);
+    EXPECT_EQ(region.payloadBegin() % alignof(std::max_align_t), 0u);
+    EXPECT_GT(region.size(), Manager::BlobLayout::chunkHeaderSize);
+    EXPECT_GE(region.begin_, previousEnd);
+    previousEnd = region.end_;
+  }
+  EXPECT_LE(previousEnd, uncompressed.size());
 }

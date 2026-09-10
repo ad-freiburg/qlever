@@ -281,11 +281,10 @@ class IndexImpl {
   // the `Id`s of a secondary vocabulary are only valid for the very vocabulary
   // that they were created for.
   //
-  // This is currently set only by tests (via
-  // `TestIndexConfig::secondaryVocabWords`, see
-  // `test/util/IndexTestHelpers.h`). It is meant to eventually be set by code
-  // that loads persisted data (e.g. the blobs of `NamedCachedQueryBlobManager`,
-  // in a follow-up change). It has to be set before the first query is
+  // This is set either by tests (via `TestIndexConfig::secondaryVocabWords`,
+  // see `test/util/IndexTestHelpers.h`), or by
+  // `NamedCachedQueryBlobManager::deserialize` when the blob that it loads
+  // contains a secondary vocabulary. It has to be set before the first query is
   // answered (in particular, before any `LocalVocabEntry` computes its position
   // in the vocabulary, see `positionInVocab()`), and is immutable afterwards.
   const SecondaryVocabulary* secondaryVocab() const {
@@ -293,10 +292,9 @@ class IndexImpl {
   }
 
   // Set the secondary vocabulary, see above. PRECONDITION: Must only be called
-  // before the first query is answered (e.g. right after construction). NOTE:
-  // This setter is not named `setSecondaryVocabForTesting` even though only
-  // tests currently call it, because it is about to get a non-test caller
-  // (see above).
+  // before the first query is answered (e.g. right after construction, or by
+  // `NamedCachedQueryBlobManager::deserialize` while it is still assembling the
+  // index).
   void setSecondaryVocab(
       std::shared_ptr<const SecondaryVocabulary> secondaryVocab) {
     secondaryVocab_ = std::move(secondaryVocab);
