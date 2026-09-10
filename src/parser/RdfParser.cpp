@@ -1336,6 +1336,16 @@ RdfParallelParser<T>::~RdfParallelParser() {
       "During the destruction of a RdfParallelParser");
 }
 
+// _____________________________________________________________________________
+TripleComponent defaultGraphFromSpec(
+    const qlever::InputFileSpecification& spec) {
+  if (spec.defaultGraph_.has_value()) {
+    return TripleComponent::Iri::fromIrirefWithoutBrackets(
+        spec.defaultGraph_.value());
+  }
+  return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+}
+
 // Create a parser for a single file of an `InputFileSpecification`. The type
 // of the parser depends on the filetype (Turtle or N-Quads) and on whether the
 // file is to be parsed in parallel.
@@ -1343,16 +1353,8 @@ template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
     const qlever::InputFileSpecification& input, const EncodedIriManager* ev,
     ad_utility::MemorySize bufferSize) {
-  auto graph = [input]() -> TripleComponent {
-    if (input.defaultGraph_.has_value()) {
-      return TripleComponent::Iri::fromIrirefWithoutBrackets(
-          input.defaultGraph_.value());
-    } else {
-      return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
-    }
-  };
   auto makeRdfParserImpl = ad_utility::ApplyAsValueIdentity{
-      [&input, &bufferSize, &graph, ev](
+      [&input, &bufferSize, ev](
           auto useParallel,
           auto isTurtleInput) -> std::unique_ptr<RdfParserBase> {
         using InnerParser =
@@ -1361,7 +1363,8 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
         using Parser =
             std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
                                RdfStreamParser<InnerParser>>;
-        return std::make_unique<Parser>(input, bufferSize, ev, graph());
+        return std::make_unique<Parser>(input, bufferSize, ev,
+                                        defaultGraphFromSpec(input));
       }};
 
   // The call to `callFixedSize` lifts runtime integers to compile time

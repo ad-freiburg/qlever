@@ -830,6 +830,12 @@ class RdfParallelParser : public RdfParserBase {
   std::future<void> parseFuture_;
 };
 
+// Compute the default graph for `spec`: the explicit `spec.defaultGraph_` if
+// set, otherwise the global default graph. Shared by `makeSingleRdfParser`
+// (used by `RdfMultifileParser`) and `RdfAsyncMultifileParser`.
+TripleComponent defaultGraphFromSpec(
+    const qlever::InputFileSpecification& spec);
+
 // This class is an RDF parser that parses multiple files in parallel. Each
 // file is specified by an  `InputFileSpecification`.
 class RdfMultifileParser : public RdfParserBase {

@@ -9,6 +9,7 @@
 
 #include "parser/RdfAsyncParallelParser.h"
 
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <string>
 #include <utility>
@@ -27,12 +28,18 @@ RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
     ad_utility::MemorySize blocksize,
     const EncodedIriManager* encodedIriManager,
     const TripleComponent& defaultGraphIri)
-    : executor_{executor},
+    : AsyncRdfParserBase{executor},
       state_{encodedIriManager, defaultGraphIri},
       blockSource_{executor, spec.makeAsyncBlockSource(executor, blocksize),
                    detail::findEndOfLastStatement,
                    std::string{detail::statementBoundaryDescription}},
       blockFetchPermit_{executor, 1} {}
+
+// _____________________________________________________________________________
+template <typename Parser>
+void RdfAsyncParallelParser<Parser>::asyncGetBatchImpl(Handler handler) {
+  boost::asio::co_spawn(executor(), getBatchCoroutine(), std::move(handler));
+}
 
 // ____________________________________________________________________________
 template <typename Parser>
