@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
 #include "../util/IdTableHelpers.h"
@@ -57,9 +58,9 @@ Graphs singleGraph(std::string_view iri) {
       TripleComponent::Iri::fromIriref(absl::StrCat("<", iri, ">"))}});
 }
 
-// Compute the result of `emptyPath` and return it as a single `IdTable`. The
-// `EmptyPath` operation only supports lazy computation, so the tables that it
-// yields have to be concatenated.
+// Compute the result of `emptyPath` lazily and return it as a single
+// `IdTable`, that is, concatenate the tables that it yields. For the fully
+// materialized computation see `theResultCanBeFullyMaterialized` below.
 IdTable computeResult(EmptyPath& emptyPath) {
   auto result = emptyPath.computeResultOnlyForTesting(true);
   EXPECT_FALSE(result.isFullyMaterialized());
@@ -411,11 +412,68 @@ TEST(EmptyPath, columnOriginatesFromGraphOrUndef) {
 }
 
 // _____________________________________________________________________________
-TEST(EmptyPath, theResultHasToBeRequestedLazily) {
+TEST(EmptyPath, theResultCanBeFullyMaterialized) {
   auto* qec = makeQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt};
-  EXPECT_THROW(emptyPath.computeResultOnlyForTesting(false),
-               ad_utility::Exception);
+
+  std::vector<Id> expected{getId("<a>"), getId("<b>"), getId("<c>"),
+                           getId("<z>")};
+  ql::ranges::sort(expected);
+  auto result = emptyPath.computeResultOnlyForTesting(false);
+  ASSERT_TRUE(result.isFullyMaterialized());
+  EXPECT_THAT(result.idTableView().getColumn(0), ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(EmptyPath, theResultOfTheExistenceCheckCanBeFullyMaterialized) {
+  auto* qec = makeQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  // Use a child with two tables and a local vocab, such that the materialized
+  // result is the concatenation of several chunks and the local vocabs of
+  // those chunks have to be merged.
+  LocalVocab localVocab;
+  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+      "<notInTheIndex>", qec->getLocalVocabContext()));
+  std::vector<IdTable> tables;
+  tables.push_back(makeIdTableFromVector({{getId("<a>")}, {getId("<p>")}}));
+  tables.push_back(makeIdTableFromVector({{getId("<z>")}}));
+  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      ValuesForTesting::liftToPairs(std::move(tables), std::move(localVocab)),
+      Vars{Variable{"?x"}});
+  EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
+                      EmptyPath::CheckedChild{std::move(child), 0}};
+
+  auto result = emptyPath.computeResultOnlyForTesting(false);
+  ASSERT_TRUE(result.isFullyMaterialized());
+  // `<p>` only occurs as a predicate, so it is filtered out.
+  EXPECT_THAT(result.idTableView().getColumn(0),
+              ElementsAreArray({getId("<a>"), getId("<z>")}));
+  EXPECT_EQ(result.localVocab().size(), 1);
+}
+
+// _____________________________________________________________________________
+// Regression test for the crash reported in
+// https://github.com/ad-freiburg/qlever/pull/3275#issuecomment-5620615850:
+// when subresults are pinned, `Operation::getResult` turns the lazy
+// computation that `TransitivePathImpl` requests into a fully materialized
+// one.
+TEST(EmptyPath, theResultCanBePinned) {
+  auto* qec = makeQec(kg);
+  qec->getQueryTreeCache().clearAll();
+  absl::Cleanup restorePinSubtrees{[qec]() {
+    qec->_pinSubtrees = false;
+    // Don't let the pinned entry interfere with other tests.
+    qec->getQueryTreeCache().clearAll();
+  }};
+  qec->_pinSubtrees = true;
+
+  EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt};
+  auto result = emptyPath.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTableView().numRows(), 4);
+  EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
 }
 
 // _____________________________________________________________________________

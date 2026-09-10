@@ -525,13 +525,22 @@ Result::Generator EmptyPath::computeExistenceCheck(
 
 // _____________________________________________________________________________
 Result EmptyPath::computeResult(bool requestLaziness) {
-  // The only consumer of this operation is `TransitivePathImpl`, which always
-  // requests the result lazily.
-  AD_CORRECTNESS_CHECK(requestLaziness);
-  if (!checkedChild_.has_value()) {
-    return {computeAllEntities(), resultSortedOn()};
+  auto generator = checkedChild_.has_value()
+                       ? computeExistenceCheck(child().getResult(true))
+                       : computeAllEntities();
+  if (requestLaziness) {
+    return {std::move(generator), resultSortedOn()};
   }
-  return {computeExistenceCheck(child().getResult(true)), resultSortedOn()};
+  // The only consumer of this operation is `TransitivePathImpl`, which always
+  // requests the result lazily, so realistically we only get here if the
+  // result is pinned (which forces a fully materialized result).
+  IdTable resultTable{getResultWidth(), allocator()};
+  LocalVocab localVocab;
+  for (auto& [idTable, vocab] : generator) {
+    resultTable.insertAtEnd(idTable);
+    localVocab.mergeWith(vocab);
+  }
+  return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
 }
 
 #endif
