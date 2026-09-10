@@ -47,7 +47,7 @@ StripColumns::StripColumns(QueryExecutionContext* ctx,
       varToCol_{std::move(varToCol)} {}
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> StripColumns::getChildren() {
+std::vector<QueryExecutionTree*> StripColumns::getChildrenImpl() const {
   return {child_.get()};
 }
 

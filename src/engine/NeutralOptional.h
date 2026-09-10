@@ -29,8 +29,10 @@ class NeutralOptional : public Operation {
   // neutral element from ever appearing in the result.
   bool singleRowCroppedByLimit() const;
 
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
  public:
-  std::vector<QueryExecutionTree*> getChildren() override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;

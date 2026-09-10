@@ -69,7 +69,7 @@ class TextLimit : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {child_.get()};
   }
 };
