@@ -293,6 +293,14 @@ class TransitivePathBase : public Operation {
       const std::optional<Variable>& graphVariable,
       std::optional<Variable> variable = std::nullopt);
 
+  // Return an execution tree with a single row that holds the given fixed
+  // value. This is used as the starting side of a path that can have length
+  // zero: the fixed value then matches the path of length zero unconditionally,
+  // without the expensive check whether it occurs in the graph (see
+  // `makeEmptyPathSide` and `joinWithIndexScan` above).
+  static std::shared_ptr<QueryExecutionTree> makeSingleValueSide(
+      QueryExecutionContext* qec, const TripleComponent& tripleComponent);
+
   // Make sure that all values in `inputCol` returned by `leftOrRightOp` can be
   // found in the knowledge graph. In many cases we can statically guarantee
   // this and just return the `leftOrRightOp` unchanged, in all other cases the

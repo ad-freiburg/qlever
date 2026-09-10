@@ -944,7 +944,10 @@ TEST_P(TransitivePathTest, zeroLengthWithLiteralsNotInIndex) {
       },
       Id::makeFromInt);
 
-  auto expected = IdTable{2, ad_utility::testing::makeAllocator()};
+  // A fixed value at the start or end of the path matches the path of length
+  // zero unconditionally, in particular also when it does not occur in the
+  // graph (see `TransitivePathBase::makeSingleValueSide`).
+  auto expected = makeIdTableFromVector({{1337, 1337}}, Id::makeFromInt);
 
   {
     TransitivePathSide left(std::nullopt, 0, 1337, 0);

@@ -47,6 +47,7 @@ RuntimeParameters::RuntimeParameters() {
   add(requestBodyLimit_);
   add(cacheServiceResults_);
   add(syntaxTestMode_);
+  add(strictSparql_);
   add(divisionByZeroIsUndef_);
   add(enablePrefilterOnIndexScans_);
   add(spatialJoinMaxNumThreads_);
