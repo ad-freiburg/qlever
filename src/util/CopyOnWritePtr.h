@@ -30,14 +30,23 @@ namespace ad_utility {
 // value-initialized `T`. The only exception is a moved-from `CopyOnWritePtr`,
 // which may only be assigned to or destroyed.
 //
-// IMPORTANT: The decision whether to clone is based on the reference count of
-// the pointee. It is therefore undefined behavior to copy a `CopyOnWritePtr`
-// while another thread calls `write()` on a `CopyOnWritePtr` that shares the
-// same pointee. Copies and writes have to be synchronized externally (in QLever
-// typically by the write lock of the structure that owns the
-// `CopyOnWritePtr`s). Reading via different copies is always safe, also
-// concurrently with a `write()` on one of them, because that `write()` operates
-// on a clone.
+// IMPORTANT NOTE: Creating a copy of a `CopyOnWritePtr` and calling `write()`
+// on a `CopyOnWritePtr` that shares the same pointee must never happen
+// concurrently. They have to be synchronized externally, typically by the write
+// lock of the structure that owns the `CopyOnWritePtr`s. For example, the
+// copies for the snapshots of the delta triples are created and the updates
+// are applied under the same lock.
+//
+// Otherwise the following can happen: thread A calls `write()` and sees that
+// the pointee is not shared, thread B then creates a copy, and thread A mutates
+// the pointee in place, which thread B now reads. No copy-on-write scheme can
+// prevent this: a copy that is created while a mutation is in progress observes
+// a partially mutated pointee no matter how the decision to clone is made.
+//
+// Everything else is safe without further synchronization: reading via any copy
+// (also concurrently with a `write()` on another copy, which operates on a
+// clone), and also destroying a copy concurrently with a `write()`, which at
+// worst causes one unnecessary clone.
 template <typename T>
 class CopyOnWritePtr {
  private:
