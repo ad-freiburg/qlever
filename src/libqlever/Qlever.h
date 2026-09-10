@@ -564,6 +564,31 @@ class Qlever {
     return blobManager_.serialize(*this, config);
   }
 
+  // Write a diff that turns `compressedBaseBlob` (a blob previously written by
+  // `serializeVocabAndNamedCacheToCompressedBlob`) into the blob that that
+  // function would currently write for this instance. Use this after SPARQL
+  // UPDATE operations have been applied and the named queries have been
+  // re-pinned: the diff is typically much smaller than a complete blob,
+  // because everything that did not change (in particular the complete
+  // vocabulary) is only referenced, not repeated. For details, and for the
+  // complete workflow, see `NamedCachedQueryBlobManager`.
+  std::vector<char> serializeVocabAndNamedCacheDiffToCompressedBlob(
+      ql::span<const char> compressedBaseBlob) const {
+    return blobManager_.serializeDiff(*this, compressedBaseBlob);
+  }
+
+  // Apply `compressedDiff` (written by
+  // `serializeVocabAndNamedCacheDiffToCompressedBlob`) to
+  // `compressedBaseBlob` and return the resulting compressed blob, which is a
+  // complete blob again and can in turn serve as the base of a further diff.
+  // For details see `NamedCachedQueryBlobManager::applyDiff`.
+  static std::vector<char> applyDiffToCompressedBlob(
+      ql::span<const char> compressedBaseBlob,
+      ql::span<const char> compressedDiff) {
+    return NamedCachedQueryBlobManager::applyDiff(compressedBaseBlob,
+                                                  compressedDiff);
+  }
+
   // Load a blob previously written by
   // `serializeVocabAndNamedCacheToCompressedBlob`. For details see
   // `NamedCachedQueryBlobManager::deserialize`.
@@ -578,6 +603,17 @@ class Qlever {
     // Note: `polymorphic_allocator` is cheap to copy and has no
     // dedicated move operations.
     blobManager_.deserialize(*this, blob, allocator);
+  }
+
+  // Same as above, but with the given `diffs` (written by
+  // `serializeVocabAndNamedCacheDiffToCompressedBlob`) applied to the `blob`
+  // in the given order, which is equivalent to (but cheaper than) applying
+  // them via `applyDiffToCompressedBlob` one after the other and loading the
+  // result.
+  void deserializeVocabAndNamedCacheFromCompressedBlob(
+      ql::span<const char> blob, ql::span<const ql::span<const char>> diffs,
+      ql::pmr::polymorphic_allocator<char> allocator = {}) {
+    blobManager_.deserialize(*this, blob, diffs, allocator);
   }
 
   // Clear the query result cache.
