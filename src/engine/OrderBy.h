@@ -79,6 +79,9 @@ class OrderBy : public Operation {
     return {subtree_.get()};
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(const std::set<Variable>& variables) const override;
+
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 

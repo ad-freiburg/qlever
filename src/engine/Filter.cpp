@@ -16,6 +16,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
+#include "util/ColumnStrippingHelpers.h"
 
 using std::endl;
 
@@ -256,4 +257,28 @@ bool Filter::isDeterministicImpl() const {
 std::unique_ptr<Operation> Filter::cloneImpl() const {
   return std::make_unique<Filter>(_executionContext, _subtree->clone(),
                                   _expression);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Filter::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  // Collect variables requested from parent-tree and variables needed for
+  // filtering
+  VarsRequiredFromSubtree helper(variables);
+  std::vector<const Variable*> variablesForFiltering =
+      _expression.containedVariables();
+  for (auto filterVar : variablesForFiltering) {
+    helper.add(*filterVar);
+  }
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
+
+  // Continue with the recursion and strip columns of subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      _subtree, varsRequiredFromSubtree);
+
+  // Create query execution tree with Filter-Operation as root-Operation and add
+  // additional stripColumns-Operation if needed.
+  return makeTreeWithOptionalStripOperation<Filter>(
+      getExecutionContext(), variables, std::move(variablesForFiltering),
+      std::move(subtree), _expression);
 }

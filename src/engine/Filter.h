@@ -38,6 +38,9 @@ class Filter : public Operation {
     return _subtree->resultSortedOn();
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(const std::set<Variable>& variables) const override;
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 

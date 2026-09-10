@@ -42,6 +42,9 @@ class Bind : public Operation {
  public:
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
 
  protected:
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;

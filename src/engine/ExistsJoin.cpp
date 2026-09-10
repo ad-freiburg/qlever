@@ -13,6 +13,7 @@
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
+#include "util/ColumnStrippingHelpers.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/VectorWithMemoryLimit.h"
@@ -580,4 +581,41 @@ CPP_template_def(typename Range)(
                            }),
       idTable.getColumn(idTable.numColumns() - 1).begin(),
       qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+ExistsJoin::makeTreeWithStrippedColumns(
+    const std::set<Variable>& variables) const {
+  // Collect variables required from subtree.
+  VarsRequiredFromSubtree helper(variables);
+
+  // The variables of the left column plus the existsVariable_ are needed for
+  // the ExistsJoin-Operation to work.
+  std::vector<const Variable*> keepVars;
+  VariableToColumnMap v2cMap = computeVariableToColumnMap();
+  for (const auto& [variable, _] : v2cMap) {
+    helper.add(variable);
+    keepVars.push_back(&variable);
+  }
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
+
+  // Continue with the recursion and strip columns of the two subtrees.
+  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(
+      left_, varsRequiredFromSubtree);
+  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(
+      right_, varsRequiredFromSubtree);
+
+  // "Delete" ExistsJoin-operation from the queryExecutionTree and only return
+  // left subtree, if the existsVariabe_ is not requested by the parent-tree
+  // (this should never happen).
+  if (!ad_utility::contains(variables, existsVariable_)) {
+    return left;
+  }
+
+  // Create query execution tree with ExistsJoin-Operation as root-Operation and
+  // add additional stripColumns-Operation if needed.
+  return makeTreeWithOptionalStripOperation<ExistsJoin>(
+      getExecutionContext(), variables, std::move(keepVars), std::move(left),
+      std::move(right), existsVariable_);
 }
