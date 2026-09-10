@@ -92,7 +92,12 @@ class AsyncBlockSource {
                 });
           });
         },
-        AD_FWD(token));
+        // NOTE: `BOOST_ASIO_NONDEDUCED_MOVE_ARG(T)` expands to `T&`, so
+        // `async_initiate` always takes its token as an lvalue; the internal
+        // `BOOST_ASIO_MOVE_CAST` then performs the actual move. Passing
+        // `AD_FWD(token)` would break every call site that passes a temporary
+        // completion token (e.g. the result of `boost::asio::bind_executor`).
+        token);
   }
 
   ad_utility::MemorySize getBlocksize() const { return blocksize_; }

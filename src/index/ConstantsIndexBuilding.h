@@ -58,13 +58,6 @@ constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
 // _________________________________________________________________
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 
-// _________________________________________________________________
-// The degree of parallelism that is used for the index building step, where the
-// unique elements of the vocabulary are identified via hash maps. Typically, 6
-// is a good value. On systems with very few CPUs, a lower value might be
-// beneficial.
-constexpr inline size_t NUM_PARALLEL_ITEM_MAPS = 10;
-
 // The number of threads that are parsing in parallel, when the parallel Turtle
 // parser is used.
 constexpr inline size_t NUM_PARALLEL_PARSER_THREADS = 8;

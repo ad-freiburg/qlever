@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/asio.h"
 #include "backports/filesystem.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -40,6 +41,7 @@
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
+#include "parser/AsyncRdfParserBase.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/File.h"
@@ -634,47 +636,74 @@ class IndexImpl {
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
-      std::shared_ptr<RdfParserBase> parser);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
 
-  // Parse all triples from `parser` using `NUM_PARALLEL_ITEM_MAPS` worker
-  // threads that work completely independently of each other. Each of them
-  // processes batches of `linesPerPartial` triples, and for each batch writes
-  // one partial vocabulary file and stores the corresponding ID triples in its
-  // own file. The memory used by the item allocator is freed when this function
-  // returns.
+  // Parse all triples from `files` and build the partial vocabularies, one per
+  // batch of (approximately) `linesPerPartial` triples. This is the first pass
+  // of the index building and is completely asynchronous: a single
+  // `boost::asio::thread_pool`, with a runtime-configurable number of threads
+  // (`RuntimeParameters::indexBuildFirstPassNumThreads_`), does all of the
+  // work. The parser (see `makeRdfParser`) is created on the pool's executor,
+  // right before the pool starts working, and is destroyed after the pool has
+  // finished (in particular, it is destroyed before the pool itself, because
+  // its asynchronous operations must not outlive the executor they run on).
+  //
+  // The pool is driven by `numThreads` "task chains". A task chain is *not* a
+  // thread: it is a chain of completion handlers, each of which calls
+  // `AsyncRdfParserBase::asyncGetBatch` and, once the batch has arrived and has
+  // been mapped to local IDs, schedules (via `boost::asio::post`, never
+  // inline) the next step of the same chain. A chain contributes its share of
+  // the work simply by keeping one call to `asyncGetBatch` in flight at a
+  // time; since the parser supports concurrent calls, the `numThreads` chains
+  // together parse and map triples in parallel. `pool.join()` returns once
+  // every chain has ended (i.e. no more calls are in flight and no more steps
+  // are queued).
+  //
+  // Each chain builds its own sequence of partial vocabularies: it owns a
+  // private `ItemMapManager` (so no synchronization with the other chains is
+  // needed while mapping triples to local IDs) and a private buffer of the
+  // resulting `MappedTriple`s. Once `linesPerPartial` triples have been
+  // collected (or the input is exhausted), the chain writes the vocabulary and
+  // the triples (into their own `CompressedExternalIdTable`, see
+  // `BuildPartialVocabulariesResult`) and, if there is more input, starts a
+  // fresh `ItemMapManager` for the next partial vocabulary.
+  //
+  // Error handling: if any chain's handler throws, the first such exception is
+  // recorded, a `stopRequested` flag is set, and that chain ends without
+  // starting another step. Every other chain notices `stopRequested` at the
+  // start of its own next step and likewise ends without doing further work.
+  // Once `pool.join()` returns, the recorded exception (if any) is re-thrown.
   BuildPartialVocabulariesResult buildPartialVocabularies(
-      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
-
-  // The work of a single worker thread spawned by `buildPartialVocabularies`:
-  // repeatedly get a batch of triples from `parser` (the parsers used for
-  // index building support concurrent calls to `getBatch`) and convert the
-  // strings in those triples to IDs using a hash map that is private to this
-  // worker. After `linesPerPartial` triples, write the resulting partial
-  // vocabulary and the corresponding triples. Both of them are private to
-  // this worker, so no synchronization with the other workers is needed.
-  BuildPartialVocabulariesResult::WorkerResult runPartialVocabularyWorker(
-      size_t linesPerPartial, RdfParserBase& parser, ItemAlloc itemAlloc,
-      std::atomic<size_t>* numHasWordTriples,
-      ad_utility::ConcurrentProgressBar& progressBar, size_t workerIdx);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t linesPerPartial);
 
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(
-      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t linesPerPartial);
 
   // Write the partial vocabulary given by `items` to the file
-  // `onDiskBase_ + PARTIAL_VOCAB_WORDS_INFIX + filenameSuffix` and add the
-  // corresponding triples in `localIds` to `idTriples`. Both `items` and
-  // `idTriples` belong to a single worker thread, so no locking is required.
-  void writePartialVocabulary(
+  // `onDiskBase_ + PARTIAL_VOCAB_WORDS_INFIX + filenameSuffix`, and write the
+  // corresponding triples in `localIds` to a `TripleVec` of their own, whose
+  // input phase is finished afterwards (see
+  // `CompressedExternalIdTable::finishPushing`). Return the suffix and the
+  // `TripleVec` as a `PartialVocabulary`. Both `items` and the `TripleVec`
+  // belong to a single task chain (see `buildPartialVocabularies`), so no
+  // locking is required.
+  BuildPartialVocabulariesResult::PartialVocabulary writePartialVocabulary(
       const std::string& filenameSuffix, ItemMapAndBuffer items,
-      std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-      TripleVec& idTriples) const;
+      std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds) const;
 
-  // Return a Turtle parser that parses the given files. The parser will be
+  // Return an asynchronous RDF parser (see `AsyncRdfParserBase`) that parses
+  // the given `files` and schedules its work on `executor`. The parser will be
   // configured to either parse in parallel or not (per input file), and to
   // either use the CTRE-based relaxed parser or not (via the
-  // `ascii-prefixes-only` setting, see `onlyAsciiTurtlePrefixes_`).
-  std::unique_ptr<RdfParserBase> makeRdfParser(
+  // `ascii-prefixes-only` setting, see `onlyAsciiTurtlePrefixes_`). In the
+  // `REDUCED_FEATURE_SET_FOR_CPP17` build, which has no coroutines, this
+  // always returns a synchronous `RdfMultifileParser` wrapped in an
+  // `AsyncSerialParserAdapter`, and parallel parsing is not available.
+  std::unique_ptr<AsyncRdfParserBase> makeRdfParser(
+      const ql::any_io_executor& executor,
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
       const;
 
