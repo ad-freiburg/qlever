@@ -19,6 +19,7 @@
 
 #include <atomic>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -37,6 +38,33 @@
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
+// Return true if `word` is a blank node. A word is a blank node if it starts
+// with `_:`, or, when `blankNodeIriRegexes` is given, if it is an IRI that is
+// fully matched by one of those regexes.
+//
+// The regexes are matched (as a full match, see `ad_utility::RegexSet`)
+// against the full text of the word, *including* the surrounding angle
+// brackets of an IRI. The match has to cover the entire word, so a regex must
+// describe the whole IRI; to allow an arbitrary suffix, end it with `.*`. For
+// example the regex `<https://example\.org/statement/.*>` matches the IRI
+// `<https://example.org/statement/42>`. Only IRIs (words starting with `<`)
+// are ever treated this way; literals are never converted. The regexes are
+// required to describe IRIs (i.e. to start with `<`), which is enforced by
+// `IndexImpl::setBlankNodeIriRegexes`. See also the
+// `--iri-as-blank-node-regexes` option of the index builder.
+inline bool isBlankNode(std::string_view word,
+                        const ad_utility::RegexSet& blankNodeIriRegexes) {
+  if (ql::starts_with(word, "_:")) {
+    return true;
+  }
+  // Only IRIs (which start with `<`) can be treated as blank nodes; this also
+  // avoids running the regexes for the common case of a literal.
+  if (!ql::starts_with(word, "<")) {
+    return false;
+  }
+  return blankNodeIriRegexes.matchesAny(word);
+}
+
 // An IRI or literal together with its index in the global vocabulary. This is
 // used during vocabulary merging.
 //
@@ -51,30 +79,10 @@ struct TripleComponentWithIndex {
   [[nodiscard]] auto& isExternal() { return isExternal_; }
   [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
   [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
-  // Return true if this word is a blank node. A word is a blank node if it
-  // starts with `_:`, or, when `blankNodeIriRegexes` is given, if it is an IRI
-  // that is fully matched by one of those regexes.
-  //
-  // The regexes are matched (as a full match, see `ad_utility::RegexSet`)
-  // against the full text of the word, *including* the surrounding angle
-  // brackets of an IRI. The match has to cover the entire word, so a regex must
-  // describe the whole IRI; to allow an arbitrary suffix, end it with `.*`. For
-  // example the regex `<https://example\.org/statement/.*>` matches the IRI
-  // `<https://example.org/statement/42>`. Only IRIs (words starting with `<`)
-  // are ever treated this way; literals are never converted. The regexes are
-  // required to describe IRIs (i.e. to start with `<`), which is enforced by
-  // `IndexImpl::setBlankNodeIriRegexes`. See also the
-  // `--iri-as-blank-node-regexes` option of the index builder.
+  // Return true if this word is a blank node, see the free `isBlankNode`
+  // function above.
   bool isBlankNode(const ad_utility::RegexSet& blankNodeIriRegexes) const {
-    if (ql::starts_with(iriOrLiteral_, "_:")) {
-      return true;
-    }
-    // Only IRIs (which start with `<`) can be treated as blank nodes; this also
-    // avoids running the regexes for the common case of a literal.
-    if (!ql::starts_with(iriOrLiteral_, "<")) {
-      return false;
-    }
-    return blankNodeIriRegexes.matchesAny(iriOrLiteral_);
+    return ::isBlankNode(iriOrLiteral_, blankNodeIriRegexes);
   }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {

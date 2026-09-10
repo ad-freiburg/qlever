@@ -58,7 +58,7 @@ TEST_P(SpatialJoinCachedIndexTest, Basic) {
   auto qec = ad_utility::testing::getQec(kb);
   qec->pinResultWithName() = {"dummy", Variable{"?o"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinned, qec);
-  [[maybe_unused]] auto pinResult = plan.getResult();
+  [[maybe_unused]] auto pinResult = plan->getResult();
 
   auto& cache = qec->namedResultCache();
   if (shouldSerialize) {
@@ -132,8 +132,8 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
   auto qec = ad_utility::testing::getQec(kb);
   qec->pinResultWithName() = {"dummy", Variable{"?geo2"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinQuery, qec);
-  const auto pinResultCacheKey = plan.getCacheKey();
-  [[maybe_unused]] auto pinResult = plan.getResult();
+  const auto pinResultCacheKey = plan->getCacheKey();
+  [[maybe_unused]] auto pinResult = plan->getResult();
 
   auto& cache = qec->namedResultCache();
   if (shouldSerialize) {
@@ -211,7 +211,7 @@ TEST_P(SpatialJoinCachedIndexSimplificationTest, WithoutSimplification) {
   auto qec = ad_utility::testing::getQec(kb);
   qec->pinResultWithName() = {"idx", Variable{"?o"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(query, qec);
-  [[maybe_unused]] auto pinResult = plan.getResult();
+  [[maybe_unused]] auto pinResult = plan->getResult();
 
   auto& cache = qec->namedResultCache();
   if (shouldSerialize) {
@@ -240,7 +240,7 @@ TEST_P(SpatialJoinCachedIndexSimplificationTest, WithSimplification) {
   auto qec = ad_utility::testing::getQec(kb);
   qec->pinResultWithName() = {"idx", Variable{"?o"}, 10.0};
   auto plan = queryPlannerTestHelpers::parseAndPlan(query, qec);
-  [[maybe_unused]] auto pinResult = plan.getResult();
+  [[maybe_unused]] auto pinResult = plan->getResult();
 
   auto& cache = qec->namedResultCache();
   if (shouldSerialize) {

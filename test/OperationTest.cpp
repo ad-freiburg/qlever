@@ -55,7 +55,15 @@ void expectRtiHasDimensions(
 }
 }  // namespace
 
-// ________________________________________________
+// _____________________________________________________________________________
+TEST(OperationTest, constructorRequiresQueryExecutionContext) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      NeutralElementOperation{nullptr},
+      ::testing::HasSubstr(
+          "An `Operation` requires a `QueryExecutionContext`"));
+}
+
+// _____________________________________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
   LimitOffsetClause l;
   {
@@ -554,9 +562,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
 
 // _____________________________________________________________________________
 TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});
   auto index = std::make_shared<Index>(makeTestIndex(
