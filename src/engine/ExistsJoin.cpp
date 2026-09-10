@@ -10,13 +10,12 @@
 #include "engine/QueryPlanner.h"
 #include "engine/Result.h"
 #include "engine/Sort.h"
-#include "engine/StripColumns.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
+#include "util/ColumnStrippingHelpers.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
-#include "util/ColumnStrippingHelpers.h"
 #include "util/VectorWithMemoryLimit.h"
 
 // _____________________________________________________________________________
@@ -594,11 +593,11 @@ ExistsJoin::makeTreeWithStrippedColumns(
 
   // The variables of the left column plus the existsVariable_ are needed for
   // the ExistsJoin-Operation to work.
-  std::vector<Variable> keepVars;
+  std::vector<const Variable*> keepVars;
   VariableToColumnMap v2cMap = computeVariableToColumnMap();
   for (const auto& [variable, _] : v2cMap) {
     helper.add(variable);
-    keepVars.push_back(variable);
+    keepVars.push_back(&variable);
   }
   const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
@@ -615,22 +614,9 @@ ExistsJoin::makeTreeWithStrippedColumns(
     return left;
   }
 
-  // Create query execution tree with ExistsJoin-Operation as root operation.
-  auto treeWithExistsJoinRoot = ad_utility::makeExecutionTree<ExistsJoin>(
-      getExecutionContext(), std::move(left), std::move(right),
-      existsVariable_);
-
-  // The ExistsJoin-Operation returns a table with the variables of the left
-  // subtree plus the existsVariable_ by default. But this does not necessarily
-  // mean that the parent tree requests all those variables. If all variables
-  // are requested by the parent tree, return treeWithExistsJoinRoot. If not, an
-  // additional StripColumns-Operation is added in the executionTree above the
-  // ExistsJoin-Operation.
-  if (ql::ranges::all_of(keepVars, [&variables](const auto& var) {
-        return ad_utility::contains(variables, var);
-      })) {
-    return treeWithExistsJoinRoot;
-  }
-  return ad_utility::makeExecutionTree<StripColumns>(
-      getExecutionContext(), std::move(treeWithExistsJoinRoot), variables);
+  // Create query execution tree with ExistsJoin-Operation as root-Operation and
+  // add additional stripColumns-Operation if needed.
+  return makeTreeWithOptionalStripOperation<ExistsJoin>(
+      getExecutionContext(), variables, std::move(keepVars), std::move(left),
+      std::move(right), existsVariable_);
 }
