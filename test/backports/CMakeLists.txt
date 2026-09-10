@@ -2,7 +2,7 @@
 add_executable(AlgorithmBackportTests algorithmTest.cpp)
 add_executable(DebugJoinView DebugJoinView.cpp)
 qlever_target_link_libraries(DebugJoinView)
-target_link_libraries(AlgorithmBackportTests GTest::gtest GTest::gmock_main)
+qlever_target_link_libraries(AlgorithmBackportTests qleverTestMain GTest::gtest GTest::gmock)
 gtest_discover_tests(AlgorithmBackportTests AlgorithmBackportTests)
 addLinkAndDiscoverTestNoLibs(ConceptsTest)
 addLinkAndDiscoverTestNoLibs(ShiftTest)
