@@ -11,13 +11,13 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_HOMOGENEOUSNUMERICEXPRESSIONHELPERS_H
 
 #include <array>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 
+#include "backports/concepts.h"
 #include "engine/CallFixedSize.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -152,9 +152,9 @@ inline auto classifyNumericOperands(EvaluationContext* context,
 // already established by homogeneous classification.
 template <typename NumericType>
 NumericType getHomogeneousNumericValue(ValueId value) {
-  if constexpr (std::same_as<NumericType, int64_t>) {
+  if constexpr (ql::concepts::same_as<NumericType, int64_t>) {
     return value.getInt();
-  } else if constexpr (std::same_as<NumericType, double>) {
+  } else if constexpr (ql::concepts::same_as<NumericType, double>) {
     return value.getDouble();
   } else {
     static_assert(ad_utility::alwaysFalse<NumericType>,
@@ -238,6 +238,28 @@ decltype(auto) dispatchHomogeneousNumericTypes(
       });
 }
 
+// Check that a vector-like operand has the expected size. Constant operands
+// don't require a size check.
+template <typename Operand>
+void checkHomogeneousNumericOperandSize(const Operand& operand,
+                                        EvaluationContext* context) {
+  using OperandType = std::decay_t<Operand>;
+  if constexpr (isVectorResult<OperandType>) {
+    AD_CORRECTNESS_CHECK(operand.size() == context->size());
+  }
+}
+
+// Apply the size check to all operands of a homogeneous numeric operation.
+template <typename... Operands>
+void checkHomogeneousNumericOperandSizes(
+    const std::tuple<Operands...>& operands, EvaluationContext* context) {
+  std::apply(
+      [context](const auto&... operand) {
+        (checkHomogeneousNumericOperandSize(operand, context), ...);
+      },
+      operands);
+}
+
 // Evaluate a homogeneous numeric operation when at least one operand is
 // non-constant. For the currently supported operand representations, this
 // means that at least one operand is vector-like.
@@ -249,18 +271,7 @@ ExpressionResult evaluateHomogeneousNumericOperation(
                 "At least one operand must be vector-like");
 
   // Check the size of every vector-like operand.
-  std::apply(
-      [context](const auto&... operand) {
-        (
-            [&] {
-              using OperandType = std::decay_t<decltype(operand)>;
-              if constexpr (isVectorResult<OperandType>) {
-                AD_CORRECTNESS_CHECK(operand.size() == context->size());
-              }
-            }(),
-            ...);
-      },
-      operands);
+  checkHomogeneousNumericOperandSizes(operands, context);
 
   using FastFunction = RawNumericFunctionT<Function>;
   FastFunction function;

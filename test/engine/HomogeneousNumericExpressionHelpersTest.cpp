@@ -16,6 +16,7 @@
 
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "backports/concepts.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 
 namespace {
@@ -82,6 +83,10 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedOperandTypes) {
   static_assert(supportsHomogeneousNumericOperand<ValueId>());
   static_assert(supportsHomogeneousNumericOperand<ql::span<const ValueId>>());
   static_assert(!supportsHomogeneousNumericOperand<int>());
+
+  EXPECT_TRUE(supportsHomogeneousNumericOperand<ValueId>());
+  EXPECT_TRUE(supportsHomogeneousNumericOperand<ql::span<const ValueId>>());
+  EXPECT_FALSE(supportsHomogeneousNumericOperand<int>());
 }
 
 // _____________________________________________________________________________
@@ -189,7 +194,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
         using Left = typename decltype(leftType)::type;
         using Right = typename decltype(rightType)::type;
 
-        return std::same_as<Left, int64_t> && std::same_as<Right, double>;
+        return ql::concepts::same_as<Left, int64_t> &&
+               ql::concepts::same_as<Right, double>;
       });
 
   EXPECT_TRUE(result);
