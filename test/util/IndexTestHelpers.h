@@ -80,12 +80,12 @@ struct TestIndexConfig {
   // index building.
   bool addHasWordTriples = false;
   // The words of the secondary vocabulary of the index (see
-  // `index/vocabulary/SecondaryVocabulary.h`). They have to be distinct (their
-  // order is arbitrary, see `SecondaryVocabulary`), and must not be contained
-  // in `turtleInput`, because the secondary vocabulary is disjoint from the
-  // vocabulary of the main index. NOTE: A secondary vocabulary is currently
-  // only created for testing (see `IndexImpl::setSecondaryVocab`), which is
-  // what this member does.
+  // `index/vocabulary/SecondaryVocabulary.h`). They have to be sorted and
+  // pairwise distinct (see `SecondaryVocabulary::appendSegment`), and must not
+  // be contained in `turtleInput`, because the secondary vocabulary is
+  // disjoint from the vocabulary of the main index. NOTE: A secondary
+  // vocabulary is currently only created for testing (see
+  // `IndexImpl::setSecondaryVocab`), which is what this member does.
   std::optional<std::vector<std::string>> secondaryVocabWords = std::nullopt;
 
   // A very typical use case is to only specify the turtle input, and leave all

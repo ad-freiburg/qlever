@@ -54,11 +54,12 @@ using ::testing::HasSubstr;
 using ::testing::Optional;
 using ::testing::UnorderedElementsAre;
 
-// The words of the secondary vocabulary that the tests below use, in
-// insertion order (which is the order of their `Id`s, see
-// `SecondaryVocabulary`). In the semantic order of the main vocabulary (see
-// `makeIndexWithSecondaryVocab`), `"a"` is sorted before all of its words,
-// `<b>` between `<a>` and `<c>`, and `<d>` between `<c>` and `<p>`.
+// The words of the secondary vocabulary that the tests below use, sorted, so
+// that they can be appended as a single segment; their global indices are
+// their positions in this vector (see `SecondaryVocabulary`). In the semantic
+// order of the main vocabulary (see `makeIndexWithSecondaryVocab`), `"a"` is
+// sorted before all of its words, `<b>` between `<a>` and `<c>`, and `<d>`
+// between `<c>` and `<p>`.
 const std::vector<std::string> secondaryVocabWords{"\"a\"", "<b>", "<d>"};
 
 // The `Id` of the word of the secondary vocabulary at the given index.
@@ -137,16 +138,18 @@ TEST(SecondaryVocabulary, wordsAndLookup) {
 }
 
 // _____________________________________________________________________________
-TEST(SecondaryVocabulary, wordsDoNotHaveToBeSortedButHaveToBeDistinct) {
-  // Words may be in any order; they simply get their `Id`s in insertion
-  // order.
-  SecondaryVocabulary vocab{{"<d>", "<b>"}};
-  EXPECT_EQ(vocab[SecondaryVocabIndex::make(0)], "<d>");
-  EXPECT_EQ(vocab[SecondaryVocabIndex::make(1)], "<b>");
+TEST(SecondaryVocabulary, wordsHaveToBeSortedAndDistinct) {
+  // The words of a segment get their global indices in the order in which
+  // they are stored, which has to be the sorted order.
+  SecondaryVocabulary vocab{{"<b>", "<d>"}};
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(0)], "<b>");
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(1)], "<d>");
 
-  // Duplicate words are still a programming error.
+  // Unsorted or duplicate words are a programming error.
+  AD_EXPECT_THROW_WITH_MESSAGE((SecondaryVocabulary{{"<d>", "<b>"}}),
+                               HasSubstr("have to be sorted and pairwise"));
   AD_EXPECT_THROW_WITH_MESSAGE((SecondaryVocabulary{{"<b>", "<b>"}}),
-                               HasSubstr("have to be distinct"));
+                               HasSubstr("have to be sorted and pairwise"));
 }
 
 // _____________________________________________________________________________
@@ -173,21 +176,50 @@ TEST(SecondaryVocabulary, appendSegmentKeepsExistingIndicesStable) {
 // _____________________________________________________________________________
 TEST(SecondaryVocabulary, appendSegmentRejectsWordAlreadyContained) {
   SecondaryVocabulary vocab{secondaryVocabWords};
-  AD_EXPECT_THROW_WITH_MESSAGE(vocab.appendSegment(makeSegment({"<f>", "<b>"})),
-                               HasSubstr("have to be distinct"));
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.appendSegment(makeSegment({"<b>", "<f>"})),
+                               HasSubstr("the word <b> is already contained"));
   // The rejected segment must not have been appended.
   EXPECT_EQ(vocab.numWords(), secondaryVocabWords.size());
   EXPECT_EQ(vocab.numSegments(), 1);
+  expectWordsAndIdsMatch(vocab, secondaryVocabWords);
 }
 
 // _____________________________________________________________________________
-TEST(SecondaryVocabulary, appendSegmentRejectsInternalDuplicates) {
+TEST(SecondaryVocabulary, appendSegmentRejectsUnsortedOrDuplicateWords) {
   SecondaryVocabulary vocab{};
   AD_EXPECT_THROW_WITH_MESSAGE(
-      vocab.appendSegment(makeSegment({"<f>", "<g>", "<f>"})),
-      HasSubstr("have to be distinct"));
+      vocab.appendSegment(makeSegment({"<f>", "<g>", "<e>"})),
+      HasSubstr("have to be sorted and pairwise"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      vocab.appendSegment(makeSegment({"<f>", "<f>", "<g>"})),
+      HasSubstr("have to be sorted and pairwise"));
   EXPECT_EQ(vocab.numWords(), 0);
   EXPECT_EQ(vocab.numSegments(), 0);
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, appendSegmentMergesIntoTheSortedIndices) {
+  // The words of the appended segments are interleaved with the ones that are
+  // already contained, in front of them, and behind them, so that the merge
+  // has to move existing entries in all of those ways.
+  SecondaryVocabulary vocab{{"<b>", "<d>"}};
+  vocab.appendSegment(makeSegment({"<a>", "<c>", "<e>"}));
+  vocab.appendSegment(makeSegment({"<f>"}));
+  vocab.appendSegment(makeSegment({"<A>"}));
+
+  // The global indices are the ones from the order in which the words were
+  // appended, not the lexicographic ones.
+  const std::vector<std::string> wordsInGlobalOrder{"<b>", "<d>", "<a>", "<c>",
+                                                    "<e>", "<f>", "<A>"};
+  EXPECT_EQ(vocab.numWords(), wordsInGlobalOrder.size());
+  EXPECT_EQ(vocab.numSegments(), 4);
+  expectWordsAndIdsMatch(vocab, wordsInGlobalOrder);
+
+  // Words that are not contained, in front of, between, and behind the
+  // contained ones.
+  EXPECT_EQ(vocab.getId("<0>"), std::nullopt);
+  EXPECT_EQ(vocab.getId("<c1>"), std::nullopt);
+  EXPECT_EQ(vocab.getId("<g>"), std::nullopt);
 }
 
 // _____________________________________________________________________________
