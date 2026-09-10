@@ -497,14 +497,20 @@ class CompressedRelationWriter {
                              bool invokeCallback);
 
   // Return the number of rows that a single block of small relations may hold
-  // at most. Note that a block is only completed once the rows that are to be
-  // added next don't fit into it anymore, so the last relation that is added
-  // to a block may push it beyond this limit.
+  // at most.
   //
-  // NOTE: there are some unit tests that rely on the factor `1.5` below.
-  size_t smallRelationBlockCapacity() const {
-    return static_cast<size_t>(static_cast<double>(blocksize()) * 1.5);
-  }
+  // Note: The `blocksize()` is only a soft target which blocks may exceed in
+  // two independent ways. First, a block of small relations is filled up to
+  // the 1.5-fold of the `blocksize()` (which is exactly the capacity returned
+  // here), and it is only completed once the rows that are to be added next
+  // don't fit into it anymore, so the last relation that is added to a block
+  // may push it even beyond that capacity. Second, a block of a large relation
+  // grows beyond the `blocksize()` whenever equal triples (when disregarding
+  // the graph and the payload columns) would otherwise be split across two
+  // blocks, see `PermutationWriter::addRowsOfCurrentRelation`.
+  //
+  // NOTE: there are some unit tests that rely on the factor `3 / 2` below.
+  size_t smallRelationBlockCapacity() const { return (3 * blocksize()) / 2; }
 
   // Return the number of rows that can still be added to the current block of
   // small relations without starting a new block. May be zero.
@@ -526,6 +532,13 @@ class CompressedRelationWriter {
   // rows of a larger table can be added directly, without materializing it in
   // an intermediate buffer first.
   //
+  // Note: For all current callers the `col0` IDs are stored in column 0 of
+  // `relations`, so that `firstCol0Id == relations(beginIdx, 0)` and
+  // `lastCol0Id == relations(endIdx - 1, 0)` (this is checked below). They are
+  // still passed explicitly, because the callers have them at hand anyway, and
+  // because the function otherwise doesn't depend on the layout of the
+  // arbitrary `Table`.
+  //
   // Note: A new block is started if the complete batch doesn't fit into the
   // current one. The resulting blocks are therefore exactly the same as if the
   // relations of the batch were added one by one, provided that the caller has
@@ -541,6 +554,8 @@ class CompressedRelationWriter {
   void addSmallRelations(Id firstCol0Id, Id lastCol0Id, const Table& relations,
                          size_t beginIdx, size_t endIdx) {
     AD_CORRECTNESS_CHECK(beginIdx < endIdx && endIdx <= relations.numRows());
+    AD_EXPENSIVE_CHECK(firstCol0Id == relations(beginIdx, 0) &&
+                       lastCol0Id == relations(endIdx - 1, 0));
     size_t numRows = endIdx - beginIdx;
     // Make sure that the blocks don't become too large: If the previously
     // buffered small relations together with the new relations would exceed

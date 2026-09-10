@@ -53,7 +53,3 @@ sourcelist
 # Test index artifacts that are generated when a unit-test binary is run with
 # the repository root as its working directory.
 /_staticGlobalTestIndex*
-
-# CTest artifacts that are generated when `ctest` is run with the repository
-# root as its working directory.
-/Testing/

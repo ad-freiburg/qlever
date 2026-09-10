@@ -139,12 +139,18 @@ auto addGraphColumnIfNecessary(std::vector<RelationInput>& inputs) {
 cppcoro::generator<IdTableStatic<0>> makeInputBlocks(
     std::vector<RelationInput> inputs, size_t numColumns,
     size_t inputBlockSize) {
+  // A fixed-size buffer for a single row, which avoids one allocation per row.
+  // Only the first `numColumns` entries are ever used.
+  static constexpr size_t maxNumColumns = 8;
+  AD_CORRECTNESS_CHECK(numColumns <= maxNumColumns);
+  std::array<Id, maxNumColumns> rowBuffer{};
   IdTableStatic<0> buffer{numColumns, ad_utility::testing::makeAllocator()};
   for (const auto& input : inputs) {
     for (const auto& arr : input.col1And2_) {
-      std::vector row{V(input.col0_)};
-      ql::ranges::transform(arr, std::back_inserter(row), V);
-      buffer.push_back(row);
+      AD_CORRECTNESS_CHECK(arr.size() + 1 == numColumns);
+      rowBuffer[0] = V(input.col0_);
+      ql::ranges::transform(arr, rowBuffer.begin() + 1, V);
+      buffer.push_back(ql::span<const Id>{rowBuffer}.subspan(0, numColumns));
       if (buffer.numRows() > inputBlockSize) {
         co_yield buffer;
         buffer.clear();

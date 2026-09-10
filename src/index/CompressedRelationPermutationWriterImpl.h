@@ -416,12 +416,14 @@ struct CompressedRelationWriter::PermutationWriter {
     // see `isCompleteSmallRelation`) case that it exceeds the capacity all by
     // itself. The loop is always left via one of the `break`s, because a run
     // that reaches the end of the input block is never a complete small
-    // relation; the condition only makes the indexing of `col0` inside
-    // `findEndOfRun` safe.
+    // relation, which is exactly what the check at the beginning of the loop
+    // body asserts. That check also guarantees that the indexing of `col0`
+    // inside `findEndOfRun` is safe.
     size_t end = firstRunEnd;
     size_t numRelations = 1;
     Id lastCol0Id = col0[begin];
-    while (end < numRowsOfBlock) {
+    for (;;) {
+      AD_CORRECTNESS_CHECK(end < numRowsOfBlock);
       size_t nextEnd = findEndOfRun(col0, end);
       if (!isCompleteSmallRelation(end, nextEnd, numRowsOfBlock) ||
           nextEnd - begin > capacity) {
