@@ -506,11 +506,13 @@ namespace serverProcessHelpers {
 using namespace ad_utility::url_parser;
 using namespace ad_utility::httpUtils;
 // Metadata for a `cmd=<name>` URL parameter handled by `Server::process`:
-// the log message and whether it requires a valid access token.
+// the log message, whether it requires a valid access token, and whether it
+// accepts (and uses) an additional query/update alongside `cmd=`.
 struct CommandMeta {
   std::string_view name_;
   std::string_view description_;
   bool requiresAuth_;
+  bool supportsOperation_ = false;
 };
 
 constexpr std::array commands = {
@@ -528,7 +530,8 @@ constexpr std::array commands = {
     CommandMeta{"get-index-id", "get index ID", false},
     CommandMeta{"dump-active-queries", "dump active queries", true},
     CommandMeta{"rebuild-index", "rebuilding index", true},
-    CommandMeta{"write-materialized-view", "write materialized view", true},
+    CommandMeta{"write-materialized-view", "write materialized view", true,
+                true},
     CommandMeta{"load-materialized-view", "explicitly load materialized view",
                 true},
     CommandMeta{"delete-materialized-view", "delete materialized view", true},
@@ -543,6 +546,18 @@ void requireValidAccessToken(bool accessTokenOk, std::string_view actionName) {
                     absl::StrCat(actionName,
                                  " requires a valid access token but no "
                                  "access token was provided"));
+  }
+}
+
+// Throw a 400 `HttpError` if `operation` is not `None`; `actionName` names the
+// command being checked, for the error message.
+void requireNoOperation(const sparqlOperation::Operation& operation,
+                        std::string_view actionName) {
+  if (!std::holds_alternative<sparqlOperation::None>(operation)) {
+    throw HttpError(
+        boost::beast::http::status::bad_request,
+        absl::StrCat("cmd=", actionName,
+                     " does not accept an additional query or update"));
   }
 }
 
@@ -579,14 +594,20 @@ auto makeCheckParameter(const ParamValueMap& parameters) {
   return absl::bind_front(&checkParameter, std::cref(parameters));
 }
 
-// Look up metadata for `cmd` in `commands`, run the access-token check (if
-// required), and log it. `cmd` must name an entry in `commands`. It always
-// comes from a literal used in the `process()` dispatch below.
-void dispatchLog(std::string_view cmd, bool accessTokenOk) {
+// Look up `cmd`'s metadata in `commands`, run its pre-dispatch checks — the
+// access-token check (if required) and the additional-query/update check —
+// and log that it is being processed. `cmd` must name an entry in
+// `commands`. It always comes from a literal used in the `process()`
+// dispatch below.
+void dispatchLog(std::string_view cmd, bool accessTokenOk,
+                 const sparqlOperation::Operation& operation) {
   auto it = ql::ranges::find(commands, cmd, &CommandMeta::name_);
   AD_CORRECTNESS_CHECK(it != commands.end());
   if (it->requiresAuth_) {
     requireValidAccessToken(accessTokenOk, it->name_);
+  }
+  if (!it->supportsOperation_) {
+    requireNoOperation(operation, it->name_);
   }
   AD_LOG_INFO << "Processing command \"" << it->name_
               << "\": " << it->description_ << std::endl;
@@ -642,10 +663,13 @@ CPP_template_def(typename RequestT)(
   auto checkParameter = makeCheckParameter(parameters);
 
   // Check if `cmd=<cmd>` is set in `parameters`. If so, log this information
-  // via `dispatchLog()` and return true. Return false otherwise.
-  auto commandIs = [accessTokenOk, &checkParameter](std::string_view cmd) {
+  // via `dispatchLog()` (which also throws if `cmd` was combined with a
+  // query/update it doesn't support) and return true. Return false
+  // otherwise.
+  auto commandIs = [accessTokenOk, &checkParameter,
+                    &operation](std::string_view cmd) {
     if (checkParameter("cmd", std::string{cmd})) {
-      dispatchLog(cmd, accessTokenOk);
+      dispatchLog(cmd, accessTokenOk, operation);
       return true;
     }
     return false;
@@ -705,21 +729,14 @@ CPP_template_def(typename RequestT)(
     // `process()` doesn't also try to run it as a regular query.
     co_return ProcessCommandsResult{jsonResponse(materializedViewStats), true};
   } else if (commandIs("load-materialized-view")) {
-    // Flag that this command already consumed the query operation, so
-    // `process()` doesn't also try to run it as a regular query.
     co_return ProcessCommandsResult{
-        jsonResponse(processLoadMaterializedView(parameters, indexAndViews)),
-        true};
+        jsonResponse(processLoadMaterializedView(parameters, indexAndViews))};
   } else if (commandIs("delete-materialized-view")) {
-    // Flag that this command already consumed the query operation, so
-    // `process()` doesn't also try to run it as a regular query.
     co_return ProcessCommandsResult{
-        jsonResponse(processDeleteMaterializedView(parameters)), true};
+        jsonResponse(processDeleteMaterializedView(parameters))};
   } else if (commandIs("unload-materialized-view")) {
-    // Flag that this command already consumed the query operation, so
-    // `process()` doesn't also try to run it as a regular query.
     co_return ProcessCommandsResult{
-        jsonResponse(processUnloadMaterializedView(parameters)), true};
+        jsonResponse(processUnloadMaterializedView(parameters))};
   } else {
     // `cmd` is set but didn't match any of the commands above.
     throw HttpError(boost::beast::http::status::bad_request,
@@ -990,7 +1007,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   // and `delete-materialized-view` don't take a query at all but reuse the
   // same result type. Clear `operation_` for all three so the code below
   // doesn't also run it as a regular query and overwrite `response`.
-  if (commandResult.consumedQueryOperation_) {
+  if (commandResult.queryOperationWasConsumed_) {
     parsedHttpRequest.operation_ = None{};
   }
 

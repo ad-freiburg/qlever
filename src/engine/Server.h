@@ -216,20 +216,22 @@ class Server {
 
   // Handle a `load-materialized-view` command: extract the view name from
   // `parameters` and load it via `indexAndViews`'s materialized views
-  // manager. The caller is responsible for resetting the request's operation
-  // to `None{}` so that `process()` doesn't also try to execute it as a
-  // regular query. Unlike `processWriteMaterializedView` above, this neither
-  // executes a query nor honors a timeout, so it runs synchronously and
-  // either returns its result or throws.
+  // manager. `processCommands` already rejects a request that combines this
+  // command with a query/update before this is called; without that check,
+  // the caller would need to reset the request's `operation_` to `None{}`
+  // itself so `process()` doesn't also try to execute it as a regular query.
+  // Unlike `processWriteMaterializedView` above, this neither executes a
+  // query nor honors a timeout, so it runs synchronously and either returns
+  // its result or throws.
   json processLoadMaterializedView(const ParamValueMap& parameters,
                                    const SharedIndexAndView& indexAndViews);
 
   // Handle a `delete-materialized-view` command: extract the view name from
   // `parameters`, delete it via a freshly taken index/views snapshot (not the
   // one from the beginning of `process()`, so that a concurrent rebuild
-  // cannot make this operate on a stale manager). The caller is responsible
-  // for resetting the request's operation to `None{}`, like
-  // `processLoadMaterializedView` above.
+  // cannot make this operate on a stale manager). Like
+  // `processLoadMaterializedView` above, `processCommands` already rejects a
+  // request that combines this command with a query/update.
   json processDeleteMaterializedView(const ParamValueMap& parameters) const;
 
   // Handle an `unload-materialized-view` command: unload the view named in
@@ -273,22 +275,23 @@ class Server {
     // The response produced by the matched `cmd=` URL parameter, if any.
     std::optional<ResponseT> response_;
 
-    // The commands `write-materialized-view`, `load-materialized-view`, and
-    // `delete-materialized-view` already execute the given query themselves.
-    // Set to true by one of them to tell `process()` not to run the
-    // operation again via `processOperation`.
-    bool consumedQueryOperation_ = false;
+    // Set to true for commands whose `serverProcessHelpers::CommandMeta::
+    // supportsOperation_` is true (currently only `write-materialized-view`,
+    // which uses the given query as the view-defining query and already
+    // executes it) to tell `process()` not to run the operation again via
+    // `processOperation`.
+    bool queryOperationWasConsumed_ = false;
   };
 
   // Handle the `cmd=<name>` URL parameter (see `serverProcessHelpers::
   // commands` in `Server.cpp` for the full list); throws an `HttpError` if
-  // `cmd` is set but not one of those. `operation` is the parsed
-  // "query"/"update"/graph-store operation of the same request, if any; for
-  // `write-materialized-view` it doubles as the view-defining query. For
-  // that command as well as `load-materialized-view` and
-  // `delete-materialized-view`, the returned
-  // `ProcessCommandsResult::consumedQueryOperation_` is set to tell
-  // `process()` not to also execute it as a regular query.
+  // `cmd` is set but not one of those, or if the matched command's
+  // `CommandMeta::supportsOperation_` is `false` while the request supplies a
+  // "query"/"update"/graph-store `operation` anyway. `write-materialized-
+  // view` is currently the only command with `supportsOperation_` set to
+  // `true`; its `operation` doubles as the view-defining query, and the
+  // returned `ProcessCommandsResult::queryOperationWasConsumed_` is set to
+  // tell `process()` not to also execute it as a regular query.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<ProcessCommandsResult> processCommands(
