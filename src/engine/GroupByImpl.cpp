@@ -17,7 +17,6 @@
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
-#include "engine/StripColumns.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -475,7 +474,9 @@ GroupByImpl::makeTreeWithStrippedColumns(
   // _groupByVariables or aliases, dont have any consequences here, as the
   // columns have been already stripped in the constructor.
   VarsRequiredFromSubtree helper(variables);
+  std::vector<const Variable*> groupByVarsPtr;
   for (const Variable& groupByVar : _groupByVariables) {
+    groupByVarsPtr.push_back(&groupByVar);
     helper.add(groupByVar);
   }
 
@@ -513,24 +514,11 @@ GroupByImpl::makeTreeWithStrippedColumns(
       QueryExecutionTree::makeTreeWithStrippedColumns(_subtree,
                                                       varsRequiredFromSubtree);
 
-  // Create query execution tree with GroupBy-Operation as root operation.
-  auto treeWithGroupByRoot = ad_utility::makeExecutionTree<GroupBy>(
-      getExecutionContext(), _groupByVariables, *resultingAliases,
+  // Create query execution tree with GroupBy-Operation as root-Operation and
+  // add additional stripColumns-Operation if needed.
+  return makeTreeWithOptionalStripOperation<GroupBy>(
+      getExecutionContext(), variables, std::move(groupByVarsPtr), _groupByVariables, std::move(*resultingAliases),
       std::move(subtree));
-
-  // The _groupByVariables are needed to compute GroupBy-Operation, but do not
-  // necessarily belong to the result requested by the parent tree. If all
-  // _groupByVariables are requested by the parent tree, return
-  // treeWithGroupByRoot. If not, an additional StripColumns-Operation is added
-  // in the executionTree above the GroupBy-Operation.
-  if (ql::ranges::all_of(_groupByVariables,
-                         [&variables](const auto& groupByVar) {
-                           return ad_utility::contains(variables, groupByVar);
-                         })) {
-    return treeWithGroupByRoot;
-  }
-  return ad_utility::makeExecutionTree<StripColumns>(
-      getExecutionContext(), std::move(treeWithGroupByRoot), variables);
 }
 
 // _____________________________________________________________________________
