@@ -512,7 +512,7 @@ Result::Generator EmptyPath::computeExistenceCheck(
     }
     co_return;
   }
-  for (auto& [table, localVocab] : childResult->idTables()) {
+  for (const auto& [table, localVocab] : childResult->idTables()) {
     for (auto& pair : processTable(table.asStaticView<0>(), localVocab,
                                    hasWarnedAboutUndef)) {
       co_yield pair;
