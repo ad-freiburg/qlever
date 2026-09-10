@@ -11,6 +11,7 @@
 
 #include <boost/asio/use_awaitable.hpp>
 #include <string>
+#include <utility>
 
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
@@ -35,6 +36,15 @@ RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
 
 // ____________________________________________________________________________
 template <typename Parser>
+net::awaitable<void> RdfAsyncParallelParser<Parser>::parseHeader() {
+  while (state_.parseHeaderStep(
+      co_await blockSource_.asyncGetNextBlock(net::use_awaitable))) {
+    // Nothing to do, all the work happens inside `parseHeaderStep`.
+  }
+}
+
+// ____________________________________________________________________________
+template <typename Parser>
 net::awaitable<typename RdfAsyncParallelParser<Parser>::OptionalTriples>
 RdfAsyncParallelParser<Parser>::getBatchCoroutine() {
   // A previous batch failed, so signal a clean end of the input to stop the
@@ -42,33 +52,29 @@ RdfAsyncParallelParser<Parser>::getBatchCoroutine() {
   if (errorWasEncountered_.load()) {
     co_return std::nullopt;
   }
+  // Declared before the `try` block below and hence destroyed only after it,
+  // in particular only after `errorWasEncountered_` has been set. Were the
+  // permit released during the unwinding (that is, before the `catch` block
+  // runs), then a call that is waiting for the permit could acquire it and
+  // continue although the header of this parser is broken.
+  Permit permit;
   try {
     // Acquire the single permit before anything else. This serializes the
     // fetching of the blocks and at the same time waits for the parsing of the
-    // header, see the class comment. The permit is released by its destructor
-    // if anything below throws.
-    Permit permit = co_await blockFetchPermit_.asyncAcquire(net::use_awaitable);
+    // header, see the class comment.
+    permit = co_await blockFetchPermit_.asyncAcquire(net::use_awaitable);
     AD_CORRECTNESS_CHECK(permit.isValid());
-    // The first call parses the header. Because it holds the permit while
-    // doing so, no other call can interleave with (or overtake) it.
-    if (!headerWasParsed_) {
-      headerWasParsed_ = true;
-      try {
-        // Feed the blocks of the input to the header parser one by one, until
-        // it reports that the header is complete.
-        while (state_.parseHeaderStep(
-            co_await blockSource_.asyncGetNextBlock(net::use_awaitable))) {
-        }
-      } catch (...) {
-        // Store the error while the permit is still held, so that the calls
-        // that are waiting for it also see it below.
-        initializationError_ = std::current_exception();
-      }
+    // Another call has failed while this call was waiting for the permit, so
+    // there is nothing left to parse.
+    if (errorWasEncountered_.load()) {
+      co_return std::nullopt;
     }
-    // The parsing of the header failed (possibly in another call), so not a
-    // single batch can be parsed; report that error.
-    if (initializationError_) {
-      std::rethrow_exception(initializationError_);
+    // The first call parses the header. Because it holds the permit while
+    // doing so, no other call can interleave with (or overtake) it. An error
+    // is propagated to this very call, exactly like an error during the
+    // parsing of a batch below.
+    if (!std::exchange(headerWasParsed_, true)) {
+      co_await parseHeader();
     }
     // The first caller gets to parse the remainder that was left over by the
     // parsing of the header, all others fetch a fresh block.
@@ -86,7 +92,9 @@ RdfAsyncParallelParser<Parser>::getBatchCoroutine() {
     co_return state_.parseBatch(std::move(block).value());
   } catch (...) {
     // Only the first error is propagated to its caller, all subsequent calls
-    // get a clean end of the input instead, see the class comment.
+    // get a clean end of the input instead, see the class comment. The permit
+    // (if it is still held) is only released after this handler has run, see
+    // its declaration above.
     if (!errorWasEncountered_.exchange(true)) {
       throw;
     }

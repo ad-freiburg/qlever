@@ -1448,6 +1448,43 @@ TEST(RdfParserTest, asyncParallelParserHaltsOnFirstError) {
   forAllAsyncParallelParsers(testWithParser);
 }
 
+// Test that an error during the parsing of the header is treated exactly like
+// an error during the parsing of a batch: the call that runs into it reports
+// the error, and all subsequent calls return `nullopt`.
+// _____________________________________________________________________________
+TEST(RdfParserTest, asyncParallelParserHaltsOnHeaderError) {
+  std::string filename{absl::StrCat(gtestCurrentTestName(), ".dat")};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  auto testWithParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    // The prefix declaration is broken, so the input fails to parse before a
+    // single batch has been looked at.
+    ad_utility::makeOfstream(filename)
+        << "@prefix ex: notAnIri .\n<a> <b> <c> .\n";
+
+    boost::asio::thread_pool pool{4};
+    Parser parser{pool.get_executor(),
+                  qlever::InputFileSpecification{
+                      filename, qlever::Filetype::Turtle, std::nullopt},
+                  1_kB, encodedIriManager()};
+    // See the comment in `parseFromFileAsync` above.
+    absl::Cleanup joinPool = [&pool] { pool.join(); };
+
+    // The first call parses the header, runs into the error, and propagates
+    // it. Byte position 12 lies inside the prefix declaration, so the error
+    // indeed comes from the parsing of the header and not from the triple.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parser.asyncGetBatch(boost::asio::use_future).get(),
+        ::testing::ContainsRegex("Parse error at byte position 12"));
+    // Subsequent calls return nullopt to stop the pipeline cleanly.
+    EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
+              std::nullopt);
+    EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
+              std::nullopt);
+  };
+  forAllAsyncParallelParsers(testWithParser);
+}
+
 // Test that the parallel parsers report a parse position of 0, because they
 // parse several blocks at once and hence have no single meaningful position
 // (see `AsyncParserDriver::getParsePosition`).
@@ -1455,10 +1492,7 @@ TEST(RdfParserTest, asyncParallelParserHaltsOnFirstError) {
 TEST(RdfParserTest, parallelParserGetParsePosition) {
   std::string filename{absl::StrCat(gtestCurrentTestName(), ".dat")};
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
-  {
-    auto of = ad_utility::makeOfstream(filename);
-    of << "<subject> <predicate> <object> .\n";
-  }
+  ad_utility::makeOfstream(filename) << "<subject> <predicate> <object> .\n";
   auto testWithParser = [&](auto t) {
     using Parser = typename decltype(t)::type;
     Parser parser{qlever::InputFileSpecification{

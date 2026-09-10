@@ -1142,6 +1142,7 @@ void RdfParallelParsingState<Parser>::parseHeader(
     absl::AnyInvocable<std::optional<qlever::parser::ByteBlock>()>
         getNextBlock) {
   while (parseHeaderStep(getNextBlock())) {
+    // Nothing to do, all the work happens inside `parseHeaderStep`.
   }
 }
 
@@ -1157,6 +1158,7 @@ bool RdfParallelParsingState<Parser>::parseHeaderStep(
   if (block.has_value()) {
     declarationParser.setInputStream(std::move(block.value()));
     while (declarationParser.parseDirectiveManually()) {
+      // Nothing to do, all the work happens inside `parseDirectiveManually`.
     }
     remainder = declarationParser.getUnparsedRemainder();
     // The declarations span more than this block, so we need the next one.

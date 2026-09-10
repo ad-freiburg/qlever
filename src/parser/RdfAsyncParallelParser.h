@@ -14,7 +14,6 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <chrono>
-#include <exception>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -51,8 +50,8 @@
 // acquire that permit before it may touch the input, so the calls that arrive
 // in the meantime automatically suspend (without blocking a thread) until the
 // header has been dealt with. An error during the parsing of the header is
-// stored in `initializationError_`, because without a header not a single
-// batch can be parsed.
+// reported to the call that ran into it, exactly like an error during the
+// parsing of a batch.
 //
 // Once the header or any batch fails to parse, `errorWasEncountered_` is set
 // and:
@@ -108,14 +107,10 @@ class RdfAsyncParallelParser {
   ad_utility::AsyncResourcePool<void> blockFetchPermit_;
 
   // True once the parsing of the header has been attempted, such that only the
-  // first `asyncGetBatch()` call does it. Like `initializationError_` below,
-  // this is only accessed while the permit of `blockFetchPermit_` is held and
-  // hence needs no further synchronization.
+  // first `asyncGetBatch()` call does it. This is only accessed while the
+  // permit of `blockFetchPermit_` is held and hence needs no further
+  // synchronization.
   bool headerWasParsed_ = false;
-
-  // The error (if any) that the parsing of the header ran into. Every
-  // `asyncGetBatch()` call reports it, see the class comment above.
-  std::exception_ptr initializationError_;
 
   // Set to true by the first `asyncGetBatch()` call that encounters an error.
   // All subsequent calls complete with `nullopt` instead of propagating
@@ -153,6 +148,13 @@ class RdfAsyncParallelParser {
   // block and parse it into triples. Throw on a parse error, and return
   // `nullopt` at the end of the input.
   boost::asio::awaitable<OptionalTriples> getBatchCoroutine();
+
+  // Parse the leading declarations of the input (the "header") by feeding the
+  // blocks of the input to `state_` one by one until it reports that the
+  // header is complete. Only called by the first `asyncGetBatch()` call, and
+  // only while the permit of `blockFetchPermit_` is held, see the class
+  // comment above.
+  boost::asio::awaitable<void> parseHeader();
 };
 
 // The `RdfAsyncParallelParser` driven by its own thread pool, which makes it a
