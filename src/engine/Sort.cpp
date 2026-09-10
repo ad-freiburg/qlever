@@ -20,7 +20,7 @@
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/Random.h"
-#include "util/VarsRequiredFromSubtree.h"
+#include "util/ColumnStrippingHelpers.h"
 
 // Type alias for the external sorter.
 //

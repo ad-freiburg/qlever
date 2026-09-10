@@ -16,7 +16,7 @@
 #include "engine/StripColumns.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
-#include "util/VarsRequiredFromSubtree.h"
+#include "util/ColumnStrippingHelpers.h"
 
 // _____________________________________________________________________________
 Bind::Bind(QueryExecutionContext* qec,

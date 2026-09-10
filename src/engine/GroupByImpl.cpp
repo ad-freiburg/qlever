@@ -38,7 +38,7 @@
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
-#include "util/VarsRequiredFromSubtree.h"
+#include "util/ColumnStrippingHelpers.h"
 
 namespace groupBy::detail {
 

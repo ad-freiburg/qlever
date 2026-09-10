@@ -34,7 +34,7 @@
 #include "util/HashMap.h"
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
-#include "util/VarsRequiredFromSubtree.h"
+#include "util/ColumnStrippingHelpers.h"
 
 using namespace qlever::joinHelpers;
 using namespace qlever::joinWithIndexScanHelpers;

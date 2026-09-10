@@ -17,7 +17,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
-#include "util/VarsRequiredFromSubtree.h"
+#include "util/ColumnStrippingHelpers.h"
 
 using std::endl;
 
