@@ -294,12 +294,26 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
   if (it != prefilterVariablePairs.end()) {
+    // Evaluate the prefilter on the freshly computed (not yet prefiltered)
+    // block metadata and intersect the result with the current block
+    // metadata, which possibly was already prefiltered before. The metadata
+    // consists of multiple contiguous ranges (see
+    // `LocatedTriplesPerBlock::getAugmentedMetadata`); `evaluate` is
+    // conservative per range, so evaluating the ranges separately yields a
+    // superset of the relevant blocks. The resulting ranges point into the
+    // underlying metadata storage, which is kept alive by
+    // `locatedTriplesSharedState_`.
+    BlockMetadataRanges prefilteredRanges;
+    for (const BlockMetadataRange& range :
+         getScanSpecAndBlocks().blockMetadata_) {
+      ql::ranges::move(
+          it->first->evaluate(getIndex(), ql::span(range.begin(), range.end()),
+                              colIndex),
+          std::back_inserter(prefilteredRanges));
+    }
     const auto& blockMetadataRanges =
         prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
-            it->first->evaluate(getIndex(),
-                                getScanSpecAndBlocks().getBlockMetadataSpan(),
-                                colIndex),
-            scanSpecAndBlocks_.blockMetadata_);
+            prefilteredRanges, scanSpecAndBlocks_.blockMetadata_);
 
     return makeCopyWithPrefilteredScanSpecAndBlocks(
         {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
