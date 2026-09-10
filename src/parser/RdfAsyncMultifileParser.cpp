@@ -11,6 +11,8 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <memory>
+#include <optional>
 #include <utility>
 
 #include "backports/algorithm.h"
@@ -32,7 +34,7 @@ RdfAsyncMultifileParser::RdfAsyncMultifileParser(
       encodedIriManager_{encodedIriManager},
       bufferSize_{bufferSize},
       useRelaxedParsing_{useRelaxedParsing},
-      files_{std::move(files)} {}
+      fileState_{FileState{std::move(files)}} {}
 
 // _____________________________________________________________________________
 std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
@@ -67,40 +69,67 @@ std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
 // _____________________________________________________________________________
 std::shared_ptr<RdfAsyncMultifileParser::OpenFile>
 RdfAsyncMultifileParser::pickFile() {
-  std::lock_guard lock{mutex_};
-  // Prefer the earliest-opened open file that can take another call.
-  // `openFiles_` is in the order in which the files were opened.
-  for (auto& file : openFiles_) {
-    if (file->supportsConcurrentCalls_ || file->numCallsInFlight_ == 0) {
-      ++file->numCallsInFlight_;
-      return file;
+  auto fileOrSpec = fileState_.withWriteLock([](FileState& state) {
+    // Prefer the earliest-opened open file that can take another call.
+    // `openFiles_` is in the order in which the files were opened.
+    for (auto& file : state.openFiles_) {
+      if (file->supportsConcurrentCalls_ || file->numCallsInFlight_ == 0) {
+        ++file->numCallsInFlight_;
+        return FileOrSpec{file, std::nullopt};
+      }
     }
-  }
-  // No open file has spare capacity; open the next unopened file, if there is
-  // one.
-  if (!noFilesLeft_) {
-    auto spec = files_.get();
-    if (spec.has_value()) {
-      auto file = std::make_shared<OpenFile>(OpenFile{
-          makeFileParser(spec.value()), spec.value().parseInParallel_, 1});
-      openFiles_.push_back(file);
-      return file;
+    // No open file has spare capacity; open the next unopened file, if there
+    // is one. The actual opening happens outside of the lock, see below.
+    if (auto spec = state.files_.get(); spec.has_value()) {
+      return FileOrSpec{nullptr, std::move(spec)};
     }
-    noFilesLeft_ = true;
+    // No unopened files are left either. If there is no open file, every input
+    // is exhausted.
+    if (state.openFiles_.empty()) {
+      return FileOrSpec{nullptr, std::nullopt};
+    }
+    // Otherwise every open file is serial and busy (a parallel file would have
+    // been picked by the loop above); pick the one with the fewest calls in
+    // flight. The call is then queued by that file's own
+    // `AsyncSerialParserAdapter`, so no thread blocks.
+    auto it = ql::ranges::min_element(state.openFiles_, {}, [](const auto& f) {
+      return f->numCallsInFlight_;
+    });
+    ++(*it)->numCallsInFlight_;
+    return FileOrSpec{*it, std::nullopt};
+  });
+  if (!fileOrSpec.specToOpen_.has_value()) {
+    return std::move(fileOrSpec.file_);
   }
-  // No unopened files are left either. If there is no open file, every input
-  // is exhausted.
-  if (openFiles_.empty()) {
-    return nullptr;
-  }
-  // Otherwise every open file is serial and busy (a parallel file would have
-  // been picked by the loop above); pick the one with the fewest calls in
-  // flight. The call is then queued by that file's own
-  // `AsyncSerialParserAdapter`, so no thread blocks.
-  auto it = ql::ranges::min_element(
-      openFiles_, {}, [](const auto& file) { return file->numCallsInFlight_; });
-  ++(*it)->numCallsInFlight_;
-  return *it;
+  // Construct the per-file parser (which opens the input file, and hence may
+  // block) *without* holding the lock, and only then publish it. Note that
+  // this means that concurrent calls may publish their files in a different
+  // order than the one in which they took the specifications; the scheduling
+  // policy only treats `openFiles_` as a preference order, so this is
+  // harmless.
+  const auto& spec = fileOrSpec.specToOpen_.value();
+  auto file = std::make_shared<OpenFile>(
+      OpenFile{makeFileParser(spec), spec.parseInParallel_, 1});
+  fileState_.withWriteLock(
+      [&file](FileState& state) { state.openFiles_.push_back(file); });
+  return file;
+}
+
+// _____________________________________________________________________________
+void RdfAsyncMultifileParser::releaseFile(const std::shared_ptr<OpenFile>& file,
+                                          bool wasExhausted) {
+  fileState_.withWriteLock([&file, wasExhausted](FileState& state) {
+    --file->numCallsInFlight_;
+    if (!wasExhausted) {
+      return;
+    }
+    // This file is exhausted; remove it from the open list, unless another
+    // concurrent call for the very same file already did so.
+    auto it = ql::ranges::find(state.openFiles_, file);
+    if (it != state.openFiles_.end()) {
+      state.openFiles_.erase(it);
+    }
+  });
 }
 
 // _____________________________________________________________________________
@@ -118,18 +147,7 @@ RdfAsyncMultifileParser::getBatchCoroutine() {
     }
     try {
       auto batch = co_await file->parser_->asyncGetBatch(net::use_awaitable);
-      {
-        std::lock_guard lock{mutex_};
-        --file->numCallsInFlight_;
-        if (!batch.has_value()) {
-          // This file is exhausted; remove it from the open list, unless
-          // another concurrent call for the very same file already did so.
-          auto it = ql::ranges::find(openFiles_, file);
-          if (it != openFiles_.end()) {
-            openFiles_.erase(it);
-          }
-        }
-      }
+      releaseFile(file, !batch.has_value());
       if (batch.has_value()) {
         co_return batch;
       }
@@ -137,10 +155,7 @@ RdfAsyncMultifileParser::getBatchCoroutine() {
       // (possibly) another file.
       continue;
     } catch (...) {
-      {
-        std::lock_guard lock{mutex_};
-        --file->numCallsInFlight_;
-      }
+      releaseFile(file, false);
       // Only the first error is propagated to its caller, all subsequent
       // calls get a clean end of the input instead, see the class comment.
       if (!errorWasEncountered_.exchange(true)) {

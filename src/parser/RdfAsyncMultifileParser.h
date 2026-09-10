@@ -14,6 +14,7 @@
 #include <boost/asio/awaitable.hpp>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 #include "backports/asio.h"
@@ -23,6 +24,7 @@
 #include "parser/RdfParser.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Synchronized.h"
 
 // The asynchronous counterpart of `RdfMultifileParser`: parses several input
 // files, each specified by an `InputFileSpecification`, and delivers their
@@ -91,22 +93,37 @@ class RdfAsyncMultifileParser : public AsyncRdfParserBase {
     size_t numCallsInFlight_ = 0;
   };
 
+  // All the state of the scheduling policy that is shared between concurrent
+  // `asyncGetBatch()` calls, and hence may only be accessed while the lock of
+  // `fileState_` is held.
+  struct FileState {
+    // The input files that have not been opened yet. `get()` is only called
+    // when a new file is actually wanted, and returns `std::nullopt` from then
+    // on (both implementations of `InputRangeTypeErased` keep doing so once
+    // exhausted), so no separate "no files left" flag is needed.
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files_;
+    // The currently open files, in the order in which they were opened (which
+    // is also the preference order of the scheduling policy above). A
+    // `shared_ptr`, because a file may be removed from this list (by whichever
+    // caller happens to see its end of input) while other callers still have
+    // calls in flight on it, and the per-file parser must outlive those calls.
+    std::vector<std::shared_ptr<OpenFile>> openFiles_;
+  };
+
+  // The result of the locked part of `pickFile()`: either a file to be called
+  // (`nullptr` if every input is exhausted), or the specification of a file
+  // that still has to be opened, which then happens outside of the lock.
+  struct FileOrSpec {
+    std::shared_ptr<OpenFile> file_;
+    std::optional<qlever::InputFileSpecification> specToOpen_;
+  };
+
   const EncodedIriManager* encodedIriManager_;
   ad_utility::MemorySize bufferSize_;
   bool useRelaxedParsing_;
 
-  // Guard `files_`, `noFilesLeft_`, and `openFiles_`.
-  std::mutex mutex_;
-  // The input files that have not been opened yet.
-  ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files_;
-  // `true` once `files_.get()` has returned `std::nullopt`.
-  bool noFilesLeft_ = false;
-  // The currently open files, in the order in which they were opened (which
-  // is also the preference order of the scheduling policy above). A
-  // `shared_ptr`, because a file may be removed from this list (by whichever
-  // caller happens to see its end of input) while other callers still have
-  // calls in flight on it, and the per-file parser must outlive those calls.
-  std::vector<std::shared_ptr<OpenFile>> openFiles_;
+  // Only ever locked exclusively, hence a plain `std::mutex`.
+  ad_utility::Synchronized<FileState, std::mutex> fileState_;
 
   // Set once any per-file parser reports an error. All subsequent
   // `asyncGetBatch()` calls then complete with `nullopt` instead of
@@ -148,8 +165,14 @@ class RdfAsyncMultifileParser : public AsyncRdfParserBase {
   // Pick the next file to call according to the scheduling policy from the
   // class comment above (opening a new one if necessary and incrementing its
   // `numCallsInFlight_`), or return `nullptr` if there is currently no file
-  // to call because all inputs are exhausted.
+  // to call because all inputs are exhausted. Every picked file must later be
+  // given back via `releaseFile`.
   std::shared_ptr<OpenFile> pickFile();
+
+  // Give back a file that was obtained from `pickFile`: decrement its
+  // `numCallsInFlight_` and, if `wasExhausted` is `true`, remove it from the
+  // list of open files.
+  void releaseFile(const std::shared_ptr<OpenFile>& file, bool wasExhausted);
 
   // Construct the per-file `AsyncRdfParserBase` for `spec`, choosing the
   // concrete parser type based on `spec.parseInParallel_` and

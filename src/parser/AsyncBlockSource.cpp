@@ -11,7 +11,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <stdexcept>
 #include <string_view>
@@ -63,15 +62,15 @@ void BlockingBlockSource::asyncGetNextBlockImpl(Handler handler) {
       exception = std::current_exception();
     }
     // Invoke the handler *outside* of the strand, on the plain executor.
-    // Downstream, the handler typically resumes a coroutine (via
-    // `boost::asio::dispatch` on the executor of the pool, which runs inline
-    // when called from a thread of that pool), and that coroutine then does
-    // expensive work: it parses the block and, in the index builder, will even
-    // map the resulting triples to IDs. Were the handler invoked from within
-    // the strand, all of that work would run while the strand is held, so the
-    // next fetch (which is queued on the strand) could only start once it has
-    // finished, and the whole pipeline would effectively run on a single
-    // thread.
+    // A handler that came in via `AsyncBlockSource::asyncGetNextBlock` would
+    // not need this, as it does nothing but `post` the actual completion
+    // handler (see there). A wrapper source that obtained this source's
+    // handler via `callAsyncGetNextBlockImpl` does need it though, because it
+    // does its block assembly (a copy of up to one block, plus the search for
+    // the statement boundary, see `AsyncStatementBoundaryBlockSource`) inline
+    // in the handler. Were the handler invoked from within the strand, all of
+    // that work would run while the strand is held, so the next fetch (which
+    // is queued on the strand) could only start once it has finished.
     net::post(
         strand_.get_inner_executor(),
         [h = std::move(h), exception, block = std::move(block)]() mutable {

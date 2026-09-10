@@ -39,12 +39,12 @@ void AsyncSerialParserAdapter::asyncGetBatchImpl(Handler handler) {
       }
       finished_ = !batch.has_value();
     }
-    // Complete outside of the strand, otherwise the caller's processing of the
-    // batch (which typically runs inline in the completion handler and is
-    // expensive) would block the strand and hence the next `getBatch()` call.
-    net::post(executor(), [h = std::move(h), exception,
-                           batch = std::move(batch)]() mutable {
-      std::move(h)(exception, std::move(batch));
-    });
+    // NOTE: `h` may be invoked directly from within the strand, because
+    // `AsyncRdfParserBase::asyncGetBatch` does nothing but `post` the actual
+    // completion handler onto its associated executor (see the comment on
+    // `asyncGetBatchImpl` there). The caller's processing of the batch, which
+    // typically runs inline in that completion handler and is expensive, hence
+    // does not block the strand and thus not the next `getBatch()` call.
+    std::move(h)(exception, std::move(batch));
   });
 }

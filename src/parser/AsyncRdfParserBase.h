@@ -14,7 +14,7 @@
 
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
-#include <boost/asio/dispatch.hpp>
+#include <boost/asio/post.hpp>
 #include <exception>
 #include <optional>
 #include <utility>
@@ -46,7 +46,9 @@ class AsyncRdfParserBase {
 
   // The completion handler signature for `asyncGetBatchImpl`. It is called
   // exactly once, from any thread, see `asyncGetBatch` below for the meaning of
-  // the arguments.
+  // the arguments. It may be called synchronously (from within
+  // `asyncGetBatchImpl`) and from within a strand of the derived class, see
+  // `asyncGetBatchImpl` below.
   using Handler = absl::AnyInvocable<void(std::exception_ptr, OptionalTriples)>;
 
  private:
@@ -54,9 +56,8 @@ class AsyncRdfParserBase {
 
  public:
   // `executor` is the executor on which the derived class schedules its work,
-  // and onto which the completion handlers are dispatched if the completion
-  // token passed to `asyncGetBatch` has no executor of its own associated with
-  // it.
+  // and onto which the completion handlers are posted if the completion token
+  // passed to `asyncGetBatch` has no executor of its own associated with it.
   explicit AsyncRdfParserBase(const ql::any_io_executor& executor)
       : executor_{executor} {}
   virtual ~AsyncRdfParserBase() = default;
@@ -79,6 +80,12 @@ class AsyncRdfParserBase {
   // class; the derived classes take care of the necessary synchronization.
   // There is no guarantee about the order in which concurrent calls complete.
   // An instance must outlive all of its in-flight calls.
+  //
+  // The completion handler is always `post`ed (never `dispatch`ed) onto its
+  // associated executor. It is therefore never invoked inline, in particular
+  // neither from within this function nor from within a strand of the derived
+  // class. This is what makes it safe for the derived classes to invoke the
+  // handler of `asyncGetBatchImpl` directly, see there.
   template <typename CompletionToken>
   auto asyncGetBatch(CompletionToken&& token) {
     namespace net = boost::asio;
@@ -89,7 +96,7 @@ class AsyncRdfParserBase {
           asyncGetBatchImpl([h = std::move(handler), ex](
                                 std::exception_ptr ep,
                                 OptionalTriples batch) mutable {
-            net::dispatch(
+            net::post(
                 ex, [h = std::move(h), ep, batch = std::move(batch)]() mutable {
                   std::move(h)(ep, std::move(batch));
                 });
@@ -102,9 +109,15 @@ class AsyncRdfParserBase {
 
  protected:
   // The single extension point required from every derived class. Must invoke
-  // `handler` exactly once (asynchronously, from any thread), see
-  // `asyncGetBatch` for the semantics of the arguments. Must never throw, but
-  // report errors via the `exception_ptr` argument of the handler.
+  // `handler` exactly once (synchronously or asynchronously, from any thread),
+  // see `asyncGetBatch` for the semantics of the arguments. Must never throw,
+  // but report errors via the `exception_ptr` argument of the handler.
+  //
+  // `handler` may be invoked directly, also from within a strand: it does
+  // nothing but `post` the actual completion handler onto its associated
+  // executor (see `asyncGetBatch` above), so neither the expensive work of the
+  // caller nor a completion inline in the initiating function can leak back
+  // into the derived class's context.
   virtual void asyncGetBatchImpl(Handler handler) = 0;
 };
 
