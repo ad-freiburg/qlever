@@ -14,7 +14,7 @@
 
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
-#include <boost/asio/dispatch.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
 #include <exception>
 #include <memory>
@@ -67,9 +67,16 @@ class AsyncBlockSource {
   // `exception_ptr` signals success, a non-null one signals an exception that
   // was thrown while retrieving the next block. A successful result with
   // `std::nullopt` means EOF (no more blocks available in this source).
-  // The handler is dispatched onto the executor associated with `token`, or
-  // onto the executor passed to the constructor if `token` has none of its
-  // own.
+  // The handler is posted onto the executor associated with `token`, or onto
+  // the executor passed to the constructor if `token` has none of its own.
+  //
+  // NOTE: It is deliberately posted and not dispatched. A `BlockingBlockSource`
+  // invokes the handler from inside the strand that serializes its reads, and
+  // `dispatch` would run the handler (and hence everything that the caller
+  // does after the fetch, e.g. the parsing of the block in a coroutine that
+  // awaits it) inline inside that strand, which blocks the next read until
+  // that work is done. The `post` guarantees that the caller's continuation
+  // leaves the strand first.
   // IMPORTANT: At most one request may be outstanding at any time; the next
   // call to `asyncGetNextBlock` may only be initiated after the completion
   // handler of the previous call has run. Sources with state (e.g.
@@ -86,7 +93,7 @@ class AsyncBlockSource {
           asyncGetNextBlockImpl([h = std::move(handler), ex](
                                     std::exception_ptr ep,
                                     std::optional<Block> block) mutable {
-            net::dispatch(
+            net::post(
                 ex, [h = std::move(h), ep, block = std::move(block)]() mutable {
                   std::move(h)(ep, std::move(block));
                 });
