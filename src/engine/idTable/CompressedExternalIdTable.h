@@ -227,9 +227,9 @@ class CompressedExternalIdTableWriter {
   }
 
   // Read and decompress column `columnIdx` of the block at `blockIdx` into
-  // `block`. This is the shared per-column kernel used by `readBlock`. May be
-  // called concurrently for distinct `columnIdx` values on the same `block` (as
-  // done by `readBlock`).
+  // `block`. This is the shared per-column kernel used by both `readBlock` and
+  // `readBlockSequential`. May be called concurrently for distinct `columnIdx`
+  // values on the same `block` (as done by `readBlock`).
   template <size_t NumCols = 0>
   void decompressColumnIntoBlock(size_t blockIdx, size_t columnIdx,
                                  IdTableStatic<NumCols>& block) {
@@ -274,6 +274,44 @@ class CompressedExternalIdTableWriter {
       fut.get();
     }
     return block;
+  }
+
+  // Like `readBlock`, but decompresses columns sequentially rather than in
+  // parallel. This avoids per-block thread creation, making it suitable for
+  // use inside a single persistent background thread (e.g. `runStreamAsync`).
+  //
+  // TODO<joka921> This function is unused. Remove it.
+  template <size_t NumCols = 0>
+  IdTableStatic<NumCols> readBlockSequential(size_t blockIdx) {
+    auto block = makeBlock<NumCols>(blockIdx);
+    for (auto i : ql::views::iota(0u, numColumns())) {
+      decompressColumnIntoBlock<NumCols>(blockIdx, i, block);
+    }
+    return block;
+  }
+
+ public:
+  // Read all blocks as a single `InputRangeTypeErased<IdTableStatic<N>>` via
+  // one background thread. This creates a constant number of threads regardless
+  // of the number of stored blocks. Columns are decompressed sequentially
+  // within a block; the single background thread already provides concurrency
+  // with the consumer.
+  //
+  // TODO<joka921> This function is unused. Remove it.
+  template <size_t N = 0>
+  InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
+    file_.wlock()->flush();
+    size_t totalBlocks =
+        blocksPerColumn_.empty() ? 0 : blocksPerColumn_.at(0).size();
+    CachingTransformInputRange readBlocks{
+        ql::views::iota(size_t{0}, totalBlocks), [this](size_t blockIdx) {
+          return this->template readBlockSequential<N>(blockIdx);
+        }};
+    ++numActiveGenerators_;
+    auto callback = [this]() noexcept { --numActiveGenerators_; };
+    // Queue size 2 keeps the producer one block ahead of the consumer.
+    return ad_utility::streams::runStreamAsync(
+        CallbackOnEndView{std::move(readBlocks), std::move(callback)}, 2);
   }
 };
 
