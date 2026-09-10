@@ -13,10 +13,9 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
-#include "engine/StripColumns.h"
 #include "util/ChunkedForLoop.h"
-#include "util/Exception.h"
 #include "util/ColumnStrippingHelpers.h"
+#include "util/Exception.h"
 
 // _____________________________________________________________________________
 Bind::Bind(QueryExecutionContext* qec,
@@ -254,9 +253,8 @@ std::unique_ptr<Operation> Bind::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithStrippedColumns(
-    const std::set<Variable>& variables) const {
-
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Bind::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   // Collect variables required from subtree.
   VarsRequiredFromSubtree helper(variables);
 
@@ -285,21 +283,9 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithStrippedCol
     return subtree;
   }
 
-  // Create query execution tree with Bind-Operation as root operation.
-  auto treeWithBindRoot = ad_utility::makeExecutionTree<Bind>(
-      getExecutionContext(), std::move(subtree), _bind);
-
-  // Some variables of the parsed Query are needed to compute Bind-Operation,
-  // but do not necessarily belong to the result requested by the parent tree.
-  // If all variables are requested by the parent tree, return treeWithBindRoot.
-  // If not, an additional StripColumns-Operation is added in the executionTree
-  // above the Bind-Operation.
-  if (ql::ranges::all_of(_bind._expression.containedVariables(),
-                         [&variables](const auto& bindVar) {
-                           return ad_utility::contains(variables, *bindVar);
-                         })) {
-    return treeWithBindRoot;
-  }
-  return ad_utility::makeExecutionTree<StripColumns>(
-      getExecutionContext(), std::move(treeWithBindRoot), variables);
+  // Create query execution tree with Bind-Operation as root-Operation and add
+  // additional stripColumns-Operation if needed.
+  return makeTreeWithOptionalStripOperation<Bind>(
+      getExecutionContext(), variables, _bind._expression.containedVariables(),
+      std::move(subtree), _bind);
 }
