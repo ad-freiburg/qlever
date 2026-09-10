@@ -171,9 +171,9 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
   // `HashMap` serialization.
   //
   // NOTE: The entries are written sorted by the name of the variable, so that
-  // identical contents yield identical bytes (which a byte-level comparison of
-  // serialized caches relies on). The reading side does not depend on the
-  // order.
+  // identical contents yield identical bytes (which the diff mechanism of
+  // `NamedCachedQueryBlobManager` relies on). The reading side does not depend
+  // on the order.
   serializer << value.varToColMap_.size();
   std::vector<const VariableToColumnMap::value_type*> sortedEntries;
   sortedEntries.reserve(value.varToColMap_.size());

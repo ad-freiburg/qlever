@@ -71,8 +71,10 @@ class CountingMemoryResource : public ql::pmr::memory_resource {
 // Write the `turtleContents` to a turtle file, build an index from it with the
 // given vocabulary `type`, and return the corresponding `IndexBuilderConfig`.
 // The basename of the index is derived from the name of the currently running
-// test, so that concurrently running tests do not interfere with each other.
-// The turtle input file is deleted again immediately after the index was built.
+// test and the optional `suffix`, so that concurrently running tests do not
+// interfere with each other, and so that a single test can build several
+// distinct indexes. The turtle input file is deleted again immediately after
+// the index was built.
 //
 // NOTE: The default vocabulary type is the in-memory, uncompressed one,
 // because `serializeVocabAndNamedCacheToCompressedBlob` currently requires it
@@ -80,8 +82,9 @@ class CountingMemoryResource : public ql::pmr::memory_resource {
 // `Vocabulary::writeAsZeroCopyBlob`).
 IndexBuilderConfig buildTestIndex(
     std::string_view turtleContents,
-    VocabularyType type = VocabularyType::InMemoryUncompressed) {
-  std::string basename = gtestCurrentTestName();
+    VocabularyType type = VocabularyType::InMemoryUncompressed,
+    std::string_view suffix = "") {
+  std::string basename = absl::StrCat(gtestCurrentTestName(), suffix);
   std::string sourceFilename = absl::StrCat(basename, ".ttl");
   {
     auto ofs = ad_utility::makeOfstream(sourceFilename);
@@ -654,17 +657,21 @@ namespace {
 // The media type in which the tests below export their query results.
 constexpr ad_utility::MediaType tsv = ad_utility::MediaType::tsv;
 
-// The turtle data used by the tests below, which write a blob after an update
-// and inspect the chunk layout of a blob.
+// The turtle data used by the tests below, which write a blob or a diff after
+// an update and inspect the chunk layout of a blob.
 constexpr std::string_view updateTestData =
     "<s1> <p1> \"l1\".\n"
     "<s2> <p1> \"l2\".\n"
     "<s1> <p2> <o1>.";
 
-// The queries whose results the tests below pin (under the names `q1` and
-// `q2`), and the corresponding queries that return those pinned results.
+// The queries whose results the tests below pin (under the names `q1`, `q2`,
+// and `q3`), and the corresponding queries that return those pinned results.
+// NOTE: `q3` returns the same triples as `q2`, but binds the object to a
+// different variable, so that a join of `q1` and `q3` joins on the subject
+// alone.
 constexpr std::string_view sourceQuery1 = "SELECT ?s ?o WHERE { ?s <p1> ?o }";
 constexpr std::string_view sourceQuery2 = "SELECT ?s ?o WHERE { ?s <p2> ?o }";
+constexpr std::string_view sourceQuery3 = "SELECT ?s ?o2 WHERE { ?s <p2> ?o2 }";
 constexpr std::string_view cachedQuery1 =
     "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-q1 {} }";
 constexpr std::string_view cachedQuery2 =
@@ -687,7 +694,9 @@ Qlever makeSourceEngine(const IndexBuilderConfig& builderConfig) {
 }
 
 // Build the test index (`updateTestData`), open a `Qlever` instance on it via
-// `makeSourceEngine`, and pin the queries via `pinSourceQueries`.
+// `makeSourceEngine`, and pin the queries via `pinSourceQueries`. This is the
+// setup that most of the tests below need before they apply their own updates
+// and (re-)pin queries.
 Qlever makePinnedSourceEngine() {
   auto builderConfig = buildTestIndex(updateTestData);
   Qlever source = makeSourceEngine(builderConfig);
@@ -702,11 +711,15 @@ std::pair<std::string, std::string> cachedResultsOf(Qlever& engine) {
           engine.query(std::string{cachedQuery2}, tsv)};
 }
 
-// Load `blob` into a fresh `Qlever` instance that has NO index files on disk at
-// all (constructed with `skipLoading`).
-std::unique_ptr<Qlever> loadBlob(ql::span<const char> blob) {
+// Load `blob`, with the `diffs` applied to it in the given order, into a fresh
+// `Qlever` instance that has NO index files on disk at all (constructed with
+// `skipLoading`).
+std::unique_ptr<Qlever> loadBlob(
+    ql::span<const char> blob,
+    const std::vector<ql::span<const char>>& diffs = {}) {
   auto target = std::make_unique<Qlever>(EngineConfig{}, /*skipLoading=*/true);
-  target->deserializeVocabAndNamedCacheFromCompressedBlob(blob);
+  target->deserializeVocabAndNamedCacheFromCompressedBlob(
+      blob, ql::span<const ql::span<const char>>{diffs});
   return target;
 }
 
@@ -719,6 +732,122 @@ const SecondaryVocabulary& secondaryVocabularyOf(const Qlever& engine) {
   return *secondaryVocabulary;
 }
 }  // namespace
+
+// _____________________________________________________________________________
+// End-to-end test of the diff mechanism: pin two queries, write a base blob,
+// apply an update that inserts triples with words that are not part of the
+// vocabulary of the index (and that deletes one of the triples of the first
+// query), re-pin the very same queries, and write a diff against the base blob.
+// Applying that diff has to yield a blob that produces exactly the same results
+// as the source engine.
+TEST(NamedCachedQueryBlobManager, diffAfterUpdate) {
+  Qlever source = makePinnedSourceEngine();
+  std::vector<char> base = source.serializeVocabAndNamedCacheToCompressedBlob();
+
+  applyUpdateToEngine(source,
+                      "INSERT DATA { <newSubject> <p1> \"new literal\" }");
+  applyUpdateToEngine(source, "DELETE DATA { <s2> <p1> \"l2\" }");
+  pinSourceQueries(source);
+  std::vector<char> diff =
+      source.serializeVocabAndNamedCacheDiffToCompressedBlob(base);
+
+  // The unchanged parts (in particular the vocabulary) are copied from the base
+  // blob, the changed ones are inserted.
+  auto statistics = Manager::describeDiff(diff);
+  EXPECT_GE(statistics.numCopyInstructions_, 1u);
+  EXPECT_GE(statistics.numInsertInstructions_, 1u);
+  EXPECT_GT(statistics.numCopiedBytes_, 0u);
+  EXPECT_GT(statistics.numInsertedBytes_, 0u);
+
+  // The patched blob is a complete blob again, and loading it into a fresh
+  // instance with no index files on disk reproduces the results of the source
+  // engine, including the word that only exists in the secondary vocabulary of
+  // the blob.
+  std::vector<char> patched = Qlever::applyDiffToCompressedBlob(base, diff);
+  auto expected = cachedResultsOf(source);
+  EXPECT_EQ(expected.first,
+            "?s\t?o\n<newSubject>\t\"new literal\"\n<s1>\t\"l1\"\n");
+  EXPECT_EQ(expected.second, "?s\t?o\n<s1>\t<o1>\n");
+
+  auto target = loadBlob(patched);
+  EXPECT_EQ(cachedResultsOf(*target), expected);
+  EXPECT_EQ(secondaryVocabularyOf(*target).numSegments(), 1u);
+
+  // A `FILTER` on the new IRI works in the target, i.e. the `Id` of the
+  // secondary vocabulary is found for the IRI of the query.
+  EXPECT_EQ(target->query("SELECT ?s ?o WHERE { SERVICE "
+                          "ql:cached-result-with-name-q1 {} FILTER(?s = "
+                          "<newSubject>) }",
+                          tsv),
+            "?s\t?o\n<newSubject>\t\"new literal\"\n");
+
+  // Applying the diff while loading the base blob is equivalent to loading the
+  // patched blob.
+  auto targetFromDiff = loadBlob(base, {diff});
+  EXPECT_EQ(cachedResultsOf(*targetFromDiff), expected);
+}
+
+// _____________________________________________________________________________
+// Test that diffs chain: a second update yields a diff against the blob that
+// resulted from the first diff, and the `Id`s that the first diff assigned to
+// the new words stay valid.
+TEST(NamedCachedQueryBlobManager, incrementalDiffs) {
+  Qlever source = makePinnedSourceEngine();
+  source.queryAndPinResultWithName("q3", std::string{sourceQuery3});
+  std::vector<char> base = source.serializeVocabAndNamedCacheToCompressedBlob();
+
+  auto rePinAll = [&source]() {
+    pinSourceQueries(source);
+    source.queryAndPinResultWithName("q3", std::string{sourceQuery3});
+  };
+
+  applyUpdateToEngine(source,
+                      "INSERT DATA { <newSubject> <p1> \"new literal\" }");
+  rePinAll();
+  std::vector<char> diff1 =
+      source.serializeVocabAndNamedCacheDiffToCompressedBlob(base);
+  std::vector<char> patched1 = Qlever::applyDiffToCompressedBlob(base, diff1);
+
+  // The second update adds another new word, and reuses the new IRI of the
+  // first update in a triple of the second query.
+  applyUpdateToEngine(source,
+                      "INSERT DATA { <newSubject> <p2> <anotherNewObject> }");
+  rePinAll();
+  std::vector<char> diff2 =
+      source.serializeVocabAndNamedCacheDiffToCompressedBlob(patched1);
+  std::vector<char> patched2 =
+      Qlever::applyDiffToCompressedBlob(patched1, diff2);
+
+  auto expected = cachedResultsOf(source);
+  auto target1 = loadBlob(patched1);
+  auto target2 = loadBlob(patched2);
+  EXPECT_EQ(cachedResultsOf(*target2), expected);
+  EXPECT_EQ(target2->query(std::string{cachedQuery2}, tsv),
+            "?s\t?o\n<newSubject>\t<anotherNewObject>\n<s1>\t<o1>\n");
+
+  // The second diff appended a second segment to the secondary vocabulary, and
+  // the word of the first segment kept its `Id`.
+  EXPECT_EQ(secondaryVocabularyOf(*target1).numSegments(), 1u);
+  EXPECT_EQ(secondaryVocabularyOf(*target2).numSegments(), 2u);
+  auto idInTarget1 = secondaryVocabularyOf(*target1).getId("<newSubject>");
+  auto idInTarget2 = secondaryVocabularyOf(*target2).getId("<newSubject>");
+  ASSERT_TRUE(idInTarget1.has_value());
+  ASSERT_TRUE(idInTarget2.has_value());
+  EXPECT_EQ(idInTarget1.value().get(), idInTarget2.value().get());
+
+  // A join of two cached results on the new IRI, which only works if that IRI
+  // is represented by the very same `Id` in both of them.
+  EXPECT_EQ(target2->query("SELECT ?s ?o ?o2 WHERE { SERVICE "
+                           "ql:cached-result-with-name-q1 {} SERVICE "
+                           "ql:cached-result-with-name-q3 {} }",
+                           tsv),
+            "?s\t?o\t?o2\n<s1>\t\"l1\"\t<o1>\n<newSubject>\t\"new "
+            "literal\"\t<anotherNewObject>\n");
+
+  // Both diffs can also be applied while loading the base blob.
+  auto targetFromDiffs = loadBlob(base, {diff1, diff2});
+  EXPECT_EQ(cachedResultsOf(*targetFromDiffs), expected);
+}
 
 // _____________________________________________________________________________
 // Test that a complete blob can be written even after an update that introduced
@@ -762,11 +891,55 @@ TEST(NamedCachedQueryBlobManager, newWordsInSecondaryVocabularyOfBlob) {
 }
 
 // _____________________________________________________________________________
-// Test that a blob cannot be created from an index that already has a secondary
-// vocabulary of its own (which in particular is the case for an instance that
-// was itself loaded from a blob that contained new words).
+// Test that a diff which is applied to a base blob other than the one it was
+// created against is rejected, and that input which is not a diff at all is
+// rejected with our own message.
+TEST(NamedCachedQueryBlobManager, applyDiffRejectsWrongInput) {
+  auto builderConfig = buildTestIndex(updateTestData);
+  auto otherBuilderConfig =
+      buildTestIndex("<otherSubject> <otherPredicate> \"other literal\".",
+                     VocabularyType::InMemoryUncompressed, "other");
+
+  std::vector<char> base;
+  std::vector<char> diff;
+  {
+    Qlever source = makeSourceEngine(builderConfig);
+    pinSourceQueries(source);
+    base = source.serializeVocabAndNamedCacheToCompressedBlob();
+    applyUpdateToEngine(source,
+                        "INSERT DATA { <newSubject> <p1> \"new literal\" }");
+    pinSourceQueries(source);
+    diff = source.serializeVocabAndNamedCacheDiffToCompressedBlob(base);
+  }
+
+  // A blob of a completely different index, which the diff was not created
+  // against.
+  std::vector<char> otherBase;
+  {
+    Qlever other = makeSourceEngine(otherBuilderConfig);
+    other.queryAndPinResultWithName(
+        "q1", "SELECT ?s ?o WHERE { ?s <otherPredicate> ?o }");
+    otherBase = other.serializeVocabAndNamedCacheToCompressedBlob();
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Qlever::applyDiffToCompressedBlob(otherBase, diff),
+      HasSubstr("checksum of the base does not match"));
+
+  // Garbage is not a diff at all.
+  std::vector<char> garbage(1024, '\xFF');
+  AD_EXPECT_THROW_WITH_MESSAGE(Qlever::applyDiffToCompressedBlob(base, garbage),
+                               HasSubstr("The given diff was not written by"));
+  AD_EXPECT_THROW_WITH_MESSAGE(Manager::describeDiff(garbage),
+                               HasSubstr("The given diff was not written by"));
+}
+
+// _____________________________________________________________________________
+// Test that neither a blob nor a diff can be created from an index that already
+// has a secondary vocabulary of its own (which in particular is the case for an
+// instance that was itself loaded from a blob that contained new words).
 TEST(NamedCachedQueryBlobManager, serializeRejectsSecondaryVocabulary) {
   Qlever source = makePinnedSourceEngine();
+  std::vector<char> base = source.serializeVocabAndNamedCacheToCompressedBlob();
 
   auto snapshot = source.indexAndViewsSnapshot();
   snapshot->index_.getImpl().setSecondaryVocab(
@@ -775,6 +948,9 @@ TEST(NamedCachedQueryBlobManager, serializeRejectsSecondaryVocabulary) {
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       source.serializeVocabAndNamedCacheToCompressedBlob(),
+      HasSubstr("without a secondary vocabulary"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      source.serializeVocabAndNamedCacheDiffToCompressedBlob(base),
       HasSubstr("without a secondary vocabulary"));
 }
 
@@ -818,4 +994,34 @@ TEST(NamedCachedQueryBlobManager, parseBlobLayoutOfFullBlob) {
     previousEnd = region.end_;
   }
   EXPECT_LE(previousEnd, uncompressed.size());
+}
+
+// _____________________________________________________________________________
+// Test that a diff against a base blob whose contents did not change at all
+// reproduces exactly the bytes of that base blob. This is what the position
+// independence of the chunks is about (see
+// `NamedCachedQueryBlobManager::parseBlobLayout`): the complete blob is
+// assembled from instructions that copy the chunks of the base blob to
+// (possibly) different offsets.
+TEST(NamedCachedQueryBlobManager, diffWithoutChanges) {
+  Qlever source = makePinnedSourceEngine();
+  std::vector<char> base = source.serializeVocabAndNamedCacheToCompressedBlob();
+
+  // Re-pin the very same queries, without any update in between.
+  pinSourceQueries(source);
+  std::vector<char> diff =
+      source.serializeVocabAndNamedCacheDiffToCompressedBlob(base);
+
+  // Only the header is inserted; all chunks are copied from the base blob, and
+  // because they are contiguous there, those copies are merged into a single
+  // instruction.
+  auto statistics = Manager::describeDiff(diff);
+  EXPECT_EQ(statistics.numInsertInstructions_, 1u);
+  EXPECT_EQ(statistics.numCopyInstructions_, 1u);
+  EXPECT_EQ(statistics.numInsertedBytes_, 10u);
+
+  auto uncompressedBase = Manager::decompressBlob(base, {});
+  auto uncompressedPatched = Manager::decompressBlob(
+      Qlever::applyDiffToCompressedBlob(base, diff), {});
+  EXPECT_THAT(uncompressedPatched, ElementsAreArray(uncompressedBase));
 }

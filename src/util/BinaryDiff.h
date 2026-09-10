@@ -44,9 +44,11 @@ namespace ad_utility {
 // with. This makes it possible to diff a format that consists of aligned,
 // *position-independent* blocks: such a block can be copied to any other
 // suitably aligned offset of the target and still be read back correctly, so
-// that a target buffer can be assembled from blocks of the base buffer. An
-// alignment of 1 means that no padding is inserted, which is the right choice
-// for a format without such alignment requirements.
+// that a target buffer can be assembled from blocks of the base buffer. The
+// chunked blob format of `libqlever/NamedCachedQueryBlobManager.h`, which is
+// what this class was written for, is such a format. An alignment of 1 means
+// that no padding is inserted, which is the right choice for a format without
+// such alignment requirements.
 //
 // BASE IDENTIFICATION: A diff stores the size and a checksum (see `checksum`)
 // of the base that it was created against, and `apply` verifies both. A diff

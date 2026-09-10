@@ -99,8 +99,8 @@ class NamedResultCache {
 
   // Get all entries of the cache, sorted by their key. The order is
   // deterministic (and not the arbitrary order of the underlying hash map), so
-  // that serializing the same contents twice yields the same bytes, which a
-  // byte-level comparison of serialized caches relies on.
+  // that serializing the same contents twice yields the same bytes, which the
+  // diff mechanism of `NamedCachedQueryBlobManager` relies on.
   std::vector<std::pair<Key, std::shared_ptr<const Value>>> getAllEntries()
       const;
 

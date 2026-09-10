@@ -24,6 +24,7 @@
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "libqlever/Qlever.h"
+#include "util/BinaryDiff.h"
 #include "util/CompactStringVector.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
@@ -65,13 +66,20 @@ constexpr std::string_view blobContentsNotReadableMessage =
     "`Qlever::serializeVocabAndNamedCacheToCompressedBlob`; the blob is "
     "probably corrupted";
 
-// The precondition of `serialize`, see the comment at
+// The message that is reported for any input that is not a diff written by
+// `NamedCachedQueryBlobManager::serializeDiff`.
+constexpr std::string_view diffNotReadableMessage =
+    "The given diff was not written by "
+    "`Qlever::serializeVocabAndNamedCacheDiffToCompressedBlob`, or is "
+    "corrupted";
+
+// The precondition of `serialize` and `serializeDiff`, see the comment at
 // `NamedCachedQueryBlobManager::serialize`.
 constexpr std::string_view noSecondaryVocabularyMessage =
-    "A blob can only be created from an index without a secondary vocabulary. "
-    "In particular, a `Qlever` instance that was itself loaded from a blob "
-    "whose named cache entries contained new words cannot be used to create "
-    "another blob";
+    "A blob (and a diff between two blobs) can only be created from an index "
+    "without a secondary vocabulary. In particular, a `Qlever` instance that "
+    "was itself loaded from a blob whose named cache entries contained new "
+    "words cannot be used to create another blob";
 
 // The alignment to which the beginning of every chunk, and hence also the
 // beginning of every chunk payload, is padded (see
@@ -94,6 +102,19 @@ using BlobReader =
     ad_utility::serialization::ByteBufferReadSerializerT<true,
                                                          ql::span<const char>>;
 
+// The serializer types that a diff (see
+// `NamedCachedQueryBlobManager::serializeDiff`) is written with and read back
+// with. In contrast to a blob, a diff uses plain, unaligned serialization: it
+// is read sequentially and only once, and the bytes that its instructions carry
+// are aligned by the application of the diff, not by the serializer.
+using DiffWriter = ad_utility::serialization::ByteBufferWriteSerializer;
+using DiffReader =
+    ad_utility::serialization::ByteBufferReadSerializerT<false,
+                                                         ql::span<const char>>;
+
+// The type of the buffer that a `BlobWriter` produces.
+using ChunkBytes = BlobWriter::Storage;
+
 // Run `function` and, if it throws, rethrow with `message` prepended. That way,
 // the rather cryptic low-level error messages (in particular those of ZSTD)
 // never reach the user unadorned.
@@ -105,6 +126,58 @@ decltype(auto) rethrowWithContext(std::string_view message,
   } catch (const std::exception& e) {
     AD_THROW(absl::StrCat(message, ". Details: ", e.what()));
   }
+}
+
+// The implementation of `NamedCachedQueryBlobManager::decompressBlob`, with the
+// message that is reported for input that is not a ZSTD frame as a parameter,
+// so that a blob and a diff (which are compressed in exactly the same way) can
+// be rejected with their own respective messages.
+std::vector<char, NamedCachedQueryBlobManager::BlobAllocator>
+decompressWithMessage(ql::span<const char> compressed,
+                      ql::pmr::polymorphic_allocator<char> allocator,
+                      std::string_view notReadableMessage) {
+  using BlobAllocator = NamedCachedQueryBlobManager::BlobAllocator;
+  // Read the size of the uncompressed data from the ZSTD frame header (which
+  // always stores it, because `compressBlob` uses the one-shot
+  // `ZSTD_compress`). This also validates that `compressed` starts with a
+  // ZSTD frame at all, so that arbitrary garbage is rejected right here,
+  // instead of being misinterpreted as an (arbitrarily large) size for the
+  // allocation below.
+  size_t uncompressedSize =
+      rethrowWithContext(notReadableMessage, [&compressed]() {
+        return ZstdWrapper::getUncompressedSize(compressed.data(),
+                                                compressed.size());
+      });
+
+  // Decompress into a buffer that is 1. allocated via the caller-provided
+  // `allocator`, 2. aligned to the maximal possible alignment (required for the
+  // zero-copy deserialization), and 3. not needlessly zero-initialized before
+  // the decompression overwrites it (see `BlobAllocator`).
+  std::vector<char, BlobAllocator> uncompressed(
+      uncompressedSize,
+      BlobAllocator{ad_utility::AlignedAllocator<
+          char, ql::pmr::polymorphic_allocator<char>>{allocator}});
+  auto actualUncompressedSize =
+      rethrowWithContext(notReadableMessage, [&compressed, &uncompressed]() {
+        return ZstdWrapper::decompressToBuffer(
+            compressed.data(), compressed.size(), uncompressed.data(),
+            uncompressed.size());
+      });
+  AD_CORRECTNESS_CHECK(actualUncompressedSize == uncompressedSize);
+  return uncompressed;
+}
+
+// Decompress and deserialize a diff written by
+// `NamedCachedQueryBlobManager::serializeDiff`, and report any input that is
+// not such a diff with `diffNotReadableMessage`.
+ad_utility::BinaryDiff readDiff(ql::span<const char> compressedDiff) {
+  auto uncompressed =
+      decompressWithMessage(compressedDiff, {}, diffNotReadableMessage);
+  DiffReader reader{ql::span<const char>{uncompressed}};
+  ad_utility::BinaryDiff diff;
+  rethrowWithContext(diffNotReadableMessage,
+                     [&reader, &diff]() { reader >> diff; });
+  return diff;
 }
 
 // The positions that `endChunk` needs to complete a chunk that `beginChunk`
@@ -149,6 +222,18 @@ void writeChunk(BlobWriter& writer, const Function& writePayload) {
   auto handle = beginChunk(writer);
   writePayload(writer);
   endChunk(writer, handle);
+}
+
+// Write one complete chunk into a fresh buffer and return its bytes. Because
+// the chunks are position independent (see
+// `NamedCachedQueryBlobManager::parseBlobLayout`), those bytes can be compared
+// to the bytes of the corresponding chunk of a base blob, and be used as they
+// are as the payload of an insert instruction of a diff.
+template <typename Function>
+ChunkBytes chunkBytes(const Function& writePayload) {
+  BlobWriter writer;
+  writeChunk(writer, writePayload);
+  return std::move(writer).data();
 }
 
 // One chunk, as returned by `readChunk`.
@@ -228,6 +313,13 @@ void writeScalarChunk(BlobWriter& writer, const T& value) {
              [&value](BlobWriter& payloadWriter) { payloadWriter << value; });
 }
 
+// The `chunkBytes` counterpart of `writeScalarChunk`.
+template <typename T>
+ChunkBytes scalarChunkBytes(const T& value) {
+  return chunkBytes(
+      [&value](BlobWriter& payloadWriter) { payloadWriter << value; });
+}
+
 // Write the index metadata JSON and the `vocabulary` of `indexImpl` (which has
 // to be passed separately, see the NOTE below) as the first two chunks of a
 // blob, omitting all vocabulary entries that match one of the
@@ -290,19 +382,38 @@ void writeMetadataAndFilteredVocabulary(
 // the index, which happens when SPARQL UPDATE operations were applied before
 // the entry was pinned.
 //
-// The new words that `rewrite` encounters are appended in the order in which
-// they are encountered, and together form the single segment that the blob adds
-// to its secondary vocabulary (see `newSegment`).
+// The words of the segments of a base blob are added first (via
+// `addBaseSegment`), so that they keep the `Id`s that they already have in that
+// base blob. All further words that `rewrite` encounters are appended, in the
+// order in which they are encountered, and form the one new segment that the
+// blob (or the diff) adds (see `newSegment`).
 class SecondaryVocabularyBuilder {
  private:
-  // The index in the secondary vocabulary of the blob, for every new word that
-  // has an index so far.
+  // The global index in the secondary vocabulary of the blob, for every word
+  // that has an index so far (the words of the base segments and the new words
+  // together).
   ad_utility::HashMap<std::string, uint64_t> wordToIndex_;
 
-  // The new words, in the order in which they were encountered.
+  // The words that were not already contained in one of the base segments, in
+  // the order in which they were encountered.
   std::vector<std::string> newWords_;
 
  public:
+  // Add the words of one segment of the base blob. The segments have to be
+  // added in the order in which they appear in that blob, because the `Id` of
+  // a word is its position in the concatenation of all segments.
+  void addBaseSegment(const CompactVectorOfStrings<char>& segment) {
+    AD_CORRECTNESS_CHECK(newWords_.empty());
+    for (std::string_view word : segment) {
+      uint64_t index = wordToIndex_.size();
+      bool wasInserted = wordToIndex_.emplace(word, index).second;
+      AD_CORRECTNESS_CHECK(
+          wasInserted,
+          "The segments of the secondary vocabulary of a blob must not contain "
+          "duplicate words");
+    }
+  }
+
   // Rewrite a single `Id` of a named cache entry. An `Id` that does not refer
   // to a local vocab entry is returned unchanged. For an `Id` that does, the
   // position of the word in the vocabularies of the index decides: if the word
@@ -333,11 +444,13 @@ class SecondaryVocabularyBuilder {
         SecondaryVocabIndex::make(iterator->second));
   }
 
-  // Whether `rewrite` has encountered any new word, and hence whether a segment
-  // of the secondary vocabulary has to be written at all.
+  // Whether `rewrite` has encountered any word that was not already contained
+  // in one of the base segments, and hence whether a new segment has to be
+  // written at all.
   bool hasNewWords() const { return !newWords_.empty(); }
 
-  // The segment with the new words that `rewrite` has encountered.
+  // The new segment, that is, the words that `rewrite` has encountered and
+  // that were not already contained in one of the base segments.
   CompactVectorOfStrings<char> newSegment() const {
     CompactVectorOfStrings<char> segment;
     segment.build(newWords_);
@@ -387,11 +500,11 @@ RewrittenColumns rewriteColumns(const NamedResultCache::Value& value,
 // Collect the words of all local vocab entries that occur in the given cache
 // entry `value` (and hence assign their `Id`s), without producing the
 // rewritten columns. This is the first of the two passes over the cache
-// entries that the writing of a blob needs: only once all words are known can
-// the segment of the secondary vocabulary be written, and that segment
-// precedes the entries in the blob. Doing it this way (instead of keeping the
-// result of `rewriteColumns` for all entries) means that the rewritten columns
-// of only one entry at a time have to be held in memory.
+// entries that the writing of a blob (or of a diff) needs: only once all words
+// are known can the new segment of the secondary vocabulary be written, and
+// that segment precedes the entries in the blob. Doing it this way (instead of
+// keeping the result of `rewriteColumns` for all entries) means that the
+// rewritten columns of only one entry at a time have to be held in memory.
 void collectNewWords(const NamedResultCache::Value& value,
                      SecondaryVocabularyBuilder& builder) {
   auto view = ExplicitIdTableOperation::viewOf(value.result_);
@@ -405,7 +518,7 @@ void collectNewWords(const NamedResultCache::Value& value,
 }
 
 // Run `collectNewWords` (the first pass over the cache entries, see there)
-// over all of `entries`.
+// over all of `entries`. Used by both `serialize` and `serializeDiff`.
 void collectAllNewWords(
     const std::vector<std::pair<
         NamedResultCache::Key, std::shared_ptr<const NamedResultCache::Value>>>&
@@ -432,7 +545,8 @@ void writeEntryPayload(BlobWriter& writer, const std::string& key,
 }
 
 // Return a function that writes the payload of the chunk of the named cache
-// entry `key`/`value` (see `writeEntryPayload`), suitable for `writeChunk`.
+// entry `key`/`value` (see `writeEntryPayload`), suitable for `writeChunk` or
+// `chunkBytes`.
 auto makeEntryPayloadWriter(const std::string& key,
                             const NamedResultCache::Value& value,
                             SecondaryVocabularyBuilder& builder) {
@@ -484,34 +598,8 @@ std::vector<char, NamedCachedQueryBlobManager::BlobAllocator>
 NamedCachedQueryBlobManager::decompressBlob(
     ql::span<const char> compressedBlob,
     ql::pmr::polymorphic_allocator<char> allocator) {
-  // Read the size of the uncompressed data from the ZSTD frame header (which
-  // always stores it, because `compressBlob` uses the one-shot
-  // `ZSTD_compress`). This also validates that `compressedBlob` starts with a
-  // ZSTD frame at all, so that arbitrary garbage is rejected right here,
-  // instead of being misinterpreted as an (arbitrarily large) size for the
-  // allocation below.
-  size_t uncompressedSize =
-      rethrowWithContext(blobNotReadableMessage, [&compressedBlob]() {
-        return ZstdWrapper::getUncompressedSize(compressedBlob.data(),
-                                                compressedBlob.size());
-      });
-
-  // Decompress into a buffer that is 1. allocated via the caller-provided
-  // `allocator`, 2. aligned to the maximal possible alignment (required for the
-  // zero-copy deserialization), and 3. not needlessly zero-initialized before
-  // the decompression overwrites it (see `BlobAllocator`).
-  std::vector<char, BlobAllocator> uncompressed(
-      uncompressedSize,
-      BlobAllocator{ad_utility::AlignedAllocator<
-          char, ql::pmr::polymorphic_allocator<char>>{allocator}});
-  auto actualUncompressedSize = rethrowWithContext(
-      blobNotReadableMessage, [&compressedBlob, &uncompressed]() {
-        return ZstdWrapper::decompressToBuffer(
-            compressedBlob.data(), compressedBlob.size(), uncompressed.data(),
-            uncompressed.size());
-      });
-  AD_CORRECTNESS_CHECK(actualUncompressedSize == uncompressedSize);
-  return uncompressed;
+  return decompressWithMessage(compressedBlob, allocator,
+                               blobNotReadableMessage);
 }
 
 // _____________________________________________________________________________
@@ -609,19 +697,169 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
 }
 
 // _____________________________________________________________________________
+std::vector<char> NamedCachedQueryBlobManager::serializeDiff(
+    const Qlever& qlever, ql::span<const char> compressedBaseBlob) const {
+  auto indexAndViews = qlever.indexAndViewsSnapshot();
+  const auto& indexImpl = indexAndViews->index_.getImpl();
+  AD_CONTRACT_CHECK(indexImpl.secondaryVocab() == nullptr,
+                    noSecondaryVocabularyMessage);
+
+  auto base = decompressBlob(compressedBaseBlob, {});
+  ql::span<const char> baseSpan{base};
+  BlobLayout layout = parseBlobLayout(baseSpan);
+
+  // The words of the segments of the base blob keep the `Id`s that they have in
+  // that blob, so they are added first.
+  SecondaryVocabularyBuilder vocabularyBuilder;
+  for (const auto& segmentRegion : layout.segments_) {
+    auto subReader = makeSubReader(segmentRegion.payloadSpan(baseSpan));
+    vocabularyBuilder.addBaseSegment(
+        CompactVectorOfStrings<char>::fromZeroCopyDeserializer(subReader));
+  }
+
+  // The first pass over the cache entries, see `collectNewWords`.
+  auto entries = qlever.namedResultCache_.getAllEntries();
+  collectAllNewWords(entries, vocabularyBuilder);
+
+  // The diff, whose alignment is the chunk alignment, so that every chunk that
+  // is copied from the base blob again begins at a multiple of that alignment
+  // in the patched blob, and hence stays readable (see `parseBlobLayout`).
+  ad_utility::BinaryDiff diff{baseSpan, chunkAlignment};
+
+  // Copy the given `region` of the base blob.
+  auto copyRegion = [&diff](const BlobLayout::Region& region) {
+    diff.addCopy(region.begin_, region.size());
+  };
+
+  // Compare the bytes of the given `chunk` to those of the `region` of the base
+  // blob, and copy that region if they are equal, and insert the chunk else.
+  auto copyOrInsert = [&diff, &baseSpan, &copyRegion](
+                          const BlobLayout::Region& region,
+                          const ChunkBytes& chunk) {
+    auto regionBytes = baseSpan.subspan(region.begin_, region.size());
+    if (ql::ranges::equal(regionBytes, chunk)) {
+      copyRegion(region);
+    } else {
+      diff.addInsert(ql::span<const char>{chunk});
+    }
+  };
+
+  // The header, which is the only part of the blob that is not a chunk, and
+  // which is small enough that it is simply inserted.
+  {
+    BlobWriter headerWriter;
+    writeBlobHeader(headerWriter);
+    auto headerBytes = std::move(headerWriter).data();
+    diff.addInsert(ql::span<const char>{headerBytes});
+  }
+
+  // The metadata JSON and the vocabulary never change (a diff may only be
+  // created against a blob that was built from the same index), so they are
+  // always copied. This is the whole point of the diff: the vocabulary is by
+  // far the largest part of a typical blob.
+  copyRegion(layout.metadata_);
+  copyRegion(layout.vocabulary_);
+
+  // The secondary vocabulary: all segments of the base blob are copied, and the
+  // new words (if there are any) are appended as one new segment.
+  uint64_t numSegments =
+      layout.segments_.size() + (vocabularyBuilder.hasNewWords() ? 1 : 0);
+  copyOrInsert(layout.segmentCount_, scalarChunkBytes(numSegments));
+  for (const auto& segmentRegion : layout.segments_) {
+    copyRegion(segmentRegion);
+  }
+  if (vocabularyBuilder.hasNewWords()) {
+    auto segment = vocabularyBuilder.newSegment();
+    auto segmentChunk = chunkBytes(
+        [&segment](BlobWriter& payloadWriter) { payloadWriter << segment; });
+    diff.addInsert(ql::span<const char>{segmentChunk});
+  }
+
+  // The entries of the `NamedResultCache`, in the second pass over them: an
+  // entry whose chunk is byte-identical to the chunk of the entry with the same
+  // key in the base blob is copied, all others are inserted.
+  copyOrInsert(layout.entryCount_, scalarChunkBytes(uint64_t{entries.size()}));
+  ad_utility::HashMap<std::string, BlobLayout::Region> baseEntries;
+  for (const auto& entry : layout.entries_) {
+    baseEntries.emplace(entry.key_, entry.region_);
+  }
+  for (const auto& [key, value] : entries) {
+    auto chunk =
+        chunkBytes(makeEntryPayloadWriter(key, *value, vocabularyBuilder));
+    auto baseEntry = baseEntries.find(key);
+    if (baseEntry != baseEntries.end()) {
+      copyOrInsert(baseEntry->second, chunk);
+    } else {
+      diff.addInsert(ql::span<const char>{chunk});
+    }
+  }
+
+  // Serialize the diff, and compress the result exactly like a blob.
+  DiffWriter diffWriter;
+  diffWriter << diff;
+  auto uncompressedDiff = std::move(diffWriter).data();
+  return compressBlob(uncompressedDiff);
+}
+
+// _____________________________________________________________________________
+std::vector<char, NamedCachedQueryBlobManager::BlobAllocator>
+NamedCachedQueryBlobManager::applyDiffToUncompressedBlob(
+    ql::span<const char> uncompressedBase, ql::span<const char> compressedDiff,
+    ql::pmr::polymorphic_allocator<char> allocator) {
+  // NOTE: `ad_utility::BinaryDiff::apply` verifies that the diff is applied to
+  // exactly the base blob that it was created against, and it inserts the
+  // alignment padding in front of every instruction.
+  return readDiff(compressedDiff)
+      .apply(uncompressedBase,
+             BlobAllocator{ad_utility::AlignedAllocator<
+                 char, ql::pmr::polymorphic_allocator<char>>{allocator}});
+}
+
+// _____________________________________________________________________________
+std::vector<char> NamedCachedQueryBlobManager::applyDiff(
+    ql::span<const char> compressedBaseBlob,
+    ql::span<const char> compressedDiff) {
+  auto base = decompressBlob(compressedBaseBlob, {});
+  auto patched = applyDiffToUncompressedBlob(base, compressedDiff, {});
+  return compressBlob(patched);
+}
+
+// _____________________________________________________________________________
+ad_utility::BinaryDiff::Statistics NamedCachedQueryBlobManager::describeDiff(
+    ql::span<const char> compressedDiff) {
+  return readDiff(compressedDiff).statistics();
+}
+
+// _____________________________________________________________________________
 void NamedCachedQueryBlobManager::deserialize(
     Qlever& qlever, ql::span<const char> compressedBlob,
+    ql::pmr::polymorphic_allocator<char> allocator) {
+  deserialize(qlever, compressedBlob, {}, allocator);
+}
+
+// _____________________________________________________________________________
+void NamedCachedQueryBlobManager::deserialize(
+    Qlever& qlever, ql::span<const char> compressedBlob,
+    ql::span<const ql::span<const char>> compressedDiffs,
     ql::pmr::polymorphic_allocator<char> allocator) {
   AD_CONTRACT_CHECK(
       !deserializedBlobLifetimeExtender_.has_value(),
       "`deserializeVocabAndNamedCacheFromCompressedBlob` must not be called "
       "more than once on the same `Qlever` instance");
 
-  // Decompress into `deserializedBlobLifetimeExtender_`, which is kept alive
+  // Decompress the base blob and apply the diffs to it, one after the other.
+  // Each of them produces a complete blob again, so the intermediate buffer
+  // can be dropped as soon as the next diff has been applied to it.
+  auto uncompressed = decompressBlob(compressedBlob, allocator);
+  for (ql::span<const char> compressedDiff : compressedDiffs) {
+    uncompressed =
+        applyDiffToUncompressedBlob(uncompressed, compressedDiff, allocator);
+  }
+
+  // Keep the result in `deserializedBlobLifetimeExtender_`, which is kept alive
   // for the lifetime of this manager because the vocabulary and named result
   // cache entries loaded below are zero-copy views directly into it.
-  deserializedBlobLifetimeExtender_.emplace(
-      decompressBlob(compressedBlob, allocator));
+  deserializedBlobLifetimeExtender_.emplace(std::move(uncompressed));
 
   // Use a serializer that only borrows a view of
   // `deserializedBlobLifetimeExtender_`, rather than one that owns/moves it, so
