@@ -14,6 +14,7 @@
 #include <absl/strings/str_cat.h>
 
 #include <array>
+#include <utility>
 
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
@@ -305,11 +306,10 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
   // The rows of one of the scans above, as a flat range of `EntityAndGraph`.
   auto rows = [numColumns = numKgColumns()](
                   ad_utility::InputRangeTypeErased<IdTable> range) {
-    return ql::views::transform(
-        ql::views::join(ad_utility::OwningView{std::move(range)}),
-        [numColumns](const auto& row) {
-          return entityAndGraph(row, numColumns);
-        });
+    return ql::views::transform(ql::views::join(std::move(range)),
+                                [numColumns](const auto& row) {
+                                  return entityAndGraph(row, numColumns);
+                                });
   };
   // Separate statements, because the second scan moves out of `idFilter` and
   // argument evaluation order is unspecified.
@@ -389,8 +389,7 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
                                               bool& hasWarnedAboutUndef) const {
   // A lazy child hands out several tables, each of which may contain UNDEF
   // values, so warn only once.
-  if (!hasWarnedAboutUndef) {
-    hasWarnedAboutUndef = true;
+  if (!std::exchange(hasWarnedAboutUndef, true)) {
     addWarning(
         "The empty path is applied to a column that contains UNDEF values. "
         "Such a value matches every entity of the knowledge graph, so all of "
