@@ -597,7 +597,7 @@ auto makeCheckParameter(const ParamValueMap& parameters) {
 // Look up `cmd`'s metadata in `commands`, run its pre-dispatch checks — the
 // access-token check (if required) and the additional-query/update check —
 // and log that it is being processed. `cmd` must name an entry in
-// `commands`. It always comes from a literal used in the `process()`
+// `commands`. It always comes from a literal used in the `processCommands()`
 // dispatch below.
 void dispatchLog(std::string_view cmd, bool accessTokenOk,
                  const sparqlOperation::Operation& operation) {

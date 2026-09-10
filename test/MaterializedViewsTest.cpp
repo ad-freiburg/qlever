@@ -1008,9 +1008,12 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "/?cmd=load-materialized-view&view-name=testViewFromHTTP2"
         "&access-token=accessToken"
         "&query=SELECT%20*%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        responseBodyAsJson(
-            makeServerForTesting(testIndexBase_).process(request)),
+    expectHttpError(
+        [&] {
+          responseBodyAsJson(
+              makeServerForTesting(testIndexBase_).process(request));
+        },
+        http::status::bad_request,
         ::testing::HasSubstr("cmd=load-materialized-view does not accept an "
                              "additional query or update"));
   }
@@ -1056,6 +1059,23 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     expectRequiresValidAccessToken("unload-materialized-view", [&] {
       makeServerForTesting(testIndexBase_).process(request);
     });
+  }
+
+  // `unload-materialized-view` doesn't take a query, so combining it with one
+  // is rejected instead of silently ignoring the query.
+  {
+    auto request = makeGetRequest(
+        "/?cmd=unload-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken"
+        "&query=SELECT%20*%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
+    expectHttpError(
+        [&] {
+          responseBodyAsJson(
+              makeServerForTesting(testIndexBase_).process(request));
+        },
+        http::status::bad_request,
+        ::testing::HasSubstr("cmd=unload-materialized-view does not accept "
+                             "an additional query or update"));
   }
 
   // Test error message for wrong query type.
@@ -1137,9 +1157,12 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "/?cmd=delete-materialized-view&view-name=testViewFromHTTP"
         "&access-token=accessToken"
         "&query=SELECT%20*%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        responseBodyAsJson(
-            makeServerForTesting(testIndexBase_).process(request)),
+    expectHttpError(
+        [&] {
+          responseBodyAsJson(
+              makeServerForTesting(testIndexBase_).process(request));
+        },
+        http::status::bad_request,
         ::testing::HasSubstr("cmd=delete-materialized-view does not accept "
                              "an additional query or update"));
   }

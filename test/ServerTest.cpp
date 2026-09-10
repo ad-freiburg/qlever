@@ -15,7 +15,6 @@
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
-#include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
@@ -29,24 +28,7 @@
 #include "util/metrics/Metrics.h"
 
 using nlohmann::json;
-
-namespace {
 using namespace ad_utility::testing;
-// Expect that `call()` throws an `HttpError` with the given `status` and
-// with a message that matches `messageMatcher`.
-auto expectHttpError =
-    [](auto call, boost::beast::http::status status, auto messageMatcher,
-       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-      auto trace = generateLocationTrace(l);
-      try {
-        call();
-        FAIL() << "Expected an `HttpError` to be thrown";
-      } catch (const HttpError& e) {
-        EXPECT_EQ(e.status(), status);
-        EXPECT_THAT(e.what(), messageMatcher);
-      }
-    };
-}  // namespace
 
 // _____________________________________________________________________________
 TEST(ServerTest, chooseBestFittingMediaType) {
@@ -275,7 +257,7 @@ TEST(ServerTest, configurePinnedResultWithName) {
   qec->pinResultWithName() = std::nullopt;
 
   // Pinning without a valid access token is rejected with 403 Forbidden.
-  expectHttpError(
+  serverTestHelpers::expectHttpError(
       [&] {
         Server::configurePinnedResultWithName(
             QueryExecutionContext::PinResultWithName{"test_query_name"}, false,
@@ -296,14 +278,14 @@ TEST(ServerTest, checkAccessToken) {
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
 
   // An invalid access token results in a 403 Forbidden response.
-  expectHttpError(
+  serverTestHelpers::expectHttpError(
       [&] { server.checkAccessToken("invalidAccessToken"); },
       boost::beast::http::status::forbidden,
       testing::HasSubstr("Access token was provided but it was invalid"));
 
   // Same when the server was started without `--access-token` at all.
   Server serverWithoutToken{4322, 1, "", config};
-  expectHttpError(
+  serverTestHelpers::expectHttpError(
       [&] { serverWithoutToken.checkAccessToken("someToken"); },
       boost::beast::http::status::forbidden,
       testing::HasSubstr("Access token was provided but server was started "
