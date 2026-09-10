@@ -67,7 +67,7 @@ std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
 // _____________________________________________________________________________
 std::shared_ptr<RdfAsyncMultifileParser::OpenFile>
 RdfAsyncMultifileParser::pickFile() {
-  std::lock_guard lock{mutex_};
+  std::unique_lock lock{mutex_};
   // Prefer the earliest-opened open file that can take another call.
   // `openFiles_` is in the order in which the files were opened.
   for (auto& file : openFiles_) {
@@ -77,12 +77,16 @@ RdfAsyncMultifileParser::pickFile() {
     }
   }
   // No open file has spare capacity; open the next unopened file, if there is
-  // one.
+  // one. The parser is constructed WITHOUT holding the lock: constructing it
+  // reads the first block of the file synchronously, which would otherwise
+  // serialize all file opens behind this lock.
   if (!noFilesLeft_) {
     auto spec = files_.get();
     if (spec.has_value()) {
+      lock.unlock();
       auto file = std::make_shared<OpenFile>(OpenFile{
           makeFileParser(spec.value()), spec.value().parseInParallel_, 1});
+      lock.lock();
       openFiles_.push_back(file);
       return file;
     }
