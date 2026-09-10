@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Anna Kaiser (anna.kaiser@uni-freiburg.de)
 
-#ifndef VARS_REQUIRED_FROM_SUBTREE_H
-#define VARS_REQUIRED_FROM_SUBTREE_H
+#ifndef COLUMN_STRIPPING_HELPERS_H
+#define COLUMN_STRIPPING_HELPERS_H
 
 #include <set>
 
+#include "engine/StripColumns.h"
 #include "rdfTypes/Variable.h"
 #include "util/Algorithm.h"
 
@@ -52,4 +53,38 @@ class VarsRequiredFromSubtree {
   const std::set<Variable>& get() const { return *varsRequiredFromSubtree_; }
 };
 
-#endif  // VARS_REQUIRED_FROM_SUBTREE_H
+// This function creates an execution tree which has the given Operation as
+// root. There are some variables that are needed by the operation itself, but
+// are not requested by the parent tree. In this case, an additional execution
+// tree is generated, which inserts a StipColumn-Operation over the given
+// Operation. This StripColumn-Operation strips the variables that were needed
+// by the given operation but are not requested from the parent. If all
+// variables, that are needed for the given operation to be executed are also
+// requested from the parent, then the treeWithOperationAsRoot is returned and
+// no additional StripColumns-Operation is inserted in the execution tree.
+template <typename Operation, typename... Args>
+std::optional<std::shared_ptr<QueryExecutionTree>>
+makeTreeWithOptionalStripOperation(
+    QueryExecutionContext* qec,
+    const std::set<Variable>& variablesRequestedFromParent,
+    std::vector<const Variable*> variablesNeededByOperation, Args&&... args) {
+  // Create query execution tree with the given operation as root.
+  auto treeWithOperationAsRoot = ad_utility::makeExecutionTree<Operation>(
+      qec, std::forward<Args>(args)...);
+
+  // check whether all variables needed for the given operation are also
+  // requested from the parent. And either return the QueryExecutionTree with or
+  // without an additional StripColumns-Operation.
+  if (ql::ranges::all_of(
+          variablesNeededByOperation,
+          [&variablesRequestedFromParent](const Variable* varNeeded) {
+            return ad_utility::contains(variablesRequestedFromParent,
+                                        *varNeeded);
+          })) {
+    return treeWithOperationAsRoot;
+  }
+  return ad_utility::makeExecutionTree<StripColumns>(
+      qec, std::move(treeWithOperationAsRoot), variablesRequestedFromParent);
+}
+
+#endif  // COLUMN_STRIPPING_HELPERS_H
