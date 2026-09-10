@@ -25,21 +25,42 @@
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
 
-#ifndef LOGLEVEL
-#define LOGLEVEL DEBUG
+// The numeric values of the log levels, and the compile-time log level
+// `QLEVER_LOGLEVEL`. These are macros with plain integer values (and not C++
+// constants), because they have to be usable in `#if` directives (see
+// `Timer.h` for an example) and because `QLEVER_LOGLEVEL` is set by the build
+// system via `-DQLEVER_LOGLEVEL=...`.
+//
+// NOTE: It is important that the values are integer literals and not
+// identifiers. A macro that expands to an identifier (as the former
+// `#define LOGLEVEL DEBUG` did) has to be resolved by name lookup at each of
+// its expansion sites, which breaks as soon as any dependency declares or
+// defines a conflicting `DEBUG`. Even worse, in a `#if` directive an
+// identifier that is not a macro silently evaluates to `0`, so `#if LOGLEVEL
+// >= TIMING` was always true, no matter what the log level actually was.
+#define QLEVER_FATAL 0
+#define QLEVER_ERROR 1
+#define QLEVER_WARN 2
+#define QLEVER_INFO 3
+#define QLEVER_DEBUG 4
+#define QLEVER_TIMING 5
+#define QLEVER_TRACE 6
+
+#ifndef QLEVER_LOGLEVEL
+#define QLEVER_LOGLEVEL QLEVER_DEBUG
 #endif
 
 namespace ad_utility {
 
 namespace detail {
 enum class LogLevelEnum {
-  FATAL = 0,
-  ERROR = 1,
-  WARN = 2,
-  INFO = 3,
-  DEBUG = 4,
-  TIMING = 5,
-  TRACE = 6
+  FATAL = QLEVER_FATAL,
+  ERROR = QLEVER_ERROR,
+  WARN = QLEVER_WARN,
+  INFO = QLEVER_INFO,
+  DEBUG = QLEVER_DEBUG,
+  TIMING = QLEVER_TIMING,
+  TRACE = QLEVER_TRACE
 };
 }
 
@@ -60,19 +81,31 @@ class LogLevel : public EnumWithStrings<LogLevel, detail::LogLevelEnum> {
   using EnumWithStrings::EnumWithStrings;
 };
 
+// The compile-time log level, as a typed constant. Use this (and not the
+// `QLEVER_LOGLEVEL` macro) everywhere where a macro is not strictly required,
+// that is, everywhere outside of `#if` directives.
+inline constexpr LogLevel::Enum compileTimeLogLevel =
+    static_cast<LogLevel::Enum>(QLEVER_LOGLEVEL);
+
 }  // namespace ad_utility
 
-// Global type alias and using-enum so that `LogLevel::FATAL` etc. and the
-// compile-time `LOGLEVEL` macro keep working outside `namespace ad_utility`.
+// Global type alias so that `LogLevel::Enum::FATAL` etc. can be written
+// without the `ad_utility::` prefix.
+//
+// NOTE: Deliberately no `using enum LogLevel::Enum;` here. That would inject
+// the names `FATAL`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TIMING` and `TRACE`
+// into the global namespace of every translation unit that (transitively)
+// includes this header, which are exactly the identifiers that other
+// libraries and platform SDKs like to declare or `#define` themselves. Always
+// spell the log levels out as `ad_utility::LogLevel::Enum::DEBUG` etc.
 using LogLevel = ad_utility::LogLevel;
-using enum LogLevel::Enum;
 
-// The branching logger: both the compile-time level (LOGLEVEL) and the runtime
-// level must pass for a message to be logged. Nothing after the `<<` is
-// evaluated for a suppressed message, which makes this variant efficient, but
-// also introduces a branch at every single call site, which is unfriendly to
-// coverage measurements. The `LogLock` temporary is held for the entire `<<`
-// chain and released at the semicolon that ends the statement.
+// The branching logger: both the compile-time level (`compileTimeLogLevel`)
+// and the runtime level must pass for a message to be logged. Nothing after
+// the `<<` is evaluated for a suppressed message, which makes this variant
+// efficient, but also introduces a branch at every single call site, which is
+// unfriendly to coverage measurements. The `LogLock` temporary is held for the
+// entire `<<` chain and released at the semicolon that ends the statement.
 #define AD_LOG_BRANCHING(x)                                         \
   if (!::ad_utility::detail::logLevelIsEnabled(x))                  \
     ;                                                               \
@@ -98,13 +131,13 @@ using enum LogLevel::Enum;
 #endif
 
 // Macros for the different log levels.
-#define AD_LOG_FATAL AD_LOG(LogLevel::Enum::FATAL)
-#define AD_LOG_ERROR AD_LOG(LogLevel::Enum::ERROR)
-#define AD_LOG_WARN AD_LOG(LogLevel::Enum::WARN)
-#define AD_LOG_INFO AD_LOG(LogLevel::Enum::INFO)
-#define AD_LOG_DEBUG AD_LOG(LogLevel::Enum::DEBUG)
-#define AD_LOG_TIMING AD_LOG(LogLevel::Enum::TIMING)
-#define AD_LOG_TRACE AD_LOG(LogLevel::Enum::TRACE)
+#define AD_LOG_FATAL AD_LOG(::ad_utility::LogLevel::Enum::FATAL)
+#define AD_LOG_ERROR AD_LOG(::ad_utility::LogLevel::Enum::ERROR)
+#define AD_LOG_WARN AD_LOG(::ad_utility::LogLevel::Enum::WARN)
+#define AD_LOG_INFO AD_LOG(::ad_utility::LogLevel::Enum::INFO)
+#define AD_LOG_DEBUG AD_LOG(::ad_utility::LogLevel::Enum::DEBUG)
+#define AD_LOG_TIMING AD_LOG(::ad_utility::LogLevel::Enum::TIMING)
+#define AD_LOG_TRACE AD_LOG(::ad_utility::LogLevel::Enum::TRACE)
 
 namespace ad_utility {
 
@@ -115,10 +148,10 @@ namespace detail {
 inline std::mutex logMutex;
 
 static constexpr LogLevel::Enum defaultLogLevel =
-    std::min(LOGLEVEL, LogLevel::Enum::INFO);
+    std::min(compileTimeLogLevel, LogLevel::Enum::INFO);
 // Runtime log level; messages with a higher level than this are suppressed.
-// Defaults to the less verbose of INFO and the compile-time LOGLEVEL so that
-// the runtime level is never set to something the binary cannot log.
+// Defaults to the less verbose of INFO and `compileTimeLogLevel`, so that the
+// runtime level is never set to something the binary cannot log.
 inline std::atomic<LogLevel::Enum> runtimeLogLevel = defaultLogLevel;
 // A stream that discards everything that is written to it. It is created from
 // a null `streambuf`, so it is in a `bad` state from the start and every
@@ -130,9 +163,9 @@ inline std::ostream& nullStream() {
 }
 
 // Return true if a message with the given `level` has to be logged, according
-// to the compile-time (`LOGLEVEL`) and the runtime log level.
+// to the compile-time (`compileTimeLogLevel`) and the runtime log level.
 inline bool logLevelIsEnabled(LogLevel::Enum level) {
-  return level <= LOGLEVEL &&
+  return level <= compileTimeLogLevel &&
          level <= runtimeLogLevel.load(std::memory_order_relaxed);
 }
 
@@ -145,15 +178,16 @@ struct LogLock {
 }  // namespace detail
 
 // Set the runtime log level. Throws if `level` is more verbose than the
-// compile-time LOGLEVEL, because such messages are compiled out and can never
-// appear regardless of the runtime setting.
+// `compileTimeLogLevel`, because such messages are compiled out and can
+// never appear regardless of the runtime setting.
 inline void setRuntimeLogLevel(LogLevel level) {
-  if (level.value() > LOGLEVEL) {
-    throw std::runtime_error{absl::StrCat(
-        "Cannot set runtime log level to `", level.toString(),
-        "` because the compile-time log level is `",
-        LogLevel{LOGLEVEL}.toString(), "`. Recompile with -DLOGLEVEL=",
-        level.toString(), " or higher to enable this log level.")};
+  if (level.value() > compileTimeLogLevel) {
+    throw std::runtime_error{
+        absl::StrCat("Cannot set runtime log level to `", level.toString(),
+                     "` because the compile-time log level is `",
+                     LogLevel{compileTimeLogLevel}.toString(),
+                     "`. Recompile with -DLOGLEVEL=", level.toString(),
+                     " or higher to enable this log level.")};
   }
   detail::runtimeLogLevel.store(level.value(), std::memory_order_relaxed);
 }
@@ -169,7 +203,7 @@ inline LogLevel getRuntimeLogLevel() {
 }
 
 // While an object of this class is alive, the runtime log level is the given
-// `level` (or the compile-time `LOGLEVEL`, if that is less verbose); the
+// `level` (or `compileTimeLogLevel`, if that is less verbose); the
 // previous level is restored when the object is destroyed. Use this to silence
 // a subroutine that logs more than the caller wants, or to set up a specific
 // log level in a test.
@@ -185,7 +219,7 @@ class QL_NODISCARD(
 
  public:
   explicit ScopedLogLevel(LogLevel::Enum level) {
-    setRuntimeLogLevel(std::min(level, LOGLEVEL));
+    setRuntimeLogLevel(std::min(level, compileTimeLogLevel));
   }
 
   ScopedLogLevel(const ScopedLogLevel&) = delete;

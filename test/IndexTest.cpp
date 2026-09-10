@@ -731,12 +731,13 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   using namespace ::testing;
 
   // Wrap a matcher for a substring that comes from an `AD_LOG_INFO` line so
-  // that the assertion is only active when `LOGLEVEL >= INFO`. At
-  // `LOGLEVEL=WARN` the INFO output is suppressed, but the test still runs to
-  // cover the WARN-level `"deprecated"` assertions; the wrapper degrades to
-  // `testing::_` (match anything) in that case.
+  // that the assertion is only active when the compile-time log level is at
+  // least `INFO`. At `LOGLEVEL=WARN` the INFO output is suppressed, but the
+  // test still runs to cover the WARN-level `"deprecated"` assertions; the
+  // wrapper degrades to `testing::_` (match anything) in that case.
   auto onlyAtInfoOrAbove = [](auto matcher) {
-    if constexpr (LOGLEVEL < INFO) {
+    if constexpr (ad_utility::compileTimeLogLevel <
+                  ad_utility::LogLevel::Enum::INFO) {
       return testing::_;
     } else {
       return matcher;
