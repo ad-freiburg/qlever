@@ -199,6 +199,58 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
 }
 
 // _____________________________________________________________________________
+TEST(TripleSerializer, serializeLocalVocabWithoutWords) {
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocab localVocab;
+  auto LV = [&localVocab, qec](std::string_view value) {
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::literalWithoutQuotes(value,
+                                              qec->getLocalVocabContext())));
+  };
+  auto bn = [&]() {
+    return Id::makeFromBlankNodeIndex(
+        localVocab.getBlankNodeIndex(qec->getIndex().getBlankNodeManager()));
+  };
+  // Add words (in two different word sets) as well as blank nodes.
+  std::vector<Id> ids{LV("abc"), LV("def"), bn()};
+  localVocab = localVocab.clone();
+  ids.push_back(LV("ghi"));
+  ids.push_back(bn());
+  ASSERT_EQ(localVocab.size(), 3);
+
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  ad_utility::detail::serializeLocalVocabWithoutWords(writer, localVocab);
+  ad_utility::serialization::ByteBufferReadSerializer reader{
+      std::move(writer).data()};
+  auto [localVocabOut, mapping] = ad_utility::detail::deserializeLocalVocab(
+      reader, qec->getLocalVocabContext());
+
+  // None of the words was written, so the deserialized local vocab is empty
+  // and the mapping (from written to deserialized `Id`s) is empty as well.
+  EXPECT_EQ(localVocabOut.size(), 0);
+  EXPECT_THAT(localVocabOut.getAllWordsForTesting(), ::testing::IsEmpty());
+  EXPECT_THAT(mapping, ::testing::IsEmpty());
+
+  // The blank node blocks are written and read back unchanged (but with an
+  // empty block prepended, see the `blankNodesRemapper` test above).
+  auto blankNodeBlocksOriginal = localVocab.getOwnedLocalBlankNodeBlocks();
+  auto blankNodeBlocksDeserialized =
+      localVocabOut.getOwnedLocalBlankNodeBlocks();
+  ASSERT_FALSE(blankNodeBlocksOriginal.empty());
+  ASSERT_EQ(blankNodeBlocksDeserialized.size(),
+            blankNodeBlocksOriginal.size() + 1);
+  EXPECT_TRUE(blankNodeBlocksDeserialized.at(0).blockIndices_.empty());
+  for (size_t i = 0; i < blankNodeBlocksOriginal.size(); ++i) {
+    EXPECT_EQ(blankNodeBlocksOriginal[i].uuid_,
+              blankNodeBlocksDeserialized[i + 1].uuid_)
+        << i;
+    EXPECT_EQ(blankNodeBlocksOriginal[i].blockIndices_,
+              blankNodeBlocksDeserialized[i + 1].blockIndices_)
+        << i;
+  }
+}
+
+// _____________________________________________________________________________
 TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
   using namespace ::testing;
   auto* qec = ad_utility::testing::getQec();

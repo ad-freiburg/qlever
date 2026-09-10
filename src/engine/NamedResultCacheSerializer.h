@@ -10,6 +10,7 @@
 #include <boost/math/tools/roots.hpp>
 #include <cstdint>
 
+#include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
@@ -42,12 +43,7 @@ CPP_template_def(typename Serializer)(
   serializer << namedResultCacheSerializer::detail::magicByte;
   serializer << namedResultCacheSerializer::detail::formatVersion;
 
-  auto lock = cache_.wlock();
-  std::vector<std::pair<Key, std::shared_ptr<const Value>>> entries;
-  for (const auto& key : lock->getAllNonpinnedKeys()) {
-    entries.emplace_back(key, (*lock)[key]);
-    AD_CORRECTNESS_CHECK(entries.back().second != nullptr);
-  }
+  auto entries = getAllEntries();
 
   // Serialize the number of entries.
   serializer << entries.size();
@@ -110,6 +106,106 @@ CPP_template_def(typename Serializer)(
   }
 }
 
+namespace namedResultCacheSerializer {
+// Write `value` to the `serializer`, in exactly the format that the read
+// branch of the serialization of a `NamedResultCache::Value` below reads.
+//
+// The `columns` (a range of ranges of `Id`, one per column of the result) and
+// the `resultSortedOn` are passed separately, so that a caller can write a
+// *rewritten* version of the `value`: `NamedCachedQueryBlobManager` replaces
+// the `Id`s that refer to local vocab entries by `Id`s of the main or the
+// secondary vocabulary, which also invalidates a part of the sort order. The
+// `columns` therefore only have to agree with `value.result_` in their number
+// and in the number of rows, which is checked. If `writeLocalVocabWords` is
+// `false`, the words of the local vocab of the `value` are not written (only
+// its blank node blocks, see `serializeLocalVocabWithoutWords`), because the
+// caller has stored them elsewhere.
+template <typename Serializer, typename Columns>
+void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
+                const Columns& columns,
+                const std::vector<ColumnIndex>& resultSortedOn,
+                bool writeLocalVocabWords) {
+  static_assert(ad_utility::serialization::WriteSerializer<Serializer>);
+  // Serialize the `LocalVocab` first (required for ID remapping).
+  if (writeLocalVocabWords) {
+    ad_utility::detail::serializeLocalVocab(serializer, value.localVocab_);
+  } else {
+    ad_utility::detail::serializeLocalVocabWithoutWords(serializer,
+                                                        value.localVocab_);
+  }
+
+  // Serialize the `IdTable` (uses the `serializeIds` helper which handles
+  // `LocalVocab` IDs).
+  const auto& resultView = ExplicitIdTableOperation::viewOf(value.result_);
+  serializer << resultView.numRows();
+  serializer << resultView.numColumns();
+  AD_CORRECTNESS_CHECK(ql::ranges::size(columns) == resultView.numColumns());
+  for (const auto& col : columns) {
+    // NOTE: Although the code for serialization of a local vocab above is
+    // already incorporated, we currently still let local vocab entries throw
+    // an exception, because there are some caveats in the serialization that
+    // don't work yet, and will only be mitigated in the future. Note that a
+    // caller that has rewritten the `columns` (see above) has already replaced
+    // all such `Id`s, so this check only applies to the `Id`s that are
+    // actually written. NOTE2: Even though we disallow the local vocab, it is
+    // crucial to serialize the local vocab because of possible added blank
+    // node indices, which we do handle correctly, and which also rely on the
+    // local vocab.
+    // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
+    // allow local vocab entries here.
+    AD_CORRECTNESS_CHECK(
+        ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
+            ql::ranges::end(col),
+        "Named result cache entries that contain local vocab entries "
+        "currently cannot be serialized. Note that local vocab entries can "
+        "also occur if SPARQL UPDATE operations have been performed on the "
+        "index before creating the named cached result.");
+    AD_CORRECTNESS_CHECK(ql::ranges::size(col) == resultView.numRows());
+    ad_utility::detail::serializeIds(serializer, col);
+  }
+
+  // Serialize `VariableToColumnMap` manually (`Variable` is not
+  // default-constructible, so we cannot automatically read the hash map from
+  // a serializer, and therefore for consistency we also manually handle the
+  // writing to the serializer, s.t. we do not depend on the internals of
+  // `HashMap` serialization.
+  //
+  // NOTE: The entries are written sorted by the name of the variable, so that
+  // identical contents yield identical bytes (which a byte-level comparison of
+  // serialized caches relies on). The reading side does not depend on the
+  // order.
+  serializer << value.varToColMap_.size();
+  std::vector<const VariableToColumnMap::value_type*> sortedEntries;
+  sortedEntries.reserve(value.varToColMap_.size());
+  for (const auto& entry : value.varToColMap_) {
+    sortedEntries.push_back(&entry);
+  }
+  ql::ranges::sort(sortedEntries, {},
+                   [](const auto* entry) -> const std::string& {
+                     return entry->first.name();
+                   });
+  for (const auto* entry : sortedEntries) {
+    serializer << entry->first;
+    serializer << entry->second;
+  }
+
+  // Serialize `resultSortedOn` (vector of `ColumnIndex`).
+  serializer << resultSortedOn;
+
+  // Serialize `cacheKey` (string).
+  serializer << value.cacheKey_;
+
+  // Serialize the `cachedGeoIndex_`. Note: The `cachedGeoIndex_` is not
+  // default-constructible, so we use manual serialization (see the comment
+  // above for the manual serialization of the `varToColMap_` for details).
+  bool hasGeoIndex = value.cachedGeoIndex_.has_value();
+  serializer << hasGeoIndex;
+  if (hasGeoIndex) {
+    serializer << value.cachedGeoIndex_.value();
+  }
+}
+}  // namespace namedResultCacheSerializer
+
 namespace ad_utility::serialization {
 
 // Serialization for `NamedResultCache::Value`
@@ -118,59 +214,13 @@ namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::SimilarTo<T, NamedResultCache::Value>)) {
   if constexpr (WriteSerializer<S>) {
-    // Serialize the LocalVocab first (required for ID remapping).
-    ad_utility::detail::serializeLocalVocab(serializer, arg.localVocab_);
-
-    // Serialize the IdTable (uses the `serializeIds` helper which handles
-    // LocalVocab IDs).
+    // Write the value as it is: with the original columns, the original sort
+    // order, and the words of its local vocab (see `writeValue` above for the
+    // cases in which those are replaced).
     const auto& resultView = ExplicitIdTableOperation::viewOf(arg.result_);
-    serializer << resultView.numRows();
-    serializer << resultView.numColumns();
-    for (const auto& col : resultView.getColumns()) {
-      // NOTE: Although the code for serialization of a local vocab above is
-      // already incorporated, we currently still let local vocab entries throw
-      // an exception, because there are some caveats in the serialization that
-      // don't work yet, and will only be mitigated in the future. NOTE2: Even
-      // though we disallow the local vocab, it is crucial to serialize the
-      // local vocab because of possible added blank node indices, which we do
-      // handle correctly, and which also rely on the local vocab.
-      // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
-      // allow local vocab entries here.
-      AD_CORRECTNESS_CHECK(
-          ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
-              col.end(),
-          "Named result cache entries that contain local vocab entries "
-          "currently cannot be serialized. Note that local vocab entries can "
-          "also occur if SPARQL UPDATE operations have been performed on the "
-          "index before creating the named cached result.");
-      ad_utility::detail::serializeIds(serializer, col);
-    }
-
-    // Serialize VariableToColumnMap manually (`Variable` is not
-    // default-constructible, so we cannot automatically read the hash map from
-    // a serializer, and therefore for consistency we also manually handling the
-    // writing to the serializer, s.t. we do not depend on the internals of
-    // HashMap serialization.
-    serializer << arg.varToColMap_.size();
-    for (const auto& [var, colInfo] : arg.varToColMap_) {
-      serializer << var;
-      serializer << colInfo;
-    }
-
-    // Serialize resultSortedOn (vector of ColumnIndex).
-    serializer << arg.resultSortedOn_;
-
-    // Serialize cacheKey (string).
-    serializer << arg.cacheKey_;
-
-    // Serialize the `cachedGeoIndex_`. Note: The `cachedGeoIndex_` is not
-    // default-constructible, so we use manual serialization (see the comment
-    // above for the manual serialization of the `varToColMap_` for details).
-    bool hasGeoIndex = arg.cachedGeoIndex_.has_value();
-    serializer << hasGeoIndex;
-    if (hasGeoIndex) {
-      serializer << arg.cachedGeoIndex_.value();
-    }
+    namedResultCacheSerializer::writeValue(
+        serializer, arg, resultView.getColumns(), arg.resultSortedOn_,
+        /*writeLocalVocabWords=*/true);
   } else {
     // Deserialize the LocalVocab and get the ID mapping.
     AD_CORRECTNESS_CHECK(arg.contextForSerialization_ != nullptr);
