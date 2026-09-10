@@ -11,6 +11,7 @@
 #define QLEVER_SRC_UTIL_COPYONWRITEPTR_H
 
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 #include "util/Exception.h"
@@ -49,6 +50,9 @@ namespace ad_utility {
 // worst causes one unnecessary clone.
 template <typename T>
 class CopyOnWritePtr {
+  static_assert(std::is_copy_constructible_v<T>,
+                "`write()` has to be able to clone the pointee");
+
  private:
   std::shared_ptr<T> ptr_;
 
