@@ -936,6 +936,13 @@ TEST(ParallelBlockMerge, chunksAreActuallyMergedInParallel) {
   auto expected = sortedConcatenation(runs);
   InstrumentedInput input{makeVectorInput(runs, 32)};
   auto state = input.state_;
+  // Hold up every read a little. Without this, the whole merge of this small
+  // input takes only a few milliseconds in an optimized build, so on a loaded
+  // machine a single thread of the pool can drain all the dispatched chunks
+  // before any of the other threads is even scheduled, and the check below
+  // fails spuriously. A thread that sleeps inside `getBlock` cannot pick up the
+  // next chunk, so another thread has to.
+  state->delayPerRead_ = std::chrono::milliseconds{1};
   EXPECT_THAT(parallelMergeToVector(std::move(input), std::less<>{},
                                     parallelOptions(64), 8),
               ::testing::ElementsAreArray(expected));
