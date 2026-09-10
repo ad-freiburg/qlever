@@ -289,11 +289,11 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   // Add variables and the variables corresponding to the sortColumnIndices_ to
   // the variables that are required from the subtree.
-  std::vector<Variable> sortVars;
+  std::vector<const Variable*> sortVars;
   VarsRequiredFromSubtree helper(variables);
   for (const auto& jcl : sortColumnIndices_) {
     const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
-    sortVars.push_back(var);
+    sortVars.push_back(&var);
     helper.add(var);
   }
   // Collect all the varaibles that are required from the subtree.
@@ -302,28 +302,17 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   // Continue with the recursion and strip columns of subtree.
   auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
       subtree_, varsRequiredFromSubtree);
+
   // Find out the new column indices to update sortColumnIndices_
   std::vector<ColumnIndex> sortColumnIndices;
   for (const auto& var : sortVars) {
-    sortColumnIndices.push_back(subtree->getVariableColumn(var));
+    sortColumnIndices.push_back(subtree->getVariableColumn(*var));
   }
 
-  // Create query execution tree with Sort-Operation as root operation.
-  auto treeWithSortRoot = ad_utility::makeExecutionTree<Sort>(
-      getExecutionContext(), std::move(subtree), sortColumnIndices,
+  // Create query execution tree with Sort-Operation as root-Operation and add
+  // additional stripColumns-Operation if needed.
+  return makeTreeWithOptionalStripOperation<Sort>(
+      getExecutionContext(), variables, std::move(sortVars),
+      std::move(subtree), std::move(sortColumnIndices),
       explicitSort_);
-
-  // The variables in sortVars (resulting from sortColumnIndices_) are needed to
-  // compute Sort-Operation, but do not necessarily belong to the result
-  // requested by the parent tree.
-  // If all sortVars are requested by the parent tree, return
-  // treeWithSortRoot. If not, an additional StripColumns-Operation is added
-  // in the executionTree above the Sort-Operation.
-  if (ql::ranges::all_of(sortVars, [&variables](const auto& sortVar) {
-        return ad_utility::contains(variables, sortVar);
-      })) {
-    return treeWithSortRoot;
-  }
-  return ad_utility::makeExecutionTree<StripColumns>(
-      getExecutionContext(), std::move(treeWithSortRoot), variables);
 }
