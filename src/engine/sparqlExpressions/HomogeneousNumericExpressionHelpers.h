@@ -85,6 +85,9 @@ inline HomogeneousNumericType classifyNumericOperand(
   bool allInt = true;
   bool allDouble = true;
 
+  // Deliberately scan the complete span without an early exit. Using the
+  // breakable `chunkedForLoop` for failed classifications was benchmarked and
+  // caused a significant regression for homogeneous inputs.
   ad_utility::chunkedForLoop<1000>(
       0, values.size(),
       [&](size_t i) {
