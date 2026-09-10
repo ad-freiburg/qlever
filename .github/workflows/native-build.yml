@@ -98,6 +98,12 @@ jobs:
 
     runs-on: ${{matrix.runner || 'ubuntu-24.04'}}
 
+    env:
+      # Suppress known ThreadSanitizer false positives in third-party libraries
+      # (see the comments in the file for details). This only affects the job
+      # that builds with `-fsanitize=thread`, all other jobs ignore the variable.
+      TSAN_OPTIONS: "suppressions=${{github.workspace}}/misc/tsan-suppressions.txt"
+
     steps:
       - name: Skip early if conditions are not met
         if: (github.event_name == 'pull_request' && matrix.skipIfPr)
