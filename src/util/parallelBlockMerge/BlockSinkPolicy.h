@@ -23,6 +23,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "util/TypeTraits.h"
+
 // The output policy of the parallel block merge: the `SinkConcept` that the
 // sink of a merge has to fulfill. It is the counterpart of the `InputConcept`
 // (see `util/parallelBlockMerge/RunsInputPolicy.h`). For the terminology (runs,
@@ -125,20 +127,11 @@ concept SinkConcept = requires(T& sink, size_t chunkIndex, Block block,
 
 namespace detail {
 // Whether `P` is a `std::shared_ptr` to a type that models the `SinkConcept`
-// for `Block`. The primary template covers every type that is no
-// `std::shared_ptr` at all.
+// for `Block`. NOTE: The `&&` short-circuits, so `typename P::element_type` is
+// only ever formed for a `P` that actually is a `std::shared_ptr`.
 template <typename P, typename Block>
-inline constexpr bool isSharedPtrToSink = false;
-
-// ___________________________________________________________________________
-template <typename Sink, typename Block>
-inline constexpr bool isSharedPtrToSink<std::shared_ptr<Sink>, Block> =
-    SinkConcept<Sink, Block>;
-
-// The same as a concept, so that it can constrain the return type of a sink
-// factory below.
-template <typename P, typename Block>
-concept SharedPtrToSink = isSharedPtrToSink<P, Block>;
+concept SharedPtrToSink = ad_utility::isInstantiation<P, std::shared_ptr> &&
+                          SinkConcept<typename P::element_type, Block>;
 
 // The type of the sink that a sink factory creates. This is only ever
 // instantiated for a factory that models the `SinkFactoryConcept` below, which
