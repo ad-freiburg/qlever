@@ -317,9 +317,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   }
 
   if (c.secondaryVocabWords.has_value()) {
-    index.getImpl().setSecondaryVocabForTesting(
-        std::make_shared<SecondaryVocabulary>(
-            std::move(c.secondaryVocabWords).value()));
+    index.getImpl().setSecondaryVocab(std::make_shared<SecondaryVocabulary>(
+        std::move(c.secondaryVocabWords).value()));
   }
 
   if (c.usePatterns && c.loadAllPermutations) {
