@@ -189,13 +189,13 @@ struct DefaultLogger {
 
   template <typename... Args>
   void operator()(LogLevel::Enum level, const Args&... args) const {
-    AD_LOG(level) << lazyLogArgs(args...);
+    AD_LOG_IMPL(level) << lazyLogArgs(args...);
   }
 
   // See `BranchingLogger::logManipulators`.
   void logManipulators(LogLevel::Enum level) const {
-    AD_LOG(level) << std::endl;
-    AD_LOG(level) << std::setw(4) << 42 << "\n";
+    AD_LOG_IMPL(level) << std::endl;
+    AD_LOG_IMPL(level) << std::setw(4) << 42 << "\n";
   }
 };
 

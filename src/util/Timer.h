@@ -220,7 +220,7 @@ struct QL_NODISCARD(
 // NOTE: This has to be a preprocessor `#if` (and not an `if constexpr` inside
 // `detail::TimeBlockAndLog`), because the whole point is that no timer and no
 // message are stored and that the callback is not instantiated at all.
-#if QLEVER_LOGLEVEL >= QLEVER_TIMING
+#if QLEVER_COMPILETIME_LOGLEVEL >= QLEVER_TIMING
 using detail::TimeBlockAndLog;
 #else
 template <typename Callback = detail::DefaultLogger>

@@ -790,7 +790,7 @@ string(TOUPPER "${LOGLEVEL}" LOGLEVEL_NAME)
 if (NOT DEFINED LOG_LEVEL_${LOGLEVEL_NAME})
     message(FATAL_ERROR "Invalid value `${LOGLEVEL}` for `LOGLEVEL`, it has to be one of FATAL, ERROR, WARN, INFO, DEBUG, TIMING, TRACE")
 endif ()
-add_compile_definitions(QLEVER_LOGLEVEL=${LOG_LEVEL_${LOGLEVEL_NAME}})
+add_compile_definitions(QLEVER_COMPILETIME_LOGLEVEL=${LOG_LEVEL_${LOGLEVEL_NAME}})
 
 # The `AD_LOG_...` macros have two implementations, see `src/util/Log.h`. By
 # default, the branching logger is used, which doesn't evaluate the arguments of

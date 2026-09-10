@@ -110,7 +110,7 @@ TEST(TimeBlockAndLog, TimeBlockAndLog) {
     ad_utility::TimeBlockAndLog t{"message", callback};
     std::this_thread::sleep_for(25ms);
   }
-#if QLEVER_LOGLEVEL >= QLEVER_TIMING
+#if QLEVER_COMPILETIME_LOGLEVEL >= QLEVER_TIMING
   ASSERT_THAT(s, MatchesRegex("message: (2[5-9]|3[0-9])"));
 #else
   // Below a compile-time log level of `TIMING`, `TimeBlockAndLog` is a stub

@@ -26,10 +26,14 @@
 #include "util/TypeTraits.h"
 
 // The numeric values of the log levels, and the compile-time log level
-// `QLEVER_LOGLEVEL`. These are macros with plain integer values (and not C++
-// constants), because they have to be usable in `#if` directives (see
-// `Timer.h` for an example) and because `QLEVER_LOGLEVEL` is set by the build
-// system via `-DQLEVER_LOGLEVEL=...`.
+// `QLEVER_COMPILETIME_LOGLEVEL`. These are macros with plain integer values
+// (and not C++ constants), because they have to be usable in `#if` directives
+// (see `Timer.h` for an example) and because `QLEVER_COMPILETIME_LOGLEVEL` is
+// set by the build system via `-DQLEVER_COMPILETIME_LOGLEVEL=...`.
+//
+// NOTE: The values have to be kept in sync with the `LOG_LEVEL_...` variables
+// in `CMakeLists.txt`, which translate the user-facing `LOGLEVEL=<NAME>` CMake
+// option (for example `-DLOGLEVEL=INFO`) into the corresponding number.
 //
 // NOTE: It is important that the values are integer literals and not
 // identifiers. A macro that expands to an identifier (as the former
@@ -46,8 +50,8 @@
 #define QLEVER_TIMING 5
 #define QLEVER_TRACE 6
 
-#ifndef QLEVER_LOGLEVEL
-#define QLEVER_LOGLEVEL QLEVER_DEBUG
+#ifndef QLEVER_COMPILETIME_LOGLEVEL
+#define QLEVER_COMPILETIME_LOGLEVEL QLEVER_DEBUG
 #endif
 
 namespace ad_utility {
@@ -82,10 +86,10 @@ class LogLevel : public EnumWithStrings<LogLevel, detail::LogLevelEnum> {
 };
 
 // The compile-time log level, as a typed constant. Use this (and not the
-// `QLEVER_LOGLEVEL` macro) everywhere where a macro is not strictly required,
-// that is, everywhere outside of `#if` directives.
+// `QLEVER_COMPILETIME_LOGLEVEL` macro) everywhere where a macro is not
+// strictly required, that is, everywhere outside of `#if` directives.
 inline constexpr LogLevel::Enum compileTimeLogLevel =
-    static_cast<LogLevel::Enum>(QLEVER_LOGLEVEL);
+    static_cast<LogLevel::Enum>(QLEVER_COMPILETIME_LOGLEVEL);
 
 }  // namespace ad_utility
 
@@ -124,20 +128,25 @@ using LogLevel = ad_utility::LogLevel;
 // The logger that is actually used by the `AD_LOG_...` macros below. This is
 // the only place where the choice between the two styles above is made; it is
 // controlled by the `BRANCHLESS_LOGGING` CMake option.
+//
+// NOTE: Always log via one of the `AD_LOG_<LEVEL>` macros below. Use
+// `AD_LOG_IMPL` directly only for the rare case that the log level is not
+// known at compile time (a grep for `AD_LOG_IMPL` outside of this header
+// lists all such places).
 #ifdef QLEVER_BRANCHLESS_LOGGING
-#define AD_LOG(x) AD_LOG_BRANCHLESS(x)
+#define AD_LOG_IMPL(x) AD_LOG_BRANCHLESS(x)
 #else
-#define AD_LOG(x) AD_LOG_BRANCHING(x)
+#define AD_LOG_IMPL(x) AD_LOG_BRANCHING(x)
 #endif
 
 // Macros for the different log levels.
-#define AD_LOG_FATAL AD_LOG(::ad_utility::LogLevel::Enum::FATAL)
-#define AD_LOG_ERROR AD_LOG(::ad_utility::LogLevel::Enum::ERROR)
-#define AD_LOG_WARN AD_LOG(::ad_utility::LogLevel::Enum::WARN)
-#define AD_LOG_INFO AD_LOG(::ad_utility::LogLevel::Enum::INFO)
-#define AD_LOG_DEBUG AD_LOG(::ad_utility::LogLevel::Enum::DEBUG)
-#define AD_LOG_TIMING AD_LOG(::ad_utility::LogLevel::Enum::TIMING)
-#define AD_LOG_TRACE AD_LOG(::ad_utility::LogLevel::Enum::TRACE)
+#define AD_LOG_FATAL AD_LOG_IMPL(::ad_utility::LogLevel::Enum::FATAL)
+#define AD_LOG_ERROR AD_LOG_IMPL(::ad_utility::LogLevel::Enum::ERROR)
+#define AD_LOG_WARN AD_LOG_IMPL(::ad_utility::LogLevel::Enum::WARN)
+#define AD_LOG_INFO AD_LOG_IMPL(::ad_utility::LogLevel::Enum::INFO)
+#define AD_LOG_DEBUG AD_LOG_IMPL(::ad_utility::LogLevel::Enum::DEBUG)
+#define AD_LOG_TIMING AD_LOG_IMPL(::ad_utility::LogLevel::Enum::TIMING)
+#define AD_LOG_TRACE AD_LOG_IMPL(::ad_utility::LogLevel::Enum::TRACE)
 
 namespace ad_utility {
 
