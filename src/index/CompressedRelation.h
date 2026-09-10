@@ -554,8 +554,8 @@ class CompressedRelationWriter {
   void addSmallRelations(Id firstCol0Id, Id lastCol0Id, const Table& relations,
                          size_t beginIdx, size_t endIdx) {
     AD_CORRECTNESS_CHECK(beginIdx < endIdx && endIdx <= relations.numRows());
-    AD_EXPENSIVE_CHECK(firstCol0Id == relations(beginIdx, 0) &&
-                       lastCol0Id == relations(endIdx - 1, 0));
+    AD_CORRECTNESS_CHECK(firstCol0Id == relations(beginIdx, 0) &&
+                         lastCol0Id == relations(endIdx - 1, 0));
     size_t numRows = endIdx - beginIdx;
     // Make sure that the blocks don't become too large: If the previously
     // buffered small relations together with the new relations would exceed

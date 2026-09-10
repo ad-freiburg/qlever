@@ -280,6 +280,14 @@ struct CompressedRelationWriter::PermutationWriter {
   // at which a new block for a large relation may be started, because equal
   // triples (when disregarding the graph and the payload columns) have to stay
   // in the same block. Requires that `relation_` is not empty.
+  //
+  // Note: The rows are compared row-wise. Scanning each of the three columns
+  // separately and taking the minimum of the resulting offsets would use the
+  // cache more efficiently, but it would also be slower if one of the columns
+  // is (almost) constant. This function is only called for large relations
+  // once the `relation_` buffer has reached the `blocksize_`, and it then
+  // typically finds a differing row immediately, so it is not a bottleneck
+  // (unless in a very degenerate case) and we keep the simpler implementation.
   template <typename Rows>
   size_t findFirstTripleChange(const Rows& rows, size_t begin,
                                size_t end) const {
