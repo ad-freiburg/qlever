@@ -137,6 +137,26 @@ TEST(CopyOnWritePtr, moveTransfersWithoutCloning) {
   EXPECT_EQ(*copy, "hello");
 }
 
+// Test that move assignment transfers the pointer like move construction.
+TEST(CopyOnWritePtr, moveAssignment) {
+  CopyOnWritePtr<std::string> a{"hello"};
+  CopyOnWritePtr<std::string> b{"other"};
+  const std::string* address = &*a;
+  b = std::move(a);
+  EXPECT_EQ(&*b, address);
+  EXPECT_EQ(*b, "hello");
+  EXPECT_FALSE(b.isShared());
+}
+
+// Test that `write()` on a moved-from pointer is rejected instead of
+// dereferencing a null pointer.
+TEST(CopyOnWritePtr, writeOnMovedFromThrows) {
+  CopyOnWritePtr<int> a{1};
+  CopyOnWritePtr<int> b = std::move(a);
+  EXPECT_EQ(*b, 1);
+  EXPECT_ANY_THROW(a.write());
+}
+
 // Check at compile time that `write()` is the only way to get a mutable
 // reference, so that an accidental mutation of a shared value cannot compile.
 TEST(CopyOnWritePtr, onlyWriteGivesMutableAccess) {
