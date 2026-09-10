@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <thread>
 
 #include "util/Log.h"
 #include "util/Parameters.h"
@@ -243,10 +244,13 @@ struct RuntimeParameters {
   // index building (parsing the input and building the partial vocabularies,
   // see `IndexImpl::buildPartialVocabularies`). It replaces the former fixed
   // `NUM_PARALLEL_ITEM_MAPS` item-map threads plus the dedicated parser
-  // threads. Must be at least 1. `qlever-index` exposes it as `--num-threads`
-  // (`-j`).
-  SizeT indexBuildFirstPassNumThreads_{16,
-                                       "index-build-first-pass-num-threads"};
+  // threads. Must be at least 1, and defaults to the number of hardware
+  // threads of the machine (`std::thread::hardware_concurrency()` returns `0`
+  // if that number cannot be determined, hence the `max`). `qlever-index`
+  // exposes it as `--num-threads` (`-j`).
+  SizeT indexBuildFirstPassNumThreads_{
+      std::max<size_t>(1, std::thread::hardware_concurrency()),
+      "index-build-first-pass-num-threads"};
 
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
