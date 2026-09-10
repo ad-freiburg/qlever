@@ -578,11 +578,11 @@ std::optional<std::string> checkAndLogParameterSetting(
   return value;
 }
 
-// Create a bound version of `createJsonResponse` with `request` as the second
-// bound argument.
+// Create a factory for a bound version of `createJsonResponse` with
+// `request` as the second bound argument.
 CPP_template(typename RequestT)(
-    requires HttpRequest<RequestT>) auto makeJsonResponse(const RequestT&
-                                                              request) {
+    requires HttpRequest<RequestT>) auto makeJsonResponseFactory(const RequestT&
+                                                                     request) {
   return [&request](const nlohmann::json& j) {
     return createJsonResponse(j, request);
   };
@@ -675,7 +675,7 @@ CPP_template_def(typename RequestT)(
     return false;
   };
 
-  auto jsonResponse = makeJsonResponse(request);
+  auto makeJsonResponse = makeJsonResponseFactory(request);
 
   // We call `composeCacheStats()` always with the same parameters:
   // `qlever().cache()` and `qlever().namedResultCache()`.
@@ -688,28 +688,28 @@ CPP_template_def(typename RequestT)(
     // No `cmd=` URL parameter at all, so there is nothing to do here.
     co_return ProcessCommandsResult{};
   } else if (commandIs("stats")) {
-    co_return ProcessCommandsResult{jsonResponse(composeIndexStats(index))};
+    co_return ProcessCommandsResult{makeJsonResponse(composeIndexStats(index))};
   } else if (commandIs("cache-stats")) {
-    co_return ProcessCommandsResult{jsonResponse(cacheStats())};
+    co_return ProcessCommandsResult{makeJsonResponse(cacheStats())};
   } else if (commandIs("clear-cache")) {
     cache().clearUnpinnedOnly();
-    co_return ProcessCommandsResult{jsonResponse(cacheStats())};
+    co_return ProcessCommandsResult{makeJsonResponse(cacheStats())};
   } else if (commandIs("clear-cache-complete")) {
     cache().clearAll();
-    co_return ProcessCommandsResult{jsonResponse(cacheStats())};
+    co_return ProcessCommandsResult{makeJsonResponse(cacheStats())};
   } else if (commandIs("clear-named-cache")) {
     namedResultCache().clear();
-    co_return ProcessCommandsResult{jsonResponse(cacheStats())};
+    co_return ProcessCommandsResult{makeJsonResponse(cacheStats())};
   } else if (commandIs("clear-delta-triples")) {
     auto countAfterClear = co_await processClearDeltaTriples();
-    co_return ProcessCommandsResult{jsonResponse(json(countAfterClear))};
+    co_return ProcessCommandsResult{makeJsonResponse(json(countAfterClear))};
   } else if (commandIs("vacuum-delta-triples")) {
     auto vacuumStats = co_await processVacuumDeltaTriples(
         checkParameter("timeout", std::nullopt), accessTokenOk);
-    co_return ProcessCommandsResult{jsonResponse(vacuumStats)};
+    co_return ProcessCommandsResult{makeJsonResponse(vacuumStats)};
   } else if (commandIs("get-settings")) {
     co_return ProcessCommandsResult{
-        jsonResponse(json(globalRuntimeParameters.rlock()->toMap()))};
+        makeJsonResponse(json(globalRuntimeParameters.rlock()->toMap()))};
   } else if (commandIs("get-index-id")) {
     co_return ProcessCommandsResult{
         createOkResponse(index.getIndexId(), request, MediaType::textPlain)};
@@ -718,25 +718,27 @@ CPP_template_def(typename RequestT)(
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
       activeQueries[nlohmann::json(key)] = std::move(value);
     }
-    co_return ProcessCommandsResult{jsonResponse(activeQueries)};
+    co_return ProcessCommandsResult{makeJsonResponse(activeQueries)};
   } else if (commandIs("rebuild-index")) {
-    co_return ProcessCommandsResult{
-        co_await processRebuildIndex(parameters, request)};
+    auto rebuildIndexResponse =
+        co_await processRebuildIndex(parameters, request);
+    co_return ProcessCommandsResult{std::move(rebuildIndexResponse)};
   } else if (commandIs("write-materialized-view")) {
     auto materializedViewStats = co_await processWriteMaterializedView(
         parameters, operation, accessTokenOk, requestTimer);
     // Flag that this command already consumed the query operation, so
     // `process()` doesn't also try to run it as a regular query.
-    co_return ProcessCommandsResult{jsonResponse(materializedViewStats), true};
+    co_return ProcessCommandsResult{makeJsonResponse(materializedViewStats),
+                                    true};
   } else if (commandIs("load-materialized-view")) {
-    co_return ProcessCommandsResult{
-        jsonResponse(processLoadMaterializedView(parameters, indexAndViews))};
+    co_return ProcessCommandsResult{makeJsonResponse(
+        processLoadMaterializedView(parameters, indexAndViews))};
   } else if (commandIs("delete-materialized-view")) {
     co_return ProcessCommandsResult{
-        jsonResponse(processDeleteMaterializedView(parameters))};
+        makeJsonResponse(processDeleteMaterializedView(parameters))};
   } else if (commandIs("unload-materialized-view")) {
     co_return ProcessCommandsResult{
-        jsonResponse(processUnloadMaterializedView(parameters))};
+        makeJsonResponse(processUnloadMaterializedView(parameters))};
   } else {
     // `cmd` is set but didn't match any of the commands above.
     throw HttpError(boost::beast::http::status::bad_request,
@@ -959,9 +961,6 @@ CPP_template_def(typename RequestT, typename SendT)(
             parameters, paramName, accessTokenOk);
       };
 
-  auto jsonResponse = makeJsonResponse(request);
-  std::optional<ResponseT> response;
-
   // Process all URL parameters known to QLever. If there is more than one,
   // QLever processes all of them, but only returns the result from the last
   // one. In particular, if there is a "query" parameter, it will be processed
@@ -972,7 +971,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   auto commandResult = co_await processCommands(
       indexAndViews, parameters, parsedHttpRequest.operation_, accessTokenOk,
       requestTimer, request);
-  response = std::move(commandResult.response_);
+  std::optional<ResponseT> response = std::move(commandResult.response_);
 
   // Ping with or without message.
   if (parsedHttpRequest.path_ == "/ping") {
@@ -984,22 +983,24 @@ CPP_template_def(typename RequestT, typename SendT)(
     response = processMetrics(accessTokenOk, request);
   }
 
+  auto makeJsonResponse = makeJsonResponseFactory(request);
+
   // Set description of KB index.
   if (auto description = checkAndLogParameterSetting("index-description")) {
     index.setKbName(description.value());
-    response = jsonResponse(composeIndexStats(index));
+    response = makeJsonResponse(composeIndexStats(index));
   }
 
   // Set description of text index.
   if (auto description = checkAndLogParameterSetting("text-description")) {
     index.setTextName(description.value());
-    response = jsonResponse(composeIndexStats(index));
+    response = makeJsonResponse(composeIndexStats(index));
   }
 
   // Set one or several of the runtime parameters.
   if (auto updatedSettings =
           processSetRuntimeParameters(parameters, accessTokenOk)) {
-    response = jsonResponse(updatedSettings.value());
+    response = makeJsonResponse(updatedSettings.value());
   }
 
   // `write-materialized-view` uses `operation` as the view-defining query and
