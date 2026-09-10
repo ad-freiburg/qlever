@@ -389,6 +389,9 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
                                               bool& hasWarnedAboutUndef) const {
   // A lazy child hands out several tables, each of which may contain UNDEF
   // values, so warn only once.
+  // NOTE: The QLever JSON export writes the `warnings` field before consuming
+  // the result, so this warning only makes it into the response if some
+  // operation above materializes the result eagerly (e.g. an `ORDER BY`).
   if (!std::exchange(hasWarnedAboutUndef, true)) {
     addWarning(
         "The empty path is applied to a column that contains UNDEF values. "
