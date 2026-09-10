@@ -30,9 +30,8 @@
 // Derived classes own no threads of their own, but schedule all of their work
 // on the executor that is passed to the constructor. The parallelism therefore
 // comes entirely from the caller keeping several `asyncGetBatch()` calls in
-// flight at once. The main use case is the first pass of the index building
-// (parsing the input and building the partial vocabularies), which a follow-up
-// PR moves onto a single thread pool using this interface.
+// flight at once, see `IndexImpl::buildPartialVocabularies` for the main use
+// case.
 //
 // NOTE: This class deliberately only uses features of `boost::asio` that are
 // available in Boost 1.71 (in particular no coroutines and no

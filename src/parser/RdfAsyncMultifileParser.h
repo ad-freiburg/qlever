@@ -31,11 +31,12 @@
 // owns no threads of its own; all of its work -- including that of the
 // per-file parsers -- is scheduled on the executor that is passed to the
 // constructor, and the parallelism comes entirely from the caller keeping
-// several `asyncGetBatch()` calls in flight at once. The main use case is the
-// first pass of the index building, which a follow-up PR moves onto a single
-// thread pool using this class (in the `REDUCED_FEATURE_SET_FOR_CPP17` build,
-// which has no coroutines, `AsyncSerialParserAdapter` around
-// `RdfMultifileParser` serves as the fallback).
+// several `asyncGetBatch()` calls in flight at once (see
+// `IndexImpl::buildPartialVocabularies` for the main use case). In the full
+// (non-`REDUCED_FEATURE_SET_FOR_CPP17`) build the index builder uses this
+// class together with `RdfAsyncParallelParser`; the reduced build has no
+// coroutines and falls back to `AsyncSerialParserAdapter` around
+// `RdfMultifileParser` instead (see `IndexImpl::makeRdfParser`).
 //
 // Lifetime: an instance of this class must outlive all of its in-flight
 // `asyncGetBatch()` calls. Because it owns no threads, its destructor cannot

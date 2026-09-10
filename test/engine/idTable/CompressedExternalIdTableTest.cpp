@@ -267,6 +267,51 @@ TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
   EXPECT_EQ(result.size(), randomTable.size());
 }
 
+// Push `numRows` random rows into a `CompressedExternalIdTable` with a block
+// size of `blockSize` rows, call `finishPushing`, and then check that
+// `getRows` yields exactly the pushed rows, in the order that they were
+// pushed. Also check that calling `finishPushing` a second time throws.
+void testFinishPushing(size_t blockSize, size_t numRows,
+                       source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  SCOPED_TRACE(
+      absl::StrCat("blockSize = ", blockSize, ", numRows = ", numRows));
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  ad_utility::CompressedExternalIdTable<0> writer{
+      filename, NUM_COLS, memoryForBlocksize(blockSize, NUM_COLS),
+      ad_utility::testing::makeAllocator()};
+
+  CopyableIdTable<0> randomTable =
+      createRandomlyFilledIdTable(numRows, NUM_COLS);
+  for (const auto& row : randomTable) {
+    writer.push(row);
+  }
+
+  writer.finishPushing();
+  AD_EXPECT_THROW_WITH_MESSAGE(writer.finishPushing(),
+                               ::testing::HasSubstr("pushingFinished_"));
+
+  auto generator = writer.getRows();
+  auto result = idTableFromRowGenerator<0>(generator, NUM_COLS);
+  EXPECT_THAT(result, ::testing::ElementsAreArray(randomTable));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, finishPushing) {
+  // An empty table (no `push` calls at all): no block is ever written.
+  testFinishPushing(10, 0);
+  // A table that is smaller than a single block.
+  testFinishPushing(10, 3);
+  // A table that spans several blocks, with a partial last block.
+  testFinishPushing(10, 23);
+  // A table whose size is an exact multiple of the block size.
+  testFinishPushing(10, 20);
+}
+
 template <size_t NumStaticColumns>
 void testExternalCompressor(size_t numDynamicColumns, size_t numRows,
                             ad_utility::MemorySize memoryToUse) {

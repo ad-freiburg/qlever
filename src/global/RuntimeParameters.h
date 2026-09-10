@@ -239,6 +239,15 @@ struct RuntimeParameters {
   // `qlever-index`doesn't expose a CLI flag to set this parameter.
   SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
 
+  // The number of threads of the thread pool that runs the first pass of the
+  // index building (parsing the input and building the partial vocabularies,
+  // see `IndexImpl::buildPartialVocabularies`). It replaces the former fixed
+  // `NUM_PARALLEL_ITEM_MAPS` item-map threads plus the dedicated parser
+  // threads. Must be at least 1. Like `permutation-writer-num-threads`, there
+  // is no CLI flag for it (yet).
+  SizeT indexBuildFirstPassNumThreads_{16,
+                                       "index-build-first-pass-num-threads"};
+
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 

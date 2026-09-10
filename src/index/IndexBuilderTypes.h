@@ -35,7 +35,6 @@
 #include "util/RegexSet.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
-#include "util/Views.h"
 
 // An IRI or literal together with its index in the global vocabulary. This is
 // used during vocabulary merging.
@@ -375,44 +374,36 @@ MappedTriples mapTripleToIds(
 struct BuildPartialVocabulariesResult {
   using TripleVec =
       ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // The triples and partial vocabularies that a single worker thread has
-  // created. The workers work completely independently of each other, so each
-  // of them has its own `idTriples_`.
-  struct WorkerResult {
-    // The i-th entry is the actual number of triples in the i-th batch of
-    // this worker (a batch consists of a partial vocabulary and the triples
-    // that were mapped using it). It might be slightly different from the
-    // specified `batchSize` because of internally added triples. The first
-    // `numTriplesPerBatch_[0]` rows of `idTriples_` are the triples of the
-    // first batch, the next `numTriplesPerBatch_[1]` rows are the triples of
-    // the second batch, and so on.
-    std::vector<size_t> numTriplesPerBatch_;
+  // A partial vocabulary together with the triples that were mapped using it.
+  struct PartialVocabulary {
+    // The suffix of the filenames of this partial vocabulary (words file and
+    // ID map file), see `partialVocabularySuffix`.
+    std::string filenameSuffix_;
+    // The triples of this partial vocabulary, with the local IDs of this
+    // partial vocabulary. The input phase is already finished
+    // (`finishPushing`), so only `getRows()` may be called.
     std::unique_ptr<TripleVec> idTriples_;
   };
-  // One entry per worker, in the order of the worker indices.
-  std::vector<WorkerResult> workerResults_;
+  // In the order: all partial vocabularies of the first task chain, then those
+  // of the second, etc.
+  std::vector<PartialVocabulary> partialVocabularies_;
 
   // The suffix of the filenames of the `partialVocabIdx`-th partial vocabulary
-  // of the worker with index `workerIdx`. The partial vocabularies are named
-  // after the worker that created them, so that the workers don't need a shared
-  // counter for the filenames.
-  static std::string partialVocabularySuffix(size_t workerIdx,
+  // of the task chain with index `taskChainIdx`. The partial vocabularies are
+  // named after the task chain that created them, so that the task chains
+  // don't need a shared counter for the filenames.
+  static std::string partialVocabularySuffix(size_t taskChainIdx,
                                              size_t partialVocabIdx) {
-    return absl::StrCat(workerIdx, ".", partialVocabIdx);
+    return absl::StrCat(taskChainIdx, ".", partialVocabIdx);
   }
 
   // The suffixes of all partial vocabularies that were written, in the order in
-  // which the corresponding triples are stored (that is, first all the partial
-  // vocabularies of the first worker, then those of the second worker, etc.).
+  // which the corresponding triples are stored in `partialVocabularies_`.
   std::vector<std::string> partialVocabularySuffixes() const {
     std::vector<std::string> suffixes;
-    for (size_t workerIdx : ad_utility::integerRange(workerResults_.size())) {
-      const auto& numTriplesPerBatch =
-          workerResults_[workerIdx].numTriplesPerBatch_;
-      for (size_t partialVocabIdx :
-           ad_utility::integerRange(numTriplesPerBatch.size())) {
-        suffixes.push_back(partialVocabularySuffix(workerIdx, partialVocabIdx));
-      }
+    suffixes.reserve(partialVocabularies_.size());
+    for (const auto& partialVocab : partialVocabularies_) {
+      suffixes.push_back(partialVocab.filenameSuffix_);
     }
     return suffixes;
   }

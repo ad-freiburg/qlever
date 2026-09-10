@@ -18,10 +18,9 @@ set(RDF_PARSER_SOURCES RdfParser.cpp AsyncFileBlockDriver.cpp AsyncSerialParserA
 # C++20 coroutines, and the former uses `ad_utility::AsyncResourcePool`, which
 # needs `boost::asio::experimental::concurrent_channel` (Boost 1.80 or newer),
 # whereas the `REDUCED_FEATURE_SET_FOR_CPP17` build targets C++17 and Boost
-# 1.71. Nothing inside `src` uses these two parsers yet (they are only exercised
-# by the unit tests; a follow-up PR uses them in the index builder, where the
-# reduced build then falls back to `AsyncSerialParserAdapter` around the
-# synchronous `RdfMultifileParser`), so they are simply excluded there.
+# 1.71. In the full build, the index builder uses these two parsers; the
+# reduced build has no coroutines and falls back to `AsyncSerialParserAdapter`
+# around the (synchronous) `RdfMultifileParser` instead.
 if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
     list(APPEND RDF_PARSER_SOURCES RdfAsyncParallelParser.cpp RdfAsyncMultifileParser.cpp)
 endif ()

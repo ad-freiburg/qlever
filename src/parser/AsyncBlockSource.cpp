@@ -66,10 +66,10 @@ void BlockingBlockSource::asyncGetNextBlockImpl(Handler handler) {
     // Downstream, the handler typically resumes a coroutine (via
     // `boost::asio::dispatch` on the executor of the pool, which runs inline
     // when called from a thread of that pool), and that coroutine then does
-    // expensive work: it parses the block and, in the index builder, will even
-    // map the resulting triples to IDs. Were the handler invoked from within
-    // the strand, all of that work would run while the strand is held, so the
-    // next fetch (which is queued on the strand) could only start once it has
+    // expensive work: it parses the block and, in the index builder, even maps
+    // the resulting triples to IDs. Were the handler invoked from within the
+    // strand, all of that work would run while the strand is held, so the next
+    // fetch (which is queued on the strand) could only start once it has
     // finished, and the whole pipeline would effectively run on a single
     // thread.
     net::post(

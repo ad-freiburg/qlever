@@ -26,8 +26,8 @@
 // the executor that happens to run it, so the parallelism of this class is
 // limited to one call at a time; it is meant for inputs that cannot be parsed
 // in parallel (see `RdfAsyncMultifileParser`), and as the fallback for the
-// `REDUCED_FEATURE_SET_FOR_CPP17` build, which has no coroutines and hence
-// cannot use `RdfAsyncMultifileParser`.
+// `REDUCED_FEATURE_SET_FOR_CPP17` build, which has no coroutines (see
+// `IndexImpl::makeRdfParser`).
 class AsyncSerialParserAdapter : public AsyncRdfParserBase {
  private:
   boost::asio::strand<ql::any_io_executor> strand_;
