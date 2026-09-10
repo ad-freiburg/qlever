@@ -626,8 +626,8 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`
 template <typename QueryPlannerClass = QueryPlanner>
-inline QueryExecutionTree parseAndPlan(std::string query,
-                                       QueryExecutionContext* qec) {
+inline std::shared_ptr<QueryExecutionTree> parseAndPlan(
+    std::string query, QueryExecutionContext* qec) {
   ParsedQuery pq = parseQuery(std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
   // a queryExecutionContext.
@@ -635,7 +635,7 @@ inline QueryExecutionTree parseAndPlan(std::string query,
       QueryPlannerClass{qec,
                         std::make_shared<ad_utility::CancellationHandle<>>()}
           .createExecutionTree(pq);
-  tree.isRoot() = true;
+  tree->isRoot() = true;
   return tree;
 }
 
@@ -665,9 +665,9 @@ void expectWithGivenBudget(std::string query, MatcherT matcher,
   QueryExecutionContext* qec =
       optQec.has_value() ? *optQec : ad_utility::testing::getQec();
   auto qet = parseAndPlan<QueryPlannerClass>(std::move(query), qec);
-  qet.getRootOperation()->createRuntimeInfoFromEstimates(
-      qet.getRootOperation()->getRuntimeInfoPointer());
-  EXPECT_THAT(qet, matcher);
+  qet->getRootOperation()->createRuntimeInfoFromEstimates(
+      qet->getRootOperation()->getRuntimeInfoPointer());
+  EXPECT_THAT(*qet, matcher);
 }
 
 // Same as `expectWithGivenBudget` but allows multiple budgets to be tested.
