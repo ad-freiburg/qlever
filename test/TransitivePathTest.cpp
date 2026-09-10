@@ -1907,6 +1907,44 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, costEstimateIsDirectionAware) {
+  auto sub = makeIdTableFromVector({
+      {0, 1},
+      {1, 2},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+
+  auto [path, qec] =
+      makePath(std::move(sub), {Variable{"?internal1"}, Variable{"?internal2"}},
+               left, right, 1, std::numeric_limits<size_t>::max());
+
+  // The cost estimate for a bound transitive path contains the size of the
+  // bound side times the multiplicity of the start column of the subtree,
+  // which is the average number of edges per node in the direction of the
+  // traversal. The subtree is a `ValuesForTesting` whose multiplicities
+  // default to 42 for column 0 and 84 for column 1, so binding the left and
+  // the right side must yield cost estimates that differ by exactly this
+  // term. The size estimates must not depend on the direction.
+  auto boundLeft = path->bindLeftSide(
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{0, 10}, {1, 11}, {2, 12}}),
+          std::vector<std::optional<Variable>>{Variable{"?start"},
+                                               Variable{"?other"}}),
+      0);
+  auto boundRight = path->bindRightSide(
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{0, 10}, {1, 11}, {2, 12}}),
+          std::vector<std::optional<Variable>>{Variable{"?target"},
+                                               Variable{"?other"}}),
+      0);
+  EXPECT_EQ(boundLeft->getSizeEstimate(), boundRight->getSizeEstimate());
+  EXPECT_EQ(boundRight->getCostEstimate() - boundLeft->getCostEstimate(),
+            3 * 84 - 3 * 42);
+}
+
+// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()),
