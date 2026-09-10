@@ -14,6 +14,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
+#include "QleverTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExternalValues.h"
 #include "engine/MaterializedViews.h"
@@ -779,26 +780,10 @@ TEST(LibQlever, applyUpdate) {
   EXPECT_EQ(engine.cache().numNonPinnedEntries(), 0U);
 }
 
-namespace {
-// Parse and plan `update` and apply it to `engine` via `Qlever::applyUpdate`,
-// returning the metadata. For why the update has to be parsed separately and
-// for the thread-safety caveat of taking the snapshot only here, see the
-// comments in `LibQlever.applyUpdate` above.
-UpdateMetadata applyUpdateToEngine(Qlever& engine, const std::string& update) {
-  ad_utility::BlankNodeManager bnm;
-  auto parsedUpdates = SparqlParser::parseUpdate(
-      &bnm, ad_utility::testing::encodedIriManager(), update);
-  AD_CORRECTNESS_CHECK(parsedUpdates.size() == 1);
-  auto plannedUpdate =
-      engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  auto snapshot = engine.indexAndViewsSnapshot();
-  return snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(
-      [&](DeltaTriples& deltaTriples) {
-        return engine.applyUpdate(plannedUpdate, handle, deltaTriples);
-      });
-}
-}  // namespace
+// `applyUpdateToEngine` (used below) is defined in `QleverTestHelpers.h`; see
+// the comment there for why the update has to be parsed separately and for
+// the thread-safety caveat of taking the snapshot only here.
+using ad_utility::testing::applyUpdateToEngine;
 
 // _____________________________________________________________________________
 // Direct counterpart to `ServerTest.clearDeltaTriples`: populate the delta
