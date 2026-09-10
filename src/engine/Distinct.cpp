@@ -11,7 +11,6 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/StripColumns.h"
 #include "util/ColumnStrippingHelpers.h"
 
 using std::endl;
@@ -251,10 +250,10 @@ Distinct::makeTreeWithStrippedColumns(
   // Add variables and the variables corresponding to the keepIndices_ to the
   // variables that are required from the subtree.
   VarsRequiredFromSubtree helper(variables);
-  std::vector<Variable> keepVars;
+  std::vector<const Variable*> keepVars;
   for (const auto& jcl : keepIndices_) {
     const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
-    keepVars.push_back(var);
+    keepVars.push_back(&var);
     helper.add(var);
   }
   // Collect all the varaibles that are required from the subtree.
@@ -267,24 +266,12 @@ Distinct::makeTreeWithStrippedColumns(
   // Find out the new column indices to update keepIndices_
   std::vector<ColumnIndex> distinctKeepIndices;
   for (const auto& var : keepVars) {
-    distinctKeepIndices.push_back(subtree->getVariableColumn(var));
+    distinctKeepIndices.push_back(subtree->getVariableColumn(*var));
   }
 
-  // Create query execution tree with Distinct-Operation as root operation.
-  auto treeWithDistinctRoot = ad_utility::makeExecutionTree<Distinct>(
-      getExecutionContext(), std::move(subtree), distinctKeepIndices);
-
-  // The variables in keepVars (resulting from keepIndices_) are needed to
-  // compute Distinct-Operation, but do not necessarily belong to the result
-  // requested by the parent tree.
-  // If all keepVars are requested by the parent tree, return
-  // treeWithDistinctRoot. If not, an additional StripColumns-Operation is added
-  // in the executionTree above the Distinct-Operation.
-  if (ql::ranges::all_of(keepVars, [&variables](const auto& keepVar) {
-        return ad_utility::contains(variables, keepVar);
-      })) {
-    return treeWithDistinctRoot;
-  }
-  return ad_utility::makeExecutionTree<StripColumns>(
-      getExecutionContext(), std::move(treeWithDistinctRoot), variables);
+  // Create query execution tree with Distinct-Operation as root-Operation and
+  // add additional stripColumns-Operation if needed.
+  return makeTreeWithOptionalStripOperation<Distinct>(
+      getExecutionContext(), variables, std::move(keepVars), std::move(subtree),
+      std::move(distinctKeepIndices));
 }
