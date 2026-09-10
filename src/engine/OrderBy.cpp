@@ -13,8 +13,8 @@
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
 #include "index/IdTableUtils.h"
-#include "util/TransparentFunctors.h"
 #include "util/ColumnStrippingHelpers.h"
+#include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
 size_t OrderBy::getResultWidth() const { return subtree_->getResultWidth(); }
@@ -171,27 +171,17 @@ OrderBy::makeTreeWithStrippedColumns(
       subtree_, varsRequiredFromSubtree);
 
   // Find out the new column indices to update sortIndices_
+  std::vector<const Variable*> keepVars;
   std::vector<std::pair<ColumnIndex, bool>> distinctSortIndices;
   for (const auto& var : sortVars) {
+    keepVars.push_back(&(var.first));
     distinctSortIndices.push_back(
         std::pair{subtree->getVariableColumn(var.first), var.second});
   }
 
-  // Create query execution tree with OrderBy-Operation as root operation.
-  auto treeWithOrderByRoot = ad_utility::makeExecutionTree<OrderBy>(
-      getExecutionContext(), std::move(subtree), distinctSortIndices);
-
-  // The variables in sortVars (resulting from sortIndices_) are needed to
-  // compute OrderBy-Operation, but do not necessarily belong to the result
-  // requested by the parent tree.
-  // If all sortVars are requested by the parent tree, return
-  // treeWithOrderByRoot. If not, an additional StripColumns-Operation is added
-  // in the executionTree above the OrderBy-Operation.
-  if (ql::ranges::all_of(sortVars, [&variables](const auto& sortVar) {
-        return ad_utility::contains(variables, sortVar.first);
-      })) {
-    return treeWithOrderByRoot;
-  }
-  return ad_utility::makeExecutionTree<StripColumns>(
-      getExecutionContext(), std::move(treeWithOrderByRoot), variables);
+  // Create query execution tree with OrderBy-Operation as root-Operation and
+  // add additional stripColumns-Operation if needed.
+  return makeTreeWithOptionalStripOperation<OrderBy>(
+      getExecutionContext(), variables, std::move(keepVars), std::move(subtree),
+      distinctSortIndices);
 }
