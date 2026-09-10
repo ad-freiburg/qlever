@@ -27,7 +27,11 @@ jobs:
       matrix:
         compiler: [gcc, clang]
         compiler-version: [8, 11, 12, 13, 18, 21]
-        warnings: [  "-Wall -Wextra -Werror " ]
+        # `-Woverloaded-virtual` is not part of `-Wall`/`-Wextra`. It catches
+        # virtual functions that a derived class hides with an overload of the
+        # same name (e.g. a `const` and a non-const overload where only the
+        # non-const one is overridden). Only GCC warns about that case.
+        warnings: [  "-Wall -Wextra -Werror -Woverloaded-virtual " ]
         build-type: [Release]
         expensive-tests: [true]
         additional-cmake-options: [""]
