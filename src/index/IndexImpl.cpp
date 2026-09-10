@@ -735,8 +735,8 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
       "least 1");
 
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
-                 "per batch ..."
-              << std::endl;
+                 "per batch, using "
+              << numThreads << " threads ..." << std::endl;
 
   // Show progress and statistics for the number of triples parsed. The total
   // number of triples is not known in advance, and the task chains report

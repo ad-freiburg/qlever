@@ -243,8 +243,8 @@ struct RuntimeParameters {
   // index building (parsing the input and building the partial vocabularies,
   // see `IndexImpl::buildPartialVocabularies`). It replaces the former fixed
   // `NUM_PARALLEL_ITEM_MAPS` item-map threads plus the dedicated parser
-  // threads. Must be at least 1. Like `permutation-writer-num-threads`, there
-  // is no CLI flag for it (yet).
+  // threads. Must be at least 1. `qlever-index` exposes it as `--num-threads`
+  // (`-j`).
   SizeT indexBuildFirstPassNumThreads_{16,
                                        "index-build-first-pass-num-threads"};
 
