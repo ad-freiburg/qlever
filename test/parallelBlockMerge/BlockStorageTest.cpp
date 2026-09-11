@@ -10,6 +10,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+// The storage is only ever used by the coroutine-based `InOrderBlockSink`, so
+// it does not exist in the C++17 backports mode, see
+// `util/parallelBlockMerge/BlockStorage.h`.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
 #include <cstddef>
@@ -18,16 +22,14 @@
 #include <utility>
 #include <vector>
 
-#include "util/parallelBlockMerge/BlockStorage.h"
+#include "./InMemoryBlockStorage.h"
 
 using namespace ad_utility::parallelBlockMerge;
 
 namespace {
 using Block = std::vector<int>;
-using Storage = BlockStorage<Block>;
-using OptionalBlock = Storage::OptionalBlock;
-using GetResult = Storage::GetResult;
-using Strand = Storage::Strand;
+using Storage = InMemoryBlockStorage<Block>;
+static_assert(BlockStorageConcept<Storage, Block>);
 
 // The outcome of a single `storeBlock`, which is recorded instead of being
 // asserted right away, so that a test can also check that an operation has
@@ -36,32 +38,32 @@ struct StoreOutcomes {
   std::vector<bool> wasStored_;
 };
 
-// The outcome of the `getBlock` operations of a single run.
+// The outcome of the `getBlock` operations of a single chunk.
 struct GetOutcomes {
   std::vector<Block> blocks_;
   bool sawSentinel_ = false;
   bool wasCancelled_ = false;
 };
 
-// Store the `block` (or the end-of-run sentinel) in the run with the given
-// `runIndex` and record whether it was stored in `outcomes`.
-void store(Storage& storage, size_t runIndex, OptionalBlock block,
+// Store the `block` (or the end-of-chunk sentinel) in the chunk with the given
+// `chunkIndex` and record whether it was stored in `outcomes`.
+void store(Storage& storage, size_t chunkIndex, Storage::OptionalBlock block,
            StoreOutcomes& outcomes) {
-  storage.storeBlock(runIndex, std::move(block),
+  storage.storeBlock(chunkIndex, std::move(block),
                      [&outcomes](std::exception_ptr exception, bool wasStored) {
                        ASSERT_EQ(exception, nullptr);
                        outcomes.wasStored_.push_back(wasStored);
                      });
 }
 
-// Retrieve a single value of the run with the given `runIndex` and record it in
-// `outcomes`. If `keepGoing` is true, immediately retrieve the next value as
-// well, until the end-of-run sentinel or a cancellation arrives.
-void get(Storage& storage, size_t runIndex, GetOutcomes& outcomes,
+// Retrieve a single value of the chunk with the given `chunkIndex` and record
+// it in `outcomes`. If `keepGoing` is true, immediately retrieve the next value
+// as well, until the end-of-chunk sentinel or a cancellation arrives.
+void get(Storage& storage, size_t chunkIndex, GetOutcomes& outcomes,
          bool keepGoing) {
   storage.getBlock(
-      runIndex, [&storage, runIndex, &outcomes, keepGoing](
-                    std::exception_ptr exception, GetResult result) {
+      chunkIndex, [&storage, chunkIndex, &outcomes, keepGoing](
+                      std::exception_ptr exception, Storage::GetResult result) {
         ASSERT_EQ(exception, nullptr);
         if (!result.has_value()) {
           outcomes.wasCancelled_ = true;
@@ -73,7 +75,7 @@ void get(Storage& storage, size_t runIndex, GetOutcomes& outcomes,
         }
         outcomes.blocks_.push_back(std::move(result).value().value());
         if (keepGoing) {
-          get(storage, runIndex, outcomes, keepGoing);
+          get(storage, chunkIndex, outcomes, keepGoing);
         }
       });
 }
@@ -103,13 +105,13 @@ void runOnStrand(net::io_context& ioContext, const Strand& strand,
 TEST(InMemoryBlockStorage, storeAndRetrieveInOrder) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
-  InMemoryBlockStorage<Block> storage{strand, 3};
+  Storage storage{strand, 3};
   StoreOutcomes stores;
   GetOutcomes gets;
   runOnStrand(ioContext, strand, [&] {
-    store(storage, 0, OptionalBlock{Block{1, 2}}, stores);
-    store(storage, 0, OptionalBlock{Block{3}}, stores);
-    store(storage, 0, OptionalBlock{std::nullopt}, stores);
+    store(storage, 0, Storage::OptionalBlock{Block{1, 2}}, stores);
+    store(storage, 0, Storage::OptionalBlock{Block{3}}, stores);
+    store(storage, 0, Storage::OptionalBlock{std::nullopt}, stores);
     get(storage, 0, gets, true);
   });
   EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true, true, true));
@@ -119,40 +121,41 @@ TEST(InMemoryBlockStorage, storeAndRetrieveInOrder) {
 }
 
 // _____________________________________________________________________________
-TEST(InMemoryBlockStorage, runsAreIndependent) {
+TEST(InMemoryBlockStorage, chunksAreIndependent) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
-  InMemoryBlockStorage<Block> storage{strand, 2};
+  Storage storage{strand, 2};
   StoreOutcomes stores;
-  GetOutcomes getsOfRunOne;
-  GetOutcomes getsOfRunZero;
+  GetOutcomes getsOfChunkOne;
+  GetOutcomes getsOfChunkZero;
   runOnStrand(ioContext, strand, [&] {
-    store(storage, 1, OptionalBlock{Block{7}}, stores);
-    store(storage, 0, OptionalBlock{Block{1}}, stores);
-    store(storage, 1, OptionalBlock{std::nullopt}, stores);
-    store(storage, 0, OptionalBlock{std::nullopt}, stores);
-    // The run with the higher index may be drained first.
-    get(storage, 1, getsOfRunOne, true);
-    get(storage, 0, getsOfRunZero, true);
+    store(storage, 1, Storage::OptionalBlock{Block{7}}, stores);
+    store(storage, 0, Storage::OptionalBlock{Block{1}}, stores);
+    store(storage, 1, Storage::OptionalBlock{std::nullopt}, stores);
+    store(storage, 0, Storage::OptionalBlock{std::nullopt}, stores);
+    // The chunk with the higher index may be drained first.
+    get(storage, 1, getsOfChunkOne, true);
+    get(storage, 0, getsOfChunkZero, true);
   });
-  EXPECT_THAT(getsOfRunOne.blocks_, ::testing::ElementsAre(Block{7}));
-  EXPECT_THAT(getsOfRunZero.blocks_, ::testing::ElementsAre(Block{1}));
-  EXPECT_TRUE(getsOfRunOne.sawSentinel_);
-  EXPECT_TRUE(getsOfRunZero.sawSentinel_);
+  EXPECT_THAT(getsOfChunkOne.blocks_, ::testing::ElementsAre(Block{7}));
+  EXPECT_THAT(getsOfChunkZero.blocks_, ::testing::ElementsAre(Block{1}));
+  EXPECT_TRUE(getsOfChunkOne.sawSentinel_);
+  EXPECT_TRUE(getsOfChunkZero.sawSentinel_);
 }
 
 // _____________________________________________________________________________
 TEST(InMemoryBlockStorage, aConsumerWaitsForItsProducer) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
-  InMemoryBlockStorage<Block> storage{strand, 2};
+  Storage storage{strand, 2};
   StoreOutcomes stores;
   GetOutcomes gets;
-  // Ask for a block of a run that does not exist yet, which has to suspend.
+  // Ask for a block of a chunk that does not exist yet, which has to suspend.
   runOnStrand(ioContext, strand, [&] { get(storage, 0, gets, false); });
   EXPECT_THAT(gets.blocks_, ::testing::IsEmpty());
-  runOnStrand(ioContext, strand,
-              [&] { store(storage, 0, OptionalBlock{Block{42}}, stores); });
+  runOnStrand(ioContext, strand, [&] {
+    store(storage, 0, Storage::OptionalBlock{Block{42}}, stores);
+  });
   EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true));
   EXPECT_THAT(gets.blocks_, ::testing::ElementsAre(Block{42}));
 }
@@ -161,13 +164,13 @@ TEST(InMemoryBlockStorage, aConsumerWaitsForItsProducer) {
 TEST(InMemoryBlockStorage, backPressure) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
-  InMemoryBlockStorage<Block> storage{strand, 1};
+  Storage storage{strand, 1};
   StoreOutcomes stores;
   GetOutcomes gets;
   // Only a single block fits, so the second `storeBlock` has to suspend.
   runOnStrand(ioContext, strand, [&] {
-    store(storage, 0, OptionalBlock{Block{1}}, stores);
-    store(storage, 0, OptionalBlock{Block{2}}, stores);
+    store(storage, 0, Storage::OptionalBlock{Block{1}}, stores);
+    store(storage, 0, Storage::OptionalBlock{Block{2}}, stores);
   });
   EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true));
   // Retrieving the first block makes room for the second one.
@@ -182,7 +185,7 @@ TEST(InMemoryBlockStorage, backPressure) {
 TEST(InMemoryBlockStorage, cancelAllWakesUpAWaitingConsumer) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
-  InMemoryBlockStorage<Block> storage{strand, 2};
+  Storage storage{strand, 2};
   GetOutcomes gets;
   runOnStrand(ioContext, strand, [&] { get(storage, 0, gets, false); });
   EXPECT_FALSE(gets.wasCancelled_);
@@ -195,11 +198,11 @@ TEST(InMemoryBlockStorage, cancelAllWakesUpAWaitingConsumer) {
 TEST(InMemoryBlockStorage, cancelAllWakesUpASuspendedProducer) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
-  InMemoryBlockStorage<Block> storage{strand, 1};
+  Storage storage{strand, 1};
   StoreOutcomes stores;
   runOnStrand(ioContext, strand, [&] {
-    store(storage, 0, OptionalBlock{Block{1}}, stores);
-    store(storage, 0, OptionalBlock{Block{2}}, stores);
+    store(storage, 0, Storage::OptionalBlock{Block{1}}, stores);
+    store(storage, 0, Storage::OptionalBlock{Block{2}}, stores);
   });
   EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true));
   runOnStrand(ioContext, strand, [&] { storage.cancelAll(); });
@@ -208,18 +211,18 @@ TEST(InMemoryBlockStorage, cancelAllWakesUpASuspendedProducer) {
 }
 
 // _____________________________________________________________________________
-TEST(InMemoryBlockStorage, eraseRunDropsTheBufferedBlocks) {
+TEST(InMemoryBlockStorage, eraseChunkDropsTheBufferedBlocks) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
-  InMemoryBlockStorage<Block> storage{strand, 1};
+  Storage storage{strand, 1};
   StoreOutcomes stores;
   GetOutcomes gets;
   runOnStrand(ioContext, strand, [&] {
-    store(storage, 0, OptionalBlock{Block{1}}, stores);
-    storage.eraseRun(0);
-    // The buffer of the run is empty again, so this does not suspend, and the
+    store(storage, 0, Storage::OptionalBlock{Block{1}}, stores);
+    storage.eraseChunk(0);
+    // The buffer of the chunk is empty again, so this does not suspend, and the
     // block that was buffered before is gone.
-    store(storage, 0, OptionalBlock{Block{2}}, stores);
+    store(storage, 0, Storage::OptionalBlock{Block{2}}, stores);
     get(storage, 0, gets, false);
   });
   EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true, true));
@@ -230,5 +233,6 @@ TEST(InMemoryBlockStorage, eraseRunDropsTheBufferedBlocks) {
 TEST(InMemoryBlockStorage, capacityHasToBePositive) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
-  EXPECT_ANY_THROW(InMemoryBlockStorage<Block>(strand, 0));
+  EXPECT_ANY_THROW(Storage(strand, 0));
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

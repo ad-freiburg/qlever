@@ -39,12 +39,6 @@ constexpr inline MemorySize DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY =
 // balancing if the individual chunks require different amounts of work.
 constexpr inline size_t DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD = 4;
 
-// The default number of input elements below which the merge is performed
-// serially. For small inputs the overhead of setting up the parallel merge
-// dominates the actual merging.
-constexpr inline size_t DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD =
-    100'000;
-
 // Return the parallelism that a merge assumes if its `MergeOptions` do not
 // specify one, which is one thread per hardware thread. NOTE: This is a pure
 // tuning default and says nothing about the executor that a merge actually
@@ -166,18 +160,6 @@ struct MergeOptions {
     // of blocking a thread. A single in-flight chunk is legal as well.
     return std::min(requestedNumChunksInFlight, numChunks);
   }
-
-  // Merge serially in the calling thread if the input has at most that many
-  // elements in total. Only `parallelBlockMergeToRange` looks at this, see
-  // there.
-  size_t serialNumElementsThreshold =
-      DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD;
-
-  // Buffer at most that many finished output blocks per chunk. Only the
-  // `InOrderBlockSink` looks at this, and only if its blocks live in memory, in
-  // which case it is the back-pressure that bounds the memory consumption of
-  // the merge.
-  size_t bufferedBlocksPerChunk = 2;
 };
 
 }  // namespace ad_utility::parallelBlockMerge
