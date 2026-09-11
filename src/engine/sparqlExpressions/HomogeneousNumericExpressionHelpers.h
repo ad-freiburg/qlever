@@ -202,7 +202,11 @@ template <typename Function>
 using RawNumericFunctionT = typename RawNumericFunction<Function>::type;
 
 // Map a homogeneous numeric type to the corresponding compile-time index used
-// for dispatching to the primitive C++ numeric type.
+// for dispatching to the primitive C++ numeric type. The `type` must be one of
+// the types in `homogeneousNumericTypeMap` above, in particular it must not be
+// `Other`, which has no primitive C++ type. Callers therefore have to classify
+// all operands first and only dispatch if none of them is `Other`, see
+// `evaluateBinaryOperationOnVectorOrConstant`.
 template <size_t I = 0>
 inline int homogeneousNumericTypeToIndex(HomogeneousNumericType type) {
   if constexpr (I == std::tuple_size_v<decltype(homogeneousNumericTypeMap)>) {
