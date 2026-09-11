@@ -25,6 +25,18 @@ namespace ad_utility {
 // `defaultExecutor`, if it has none of its own). The resulting handler may
 // hence safely be invoked directly, in particular from within a strand,
 // because the actual work of `handler` then runs outside of that strand.
+//
+// NOTE: This is not the same as `boost::asio::bind_executor`, for three
+// reasons. First, `bind_executor` only *associates* an executor with a
+// handler; it is up to the initiating function of an asynchronous operation to
+// honor that association. The handlers here are invoked directly by hand (see
+// `AsyncSerialParserAdapter::asyncGetBatchImpl` for an example), so the
+// association would simply be ignored. Second, `bind_executor` *overrides* the
+// executor that the handler already has, whereas the wrapper below reads that
+// executor and only falls back to `defaultExecutor` if there is none. Third,
+// even an honored association only leads to a `dispatch`, which may still run
+// the handler inline if the current thread already runs on that executor,
+// which would defeat the very purpose of this function.
 template <typename Payload, typename Handler>
 auto makeHandlerExecutorAware(Handler handler,
                               const ql::any_io_executor& defaultExecutor) {

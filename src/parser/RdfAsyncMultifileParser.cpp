@@ -9,6 +9,8 @@
 
 #include "parser/RdfAsyncMultifileParser.h"
 
+#include <absl/cleanup/cleanup.h>
+
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <memory>
@@ -113,8 +115,10 @@ RdfAsyncMultifileParser::pickFile() {
     // Step 2: no open file is idle; open the next unopened file, if there is
     // one.
     if (auto spec = state.files_.get(); spec.has_value()) {
-      auto file = std::make_shared<OpenFile>(OpenFile{
-          makeFileParser(spec.value()), spec.value().parseInParallel_, 1});
+      auto file = std::make_shared<OpenFile>(
+          OpenFile{.parser_ = makeFileParser(spec.value()),
+                   .supportsConcurrentCalls_ = spec.value().parseInParallel_,
+                   .numCallsInFlight_ = 1});
       state.openFiles_.push_back(file);
       return file;
     }
@@ -155,7 +159,7 @@ void RdfAsyncMultifileParser::releaseFile(const std::shared_ptr<OpenFile>& file,
 // _____________________________________________________________________________
 net::awaitable<RdfAsyncMultifileParser::OptionalTriples>
 RdfAsyncMultifileParser::getBatchCoroutine() {
-  while (true) {
+  for (;;) {
     // Another call has failed in the meantime, so there is nothing left to
     // parse.
     if (errorWasEncountered_.load()) {
@@ -163,15 +167,24 @@ RdfAsyncMultifileParser::getBatchCoroutine() {
     }
     // NOTE: `pickFile()` is called inside the `try` because it may throw (the
     // constructor of `RdfAsyncParallelParser` opens its input file), and such
-    // an error has to be reported with the same semantics as a parse error.
-    std::shared_ptr<OpenFile> file;
+    // an error has to be reported with the same semantics as a parse error. It
+    // is deliberately called before the `absl::Cleanup` below is set up: if it
+    // throws, then no file was picked, and hence none has to be released.
     try {
-      file = pickFile();
+      auto file = pickFile();
       if (file == nullptr) {
         co_return std::nullopt;
       }
+      // Give the file back on every path out of this scope, including the one
+      // taken when `asyncGetBatch` below throws. `wasExhausted` is only known
+      // after that call has completed, hence the separate variable; on the
+      // exception path it keeps its initial value `false`.
+      bool wasExhausted = false;
+      absl::Cleanup release = [this, &file, &wasExhausted] {
+        releaseFile(file, wasExhausted);
+      };
       auto batch = co_await file->parser_->asyncGetBatch(net::use_awaitable);
-      releaseFile(file, !batch.has_value());
+      wasExhausted = !batch.has_value();
       if (batch.has_value()) {
         co_return batch;
       }
@@ -179,9 +192,6 @@ RdfAsyncMultifileParser::getBatchCoroutine() {
       // (possibly) another file.
       continue;
     } catch (...) {
-      if (file != nullptr) {
-        releaseFile(file, false);
-      }
       // Only the first error is propagated to its caller, all subsequent
       // calls get a clean end of the input instead, see the class comment.
       if (!errorWasEncountered_.exchange(true)) {
