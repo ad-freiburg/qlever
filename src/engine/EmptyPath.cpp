@@ -140,7 +140,7 @@ EmptyPath::EmptyPath(QueryExecutionContext* qec, Variable variable,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> EmptyPath::getChildren() {
+std::vector<QueryExecutionTree*> EmptyPath::getChildrenImpl() const {
   if (!checkedChild_.has_value()) {
     return {};
   }

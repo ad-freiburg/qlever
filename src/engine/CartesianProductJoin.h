@@ -52,11 +52,9 @@ class CartesianProductJoin : public Operation {
                                 Children children,
                                 size_t chunkSize = 1'000'000);
 
-  /// get non-owning pointers to all the held subtrees to actually use the
-  /// Execution Trees as trees
-  std::vector<QueryExecutionTree*> getChildren() override;
-
  private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
   std::string getCacheKeyImpl() const override;

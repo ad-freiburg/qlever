@@ -119,7 +119,6 @@ class EmptyPath : public Operation {
     return graphVariable_;
   }
 
-  std::vector<QueryExecutionTree*> getChildren() override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
@@ -132,6 +131,7 @@ class EmptyPath : public Operation {
   std::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
   std::string getCacheKeyImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
