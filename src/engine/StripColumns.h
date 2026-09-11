@@ -41,7 +41,6 @@ class StripColumns : public Operation {
 
   // Member functions inherited from `Operation` that have to be implemented by
   // each child class.
-  std::vector<QueryExecutionTree*> getChildren() override;
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
@@ -59,6 +58,7 @@ class StripColumns : public Operation {
   bool knownEmptyResult() override;
 
  private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;

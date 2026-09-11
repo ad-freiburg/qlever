@@ -64,10 +64,12 @@ class Union : public Operation {
       const IdTableView<0>& left, const IdTableView<0>& right,
       const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
+ public:
   // Create a sorted variant of this operation. This can be more efficient than
   // stacking a `Sort` operation on top of this one because Union can simply
   // push the sort down to its children. If one of the children is already

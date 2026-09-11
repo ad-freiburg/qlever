@@ -54,7 +54,10 @@ class SpatialJoin : public Operation {
               std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
               bool substitutesFilterOp = false);
 
-  std::vector<QueryExecutionTree*> getChildren() override;
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
+ public:
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
