@@ -14,11 +14,10 @@
 #include <string>
 #include <vector>
 
-#include "backports/algorithm.h"
 #include "global/Id.h"
-#include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/WordBatch.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 
 // The third stage of the merging pipeline of the vocabulary merger (see the
@@ -49,23 +48,22 @@ class IdMapBatchWriter {
 
  public:
   // Create the ID map for each of the partial vocabularies, in the files
-  // `partialVocabularyIdMapFilename(basename, idx)` for each `idx` in
-  // `[0, numPartialVocabularies)`.
+  // `idMapFilenames`, one per partial vocabulary and in the order of the
+  // partial vocabularies. The filenames are taken as a type-erased range, such
+  // that this class is oblivious of how they are derived (see
+  // `index/PartialVocabularyFilenames.h`).
   // NOTE: That the number of partial vocabularies fits into the `uint32_t` of
   // a `LocalIdxToBatchMapping` is checked by `mergeVocabulary` (see
   // `index/VocabularyMergerImpl.h`).
-  IdMapBatchWriter(const std::string& basename, size_t numPartialVocabularies) {
-    // NOTE: We deliberately use the range constructor of `std::vector` and not
+  explicit IdMapBatchWriter(
+      ad_utility::InputRangeTypeErased<std::string> idMapFilenames) {
+    // NOTE: We deliberately use a manual loop with `emplace_back` and not
     // `::ranges::to_vector`. The latter goes via `std::vector::assign`, which
     // requires the elements to be assignable, which an `IdMapWriter`
     // deliberately is not (see `index/vocabulary_merger/IdMap.h`).
-    auto writers =
-        partialVocabularyIdMapFilenames(basename, numPartialVocabularies) |
-        ql::views::transform([](const std::string& filename) {
-          return makeIdMapWriter(filename);
-        });
-    idMapWriters_ = std::vector<IdMapWriter>(ql::ranges::begin(writers),
-                                             ql::ranges::end(writers));
+    for (const std::string& filename : idMapFilenames) {
+      idMapWriters_.emplace_back(makeIdMapWriter(filename));
+    }
   }
 
   // Write all the mappings of the `batch` to their respective ID maps.

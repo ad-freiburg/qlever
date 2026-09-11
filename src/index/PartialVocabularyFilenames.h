@@ -18,6 +18,8 @@
 
 #include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "util/Iterators.h"
+#include "util/Log.h"
 #include "util/Views.h"
 
 // The names of the temporary files that the index builder creates for each of
@@ -30,8 +32,9 @@
 // Each kind of file has a function that yields the file of a single partial
 // vocabulary, for the callers that only need one of them. The kinds that are
 // also consumed as a whole additionally have a function that yields the files
-// of all the partial vocabularies as a lazy range. Those ranges refer to the
-// `basename`, which therefore has to outlive them.
+// of all the partial vocabularies as a lazy range. Those ranges are
+// type-erased and self-contained (in particular, they own the `basename`), so
+// that their consumers are completely oblivious of how the files are named.
 
 // The file that holds the words of the `idx`-th partial vocabulary.
 inline std::string partialVocabularyWordsFilename(std::string_view basename,
@@ -53,22 +56,52 @@ inline std::string unsortedTriplesFilename(std::string_view basename,
   return absl::StrCat(basename, UNSORTED_TRIPLES_INFIX, idx, ".dat");
 }
 
+namespace partialVocabularyFilenames::detail {
+// The filenames that `makeFilename` yields for each of the
+// `numPartialVocabularies` partial vocabularies. NOTE: The returned range owns
+// the `basename`, so it is self-contained and outliving its arguments is fine.
+template <typename F>
+ad_utility::InputRangeTypeErased<std::string> makeFilenames(
+    std::string_view basename, size_t numPartialVocabularies, F makeFilename) {
+  return ad_utility::InputRangeTypeErased<std::string>{
+      ad_utility::integerRange(numPartialVocabularies) |
+      ql::views::transform(
+          [basename = std::string{basename}, makeFilename](size_t idx) {
+            return makeFilename(basename, idx);
+          })};
+}
+}  // namespace partialVocabularyFilenames::detail
+
 // The words files of all the `numPartialVocabularies` partial vocabularies.
-inline auto partialVocabularyWordsFilenames(std::string_view basename,
-                                            size_t numPartialVocabularies) {
-  return ad_utility::integerRange(numPartialVocabularies) |
-         ql::views::transform([basename](size_t idx) {
-           return partialVocabularyWordsFilename(basename, idx);
-         });
+inline ad_utility::InputRangeTypeErased<std::string>
+partialVocabularyWordsFilenames(std::string_view basename,
+                                size_t numPartialVocabularies) {
+  return partialVocabularyFilenames::detail::makeFilenames(
+      basename, numPartialVocabularies, partialVocabularyWordsFilename);
 }
 
 // The ID map files of all the `numPartialVocabularies` partial vocabularies.
-inline auto partialVocabularyIdMapFilenames(std::string_view basename,
-                                            size_t numPartialVocabularies) {
-  return ad_utility::integerRange(numPartialVocabularies) |
-         ql::views::transform([basename](size_t idx) {
-           return partialVocabularyIdMapFilename(basename, idx);
-         });
+inline ad_utility::InputRangeTypeErased<std::string>
+partialVocabularyIdMapFilenames(std::string_view basename,
+                                size_t numPartialVocabularies) {
+  return partialVocabularyFilenames::detail::makeFilenames(
+      basename, numPartialVocabularies, partialVocabularyIdMapFilename);
+}
+
+// Delete the words files of all the `numPartialVocabularies` partial
+// vocabularies; they are not needed anymore once the vocabulary has been
+// merged. The `deleteFile` callback does the actual deletion, because the
+// caller decides whether temporary files are kept (see
+// `IndexImpl::deleteTemporaryFile`).
+template <typename F>
+void deletePartialVocabularyWordsFiles(std::string_view basename,
+                                       size_t numPartialVocabularies,
+                                       const F& deleteFile) {
+  AD_LOG_DEBUG << "Removing temporary files ..." << std::endl;
+  for (const std::string& filename :
+       partialVocabularyWordsFilenames(basename, numPartialVocabularies)) {
+    deleteFile(filename);
+  }
 }
 
 #endif  // QLEVER_SRC_INDEX_PARTIALVOCABULARYFILENAMES_H

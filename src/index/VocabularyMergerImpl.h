@@ -15,6 +15,7 @@
 #include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/VocabularyMerger.h"
+#include "util/Allocator.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
@@ -27,6 +28,7 @@
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Timer.h"
+#include "util/Views.h"
 
 namespace ad_utility::vocabulary_merger {
 // _________________________________________________________________
@@ -77,7 +79,8 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
   // The stages of the pipeline. The `batchBuilder` (the first stage) runs on
   // this thread, the `pipeline` owns the three stages that run concurrently to
   // it.
-  detail::VocabularyMergePipeline pipeline{basename, numPartialVocabularies};
+  detail::VocabularyMergePipeline pipeline{
+      partialVocabularyIdMapFilenames(basename, numPartialVocabularies)};
   detail::WordBatchBuilder batchBuilder;
   auto batchCallback = [&pipeline, &wordCallback,
                         &blankNodeIriRegexes](detail::WordBatch batch) {
@@ -128,8 +131,18 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
   return res;
 }
 
+// The serializer that is used to write the triples that were mapped using a
+// single partial vocabulary to disk (see `writeMappedIdsToFile` below).
+using TripleWriter = ad_utility::serialization::ZstdWriteSerializer<
+    ad_utility::serialization::FileWriteSerializer>;
+
+// The counterpart of `TripleWriter` that reads those triples back (see
+// `readMappedIdsFromFile` below).
+using TripleReader = ad_utility::serialization::ZstdReadSerializer<
+    ad_utility::serialization::FileReadSerializer>;
+
 // ________________________________________________________________________________________________________
-inline void writeMappedIdsToExtVec(
+inline void writeMappedIdsToFile(
     std::vector<std::array<Id, NumColumnsIndexBuilding>> input,
     const HashMap<uint64_t, uint64_t>& map, const std::string& filename) {
   for (auto& curTriple : input) {
@@ -147,12 +160,31 @@ inline void writeMappedIdsToExtVec(
   }
   TripleWriter writer{ad_utility::serialization::FileWriteSerializer{filename}};
   // Serialize the whole batch as a single vector. This prepends the number of
-  // triples, so that the reader can read back exactly this batch without any
-  // external bookkeeping (see `IndexImpl::convertPartialToGlobalIds`).
+  // triples, so that `readMappedIdsFromFile` can read back exactly this batch
+  // without any external bookkeeping.
   writer << input;
   // Flush the remaining buffered triples and close the file, so that it can be
-  // read back by `IndexImpl::convertPartialToGlobalIds`.
+  // read back.
   writer.close();
+}
+
+// ________________________________________________________________________________________________________
+inline IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
+    const std::string& filename) {
+  TripleReader reader{ad_utility::serialization::FileReadSerializer{filename}};
+  // The triples were written as a single vector, so their number precedes them
+  // (see `writeMappedIdsToFile` above).
+  size_t numTriples;
+  reader >> numTriples;
+  IdTableStatic<NumColumnsIndexBuilding> triples{
+      ad_utility::makeUnlimitedAllocator<Id>()};
+  triples.reserve(numTriples);
+  for ([[maybe_unused]] size_t idx : ad_utility::integerRange(numTriples)) {
+    std::array<Id, NumColumnsIndexBuilding> triple;
+    reader >> triple;
+    triples.push_back(triple);
+  }
+  return triples;
 }
 
 // _________________________________________________________________________________________________________

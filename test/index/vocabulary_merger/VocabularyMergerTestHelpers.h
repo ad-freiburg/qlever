@@ -59,7 +59,9 @@ struct PartialVocabularyFiles {
   size_t numPartialVocabularies_ = 0;
   // The file that holds the words of each of the partial vocabularies.
   std::vector<std::string> wordsFiles_;
-  // The file that holds the ID map of each of the partial vocabularies.
+  // The file that holds the ID map of each of the partial vocabularies. Hand
+  // these to the `IdMapBatchWriter` and the `VocabularyMergePipeline`, which
+  // take the filenames directly.
   std::vector<std::string> idMapFiles_;
 };
 

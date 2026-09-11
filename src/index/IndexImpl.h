@@ -63,9 +63,9 @@ using SecondPermutation = SortByOSP;
 using ThirdPermutation = SortByPSO;
 
 // Data produced after parsing: vocabulary metadata and the number of partial
-// vocabularies. The ID triples themselves are written to disk (one file per
-// partial vocabulary, see `unsortedTriplesFilename`) and read back by
-// `IndexImpl::convertPartialToGlobalIds`.
+// vocabularies. The ID triples and partial vocabularies themselves are written
+// to disk (one file per partial vocabulary, see `unsortedTriplesFilename`) and
+// read back by `IndexImpl::convertPartialToGlobalIds`.
 struct IndexBuilderDataAsExternalVector {
   ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   BuildPartialVocabulariesResult parsedTriples_;
@@ -630,7 +630,7 @@ class IndexImpl {
  protected:
   // Private member functions
 
-  // Create Vocabulary and directly write it to disk. Write all the triples
+  // Create the vocabulary and directly write it to disk. Write all the triples
   // converted to id space to disk, sorted into the first permutation, so that
   // they can be used for creating the permutations. Member vocab_ will be empty
   // after this because it is not needed for index creation once the triples are
@@ -652,14 +652,14 @@ class IndexImpl {
   // index building support concurrent calls to `getBatch`) and convert the
   // strings in those triples to IDs using a hash map that is private to this
   // worker. After `linesPerPartial` triples, atomically claim the next free
-  // index from `numPartialVocabularies` and write the resulting partial
+  // index from `nextPartialVocabIdx` and write the resulting partial
   // vocabulary and the corresponding triples under that index. Return the
   // number of triples written (only used for logging).
   size_t runPartialVocabularyWorker(
       size_t linesPerPartial, RdfParserBase& parser, ItemAlloc itemAlloc,
       std::atomic<size_t>* numHasWordTriples,
       ad_utility::ConcurrentProgressBar& progressBar,
-      std::atomic<size_t>& numPartialVocabularies);
+      std::atomic<size_t>& nextPartialVocabIdx);
 
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(
@@ -667,8 +667,9 @@ class IndexImpl {
 
   // Write the partial vocabulary with index `partialVocabIdx` given by `items`
   // to its `partialVocabularyWordsFilename` and the corresponding triples in
-  // `localIds` to its `unsortedTriplesFilename`. The index is exclusively
-  // owned by the calling worker thread, so no locking is required.
+  // `localIds` to its `unsortedTriplesFilename`. All data associated with the
+  // `partialVocabIdx` is exclusively owned by the calling worker thread, so no
+  // locking is required.
   void writePartialVocabulary(
       size_t partialVocabIdx, ItemMapAndBuffer items,
       std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds) const;

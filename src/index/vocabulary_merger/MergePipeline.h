@@ -24,6 +24,7 @@
 #include "index/vocabulary_merger/VocabularyMetaData.h"
 #include "index/vocabulary_merger/VocabularyWriter.h"
 #include "index/vocabulary_merger/WordBatch.h"
+#include "util/Iterators.h"
 #include "util/RegexSet.h"
 #include "util/TaskQueue.h"
 
@@ -75,11 +76,12 @@ class VocabularyMergePipelineImpl {
       VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Writing the merged vocabulary"};
 
  public:
-  // Create the pipeline. The `basename` and the `numPartialVocabularies`
-  // determine the files of the partial ID maps (see `IdMapBatchWriter`).
-  VocabularyMergePipelineImpl(const std::string& basename,
-                              size_t numPartialVocabularies)
-      : idMapBatchWriter_{basename, numPartialVocabularies} {}
+  // Create the pipeline. The `idMapFilenames` are the files of the partial ID
+  // maps, one per partial vocabulary and in the order of the partial
+  // vocabularies (see `IdMapBatchWriter`).
+  explicit VocabularyMergePipelineImpl(
+      ad_utility::InputRangeTypeErased<std::string> idMapFilenames)
+      : idMapBatchWriter_{std::move(idMapFilenames)} {}
 
   // Asynchronously process a single `batch` of merged words: write its
   // distinct words to the vocabulary (via the `wordCallback` and the

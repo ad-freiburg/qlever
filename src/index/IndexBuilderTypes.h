@@ -383,10 +383,10 @@ MappedTriples mapTripleToIds(
 struct BuildPartialVocabulariesResult {
   // The number of partial vocabularies that were written. Each partial
   // vocabulary has exactly one file with the ID triples that were mapped using
-  // it (see `IndexImpl::unsortedTriplesFilename`), so the partial vocabulary
-  // with index `i` and the triples in the file with index `i` always belong
-  // together. The workers that write those pairs work completely independently
-  // of each other; they only share the counter for the indices.
+  // it (see `unsortedTriplesFilename`), so the partial vocabulary with index
+  // `i` and the triples in the file with index `i` always belong together. The
+  // workers that write those pairs work completely independently of each
+  // other; they only share the counter for the indices.
   size_t numPartialVocabularies_ = 0;
   // The total number of triples that were written. Only used for logging.
   size_t numTriples_ = 0;

@@ -11,7 +11,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
-#include "engine/idTable/CompressedExternalIdTable.h"
+#include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -27,19 +27,7 @@
 #include "index/vocabulary_merger/WordBatchBuilder.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/Serializer/CompressedSerializer.h"
-#include "util/Serializer/FileSerializer.h"
 #include "util/TypeTraits.h"
-
-// The serializer that is used to write the parsed triples with their partial
-// IDs to disk (one file per worker, see `IndexImpl::buildPartialVocabularies`).
-using TripleWriter = ad_utility::serialization::ZstdWriteSerializer<
-    ad_utility::serialization::FileWriteSerializer>;
-
-// The counterpart of `TripleWriter` that reads those triples back (see
-// `IndexImpl::convertPartialToGlobalIds`).
-using TripleReader = ad_utility::serialization::ZstdReadSerializer<
-    ad_utility::serialization::FileReadSerializer>;
 
 // This header is the public interface of the vocabulary merger. The parts of
 // it that are understandable (and testable) on their own live in
@@ -111,12 +99,22 @@ ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
  */
 ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
 
-// For each of the IdTriples in `input`: map the three Ids using the `map` and
+// The triples that were mapped using a single partial vocabulary are stored in
+// a file of their own (see `unsortedTriplesFilename`). The following two
+// functions are the only writer and the only reader of that file format, so
+// they always have to be changed together.
+
+// For each of the IdTriples in `input`: map its Ids using the `map` and
 // serialize the resulting batch of Id triples to the file `filename`, which is
-// created and closed by this function.
-void writeMappedIdsToExtVec(
+// created and closed by this function. Counterpart of `readMappedIdsFromFile`.
+void writeMappedIdsToFile(
     std::vector<std::array<Id, NumColumnsIndexBuilding>> input,
     const HashMap<uint64_t, uint64_t>& map, const std::string& filename);
+
+// Read back the Id triples that `writeMappedIdsToFile` has written to the file
+// `filename`.
+IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
+    const std::string& filename);
 
 /**
  * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
