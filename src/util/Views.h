@@ -541,6 +541,25 @@ CPP_template(typename Int)(requires ql::concepts::unsigned_integral<
   return ql::views::iota(Int{0}, upperBound);
 }
 
+// Convert given optional range into a range of optionals of its contents. If
+// the given range is nullopt, return an infinite range of nullopt.
+CPP_template(typename R)(requires ql::ranges::range<R>) auto rangeToOptional(
+    std::optional<R>&& range) {
+  using RangeContentType = ql::ranges::range_value_t<R>;
+  using ResultRangeType = ::ranges::any_view<std::optional<RangeContentType>>;
+
+  // Transform the range to a range of optionals of its contents
+  if (range.has_value()) {
+    return ResultRangeType(std::move(range.value()) |
+                           ::ranges::views::transform([](auto& element) {
+                             return std::make_optional(std::move(element));
+                           }));
+  }
+  // Create a range containing nullopts of the same "type" as the ranges
+  // contents would have if they'd hold a value.
+  return ResultRangeType(::ranges::views::repeat(std::nullopt));
+}
+
 }  // namespace ad_utility
 
 // Enabling of "borrowed" ranges for `OwningView, RvalueView, and

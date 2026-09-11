@@ -137,7 +137,7 @@ class TransitivePathBase : public Operation {
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
   // Indicate that the variable is only bound because the path is empty, not
-  // because `bindLeftOrRightSide` was called. This means that it is bound to a
+  // because `bindSides` was called. This means that it is bound to a
   // full scan of all subjects and objects in the knowledge graph, but can be
   // re-bound to something cheaper later if the query permits it.
   bool boundVariableIsForEmptyPath_ = false;
@@ -162,25 +162,14 @@ class TransitivePathBase : public Operation {
 
   ~TransitivePathBase() override = 0;
 
-  /**
-   * Returns a new TransitivePath operation that uses the fact that leftop
-   * generates all possible values for the left side of the paths. If the
-   * results of leftop is smaller than all possible values this will result in a
-   * faster transitive path operation (as the transitive paths has to be
-   * computed for fewer elements).
-   */
-  std::shared_ptr<TransitivePathBase> bindLeftSide(
-      std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const;
-
-  /**
-   * Returns a new TransitivePath operation that uses the fact that rightop
-   * generates all possible values for the right side of the paths. If the
-   * results of rightop is smaller than all possible values this will result in
-   * a faster transitive path operation (as the transitive paths has to be
-   * computed for fewer elements).
-   */
-  std::shared_ptr<TransitivePathBase> bindRightSide(
-      std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const;
+  // Return a new Transitive Path `Operation` that uses the fact that either
+  // the left, right or both input operations generate all possible values of
+  // their corresponding side. This may result in a faster transitive path
+  // operation if the amount of those values is smaller than all possible values
+  // (as the transitive path has to be computed for fewer elements).
+  std::shared_ptr<TransitivePathBase> bindSides(
+      std::shared_ptr<QueryExecutionTree> op, std::optional<size_t> leftCol,
+      std::optional<size_t> rightCol = std::nullopt) const;
 
   bool isBoundOrId() const;
 
@@ -241,11 +230,13 @@ class TransitivePathBase : public Operation {
   std::optional<ColumnIndex> getActualGraphColumnIndex(
       const std::shared_ptr<QueryExecutionTree>& tree) const;
 
-  // Return how many columns would be joined given the passed `tree`. Return 1
-  // if `getActualGraphColumnIndex(tree)` is `std::nullopt` or the returned
-  // index is equal to `joinColumn`. Return 2 otherwise.
-  size_t numJoinColumnsWith(const std::shared_ptr<QueryExecutionTree>& tree,
-                            ColumnIndex joinColumn) const;
+  // Return the amount of distinctive non-payload columns (start, target, graph)
+  // that are present in the input and will be joined given the passed `tree`.
+  // Depending on how many are given and if some are identical, return either 1,
+  // 2 or 3.
+  size_t numJoinColumnsWith(
+      const std::shared_ptr<QueryExecutionTree>& tree, ColumnIndex joinColumn,
+      std::optional<ColumnIndex> otherJoinColumn = std::nullopt) const;
 
  public:
   std::string getDescriptor() const override;
@@ -284,12 +275,19 @@ class TransitivePathBase : public Operation {
       size_t& inputCol,
       std::shared_ptr<QueryExecutionTree> leftOrRightOp) const;
 
+  // Calculate the correct offsets and copy the payload columns from `op` into
+  // the `plan`. `leftCol` and/or `rightCol` are the sides to which the
+  // transitive path is bound to. This method is called from within `bindSides`.
+  void copyPayloadColumnsToPlan(auto& op, auto& plan,
+                                std::optional<size_t> leftCol,
+                                std::optional<size_t> rightCol) const;
+
  public:
   size_t getCostEstimate() override;
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
-   * The concrete object will either be TransitivePathFallback or
+   * The concrete object will either be TransitivePathHashMap or
    * TransitivePathBinSearch, depending on the useBinSearch flag.
    *
    * @param qec QueryExecutionContext for the TransitivePath Operation
@@ -341,12 +339,6 @@ class TransitivePathBase : public Operation {
 
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
-
-  // The internal implementation of `bindLeftSide` and `bindRightSide` which
-  // share a lot of code.
-  std::shared_ptr<TransitivePathBase> bindLeftOrRightSide(
-      std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
-      bool isLeft) const;
 
   // Return a set of subtrees that can be used alternatively when the left or
   // right side is bound. This is used by the `TransitivePathBinSearch` class,
