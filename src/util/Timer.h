@@ -227,8 +227,14 @@ template <typename Callback = detail::DefaultLogger>
 struct QL_NODISCARD(
     "TimeBlockAndLog objects are RAII types that always have to be bound to a "
     "variable") TimeBlockAndLog {
-  explicit TimeBlockAndLog([[maybe_unused]] std::string message,
-                           [[maybe_unused]] Callback callback = {}) {}
+  // NOTE: The parameters are unused, but they may not be marked as
+  // `[[maybe_unused]]`, because GCC 8 (which is used by the C++17 CI job)
+  // cannot parse an attribute at the beginning of a parameter declaration of a
+  // constructor, so we discard them explicitly instead.
+  explicit TimeBlockAndLog(std::string message, Callback callback = {}) {
+    (void)message;
+    (void)callback;
+  }
 
   // The semantics of copying/moving this class are unclear and copying/moving
   // is not needed for the typical usage, so those operations are deleted.
