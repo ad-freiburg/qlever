@@ -1,0 +1,2 @@
+addLinkAndDiscoverTest(LegacyEncodedIriManagerTest blobConverter)
+addLinkAndDiscoverTest(BlobConverterTest blobConverter qlever)

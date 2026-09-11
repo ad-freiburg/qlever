@@ -805,6 +805,7 @@ add_subdirectory(src/util)
 add_subdirectory(src/rdfTypes)
 add_subdirectory(src/global)
 add_subdirectory(src/libqlever)
+add_subdirectory(src/blobConverter)
 
 ##################################################
 # Precompiled headers
@@ -906,6 +907,7 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
         qlever-index
         qlever-server
         qlever-upgrade-index
+        qlever-blob-converter
         RUNTIME DESTINATION bin
     )
 endif()
