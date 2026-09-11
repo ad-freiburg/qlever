@@ -1499,25 +1499,46 @@ TEST(RdfParserTest, asyncParallelParserHaltsOnHeaderError) {
     ad_utility::makeOfstream(filename)
         << "@prefix ex: notAnIri .\n<a> <b> <c> .\n";
 
-    boost::asio::thread_pool pool{4};
-    Parser parser{pool.get_executor(),
-                  qlever::InputFileSpecification{
-                      filename, qlever::Filetype::Turtle, std::nullopt},
-                  1_kB, encodedIriManager()};
-    // See the comment in `parseFromFileAsync` above.
-    absl::Cleanup joinPool = [&pool] { pool.join(); };
+    // The error of the first call is only inspected after the pool has been
+    // joined, see the NOTE below.
+    std::exception_ptr error;
+    {
+      boost::asio::thread_pool pool{4};
+      Parser parser{pool.get_executor(),
+                    qlever::InputFileSpecification{
+                        filename, qlever::Filetype::Turtle, std::nullopt},
+                    1_kB, encodedIriManager()};
+      // See the comment in `parseFromFileAsync` above.
+      absl::Cleanup joinPool = [&pool] { pool.join(); };
 
-    // The first call parses the header, runs into the error, and propagates
-    // it. Byte position 12 lies inside the prefix declaration, so the error
-    // indeed comes from the parsing of the header and not from the triple.
+      // The first call parses the header and runs into the error.
+      try {
+        parser.asyncGetBatch(boost::asio::use_future).get();
+        ADD_FAILURE() << "No exception was thrown";
+      } catch (...) {
+        error = std::current_exception();
+      }
+      // Subsequent calls return nullopt to stop the pipeline cleanly.
+      EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
+                std::nullopt);
+      EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
+                std::nullopt);
+    }
+
+    // NOTE: The exception is captured above and only rethrown here, once the
+    // pool is joined, because the exception object is owned by the shared
+    // state of the `std::future` and the teardown of the coroutine releases
+    // that state on a thread of the pool. Reading the message while that
+    // teardown may still be running is reported as a data race by the thread
+    // sanitizer, which cannot see the reference counting that makes it safe,
+    // because that lives in an uninstrumented `libstdc++`.
+    //
+    // Byte position 12 lies inside the prefix declaration, so the error indeed
+    // comes from the parsing of the header and not from the triple.
+    ASSERT_NE(error, nullptr);
     AD_EXPECT_THROW_WITH_MESSAGE(
-        parser.asyncGetBatch(boost::asio::use_future).get(),
+        std::rethrow_exception(error),
         ::testing::ContainsRegex("Parse error at byte position 12"));
-    // Subsequent calls return nullopt to stop the pipeline cleanly.
-    EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
-              std::nullopt);
-    EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
-              std::nullopt);
   };
   forAllAsyncParallelParsers(testWithParser);
 }

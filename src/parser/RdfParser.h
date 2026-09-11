@@ -709,10 +709,10 @@ class RdfParallelParsingState {
   // caller becomes its sole owner, every subsequent call returns `nullopt`, so
   // that the block is parsed exactly once.
   //
-  // This is thread-safe: `remainderWasTaken_` is the synchronizing atomic, so
-  // exactly one of several concurrent callers sees it as `false`, and the move
-  // out of `remainderFromInitialization_` by that caller happens before every
-  // other caller observes the flag as `true`.
+  // This is thread-safe: the atomic `exchange` on `remainderWasTaken_`
+  // guarantees that exactly one of several concurrent callers sees it as
+  // `false`, and only that caller touches `remainderFromInitialization_` at
+  // all.
   std::optional<qlever::parser::ByteBlock> takeRemainderFromInitialization() {
     if (remainderWasTaken_.exchange(true)) {
       return std::nullopt;
