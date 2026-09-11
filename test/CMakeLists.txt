@@ -513,6 +513,10 @@ addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
 addLinkAndDiscoverTestNoLibs(RunsInputPolicyTest)
 
+addLinkAndDiscoverTestNoLibs(InOrderBlockSinkTest)
+
+addLinkAndDiscoverTestNoLibs(BlockStorageTest)
+
 addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
