@@ -16,6 +16,7 @@
 #include "./engine/sparqlExpressions/LiteralExpression.h"
 #include "./engine/sparqlExpressions/NaryExpression.h"
 #include "./engine/sparqlExpressions/PrefilterExpressionIndex.h"
+#include "./engine/sparqlExpressions/PrefixMatchExpression.h"
 #include "./engine/sparqlExpressions/RegexExpression.h"
 #include "./engine/sparqlExpressions/RelationalExpressions.h"
 #include "./engine/sparqlExpressions/SparqlExpression.h"
@@ -224,6 +225,23 @@ std::unique_ptr<SparqlExpression> makePrefixRegexExpression(
 }
 
 //______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makePrefixRegexExpressionWithFlags(
+    VariantArgs varExpr, VariantArgs litExpr, VariantArgs flagsExpr) {
+  return sparqlExpression::makeRegexExpression(
+      std::visit(getExpr, std::move(varExpr)),
+      std::visit(getExpr, std::move(litExpr)),
+      std::visit(getExpr, std::move(flagsExpr)));
+}
+
+//______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makePrefixMatchSparqlExpression(
+    VariantArgs varExpr, VariantArgs litExpr) {
+  return sparqlExpression::makePrefixMatchExpression(
+      std::visit(getExpr, std::move(varExpr)),
+      std::visit(getExpr, std::move(litExpr)));
+}
+
+//______________________________________________________________________________
 std::unique_ptr<SparqlExpression> makeStrSparqlExpression(
     VariantArgs childVal) {
   return makeStrExpression(std::visit(getExpr, std::move(childVal)));
@@ -293,6 +311,11 @@ constexpr inline auto notSprqlExpr = &makeUnaryNegateExpression;
 constexpr inline auto strStartsSprql = &makeStringStartsWithSparqlExpression;
 // Create SparqlExpression `REGEX`.
 constexpr inline auto regexSparql = &makePrefixRegexExpression;
+// Create SparqlExpression `REGEX` with an explicit third argument (the flags).
+constexpr inline auto regexSparqlWithFlags =
+    &makePrefixRegexExpressionWithFlags;
+// Create SparqlExpression `ql:prefix-match`.
+constexpr inline auto prefixMatchSparql = &makePrefixMatchSparqlExpression;
 // Create SparqlExpression `STR`
 constexpr inline auto strSprql = &makeStrSparqlExpression;
 
