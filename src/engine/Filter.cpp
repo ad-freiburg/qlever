@@ -12,6 +12,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/Sort.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -256,4 +257,25 @@ bool Filter::isDeterministicImpl() const {
 std::unique_ptr<Operation> Filter::cloneImpl() const {
   return std::make_unique<Filter>(_executionContext, _subtree->clone(),
                                   _expression);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Filter::makeSortedTree(
+    const std::vector<ColumnIndex>& sortColumns) const {
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  // Try to push the sorting down to the child.
+  auto sortedChild =
+      QueryExecutionTree::createSortedTree(_subtree, sortColumns);
+  auto rootIsSort = [](const QueryExecutionTree& tree) {
+    return std::dynamic_pointer_cast<Sort>(tree.getRootOperation()) != nullptr;
+  };
+  // If the child requires an explicit `Sort` that it didn't have before, don't
+  // push the sorting down, but return `std::nullopt` so that the caller adds
+  // the `Sort` on top of this `Filter`. That is cheaper, because then only the
+  // rows that pass the filter have to be sorted.
+  if (rootIsSort(*sortedChild) && !rootIsSort(*_subtree)) {
+    return std::nullopt;
+  }
+  return ad_utility::makeExecutionTree<Filter>(
+      getExecutionContext(), std::move(sortedChild), _expression);
 }
