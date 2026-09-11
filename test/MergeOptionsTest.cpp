@@ -10,7 +10,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <limits>
+#include <thread>
 
 #include "util/GTestHelpers.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
@@ -25,6 +28,70 @@ TEST(MergeOptions, Defaults) {
             DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_SIZE);
   EXPECT_EQ(options.outputBlockSize.maxMemory(),
             DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY);
+  EXPECT_EQ(options.parallelismHint, 0u);
+  EXPECT_EQ(options.targetChunksPerThread,
+            DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD);
+  EXPECT_EQ(options.maxNumChunksInFlight, 0u);
+}
+
+// _____________________________________________________________________________
+TEST(MergeOptions, DefaultParallelismIsAtLeastOne) {
+  EXPECT_GE(defaultMergeParallelism(), 1u);
+  EXPECT_EQ(defaultMergeParallelism(),
+            std::max<size_t>(1, std::thread::hardware_concurrency()));
+}
+
+// _____________________________________________________________________________
+TEST(MergeOptions, ParallelismHintOfZeroMeansTheDefault) {
+  MergeOptions options;
+  EXPECT_EQ(options.parallelism(), defaultMergeParallelism());
+  // Every other value is used as it is, also one that far exceeds the hardware,
+  // because the hint only affects the scheduling and never the correctness.
+  options.parallelismHint = 1;
+  EXPECT_EQ(options.parallelism(), 1u);
+  options.parallelismHint = 4;
+  EXPECT_EQ(options.parallelism(), 4u);
+  options.parallelismHint = 1000;
+  EXPECT_EQ(options.parallelism(), 1000u);
+}
+
+// _____________________________________________________________________________
+TEST(MergeOptions, TargetNumChunks) {
+  MergeOptions options;
+  options.parallelismHint = 4;
+  EXPECT_EQ(options.targetNumChunks(),
+            4 * DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD);
+  // One chunk per thread is the coarsest sensible granularity.
+  options.targetChunksPerThread = 1;
+  EXPECT_EQ(options.targetNumChunks(), 4u);
+  options.targetChunksPerThread = 7;
+  EXPECT_EQ(options.targetNumChunks(), 28u);
+  // The `parallelismHint` of zero is resolved first, see `parallelism()`.
+  options.parallelismHint = 0;
+  EXPECT_EQ(options.targetNumChunks(), 7 * defaultMergeParallelism());
+}
+
+// _____________________________________________________________________________
+TEST(MergeOptions, NumChunksInFlight) {
+  MergeOptions options;
+  options.parallelismHint = 4;
+  // The value `0` means "as many as `parallelism()`".
+  EXPECT_EQ(options.numChunksInFlight(100), 4u);
+  // Every other value is used as it is, also one that far exceeds the
+  // parallelism, because a chunk that has to wait suspends instead of blocking
+  // a thread.
+  options.maxNumChunksInFlight = 1;
+  EXPECT_EQ(options.numChunksInFlight(100), 1u);
+  options.maxNumChunksInFlight = 6;
+  EXPECT_EQ(options.numChunksInFlight(100), 6u);
+  // The result is never greater than the number of chunks that actually exist,
+  // no matter whether the bound is explicit or derived from the parallelism.
+  options.maxNumChunksInFlight = 1000;
+  EXPECT_EQ(options.numChunksInFlight(100), 100u);
+  EXPECT_EQ(options.numChunksInFlight(1), 1u);
+  options.maxNumChunksInFlight = 0;
+  EXPECT_EQ(options.numChunksInFlight(2), 2u);
+  EXPECT_EQ(options.numChunksInFlight(1), 1u);
 }
 
 // _____________________________________________________________________________

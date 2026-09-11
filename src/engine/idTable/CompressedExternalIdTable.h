@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/thread_pool.hpp>
 #include <future>
 #include <utility>
 
@@ -127,6 +128,30 @@ constexpr inline size_t MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE = 100'000;
 // phase gives up and reports that the memory limit is insufficient. Below that
 // size the per-block overhead dominates completely.
 constexpr inline size_t MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE = 10'000;
+
+// Return the executor of the process-wide default thread pool of the merge
+// phase, which has `parallelBlockMerge::defaultMergeParallelism()` threads and
+// is created lazily on the first call. It is what a
+// `CompressedExternalIdTableSorter` merges on if its owner does not supply an
+// executor of its own, see `CompressedExternalIdTableSorter::setMergeExecutor`.
+//
+// NOTE: The parallel merge itself deliberately has no default executor, so that
+// every caller stays in control of the threads that its merges run on (see
+// `parallelBlockMerge::parallelBlockMergeToSink`). This pool is therefore a
+// policy of the *sorter* and not of the merge: the sorter is created in many
+// places that have no thread pool of their own, and merging its runs serially
+// would make the merge phase the bottleneck of the index build.
+//
+// Sharing a single pool between concurrent merge phases is safe, because a
+// chunk that cannot make progress suspends instead of occupying its thread, so
+// the merges cannot starve each other. It is however *not* safe to consume a
+// merge from one of the threads of its own executor, see
+// `parallelBlockMerge::parallelBlockMergeToRange`.
+inline boost::asio::any_io_executor defaultSorterMergeExecutor() {
+  static boost::asio::thread_pool pool{
+      parallelBlockMerge::defaultMergeParallelism()};
+  return pool.get_executor();
+}
 
 // A class that stores a sequence of `IdTable`s in a file. Each `IdTable` is
 // compressed blockwise. Typically, the blocksize is much smaller than the size
@@ -926,8 +951,7 @@ class CompressedExternalIdTableSorter
 
   // The executor on which the merge phase runs, together with the number of
   // threads that run it.
-  boost::asio::any_io_executor mergeExecutor_ =
-      parallelBlockMerge::defaultMergeExecutor();
+  boost::asio::any_io_executor mergeExecutor_ = defaultSorterMergeExecutor();
   size_t mergeParallelism_ = parallelBlockMerge::defaultMergeParallelism();
 
   // Set as soon as the warning about a reduced parallelism (see
@@ -1141,7 +1165,7 @@ class CompressedExternalIdTableSorter
     auto merged =
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
             mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
-            this->comparator_, makeMergeOptions(parameters), mergeParallelism_,
+            this->comparator_, makeMergeOptions(parameters),
             // NOTE: The sorter has no cancellation handle of its own, and the
             // merge requires one that is not `nullptr`, so this is a fresh
             // handle that is never cancelled.
@@ -1197,7 +1221,8 @@ class CompressedExternalIdTableSorter
     // exactly as it was before the merge phase was parallelized.
     options.outputBlockSize = parallelBlockMerge::OutputBlockSize::numElements(
         parameters.outputBlockSize_);
-    options.maxInFlightChunks = parameters.maxInFlightChunks_;
+    options.parallelismHint = mergeParallelism_;
+    options.maxNumChunksInFlight = parameters.maxInFlightChunks_;
     // The block storage of the merge phase spills to disk, so this is the
     // number of output blocks that it keeps in memory and not a back-pressure
     // limit, see `makeBlockStorageFactory`.

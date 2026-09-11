@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "util/parallelBlockMerge/BlockSinkPolicy.h"
 #include "util/parallelBlockMerge/InOrderBlockSink.h"
 
 // The tests in this file drive the sink from coroutines and are therefore not
@@ -41,6 +42,9 @@ using namespace ad_utility::parallelBlockMerge;
 namespace {
 using Block = std::vector<int>;
 using Sink = InOrderBlockSink<Block>;
+// This sink is the output policy that `parallelBlockMergeToRange` plugs into
+// the parallel merge, so it has to model the `SinkConcept`.
+static_assert(SinkConcept<Sink, Block>);
 // A counted latch via which a producer coroutine signals that it is done.
 // NOTE: In contrast to the channels inside the sink this one is *not* confined
 // to the sink's strand, so it has to be a concurrent channel.
@@ -211,7 +215,7 @@ ASYNC_TEST(InOrderBlockSink, exceptionUnblocksProducers) {
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST(InOrderBlockSink, abortUnblocksProducers) {
+ASYNC_TEST(InOrderBlockSink, stopUnblocksProducers) {
   Sink sink{ioContext.get_executor(), 2, 1};
   Latch latch{ioContext.get_executor(), 2};
   std::atomic<size_t> numPushed{0};
@@ -220,18 +224,18 @@ ASYNC_TEST(InOrderBlockSink, abortUnblocksProducers) {
                 net::detached);
   co_await yieldUntil(ioContext,
                       [&numPushed] { return numPushed.load() == 1; });
-  co_await sink.asyncAbort(net::use_awaitable);
+  co_await sink.asyncStop(net::use_awaitable);
   // The suspended producer has to wake up, otherwise this hangs.
   co_await waitForLatch(latch);
   EXPECT_EQ(numPushed.load(), 1u);
-  // An aborted sink yields nothing anymore, not even the block that is still
+  // A stopped sink yields nothing anymore, not even the block that is still
   // buffered.
   auto block = co_await sink.asyncGetNextBlock(net::use_awaitable);
   EXPECT_FALSE(block.has_value());
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST(InOrderBlockSink, abortUnblocksFinishChunk) {
+ASYNC_TEST(InOrderBlockSink, stopUnblocksFinishChunk) {
   // The end-of-chunk sentinel travels through the same bounded channel as the
   // blocks, so a producer may also be suspended inside `asyncFinishChunk`.
   // Aborting has to wake that one up, too.
@@ -244,7 +248,7 @@ ASYNC_TEST(InOrderBlockSink, abortUnblocksFinishChunk) {
   // The single buffer slot of chunk `1` is taken by the block, so the producer
   // is now suspended while it sends the sentinel.
   co_await yieldUntil(ioContext, [&pushedBlock] { return pushedBlock.load(); });
-  co_await sink.asyncAbort(net::use_awaitable);
+  co_await sink.asyncStop(net::use_awaitable);
   // The suspended producer has to wake up, otherwise this hangs.
   co_await waitForLatch(latch);
 }
@@ -273,13 +277,13 @@ ASYNC_TEST_N(InOrderBlockSink, multiThreaded, 4) {
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST_N(InOrderBlockSink, abortRacesWithProducers, 4) {
+ASYNC_TEST_N(InOrderBlockSink, stopRacesWithProducers, 4) {
   // Abort while many producers are in flight on several threads. Every single
   // producer has to arrive at its `finishChunk`, no matter whether it is
   // currently suspended on a full channel, about to initiate a `push`, or about
   // to send its end-of-chunk sentinel. The last case is the interesting one,
   // because the channel of a chunk that never pushed a block only comes into
-  // existence in that `finishChunk`, i.e. possibly after the abort has already
+  // existence in that `finishChunk`, i.e. possibly after the stop has already
   // swept over all the channels that existed at its time.
   constexpr size_t numChunks = 32;
   constexpr size_t numBlocksPerChunk = 20;
@@ -297,11 +301,11 @@ ASYNC_TEST_N(InOrderBlockSink, abortRacesWithProducers, 4) {
                   net::detached);
   }
   // Consume a little, such that the producers really are in flight, and then
-  // abort in the middle of everything.
+  // stop in the middle of everything.
   for (size_t i = 0; i < 5; ++i) {
     co_await sink.asyncGetNextBlock(net::use_awaitable);
   }
-  co_await sink.asyncAbort(net::use_awaitable);
+  co_await sink.asyncStop(net::use_awaitable);
   EXPECT_TRUE(sink.stopRequested());
   // This hangs if a single producer was left suspended.
   co_await waitForLatch(latch, numChunks);

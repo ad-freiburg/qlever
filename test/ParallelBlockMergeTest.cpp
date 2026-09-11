@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cstddef>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -25,22 +26,14 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/asio.h"
+#include "util/AsyncTestHelpers.h"
 #include "util/CancellationHandle.h"
-#include "util/Forward.h"
 #include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParallelBlockMergeTestHelpers.h"
+#include "util/SourceLocation.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
-
-// The single test at the very bottom of this file consumes the merge from a
-// coroutine and is therefore not available in the C++17 backports mode. The
-// merge itself is coroutine-free and available in that mode.
-#ifndef QLEVER_CPP_17
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/use_awaitable.hpp>
-
-#include "util/AsyncTestHelpers.h"
-#endif
 
 // The tests of the helpers from `MergeHelpers.h` (in particular of
 // `computeChunkBoundaries`) live in `MergeHelpersTest.cpp`.
@@ -50,6 +43,9 @@ using namespace parallelBlockMergeTestHelpers;
 namespace {
 static_assert(InputConcept<SizeInput>);
 static_assert(InputConcept<VectorInput<Pair>>);
+static_assert(SinkConcept<CollectingBlockSink<SizeVec>, SizeVec>);
+static_assert(
+    SinkConcept<CollectingBlockSink<std::vector<Pair>>, std::vector<Pair>>);
 
 // A string that counts how often it was copied, so that a merge that moves the
 // elements out of its input blocks is distinguishable from one that does not.
@@ -108,15 +104,12 @@ std::vector<LiveCounted> makeLiveCounted(size_t first, size_t last) {
   return result;
 }
 
-// An input policy that wraps a `VectorInput<size_t>` and additionally records
-// every call to `getBlock` and (optionally) throws from the `throwAtRead_`-th
-// of them. The recorded state is shared between all copies, because the merge
-// takes the input by value.
-struct InstrumentedInput {
-  using value_type = size_t;
-  using Element = size_t;
-  using Block = SizeVec;
-
+// An input policy that derives from `SizeInput` (that is, from
+// `VectorInput<size_t>`) and instruments only `getBlock`: it records every call
+// to it and (optionally) throws from the `throwAtRead_`-th of them. Everything
+// else is inherited from the base class. The recorded state is shared between
+// all copies, because the merge takes the input by value.
+struct InstrumentedInput : public SizeInput {
   // The shared state of all copies of an `InstrumentedInput`.
   struct State {
     // NOTE: The `mutex_` is required because `InputConcept` requires `getBlock`
@@ -138,20 +131,8 @@ struct InstrumentedInput {
     std::atomic<size_t> numOverlappingReads_{0};
   };
 
-  SizeInput wrapped_;
   std::shared_ptr<State> state_ = std::make_shared<State>();
 
-  size_t numRuns() const { return wrapped_.numRuns(); }
-  size_t numBlocks(size_t runIdx) const { return wrapped_.numBlocks(runIdx); }
-  size_t numElementsInBlock(size_t runIdx, size_t blockIdx) const {
-    return wrapped_.numElementsInBlock(runIdx, blockIdx);
-  }
-  const Element& firstElement(size_t runIdx, size_t blockIdx) const {
-    return wrapped_.firstElement(runIdx, blockIdx);
-  }
-  const Element& lastElement(size_t runIdx, size_t blockIdx) const {
-    return wrapped_.lastElement(runIdx, blockIdx);
-  }
   Block getBlock(size_t runIdx, size_t blockIdx) const {
     size_t numReads = 0;
     {
@@ -170,34 +151,20 @@ struct InstrumentedInput {
     if (state_->throwAtRead_ != 0 && numReads >= state_->throwAtRead_) {
       throw std::runtime_error{"getBlock failed"};
     }
-    return wrapped_.getBlock(runIdx, blockIdx);
-  }
-  Block makeEmptyBlock() const { return {}; }
-  template <typename T>
-  void appendToBlock(Block& block, T&& element) const {
-    block.push_back(AD_FWD(element));
-  }
-  ad_utility::MemorySize memorySizeOfElement(
-      [[maybe_unused]] const value_type& element) const {
-    return ad_utility::MemorySize::bytes(sizeof(value_type));
+    return SizeInput::getBlock(runIdx, blockIdx);
   }
 };
 
 static_assert(InputConcept<InstrumentedInput>);
 
-// Merge the `input` split into (at most) `numChunks` chunks and return the
-// elements of all output blocks in a single vector.
-template <bool moveElements = false, typename Input, typename Comparator>
-std::vector<typename Input::value_type> mergeToVector(
-    Input input, Comparator comparator, MergeOptions options = {},
-    size_t numChunks = 1,
-    ad_utility::SharedCancellationHandle cancellationHandle =
-        std::make_shared<ad_utility::CancellationHandle<>>()) {
-  auto boundaries = computeChunkBoundaries(input, comparator, numChunks);
-  auto blocks = serialBlockMergeToRange<moveElements>(
-      std::move(input), std::move(comparator), std::move(options),
-      std::move(cancellationHandle), std::move(boundaries));
-  std::vector<typename Input::value_type> result;
+// Return the elements of all `blocks` in a single vector, and check that no
+// block is empty. The elements are moved out of the `blocks`, which every call
+// site may do because each of them owns its blocks.
+template <typename Blocks>
+std::vector<ql::ranges::range_value_t<ql::ranges::range_value_t<Blocks>>>
+collectBlocks(Blocks&& blocks) {
+  std::vector<ql::ranges::range_value_t<ql::ranges::range_value_t<Blocks>>>
+      result;
   for (auto& block : blocks) {
     // An output block is never empty, no matter how the chunks are laid out.
     EXPECT_FALSE(block.empty());
@@ -206,6 +173,21 @@ std::vector<typename Input::value_type> mergeToVector(
     }
   }
   return result;
+}
+
+// Merge the `input` split into (at most) `numChunks` chunks and return the
+// elements of all output blocks in a single vector.
+template <bool moveElements = false, typename Input, typename Comparator>
+std::vector<typename Input::value_type> mergeToVector(
+    Input input, Comparator comparator, MergeOptions options = {},
+    size_t numChunks = 1,
+    ad_utility::SharedCancellationHandle cancellationHandle =
+        detail::freshCancellationHandle()) {
+  auto boundaries = computeChunkBoundaries(input, comparator, numChunks);
+  auto blocks = serialBlockMergeToRange<moveElements>(
+      std::move(input), std::move(comparator), std::move(options),
+      std::move(cancellationHandle), std::move(boundaries));
+  return collectBlocks(blocks);
 }
 
 // Return the keys (that is, the first components) of the `pairs`.
@@ -238,6 +220,73 @@ std::vector<std::vector<Pair>> makeTiedPairRuns() {
   return runs;
 }
 
+// The number of runs and the number of elements per run of
+// `makeDistinctPairRuns()`.
+constexpr size_t numDistinctRuns = 16;
+constexpr size_t numDistinctElementsPerRun = 500;
+
+// Return sorted runs of pairs the keys of which are pairwise distinct across
+// all runs, so that there is no tie at all and the result of a merge is
+// therefore completely determined by the input.
+std::vector<std::vector<Pair>> makeDistinctPairRuns() {
+  std::vector<std::vector<Pair>> runs;
+  for (size_t run = 0; run < numDistinctRuns; ++run) {
+    std::vector<Pair> elements;
+    for (size_t i = 0; i < numDistinctElementsPerRun; ++i) {
+      // The keys are pairwise distinct across all runs.
+      elements.emplace_back(i * numDistinctRuns + run, run);
+    }
+    runs.push_back(std::move(elements));
+  }
+  return runs;
+}
+
+// Check the invariants that the `result` of a merge of the `tiedRuns` has to
+// satisfy no matter how the chunks are laid out: the keys of the `result` are
+// exactly the keys of the stably sorted concatenation of the `tiedRuns` and in
+// that very order, and the `result` consists of exactly the same elements (with
+// the same multiplicities). The relative order of the tied elements themselves
+// is deliberately *not* specified, so it is not checked here.
+void expectSameKeysAndMultiset(
+    const std::vector<Pair>& result,
+    const std::vector<std::vector<Pair>>& tiedRuns,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
+  auto expected = concatenation(tiedRuns);
+  ql::ranges::stable_sort(expected, ComparePairs{});
+  EXPECT_THAT(getKeys(result), ::testing::ElementsAreArray(getKeys(expected)));
+  auto sortedResult = result;
+  ql::ranges::sort(sortedResult);
+  ql::ranges::sort(expected);
+  EXPECT_THAT(sortedResult, ::testing::ElementsAreArray(expected));
+}
+
+// Return four sorted runs of 40 elements each which together are exactly the
+// elements `100 ... 259`, distributed over the runs in a round-robin fashion,
+// so that all four runs contribute to (almost) every chunk.
+std::vector<SizeVec> runsWithInterleavedElements() {
+  std::vector<SizeVec> runs;
+  for (size_t run = 0; run < 4; ++run) {
+    SizeVec elements;
+    for (size_t i = 0; i < 40; ++i) {
+      elements.push_back(100 + run + 4 * i);
+    }
+    runs.push_back(std::move(elements));
+  }
+  return runs;
+}
+
+// Return the split points `0 ... numSplitPoints - 1`, which describe one chunk
+// per element of the range `[0, numSplitPoints)` plus a single chunk that holds
+// everything that is greater.
+SizeVec splitPointsUpTo(size_t numSplitPoints) {
+  SizeVec result;
+  for (size_t i = 0; i < numSplitPoints; ++i) {
+    result.push_back(i);
+  }
+  return result;
+}
+
 // Return the `values` as `CountingString`s, all of which have not been copied
 // yet.
 std::vector<CountingString> makeCountingStrings(
@@ -249,17 +298,78 @@ std::vector<CountingString> makeCountingStrings(
   return result;
 }
 
+// Create the `MergeState` that the `detail::ChunkMerger`s of a merge share (see
+// `detail::MergeState`), with exactly the given chunk `boundaries` and with a
+// fresh cancellation handle.
+template <typename Input, typename Comparator>
+auto makeMergeState(
+    Input input, Comparator comparator, MergeOptions options,
+    std::vector<ChunkBoundary<typename Input::Element>> boundaries) {
+  using State = detail::MergeState<Input, Comparator>;
+  return std::make_shared<const State>(
+      std::move(input), std::move(comparator), std::move(options),
+      detail::freshCancellationHandle(), std::move(boundaries));
+}
+
 // Create the `MergeState` that a single `detail::ChunkMerger` needs, with
 // exactly the given chunk `boundary`.
 template <typename Input, typename Comparator>
 auto makeSingleChunkState(Input input, Comparator comparator,
                           MergeOptions options,
                           ChunkBoundary<typename Input::Element> boundary) {
-  using State = detail::MergeState<Input, Comparator>;
-  return std::make_shared<const State>(
+  return makeMergeState(
       std::move(input), std::move(comparator), std::move(options),
-      std::make_shared<ad_utility::CancellationHandle<>>(),
       std::vector<ChunkBoundary<typename Input::Element>>{std::move(boundary)});
+}
+
+// Check that a merge of random runs yields their sorted concatenation. The
+// `mergeFn` performs the actual merge; it is called as `mergeFn(input,
+// blockSize)` with an input of `numRuns` runs, the sizes of which are
+// uniformly distributed in `[minSize, maxSize]`, split into blocks of
+// `blockSize` elements. This way the very same check can be run for the serial
+// and for the parallel merge.
+template <typename MergeFn>
+void expectSortedResult(
+    MergeFn mergeFn, size_t blockSize, size_t numRuns, size_t minSize,
+    size_t maxSize, ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
+  auto runs = makeRandomRuns(numRuns, minSize, maxSize);
+  auto expected = sortedConcatenation(runs);
+  auto result = mergeFn(makeVectorInput(runs, blockSize), blockSize);
+  ASSERT_EQ(result.size(), expected.size());
+  EXPECT_TRUE(ql::ranges::is_sorted(result));
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+
+// Check that an exception that the input of a merge throws is propagated to the
+// caller of that merge. The input throws from its third call to `getBlock`
+// onwards, so that the merge has already produced some output blocks when the
+// exception arrives. The `mergeFn` performs the actual merge of the
+// `InstrumentedInput` that it is called with.
+template <typename MergeFn>
+void expectExceptionPropagates(
+    MergeFn mergeFn,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
+  auto runs = makeRandomRuns(16, 200, 300);
+  InstrumentedInput input{makeVectorInput(runs, 16)};
+  input.state_->throwAtRead_ = 3;
+  AD_EXPECT_THROW_WITH_MESSAGE(mergeFn(input),
+                               ::testing::HasSubstr("getBlock failed"));
+}
+
+// Check that a merge which is given an already cancelled cancellation handle
+// throws a `CancellationException`. The `mergeFn` performs the actual merge; it
+// is called as `mergeFn(input, cancellationHandle)`.
+template <typename MergeFn>
+void expectCancellationThrows(MergeFn mergeFn, ad_utility::source_location loc =
+                                                   AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
+  auto runs = makeRandomRuns(16, 200, 300);
+  auto handle = detail::freshCancellationHandle();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(mergeFn(makeVectorInput(runs, 16), handle),
+               ad_utility::CancellationException);
 }
 }  // namespace
 
@@ -354,18 +464,14 @@ TEST(ParallelBlockMerge, blockOfAnExhaustedRunIsReleasedEarly) {
 
 // _____________________________________________________________________________
 TEST(ParallelBlockMerge, randomInputs) {
-  auto testRandomInts = [](size_t blockSize, size_t numRuns, size_t minSize,
-                           size_t maxSize) {
-    auto runs = makeRandomRuns(numRuns, minSize, maxSize);
-    auto expected = sortedConcatenation(runs);
-    auto result = mergeToVector(makeVectorInput(runs, blockSize), std::less<>{},
-                                optionsWithBlockSize(blockSize), 8);
-    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  auto mergeSerially = [](SizeInput input, size_t blockSize) {
+    return mergeToVector(std::move(input), std::less<>{},
+                         optionsWithBlockSize(blockSize), 8);
   };
-  testRandomInts(12, 2000, 20, 50);
-  testRandomInts(13, 1, 40, 40);
-  testRandomInts(5, 2, 40, 50);
-  testRandomInts(1, 3, 30, 50);
+  expectSortedResult(mergeSerially, 12, 2000, 20, 50);
+  expectSortedResult(mergeSerially, 13, 1, 40, 40);
+  expectSortedResult(mergeSerially, 5, 2, 40, 50);
+  expectSortedResult(mergeSerially, 1, 3, 30, 50);
 }
 
 // _____________________________________________________________________________
@@ -452,23 +558,14 @@ TEST(ParallelBlockMerge, resultIsIndependentOfTheChunking) {
   // other has to yield exactly the same elements as a single chunk that covers
   // everything. This is the property that a merge which distributes the chunks
   // over several threads relies on.
-  static constexpr size_t numRuns = 16;
-  static constexpr size_t numElementsPerRun = 500;
-  std::vector<std::vector<Pair>> distinctRuns;
-  for (size_t run = 0; run < numRuns; ++run) {
-    std::vector<Pair> elements;
-    for (size_t i = 0; i < numElementsPerRun; ++i) {
-      // The keys are pairwise distinct across all runs.
-      elements.emplace_back(i * numRuns + run, run);
-    }
-    distinctRuns.push_back(std::move(elements));
-  }
+  auto distinctRuns = makeDistinctPairRuns();
   auto mergeDistinct = [&distinctRuns](size_t numChunks) {
     return mergeToVector(makeVectorInput(distinctRuns, 32), ComparePairs{},
                          optionsWithBlockSize(64), numChunks);
   };
   auto singleChunkResult = mergeDistinct(1);
-  ASSERT_EQ(singleChunkResult.size(), numRuns * numElementsPerRun);
+  ASSERT_EQ(singleChunkResult.size(),
+            numDistinctRuns * numDistinctElementsPerRun);
   EXPECT_TRUE(ql::ranges::is_sorted(singleChunkResult, ComparePairs{}));
   for (size_t numChunks : {2u, 8u, 64u, 10000u}) {
     EXPECT_THAT(mergeDistinct(numChunks),
@@ -480,19 +577,11 @@ TEST(ParallelBlockMerge, resultIsIndependentOfTheChunking) {
   // cursors for those runs that actually contribute to it. The keys are still
   // in sorted order, and no element is ever lost or duplicated.
   auto tiedRuns = makeTiedPairRuns();
-  auto expected = concatenation(tiedRuns);
-  ql::ranges::stable_sort(expected, ComparePairs{});
-  auto sortedExpected = expected;
-  ql::ranges::sort(sortedExpected);
   for (size_t numChunks : {1u, 2u, 8u, 64u}) {
     auto result = mergeToVector(makeVectorInput(tiedRuns, 32), ComparePairs{},
                                 optionsWithBlockSize(64), numChunks);
     EXPECT_TRUE(ql::ranges::is_sorted(result, ComparePairs{}));
-    EXPECT_THAT(getKeys(result),
-                ::testing::ElementsAreArray(getKeys(expected)));
-    auto sortedResult = result;
-    ql::ranges::sort(sortedResult);
-    EXPECT_THAT(sortedResult, ::testing::ElementsAreArray(sortedExpected));
+    expectSameKeysAndMultiset(result, tiedRuns);
   }
 }
 
@@ -502,60 +591,46 @@ TEST(ParallelBlockMerge, chunksWithoutAnyElementAreSkipped) {
   // yields no output block. The split points below cannot be produced by
   // `computeChunkBoundaries` (which only ever picks elements that actually
   // occur in the data), so they are handed to the merge directly.
-  std::vector<SizeVec> runs;
-  for (size_t run = 0; run < 4; ++run) {
-    SizeVec elements;
-    for (size_t i = 0; i < 40; ++i) {
-      elements.push_back(100 + run + 4 * i);
-    }
-    runs.push_back(std::move(elements));
-  }
+  auto runs = runsWithInterleavedElements();
   auto expected = sortedConcatenation(runs);
   auto mergeWithSplitPoints = [&runs, &expected](SizeVec splitPoints) {
     auto blocks = serialBlockMergeToRange<false>(
         makeVectorInput(runs, 8), std::less<>{}, optionsWithBlockSize(8),
-        std::make_shared<ad_utility::CancellationHandle<>>(),
+        detail::freshCancellationHandle(),
         detail::chunkBoundariesFromSplitPoints(splitPoints));
-    SizeVec result;
-    for (const auto& block : blocks) {
-      EXPECT_FALSE(block.empty());
-      result.insert(result.end(), block.begin(), block.end());
-    }
-    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+    EXPECT_THAT(collectBlocks(blocks), ::testing::ElementsAreArray(expected));
   };
-  // All elements are greater than `100`, so the first five chunks are empty.
+  // All elements are greater than or equal to `100`, so the first five chunks
+  // are empty.
   mergeWithSplitPoints(SizeVec{1, 2, 3, 4, 5});
-  // Empty chunks at the beginning, in the middle, and at the end.
+  // All elements lie between the split points `2` and `1000`, so all chunks but
+  // the third one are empty: two empty chunks before the single non-empty one,
+  // and three after it.
   mergeWithSplitPoints(SizeVec{1, 2, 1000, 2000, 3000});
   // A single element per chunk, and far more chunks than elements.
-  SizeVec manySplitPoints;
-  for (size_t i = 0; i < 300; ++i) {
-    manySplitPoints.push_back(i);
-  }
-  mergeWithSplitPoints(std::move(manySplitPoints));
+  mergeWithSplitPoints(splitPointsUpTo(300));
 }
 
 // _____________________________________________________________________________
 TEST(ParallelBlockMerge, exceptionFromChunkPropagates) {
-  auto runs = makeRandomRuns(16, 200, 300);
-  InstrumentedInput input{makeVectorInput(runs, 16)};
-  // Throw from the third call to `getBlock` onwards, so that the merge has
-  // already yielded some output blocks when the exception arrives.
-  input.state_->throwAtRead_ = 3;
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      mergeToVector(input, std::less<>{}, optionsWithBlockSize(16), 4),
-      ::testing::HasSubstr("getBlock failed"));
+  // The merge has already yielded some output blocks when the exception
+  // arrives, see `expectExceptionPropagates`.
+  expectExceptionPropagates([](InstrumentedInput input) {
+    return mergeToVector(std::move(input), std::less<>{},
+                         optionsWithBlockSize(16), 4);
+  });
 }
 
 // _____________________________________________________________________________
 TEST(ParallelBlockMerge, cancellation) {
-  auto runs = makeRandomRuns(16, 200, 300);
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  handle->cancel(ad_utility::CancellationState::MANUAL);
   for (size_t numChunks : {1u, 4u}) {
-    EXPECT_THROW(mergeToVector(makeVectorInput(runs, 16), std::less<>{},
-                               optionsWithBlockSize(16), numChunks, handle),
-                 ad_utility::CancellationException);
+    expectCancellationThrows(
+        [numChunks](SizeInput input,
+                    ad_utility::SharedCancellationHandle handle) {
+          return mergeToVector(std::move(input), std::less<>{},
+                               optionsWithBlockSize(16), numChunks,
+                               std::move(handle));
+        });
   }
 }
 
@@ -579,48 +654,152 @@ TEST(ParallelBlockMerge, outputBlockMemoryLimit) {
 }
 
 // ___________________________________________________________________________
-// The parallel merge.
-//
+// The parallel merge. NOTE: It is not available in the C++17 backports mode,
+// see `util/parallelBlockMerge/ParallelMergeState.h`, so everything from here
+// to the end of this file is C++20 only.
+// ___________________________________________________________________________
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 // The tests above pin down the chunking and the merging itself, both of which
 // the parallel merge shares with the serial one. The tests below therefore only
 // cover what the parallelization adds: that the chunks really are merged
-// concurrently, that the blocks nevertheless arrive in the global order, and
-// that the teardown works on every path.
+// concurrently, that every chunk nevertheless pushes exactly the blocks that it
+// would push in a serial merge, and that the teardown works on every path.
+//
+// The sink of all these tests is the trivial in-memory `CollectingBlockSink`,
+// which buffers everything and hence never applies back-pressure. What such a
+// sink does with the blocks (and in particular how it turns them back into a
+// single sorted range) is not part of the merge and is tested separately.
 // ___________________________________________________________________________
 
 namespace {
+// Return the sink factory that a merge requires (see
+// `parallelBlockMergeToSink`): it creates a `CollectingBlockSink` that runs on
+// the `executor` and stores it in `out`, so that the caller can inspect it
+// afterwards. Pass a positive `stopAfterNumBlocks` to make the sink stop the
+// merge as soon as that many blocks were pushed.
+//
+// NOTE: The reference to `out` is only used while the factory is called, which
+// happens inside `parallelBlockMergeToSink` and hence before that function
+// returns.
+template <typename Sink>
+auto collectingSinkFactory(ql::any_io_executor executor,
+                           std::shared_ptr<Sink>& out,
+                           size_t stopAfterNumBlocks = 0) {
+  return [executor = std::move(executor), &out,
+          stopAfterNumBlocks](size_t numChunks) {
+    out = std::make_shared<Sink>(executor, numChunks, stopAfterNumBlocks);
+    return out;
+  };
+}
+
+// Pin down that the factory above models the `SinkFactoryConcept`, and that
+// that concept is SFINAE-friendly: for a type that is not a sink factory it has
+// to be a plain `false` instead of a compilation error, no matter which of its
+// requirements is violated.
+using CollectingSinkFactory =
+    decltype(collectingSinkFactory<CollectingBlockSink<SizeVec>>(
+        ql::any_io_executor{},
+        std::declval<std::shared_ptr<CollectingBlockSink<SizeVec>>&>()));
+static_assert(SinkFactoryConcept<CollectingSinkFactory, SizeVec>);
+// Not callable with a `size_t` at all.
+static_assert(!SinkFactoryConcept<int, SizeVec>);
+// Callable, but does not return a `std::shared_ptr`.
+struct NotAFactory {
+  int operator()(size_t) const { return 0; }
+};
+static_assert(!SinkFactoryConcept<NotAFactory, SizeVec>);
+// Returns a `std::shared_ptr`, but not to something that models the
+// `SinkConcept`.
+struct FactoryOfNonSink {
+  std::shared_ptr<int> operator()(size_t) const { return nullptr; }
+};
+static_assert(!SinkFactoryConcept<FactoryOfNonSink, SizeVec>);
+// A sink, but for the wrong block type.
+static_assert(!SinkFactoryConcept<CollectingSinkFactory, std::vector<Pair>>);
+
+// Start a parallel merge of the `input` on the `executor` and return its state
+// together with the `CollectingBlockSink` that collects its output blocks. Pass
+// a positive `stopAfterNumBlocks` to make the sink stop the merge as soon as
+// that many blocks were pushed.
+template <bool moveElements = false, typename Input, typename Comparator>
+auto startParallelMerge(
+    ql::any_io_executor executor, Input input, Comparator comparator,
+    MergeOptions options, size_t parallelismHint,
+    ad_utility::SharedCancellationHandle cancellationHandle =
+        detail::freshCancellationHandle(),
+    size_t stopAfterNumBlocks = 0) {
+  using Sink = CollectingBlockSink<typename Input::Block>;
+  std::shared_ptr<Sink> sink;
+  options.parallelismHint = parallelismHint;
+  auto state = parallelBlockMergeToSink<moveElements>(
+      executor, std::move(input), std::move(comparator),
+      collectingSinkFactory(executor, sink, stopAfterNumBlocks),
+      std::move(options), std::move(cancellationHandle));
+  AD_CORRECTNESS_CHECK(sink != nullptr);
+  return std::pair{std::move(state), std::move(sink)};
+}
+
+// Check the invariants that hold for the sink of every merge all of whose
+// coroutines are done: a chunk never sends more than one end-of-chunk sentinel,
+// and if the merge was not stopped, then every chunk sends exactly one. A merge
+// that was stopped in contrast does not dispatch its remaining chunks at all,
+// so those send no sentinel.
+template <typename Sink>
+void expectSentinelsAreConsistent(const Sink& sink) {
+  for (const auto& chunk : sink.chunks()) {
+    EXPECT_LE(chunk.numSentinels_, 1u);
+    if (!sink.stopRequested()) {
+      EXPECT_EQ(chunk.numSentinels_, 1u);
+    }
+    // An output block is never empty, no matter how the chunks are laid out.
+    for (const auto& block : chunk.blocks_) {
+      EXPECT_FALSE(block.empty());
+    }
+  }
+}
+
+// Wait until every chunk of the merge that pushes to the `sink` has sent its
+// end-of-chunk sentinel, check that the sentinels are consistent, and return
+// the elements of all output blocks. This is how a test that does not join the
+// thread pool of its merge waits for that merge; only use it for a merge that
+// was not stopped, see `CollectingBlockSink::waitUntilAllChunksAreFinished`.
+template <typename Sink>
+auto awaitAndCollect(const Sink& sink, ad_utility::source_location loc =
+                                           AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
+  sink.waitUntilAllChunksAreFinished();
+  expectSentinelsAreConsistent(sink);
+  return mergedElements(sink);
+}
+
 // Merge the `input` on a thread pool with `numThreads` threads and return the
-// elements of all output blocks in a single vector. A `numThreads` of one takes
-// the serial fast path, which merges in the calling thread.
+// elements of all output blocks, in the order of the chunks. Rethrow the
+// exception of a chunk if there is one.
 template <bool moveElements = false, typename Input, typename Comparator>
 std::vector<typename Input::value_type> parallelMergeToVector(
     Input input, Comparator comparator, MergeOptions options = {},
     size_t numThreads = 4,
     ad_utility::SharedCancellationHandle cancellationHandle =
-        std::make_shared<ad_utility::CancellationHandle<>>()) {
+        detail::freshCancellationHandle()) {
   net::thread_pool pool{numThreads};
-  std::vector<typename Input::value_type> result;
-  {
-    auto blocks = parallelBlockMergeToRange<moveElements>(
-        pool.get_executor(), std::move(input), std::move(comparator),
-        std::move(options), numThreads, std::move(cancellationHandle));
-    for (auto& block : blocks) {
-      for (auto& element : block) {
-        result.push_back(std::move(element));
-      }
-    }
-  }
-  // All the tasks that are still in flight have to finish, otherwise this
-  // hangs.
+  auto sink = startParallelMerge<moveElements>(
+                  pool.get_executor(), std::move(input), std::move(comparator),
+                  std::move(options), numThreads, std::move(cancellationHandle))
+                  .second;
+  // All the coroutines that are still in flight have to finish, otherwise
+  // this hangs.
   pool.join();
-  return result;
+  expectSentinelsAreConsistent(*sink);
+  sink->rethrowIfException();
+  return mergedElements(*sink);
 }
 
-// Return `MergeOptions` that force the parallel code path also for the small
-// inputs that are used in the tests.
+// Return `MergeOptions` with a small output block size and several chunks per
+// thread, so that even the small inputs of the tests are split.
 MergeOptions parallelOptions(size_t outputBlockSize = 7) {
   MergeOptions options = optionsWithBlockSize(outputBlockSize);
-  options.serialNumElementsThreshold = 0;
   options.targetChunksPerThread = 2;
   return options;
 }
@@ -628,20 +807,13 @@ MergeOptions parallelOptions(size_t outputBlockSize = 7) {
 
 // _____________________________________________________________________________
 TEST(ParallelBlockMerge, parallelMergeYieldsTheSortedResult) {
-  auto testRandomInts = [](size_t blockSize, size_t numRuns, size_t minSize,
-                           size_t maxSize) {
-    auto runs = makeRandomRuns(numRuns, minSize, maxSize);
-    auto expected = sortedConcatenation(runs);
-    auto result =
-        parallelMergeToVector(makeVectorInput(runs, blockSize), std::less<>{},
-                              parallelOptions(blockSize), 8);
-    ASSERT_EQ(result.size(), expected.size());
-    EXPECT_TRUE(ql::ranges::is_sorted(result));
-    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  auto mergeInParallel = [](SizeInput input, size_t blockSize) {
+    return parallelMergeToVector(std::move(input), std::less<>{},
+                                 parallelOptions(blockSize), 8);
   };
-  testRandomInts(16, 8, 100, 200);
+  expectSortedResult(mergeInParallel, 16, 8, 100, 200);
   // A block size of one, so that no input block is shared between two chunks.
-  testRandomInts(1, 4, 20, 30);
+  expectSortedResult(mergeInParallel, 1, 4, 20, 30);
 }
 
 // _____________________________________________________________________________
@@ -649,6 +821,7 @@ TEST(ParallelBlockMerge, parallelMergeOfElementsThatAreMoved) {
   std::vector<std::vector<CountingString>> runs;
   for (size_t run = 0; run < 4; ++run) {
     std::vector<std::string> values;
+    values.reserve(100);
     for (size_t i = 0; i < 100; ++i) {
       // The runs interleave, so that all of them contribute to (almost) every
       // chunk.
@@ -677,108 +850,33 @@ TEST(ParallelBlockMerge, deterministicAcrossParallelism) {
   // that the result is fully determined by the input and the configuration.
   // Without any ties that means that the result is identical for every number
   // of chunks.
-  static constexpr size_t numRuns = 16;
-  static constexpr size_t numElementsPerRun = 500;
-  std::vector<std::vector<Pair>> distinctRuns;
-  for (size_t run = 0; run < numRuns; ++run) {
-    std::vector<Pair> elements;
-    for (size_t i = 0; i < numElementsPerRun; ++i) {
-      // The keys are pairwise distinct across all runs.
-      elements.emplace_back(i * numRuns + run, run);
-    }
-    distinctRuns.push_back(std::move(elements));
-  }
-  auto mergeDistinct = [&distinctRuns](size_t numThreads) {
+  auto mergeRuns = [](const std::vector<std::vector<Pair>>& runs,
+                      size_t numThreads) {
     MergeOptions options = parallelOptions(64);
     options.targetChunksPerThread = 3;
-    return parallelMergeToVector(makeVectorInput(distinctRuns, 32),
-                                 ComparePairs{}, options, numThreads);
+    return parallelMergeToVector(makeVectorInput(runs, 32), ComparePairs{},
+                                 options, numThreads);
   };
-  auto serial = mergeDistinct(1);
-  ASSERT_EQ(serial.size(), numRuns * numElementsPerRun);
-  EXPECT_TRUE(ql::ranges::is_sorted(serial, ComparePairs{}));
-  EXPECT_THAT(mergeDistinct(2), ::testing::ElementsAreArray(serial));
-  EXPECT_THAT(mergeDistinct(8), ::testing::ElementsAreArray(serial));
+  auto distinctRuns = makeDistinctPairRuns();
+  auto reference = mergeRuns(distinctRuns, 1);
+  ASSERT_EQ(reference.size(), numDistinctRuns * numDistinctElementsPerRun);
+  EXPECT_TRUE(ql::ranges::is_sorted(reference, ComparePairs{}));
+  EXPECT_THAT(mergeRuns(distinctRuns, 2),
+              ::testing::ElementsAreArray(reference));
+  EXPECT_THAT(mergeRuns(distinctRuns, 8),
+              ::testing::ElementsAreArray(reference));
 
   // With ties, a *fixed* configuration is still perfectly reproducible, also
   // across repeated runs with different thread schedules.
   auto tiedRuns = makeTiedPairRuns();
-  auto mergeTied = [&tiedRuns](size_t numThreads) {
-    MergeOptions options = parallelOptions(64);
-    options.targetChunksPerThread = 3;
-    return parallelMergeToVector(makeVectorInput(tiedRuns, 32), ComparePairs{},
-                                 options, numThreads);
-  };
-  auto reference = mergeTied(8);
-  EXPECT_TRUE(ql::ranges::is_sorted(reference, ComparePairs{}));
+  auto tiedReference = mergeRuns(tiedRuns, 8);
+  EXPECT_TRUE(ql::ranges::is_sorted(tiedReference, ComparePairs{}));
   for (size_t i = 0; i < 5; ++i) {
-    EXPECT_THAT(mergeTied(8), ::testing::ElementsAreArray(reference));
+    EXPECT_THAT(mergeRuns(tiedRuns, 8),
+                ::testing::ElementsAreArray(tiedReference));
   }
   // Independently of the tie breaking, no element is ever lost or duplicated.
-  auto expected = concatenation(tiedRuns);
-  ql::ranges::stable_sort(expected, ComparePairs{});
-  EXPECT_THAT(getKeys(reference),
-              ::testing::ElementsAreArray(getKeys(expected)));
-  auto sortedReference = reference;
-  ql::ranges::sort(sortedReference);
-  auto sortedExpected = expected;
-  ql::ranges::sort(sortedExpected);
-  EXPECT_THAT(sortedReference, ::testing::ElementsAreArray(sortedExpected));
-}
-
-// _____________________________________________________________________________
-TEST(ParallelBlockMerge, exceptionFromChunkPropagatesInParallel) {
-  auto runs = makeRandomRuns(16, 200, 300);
-  InstrumentedInput input{makeVectorInput(runs, 16)};
-  // Throw from the third call to `getBlock` onwards, so that some of the
-  // chunks succeed and others fail.
-  input.state_->throwAtRead_ = 3;
-  // This must throw and must in particular not call `std::terminate`.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parallelMergeToVector(input, std::less<>{}, parallelOptions(16), 4),
-      ::testing::HasSubstr("getBlock failed"));
-}
-
-// _____________________________________________________________________________
-TEST(ParallelBlockMerge, cancellationInParallel) {
-  auto runs = makeRandomRuns(16, 200, 300);
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  handle->cancel(ad_utility::CancellationState::MANUAL);
-  EXPECT_THROW(parallelMergeToVector(makeVectorInput(runs, 16), std::less<>{},
-                                     parallelOptions(16), 4, handle),
-               ad_utility::CancellationException);
-  // The same holds for the serial fast path.
-  auto smallRuns = makeRandomRuns(2, 20, 30);
-  EXPECT_THROW(parallelMergeToVector(makeVectorInput(smallRuns, 4),
-                                     std::less<>{}, MergeOptions{}, 4, handle),
-               ad_utility::CancellationException);
-}
-
-// _____________________________________________________________________________
-TEST(ParallelBlockMerge, consumerAbandonsRangeEarly) {
-  auto runs = makeRandomRuns(50, 2000, 2000);
-  net::thread_pool pool{8};
-  // This must neither hang, nor crash, nor leak. The destructor of the range
-  // has to abort the merge, and the state has to stay alive until the last task
-  // that refers to it is done.
-  {
-    auto blocks = parallelBlockMergeToRange<false>(
-        pool.get_executor(), makeVectorInput(runs, 64), std::less<>{},
-        parallelOptions(16), 8);
-    auto it = blocks.begin();
-    ASSERT_NE(it, blocks.end());
-    EXPECT_FALSE(it->empty());
-    ++it;
-    ASSERT_NE(it, blocks.end());
-    EXPECT_FALSE(it->empty());
-  }
-  // Abandoning the range without consuming anything at all also works.
-  {
-    auto blocks = parallelBlockMergeToRange<false>(
-        pool.get_executor(), makeVectorInput(runs, 64), std::less<>{},
-        parallelOptions(16), 8);
-  }
-  pool.join();
+  expectSameKeysAndMultiset(tiedReference, tiedRuns);
 }
 
 // _____________________________________________________________________________
@@ -789,7 +887,6 @@ TEST(ParallelBlockMerge, manyRunsManyChunks) {
   MergeOptions options = parallelOptions(64);
   // Several chunks per thread.
   options.targetChunksPerThread = 5;
-  options.bufferedBlocksPerChunk = 1;
   auto result = parallelMergeToVector(makeVectorInput(runs, 32), std::less<>{},
                                       options, 8);
   ASSERT_EQ(result.size(), expected.size());
@@ -799,66 +896,79 @@ TEST(ParallelBlockMerge, manyRunsManyChunks) {
 
 // _____________________________________________________________________________
 TEST(ParallelBlockMerge, singleInFlightChunk) {
-  // A single in-flight chunk is perfectly legal and does not fall back to the
-  // serial merge, because a chunk whose channel is full suspends instead of
-  // blocking its thread.
+  // A single in-flight chunk is perfectly legal, because a chunk that cannot
+  // push suspends instead of blocking its thread.
   auto runs = makeRandomRuns(16, 200, 300);
   auto expected = sortedConcatenation(runs);
   MergeOptions options = parallelOptions(16);
-  options.bufferedBlocksPerChunk = 1;
-  options.maxInFlightChunks = 1;
+  options.maxNumChunksInFlight = 1;
   EXPECT_THAT(parallelMergeToVector(makeVectorInput(runs, 16), std::less<>{},
                                     options, 4),
               ::testing::ElementsAreArray(expected));
-  options.maxInFlightChunks = 2;
+  options.maxNumChunksInFlight = 2;
   EXPECT_THAT(parallelMergeToVector(makeVectorInput(runs, 16), std::less<>{},
                                     options, 4),
               ::testing::ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, exceptionFromChunkPropagatesInParallel) {
+  // Some of the chunks succeed and others fail, see
+  // `expectExceptionPropagates`. The merge must throw and must in particular
+  // not call `std::terminate`.
+  expectExceptionPropagates([](InstrumentedInput input) {
+    return parallelMergeToVector(std::move(input), std::less<>{},
+                                 parallelOptions(16), 4);
+  });
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, cancellationInParallel) {
+  expectCancellationThrows(
+      [](SizeInput input, ad_utility::SharedCancellationHandle handle) {
+        return parallelMergeToVector(std::move(input), std::less<>{},
+                                     parallelOptions(16), 4, std::move(handle));
+      });
 }
 
 // _____________________________________________________________________________
 TEST(ParallelBlockMerge, chunksAreActuallyMergedInParallel) {
-  // Make sure that the tests above really exercise the parallel code path (and
-  // not silently one of the serial fast paths).
+  // Make sure that the tests above really exercise the parallel code path.
   auto runs = makeRandomRuns(32, 1000, 2000);
   auto expected = sortedConcatenation(runs);
   InstrumentedInput input{makeVectorInput(runs, 32)};
   auto state = input.state_;
+  // Hold up every read a little. Without this, the whole merge of this small
+  // input takes only a few milliseconds in an optimized build, so on a loaded
+  // machine a single thread of the pool can drain all the dispatched chunks
+  // before any of the other threads is even scheduled, and the check below
+  // fails spuriously. A thread that sleeps inside `getBlock` cannot pick up the
+  // next chunk, so another thread has to.
+  state->delayPerRead_ = std::chrono::milliseconds{1};
   EXPECT_THAT(parallelMergeToVector(std::move(input), std::less<>{},
                                     parallelOptions(64), 8),
               ::testing::ElementsAreArray(expected));
   EXPECT_GT(state->readingThreads_.size(), 1u);
-  // The serial fast path in contrast only ever reads from the consuming thread.
-  InstrumentedInput serialInput{makeVectorInput(runs, 32)};
-  auto serialState = serialInput.state_;
-  MergeOptions options = parallelOptions(64);
-  options.serialNumElementsThreshold = 1'000'000;
-  EXPECT_THAT(
-      parallelMergeToVector(std::move(serialInput), std::less<>{}, options, 8),
-      ::testing::ElementsAreArray(expected));
-  EXPECT_EQ(serialState->readingThreads_.size(), 1u);
-  EXPECT_EQ(*serialState->readingThreads_.begin(), std::this_thread::get_id());
+  // A merge on a single thread in contrast never reads from two threads at the
+  // same time, although it also runs on the executor and not in the calling
+  // thread.
+  InstrumentedInput singleThreaded{makeVectorInput(runs, 32)};
+  auto singleThreadedState = singleThreaded.state_;
+  EXPECT_THAT(parallelMergeToVector(std::move(singleThreaded), std::less<>{},
+                                    parallelOptions(64), 1),
+              ::testing::ElementsAreArray(expected));
+  EXPECT_EQ(singleThreadedState->numOverlappingReads_.load(), 0u);
 }
 
 // _____________________________________________________________________________
-TEST(ParallelBlockMerge, chunksStayInParallelAfterTheirFirstOutputBlock) {
+TEST(ParallelBlockMerge, chunksOverlapForAllOfTheirOutputBlocks) {
   // The stronger version of `chunksAreActuallyMergedInParallel`: the chunks
   // have to keep overlapping in time for *all* of their output blocks, and not
-  // only while they are started.
-  //
-  // This pins down that a chunk continues on the general executor after every
-  // single `asyncPush`. The completion handler of that push may well run on the
-  // strand of the sink, and everything that runs on a strand is serialized, so
-  // a chunk that continued to merge right there would hold the strand for a
-  // whole output block and thereby serialize the entire merge. Only the *first*
-  // output block of a chunk would still be merged in parallel (it is reached
-  // from the `net::post` of the dispatch loop), which is exactly why a test
-  // that only looks at the peak concurrency does not catch this. See the
-  // IMPORTANT note at `detail::ParallelMergeState` and `ChunkTask::step`.
-  //
-  // A regression shows up as a large majority of *non*-overlapping reads (and,
-  // in an optimized build, as a merge that is slower by roughly the degree of
-  // parallelism).
+  // only while they are started. A chunk continues on the general executor
+  // after every single `asyncPush`, so nothing serializes the chunks once they
+  // are under way; a regression shows up as a large majority of
+  // *non*-overlapping reads (and, in an optimized build, as a merge that is
+  // slower by roughly the degree of parallelism).
   static constexpr size_t numThreads = 8;
   auto runs = makeRandomRuns(4, 4000, 4000);
   auto expected = sortedConcatenation(runs);
@@ -866,12 +976,8 @@ TEST(ParallelBlockMerge, chunksStayInParallelAfterTheirFirstOutputBlock) {
   auto state = input.state_;
   // Hold up every single read, so that overlapping reads are easy to observe.
   state->delayPerRead_ = std::chrono::milliseconds{4};
-  MergeOptions options = parallelOptions(100);
-  // Buffer generously, so that the chunks are not throttled by the consumer.
-  // The back-pressure is tested separately, and here it would hide the effect.
-  options.bufferedBlocksPerChunk = 40;
-  EXPECT_THAT(parallelMergeToVector(std::move(input), std::less<>{}, options,
-                                    numThreads),
+  EXPECT_THAT(parallelMergeToVector(std::move(input), std::less<>{},
+                                    parallelOptions(100), numThreads),
               ::testing::ElementsAreArray(expected));
   // Every chunk reads several blocks per output block, so if the chunks really
   // run concurrently then almost every read overlaps with another one. Only a
@@ -883,74 +989,281 @@ TEST(ParallelBlockMerge, chunksStayInParallelAfterTheirFirstOutputBlock) {
 }
 
 // _____________________________________________________________________________
-TEST(ParallelBlockMerge, chunksWithoutAnyOutputBlockDoNotHang) {
-  // A chunk that yields no output block at all still has to send its
-  // end-of-chunk sentinel, otherwise the consumer waits for it forever. The
-  // split points below cannot be produced by `computeChunkBoundaries` (which
-  // only ever picks elements that actually occur in the data), so the
-  // `ParallelMergeState` is driven directly. A regression manifests as a hang
-  // of this test.
-  std::vector<SizeVec> runs;
-  for (size_t run = 0; run < 4; ++run) {
-    SizeVec elements;
-    for (size_t i = 0; i < 40; ++i) {
-      elements.push_back(100 + run + 4 * i);
-    }
-    runs.push_back(std::move(elements));
+TEST(ParallelBlockMerge, stopStopsTheMerge) {
+  auto runs = makeRandomRuns(50, 2000, 2000);
+  net::thread_pool pool{8};
+  auto stateAndSink =
+      startParallelMerge<false>(pool.get_executor(), makeVectorInput(runs, 64),
+                                std::less<>{}, parallelOptions(16), 8);
+  // Abandon the merge right away. This must neither hang, nor crash, nor leak:
+  // the coroutines that are still in flight have to finish instead of waiting
+  // for a consumer that is gone, and the state has to stay alive until the last
+  // of them is done.
+  stateAndSink.first->stop();
+  stateAndSink.first.reset();
+  pool.join();
+  const auto& sink = *stateAndSink.second;
+  EXPECT_TRUE(sink.stopRequested());
+  expectSentinelsAreConsistent(sink);
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, sinkThatStopsTheMergeEarly) {
+  // A sink may also stop the merge from within an `asyncPush`, which is what a
+  // sink whose consumer has abandoned it does. The merge then drops the blocks
+  // that are already finished, finishes the chunks that are already running,
+  // and does not dispatch the remaining ones at all.
+  static constexpr size_t stopAfterNumBlocks = 3;
+  auto runs = makeRandomRuns(50, 2000, 2000);
+  net::thread_pool pool{8};
+  auto sink = startParallelMerge<false>(
+                  pool.get_executor(), makeVectorInput(runs, 64), std::less<>{},
+                  parallelOptions(16), 8, detail::freshCancellationHandle(),
+                  stopAfterNumBlocks)
+                  .second;
+  pool.join();
+  EXPECT_TRUE(sink->stopRequested());
+  expectSentinelsAreConsistent(*sink);
+  // The blocks that the merge finishes after the stop are dropped, and the
+  // input is far too large to be merged into three blocks, so exactly the
+  // blocks up to the stop arrive.
+  size_t numBlocks = 0;
+  for (const auto& chunk : sink->chunks()) {
+    numBlocks += chunk.blocks_.size();
   }
+  EXPECT_EQ(numBlocks, stopAfterNumBlocks);
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, chunksWithoutAnyOutputBlockStillSendTheirSentinel) {
+  // A chunk that yields no output block at all still has to send its
+  // end-of-chunk sentinel, otherwise a sink that waits for that chunk waits
+  // forever. The split points below cannot be produced by
+  // `computeChunkBoundaries` (which only ever picks elements that actually
+  // occur in the data), so the `ParallelMergeState` is driven directly. A
+  // regression manifests as a hang of this test.
+  auto runs = runsWithInterleavedElements();
   auto expected = sortedConcatenation(runs);
-  using State = detail::ParallelMergeState<false, SizeInput, std::less<>>;
-  using Range = detail::ParallelMergeRange<false, SizeInput, std::less<>>;
+  using Sink = CollectingBlockSink<SizeVec>;
+  using State = detail::ParallelMergeState<false, SizeInput, std::less<>, Sink>;
   net::thread_pool pool{4};
-  auto mergeWithSplitPoints = [&runs, &pool](SizeVec splitPoints) {
-    auto mergeState = std::make_shared<const typename State::SharedMergeState>(
-        makeVectorInput(runs, 8), std::less<>{}, parallelOptions(8),
-        std::make_shared<ad_utility::CancellationHandle<>>(),
-        detail::chunkBoundariesFromSplitPoints(splitPoints));
-    auto state = State::create(pool.get_executor(), std::move(mergeState), 2);
-    ad_utility::InputRangeTypeErased<SizeVec> blocks{
-        std::make_unique<Range>(std::move(state))};
-    SizeVec result;
-    for (const auto& block : blocks) {
-      EXPECT_FALSE(block.empty());
-      result.insert(result.end(), block.begin(), block.end());
-    }
-    return result;
+  auto mergeWithSplitPoints = [&runs, &pool](const SizeVec& splitPoints) {
+    auto boundaries = detail::chunkBoundariesFromSplitPoints(splitPoints);
+    size_t numChunks = boundaries.size();
+    auto mergeState = makeMergeState(makeVectorInput(runs, 8), std::less<>{},
+                                     parallelOptions(8), std::move(boundaries));
+    auto sink = std::make_shared<Sink>(pool.get_executor(), numChunks);
+    auto state = State::create(pool.get_executor(), std::move(mergeState), sink,
+                               std::min<size_t>(2, numChunks));
+    return awaitAndCollect(*sink);
   };
-  // All elements are greater than `100`, so the first five chunks are empty.
+  // All elements are greater than or equal to `100`, so the first five chunks
+  // are empty.
   EXPECT_THAT(mergeWithSplitPoints(SizeVec{1, 2, 3, 4, 5}),
               ::testing::ElementsAreArray(expected));
-  // Empty chunks at the beginning, in the middle, and at the end.
+  // All elements lie between the split points `2` and `1000`, so all chunks but
+  // the third one are empty: two empty chunks before the single non-empty one,
+  // and three after it.
   EXPECT_THAT(mergeWithSplitPoints(SizeVec{1, 2, 1000, 2000, 3000}),
               ::testing::ElementsAreArray(expected));
   // A single element per chunk, so that there are far more chunks than
   // in-flight slots.
-  SizeVec manySplitPoints;
-  for (size_t i = 0; i < 300; ++i) {
-    manySplitPoints.push_back(i);
-  }
-  EXPECT_THAT(mergeWithSplitPoints(std::move(manySplitPoints)),
+  EXPECT_THAT(mergeWithSplitPoints(splitPointsUpTo(300)),
               ::testing::ElementsAreArray(expected));
   pool.join();
 }
 
-#ifndef QLEVER_CPP_17
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, defaultParallelismHint) {
+  // A `MergeOptions::parallelismHint` of zero means "as many threads as the
+  // hardware offers", see `defaultMergeParallelism()`.
+  auto runs = makeRandomRuns(4, 200, 300);
+  auto expected = sortedConcatenation(runs);
+  using Sink = CollectingBlockSink<SizeVec>;
+  std::shared_ptr<Sink> sink;
+  // NOTE: The merge is set up by hand (and not via `startParallelMerge`),
+  // because it is exactly the default `MergeOptions::parallelismHint` that is
+  // tested here.
+  auto state = parallelBlockMergeToSink<false>(
+      sharedTestExecutor(), makeVectorInput(runs, 16), std::less<>{},
+      collectingSinkFactory(sharedTestExecutor(), sink), parallelOptions(16));
+  EXPECT_GT(state->numChunks(), 1u);
+  // The shared pool of the tests cannot be joined; wait for the merge itself
+  // instead.
+  EXPECT_THAT(awaitAndCollect(*sink), ::testing::ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, emptyExecutorIsRejected) {
+  // There deliberately is no default executor, so an empty one is a contract
+  // violation and not an implicit "use some pool of your own".
+  auto runs = makeRandomRuns(2, 20, 30);
+  std::shared_ptr<CollectingBlockSink<SizeVec>> sink;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parallelBlockMergeToSink<false>(
+          ql::any_io_executor{}, makeVectorInput(runs, 8), std::less<>{},
+          collectingSinkFactory(sharedTestExecutor(), sink),
+          parallelOptions(8)),
+      ::testing::HasSubstr("executor of a parallel block merge must not be"));
+  // The merge never got as far as creating its sink.
+  EXPECT_EQ(sink, nullptr);
+}
+
+// ___________________________________________________________________________
+// `parallelBlockMergeToRange`: the parallel merge plus the `InOrderBlockSink`
+// that turns the concurrently produced blocks back into a single sequential
+// range, see `InOrderBlockSink.h`. The tests above never see that sink (they
+// collect the blocks per chunk), so the tests below cover what it adds: the
+// global order of the blocks, the serial fast path, and the teardown when the
+// consumer abandons the range.
+// ___________________________________________________________________________
+
+namespace {
+// Merge the `input` on a thread pool with `numThreads` threads, consume the
+// resulting range, and return all of its elements in a single vector.
+template <bool moveElements = false, typename Input, typename Comparator>
+std::vector<typename Input::value_type> mergeToRangeAndCollect(
+    Input input, Comparator comparator, MergeOptions options = {},
+    size_t numThreads = 4) {
+  options.parallelismHint = numThreads;
+  net::thread_pool pool{numThreads};
+  std::vector<typename Input::value_type> result;
+  {
+    auto blocks = parallelBlockMergeToRange<moveElements>(
+        pool.get_executor(), std::move(input), std::move(comparator),
+        std::move(options));
+    for (auto& block : blocks) {
+      EXPECT_FALSE(block.empty());
+      for (auto& element : block) {
+        result.push_back(std::move(element));
+      }
+    }
+  }
+  // All the coroutines that are still in flight have to finish, otherwise this
+  // hangs.
+  pool.join();
+  return result;
+}
+
+// Return `MergeOptions` that force the parallel code path also for the small
+// inputs of these tests, see `MergeOptions::serialNumElementsThreshold`.
+MergeOptions rangeOptions(size_t outputBlockSize = 7) {
+  MergeOptions options = parallelOptions(outputBlockSize);
+  options.serialNumElementsThreshold = 0;
+  return options;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, rangeYieldsTheGloballySortedResult) {
+  auto testRandomInts = [](size_t blockSize, size_t numRuns, size_t minSize,
+                           size_t maxSize) {
+    auto runs = makeRandomRuns(numRuns, minSize, maxSize);
+    auto expected = sortedConcatenation(runs);
+    auto result =
+        mergeToRangeAndCollect(makeVectorInput(runs, blockSize), std::less<>{},
+                               rangeOptions(blockSize), 8);
+    EXPECT_TRUE(ql::ranges::is_sorted(result));
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  };
+  testRandomInts(16, 8, 100, 200);
+  // A block size of one, so that no input block is shared between two chunks.
+  testRandomInts(1, 4, 20, 30);
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, rangeWithASingleInFlightChunk) {
+  // A single in-flight chunk is perfectly legal and does not deadlock, because
+  // a chunk whose storage is full suspends instead of blocking its thread.
+  auto runs = makeRandomRuns(16, 200, 300);
+  auto expected = sortedConcatenation(runs);
+  MergeOptions options = rangeOptions(16);
+  options.bufferedBlocksPerChunk = 1;
+  for (size_t maxNumChunksInFlight : {1, 2}) {
+    options.maxNumChunksInFlight = maxNumChunksInFlight;
+    EXPECT_THAT(mergeToRangeAndCollect(makeVectorInput(runs, 16), std::less<>{},
+                                       options, 4),
+                ::testing::ElementsAreArray(expected));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, rangeTakesTheSerialFastPath) {
+  auto runs = makeRandomRuns(8, 100, 200);
+  auto expected = sortedConcatenation(runs);
+  // Both conditions of the fast path merge in the calling thread, so an empty
+  // executor (which the parallel path rejects) suffices.
+  MergeOptions singleThreaded = rangeOptions(16);
+  singleThreaded.parallelismHint = 1;
+  MergeOptions smallInput = rangeOptions(16);
+  smallInput.parallelismHint = 8;
+  smallInput.serialNumElementsThreshold = std::numeric_limits<size_t>::max();
+  for (const MergeOptions& options : {singleThreaded, smallInput}) {
+    SizeVec result;
+    for (const auto& block : parallelBlockMergeToRange<false>(
+             ql::any_io_executor{}, makeVectorInput(runs, 16), std::less<>{},
+             options)) {
+      result.insert(result.end(), block.begin(), block.end());
+    }
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, consumerAbandonsRangeEarly) {
+  auto runs = makeRandomRuns(50, 2000, 2000);
+  net::thread_pool pool{8};
+  MergeOptions options = rangeOptions(16);
+  options.parallelismHint = 8;
+  // This must neither hang, nor crash, nor leak. The destructor of the range
+  // has to stop the merge, and the state has to stay alive until the last
+  // coroutine that refers to it is done.
+  {
+    auto blocks = parallelBlockMergeToRange<false>(
+        pool.get_executor(), makeVectorInput(runs, 64), std::less<>{}, options);
+    auto it = blocks.begin();
+    ASSERT_NE(it, blocks.end());
+    EXPECT_FALSE(it->empty());
+    ++it;
+    ASSERT_NE(it, blocks.end());
+    EXPECT_FALSE(it->empty());
+  }
+  // Abandoning the range without consuming anything at all also works.
+  {
+    [[maybe_unused]] auto blocks = parallelBlockMergeToRange<false>(
+        pool.get_executor(), makeVectorInput(runs, 64), std::less<>{}, options);
+  }
+  pool.join();
+}
+
 // _____________________________________________________________________________
 ASYNC_TEST(ParallelBlockMerge, singleThreadedConsumer) {
-  // A single thread suffices for an asynchronous consumer, even if many more
-  // chunks than that are in flight, because a chunk that has to wait for the
-  // consumer suspends instead of blocking the only thread.
+  // A single thread suffices for an asynchronous consumer that reads the sink
+  // directly, even if many more chunks than that are in flight, because a chunk
+  // that has to wait for the consumer suspends instead of blocking the only
+  // thread. (The blocking `parallelBlockMergeToRange` in contrast requires the
+  // executor to be run by other threads, see there.)
   auto runs = makeRandomRuns(8, 300, 400);
   auto expected = sortedConcatenation(runs);
-  MergeOptions options = parallelOptions(16);
+  MergeOptions options = rangeOptions(16);
+  options.parallelismHint = 8;
   options.bufferedBlocksPerChunk = 1;
-  auto state = parallelBlockMergeAsync<false>(ioContext.get_executor(),
-                                              makeVectorInput(runs, 16),
-                                              std::less<>{}, options, 8);
+  using Sink = InOrderBlockSink<SizeVec>;
+  auto executor = ioContext.get_executor();
+  std::shared_ptr<Sink> sink;
+  auto state = parallelBlockMergeToSink<false>(
+      executor, makeVectorInput(runs, 16), std::less<>{},
+      [&sink, &executor, &options](size_t numChunks) {
+        sink = std::make_shared<Sink>(executor, numChunks,
+                                      options.bufferedBlocksPerChunk);
+        return sink;
+      },
+      options);
   SizeVec result;
-  while (auto block = co_await state->asyncNext(net::use_awaitable)) {
+  while (auto block = co_await sink->asyncGetNextBlock(net::use_awaitable)) {
     result.insert(result.end(), block->begin(), block->end());
   }
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }
-#endif  // QLEVER_CPP_17
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

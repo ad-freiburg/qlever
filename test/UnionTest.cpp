@@ -11,6 +11,7 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/OptionalJoin.h"
 #include "engine/Sort.h"
 #include "engine/Union.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -769,6 +770,55 @@ TEST(Union, getCostEstimate) {
   // Union should never be free.
   EXPECT_GT(unsortedUnionSmall.getCostEstimate(),
             valuesSmall->getCostEstimate() * 2);
+}
+
+// _____________________________________________________________________________
+// Pushing a `LIMIT` into the children can change the algorithm and with it the
+// sort order of an `OptionalJoin` inside them, see the caution note on
+// `Operation::applyLimitOffset`. Check that the sort order which the merging
+// implementation requires of the children is restored in that case.
+TEST(Union, limitPushdownRestoresSortOrderOfChildren) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  // An `OptionalJoin` on `?a` that is sorted on `?a`, but switches to the index
+  // nested loop join (which doesn't preserve the order of its left input) as
+  // soon as its left input becomes smaller than its right input.
+  auto makeOptionalJoin = [qec]() {
+    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec,
+        makeIdTableFromVector(
+            {{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}, {6, 6}}),
+        Vars{Var{"?a"}, Var{"?b"}}, false, std::vector<ColumnIndex>{0});
+    // Deliberately unsorted, so that the `OptionalJoin` wraps it in a `Sort`,
+    // which is a precondition for the index nested loop join.
+    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{2, 20}, {1, 10}, {0, 0}}),
+        Vars{Var{"?a"}, Var{"?c"}});
+    return ad_utility::makeExecutionTree<OptionalJoin>(qec, std::move(left),
+                                                       std::move(right));
+  };
+  auto other = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{7, 70}, {8, 80}}),
+      Vars{Var{"?a"}, Var{"?d"}}, false, std::vector<ColumnIndex>{0});
+
+  // The result of the union has to be sorted on `?a`, which is its column 0.
+  Union unionOperation{qec, makeOptionalJoin(), std::move(other),
+                       std::vector<ColumnIndex>{0}};
+  auto expectChildrenAreSorted =
+      [&unionOperation](ad_utility::source_location loc =
+                            AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(loc);
+        for (const auto* child : unionOperation.getChildren()) {
+          EXPECT_TRUE(child->getRootOperation()->isSortedBy({0}));
+        }
+      };
+  // Both children are already sorted, so the constructor added no `Sort`.
+  expectChildrenAreSorted();
+
+  // The limit is small enough to make the left input of the `OptionalJoin`
+  // smaller than its right input.
+  unionOperation.applyLimitOffset({2});
+  expectChildrenAreSorted();
 }
 
 // _____________________________________________________________________________

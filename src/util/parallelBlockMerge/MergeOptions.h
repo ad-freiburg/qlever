@@ -10,8 +10,10 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEOPTIONS_H
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEOPTIONS_H
 
+#include <algorithm>
 #include <cstddef>
 #include <limits>
+#include <thread>
 
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
@@ -42,6 +44,15 @@ constexpr inline size_t DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD = 4;
 // dominates the actual merging.
 constexpr inline size_t DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD =
     100'000;
+
+// Return the parallelism that a merge assumes if its `MergeOptions` do not
+// specify one, which is one thread per hardware thread. NOTE: This is a pure
+// tuning default and says nothing about the executor that a merge actually
+// runs on; that executor is always supplied (and owned) by the caller, see
+// `parallelBlockMergeToSink`.
+inline size_t defaultMergeParallelism() {
+  return std::max<size_t>(1, std::thread::hardware_concurrency());
+}
 
 // The criterion for when a single output block of the merge is complete. A
 // block is finished as soon as it either contains a given number of elements or
@@ -107,24 +118,65 @@ struct MergeOptions {
                             DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY);
 
   // The remaining knobs only affect a merge that actually distributes its
-  // chunks over several threads, see `parallelBlockMergeAsync`. The serial
+  // chunks over several threads, see `parallelBlockMergeToSink`. The serial
   // merge ignores all of them.
+
+  // The number of threads that are expected to run the executor of the merge.
+  // The value `0` means "as many as the hardware offers", see
+  // `defaultMergeParallelism()`.
+  //
+  // NOTE: This is only a hint, and never a promise or a requirement: it is used
+  // exclusively to derive `targetNumChunks()` and `numChunksInFlight()` below,
+  // both of which may safely exceed the parallelism that the executor actually
+  // provides. A merge is correct for every value, it is only its scheduling
+  // that becomes suboptimal if the value is far off.
+  size_t parallelismHint = 0;
 
   // Aim for that many independent chunks per thread. Larger values improve the
   // load balancing at the cost of a larger scheduling overhead.
   size_t targetChunksPerThread = DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD;
 
   // Never keep more than that many chunks in flight at the same time. The value
-  // `0` means "as many as the `parallelismHint` of the merge".
-  size_t maxInFlightChunks = 0;
+  // `0` means "as many as `parallelism()`".
+  size_t maxNumChunksInFlight = 0;
 
-  // Merge serially if the input has at most that many elements in total.
+  // Return the number of threads that the merge assumes, that is the
+  // `parallelismHint` with the value `0` resolved to its default.
+  size_t parallelism() const {
+    return parallelismHint == 0 ? defaultMergeParallelism() : parallelismHint;
+  }
+
+  // Return the number of chunks that the merge should be split into, see
+  // `computeChunkBoundaries`. This is only a target: the actual number of
+  // chunks may be smaller, for example because the input has fewer elements
+  // than that.
+  size_t targetNumChunks() const {
+    return parallelism() * targetChunksPerThread;
+  }
+
+  // Return the number of chunks that may be merged concurrently, given the
+  // `numChunks` that the merge actually consists of. Never zero, and never
+  // greater than `numChunks`, because a chunk that is in flight but does not
+  // exist would only waste a permit of the semaphore that enforces this bound.
+  size_t numChunksInFlight(size_t numChunks) const {
+    size_t requestedNumChunksInFlight =
+        maxNumChunksInFlight == 0 ? parallelism() : maxNumChunksInFlight;
+    // NOTE: The number of in-flight chunks is deliberately *not* bounded by the
+    // available parallelism, because a chunk that has to wait suspends instead
+    // of blocking a thread. A single in-flight chunk is legal as well.
+    return std::min(requestedNumChunksInFlight, numChunks);
+  }
+
+  // Merge serially in the calling thread if the input has at most that many
+  // elements in total. Only `parallelBlockMergeToRange` looks at this, see
+  // there.
   size_t serialNumElementsThreshold =
       DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD;
 
-  // Buffer at most that many finished output blocks per chunk before the
-  // producing worker of that chunk is blocked. This is the back-pressure that
-  // bounds the memory consumption of the merge.
+  // Buffer at most that many finished output blocks per chunk. Only the
+  // `InOrderBlockSink` looks at this, and only if its blocks live in memory, in
+  // which case it is the back-pressure that bounds the memory consumption of
+  // the merge.
   size_t bufferedBlocksPerChunk = 2;
 };
 

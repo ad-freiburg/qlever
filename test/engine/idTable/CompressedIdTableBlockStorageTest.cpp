@@ -746,7 +746,7 @@ net::awaitable<void> abortAfterYielding(Sink<0>& sink,
   for (size_t i = 0; i < 3; ++i) {
     co_await net::post(ioContext, net::use_awaitable);
   }
-  co_await sink.asyncAbort(net::use_awaitable);
+  co_await sink.asyncStop(net::use_awaitable);
   latch.try_send(boost::system::error_code{});
 }
 
@@ -918,7 +918,7 @@ ASYNC_TEST_N(CompressedIdTableBlockStorage, abortWhileProducersRun, 4) {
   for (size_t i = 0; i < 3; ++i) {
     co_await sink.asyncGetNextBlock(net::use_awaitable);
   }
-  co_await sink.asyncAbort(net::use_awaitable);
+  co_await sink.asyncStop(net::use_awaitable);
   EXPECT_TRUE(sink.stopRequested());
   // This hangs if a single producer was left suspended.
   co_await waitForLatch(latch, numChunks);

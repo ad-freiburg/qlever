@@ -141,7 +141,7 @@ namespace net = boost::asio;
 //    such a user would have to batch, or run on the strand to begin with.
 // 4. All those hops allocate (the handler that is posted onto the strand, the
 //    type-erased handler that is passed to the storage, and the one that
-//    `ParallelMergeState::abort` posts), so the teardown itself can fail once
+//    `ParallelMergeState::stop` posts), so the teardown itself can fail once
 //    memory is exhausted. The failure is then swallowed and the consumer simply
 //    sees the end of the range.
 // 5. Once the merge was stopped, nothing calls `BlockStorage::eraseRun`
@@ -212,7 +212,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
     };
   }
 
-  // Return `true` if the merge was stopped, either by `asyncAbort()` or by
+  // Return `true` if the merge was stopped, either by `asyncStop()` or by
   // `asyncPushException()`. A producer should poll this between two output
   // blocks, so that it does not do any superfluous work. Callable from
   // anywhere, and the only operation of this class that is synchronous.
@@ -276,7 +276,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   // exception), so that no producer is left suspended forever. Complete with
   // nothing.
   template <typename CompletionToken>
-  auto asyncAbort(CompletionToken&& completionToken) {
+  auto asyncStop(CompletionToken&& completionToken) {
     return ad_utility::runFunctionOnExecutor(
         strand_, [this]() { requestStop(); }, AD_FWD(completionToken));
   }
@@ -449,7 +449,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
             }});
   }
 
-  // The actual teardown of `asyncAbort()`, for callers that are already on the
+  // The actual teardown of `asyncStop()`, for callers that are already on the
   // strand and that must not (or cannot) suspend.
   //
   // PRECONDITION: This runs on `strand_`.

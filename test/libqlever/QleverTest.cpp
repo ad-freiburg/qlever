@@ -943,3 +943,15 @@ TEST(Qlever, makeIndexRebuildConfig) {
                                AllOf(HasSubstr("all already exist"),
                                      HasSubstr("rebuild-previous-index-dir")));
 }
+
+// _____________________________________________________________________________
+// A `PlannedQuery` always needs an actual `QueryExecutionTree`, as all of its
+// accessors dereference it.
+TEST(LibQlever, plannedQueryRequiresQueryExecutionTree) {
+  auto* qec = ad_utility::testing::getQec();
+  ParsedQuery parsedQuery = SparqlParser::parseQuery(
+      &qec->getIndex().encodedIriManager(), "SELECT * { ?s ?p ?o }");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      PlannedQuery(std::move(parsedQuery), nullptr, *qec),
+      HasSubstr("Assertion `queryExecutionTree_ != nullptr` failed."));
+}

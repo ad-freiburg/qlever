@@ -10,23 +10,26 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_PARALLELBLOCKMERGE_H
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_PARALLELBLOCKMERGE_H
 
-#include <algorithm>
-#include <boost/asio/any_io_executor.hpp>
 #include <cstddef>
 #include <memory>
 #include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/asio.h"
 #include "backports/concepts.h"
 #include "util/CancellationHandle.h"
+#include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/Views.h"
+#include "util/parallelBlockMerge/BlockSinkPolicy.h"
+#include "util/parallelBlockMerge/BlockStorage.h"
 #include "util/parallelBlockMerge/ChunkMerger.h"
-#include "util/parallelBlockMerge/MergeExecutor.h"
+#include "util/parallelBlockMerge/InOrderBlockSink.h"
 #include "util/parallelBlockMerge/MergeHelpers.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
+#include "util/parallelBlockMerge/ParallelMergeRange.h"
 #include "util/parallelBlockMerge/ParallelMergeState.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
@@ -59,13 +62,20 @@
 // chunks were obtained; that also means that the chunks may be merged
 // concurrently, which is what the splitting is for.
 //
-// That is what `parallelBlockMergeAsync` (and its blocking adapter
-// `parallelBlockMergeToRange`) does: it schedules all of its work on a
-// Boost.Asio executor, one task per chunk, and a chunk that currently cannot
-// make progress (because the consumer has not caught up yet) suspends instead
-// of occupying a thread. The corresponding back-pressure and the reordering of
-// the output blocks live in `InOrderBlockSink`, the merging itself is done by
-// the very same `detail::ChunkMerger` that the serial merge uses.
+// That is what `parallelBlockMergeToSink` does: it schedules all of its work on
+// a Boost.Asio executor, one coroutine per chunk, and pushes the output blocks
+// of every chunk to a sink (see `SinkConcept` in `BlockSinkPolicy.h`). A chunk
+// that currently cannot make progress, because the sink has no room for its
+// next block, suspends instead of occupying a thread. The corresponding
+// back-pressure, as well as the order in which the blocks of the individual
+// chunks are handed on to a consumer, live in the sink and not in the merge;
+// the merging itself is done by the very same `detail::ChunkMerger` that the
+// serial merge uses.
+//
+// NOTE: The parallel merge is implemented with coroutines and hence only
+// available in C++20 mode, that is when `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17`
+// is not set. Everything else in this directory, `serialBlockMergeToRange`
+// included, is available in both modes.
 namespace ad_utility::parallelBlockMerge {
 
 // ___________________________________________________________________________
@@ -122,123 +132,171 @@ CPP_template(bool moveElements, typename Input,
       ql::views::join(std::move(chunks))};
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 // Set up a parallel merge of the presorted runs of `input` according to
 // `comparator` and start it. All the work is scheduled on the `executor`, which
-// somebody else has to run. Return the state of the merge, whose `asyncNext()`
-// yields the merged elements as an asynchronous sequence of blocks in globally
-// sorted order; see `detail::ParallelMergeState` for the details and in
-// particular for its lifetime requirements.
+// must not be empty and which somebody else has to run. The output blocks of
+// every chunk are pushed to the sink that `makeSink` creates, see
+// `SinkConcept`. Return the state of the merge, see
+// `detail::ParallelMergeState` for the details.
 //
-// The result is deterministic for a fixed configuration (the same `options` and
-// the same `parallelismHint` always yield the same order, also for elements
-// that the `comparator` considers equal). The relative order of tied elements
-// is however *not* specified and in particular may depend on the number of
-// chunks, so a caller that cares about the order of equal elements has to make
-// the `comparator` a total order.
+// NOTE: There deliberately is no default executor, so that the caller stays in
+// control of the threads that its merges run on, and in particular of their
+// shutdown. A caller that has no executor of its own has to create a thread
+// pool (and to keep it alive for at least as long as the merge, see the
+// LIFETIME note below).
 //
-// The `parallelismHint` is the number of threads that are expected to run the
-// `executor`; it is only used to derive the number of chunks and the number of
-// chunks that are in flight, both of which may safely exceed the actual
-// parallelism. A value of `0` means "as many threads as the hardware offers".
+// `makeSink` is called exactly once, as `makeSink(numChunks)`, and has to
+// return a `std::shared_ptr` to a sink that expects that many chunks. It is a
+// factory (and not simply a sink) because the number of chunks is only known
+// once the chunk boundaries have been computed, which happens inside
+// this function. See `SinkFactoryConcept` for the exact requirements.
 //
-// The `blockStorageFactory` decides where the finished output blocks live
-// between the producer of a chunk and the consumer, see `BlockStorage`. An
-// empty factory (the default) keeps them in memory, which means that a producer
-// whose chunk is far ahead of the consumer suspends; a factory that spills to
-// disk (see `engine/idTable/CompressedIdTableBlockStorage.h`) lets it run ahead
-// instead.
+// LIFETIME: The returned `shared_ptr` may be dropped at any time, also while
+// the merge is still running: every coroutine of the merge holds the state
+// alive, and the state in turn holds the sink alive. The flip side is that
+// there is deliberately no destructor that waits, so a consumer that abandons
+// the merge (instead of reading it to the end) has to call `stop()` on the
+// returned state, which makes the coroutines that are still in flight finish
+// instead of waiting for a consumer that is gone. The `input`, the
+// `comparator` and the `cancellationHandle` are moved into the state and hence
+// share its lifetime.
+//
+// The result is deterministic for a fixed configuration (the same `options`
+// always yield the same blocks in the same chunks, also for elements that the
+// `comparator` considers equal). The relative order of tied elements is however
+// *not* specified and in particular may depend on the number of chunks, so a
+// caller that cares about the order of equal elements has to make the
+// `comparator` a total order.
+//
+// How many chunks the merge creates, and how many of them it merges
+// concurrently, is derived from the `options`, see `MergeOptions`; in
+// particular its `parallelismHint` is the number of threads that are expected
+// to run the `executor`.
 //
 // The requirements on the `comparator` and the meaning of `moveElements` are
-// the same as for `serialBlockMergeToRange` above. In contrast to
-// `parallelBlockMergeToRange` below, this function has no serial fast path,
-// because a merge with a single chunk is already the serial merge, just
-// performed by a single task on the `executor`.
-CPP_template(bool moveElements, typename Input,
-             typename Comparator)(requires InputConcept<Input>)
-    std::shared_ptr<detail::ParallelMergeState<
-        moveElements, Input,
-        Comparator>> parallelBlockMergeAsync(net::any_io_executor executor,
-                                             Input input, Comparator comparator,
-                                             MergeOptions options = {},
-                                             size_t parallelismHint = 0,
-                                             ad_utility::SharedCancellationHandle
-                                                 cancellationHandle = detail::
-                                                     freshCancellationHandle(),
-                                             BlockStorageFactory<
-                                                 typename Input::Block>
-                                                 blockStorageFactory = {}) {
-  using State = detail::ParallelMergeState<moveElements, Input, Comparator>;
-  if (!executor) {
-    executor = defaultMergeExecutor();
-  }
-  if (parallelismHint == 0) {
-    parallelismHint = defaultMergeParallelism();
-  }
-  auto chunkBoundaries = computeChunkBoundaries(
-      input, comparator, parallelismHint * options.targetChunksPerThread);
-  size_t requested = options.maxInFlightChunks == 0 ? parallelismHint
-                                                    : options.maxInFlightChunks;
-  // NOTE: The number of in-flight chunks is deliberately *not* bounded by the
-  // available parallelism, because a chunk that has to wait suspends instead of
-  // blocking a thread. A single in-flight chunk is legal as well.
-  size_t maxInFlight = std::min(requested, chunkBoundaries.size());
+// the same as for `serialBlockMergeToRange` above. Note that a merge with a
+// single chunk is already the serial merge, just performed by a single
+// coroutine on the `executor`, so there is deliberately no serial fast path
+// here.
+template <bool moveElements, typename Input, typename Comparator,
+          typename SinkFactory>
+requires InputConcept<Input> &&
+             SinkFactoryConcept<SinkFactory, typename Input::Block>
+auto parallelBlockMergeToSink(
+    ql::any_io_executor executor, Input input, Comparator comparator,
+    SinkFactory makeSink, MergeOptions options = {},
+    ad_utility::SharedCancellationHandle cancellationHandle =
+        detail::freshCancellationHandle())
+    -> std::shared_ptr<detail::ParallelMergeStateFor<moveElements, Input,
+                                                     Comparator, SinkFactory>> {
+  using Sink = detail::SinkFromFactoryT<SinkFactory>;
+  using State =
+      detail::ParallelMergeState<moveElements, Input, Comparator, Sink>;
+  AD_CONTRACT_CHECK(static_cast<bool>(executor),
+                    "The executor of a parallel block merge must not be empty");
+  auto chunkBoundaries =
+      computeChunkBoundaries(input, comparator, options.targetNumChunks());
+  size_t numChunks = chunkBoundaries.size();
+  size_t maxNumChunksInFlight = options.numChunksInFlight(numChunks);
   // NOTE: The input, the comparator, the options, the cancellation handle, and
   // the chunk boundaries are shared by the mergers of all chunks, see
   // `detail::MergeState`.
   auto mergeState = std::make_shared<const typename State::SharedMergeState>(
       std::move(input), std::move(comparator), std::move(options),
       std::move(cancellationHandle), std::move(chunkBoundaries));
-  return State::create(std::move(executor), std::move(mergeState), maxInFlight,
-                       std::move(blockStorageFactory));
+  return State::create(std::move(executor), std::move(mergeState),
+                       makeSink(numChunks), maxNumChunksInFlight);
 }
 
-// The same as `parallelBlockMergeAsync` above, but return the merged blocks as
-// an ordinary (blocking) lazy range, for consumers that are not themselves
-// asynchronous. A default-constructed `executor` means "use
-// `defaultMergeExecutor()`".
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+// Merge the presorted runs of `input` according to `comparator` and return the
+// merged blocks as an ordinary (blocking) lazy range, for consumers that are
+// not themselves asynchronous. This is `parallelBlockMergeToSink` plus the
+// `InOrderBlockSink` that turns the concurrently produced blocks back into a
+// single sequential range, see `InOrderBlockSink.h`.
 //
 // The merge is performed serially in the calling thread (and the `executor` is
 // then never used at all) if the input is small (see
-// `MergeOptions::serialNumElementsThreshold`) or if the `parallelismHint`
-// resolves to a single thread. On that path there is no sink at all, so the
-// `blockStorageFactory` is ignored.
+// `MergeOptions::serialNumElementsThreshold`) or if `options.parallelism()` is
+// a single thread. On that path there is no sink at all, so the
+// `blockStorageFactory` is ignored. Except on that path the `executor` must not
+// be empty, see `parallelBlockMergeToSink`.
 //
-// IMPORTANT: Except on that serial path, the `executor` has to be run by
-// *other* threads (for example by a `boost::asio::thread_pool`), because the
-// thread that iterates over the returned range is blocked while it waits for
-// the next block and can therefore not run any of the merge's tasks itself.
+// The `blockStorageFactory` decides where the finished output blocks live
+// between the producer of a chunk and the consumer, see `BlockStorage`. An
+// empty factory (the default) keeps them in memory, which means that a producer
+// whose chunk is far ahead of the consumer suspends (buffering at most
+// `MergeOptions::bufferedBlocksPerChunk` blocks per chunk); a factory that
+// spills to disk (see `engine/idTable/CompressedIdTableBlockStorage.h`) lets it
+// run ahead instead.
 //
-// NOTE: The returned range keeps everything that the concurrently running tasks
-// refer to alive, so it is safe (and cheap) to destroy it before it is
-// exhausted.
+// IMPORTANT: Except on the serial path, the `executor` has to be run by *other*
+// threads (for example by a `boost::asio::thread_pool`), because the thread
+// that iterates over the returned range is blocked while it waits for the next
+// block and can therefore not run any of the merge's coroutines itself.
+//
+// NOTE: The returned range keeps everything that the concurrently running
+// coroutines refer to alive, so it is safe (and cheap) to destroy it before it
+// is exhausted.
+//
+// NOTE: The parallel merge is implemented with coroutines and hence only
+// available in C++20 mode. When `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is set,
+// this function always takes the serial path above; it is then a mere
+// convenience wrapper around `serialBlockMergeToRange` and in particular
+// ignores the `executor` and the `blockStorageFactory`.
 CPP_template(bool moveElements, typename Input,
              typename Comparator)(requires InputConcept<Input>) ad_utility::
     InputRangeTypeErased<typename Input::Block> parallelBlockMergeToRange(
-        net::any_io_executor executor, Input input, Comparator comparator,
-        MergeOptions options = {}, size_t parallelismHint = 0,
+        ql::any_io_executor executor, Input input, Comparator comparator,
+        MergeOptions options = {},
         ad_utility::SharedCancellationHandle cancellationHandle =
-            detail::freshCancellationHandle(),
+            std::make_shared<ad_utility::CancellationHandle<>>(),
         BlockStorageFactory<typename Input::Block> blockStorageFactory = {}) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // There is no parallel path at all in this mode, so these two arguments are
+  // unused, see the NOTE above.
+  static_cast<void>(executor);
+  static_cast<void>(blockStorageFactory);
+#else
   using Block = typename Input::Block;
-  using Range = detail::ParallelMergeRange<moveElements, Input, Comparator>;
   using Result = ad_utility::InputRangeTypeErased<Block>;
-
-  if (parallelismHint == 0) {
-    parallelismHint = defaultMergeParallelism();
-  }
   // A single thread cannot merge two chunks concurrently, and for small inputs
-  // the overhead of setting up the merge dominates the actual merging, so merge
-  // directly in the calling thread in both cases.
-  if (parallelismHint <= 1 ||
-      detail::totalNumElements(input) <= options.serialNumElementsThreshold) {
-    return serialBlockMergeToRange<moveElements>(
-        std::move(input), std::move(comparator), std::move(options),
-        std::move(cancellationHandle));
+  // the overhead of setting up the parallel merge dominates the actual merging,
+  // so merge directly in the calling thread in both cases.
+  if (options.parallelism() > 1 &&
+      detail::totalNumElements(input) > options.serialNumElementsThreshold) {
+    using Sink = InOrderBlockSink<Block>;
+    // NOTE: An empty `blockStorageFactory` means "keep the blocks in memory",
+    // which is what bounds the memory consumption of the merge via
+    // back-pressure, see `InMemoryBlockStorage`.
+    auto storageFactory =
+        blockStorageFactory
+            ? std::move(blockStorageFactory)
+            : Sink::makeInMemoryStorageFactory(options.bufferedBlocksPerChunk);
+    // The sink is created inside `parallelBlockMergeToSink`, because only that
+    // function knows the number of chunks; this lambda is what lets us get hold
+    // of it afterwards, so that the returned range can read from it.
+    std::shared_ptr<Sink> sink;
+    auto makeSink = [&sink, &executor,
+                     &storageFactory](size_t numChunks) mutable {
+      sink = std::make_shared<Sink>(executor, numChunks,
+                                    std::move(storageFactory));
+      return sink;
+    };
+    auto state = parallelBlockMergeToSink<moveElements>(
+        executor, std::move(input), std::move(comparator), makeSink,
+        std::move(options), std::move(cancellationHandle));
+    using Range =
+        detail::ParallelMergeRange<typename decltype(state)::element_type>;
+    return Result{std::make_unique<Range>(std::move(state), std::move(sink))};
   }
-  return Result{std::make_unique<Range>(parallelBlockMergeAsync<moveElements>(
-      std::move(executor), std::move(input), std::move(comparator),
-      std::move(options), parallelismHint, std::move(cancellationHandle),
-      std::move(blockStorageFactory)))};
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  return serialBlockMergeToRange<moveElements>(
+      std::move(input), std::move(comparator), std::move(options),
+      std::move(cancellationHandle));
 }
 
 }  // namespace ad_utility::parallelBlockMerge

@@ -271,9 +271,11 @@ template <typename T, typename Comparator>
 size_t mergeAndComputeChecksum(const Runs<T>& runs, Comparator comparator,
                                net::any_io_executor executor,
                                size_t parallelism) {
+  MergeOptions options;
+  options.parallelismHint = parallelism;
   auto blocks = parallelBlockMergeToRange</*moveElements=*/false>(
       std::move(executor), Input<T>{runs.spans_, VIRTUAL_BLOCK_SIZE},
-      std::move(comparator), MergeOptions{}, parallelism);
+      std::move(comparator), std::move(options));
   size_t checksum = 0;
   for (const auto& block : blocks) {
     for (const auto& element : block) {
