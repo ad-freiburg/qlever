@@ -5,7 +5,9 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 
+#include <cstdint>
 #include <future>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,7 +20,6 @@
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
 #include "util/ParallelMultiwayMerge.h"
-#include "util/ProgressBar.h"
 #include "util/Serializer/BufferedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeString.h"
@@ -29,39 +30,20 @@ namespace ad_utility::vocabulary_merger {
 template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename,
                      const std::vector<std::string>& partialVocabularySuffixes,
-                     W comparator, C& internalWordCallback,
+                     W comparator, C& wordCallback,
                      ad_utility::MemorySize memoryToUse,
                      const ad_utility::RegexSet& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
-  VocabularyMerger merger;
-  return merger.mergeVocabulary(basename, partialVocabularySuffixes,
-                                std::move(comparator), internalWordCallback,
-                                memoryToUse, blankNodeIriRegexes);
-}
-
-// _________________________________________________________________
-template <typename W, typename C>
-auto VocabularyMerger::mergeVocabulary(
-    const std::string& basename,
-    const std::vector<std::string>& partialVocabularySuffixes, W comparator,
-    C& wordCallback, ad_utility::MemorySize memoryToUse,
-    const ad_utility::RegexSet& blankNodeIriRegexes)
-    -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>) {
-  // Return true iff p1 >= p2 according to the lexicographic order of the IRI
-  // or literal.
-  auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
-                                const TripleComponentWithIndex& t2) {
-    return comparator(t1.iriOrLiteral_, t1.isExternal_, t2.iriOrLiteral_,
-                      t2.isExternal_);
-  };
-  auto lessThanForQueue = [&lessThan](const QueueWord& p1,
-                                      const QueueWord& p2) {
-    return lessThan(p1.entry_, p2.entry_);
+  using detail::QueueWord;
+  // Return true iff `p1` is smaller than `p2` according to the order of the
+  // IRI or literal.
+  auto lessThanForQueue = [&comparator](const QueueWord& p1,
+                                        const QueueWord& p2) {
+    return comparator(p1.iriOrLiteral(), p2.iriOrLiteral());
   };
 
-  // Open and prepare all infiles and file-based output vectors.
+  // Open and prepare all the input files.
   auto makeWordRangeFromFile = [&basename,
                                 &partialVocabularySuffixes](size_t fileIndex) {
     ad_utility::serialization::FileReadSerializer infile{
@@ -81,13 +63,27 @@ auto VocabularyMerger::mergeVocabulary(
   };
   std::vector<decltype(makeWordRangeFromFile(0))> generators;
   generators.reserve(partialVocabularySuffixes.size());
+  // The index of the partial vocabulary that a merged word comes from is
+  // stored in 32 bits (see `detail::LocalIdxToBatchMapping`). NOTE: This check
+  // is done here (and not per merged word, which would be on the hot path of
+  // the merging), because `partialFileId_` is always one of the indices below.
+  AD_CORRECTNESS_CHECK(partialVocabularySuffixes.size() <=
+                       std::numeric_limits<uint32_t>::max());
 
   for (std::size_t i :
        ad_utility::integerRange(partialVocabularySuffixes.size())) {
     generators.push_back(makeWordRangeFromFile(i));
-    idMapWriters_.push_back(makeIdMapWriter(absl::StrCat(
-        basename, PARTIAL_VOCAB_IDMAP_INFIX, partialVocabularySuffixes.at(i))));
   }
+
+  // The stages of the pipeline. The `batchBuilder` (the first stage) runs on
+  // this thread, the `pipeline` owns the three stages that run concurrently to
+  // it.
+  detail::VocabularyMergePipeline pipeline{basename, partialVocabularySuffixes};
+  detail::WordBatchBuilder batchBuilder;
+  auto batchCallback = [&pipeline, &wordCallback,
+                        &blankNodeIriRegexes](detail::WordBatch batch) {
+    pipeline.push(std::move(batch), wordCallback, blankNodeIriRegexes);
+  };
 
   // Some memory (that is hard to measure exactly) is used for the writing of
   // a batch of merged words, so we only give 80% of the total memory to the
@@ -97,80 +93,19 @@ auto VocabularyMerger::mergeVocabulary(
       ad_utility::parallelMultiwayMerge<QueueWord, true,
                                         decltype(detail::sizeOfQueueWord)>(
           0.8 * memoryToUse, std::move(generators), lessThanForQueue);
-  ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
-                                      "Words merged: "};
   for (std::vector<QueueWord>& currentWords : mergedWords) {
-    writeQueueWordsToIdMap(currentWords, wordCallback, lessThan,
-                           blankNodeIriRegexes, progressBar);
-  }
-
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-
-  auto metaData = std::move(metaData_);
-  // completely reset all the inner state
-  clear();
-  return metaData;
-}
-
-// ________________________________________________________________________________
-CPP_template_def(typename C, typename L)(
-    requires WordCallback<C> CPP_and_def
-        ranges::predicate<L, TripleComponentWithIndex,
-                          TripleComponentWithIndex>) void VocabularyMerger::
-    writeQueueWordsToIdMap(std::vector<QueueWord>& buffer, C& wordCallback,
-                           const L& lessThan,
-                           const ad_utility::RegexSet& blankNodeIriRegexes,
-                           ad_utility::ProgressBar& progressBar) {
-  AD_LOG_TIMING << "Start writing a batch of merged words\n";
-
-  // Iterate (avoid duplicates).
-  for (auto& top : buffer) {
-    if (!lastTripleComponent_.has_value() ||
-        top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
-      if (lastTripleComponent_.has_value()) {
-        AD_CORRECTNESS_CHECK(lessThan(lastTripleComponent_.value(), top.entry_),
-                             "Total vocabulary order violated for ",
-                             lastTripleComponent_->iriOrLiteral(), " and ",
-                             top.iriOrLiteral());
-      }
-      lastTripleComponent_ =
-          TripleComponentWithIndex{std::move(top.iriOrLiteral()),
-                                   top.isExternal(), metaData_.numWordsTotal()};
-      lastTripleComponentIsBlankNode_ =
-          lastTripleComponent_.value().isBlankNode(blankNodeIriRegexes);
-
-      // TODO<optimization> If we aim to further speed this up, we could
-      // order all the write requests to _outfile _externalOutfile and all the
-      // idVecs to have a more useful external access pattern.
-
-      // Write the new word to the vocabulary.
-      auto& nextWord = lastTripleComponent_.value();
-      if (lastTripleComponentIsBlankNode_) {
-        nextWord.index_ = metaData_.getNextBlankNodeIndex();
-      } else {
-        nextWord.index_ =
-            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
-        metaData_.addWord(nextWord.iriOrLiteral(), nextWord.index_);
-      }
-      if (progressBar.update()) {
-        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-      }
-    } else {
-      // If a word appears with different values for `isExternal`, then we
-      // externalize it.
-      bool& external = lastTripleComponent_.value().isExternal();
-      external = external || top.isExternal();
+    // Stop merging as soon as one of the stages of the pipeline has failed,
+    // the exception is rethrown by `finish()` below.
+    if (pipeline.hasFailed()) {
+      break;
     }
-    const auto& word = lastTripleComponent_.value();
-    Id targetId =
-        lastTripleComponentIsBlankNode_
-            ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
-            : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
-    // Write the mapping from the local index to the global ID to the ID map
-    // of the partial vocabulary that this occurrence of the word came from.
-    idMapWriters_[top.partialFileId_].push(
-        IdMapEntry{VocabIndex::make(top.id()), targetId});
+    batchBuilder.addMergedWords(std::move(currentWords), comparator,
+                                batchCallback);
   }
+  // Hand the remaining words (including the one that is still held back) to
+  // the pipeline and wait until all of them have actually been written.
+  batchBuilder.finish(batchCallback);
+  return pipeline.finish();
 }
 
 // ____________________________________________________________________________________________________________

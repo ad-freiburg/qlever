@@ -13,6 +13,7 @@
 
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <stdexcept>
 
 #include "backports/filesystem.h"
@@ -821,7 +822,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   // no join occurs if multiple materialized views are requested in a single
   // query.
   auto scanTriple = makeScanConfig(viewQuery);
-  return std::make_shared<IndexScan>(
+  return qec->makeShared<IndexScan>(
       qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
       std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
       viewQuery.getVarsToKeep());
@@ -858,7 +859,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
                                 std::move(additionalCols)};
   auto v = varToCol | ql::ranges::views::keys;
   ad_utility::HashSet<Variable> varsToKeep{v.begin(), v.end()};
-  return std::make_shared<IndexScan>(
+  return qec->makeShared<IndexScan>(
       qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
       std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
       std::move(varsToKeep));
@@ -947,7 +948,7 @@ MaterializedView::computeCacheKey(
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     QueryPlanner qp{&qec, handle};
 
-    QueryExecutionTree executionTree{&qec};
+    std::shared_ptr<QueryExecutionTree> executionTree;
     try {
       executionTree = qp.createExecutionTree(parsed);
     } catch (const MaterializedViewConfigException&) {
@@ -960,7 +961,7 @@ MaterializedView::computeCacheKey(
     }
 
     ColumnMapping mapping;
-    for (const auto& [var, col] : executionTree.getVariableColumns()) {
+    for (const auto& [var, col] : executionTree->getVariableColumns()) {
       auto it = viewCols.find(var);
       // Internal variables and variables that are not selected by the
       // materialized view query are not present in the view. Therefore this
@@ -970,7 +971,7 @@ MaterializedView::computeCacheKey(
       }
       mapping.insert({col.columnIndex_, it->second.columnIndex_});
     }
-    return CacheKeyAndColumnMapping{executionTree.getCacheKey(),
+    return CacheKeyAndColumnMapping{executionTree->getCacheKey(),
                                     std::move(mapping)};
   };
 

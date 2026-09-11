@@ -645,10 +645,9 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
-    auto sortPred = [&cmp = vocab_.getCaseComparator()](
-                        std::string_view a, bool aIsExternal,
-                        std::string_view b, bool bIsExternal) {
-      return cmp.isLessInTotalWithExternalFlag(a, aIsExternal, b, bIsExternal);
+    auto sortPred = [&cmp = vocab_.getCaseComparator()](std::string_view a,
+                                                        std::string_view b) {
+      return cmp(a, b, TripleComponentComparator::Level::TOTAL);
     };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
@@ -1491,6 +1490,25 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
       ad_utility::VocabularyType::Enum::OnDiskCompressed);
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
+
+  // The geo cell grid of the geo vocabulary, if the index was built with one
+  // (see `GeoCellGrid`). The vocabulary needs it before it is opened, because
+  // the grid determines how its indices are composed.
+  uint64_t geoCellGridLevel = 0;
+  loadDataMember("geo-cell-grid-level", geoCellGridLevel, geoCellGridLevel);
+  if (geoCellGridLevel > 0) {
+    if (geoCellGridLevel > std::numeric_limits<uint8_t>::max()) {
+      throw std::runtime_error{absl::StrCat(
+          "Invalid value ", geoCellGridLevel,
+          " for the key \"geo-cell-grid-level\" in the `meta-data.json`")};
+    }
+    ad_utility::GeoCellGridScheme geoCellGridScheme =
+        ad_utility::GeoCellGridScheme::Flat;
+    loadDataMember("geo-cell-grid-scheme", geoCellGridScheme,
+                   geoCellGridScheme);
+    vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
+        static_cast<uint8_t>(geoCellGridLevel), geoCellGridScheme});
+  }
 
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;
