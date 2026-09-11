@@ -72,6 +72,10 @@ constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 // beneficial.
 constexpr inline size_t NUM_PARALLEL_ITEM_MAPS = 10;
 
+// The number of workers that convert the partial to the global IDs (see
+// `IndexImpl::convertPartialToGlobalIds`).
+constexpr inline size_t NUM_PARALLEL_ID_CONVERSION_WORKERS = 10;
+
 // The number of threads that are parsing in parallel, when the parallel Turtle
 // parser is used.
 constexpr inline size_t NUM_PARALLEL_PARSER_THREADS = 8;

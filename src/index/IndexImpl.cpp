@@ -554,7 +554,7 @@ size_t IndexImpl::runPartialVocabularyWorker(
     // Claim the index of the partial vocabulary and of the corresponding
     // triples file. Both files are exclusively owned by this worker, so no
     // further synchronization is needed.
-    size_t partialVocabIdx = nextPartialVocabIdx++;
+    size_t partialVocabIdx = nextPartialVocabIdx.fetch_add(1);
     numTriples += localWriter.size();
     writePartialVocabulary(partialVocabIdx, std::move(itemMap).moveMap(),
                            std::move(localWriter));
@@ -773,7 +773,8 @@ auto IndexImpl::convertPartialToGlobalIds(
   // Convert the triples that were mapped using the partial vocabulary with
   // index `partialVocabIdx` and push them to the sorters. The partial
   // vocabulary and its triples were written as a pair by a single worker in
-  // `buildPartialVocabularies`, so this function needs nothing but the index.
+  // `buildPartialVocabularies`, so this function needs nothing but the
+  // `partialVocabIdx`.
   auto convertTriplesOfPartialVocabulary = [this, &output,
                                             &isQLeverInternalTriple](
                                                size_t partialVocabIdx) {
@@ -796,21 +797,21 @@ auto IndexImpl::convertPartialToGlobalIds(
 
     // Partitioning makes each of the two kinds of triples contiguous, so that
     // each of them can be copied to its sorter in one go. The QLever-internal
-    // triples come first. NOTE: We deliberately use `::ranges::partition` and
-    // not `ql::ranges::partition`, because the latter returns an iterator in
-    // C++17 mode but a `subrange` in C++20 mode (see `backports/algorithm.h`).
-    auto normalTriples = ::ranges::partition(triples, isQLeverInternalTriple);
+    // triples come first.
+    auto normalTriples =
+        std::partition(triples.begin(), triples.end(), isQLeverInternalTriple);
     size_t numInternalTriples = normalTriples - triples.begin();
     size_t numNormalTriples = triples.size() - numInternalTriples;
     output.wlock()->push(triples.subView(numInternalTriples, numNormalTriples),
                          triples.subView(0, numInternalTriples));
   };
 
-  // The pairs are distributed among the workers via a shared counter, which is
-  // the exact reverse of how they were created in `buildPartialVocabularies`.
+  // Each worker repeatedly claims the next partial vocabulary from a shared
+  // counter. Their number is bounded, because each of them holds one partial
+  // vocabulary and its triples in RAM.
   std::atomic<size_t> nextPartialVocabIdx = 0;
-  size_t numWorkers =
-      std::min(data.numPartialVocabularies_, NUM_PARALLEL_ITEM_MAPS);
+  size_t numWorkers = std::min(data.numPartialVocabularies_,
+                               NUM_PARALLEL_ID_CONVERSION_WORKERS);
   auto tasks =
       ad_utility::integerRange(numWorkers) |
       ql::views::transform([&convertTriplesOfPartialVocabulary,
@@ -818,7 +819,7 @@ auto IndexImpl::convertPartialToGlobalIds(
         return std::packaged_task<void()>([&convertTriplesOfPartialVocabulary,
                                            &nextPartialVocabIdx, &data]() {
           for (;;) {
-            size_t partialVocabIdx = nextPartialVocabIdx++;
+            size_t partialVocabIdx = nextPartialVocabIdx.fetch_add(1);
             if (partialVocabIdx >= data.numPartialVocabularies_) {
               return;
             }

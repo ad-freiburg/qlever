@@ -174,6 +174,11 @@ inline IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
   TripleReader reader{ad_utility::serialization::FileReadSerializer{filename}};
   // The triples were written as a single vector, so their number precedes them
   // (see `writeMappedIdsToFile` above).
+  //
+  // NOTE: We deliberately read the triples one by one instead of deserializing
+  // them into a `std::vector` (`reader >> triples`) and copying that into the
+  // `IdTable`. The vector and the table would be alive at the same time, which
+  // would double the memory footprint of this step.
   size_t numTriples;
   reader >> numTriples;
   IdTableStatic<NumColumnsIndexBuilding> triples{
