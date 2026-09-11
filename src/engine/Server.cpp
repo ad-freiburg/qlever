@@ -599,8 +599,8 @@ auto makeCheckParameter(const ParamValueMap& parameters) {
 // and log that it is being processed. `cmd` must name an entry in
 // `commands`. It always comes from a literal used in the `processCommands()`
 // dispatch below.
-void dispatchLog(std::string_view cmd, bool accessTokenOk,
-                 const sparqlOperation::Operation& operation) {
+void checkAndLogCommand(std::string_view cmd, bool accessTokenOk,
+                        const sparqlOperation::Operation& operation) {
   auto it = ql::ranges::find(commands, cmd, &CommandMeta::name_);
   AD_CORRECTNESS_CHECK(it != commands.end());
   if (it->requiresAuth_) {
@@ -663,13 +663,14 @@ CPP_template_def(typename RequestT)(
   auto checkParameter = makeCheckParameter(parameters);
 
   // Check if `cmd=<cmd>` is set in `parameters`. If so, log this information
-  // via `dispatchLog()` (which also throws if `cmd` was combined with a
+  // via `checkAndLogCommand()` (which also throws if the command requires a
+  // valid access token that wasn't given, or if `cmd` was combined with a
   // query/update it doesn't support) and return true. Return false
   // otherwise.
   auto commandIs = [accessTokenOk, &checkParameter,
                     &operation](std::string_view cmd) {
     if (checkParameter("cmd", std::string{cmd})) {
-      dispatchLog(cmd, accessTokenOk, operation);
+      checkAndLogCommand(cmd, accessTokenOk, operation);
       return true;
     }
     return false;
@@ -677,39 +678,45 @@ CPP_template_def(typename RequestT)(
 
   auto makeJsonResponse = makeJsonResponseFactory(request);
 
+  // We wrap `j` in a `ProcessCommandsResult` always via
+  // `makeJsonResponse()`.
+  auto makeCommandResult = [&makeJsonResponse](const json& j) {
+    return ProcessCommandsResult{makeJsonResponse(j)};
+  };
+
   // We call `composeCacheStats()` always with the same parameters:
   // `qlever().cache()` and `qlever().namedResultCache()`.
   auto cacheStats = [&cache = qlever().cache(),
-                     &namedResultCache = qlever().namedResultCache()]() {
-    return composeCacheStats(cache, namedResultCache);
+                     &namedResultCache = qlever().namedResultCache(),
+                     &makeCommandResult]() {
+    return makeCommandResult(composeCacheStats(cache, namedResultCache));
   };
 
   if (!checkParameter("cmd", std::nullopt).has_value()) {
     // No `cmd=` URL parameter at all, so there is nothing to do here.
     co_return ProcessCommandsResult{};
   } else if (commandIs("stats")) {
-    co_return ProcessCommandsResult{makeJsonResponse(composeIndexStats(index))};
+    co_return makeCommandResult(composeIndexStats(index));
   } else if (commandIs("cache-stats")) {
-    co_return ProcessCommandsResult{makeJsonResponse(cacheStats())};
+    co_return cacheStats();
   } else if (commandIs("clear-cache")) {
     cache().clearUnpinnedOnly();
-    co_return ProcessCommandsResult{makeJsonResponse(cacheStats())};
+    co_return cacheStats();
   } else if (commandIs("clear-cache-complete")) {
     cache().clearAll();
-    co_return ProcessCommandsResult{makeJsonResponse(cacheStats())};
+    co_return cacheStats();
   } else if (commandIs("clear-named-cache")) {
     namedResultCache().clear();
-    co_return ProcessCommandsResult{makeJsonResponse(cacheStats())};
+    co_return cacheStats();
   } else if (commandIs("clear-delta-triples")) {
     auto countAfterClear = co_await processClearDeltaTriples();
-    co_return ProcessCommandsResult{makeJsonResponse(json(countAfterClear))};
+    co_return makeCommandResult(json(countAfterClear));
   } else if (commandIs("vacuum-delta-triples")) {
     auto vacuumStats = co_await processVacuumDeltaTriples(
         checkParameter("timeout", std::nullopt), accessTokenOk);
-    co_return ProcessCommandsResult{makeJsonResponse(vacuumStats)};
+    co_return makeCommandResult(vacuumStats);
   } else if (commandIs("get-settings")) {
-    co_return ProcessCommandsResult{
-        makeJsonResponse(json(globalRuntimeParameters.rlock()->toMap()))};
+    co_return makeCommandResult(json(globalRuntimeParameters.rlock()->toMap()));
   } else if (commandIs("get-index-id")) {
     co_return ProcessCommandsResult{
         createOkResponse(index.getIndexId(), request, MediaType::textPlain)};
@@ -718,7 +725,7 @@ CPP_template_def(typename RequestT)(
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
       activeQueries[nlohmann::json(key)] = std::move(value);
     }
-    co_return ProcessCommandsResult{makeJsonResponse(activeQueries)};
+    co_return makeCommandResult(activeQueries);
   } else if (commandIs("rebuild-index")) {
     auto rebuildIndexResponse =
         co_await processRebuildIndex(parameters, request);
@@ -731,20 +738,18 @@ CPP_template_def(typename RequestT)(
     co_return ProcessCommandsResult{makeJsonResponse(materializedViewStats),
                                     true};
   } else if (commandIs("load-materialized-view")) {
-    co_return ProcessCommandsResult{makeJsonResponse(
-        processLoadMaterializedView(parameters, indexAndViews))};
+    co_return makeCommandResult(
+        processLoadMaterializedView(parameters, indexAndViews));
   } else if (commandIs("delete-materialized-view")) {
-    co_return ProcessCommandsResult{
-        makeJsonResponse(processDeleteMaterializedView(parameters))};
+    co_return makeCommandResult(processDeleteMaterializedView(parameters));
   } else if (commandIs("unload-materialized-view")) {
-    co_return ProcessCommandsResult{
-        makeJsonResponse(processUnloadMaterializedView(parameters))};
+    co_return makeCommandResult(processUnloadMaterializedView(parameters));
   } else {
     // `cmd` is set but didn't match any of the commands above.
     throw HttpError(boost::beast::http::status::bad_request,
-                    absl::StrCat("Unknown value \"",
+                    absl::StrCat(R"(Unknown value ")",
                                  checkParameter("cmd", std::nullopt).value(),
-                                 "\" for parameter \"cmd\""));
+                                 R"(" for parameter "cmd")"));
   }
 }
 
@@ -967,7 +972,8 @@ CPP_template_def(typename RequestT, typename SendT)(
   // last and its result returned.
   //
   // Some parameters require that "access-token" is set correctly. If not, an
-  // `HttpError` with status 403 Forbidden is thrown.
+  // `HttpError` with status 403 Forbidden is thrown. A `cmd=` combined with a
+  // query/update it doesn't support throws a 400 Bad Request instead.
   auto commandResult = co_await processCommands(
       indexAndViews, parameters, parsedHttpRequest.operation_, accessTokenOk,
       requestTimer, request);

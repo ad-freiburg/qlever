@@ -216,22 +216,16 @@ class Server {
 
   // Handle a `load-materialized-view` command: extract the view name from
   // `parameters` and load it via `indexAndViews`'s materialized views
-  // manager. `processCommands` already rejects a request that combines this
-  // command with a query/update before this is called; without that check,
-  // the caller would need to reset the request's `operation_` to `None{}`
-  // itself so `process()` doesn't also try to execute it as a regular query.
-  // Unlike `processWriteMaterializedView` above, this neither executes a
-  // query nor honors a timeout, so it runs synchronously and either returns
-  // its result or throws.
+  // manager. Unlike `processWriteMaterializedView` above, this neither
+  // executes a query nor honors a timeout, so it runs synchronously and
+  // either returns its result or throws.
   json processLoadMaterializedView(const ParamValueMap& parameters,
                                    const SharedIndexAndView& indexAndViews);
 
   // Handle a `delete-materialized-view` command: extract the view name from
   // `parameters`, delete it via a freshly taken index/views snapshot (not the
   // one from the beginning of `process()`, so that a concurrent rebuild
-  // cannot make this operate on a stale manager). Like
-  // `processLoadMaterializedView` above, `processCommands` already rejects a
-  // request that combines this command with a query/update.
+  // cannot make this operate on a stale manager).
   json processDeleteMaterializedView(const ParamValueMap& parameters) const;
 
   // Handle an `unload-materialized-view` command: unload the view named in
