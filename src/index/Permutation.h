@@ -63,7 +63,7 @@ class Permutation {
     }
   }
 
-  using MetaData = IndexMetaDataMmapView;
+  using MetaData = IndexMetaData;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
   using ColumnIndices = CompressedRelationReader::ColumnIndices;
@@ -78,6 +78,13 @@ class Permutation {
   // to "PSO".
   static std::string_view toString(Enum permutation);
 
+  // Return the paths of the files that store `permutation` for the index with
+  // the given `onDiskBase` (the permutation file and its `.meta` file). For the
+  // files of an internal permutation, pass the base name with the
+  // `QLEVER_INTERNAL_INDEX_INFIX` already appended.
+  static std::vector<ql::filesystem::path> fileNames(
+      Enum permutation, std::string_view onDiskBase);
+
   // Convert a permutation to the corresponding permutation of [0, 1, 2], etc.
   // `PSO` is converted to [1, 0, 2].
   static KeyOrder toKeyOrder(Enum permutation);
@@ -87,11 +94,17 @@ class Permutation {
   explicit Permutation(Enum permutation, Allocator allocator,
                        std::optional<std::string> readableName = std::nullopt);
 
-  // everything that has to be done when reading an index from disk
+  // Everything that has to be done when reading an index from disk.
+  //
+  // With `logRegistration` set to `false`, the "Registered ... permutation"
+  // message is not logged. That is for callers that load several permutations
+  // and write a progress bar of their own, which such a message would
+  // interrupt.
   void loadFromDisk(
       const std::string& onDiskBase, bool loadInternalPermutation = false,
       Type permutationType = Type::NORMAL,
-      ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns = {});
+      ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns = {},
+      bool logRegistration = true);
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
@@ -119,6 +132,21 @@ class Permutation {
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState,
       const LimitOffsetClause& limitOffset) const;
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Lazily compute the distinct `col0Id`s of a full scan of this permutation.
+  // The `scanSpec` must not fix any of the columns, it is only used for its
+  // graph filter. See `CompressedRelationReader::getDistinctCol0Ids` for the
+  // exact semantics of `addGraphColumn` and `idFilter`.
+  //
+  // NOTE: `locatedTriplesState` has to be kept alive until the returned
+  // generator has been fully consumed.
+  cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
+  getDistinctCol0Ids(const ScanSpecification& scanSpec, bool addGraphColumn,
+                     std::optional<std::vector<Id>> idFilter,
+                     const CancellationHandle& cancellationHandle,
+                     const LocatedTriplesState& locatedTriplesState) const;
+#endif
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks =
@@ -162,11 +190,18 @@ class Permutation {
   // `CompressedRelationReader` with an unlimited-memory allocator instead of
   // this permutation's shared reader. This allows the scan to run independently
   // of memory constraints imposed on most queries.
+  //
+  // `numThreadsOverride`, if set, overrides the number of block read/decompress
+  // threads for this scan (otherwise the `lazy-index-scan-num-threads` runtime
+  // parameter is used, as for query scans). The runtime index rebuild uses this
+  // to throttle its read parallelism (and hence peak CPU) without affecting
+  // queries.
   LazyScanWithReader lazyScanWithUnlimitedReader(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState) const;
+      const LocatedTriplesState& locatedTriplesState,
+      std::optional<size_t> numThreadsOverride = std::nullopt) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
   // with relevant `BlockMetadataRanges`.
@@ -215,7 +250,7 @@ class Permutation {
   const std::string& fileSuffix() const { return fileSuffix_; }
 
   // _______________________________________________________
-  const KeyOrder& keyOrder() const { return keyOrder_; };
+  const KeyOrder& keyOrder() const { return keyOrder_; }
 
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
@@ -230,7 +265,10 @@ class Permutation {
   // triples).
   size_t numTriples() const { return metaData().totalElements(); }
 
-  // From the given snapshot, get the located triples for this permutation.
+  // From the given snapshot, get the located triples for this permutation. Note
+  // that for materialized views, this must not be the global
+  // `LocatedTriplesState`, instead they must use their own
+  // `LocatedTriplesState` provided by the `MaterializedView` object.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesState& locatedTriplesState) const;
 

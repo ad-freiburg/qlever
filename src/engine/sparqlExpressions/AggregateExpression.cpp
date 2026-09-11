@@ -190,7 +190,7 @@ template class DeviationAggExpression<AvgOperation, StdevFinalOperation>;
 // Explicit instantiations for the other aggregate expressions.
 #define INSTANTIATE_AGG_EXP(Function, ValueGetter) \
   template class AggregateExpression<              \
-      Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
+      Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>
 INSTANTIATE_AGG_EXP(AddForSum, NumericValueGetter);
 INSTANTIATE_AGG_EXP(Count, IsValidValueGetter);
 INSTANTIATE_AGG_EXP(MinLambdaForAllTypes, ActualValueGetter);

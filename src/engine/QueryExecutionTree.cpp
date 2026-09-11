@@ -13,6 +13,9 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "engine/Distinct.h"
+#include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
@@ -23,8 +26,19 @@ using std::string;
 using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
-QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
-    : qec_(qec) {}
+QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec,
+                                       std::shared_ptr<Operation> operation)
+    : qec_{qec}, rootOperation_{std::move(operation)} {
+  // A `QueryExecutionTree` always needs a `QueryExecutionContext`, if only to
+  // obtain the memory limited allocator of the query.
+  AD_CONTRACT_CHECK(qec_ != nullptr);
+  AD_CONTRACT_CHECK(rootOperation_ != nullptr);
+  resultWidth_ = rootOperation_->getResultWidth();
+  cacheKey_ = rootOperation_->getCacheKey();
+  if (!readFromCache()) {
+    readFromMaterializedView();
+  }
+}
 
 // _____________________________________________________________________________
 std::string QueryExecutionTree::getCacheKey() const {
@@ -43,7 +57,6 @@ size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
 // _____________________________________________________________________________
 std::optional<size_t> QueryExecutionTree::getVariableColumnOrNullopt(
     const Variable& variable) const {
-  AD_CONTRACT_CHECK(rootOperation_);
   const auto& varCols = getVariableColumns();
   if (!varCols.contains(variable)) {
     return std::nullopt;
@@ -114,7 +127,6 @@ size_t QueryExecutionTree::getSizeEstimate() {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     std::vector<Operation::PrefilterVariablePair> prefilterPairs) const {
-  AD_CONTRACT_CHECK(rootOperation_);
   VariableToColumnMap varToColMap = getVariableColumns();
 
   // Note: Variables that have been stripped are still semantically part of the
@@ -136,32 +148,52 @@ QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 bool QueryExecutionTree::knownEmptyResult() {
   if (cachedResult_) {
     AD_CORRECTNESS_CHECK(cachedResult_->isFullyMaterialized());
-    return cachedResult_->idTable().size() == 0;
+    return cachedResult_->idTableView().size() == 0;
   }
   return rootOperation_->knownEmptyResult();
 }
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::isVariableCovered(Variable variable) const {
-  AD_CONTRACT_CHECK(rootOperation_);
   return getVariableColumns().contains(variable);
 }
 
-// _______________________________________________________________________
-void QueryExecutionTree::readFromCache() {
+// _____________________________________________________________________________
+bool QueryExecutionTree::readFromCache() {
   AD_CORRECTNESS_CHECK(qec_ != nullptr);
   if (qec_->disableCaching()) {
-    return;
+    return false;
   }
   auto& cache = qec_->getQueryTreeCache();
   auto res =
       cache.getIfContained({getCacheKey(), qec_->locatedTriplesState().index_});
   if (res.has_value()) {
     cachedResult_ = res->_resultPointer->resultTablePtr();
+    return true;
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
+void QueryExecutionTree::readFromMaterializedView() {
+  AD_CORRECTNESS_CHECK(qec_ != nullptr);
+  if (qec_->disableMaterializedViewRewriting() || qec_->disableCaching()) {
+    // If caching is disabled completely, we don't have cache keys and therefore
+    // can't match based on cache keys.
+    return;
+  }
+  auto scan = qec_->materializedViewsManager().makeIndexScan(
+      qec_, getCacheKey(), getVariableColumns());
+  if (scan != nullptr) {
+    rootOperation_ = std::static_pointer_cast<Operation>(scan);
+    resultWidth_ = rootOperation_->getResultWidth();
+    // New cache key is important because of column permutation in materialized
+    // view.
+    cacheKey_ = rootOperation_->getCacheKey();
   }
 }
 
-// ________________________________________________________________________________________________________________
+// _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::createSortedTreeAnyPermutation(
     std::shared_ptr<QueryExecutionTree> qet,
@@ -179,7 +211,7 @@ QueryExecutionTree::createSortedTreeAnyPermutation(
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::vector<ColumnIndex>& sortColumns) {
+    const std::vector<ColumnIndex>& sortColumns, bool explicitSort) {
   const auto& rootOperation = qet->getRootOperation();
   if (rootOperation->isSortedBy(sortColumns)) {
     return qet;
@@ -190,13 +222,92 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
     AD_CORRECTNESS_CHECK(qet->getVariableColumns() ==
                          sortedQet.value()->getVariableColumns());
+    const auto& sortedRootOperation = sortedQet.value()->getRootOperation();
+    AD_CORRECTNESS_CHECK(sortedRootOperation->isSortedBy(sortColumns));
     AD_CORRECTNESS_CHECK(
-        sortedQet.value()->getRootOperation()->isSortedBy(sortColumns));
+        sortedRootOperation->getLimitOffset().isUnconstrained(),
+        "`LIMIT` and `OFFSET` are applied by "
+        "`QueryExecutionTree::createSortedTree` not by the individual "
+        "implementations.");
+    // We cannot use `applyLimitOffset` here, because this might get propagated
+    // to children of this operation, where the limit/offset has already been
+    // set correctly. We just reapply a previously set limit to the newly
+    // created re-sorted operation, which was removed by the re-sorting.
+    sortedRootOperation->setLimitOffsetDirectlyWithoutTriggeringHooks(
+        rootOperation->getLimitOffset());
+    // Restoring the limit/offset must not have changed the sort order again.
+    // This holds because it is not propagated to the children, so no size
+    // estimate that an algorithm choice depends on changes (see the caution
+    // note on `Operation::applyLimitOffset`).
+    AD_CORRECTNESS_CHECK(sortedRootOperation->isSortedBy(sortColumns));
     return std::move(sortedQet).value();
   }
 
   return ad_utility::makeExecutionTree<Sort>(
-      rootOperation->getExecutionContext(), std::move(qet), sortColumns);
+      rootOperation->getExecutionContext(), std::move(qet), sortColumns,
+      explicitSort);
+}
+
+// ________________________________________________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
+    std::shared_ptr<QueryExecutionTree> qet,
+    const std::vector<ColumnIndex>& distinctIndices) {
+  const auto& rootOperation = qet->getRootOperation();
+  // If the result is already distinct wrt the `distinctIndices`, the `DISTINCT`
+  // would be a no-op and we can simply return the tree unchanged.
+  if (rootOperation->isDistinctBy(distinctIndices)) {
+    return qet;
+  }
+
+  // A `DISTINCT` on zero columns keeps at most one row, which is exactly a
+  // `LIMIT 1`. This is much cheaper than a `Distinct` (no sorting or
+  // deduplication, and the limit can terminate the subtree early). We clone
+  // before applying the limit, because `qet` (and its root operation) may be
+  // shared with other query execution trees and `applyLimitOffset` mutates the
+  // operation in place.
+  if (distinctIndices.empty()) {
+    auto limitedQet = qet->clone();
+    limitedQet->applyLimitOffset(LimitOffsetClause{._limit = 1});
+    return limitedQet;
+  }
+
+  // Give the root operation the chance to push the `DISTINCT` down into its
+  // subtree(s) more efficiently (e.g. `CartesianProductJoin`).
+  auto distinctQet = rootOperation->makeDistinctTree(distinctIndices);
+  if (distinctQet.has_value()) {
+    AD_CORRECTNESS_CHECK(distinctQet.value() != nullptr);
+    // Pushing the `DISTINCT` down must preserve the set of visible variables,
+    // but the exact column layout may change: e.g. pushing into a
+    // `CartesianProductJoin` can collapse a child to a single row, which
+    // changes its size estimate and thus the order in which the product sorts
+    // its children. This is harmless because `DISTINCT` has set semantics and
+    // variables are accessed by name.
+    const auto& before = qet->getVariableColumns();
+    const auto& after = distinctQet.value()->getVariableColumns();
+    AD_CORRECTNESS_CHECK(before.size() == after.size() &&
+                         ql::ranges::all_of(before | ql::views::keys,
+                                            [&after](const Variable& v) {
+                                              return after.contains(v);
+                                            }));
+    // The rewritten tree must actually be distinct wrt the same columns. Since
+    // the column layout may have changed, translate `distinctIndices` into the
+    // layout of the rewritten tree via the variable names before checking.
+    std::vector<ColumnIndex> translatedIndices;
+    for (const auto& [variable, info] : before) {
+      if (ad_utility::contains(distinctIndices, info.columnIndex_)) {
+        translatedIndices.push_back(after.at(variable).columnIndex_);
+      }
+    }
+    // The sizes can only match because `distinctIndices` contains no
+    // duplicates (a documented precondition of this function).
+    AD_CORRECTNESS_CHECK(translatedIndices.size() == distinctIndices.size());
+    AD_CORRECTNESS_CHECK(distinctQet.value()->getRootOperation()->isDistinctBy(
+        translatedIndices));
+    return std::move(distinctQet).value();
+  }
+
+  return ad_utility::makeExecutionTree<Distinct>(
+      rootOperation->getExecutionContext(), std::move(qet), distinctIndices);
 }
 
 // _____________________________________________________________________________

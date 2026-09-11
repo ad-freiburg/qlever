@@ -9,6 +9,8 @@
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/QueryExecutionTree.h"
+#include "index/TripleComponentConversions.h"
 
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,
@@ -56,7 +58,7 @@ std::string Describe::getCacheKeyImpl() const {
   if (defaultGraphs.has_value()) {
     std::vector<std::string> graphIdVec;
     ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
-                          &TripleComponent::toRdfLiteral);
+                          &toRdfLiteral);
     ql::ranges::sort(graphIdVec);
     absl::StrAppend(&result,
                     "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " "));
@@ -161,7 +163,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   using V = Variable;
   auto subjectVar = V{"?subject"};
   auto valuesOp = ad_utility::makeExecutionTree<ExplicitIdTableOperation>(
-      getExecutionContext(), std::make_shared<IdTable>(std::move(input)),
+      getExecutionContext(), makeShared<IdTable>(std::move(input)),
       VariableToColumnMap{
           {subjectVar,
            ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
@@ -187,7 +189,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   // case the `selectColumns` operation is a no-op. Note sure when this is not
   // the case, but better safe than sorry.
   auto result = join->getResult();
-  IdTable resultTable = result->idTable().clone();
+  IdTable resultTable = result->cloneIdTable();
   ColumnIndex s = join->getVariableColumn(V{"?subject"});
   ColumnIndex p = join->getVariableColumn(V{"?predicate"});
   ColumnIndex o = join->getVariableColumn(V{"?object"});
@@ -209,8 +211,8 @@ IdTable Describe::getIdsToDescribe(const Result& result,
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
       // For an IRI, add the corresponding ID to `idsToDescribe`.
       idsToDescribe.insert(
-          TripleComponent{std::get<TripleComponent::Iri>(resource)}.toValueId(
-              getIndex(), localVocab));
+          toValueId(TripleComponent{std::get<TripleComponent::Iri>(resource)},
+                    getIndex(), localVocab));
     } else {
       // For a variable, add all IDs that match the variable in the `result` of
       // the WHERE clause to `idsToDescribe`.
@@ -219,7 +221,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
       if (!column.has_value()) {
         continue;
       }
-      for (Id id : result.idTable().getColumn(column.value())) {
+      for (Id id : result.idTableView().getColumn(column.value())) {
         idsToDescribe.insert(id);
       }
     }

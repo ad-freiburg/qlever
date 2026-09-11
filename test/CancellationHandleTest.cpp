@@ -41,7 +41,7 @@ TYPED_TEST_SUITE(CancellationHandleFixture, WithAndWithoutWatchDog);
 
 TEST(CancellationException, verifyConstructorMessageIsPassed) {
   auto message = "Message";
-  CancellationException exception{message};
+  CancellationException exception{MANUAL, message};
   EXPECT_STREQ(message, exception.what());
 }
 
@@ -54,12 +54,23 @@ TEST(CancellationException, verifyConstructorDoesNotAcceptNoReason) {
 
 // _____________________________________________________________________________
 
+TEST(CancellationException, stateAccessorReturnsConstructorReason) {
+  EXPECT_EQ(CancellationException{TIMEOUT}.state(), TIMEOUT);
+  EXPECT_EQ(CancellationException{MANUAL}.state(), MANUAL);
+  // Custom message paired with a known reason keeps both.
+  CancellationException withReason{TIMEOUT, "estimate exceeded remaining time"};
+  EXPECT_EQ(withReason.state(), TIMEOUT);
+  EXPECT_STREQ(withReason.what(), "estimate exceeded remaining time");
+}
+
+// _____________________________________________________________________________
+
 TEST(CancellationException, verifySetOperationModifiedTheMessageAsExpected) {
   auto message = "Message";
   auto operation = "Operation";
   auto otherThing = "Other Thing";
   {
-    CancellationException exception{message};
+    CancellationException exception{MANUAL, message};
 
     exception.setOperation(operation);
     EXPECT_THAT(exception.what(),
@@ -160,9 +171,7 @@ TEST(CancellationHandle, ensureObjectLifetimeIsValidWithoutWatchDogStarted) {
 namespace ad_utility {
 
 TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   CancellationHandle<ENABLED> handle;
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
@@ -179,9 +188,7 @@ TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   CancellationHandle<ENABLED> handle;
   handle.startWatchDog();
 
@@ -294,15 +301,10 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
-  auto& choice = ad_utility::LogstreamChoice::get();
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
-  auto& originalOStream = choice.getStream();
-  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
-
-  std::ostringstream testStream;
-  choice.setStream(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
@@ -323,15 +325,10 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
-  auto& choice = ad_utility::LogstreamChoice::get();
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
-  auto& originalOStream = choice.getStream();
-  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
-
-  std::ostringstream testStream;
-  choice.setStream(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
@@ -408,15 +405,10 @@ TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
-  auto& choice = ad_utility::LogstreamChoice::get();
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
-  auto& originalOStream = choice.getStream();
-  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
-
-  std::ostringstream testStream;
-  choice.setStream(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;

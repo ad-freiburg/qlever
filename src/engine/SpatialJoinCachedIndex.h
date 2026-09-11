@@ -6,15 +6,18 @@
 #define QLEVER_SRC_ENGINE_SPATIALJOINCACHEDINDEX_H
 
 #include <memory>
+#include <optional>
 
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
+#include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/Serializer.h"
 
 // Forward declarations
 class MutableS2ShapeIndex;
 class SpatialJoinCachedIndexImpl;
+class S2Polyline;
 
 // This class holds a `MutableS2ShapeIndex` that is created once by the named
 // cached result mechanism and is then kept constant and persisted across
@@ -41,9 +44,14 @@ class SpatialJoinCachedIndex {
  public:
   // Constructor that builds an index from the geometries in the given column in
   // the `IdTable`. Currently only line strings are supported for the
-  // experimental S2 point polyline algorithm.
-  SpatialJoinCachedIndex(Variable geometryColumn, ColumnIndex col,
-                         const IdTable& restable, const Index& index);
+  // experimental S2 point polyline algorithm. If `simplificationErrorInMeters`
+  // has a value, geometries are simplified using the Douglas-Peucker algorithm
+  // with the given maximum error in meters before indexing; `std::nullopt`
+  // means no simplification.
+  SpatialJoinCachedIndex(
+      Variable geometryColumn, ColumnIndex col, const IdTableView<0>& restable,
+      const Index& index,
+      std::optional<double> simplificationErrorInMeters = std::nullopt);
 
   // Getters
   const Variable& getGeometryColumn() const;
@@ -61,6 +69,14 @@ class SpatialJoinCachedIndex {
   // `populateFromSerialized` below.
   struct TagForSerialization {};
   SpatialJoinCachedIndex(TagForSerialization);
+
+  // Retrieves and parses a line string from the given cell of an `IdTable`
+  // and converts it to an `S2Polyline`. Used when populating the index above.
+  // This function is only `public` for testing purposes and should otherwise
+  // not be used outside of this class.
+  static std::optional<S2Polyline> getPolyline(const IdTableView<0>& restable,
+                                               size_t row, ColumnIndex col,
+                                               const Index& index);
 
   // Serialize a `SpatialJoinCachedIndex`. When reading from a serializer, then
   // the target `arg` has to be constructed upfront via the constructor that

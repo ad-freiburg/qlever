@@ -30,7 +30,13 @@ class NamedResultCache {
   // geometry index `cachedGeoIndex_` can be precomputed on a column of the
   // result table for spatial joins with a constant (right) child.
   struct Value {
-    std::shared_ptr<const IdTable> result_;
+    // The result can either be an owning `shared_ptr<const IdTable>` or a
+    // non-owning `IdTableView<0>`. The latter is used when the value was
+    // deserialized as a zero-copy view directly into an externally-owned
+    // buffer (e.g. a memory-mapped or in-memory blob); the caller is then
+    // responsible for keeping that buffer alive for at least as long as this
+    // `Value` (and any `ExplicitIdTableOperation`/`Result` derived from it).
+    ExplicitIdTableOperation::IdTableOrView result_;
     VariableToColumnMap varToColMap_;
     std::vector<ColumnIndex> resultSortedOn_;
     LocalVocab localVocab_;

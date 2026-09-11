@@ -34,10 +34,11 @@ size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 Sort::Sort(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
-           std::vector<ColumnIndex> sortColumnIndices)
+           std::vector<ColumnIndex> sortColumnIndices, bool explicitSort)
     : Operation{qec},
       subtree_{std::move(subtree)},
-      sortColumnIndices_{std::move(sortColumnIndices)} {}
+      sortColumnIndices_{std::move(sortColumnIndices)},
+      explicitSort_{explicitSort} {}
 
 // _____________________________________________________________________________
 std::string Sort::getCacheKeyImpl() const {
@@ -68,6 +69,12 @@ std::string Sort::getDescriptor() const {
 
 // _____________________________________________________________________________
 void Sort::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+  // For an explicit `INTERNAL SORT BY` we deliberately keep the complete sorted
+  // result and let the `LIMIT`/`OFFSET` be applied externally (see
+  // `handlesLimitOffset()`), so we must not push it down to the subtree.
+  if (explicitSort_) {
+    return;
+  }
   subtree_ = subtree_->clone();
   subtree_->applyLimitOffset(limitOffset);
 }
@@ -86,15 +93,14 @@ Result Sort::computeResult(bool requestLaziness) {
 
   // For fully materialized input, we know the size upfront.
   if (input->isFullyMaterialized()) {
-    const IdTable& inputTable = input->idTable();
-    if (inputTable.numRows() <= maxNumRowsToBeSortedInMemory) {
-      return computeResultInMemory(inputTable.clone(),
+    if (input->idTableView().numRows() <= maxNumRowsToBeSortedInMemory) {
+      return computeResultInMemory(input->cloneIdTable(),
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
-      ql::span<const IdTable> inputTableSpan{&inputTable, 1};
+      ql::span<const IdTableView<0>> inputViewSpan{&input->idTableView(), 1};
       return computeResultExternal({}, std::move(localVocab),
-                                   inputTableSpan.begin(), inputTableSpan.end(),
+                                   inputViewSpan.begin(), inputViewSpan.end(),
                                    std::move(input), requestLaziness);
     }
   }
@@ -194,10 +200,9 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
       sorter->pushBlock(std::move(idTableAndLocalVocab.idTable_));
       mergedLocalVocab.mergeWith(idTableAndLocalVocab.localVocab_);
     } else {
-      // NOTE: `pushBlock` with a const reference iterates over the rows and
-      // calls `push` for each, which buffers rows and flushes to disk when the
-      // buffer is full. This avoids having to clone the (potentially large)
-      // input table.
+      // NOTE: `pushBlock` copies the columns of the input into the sorter's
+      // internal buffer and flushes that buffer to disk when it is full. This
+      // avoids having to clone the (potentially large) input table.
       sorter->pushBlock(*it);
     }
     ++it;
@@ -244,18 +249,37 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
 std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
     const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  // For an explicit `INTERNAL SORT BY` with a `LIMIT`/`OFFSET` the sort order
+  // determines which rows are part of the result, so we must not replace it by
+  // a different one:
+  //
+  //   SELECT * {
+  //     { SELECT * { ?x <p> ?y . ?y <q> ?z }
+  //       INTERNAL SORT BY ?z LIMIT 5 OFFSET 7 }
+  //     ?x <r> ?w
+  //   }
+  //
+  // The subquery uses the cheap `INTERNAL SORT BY ?z` (instead of an
+  // `ORDER BY`) to obtain a deterministic subset. The outer join needs `?x`
+  // order, but sorting by `?x` instead of `?z` would change which 5 rows
+  // survive. We therefore return `std::nullopt`, such that a second `Sort` (on
+  // `?x`) is stacked on top of this one (on `?z`). Without a `LIMIT`/`OFFSET`
+  // the sort order is not observable, because the result is re-sorted anyway.
+  if (explicitSort_ && !getLimitOffset().isUnconstrained()) {
+    return std::nullopt;
+  }
   AD_LOG_DEBUG
       << "Tried to re-sort a subtree that is already sorted by `Sort` with a "
          "different sort order. This indicates a flaw during query planning."
       << std::endl;
   return ad_utility::makeExecutionTree<Sort>(_executionContext, subtree_,
-                                             sortColumns);
+                                             sortColumns, explicitSort_);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Sort::cloneImpl() const {
   return std::make_unique<Sort>(_executionContext, subtree_->clone(),
-                                sortColumnIndices_);
+                                sortColumnIndices_, explicitSort_);
 }
 
 // _____________________________________________________________________________
@@ -284,6 +308,7 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
     sortColumnIndices.push_back(subtree->getVariableColumn(var));
   }
 
-  return ad_utility::makeExecutionTree<Sort>(
-      getExecutionContext(), std::move(subtree), sortColumnIndices);
+  return ad_utility::makeExecutionTree<Sort>(getExecutionContext(),
+                                             std::move(subtree),
+                                             sortColumnIndices, explicitSort_);
 }

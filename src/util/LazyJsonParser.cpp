@@ -102,7 +102,7 @@ void LazyJsonParser::parseLiteral(size_t& idx) {
     ++idx;
     if (std::holds_alternative<BeforeArrayPath>(state_)) {
       std::get<BeforeArrayPath>(state_).optLiteral_ =
-          BeforeArrayPath::LiteralView{.start_ = idx, .length_ = 0};
+          BeforeArrayPath::LiteralView{idx, 0};
     }
     inLiteral_ = true;
   }
@@ -180,7 +180,7 @@ size_t LazyJsonParser::parseInArrayPath(size_t& idx) {
   size_t materializeEnd = 0;
 
   auto exitArrayPath = [&]() {
-    state_ = AfterArrayPath{.remainingBraces_ = arrayPath_.size()};
+    state_ = AfterArrayPath{arrayPath_.size()};
     ++idx;
     if (arrayPath_.empty()) {
       materializeEnd = idx;

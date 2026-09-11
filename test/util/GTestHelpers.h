@@ -10,8 +10,11 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 #include <gmock/gmock.h>
+#include <re2/re2.h>
 
+#include <memory>
 #include <optional>
+#include <sstream>
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
@@ -80,8 +83,9 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(statement, errorMessageMatcher, \
                                         std::exception)
 
-// `EXPECT` that the `argument` is equal to `std::nullopt`.
-#define AD_EXPECT_NULLOPT(argument) EXPECT_EQ(argument, std::nullopt)
+// `EXPECT` that the `argument`'s `has_value` method returns `false`. Checking
+// equality to `std::nullopt` does not work with `boost::optional`.
+#define AD_EXPECT_NULLOPT(argument) EXPECT_FALSE(argument.has_value())
 
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,
@@ -95,32 +99,74 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 }
 
 // _____________________________________________________________________________
-// Some tests require a certain log level, e.g. but not only because they
-// capture log output and make assertions about it. This macro can be used to
-// skip such tests if the runtime log level is too low.
-#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                                       \
-  if (::ad_utility::detail::runtimeLogLevel.load(std::memory_order_relaxed) <  \
-      (level)) {                                                               \
-    GTEST_SKIP() << "This test requires a runtime log level of at least "      \
-                 << ad_utility::LogLevel{level}.toString()                     \
-                 << ", but the current runtime log level is "                  \
-                 << ad_utility::LogLevel{::ad_utility::detail::runtimeLogLevel \
-                                             .load(std::memory_order_relaxed)} \
-                        .toString();                                           \
-  }
+// Create a unique name for the `ad_utility::ScopedLogLevel` object that
+// `ENFORCE_LOG_LEVEL_OR_SKIP` below declares. The indirection via the
+// `..._IMPL` macro is required so that `__COUNTER__` is expanded before the
+// tokens are pasted together.
+#define AD_SCOPED_LOG_LEVEL_NAME_IMPL(counter) scopedLogLevel##counter##_
+#define AD_SCOPED_LOG_LEVEL_NAME(counter) AD_SCOPED_LOG_LEVEL_NAME_IMPL(counter)
 
 // _____________________________________________________________________________
-// Set the runtime log level to `level` and return an `absl::Cleanup` that
-// restores the previous level when it goes out of scope. Use this in tests
-// that temporarily need a specific log level to avoid leaving the global
-// atomic modified after the test finishes.
-inline auto setLoglevelForTesting(LogLevel level) {
-  auto previous = ::ad_utility::detail::runtimeLogLevel.exchange(
-      level.value(), std::memory_order_relaxed);
-  return absl::MakeCleanup([previous] {
-    ::ad_utility::detail::runtimeLogLevel.store(previous,
-                                                std::memory_order_relaxed);
+// Some tests require a certain log level, e.g. but not only because they
+// capture log output and make assertions about it. This macro enforces that
+// `level` is the runtime log level for the remainder of the enclosing scope, by
+// declaring an `ad_utility::ScopedLogLevel` object that restores the previous
+// level when the scope is left. If the compile-time `LOGLEVEL` is less verbose
+// than `level`, the test is skipped instead: such log levels are compiled out
+// and can never become the runtime log level, so the test could never pass.
+#define ENFORCE_LOG_LEVEL_OR_SKIP(level)                                     \
+  if (LOGLEVEL < ad_utility::LogLevel{level}) {                              \
+    GTEST_SKIP() << "This test requires a compile-time log level of at "     \
+                    "least "                                                 \
+                 << ad_utility::LogLevel{level}.toString() << ", but it is " \
+                 << ad_utility::LogLevel{LOGLEVEL}.toString();               \
+  }                                                                          \
+  ad_utility::ScopedLogLevel AD_SCOPED_LOG_LEVEL_NAME(__COUNTER__) { level }
+
+// _____________________________________________________________________________
+// Skip the enclosing test if the `_NO_TIMING_TESTS` CMake option is set. Use
+// this in tests that depend on the actual duration of `sleep` or on similar
+// timings, which are unreliable on some platforms (in particular macOS). Note
+// that the macro has to be used as a statement (with a trailing semicolon).
+#ifdef _QLEVER_NO_TIMING_TESTS
+#define QLEVER_SKIP_TEST_IF_FLAKY_TIMING \
+  GTEST_SKIP() << "because `_QLEVER_NO_TIMING_TESTS` is defined"
+#else
+#define QLEVER_SKIP_TEST_IF_FLAKY_TIMING static_assert(true)
+#endif
+
+// _____________________________________________________________________________
+// Redirect the global logging stream to `stream` and return an `absl::Cleanup`
+// that restores the *previously active* stream when it goes out of scope. Use
+// this in tests that temporarily capture or suppress log output, so the global
+// stream is never left dangling or reset to the wrong value.
+inline auto setGlobalLoggingStreamForTesting(std::ostream* stream) {
+  auto* previous = &ad_utility::LogstreamChoice::get().getStream();
+  ad_utility::setGlobalLoggingStream(stream);
+  return absl::Cleanup(
+      [previous] { ad_utility::setGlobalLoggingStream(previous); });
+}
+
+// _____________________________________________________________________________
+// Redirect the global logging stream to a fresh `std::ostringstream` and return
+// a pair of an `absl::Cleanup` (which restores the previously active stream
+// when it goes out of scope) and a reference to that stream. Typical usage is
+// `auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();`.
+// NOTE: The returned reference is only valid as long as the `cleanup` is alive,
+// as the underlying stream is owned by the `cleanup`.
+inline auto setGlobalLoggingStreamToStringStream() {
+  auto stream = std::make_shared<std::ostringstream>();
+  auto& streamRef = *stream;
+  // `setGlobalLoggingStreamForTesting` cannot be used here because we have to
+  // move the shared pointer to the string stream into the cleanup to keep it
+  // alive.
+  auto* previous = &ad_utility::LogstreamChoice::get().getStream();
+  ad_utility::setGlobalLoggingStream(stream.get());
+  auto cleanup = absl::Cleanup([previous, stream = std::move(stream)] {
+    ad_utility::setGlobalLoggingStream(previous);
   });
+  return std::pair<decltype(cleanup), std::ostringstream&>{std::move(cleanup),
+                                                           streamRef};
 }
 
 // _____________________________________________________________________________
@@ -139,6 +185,15 @@ MATCHER_P(ParsedAsJson, matcher,
     *result_listener << "is not a JSON object.";
   }
   return false;
+}
+
+// Helper matcher for a full `RE2` match, to use instead of
+// `::testing::MatchesRegex`, which works differently on non-POSIX platforms.
+// Example: EXPECT_THAT("t42", MatchesRegex("t[0-9]+"));
+MATCHER_P(MatchesRegex, pattern,
+          absl::StrCat(negation ? "doesn't match" : "matches", " the regex \"",
+                       pattern, "\"")) {
+  return RE2::FullMatch(arg, RE2{pattern});
 }
 
 // Helper matcher that can be used to make assertions about a JSON object's

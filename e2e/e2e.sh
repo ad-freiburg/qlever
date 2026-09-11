@@ -9,9 +9,19 @@ function cleanup_server {
 	cat "$BINARY_DIR/server_log.txt"
 	echo "The Query Log:"
 	cat "$BINARY_DIR/query_log.txt"
+	if [ -f "$BINARY_DIR/server_with_proxy_log.txt" ]; then
+		echo "The Log of the server that uses the proxy:"
+		cat "$BINARY_DIR/server_with_proxy_log.txt"
+	fi
+	if [ -f "$BINARY_DIR/proxy_log.txt" ]; then
+		echo "The Proxy Log:"
+		cat "$BINARY_DIR/proxy_log.txt"
+	fi
 	# Killing 0 sends the signal to all processes in the current
 	# process group
 	kill "$SERVER_PID"
+	[ -n "${SERVER_WITH_PROXY_PID:-}" ] && kill "$SERVER_WITH_PROXY_PID" || true
+	[ -n "${PROXY_PID:-}" ] && kill "$PROXY_PID" || true
 }
 
 function print_usage {
@@ -153,4 +163,56 @@ fi
 
 echo "qlever-server was successfully started, running queries ..."
 $PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" | tee "$BINARY_DIR/query_log.txt" || bail "Querying Server failed"
+
+# Test that federated queries (`SERVICE`) can be routed through an HTTP proxy,
+# configured via the `http_proxy` environment variable. We start a logging
+# proxy and a second server that uses it, and send the second server a
+# federated query whose `SERVICE` part must be answered by the first server.
+# The proxy log then proves that the request actually went through the proxy.
+echo "Testing federated queries through an HTTP proxy ..."
+PROXY_PORT=9097
+PROXY_LOG="$BINARY_DIR/proxy_log.txt"
+rm -f "$PROXY_LOG"
+$PYTHON_BINARY "$PROJECT_DIR/e2e/proxy.py" "$PROXY_PORT" "$PROXY_LOG" > /dev/null &
+PROXY_PID=$!
+
+pushd "$BINARY_DIR"
+env http_proxy="http://localhost:$PROXY_PORT" ./qlever-server -i "$INDEX" -p 9098 -m 1GB --default-query-timeout 30s &> server_with_proxy_log.txt &
+SERVER_WITH_PROXY_PID=$!
+popd
+
+echo "Waiting for the server that uses the proxy to launch and open its port"
+i=0
+until [ $i -eq 60 ] || curl --max-time 1 --output /dev/null --silent http://localhost:9098/; do
+	sleep 1;
+  i=$((i+1));
+done
+[ $i -lt 60 ] || bail "The server that uses the proxy could not be reached"
+
+grep -q "Proxy for outgoing HTTP requests: localhost:$PROXY_PORT" "$BINARY_DIR/server_with_proxy_log.txt" \
+  || bail "The server did not log the configured proxy"
+
+# The result of the federated query (which goes through the proxy) must match
+# the result of the direct query, and the proxy must have seen the `SERVICE`
+# request (a `POST` with an absolute-form target, as required for a relayed
+# plain HTTP request).
+DIRECT_COUNT=$(curl --silent http://localhost:9099/ -H "Accept: text/csv" \
+  --data-urlencode "query=SELECT (COUNT(?s) AS ?count) WHERE { ?s <is-a> <Scientist> }" | tail -1 | tr -d '\r')
+FEDERATED_COUNT=$(curl --silent http://localhost:9098/ -H "Accept: text/csv" \
+  --data-urlencode "query=SELECT (COUNT(?s) AS ?count) WHERE { SERVICE <http://localhost:9099> { ?s <is-a> <Scientist> } }" | tail -1 | tr -d '\r')
+echo "Number of scientists, direct query: ${DIRECT_COUNT}, federated query via the proxy: ${FEDERATED_COUNT}"
+[[ "$DIRECT_COUNT" =~ ^[1-9][0-9]*$ ]] || bail "The direct query failed"
+[ "$DIRECT_COUNT" == "$FEDERATED_COUNT" ] || bail "The federated query through the proxy returned a wrong result"
+grep -q "REQUEST: POST http://localhost:9099/" "$PROXY_LOG" \
+  || bail "The proxy did not see the federated request"
+
+# A malformed proxy URL must fail the server startup with a readable message.
+pushd "$BINARY_DIR"
+if env http_proxy="socks5://proxy:1080" ./qlever-server -i "$INDEX" -p 9096 -m 1GB &> bad_proxy_log.txt; then
+  bail "The server started despite a malformed http_proxy"
+fi
+popd
+grep -q "only supports plain HTTP proxies" "$BINARY_DIR/bad_proxy_log.txt" \
+  || bail "The error message for a malformed http_proxy is missing"
+echo "The HTTP proxy tests passed"
 popd

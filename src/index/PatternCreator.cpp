@@ -12,8 +12,7 @@ using PatternId = Pattern::PatternId;
 
 // _________________________________________________________________________
 void PatternCreator::processTriple(
-    std::array<Id, NumColumnsIndexBuilding> triple,
-    bool ignoreTripleForPatterns) {
+    const std::array<Id, NumColumnsIndexBuilding>& triple) {
   if (!currentSubject_.has_value()) {
     // This is the very first triple.
     currentSubject_ = triple[0];
@@ -23,10 +22,7 @@ void PatternCreator::processTriple(
     currentSubject_ = triple[0];
     currentPattern_.clear();
   }
-  tripleBuffer_.push_back({triple, ignoreTripleForPatterns});
-  if (ignoreTripleForPatterns) {
-    return;
-  }
+  tripleBuffer_.push_back(triple);
   // Add predicate to pattern unless it was already added.
   if (currentPattern_.empty() || currentPattern_.back() != triple[1]) {
     currentPattern_.push_back(triple[1]);
@@ -76,17 +72,16 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   // Note: This has to be done for all triples, including those where the
   // subject has no pattern.
   auto curSubject = currentSubject_.value();
-  ql::ranges::for_each(
-      tripleBuffer_, [this, patternId, &curSubject](const auto& t) {
-        static_assert(NumColumnsIndexBuilding == 4,
-                      "The following lines have to be changed when additional "
-                      "payload columns are added");
-        const auto& [s, p, o, g] = t.triple_;
+  tripleBuffer_.forEach([this, patternId, &curSubject](const auto& triple) {
+    static_assert(NumColumnsIndexBuilding == 4,
+                  "The following lines have to be changed when additional "
+                  "payload columns are added");
+    const auto& [s, p, o, g] = triple;
 
-        AD_CORRECTNESS_CHECK(s == curSubject);
-        ospSorterTriplesWithPattern().push(
-            std::array{s, p, o, g, Id::makeFromInt(patternId)});
-      });
+    AD_CORRECTNESS_CHECK(s == curSubject);
+    ospSorterTriplesWithPattern().push(
+        std::array{s, p, o, g, Id::makeFromInt(patternId)});
+  });
   tripleBuffer_.clear();
 }
 

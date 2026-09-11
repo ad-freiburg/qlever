@@ -15,6 +15,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
+#include "util/AllocateShared.h"
 #include "util/HashSet.h"
 
 // Strongly typed enum for controlling whether stripped variables are explicitly
@@ -27,22 +28,14 @@ enum class HideStrippedColumns { False, True };
 // operations needed to solve a query.
 class QueryExecutionTree {
  public:
-  explicit QueryExecutionTree(QueryExecutionContext* qec);
   QueryExecutionTree(QueryExecutionContext* qec,
-                     std::shared_ptr<Operation> operation)
-      : QueryExecutionTree(qec) {
-    rootOperation_ = std::move(operation);
-    resultWidth_ = rootOperation_->getResultWidth();
-    cacheKey_ = rootOperation_->getCacheKey();
-    readFromCache();
-  }
+                     std::shared_ptr<Operation> operation);
 
   std::string getCacheKey() const;
 
   const QueryExecutionContext* getQec() const { return qec_; }
 
   const VariableToColumnMap& getVariableColumns() const {
-    AD_CONTRACT_CHECK(rootOperation_);
     return rootOperation_->getExternallyVisibleVariableColumns();
   }
 
@@ -55,8 +48,6 @@ class QueryExecutionTree {
       ColumnIndex colIdx) const;
 
   std::shared_ptr<Operation> getRootOperation() const { return rootOperation_; }
-
-  bool isEmpty() const { return !rootOperation_; }
 
   // Get the column index that the given `variable` will have in the result of
   // this query. Throw if the variable is not part of the `VariableToColumnMap`.
@@ -128,7 +119,12 @@ class QueryExecutionTree {
   // of our qec. If found, we store a shared ptr to pin it
   // and set the size estimate correctly and the cost estimate
   // to zero. Currently multiplicities are not affected
-  void readFromCache();
+  bool readFromCache();
+
+  // Check whether the cache key of this `QueryExecutionTree` matches a loaded
+  // materialized view. If yes, replace the `rootOperation_` with an `IndexScan`
+  // on that view with a result equivalent to the current `rootOperation_`.
+  void readFromMaterializedView();
 
   // recursively get all warnings from descendant operations
   std::vector<std::string> collectWarnings() const {
@@ -173,10 +169,32 @@ class QueryExecutionTree {
 
   // Create a `QueryExecutionTree` that produces exactly the same result as
   // `qet`, but sorted according to the `sortColumns`. If `qet` is already
-  // sorted accordingly, it is simply returned.
+  // sorted accordingly, it is simply returned. If `explicitSort` is `true` and
+  // a `Sort` operation has to be created, that `Sort` will not propagate a
+  // `LIMIT`/`OFFSET` to its subtree. This is used for explicit `INTERNAL SORT
+  // BY` clauses, where the complete sorted result is requested and the
+  // limit-pushdown optimization is undesired.
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::vector<ColumnIndex>& sortColumns);
+      const std::vector<ColumnIndex>& sortColumns, bool explicitSort = false);
+
+  // Create a `QueryExecutionTree` that produces the same set of results as
+  // applying a `DISTINCT` on the columns `distinctIndices` to `qet`. In order
+  // of preference:
+  //  - If `qet` is already distinct wrt `distinctIndices` (e.g. a full index
+  //    scan `?s ?p ?o`), `qet` is returned unchanged.
+  //  - If `distinctIndices` is empty, the `DISTINCT` keeps at most one row and
+  //    is realized as a `LIMIT 1` on (a clone of) `qet`.
+  //  - If the root operation can push the `DISTINCT` down into its subtree(s)
+  //    more efficiently (e.g. a `CartesianProductJoin`), that rewritten tree is
+  //    returned.
+  //  - Otherwise a `Distinct` operation is added on top.
+  // The returned tree always exposes the same set of variables as `qet`, but
+  // the column order may differ. The `distinctIndices` must not contain
+  // duplicates.
+  static std::shared_ptr<QueryExecutionTree> createDistinctTree(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const std::vector<ColumnIndex>& distinctIndices);
 
   // Similar to `createSortedTree` (see directly above), but create the sorted
   // trees for two different trees, the sort columns of which are specified as
@@ -240,8 +258,8 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
-  bool supportsLimitOffset() const {
-    return getRootOperation()->supportsLimitOffset();
+  LimitOffsetHandling handlesLimitOffset() const {
+    return getRootOperation()->handlesLimitOffset();
   }
 
   // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
@@ -305,10 +323,13 @@ class QueryExecutionTree {
     }
   };
 
+  // define a `makeShared` member function that has the same interface as
+  // `std::make_shared`, but allocates via the `qec_->getAllocator()` (see
+  // `util/AllocateShared.h`).
+  DEFINE_MAKE_SHARED_MEMBER(qec_->getAllocator())
+
   std::shared_ptr<QueryExecutionTree> clone() const {
-    return rootOperation_ ? std::make_shared<QueryExecutionTree>(
-                                qec_, rootOperation_->clone())
-                          : std::make_shared<QueryExecutionTree>(qec_);
+    return makeShared<QueryExecutionTree>(qec_, rootOperation_->clone());
   }
 };
 
@@ -316,11 +337,14 @@ namespace ad_utility {
 // Create a `QueryExecutionTree` with `Operation` at the root.
 // The `Operation` is created using `qec` and `args...` as constructor
 // arguments.
+//
+// NOTE: Both the tree and the operation are allocated with the memory limited
+// allocator of the query, such that they count towards its memory limit.
 template <typename Operation, typename... Args>
 std::shared_ptr<QueryExecutionTree> makeExecutionTree(
     QueryExecutionContext* qec, Args&&... args) {
-  return std::make_shared<QueryExecutionTree>(
-      qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
+  return qec->makeShared<QueryExecutionTree>(
+      qec, qec->makeShared<Operation>(qec, AD_FWD(args)...));
 }
 }  // namespace ad_utility
 

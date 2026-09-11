@@ -1,9 +1,19 @@
 add_subdirectory(vocabulary)
+add_subdirectory(vocabulary_merger)
 addLinkAndDiscoverTest(PatternCreatorTest index)
 addLinkAndDiscoverTest(ScanSpecificationTest index)
 addLinkAndDiscoverTestNoLibs(KeyOrderTest)
-addLinkAndDiscoverTestNoLibs(EncodedIriManagerTest parser)
+addLinkAndDiscoverTestNoLibs(EncodedIriManagerTest vocabulary)
 addLinkAndDiscoverTest(GraphNameManagerTest index)
-addLinkAndDiscoverTest(IndexRebuilderTest index server)
-addLinkAndDiscoverTest(InputFileSpecificationTest parser)
+addLinkAndDiscoverTest(IndexFormatConverterTest index engine)
+# When the `server` library is not built (Emscripten, see
+# `src/engine/CMakeLists.txt`), the server-integration test is compiled out
+# via `#ifndef __EMSCRIPTEN__` in the test file and all other tests still run.
+if (TARGET server)
+    addLinkAndDiscoverTest(IndexRebuilderTest index server)
+else ()
+    addLinkAndDiscoverTest(IndexRebuilderTest index)
+endif ()
+addLinkAndDiscoverTest(IndexSwapTest index)
+addLinkAndDiscoverTest(InputFileSpecificationTest sparqlParser index)
 addLinkAndDiscoverTest(VocabularyMergerImplTest index)

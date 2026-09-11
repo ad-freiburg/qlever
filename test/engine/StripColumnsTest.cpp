@@ -93,7 +93,7 @@ TEST(StripColumns, computeResult) {
     auto strip = makeOp();
     auto res = strip.computeResultOnlyForTesting(false);
     ASSERT_TRUE(res.isFullyMaterialized());
-    EXPECT_THAT(res.idTable(),
+    EXPECT_THAT(res.idTableView(),
                 matchesIdTableFromVector({{1, 3}, {4, 6}, {8, 10}}));
     EXPECT_THAT(res.localVocab(), localVocabMatcher);
   }

@@ -3,6 +3,7 @@
 // 2024 - 2025 Hannes Baumann <baumannh@cs.uni-freiburg.de>, UFR
 // 2026        Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 // 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -18,8 +19,12 @@
 #include "global/Id.h"
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelation.h"
-#include "index/Vocabulary.h"
+#include "index/vocabulary/Vocabulary.h"
 #include "util/Iterators.h"
+
+// NOTE: The prefiltering needs the vocabulary of the index (and not only the
+// `LocalVocabContext` interface), so it takes the `IndexImpl` itself.
+class IndexImpl;
 
 // For certain SparqlExpressions it is possible to perform a pre-filtering
 // procedure w.r.t. relevant data blocks/ValueId values, by making use of the
@@ -132,7 +137,7 @@ class PrefilterExpression {
   // potentially incomplete first/last `CompressedBlockMetadata` values in input
   // are handled automatically. They are stripped at the beginning and added
   // again when the evaluation procedure was successfully performed.
-  BlockMetadataRanges evaluate(const LocalVocabContext& context,
+  BlockMetadataRanges evaluate(const IndexImpl& index,
                                BlockMetadataSpan blockRange,
                                size_t evaluationColumn) const;
 
@@ -144,7 +149,7 @@ class PrefilterExpression {
   // return their corresponding complement over ALL datatypes. This is in
   // particular needed for the complement of `IsDatatype` and `InExpression`.
   virtual BlockMetadataRanges evaluateImpl(
-      const LocalVocabContext& context, const ValueIdSubrange& idRange,
+      const IndexImpl& index, const ValueIdSubrange& idRange,
       BlockMetadataSpan blockRange, bool getTotalComplement = false) const = 0;
 
   // Format for debugging
@@ -182,7 +187,7 @@ class PrefixRegexExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -215,7 +220,7 @@ class LogicalExpression : public PrefilterExpression {
   // Declare `PrefixRegexExpression` as a friend because its `evaluateImpl`
   // requires access to the `evaluateImpl` declared here.
   friend class PrefixRegexExpression;
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -223,8 +228,11 @@ class LogicalExpression : public PrefilterExpression {
 
 // Values to differentiate `PrefilterExpression` for the respective `isDatatype`
 // SPARQL expressions. Supported by the following prefilter
-// `IsDatatypeExpression`: `isIri`, `isBlank`, `isLiteral` and `isNumeric`.
-enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC };
+// `IsDatatypeExpression`: `isIri`, `isBlank`, `isLiteral`, `isNumeric` and
+// `isEncodedIri`. Note: `IRI` includes "ordinary" (VocabIndex, LocalVocabIndex)
+// IRIs, as well as ID-encoded IRIs. `ENCODED_IRI` only includes the ID-encoded
+// IRIs.
+enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC, ENCODED_IRI };
 
 // The specialized `PrefilterExpression` class that actually applies the
 // pre-filter procedure w.r.t. the datatypes defined with `IsDatatype`.
@@ -242,7 +250,7 @@ class IsDatatypeExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -271,7 +279,7 @@ class IsInExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -310,7 +318,7 @@ class RelationalExpression : public PrefilterExpression {
   // If `getTotalComplement` is set to `true`, this method returns
   // the total complement over all datatype `ValueId`s from the
   // provided `CompressedBlockMetadata` values.
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -336,7 +344,7 @@ class NotExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -367,6 +375,8 @@ using IsLiteralExpression = prefilterExpressions::IsDatatypeExpression<
     prefilterExpressions::IsDatatype::LITERAL>;
 using IsNumericExpression = prefilterExpressions::IsDatatypeExpression<
     prefilterExpressions::IsDatatype::NUMERIC>;
+using IsEncodedIriExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::ENCODED_IRI>;
 
 //______________________________________________________________________________
 // Definition of the LogicalExpression for AND and OR.

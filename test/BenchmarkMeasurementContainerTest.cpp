@@ -31,9 +31,7 @@ static auto createWaitLambda(std::chrono::milliseconds waitDuration) {
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultEntry) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
 
   // There's really no special cases.
   const std::string entryDescriptor{"entry"};
@@ -60,9 +58,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultEntry) {
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   // The function should just wait 0.01 seconds.
   constexpr auto waitTime = 10ms;
   // There's really no special cases.
@@ -98,9 +94,10 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
 /*
 Check the content of a `Result` row.
 */
+template <typename... WantedContent>
 static void checkResultTableRow(const ResultTable& table,
                                 const size_t& rowNumber,
-                                const auto&... wantedContent) {
+                                const WantedContent&... wantedContent) {
   // Calls the correct assert function based on type.
   auto assertEqual = [](const auto& a, const auto& b) {
     static_assert(std::is_same_v<decltype(a), decltype(b)>,
@@ -134,9 +131,7 @@ static void checkResultTableRow(const ResultTable& table,
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   // Looks, if the general form is correct.
   auto checkForm = [](const ResultTable& table, const std::string& name,
                       const std::string& descriptorForLog,

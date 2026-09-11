@@ -17,13 +17,14 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
-#include "index/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "util/Exception.h"
 
 namespace ql::exportIds {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Iri = ad_utility::triple_component::Iri;
+using IriView = ad_utility::triple_component::IriView;
 using Literal = ad_utility::triple_component::Literal;
 
 // _____________________________________________________________________________
@@ -88,6 +89,7 @@ std::optional<Literal> idToLiteral(const IndexImpl& index, Id id,
                                 onlyReturnLiteralsWithXsdString);
     case VocabIndex:
     case LocalVocabIndex:
+    case SecondaryVocabIndex:
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab),
           onlyReturnLiteralsWithXsdString);
@@ -105,7 +107,7 @@ std::optional<Literal> getLiteralOrNullopt(
     return std::move(litOrIri.value().getLiteral());
   }
   return std::nullopt;
-};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(Id id) {
@@ -134,7 +136,7 @@ LiteralOrIri getLiteralOrIriFromWordVocabIndex(const IndexImpl& index, Id id) {
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(
           index.indexToString(id.getWordVocabIndex()))};
-};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
@@ -142,7 +144,7 @@ std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(
           index.getTextExcerpt(id.getTextRecordIndex()))};
-};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
@@ -154,6 +156,7 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
       return getLiteralOrIriFromWordVocabIndex(index, id);
     case VocabIndex:
     case LocalVocabIndex:
+    case SecondaryVocabIndex:
     case EncodedVal:
       return ql::exportIds::getLiteralOrIriFromVocabIndex(index, id,
                                                           localVocab);
@@ -168,17 +171,21 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> blankNodeIriToString(const Iri& iri) {
-  const auto& representation = iri.toStringRepresentation();
+template <typename IriType>
+std::optional<std::string_view> blankNodeIriToString(const IriType& iri) {
+  std::string_view representation = iri.toStringRepresentation();
   if (ql::starts_with(representation, QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX)) {
-    std::string_view view = representation;
-    view.remove_prefix(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX.size());
-    view.remove_suffix(1);
-    AD_CORRECTNESS_CHECK(ql::starts_with(view, "_:"));
-    return std::string{view};
+    representation.remove_prefix(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX.size());
+    representation.remove_suffix(1);
+    AD_CORRECTNESS_CHECK(ql::starts_with(representation, "_:"));
+    return representation;
   }
   return std::nullopt;
 }
+
+template std::optional<std::string_view> blankNodeIriToString<Iri>(const Iri&);
+template std::optional<std::string_view> blankNodeIriToString<IriView>(
+    const IriView&);
 
 // _____________________________________________________________________________
 LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
@@ -198,6 +205,14 @@ LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
       static_assert(ad_utility::SameAsAny<decltype(getEntity()), std::string,
                                           std::string_view>);
       return LiteralOrIri::fromStringRepresentation(std::string(getEntity()));
+    }
+    case Datatype::SecondaryVocabIndex: {
+      const auto* secondaryVocab = index.secondaryVocab();
+      AD_CORRECTNESS_CHECK(secondaryVocab != nullptr,
+                           "Encountered an `Id` of a secondary vocabulary, but "
+                           "the index has no secondary vocabulary");
+      return LiteralOrIri::fromStringRepresentation(
+          std::string((*secondaryVocab)[id.getSecondaryVocabIndex()]));
     }
     case Datatype::EncodedVal:
       return encodedIdToLiteralOrIri(id, index);
@@ -274,6 +289,20 @@ idToStringAndTypeForEncodedValue(Id id) {
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
   const auto& mgr = index.encodedIriManager();
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
+}
+
+// _____________________________________________________________________________
+PartitionedIdPositions partitionIdPositions(ql::span<const Id> ids) {
+  PartitionedIdPositions positions;
+  positions.vocabIndexIndices_.reserve(ids.size());
+  positions.nonVocabIndexIndices_.reserve(ids.size());
+  ql::ranges::partition_copy(
+      ql::views::iota(size_t{0}, ids.size()),
+      std::back_inserter(positions.vocabIndexIndices_),
+      std::back_inserter(positions.nonVocabIndexIndices_), [&ids](size_t i) {
+        return ids[i].getDatatype() == Datatype::VocabIndex;
+      });
+  return positions;
 }
 
 }  // namespace ql::exportIds

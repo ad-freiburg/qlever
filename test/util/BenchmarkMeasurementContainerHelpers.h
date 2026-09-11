@@ -34,7 +34,7 @@ parameter.
 arguments. Should be passed per deduction.
 */
 template <typename Function>
-static void doForTypeInResultTableEntryType(Function function) {
+void doForTypeInResultTableEntryType(Function function) {
   ad_utility::forEachTypeInTemplateTypeWithTI(
       ad_utility::use_type_identity::ti<ad_benchmark::ResultTable::EntryType>,
       [&function](auto t) {

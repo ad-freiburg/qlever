@@ -25,32 +25,34 @@ using namespace ad_utility::memory_literals;
 
 TEST(MemorySize, UserDefinedLiterals) {
   // Normal bytes.
-  ASSERT_EQ(50uL, (50_B).getBytes());
+  ASSERT_EQ(50ul, (50_B).getBytes());
 
   // Kilobytes.
-  ASSERT_EQ(2000uL, (2_kB).getBytes());    // Whole number.
-  ASSERT_EQ(1500uL, (1.5_kB).getBytes());  // Floating point without rounding.
-  ASSERT_EQ(1001uL, (1.0003_kB).getBytes());  // Floating point with rounding.
+  ASSERT_EQ(2000ul, (2_kB).getBytes());  // Whole number.
+  ASSERT_EQ(1500ul,
+            (1.5_kB).getBytes());  // Floating point without rounding.
+  ASSERT_EQ(1001ul,
+            (1.0003_kB).getBytes());  // Floating point with rounding.
 
   // Megabytes.
-  ASSERT_EQ(2000000uL, (2_MB).getBytes());  // Whole number.
-  ASSERT_EQ(1500000uL,
+  ASSERT_EQ(2000000ul, (2_MB).getBytes());  // Whole number.
+  ASSERT_EQ(1500000ul,
             (1.5_MB).getBytes());  // Floating point without rounding.
-  ASSERT_EQ(1000001uL,
+  ASSERT_EQ(1000001ul,
             (1.0000003_MB).getBytes());  // Floating point with rounding.
 
   // Gigabytes.
-  ASSERT_EQ(2000000000uL, (2_GB).getBytes());  // Whole number.
-  ASSERT_EQ(1500000000uL,
+  ASSERT_EQ(2000000000ul, (2_GB).getBytes());  // Whole number.
+  ASSERT_EQ(1500000000ul,
             (1.5_GB).getBytes());  // Floating point without rounding.
-  ASSERT_EQ(1000000001uL,
+  ASSERT_EQ(1000000001ul,
             (1.0000000003_GB).getBytes());  // Floating point with rounding.
 
   // Terabytes.
-  ASSERT_EQ(2000000000000uL, (2_TB).getBytes());  // Whole number.
-  ASSERT_EQ(1500000000000uL,
+  ASSERT_EQ(2000000000000ul, (2_TB).getBytes());  // Whole number.
+  ASSERT_EQ(1500000000000ul,
             (1.5_TB).getBytes());  // Floating point without rounding.
-  ASSERT_EQ(1000000000001uL,
+  ASSERT_EQ(1000000000001ul,
             (1.0000000000003_TB).getBytes());  // Floating point with rounding.
 }
 
@@ -68,12 +70,14 @@ struct AllMemoryUnitSizes {
 using Pair = ad_utility::ConstexprMapPair<std::string_view, AllMemoryUnitSizes>;
 constexpr ad_utility::ConstexprMap<std::string_view, AllMemoryUnitSizes, 5>
     singleMemoryUnitSizes(
-        {Pair{"B", AllMemoryUnitSizes{1uL, 1e-3, 1e-6, 1e-9, 1e-12}},
-         Pair{"kB", AllMemoryUnitSizes{1'000uL, 1, 1e-3, 1e-6, 1e-9}},
-         Pair{"MB", AllMemoryUnitSizes{1'000'000uL, 1e3, 1, 1e-3, 1e-6}},
-         Pair{"GB", AllMemoryUnitSizes{1'000'000'000uL, 1e6, 1e3, 1, 1e-3}},
-         Pair{"TB",
-              AllMemoryUnitSizes{1'000'000'000'000uL, 1e9, 1e6, 1e3, 1}}});
+        {Pair{"B", AllMemoryUnitSizes{uint64_t{1}, 1e-3, 1e-6, 1e-9, 1e-12}},
+         Pair{"kB", AllMemoryUnitSizes{uint64_t{1'000}, 1, 1e-3, 1e-6, 1e-9}},
+         Pair{"MB",
+              AllMemoryUnitSizes{uint64_t{1'000'000}, 1e3, 1, 1e-3, 1e-6}},
+         Pair{"GB",
+              AllMemoryUnitSizes{uint64_t{1'000'000'000}, 1e6, 1e3, 1, 1e-3}},
+         Pair{"TB", AllMemoryUnitSizes{uint64_t{1'000'000'000'000}, 1e9, 1e6,
+                                       1e3, 1}}});
 
 /*
 Checks all the getters of the class with the wanted memory sizes.
@@ -93,7 +97,8 @@ void checkAllMemorySizeGetter(
 TEST(MemorySize, MemorySizeConstructor) {
   // Default constructor.
   ad_utility::MemorySize m1;
-  checkAllMemorySizeGetter(m1, AllMemoryUnitSizes{0uL, 0.0, 0.0, 0.0, 0.0});
+  checkAllMemorySizeGetter(m1,
+                           AllMemoryUnitSizes{uint64_t{0}, 0.0, 0.0, 0.0, 0.0});
 
   // Factory functions for integral overload.
   checkAllMemorySizeGetter(ad_utility::MemorySize::bytes(1),
@@ -162,7 +167,8 @@ TEST(MemorySize, MemorySizeConstructor) {
 
 TEST(MemorySize, AssignmentOperator) {
   ad_utility::MemorySize m;
-  checkAllMemorySizeGetter(m, AllMemoryUnitSizes{0uL, 0.0, 0.0, 0.0, 0.0});
+  checkAllMemorySizeGetter(m,
+                           AllMemoryUnitSizes{uint64_t{0}, 0.0, 0.0, 0.0, 0.0});
 
   m = 1_B;
   checkAllMemorySizeGetter(m, singleMemoryUnitSizes.at("B"));
@@ -425,8 +431,9 @@ TEST(MemorySize, ArithmeticOperatorsOverAndUnderFlow) {
 
   // Whole number multiplication.
   ASSERT_THROW(100_GB * ad_utility::size_t_max, std::overflow_error);
-  ASSERT_NO_THROW(ad_utility::MemorySize::bytes(ad_utility::size_t_max / 2UL) *
-                  2UL);
+  ASSERT_NO_THROW(
+      ad_utility::MemorySize::bytes(ad_utility::size_t_max / uint64_t{2}) *
+      uint64_t{2});
   ad_utility::MemorySize memWholeMultiplication{40_MB};
   ASSERT_THROW(memWholeMultiplication *= ad_utility::size_t_max,
                std::overflow_error);
@@ -476,13 +483,17 @@ TEST(MemorySize, ConstEval) {
 
   // Factory functions.
   static_assert(ad_utility::MemorySize::bytes(42).getBytes() == 42);
-  static_assert(ad_utility::MemorySize::kilobytes(42uL).getKilobytes() == 42);
+  static_assert(
+      ad_utility::MemorySize::kilobytes(uint64_t{42}).getKilobytes() == 42);
   static_assert(ad_utility::MemorySize::kilobytes(4.2).getKilobytes() == 4.2);
-  static_assert(ad_utility::MemorySize::megabytes(42uL).getMegabytes() == 42);
+  static_assert(
+      ad_utility::MemorySize::megabytes(uint64_t{42}).getMegabytes() == 42);
   static_assert(ad_utility::MemorySize::megabytes(4.2).getMegabytes() == 4.2);
-  static_assert(ad_utility::MemorySize::gigabytes(42uL).getGigabytes() == 42);
+  static_assert(
+      ad_utility::MemorySize::gigabytes(uint64_t{42}).getGigabytes() == 42);
   static_assert(ad_utility::MemorySize::gigabytes(4.2).getGigabytes() == 4.2);
-  static_assert(ad_utility::MemorySize::terabytes(42uL).getTerabytes() == 42);
+  static_assert(
+      ad_utility::MemorySize::terabytes(uint64_t{42}).getTerabytes() == 42);
   static_assert(ad_utility::MemorySize::terabytes(4.2).getTerabytes() == 4.2);
   static_assert(ad_utility::MemorySize::max().getBytes() ==
                 ad_utility::size_t_max);

@@ -220,6 +220,7 @@ TEST(AggregateExpression, CountStar) {
   // stores `i`.
   auto matcher = [&](int64_t i) {
     auto evaluate = [&](const SparqlExpression::Ptr& expr) {
+      t.context._inputTable = t.table.asStaticView<0>();
       t.context._beginIndex = 0;
       t.context._endIndex = t.table.size();
       return expr->evaluate(&t.context);

@@ -12,12 +12,14 @@
 #include <variant>
 
 #include "./util/GTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
+#include "engine/EmptyPath.h"
 #include "engine/ExistsJoin.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/Filter.h"
@@ -42,16 +44,15 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
-#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/RuntimeParameters.h"
-#include "parser/SparqlParser.h"
 #include "rdfTypes/Iri.h"
 #include "util/Exception.h"
 #include "util/IndexTestHelpers.h"
 #include "util/TypeTraits.h"
 
 using ad_utility::source_location;
+using ad_utility::testing::parseQuery;
 
 namespace queryPlannerTestHelpers {
 using namespace ::testing;
@@ -320,6 +321,17 @@ constexpr auto NeutralOptional = MatchTypeAndOrderedChildren<::NeutralOptional>;
 
 constexpr auto Minus = MatchTypeAndOrderedChildren<::Minus>;
 
+// Match an `EmptyPath` operation with the given `variable`, the given optional
+// `graphVariable` and the given (optional) child.
+inline auto EmptyPath = [](const Variable& variable,
+                           const std::optional<Variable>& graphVariable,
+                           const auto&... childMatchers) -> QetMatcher {
+  return RootOperation<::EmptyPath>(
+      AllOf(children(childMatchers...),
+            AD_PROPERTY(::EmptyPath, variable, Eq(variable)),
+            AD_PROPERTY(::EmptyPath, graphVariable, Eq(graphVariable))));
+};
+
 // Return a matcher that matches a query execution tree that consists of
 // multiple JOIN operations that join the `children`. The `INTERNAL SORT BY`
 // operations required for the joins are also ignored by this matcher.
@@ -427,6 +439,7 @@ struct SpatialJoinMatcher {
                   PayloadVariables payloadVariables,
                   SpatialJoinAlgorithm algorithm,
                   std::optional<SpatialJoinType> joinType,
+                  std::optional<De9imFilterString> de9imFilter,
                   const ChildArgs&... childMatchers) const {
     return RootOperation<::SpatialJoin>(AllOf(
         children(childMatchers...),
@@ -440,6 +453,7 @@ struct SpatialJoinMatcher {
                     Eq(payloadVariables)),
         AD_PROPERTY(::SpatialJoin, getAlgorithm, Eq(algorithm)),
         AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType)),
+        AD_PROPERTY(::SpatialJoin, getDe9imFilter, Eq(de9imFilter)),
         AD_PROPERTY(::SpatialJoin, getSubstitutesFilterOp, Eq(Substitute))));
   }
 };
@@ -491,6 +505,15 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
+
+// Match a subtree that matches the `actualMatcher` and additionally has the
+// given `LIMIT`/`OFFSET` attached to its root operation.
+inline QetMatcher WithLimitOffset(const LimitOffsetClause& limitOffset,
+                                  const QetMatcher& actualMatcher) {
+  return AllOf(RootOperationBase(
+                   AD_PROPERTY(::Operation, getLimitOffset, Eq(limitOffset))),
+               actualMatcher);
+}
 
 // Match a `DISTINCT` operation.
 constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
@@ -574,7 +597,7 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
   using QueryPlanner::QueryPlanner;
 
   FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      const std::vector<SparqlFilter>& filters) const override {
+      const std::vector<SparqlFilter>& filters) override {
     FiltersAndOptionalSubstitutes plans;
     plans.reserve(filters.size());
 
@@ -615,17 +638,16 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`
 template <typename QueryPlannerClass = QueryPlanner>
-inline QueryExecutionTree parseAndPlan(std::string query,
-                                       QueryExecutionContext* qec) {
-  static EncodedIriManager ev;
-  ParsedQuery pq = SparqlParser::parseQuery(&ev, std::move(query));
+inline std::shared_ptr<QueryExecutionTree> parseAndPlan(
+    std::string query, QueryExecutionContext* qec) {
+  ParsedQuery pq = parseQuery(std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
   // a queryExecutionContext.
   auto tree =
       QueryPlannerClass{qec,
                         std::make_shared<ad_utility::CancellationHandle<>>()}
           .createExecutionTree(pq);
-  tree.isRoot() = true;
+  tree->isRoot() = true;
   return tree;
 }
 
@@ -634,8 +656,8 @@ inline QueryExecutionTree parseAndPlan(std::string query,
 // be controlled to choose between the greedy and the dynamic programming
 // planner. This function only serves as a common implementation, for the
 // actual tests the three functions below should be used.
-template <typename QueryPlannerClass = QueryPlanner>
-void expectWithGivenBudget(std::string query, auto matcher,
+template <typename QueryPlannerClass = QueryPlanner, typename MatcherT>
+void expectWithGivenBudget(std::string query, MatcherT matcher,
                            std::optional<QueryExecutionContext*> optQec,
                            size_t queryPlanningBudget,
                            source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -655,14 +677,14 @@ void expectWithGivenBudget(std::string query, auto matcher,
   QueryExecutionContext* qec =
       optQec.has_value() ? *optQec : ad_utility::testing::getQec();
   auto qet = parseAndPlan<QueryPlannerClass>(std::move(query), qec);
-  qet.getRootOperation()->createRuntimeInfoFromEstimates(
-      qet.getRootOperation()->getRuntimeInfoPointer());
-  EXPECT_THAT(qet, matcher);
+  qet->getRootOperation()->createRuntimeInfoFromEstimates(
+      qet->getRootOperation()->getRuntimeInfoPointer());
+  EXPECT_THAT(*qet, matcher);
 }
 
 // Same as `expectWithGivenBudget` but allows multiple budgets to be tested.
-template <typename QueryPlannerClass = QueryPlanner>
-void expectWithGivenBudgets(std::string query, auto matcher,
+template <typename QueryPlannerClass = QueryPlanner, typename MatcherT>
+void expectWithGivenBudgets(std::string query, MatcherT matcher,
                             std::optional<QueryExecutionContext*> optQec,
                             std::vector<size_t> queryPlanningBudgets,
                             source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -673,8 +695,8 @@ void expectWithGivenBudgets(std::string query, auto matcher,
 
 // Same as `expectWithGivenBudget` above, but always use the greedy query
 // planner.
-template <typename QueryPlannerClass = QueryPlanner>
-void expectGreedy(std::string query, auto matcher,
+template <typename QueryPlannerClass = QueryPlanner, typename MatcherT>
+void expectGreedy(std::string query, MatcherT matcher,
                   std::optional<QueryExecutionContext*> optQec = std::nullopt,
                   source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudget<QueryPlannerClass>(std::move(query), std::move(matcher),
@@ -682,9 +704,9 @@ void expectGreedy(std::string query, auto matcher,
 }
 // Same as `expectWithGivenBudget` above, but always use the dynamic
 // programming query planner.
-template <typename QueryPlannerClass = QueryPlanner>
+template <typename QueryPlannerClass = QueryPlanner, typename MatcherT>
 void expectDynamicProgramming(
-    std::string query, auto matcher,
+    std::string query, MatcherT matcher,
     std::optional<QueryExecutionContext*> optQec = std::nullopt,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudget<QueryPlannerClass>(
@@ -695,8 +717,8 @@ void expectDynamicProgramming(
 // Same as `expectWithGivenBudget` above, but run the test for different
 // query planning budgets. This is guaranteed to run with both the greedy
 // query planner and the dynamic-programming based query planner.
-template <typename QueryPlannerClass = QueryPlanner>
-void expect(std::string query, auto matcher,
+template <typename QueryPlannerClass = QueryPlanner, typename MatcherT>
+void expect(std::string query, MatcherT matcher,
             std::optional<QueryExecutionContext*> optQec = std::nullopt,
             source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudgets<QueryPlannerClass>(

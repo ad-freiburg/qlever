@@ -5,7 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "../util/GTestHelpers.h"
-#include "index/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "util/Random.h"
 #include "util/TransparentFunctors.h"
 

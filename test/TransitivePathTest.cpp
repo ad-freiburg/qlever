@@ -124,7 +124,7 @@ class TransitivePathTest
           aggregateTables(result.idTables(), expected.numColumns());
       EXPECT_THAT(idTable, UnorderedElementsAreArray(expected));
     } else {
-      EXPECT_THAT(result.idTable(), UnorderedElementsAreArray(expected));
+      EXPECT_THAT(result.idTableView(), UnorderedElementsAreArray(expected));
     }
   }
 
@@ -1447,6 +1447,50 @@ TEST_P(TransitivePathTest, graphVariableBoundToNonGraphOperationEmptyPath) {
       {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}},
       std::move(side), 0, {Variable{"?start"}, Variable{"?other"}}, left, right,
       0, std::numeric_limits<size_t>::max(), false, {Variable{"?g"}},
+      "<a> <b> <c> <a> . <a> <b> <d> <b> .");
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest,
+       graphVariableBoundToOperationThatAlreadyProvidesTheGraph) {
+  auto sub = makeIdTableFromVector({
+      {0, 1, 0},
+      {1, 0, 0},
+      {2, 3, 0},
+      {0, 1, 1},
+      {1, 0, 1},
+      {2, 3, 1},
+      {3, 2, 1},
+      {1, 0, 2},
+      {3, 2, 2},
+  });
+
+  // The bound side already provides the graph, so the pairs of value and graph
+  // are matched against the knowledge graph. `<c>` (id 2) only occurs in the
+  // graph `<a>` (id 0), so the last row is filtered out.
+  auto side = makeIdTableFromVector({
+      {0, 0},
+      {0, 1},
+      {2, 1},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {0, 0, 0},
+      {0, 1, 0},
+      {0, 0, 1},
+      {0, 1, 1},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathBound(
+      true, std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}},
+      std::move(side), 0, {Variable{"?start"}, Variable{"?g"}}, left, right, 0,
+      std::numeric_limits<size_t>::max(), false, {Variable{"?g"}},
       "<a> <b> <c> <a> . <a> <b> <d> <b> .");
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());

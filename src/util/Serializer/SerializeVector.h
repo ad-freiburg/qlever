@@ -7,9 +7,12 @@
 
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "backports/span.h"
+#include "util/ExceptionHandling.h"
+#include "util/ResetWhenMoved.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
@@ -27,6 +30,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
   }
   if constexpr (TriviallySerializable<V>) {
     using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
+    ad_utility::serialization::alignSerializerForType<V>(serializer);
     serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
                               arg.size() * sizeof(V));
   } else {
@@ -67,6 +71,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
   }
   if constexpr (TriviallySerializable<V>) {
     using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
+    ad_utility::serialization::alignSerializerForType<V>(serializer);
     serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
                               arg.size() * sizeof(V));
   } else {
@@ -74,6 +79,28 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
       serializer | el;
     }
   }
+}
+
+// Read a span of trivially copyable values from the serializer without copying
+// them. The pointer of the span will point into the serializers internal
+// buffer. Can only be called if a `span` or `vector` of the same type was
+// written to the serializer at its current position using a serializer
+// that implements aligned serialization.
+CPP_template(typename T, typename S)(
+    requires ZeroCopyReadSerializer<S> CPP_and TriviallySerializable<T>)
+    ql::span<const T> zeroCopyDeserializeToSpan(S& serializer) {
+  std::size_t size;
+  serializer >> size;
+  alignSerializerForType<T>(serializer);
+  auto bytes = serializer.getSpanToBytes(size * sizeof(T));
+  AD_CORRECTNESS_CHECK(bytes.size() == size * sizeof(T));
+  AD_CORRECTNESS_CHECK(
+      reinterpret_cast<std::uintptr_t>(bytes.data()) % alignof(T) == 0);
+  // TODO<C++23> Technically this is undefined behavior for types other than
+  // `char` without calling `start_lifetime_as_array` or memcopying the data,
+  // But no compiler implements this as of now, and it has been working in
+  // practice forever.
+  return ql::span<const T>{reinterpret_cast<const T*>(bytes.data()), size};
 }
 
 /// Incrementally serialize a std::vector to disk without materializing it.
@@ -84,7 +111,10 @@ CPP_template(typename T, typename Serializer)(
   Serializer _serializer;
   uint64_t _startPosition;
   typename std::vector<T>::size_type _size = 0;
-  bool _isFinished = false;
+  // A moved-from `VectorIncrementalSerializer` must not write anything anymore,
+  // as its serializer has been moved away. The `ResetWhenMoved` takes care of
+  // this, such that the move constructor can simply be defaulted.
+  ad_utility::ResetWhenMoved<bool, true> _isFinished = false;
 
  public:
   explicit VectorIncrementalSerializer(Serializer&& serializer)
@@ -93,7 +123,20 @@ CPP_template(typename T, typename Serializer)(
     // `_size` does not have the correct value yet. The correct size will be set
     // in the finish() method.
     _serializer << _size;
+    alignSerializerForType<T>(_serializer);
   }
+
+  // This class is move-only, as the underlying serializers are.
+  VectorIncrementalSerializer(const VectorIncrementalSerializer&) = delete;
+  VectorIncrementalSerializer& operator=(const VectorIncrementalSerializer&) =
+      delete;
+  // The defaulted move constructor has the correct semantics because of the
+  // usage of `ResetWhenMoved` for the `_isFinished` member.
+  //
+  // NOTE: There deliberately is no move assignment operator. It would have to
+  // `finish()` the assigned-to object first (which might already have been
+  // written to), and no caller currently needs it.
+  VectorIncrementalSerializer(VectorIncrementalSerializer&&) = default;
 
   void push(const T& element) {
     _serializer << element;
@@ -105,10 +148,7 @@ CPP_template(typename T, typename Serializer)(
       return;
     }
     _isFinished = true;
-    auto endPosition = _serializer.getSerializationPosition();
-    _serializer.setSerializationPosition(_startPosition);
-    _serializer << _size;
-    _serializer.setSerializationPosition(endPosition);
+    serializeAtPosition(_serializer, _startPosition, _size);
   }
 
   Serializer serializer() && {
@@ -116,7 +156,11 @@ CPP_template(typename T, typename Serializer)(
     return std::move(_serializer);
   }
 
-  ~VectorIncrementalSerializer() { finish(); }
+  ~VectorIncrementalSerializer() {
+    ad_utility::terminateIfThrows(
+        [this]() { finish(); },
+        "The finishing of a `VectorIncrementalSerializer` failed");
+  }
 };
 
 }  // namespace ad_utility::serialization

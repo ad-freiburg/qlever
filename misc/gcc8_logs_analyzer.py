@@ -3,7 +3,11 @@
 import re
 import sys
 
-ERROR_PATTERN = re.compile(r'^(.*?):(\d+):(\d+):\s+error:\s+(.*)$')
+# NOTE: `fatal error:` (for example a missing header, which GCC 8 reports for
+# `#include <coroutine>`) has to be matched as well. Such errors abort the
+# translation unit immediately, so missing them is worse than missing an
+# ordinary `error:`.
+ERROR_PATTERN = re.compile(r'^(.*?):(\d+):(\d+):\s+(?:fatal\s+)?error:\s+(.*)$')
 LANG_SPECIFIC_REGEX = re.compile(
     r'[‘’"]\b(co_await|co_return|co_yield|concept|consteval|constinit|requires)\b[’‘"]',
     re.IGNORECASE

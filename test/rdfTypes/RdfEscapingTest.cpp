@@ -10,6 +10,26 @@
 using namespace RdfEscaping;
 
 // ___________________________________________________________________________
+TEST(RdfEscapingTest, hexadecimalCharactersToUtf8Codepoint) {
+  using detail::hexadecimalCharactersToUtf8Codepoint;
+  // Ordinary cases: one-, two-, three- and four-byte codepoints. The expected
+  // values use the C++ `\u`/`\U` escapes matching the hexadecimal input (except
+  // for `0041`, since `A` would be an ill-formed universal character name).
+  EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("0041"), "A");
+  EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("00e4"), "\u00e4");
+  EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("2702"), "\u2702");
+  EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("0001F600"), "\U0001F600");
+  // Corner cases: shorter and full-length (8 hex digits) inputs are accepted.
+  EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("41"), "A");
+  EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("1F600"), "\U0001F600");
+  // An input longer than a single codepoint (more than 8 hex digits) violates
+  // the contract check.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      hexadecimalCharactersToUtf8Codepoint("000000000"),
+      ::testing::HasSubstr("Assertion `hex.size() <= 8` failed"));
+}
+
+// ___________________________________________________________________________
 TEST(RdfEscapingTest, escapeForCsv) {
   ASSERT_EQ(escapeForCsv("abc"), "abc");
   ASSERT_EQ(escapeForCsv("a\nb\rc,d"), "\"a\nb\rc,d\"");

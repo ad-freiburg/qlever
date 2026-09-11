@@ -7,7 +7,6 @@
 #include <boost/program_options.hpp>
 #include <boost/program_options/value_semantic.hpp>
 #include <cstdlib>
-#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <ios>
@@ -21,6 +20,7 @@
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/filesystem.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/Exception.h"
@@ -47,8 +47,7 @@ be treated as `false`.
 static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
     const std::vector<std::pair<const BenchmarkInterface*, BenchmarkResults>>&
         benchmarkClassAndResults,
-    const std::filesystem::path& jsonFileName,
-    bool appendToJsonInFile = false) {
+    const ql::filesystem::path& jsonFileName, bool appendToJsonInFile = false) {
   AD_CORRECTNESS_CHECK(jsonFileName.extension() == ".json");
   // Convert to json.
   nlohmann::ordered_json benchmarkClassAndBenchmarkResultsAsJson(
@@ -59,8 +58,8 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
   Add the old json array entries to the new json array entries, if a non empty
   file exists. Otherwise, we create/fill the file.
   */
-  if (appendToJsonInFile && std::filesystem::exists(jsonFileName) &&
-      !std::filesystem::is_empty(jsonFileName)) {
+  if (appendToJsonInFile && ql::filesystem::exists(jsonFileName) &&
+      !ql::filesystem::is_empty(jsonFileName)) {
     /*
     By parsing the file as json and working with `nlohmann::ordered_json`,
     instead of the json string representation, we first make sure, that the file

@@ -16,6 +16,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
@@ -36,6 +37,11 @@ Service::Service(QueryExecutionContext* qec,
     : Operation{qec},
       parsedServiceClause_{std::move(parsedServiceClause)},
       getResultFunction_{std::move(getResultFunction)} {}
+
+// ____________________________________________________________________________
+bool Service::isDeterministicImpl() const {
+  return getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>();
+}
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
@@ -102,12 +108,15 @@ std::string Service::pushDownValues(std::string_view pattern,
   size_t index = pattern.find('{');
   AD_CORRECTNESS_CHECK(index != std::string::npos);
   pattern.remove_prefix(index + 1);
+  size_t lastBrace = pattern.rfind('}');
+  AD_CORRECTNESS_CHECK(lastBrace != std::string_view::npos);
+  std::string_view body = pattern.substr(0, lastBrace);
   // If we have a single subquery in the service clause, wrap it inside curly
   // braces so it remains valid syntax alongside a VALUES clause.
   if (ctre::starts_with<selectPatternRegex>(pattern)) {
-    return absl::StrCat("{\n", values, "\n{", pattern, "\n}");
+    return absl::StrCat("{\n{", body, "}\n", values, "\n}");
   }
-  return absl::StrCat("{\n", values, "\n", pattern);
+  return absl::StrCat("{\n", body, "\n", values, "\n}");
 }
 
 // _____________________________________________________________________________
@@ -263,7 +272,7 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
                                            localVocab)
                 : TripleComponent::UNDEF();
 
-        Id id = std::move(tc).toValueId(getIndex(), *localVocab);
+        Id id = toValueId(std::move(tc), getIndex(), *localVocab);
         idTable(rowIdx, colIdx) = id;
         if (id.getDatatype() == Datatype::LocalVocabIndex) {
           ++numLocalVocabPerColumn[colIdx];
@@ -398,7 +407,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     std::string row = "(";
     for (const auto& columnIdx : commonColumnIndices) {
       const auto& optStr = idToValueForValuesClause(
-          getIndex(), siblingResult->idTable()(rowIndex, columnIdx),
+          getIndex(), siblingResult->idTableView()(rowIndex, columnIdx),
           siblingResult->localVocab());
 
       if (!optStr.has_value()) {
@@ -412,7 +421,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
   ad_utility::HashSet<std::string> rowSet;
   std::string values = " { ";
-  for (size_t rowIndex = 0; rowIndex < siblingResult->idTable().size();
+  for (size_t rowIndex = 0; rowIndex < siblingResult->idTableView().size();
        ++rowIndex) {
     std::string row = createValueRow(rowIndex);
     if (row.empty() || rowSet.contains(row)) {
@@ -424,7 +433,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     checkCancellation();
   }
 
-  return "VALUES " + vars + values + "} . ";
+  return "VALUES " + vars + values + "} ";
 }
 
 // ____________________________________________________________________________
@@ -633,7 +642,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
   if (siblingResult->isFullyMaterialized()) {
     bool resultIsSmall =
-        siblingResult->idTable().size() <=
+        siblingResult->idTableView().size() <=
         getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
     if (resultIsSmall) {
       service->siblingInfo_.emplace(
@@ -671,7 +680,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
           moveToCachingInputRange(std::move(resultPairs)));
       viewCollection.emplace_back(std::move(generator));
       sibling->precomputedResultBecauseSiblingOfService() =
-          std::make_shared<const Result>(
+          sibling->makeShared<const Result>(
               Result::LazyResult{
                   ad_utility::OwningViewNoConst{std::move(viewCollection)} |
                   ql::views::join},
@@ -684,9 +693,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // The `siblingResult` has been fully materialized, so it can now be
   // used in both sibling and service.
   Result::IdTableVocabPair siblingPair(
-      IdTable{sibling->getResultWidth(),
-              sibling->getExecutionContext()->getAllocator()},
-      LocalVocab{});
+      IdTable{sibling->getResultWidth(), sibling->allocator()}, LocalVocab{});
   siblingPair.idTable_.reserve(rows);
 
   for (auto& pair : resultPairs) {
@@ -695,8 +702,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }
 
   service->siblingInfo_.emplace(
-      std::make_shared<Result>(std::move(siblingPair),
-                               siblingResult->sortedBy()),
+      service->makeShared<Result>(std::move(siblingPair),
+                                  siblingResult->sortedBy()),
       sibling->getExternallyVisibleVariableColumns(), sibling->getCacheKey());
 
   sibling->precomputedResultBecauseSiblingOfService() =

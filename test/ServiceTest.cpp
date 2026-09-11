@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
@@ -319,8 +320,8 @@ TEST_F(ServiceTest, computeResult) {
         getResultFunctionFactory(
             expectedUrl, expectedSparqlQuery, "{}",
             boost::beast::http::status::ok, "application/sparql-results+json",
-            std::make_exception_ptr(
-                ad_utility::CancellationException("Mock Cancellation")))};
+            std::make_exception_ptr(ad_utility::CancellationException(
+                ad_utility::CancellationState::MANUAL, "Mock Cancellation")))};
 
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         serviceSilent.computeResultOnlyForTesting(),
@@ -360,7 +361,7 @@ TEST_F(ServiceTest, computeResult) {
     // value -> undefined value
     auto result3 = runComputeResult(
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}));
-    EXPECT_TRUE(result3.idTable().at(1, 1).isUndefined());
+    EXPECT_TRUE(result3.idTableView()(1, 1).isUndefined());
 
     testQec->clearCacheUnpinnedOnly();
 
@@ -398,7 +399,7 @@ TEST_F(ServiceTest, computeResult) {
     // Check that the result table corresponds to the contents of the JSON.
     IdTable expectedIdTable = makeIdTableFromVector(
         {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
-    EXPECT_EQ(result.idTable(), expectedIdTable);
+    EXPECT_EQ(result.idTableView(), expectedIdTable);
 
     // Check 5: When a siblingTree with variables common to the Service
     // Clause is passed, the Service Operation shall use the siblings result
@@ -425,9 +426,8 @@ TEST_F(ServiceTest, computeResult) {
 
     std::string_view expectedSparqlQuery5 =
         "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
-        "{ VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y "
-        ". ?y "
-        "<is-a> ?z2 . }";
+        "{ ?x <ble> ?y . ?y <is-a> ?z2 . VALUES (?x ?y) { (<x> <y>) "
+        "(<blu> <bla>) } }";
 
     Service serviceOperation5{
         testQec, parsedServiceClause5,
@@ -498,8 +498,7 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
       false};
 
   std::string_view expectedSparqlQuery =
-      " SELECT ?a { VALUES (?a) { (<a>) } . { SELECT ?obj WHERE { ?a ?b "
-      "?c } } }";
+      " SELECT ?a { { SELECT ?obj WHERE { ?a ?b ?c } } VALUES (?a) { (<a>) } }";
 
   Service serviceOperation{
       testQec, parsedServiceClause,
@@ -508,6 +507,27 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
 
   serviceOperation.siblingInfo_.emplace(siblingInfoFromOp(sibling));
   EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
+}
+
+// _____________________________________________________________________________
+TEST_F(ServiceTest, pushDownValuesPlacesValuesAtEnd) {
+  // Normal body: VALUES clause appears after the body content.
+  EXPECT_EQ(
+      Service::pushDownValues("{ ?x <ble> ?y . }", "VALUES (?x) { (<a>) } "),
+      "{\n ?x <ble> ?y . \nVALUES (?x) { (<a>) } \n}");
+
+  // Subquery body: subquery is wrapped in braces and VALUES appears after.
+  EXPECT_EQ(Service::pushDownValues("{ SELECT ?a WHERE { ?a ?b ?c } }",
+                                    "VALUES (?a) { (<a>) } "),
+            "{\n{ SELECT ?a WHERE { ?a ?b ?c } }\nVALUES (?a) { (<a>) } \n}");
+
+  // BIND body: VALUES is placed AFTER the BIND so the remote endpoint does not
+  // see the variable as already bound when it evaluates the BIND expression.
+  // Reproducer: SELECT * WHERE { VALUES ?x { 1 }
+  //             SERVICE <...> { BIND (1 AS ?x) } }
+  EXPECT_EQ(
+      Service::pushDownValues("{ BIND (1 AS ?x) }", "VALUES (?x) { (1) } "),
+      "{\n BIND (1 AS ?x) \nVALUES (?x) { (1) } \n}");
 }
 
 // _____________________________________________________________________________
@@ -678,11 +698,11 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   EXPECT_EQ(blankNodeMap.size(), 0);
 
   const EncodedIriManager encodedIriManager;
-  Id a = bTTC({{"type", "bnode"}, {"value", "A"}})
-             .toValueIdIfNotString(&encodedIriManager)
+  Id a = toValueIdIfNotString(bTTC({{"type", "bnode"}, {"value", "A"}}),
+                              &encodedIriManager)
              .value();
-  Id b = bTTC({{"type", "bnode"}, {"value", "B"}})
-             .toValueIdIfNotString(&encodedIriManager)
+  Id b = toValueIdIfNotString(bTTC({{"type", "bnode"}, {"value", "B"}}),
+                              &encodedIriManager)
              .value();
   EXPECT_EQ(a.getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_EQ(b.getDatatype(), Datatype::BlankNodeIndex);
@@ -691,8 +711,8 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   EXPECT_EQ(blankNodeMap.size(), 2);
 
   // This BlankNode exists already, known Id will be used.
-  Id a2 = bTTC({{"type", "bnode"}, {"value", "A"}})
-              .toValueIdIfNotString(&encodedIriManager)
+  Id a2 = toValueIdIfNotString(bTTC({{"type", "bnode"}, {"value", "A"}}),
+                               &encodedIriManager)
               .value();
   EXPECT_EQ(a, a2);
 
@@ -721,7 +741,8 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
   // Escape Quotes within literals.
-  auto str = LocalVocabEntry::literalWithoutQuotes("a\"b\"c", index);
+  auto str = LocalVocabEntry::literalWithoutQuotes(
+      "a\"b\"c", index.getLocalVocabContext());
   EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
             "\"a\\\"b\\\"c\"");
 
@@ -820,7 +841,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
       Result res = Values::computeResult(false);
 
       if (!requestLaziness) {
-        return Result(Result::IdTableVocabPair(res.idTable().clone(),
+        return Result(Result::IdTableVocabPair(res.cloneIdTable(),
                                                res.localVocab().clone()),
                       res.sortedBy());
       }
@@ -835,7 +856,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                   co_yield pair;
                   idt.clear();
                 }
-              }(res.idTable().clone()),
+              }(res.cloneIdTable()),
               res.sortedBy()};
     }
   };
@@ -959,6 +980,8 @@ TEST_F(ServiceTest, clone) {
           genJsonResult({"x", "y"}, {{"a", "b"}}),
           boost::beast::http::status::ok, "application/sparql-results+json")};
 
+  // SERVICE performs a network request and is therefore non-deterministic.
+  EXPECT_FALSE(service.isDeterministic());
   auto clone = service.clone();
   ASSERT_TRUE(clone);
   EXPECT_THAT(service, IsDeepCopy(*clone));

@@ -15,6 +15,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
 #include "index/IndexImpl.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/ParsedQuery.h"
 #include "util/Exception.h"
 #include "util/InputRangeUtils.h"
@@ -130,7 +131,7 @@ string IndexScan::getCacheKeyImpl() const {
     os << "SCAN " << permutationString << " with ";
     auto addKey = [&os, &permutationString, this](size_t idx) {
       auto keyString = permutationString.at(idx);
-      const auto& key = getPermutedTriple().at(idx)->toRdfLiteral();
+      const auto& key = toRdfLiteral(*getPermutedTriple().at(idx));
       os << keyString << " = \"" << key << "\"";
     };
     for (size_t i = 0; i < 3 - numVariables_; ++i) {
@@ -146,7 +147,7 @@ string IndexScan::getCacheKeyImpl() const {
   }
 
   os << " ";
-  graphsToFilter_.format(os, &TripleComponent::toRdfLiteral);
+  graphsToFilter_.format(os, &toRdfLiteral);
 
   if (varsToKeep_.has_value()) {
     os << " column subset "
@@ -156,21 +157,29 @@ string IndexScan::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-bool IndexScan::canResultBeCachedImpl() const {
+bool IndexScan::resultDoesMatchCacheKey() const {
   return !scanSpecAndBlocksIsPrefiltered_;
-};
+}
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  auto additionalVars = absl::StrJoin(
-      additionalVariables_ |
+  auto isNotStripped = [this](const Variable& var) {
+    return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
+  };
+  auto triple = ::ranges::views::concat(ql::ranges::views::single(subject_),
+                                        ql::ranges::views::single(predicate_),
+                                        ql::ranges::views::single(object_));
+  auto components = ::ranges::views::concat(
+      // All IRIs/literals and non-stripped variables from the scan triple.
+      triple | ql::views::filter([&isNotStripped](const TripleComponent& tc) {
+        return !tc.isVariable() || isNotStripped(tc.getVariable());
+      }) | ql::views::transform(&TripleComponent::toString),
+      // All non-stripped additional variables.
+      additionalVariables_ | ql::views::filter(isNotStripped) |
           ql::views::transform(
-              [](const auto& var) -> decltype(auto) { return var.name(); }),
-      " ");
+              [](const auto& var) -> decltype(auto) { return var.name(); }));
   return absl::StrCat("IndexScan ", permutation().readableName(), " ",
-                      subject_.toString(), " ", predicate_.toString(), " ",
-                      object_.toString(), additionalVars.empty() ? "" : " ",
-                      additionalVars);
+                      absl::StrJoin(components.begin(), components.end(), " "));
 }
 
 // _____________________________________________________________________________
@@ -182,7 +191,7 @@ size_t IndexScan::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+std::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
   std::vector<ColumnIndex> result;
   for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
     result.push_back(i);
@@ -192,6 +201,12 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
       result.push_back(numVariables_ + i);
     }
   }
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+  auto result = variableAndGraphColumns();
 
   if (varsToKeep_.has_value()) {
     auto permutation = getSubsetForStrippedColumns();
@@ -203,6 +218,52 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
     }
   }
   return result;
+}
+
+// _____________________________________________________________________________
+bool IndexScan::isDistinctByImpl(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  // Duplicate triples are removed during scanning, so the result contains every
+  // matching triple (or quad, if a graph column is present) exactly once. Its
+  // rows are therefore uniquely identified by the triple's variable columns
+  // plus the graph column; all other (payload) columns, e.g. the `pattern`
+  // column, are functionally determined by those. The scan is thus distinct wrt
+  // `distinctIndices` iff `distinctIndices` is a superset of the identifying
+  // columns. Note that it does not have to be equal to them: additional columns
+  // in `distinctIndices` can only make two rows differ in more places, so they
+  // never destroy distinctness. Conversely, a `distinctIndices` that misses
+  // even one identifying column (e.g. `DISTINCT ?s` for `?s ?p ?o`) makes this
+  // function return `false`, because the remaining columns may well repeat.
+  //
+  // Exception: For materialized views the deduplication during scanning is
+  // deliberately deactivated (see the `MaterializedView` constructor), so a
+  // view scan may well contain duplicate rows.
+  if (permutation().permutationType() == Permutation::Type::MATERIALIZED_VIEW) {
+    return false;
+  }
+
+  auto identifyingColumns = variableAndGraphColumns();
+
+  // The identifying columns above refer to the unstripped result, so translate
+  // them into the columns of the actual (possibly stripped) result. An
+  // identifying column that was stripped away is not part of the result at all,
+  // which makes the scan non-distinct: the columns that remain don't identify a
+  // row uniquely.
+  if (varsToKeep_.has_value()) {
+    auto subset = getSubsetForStrippedColumns();
+    for (ColumnIndex& col : identifyingColumns) {
+      auto it = ql::ranges::find(subset, col);
+      if (it == subset.end()) {
+        return false;
+      }
+      col = it - subset.begin();
+    }
+  }
+
+  return ql::ranges::all_of(identifyingColumns,
+                            [&distinctIndices](ColumnIndex col) {
+                              return ad_utility::contains(distinctIndices, col);
+                            });
 }
 
 // _____________________________________________________________________________
@@ -235,7 +296,7 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
   if (it != prefilterVariablePairs.end()) {
     const auto& blockMetadataRanges =
         prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
-            it->first->evaluate(getLocalVocabContext(),
+            it->first->evaluate(getIndex(),
                                 getScanSpecAndBlocks().getBlockMetadataSpan(),
                                 colIndex),
             scanSpecAndBlocks_.blockMetadata_);
@@ -462,19 +523,17 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
       cancellationHandle_, locatedTriplesState(), getLimitOffset());
 
   return CompressedRelationReader::IdTableGeneratorInputRange{
-      ad_utility::CachingTransformInputRange<
-          ad_utility::OwningView<
-              CompressedRelationReader::IdTableGeneratorInputRange>,
-          decltype(makeApplyColumnSubset()), LazyScanMetadata>{
-          std::move(lazyScanAllCols), makeApplyColumnSubset()}};
-};
+      ad_utility::CachingTransformInputRange{
+          std::move(lazyScanAllCols), makeApplyColumnSubset(),
+          ql::type_identity<LazyScanMetadata>{}}};
+}
 
 // _____________________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
   return permutation().getMetadataAndBlocks(scanSpecAndBlocks_,
                                             locatedTriplesState());
-};
+}
 
 // _____________________________________________________________________________
 std::array<CompressedRelationReader::IdTableGeneratorInputRange, 2>
@@ -821,9 +880,9 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
        metadata = LazyScanMetadata{}]() mutable {
         // Handle UNDEF case using LoopControl pattern
         if (state->hasUndef()) {
-          auto scan = std::make_shared<
-              CompressedRelationReader::IdTableGeneratorInputRange>(
-              getLazyScan());
+          auto scan =
+              makeShared<CompressedRelationReader::IdTableGeneratorInputRange>(
+                  getLazyScan());
           scan->details().numBlocksAll_ =
               getMetadataForScan().value().sizeBlockMetadata_;
           updateRuntimeInfoForLazyScan(scan->details(), Always);
@@ -886,7 +945,7 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
             Result::LazyResult{}};
   }
 
-  auto state = std::make_shared<SharedGeneratorState>(
+  auto state = makeShared<SharedGeneratorState>(
       SharedGeneratorState{std::move(input), joinColumn,
                            std::move(metaBlocks.value()), filterJoinSide});
   return {createPrefilteredJoinSide(state),

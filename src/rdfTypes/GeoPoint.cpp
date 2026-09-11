@@ -7,10 +7,11 @@
 #include <cmath>
 #include <optional>
 
+#include "global/Constants.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
-#include "util/GeoSparqlHelpers.h"
 
 // _____________________________________________________________________________
 GeoPoint::GeoPoint(double lat, double lng) : lat_{lat}, lng_{lng} {
@@ -19,7 +20,7 @@ GeoPoint::GeoPoint(double lat, double lng) : lat_{lat}, lng_{lng} {
     throw CoordinateOutOfRangeException(lat, true);
   if (lng < -COORDINATE_LNG_MAX || lng > COORDINATE_LNG_MAX || std::isnan(lng))
     throw CoordinateOutOfRangeException(lng, false);
-};
+}
 
 // _____________________________________________________________________________
 GeoPoint::T GeoPoint::toBitRepresentation() const {
@@ -56,7 +57,7 @@ GeoPoint::T GeoPoint::toBitRepresentation() const {
   // Ensure the highest 4 bits are 0
   AD_CORRECTNESS_CHECK((bits & coordinateMaskFreeBits) == 0);
   return bits;
-};
+}
 
 // _____________________________________________________________________________
 std::optional<GeoPoint> GeoPoint::parseFromLiteral(
@@ -71,7 +72,7 @@ std::optional<GeoPoint> GeoPoint::parseFromLiteral(
     }
   }
   return std::nullopt;
-};
+}
 
 // _____________________________________________________________________________
 GeoPoint GeoPoint::fromBitRepresentation(T bits) {
@@ -94,16 +95,16 @@ GeoPoint GeoPoint::fromBitRepresentation(T bits) {
       extractCoordinate(bits, coordinateMaskLng, 0, COORDINATE_LNG_MAX);
 
   return {lat, lng};
-};
+}
 
 // _____________________________________________________________________________
 std::string GeoPoint::toStringRepresentation() const {
   // Extra conversion using std::to_string to get more decimals
   return absl::StrCat("POINT(", std::to_string(getLng()), " ",
                       std::to_string(getLat()), ")");
-};
+}
 
 // _____________________________________________________________________________
 std::pair<std::string, const char*> GeoPoint::toStringAndType() const {
   return std::pair(toStringRepresentation(), GEO_WKT_LITERAL.data());
-};
+}

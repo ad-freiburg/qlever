@@ -4,21 +4,42 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
+#include <absl/time/time.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <re2/re2.h>
 
+#include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 
+#include "./WordsAndDocsFileLineCreator.h"
+#include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
+#include "backports/filesystem.h"
+#include "engine/MaterializedViews.h"
+#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/Index.h"
+#include "index/IndexFormatConverter.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
+#include "index/Permutation.h"
+#include "index/vocabulary/VocabularyType.h"
+#include "rdfTypes/GeoCellGrid.h"
+#include "util/FilesystemHelpers.h"
+#include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
+#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/UnicodeSupport.h"
 
 using namespace ad_utility::testing;
 using namespace std::string_literals;
@@ -95,31 +116,6 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
-
-// Create a temporary directory inside the Google Test temporary directory
-// with the given `name`. The directory and all its contents are deleted when
-// the returned `absl::Cleanup` is destroyed.
-auto makeTemporaryDirectory(std::string_view name) {
-  std::string directory = ::testing::TempDir();
-  if (!ql::ends_with(directory, "/")) {
-    directory.push_back('/');
-  }
-  AD_CORRECTNESS_CHECK(!ql::starts_with(name, '/'));
-  directory += name;
-  // Create directory.
-  std::filesystem::create_directory(directory);
-
-  // Remove all files in directory when done.
-  absl::Cleanup cleanup{[directory]() {
-    std::error_code ec;
-    std::filesystem::remove_all(directory, ec);
-    if (ec) {
-      AD_LOG(ERROR) << "Could not remove temporary directory " << directory
-                    << ": " << ec.message();
-    }
-  }};
-  return std::make_pair(std::move(directory), std::move(cleanup));
-}
 }  // namespace
 
 TEST(IndexTest, createFromTurtleTest) {
@@ -459,6 +455,70 @@ TEST(IndexTest, emptyTextIndex) {
   }
 }
 
+// Test that the geo cell grid (see `GeoVocabulary`) is read from the index
+// configuration when an index is loaded, with `flat` as the default scheme.
+// NOTE: Building an index with a grid is a follow-up change, so the
+// configuration of an index built without a grid is edited by hand here.
+TEST(IndexTest, geoCellGridFromConfiguration) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> \"LINESTRING(7 48, 8 49)\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral> ."};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& base = qec->getIndex().getOnDiskBase();
+  EXPECT_FALSE(qec->getIndex().getVocab().getGeoCellGrid().has_value());
+
+  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
+  auto loadWithConfiguration = [&](const nlohmann::json& additionalKeys) {
+    nlohmann::json configuration;
+    {
+      std::ifstream in{configFilename};
+      in >> configuration;
+    }
+    configuration.update(additionalKeys);
+    {
+      auto out = ad_utility::makeOfstream(configFilename);
+      out << configuration;
+    }
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.createFromOnDiskIndex(base, false);
+    return index.getVocab().getGeoCellGrid();
+  };
+  EXPECT_EQ(loadWithConfiguration({{"geo-cell-grid-level", 2}}),
+            std::optional{ad_utility::GeoCellGrid{2}});
+  EXPECT_EQ(loadWithConfiguration(
+                {{"geo-cell-grid-level", 3}, {"geo-cell-grid-scheme", "flat"}}),
+            std::optional{ad_utility::GeoCellGrid{3}});
+
+  // A level that does not fit the grid is rejected.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration({{"geo-cell-grid-level", 300}}),
+      ::testing::HasSubstr("Invalid value 300"));
+}
+
+// Regression test for #3191.
+TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <b> \"hello world\" . "
+      "<a> <b> \"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))\"^^<http://www."
+      "opengis.net/ont/geosparql#wktLiteral> ."};
+  config.createTextIndex = true;
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  config.scoringMetric = qlever::TextScoringMetric::TFIDF;
+  config.contentsOfWordsFileAndDocsfile =
+      std::pair{createWordsFileLineAsString("dummy", false, 1, 1),
+                createDocsFileLineAsString(1, "dummy")};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  IdTable helloResult =
+      qec->getIndex().getWordPostingsForTerm("hello", qec->getAllocator());
+  ASSERT_EQ(helloResult.size(), 1u);
+
+  IdTable polygonResult =
+      qec->getIndex().getWordPostingsForTerm("polygon", qec->getAllocator());
+  ASSERT_EQ(polygonResult.size(), 1u);
+  EXPECT_GT(polygonResult.at(0, 2).getDouble(), 0.0);
+}
+
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
 // `PossiblyExternalizedTripleComponent` that matches `content` and the bool
 // `isExternal`.
@@ -506,6 +566,60 @@ TEST(IndexTest, processTriple) {
     ProcessedTriple result = index.processTriple(std::move(turtleTriple));
     EXPECT_EQ(Id::makeFromDouble(42.0),
               result.triple_[2].tripleComponent_.getId());
+  }
+}
+
+// _____________________________________________________________________________
+// The regexes passed to `setBlankNodeIriRegexes` must describe full IRIs (and
+// therefore have to start with `<`) and must be valid regular expressions;
+// otherwise the setter throws. Valid regexes are compiled and stored.
+TEST(IndexTest, setBlankNodeIriRegexesRequiresValidIriPatterns) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+
+  // A regex that does not start with `<` cannot describe a (full) IRI and is
+  // rejected, even if other regexes in the same call are valid.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setBlankNodeIriRegexes({"<http://ex/ok.*>", "http://ex/bad.*"}),
+      ::testing::HasSubstr("must therefore start with `<`"));
+
+  // A regex that is not a valid regular expression is reported with a
+  // user-readable message (here: an unclosed group).
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setBlankNodeIriRegexes({"<http://ex/(unclosed"}),
+      ::testing::HasSubstr("not a valid regular expression"));
+
+  // Valid IRI regexes are accepted, compiled, and stored (in order).
+  index.setBlankNodeIriRegexes({"<http://ex/bn_.*>", "<http://ex/other>"});
+  const auto& regexes = index.getBlankNodeIriRegexes();
+  EXPECT_THAT(regexes.regexesAsStrings(),
+              ::testing::ElementsAre("<http://ex/bn_.*>", "<http://ex/other>"));
+  EXPECT_TRUE(regexes.matchesAny("<http://ex/bn_1>"));
+  EXPECT_FALSE(regexes.matchesAny("<http://ex/bn_1>suffix"));
+}
+
+// _____________________________________________________________________________
+TEST(IndexTest, ZeroCopyVocabularyBlob) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto& vocab = index.getNonConstVocabForTesting();
+  vocab.resetToType(ad_utility::VocabularyType{
+      ad_utility::VocabularyType::Enum::InMemoryUncompressed});
+  ad_utility::HashSet<std::string> words{"<alpha>", "<beta>", "\"gamma\""};
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
+  vocab.createFromSet(words, filename);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  index.writeVocabularyToZeroCopyBlob(writeSerializer);
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  IndexImpl otherIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  otherIndex.loadVocabularyFromZeroCopyBlob(readSerializer);
+
+  const auto& readVocab = otherIndex.getVocab();
+  ASSERT_EQ(vocab.size(), readVocab.size());
+  for (size_t i = 0; i < vocab.size(); ++i) {
+    EXPECT_EQ(vocab[VocabIndex::make(i)], readVocab[VocabIndex::make(i)]);
   }
 }
 
@@ -606,8 +720,50 @@ TEST(IndexTest, trivialGettersAndSetters) {
   EXPECT_EQ(std::as_const(index).parserBufferSize(), 8_kB);
 }
 
+// _____________________________________________________________________________
+TEST(IndexTest, destructorLogsUnloading) {
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
+  // An `Index` that was loaded from disk logs on destruction.
+  std::string basename = gtestCurrentTestName();
+  ad_utility::testing::makeTestIndex(basename, "<a> <b> <c> .");
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    std::optional<Index> index;
+    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
+    index->createFromOnDiskIndex(basename, false);
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr(absl::StrCat(
+                    "Index with basename \"", basename, "\" was unloaded")));
+  }
+  // An `Index` that was never loaded from disk (for example, one that was
+  // merely built) stays silent on destruction.
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    std::optional<Index> index;
+    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
+    index->setOnDiskBase("someIndexBase");
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::Not(::testing::HasSubstr("was unloaded")));
+  }
+  // A moved-from `Index` no longer owns an `IndexImpl` and therefore stays
+  // silent on destruction. We reset it while `movedInto` is still alive, so no
+  // unload message may be logged at that point.
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    std::optional<Index> index;
+    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
+    index->createFromOnDiskIndex(basename, false);
+    Index movedInto{std::move(index).value()};
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::Not(::testing::HasSubstr("was unloaded")));
+  }
+}
+
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   using enum qlever::Filetype;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
@@ -708,10 +864,13 @@ TEST(IndexTest, getBlankNodeManager) {
   // uninitialized Index.
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   EXPECT_ANY_THROW(index.getBlankNodeManager());
+  // The same holds for the access via the `LocalVocabContext`.
+  EXPECT_ANY_THROW(index.getLocalVocabContext().getBlankNodeManager());
 
   // Index is initialized -> no throw
   const Index& index2 = getQec("")->getIndex();
   EXPECT_NO_THROW(index2.getBlankNodeManager());
+  EXPECT_NO_THROW(index2.getLocalVocabContext().getBlankNodeManager());
 
   // Given an Index, ensure that the BlankNodeManager's `minIndex_` is set to
   // the number of blank nodes the Index is initialized with.
@@ -743,9 +902,10 @@ TEST(IndexImpl, recomputeStatistics) {
   index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId,
                                             &indexImpl](
                                                DeltaTriples& deltaTriples) {
-    LocalVocabEntry zzz = LocalVocabEntry::fromIriref("<zzz>", indexImpl);
-    LocalVocabEntry literal =
-        LocalVocabEntry::fromStringRepresentation("\"test\"@en", indexImpl);
+    LocalVocabEntry zzz =
+        LocalVocabEntry::fromIriref("<zzz>", indexImpl.getLocalVocabContext());
+    LocalVocabEntry literal = LocalVocabEntry::fromStringRepresentation(
+        "\"test\"@en", indexImpl.getLocalVocabContext());
     Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
     Id literalId = Id::makeFromLocalVocabIndex(&literal);
     // Create duplicate in different graph.
@@ -821,8 +981,28 @@ TEST(IndexImpl, createPermutation) {
   index.finalizePermutation(meta, permutation, false);
 
   EXPECT_EQ(uniquePredicates, 3);
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso"));
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso.meta"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
+
+  // Writing the same permutation with the writer-thread throttle disabled
+  // (0 means "fall back to `permutation-writer-num-threads`") must give the
+  // same result. Together with the default of 1 used by the calls above and
+  // below, this exercises the translation of the runtime parameter to the
+  // writer-thread override on both of its branches. Use a separate base name,
+  // so that the permutation that was already finalized above stays intact.
+  {
+    auto cleanupParameter = setRuntimeParameterForTest<
+        &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);
+    index.setOnDiskBase(onDiskBase + ".unthrottled");
+    auto [uniquePredicatesUnthrottled, metaUnthrottled] =
+        index.createPermutationWithoutMetadata(
+            4,
+            ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
+                tables.at(0).clone(), tables.at(1).clone()}},
+            permutation, false);
+    index.setOnDiskBase(onDiskBase);
+    EXPECT_EQ(uniquePredicatesUnthrottled, uniquePredicates);
+  }
 
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
@@ -831,8 +1011,8 @@ TEST(IndexImpl, createPermutation) {
   index.finalizePermutation(internalMeta, permutation, true);
 
   EXPECT_EQ(uniqueInternalPredicates, 3);
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso"));
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
 
   permutation.loadFromDisk(onDiskBase, true);
   index.deltaTriplesManager().modify<void>(
@@ -881,7 +1061,7 @@ TEST(IndexImpl, writePatternsToFile) {
   index.getPatterns() = CompactVectorOfStrings{data};
   index.writePatternsToFile();
 
-  ASSERT_TRUE(std::filesystem::exists(onDiskBase + ".index.patterns"));
+  ASSERT_TRUE(ql::filesystem::exists(onDiskBase + ".index.patterns"));
 
   double avgNumDistinctSubjectsPerPredicate;
   double avgNumDistinctPredicatesPerSubject;
@@ -937,12 +1117,288 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   // The version written to disk will also have these fields.
   stats["git-hash"] = *qlever::version::gitShortHashWithoutLinking.wlock();
   stats["index-format-version"] = qlever::indexFormatVersion;
+  stats["has-icu-support"] = ad_utility::useICUDefault;
 
   std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
   std::ifstream in{jsonFile};
   nlohmann::json jsonFromFile;
   in >> jsonFromFile;
   EXPECT_EQ(stats, jsonFromFile);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, icuSupportConfigurationMustMatch) {
+  auto index =
+      makeTestIndex("icuSupportConfigurationMustMatch", "<a> <b> <c> .");
+  auto& indexImpl = index.getImpl();
+
+  // A freshly built index records whether the current binary has ICU support.
+  ASSERT_TRUE(indexImpl.configurationJson().contains("has-icu-support"));
+  EXPECT_EQ(indexImpl.configurationJson()["has-icu-support"],
+            ad_utility::useICUDefault);
+  const auto originalConfig = indexImpl.configurationJson();
+
+  // Applying a configuration whose ICU-support flag disagrees with the current
+  // binary must throw.
+  auto mismatchedConfig = originalConfig;
+  mismatchedConfig["has-icu-support"] = !ad_utility::useICUDefault;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      indexImpl.applyConfiguration(mismatchedConfig),
+      ::testing::HasSubstr(
+          "different string collations and are not interchangeable"));
+
+  // An index built before this flag existed is assumed to have ICU support, so
+  // it loads iff the current binary also has ICU support.
+  auto legacyConfig = originalConfig;
+  legacyConfig.erase("has-icu-support");
+  if constexpr (ad_utility::useICUDefault) {
+    EXPECT_NO_THROW(indexImpl.applyConfiguration(legacyConfig));
+  } else {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        indexImpl.applyConfiguration(legacyConfig),
+        ::testing::HasSubstr(
+            "different string collations and are not interchangeable"));
+  }
+}
+
+namespace {
+// Return a minimal configuration (index metadata) that
+// `IndexImpl::applyConfiguration` accepts. The tests below tamper with single
+// keys of this configuration to exercise the handling of metadata that stems
+// from an older or from an unsupported index format.
+nlohmann::json minimalValidConfiguration() {
+  nlohmann::json configuration;
+  configuration["git-hash"] = "f00ba4";
+  configuration["index-format-version"] = qlever::indexFormatVersion;
+  configuration["has-icu-support"] = ad_utility::useICUDefault;
+  configuration["locale"]["language"] = "en";
+  configuration["locale"]["country"] = "US";
+  configuration["locale"]["ignore-punctuation"] = false;
+  configuration["num-predicates"] = Index::NumNormalAndInternal{2, 1};
+  // This is the key `BLANK_NODE_ALLOCATION_START` from `IndexImpl.cpp`.
+  configuration["num-blank-nodes-total"] = 0;
+  return configuration;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(IndexImpl, applyConfigurationGitHash) {
+  // The git hash of the QLever version that built the index is logged and
+  // stored in the `IndexImpl`.
+  {
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    ASSERT_NO_THROW(indexImpl.applyConfiguration(minimalValidConfiguration()));
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr(
+                    "The git hash used to build this index was \"f00ba4\""));
+    EXPECT_EQ(indexImpl.getGitShortHash(), "f00ba4");
+  }
+
+  // For an index that was built before the git hash was stored in the metadata,
+  // this fact is logged. The hash is also a required key of the metadata, hence
+  // applying such a configuration ultimately throws.
+  {
+    auto configuration = minimalValidConfiguration();
+    configuration.erase("git-hash");
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        indexImpl.applyConfiguration(configuration),
+        ::testing::HasSubstr("The required key \"git-hash\" was not found in "
+                             "the `meta-data.json`"));
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr("The index was built before git commit "
+                                     "hashes were stored in the index meta "
+                                     "data"));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
+  // Apply the `minimalValidConfiguration()`, but with the
+  // `index-format-version` replaced by `version` (or removed, if `version` is
+  // `std::nullopt`), to a freshly created `IndexImpl`. Expect that this throws
+  // with a message that matches `messageMatcher`, and return the log output
+  // that was produced in the process.
+  auto applyVersionAndExpectThrow =
+      [](std::optional<qlever::IndexFormatVersion> version,
+         const auto& messageMatcher,
+         ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(loc);
+        auto configuration = minimalValidConfiguration();
+        if (version.has_value()) {
+          configuration["index-format-version"] = version.value();
+        } else {
+          configuration.erase("index-format-version");
+        }
+        IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+        auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            indexImpl.applyConfiguration(configuration), messageMatcher);
+        return logStream.str();
+      };
+  auto genericThrowMessage = ::testing::HasSubstr(
+      "Incompatible index format, see log message for details");
+
+  // An index that was built before the index format was versioned at all.
+  EXPECT_THAT(applyVersionAndExpectThrow(std::nullopt, genericThrowMessage),
+              ::testing::HasSubstr("This index was built before versioning was "
+                                   "introduced for QLever's index format"));
+
+  // An index that is newer than the QLever binary that reads it.
+  EXPECT_THAT(
+      applyVersionAndExpectThrow(
+          qlever::IndexFormatVersion{4711,
+                                     DateYearOrDuration{Date{9999, 12, 31}}},
+          genericThrowMessage),
+      ::testing::AllOf(
+          ::testing::HasSubstr("The version of QLever you are using is too old "
+                               "for this index"),
+          ::testing::HasSubstr("PR = 4711"),
+          ::testing::HasSubstr("Date = 9999-12-31"),
+          ::testing::Not(::testing::HasSubstr("qlever-upgrade-index"))));
+
+  // An index that is older than the QLever binary that reads it, but not in
+  // exactly the format that the index upgrader upgrades from. Such an index
+  // has to be rebuilt.
+  EXPECT_THAT(
+      applyVersionAndExpectThrow(
+          qlever::IndexFormatVersion{42, DateYearOrDuration{Date{1900, 1, 1}}},
+          genericThrowMessage),
+      ::testing::AllOf(
+          ::testing::HasSubstr("The index is too old for this version of "
+                               "QLever"),
+          ::testing::HasSubstr("PR = 42"),
+          ::testing::Not(::testing::HasSubstr("qlever-upgrade-index"))));
+
+  // An index in exactly the format that the `qlever-upgrade-index` binary
+  // upgrades from. Then the thrown exception is one dedicated message that
+  // mentions that binary, and the generic advice is not logged at all. Note
+  // that this requires the target format of the upgrader to be the current
+  // index format (which `convertIndexToCurrentFormat` also checks).
+  ASSERT_EQ(qlever::indexFormatConverter::targetVersion,
+            qlever::indexFormatVersion);
+  EXPECT_THAT(
+      applyVersionAndExpectThrow(
+          qlever::indexFormatConverter::sourceVersion,
+          ::testing::AllOf(
+              ::testing::HasSubstr("but your index uses the previous format"),
+              ::testing::HasSubstr("sometimes they are unavoidable"),
+              ::testing::HasSubstr("the old index is preserved"),
+              ::testing::HasSubstr("qlever-upgrade-index "))),
+      ::testing::Not(::testing::HasSubstr("The index is too old")));
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, applyConfigurationDeprecatedIgnoreCaseKey) {
+  // The key `ignore-case` was used by very old index builds and is no longer
+  // supported.
+  auto configuration = minimalValidConfiguration();
+  configuration["ignore-case"] = false;
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      indexImpl.applyConfiguration(configuration),
+      ::testing::HasSubstr("Deprecated key \"ignore-case\" in index build"));
+  EXPECT_THAT(logStream.str(),
+              ::testing::HasSubstr(std::string{ERROR_IGNORE_CASE_UNSUPPORTED}));
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, applyConfigurationMissingLocaleKey) {
+  // The key `locale` is required; index builds that don't have it are no longer
+  // supported.
+  auto configuration = minimalValidConfiguration();
+  configuration.erase("locale");
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      indexImpl.applyConfiguration(configuration),
+      ::testing::HasSubstr(
+          "Missing required key \"locale\" in index build's metadata"));
+  EXPECT_THAT(logStream.str(),
+              ::testing::HasSubstr(
+                  "Key \"locale\" is missing in the metadata. This is probably "
+                  "an old index build that is no longer supported"));
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, dateOfIndexBuild) {
+  auto index = makeTestIndex("dateOfIndexBuild", "<a> <b> <c> .");
+  auto& indexImpl = index.getImpl();
+
+  // A freshly built index records the build date under
+  // `DATE_OF_INDEX_BUILD_KEY` in its configuration, and `dateOfIndexBuild()`
+  // returns exactly that value.
+  ASSERT_TRUE(indexImpl.configurationJson_.contains(DATE_OF_INDEX_BUILD_KEY));
+  auto storedDate =
+      indexImpl.configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
+  EXPECT_EQ(indexImpl.dateOfIndexBuild(), storedDate);
+
+  // The `static` overload, which works without a loaded index, returns the
+  // same value when it is given the configuration and the base name of that
+  // index.
+  EXPECT_EQ(IndexImpl::dateOfIndexBuild(indexImpl.configurationJson_,
+                                        indexImpl.onDiskBase_),
+            storedDate);
+
+  // The stored value is a valid UTC timestamp in the expected format.
+  absl::Time parsed;
+  std::string error;
+  EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, storedDate,
+                              absl::UTCTimeZone(), &parsed, &error))
+      << error;
+
+  // The fallback to the modification time of the configuration file (for
+  // indexes that were built before the build date was recorded) is tested in
+  // `dateOfIndexBuildStatic` below.
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, dateOfIndexBuildStatic) {
+  // The `static` overload of `dateOfIndexBuild` works on an index that is not
+  // loaded, so we can exercise it with an arbitrary configuration and base
+  // name.
+  auto onDiskBase = gtestCurrentTestName();
+  auto configFilename = absl::StrCat(onDiskBase, CONFIGURATION_FILE);
+
+  // If the configuration contains the build date, it is returned verbatim, and
+  // the configuration file doesn't even have to exist.
+  nlohmann::json configuration;
+  configuration[std::string{DATE_OF_INDEX_BUILD_KEY}] = "2026-07-12T14:03:52Z";
+  EXPECT_EQ(IndexImpl::dateOfIndexBuild(configuration, onDiskBase),
+            "2026-07-12T14:03:52Z");
+
+  // If the configuration doesn't contain the build date, the modification time
+  // of the configuration file is used instead. Since the format only has
+  // second precision, we don't compare the timestamp exactly, but check that
+  // it lies within the last second + tolerance.
+  configuration.erase(std::string{DATE_OF_INDEX_BUILD_KEY});
+  {
+    auto configFile = ad_utility::makeOfstream(configFilename);
+    configFile << configuration;
+  }
+  absl::Cleanup cleanup = [&configFilename]() {
+    ad_utility::deleteFile(configFilename);
+  };
+  absl::Time fallbackTime;
+  std::string parseError;
+  ASSERT_TRUE(
+      absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT,
+                      IndexImpl::dateOfIndexBuild(configuration, onDiskBase),
+                      absl::UTCTimeZone(), &fallbackTime, &parseError))
+      << parseError;
+  EXPECT_THAT(absl::Now() - fallbackTime,
+              ::testing::AllOf(::testing::Ge(absl::ZeroDuration()),
+                               ::testing::Lt(absl::Seconds(2))));
+
+  // If the configuration doesn't contain the build date and there also is no
+  // configuration file to fall back to, the contract check on `stat` fails.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IndexImpl::dateOfIndexBuild(configuration,
+                                  absl::StrCat(onDiskBase, ".does-not-exist")),
+      ::testing::HasSubstr("stat(configFilename.c_str(), &fileStat) == 0"));
 }
 
 // _____________________________________________________________________________
@@ -957,4 +1413,96 @@ TEST(IndexImpl, graphNameManagerIntegration) {
   EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
   EXPECT_THAT(graphManager.prefixWithoutBraces_,
               testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
+}
+
+// _____________________________________________________________________________
+// Checks that `IndexImpl::allIndexFiles` lists exactly the on-disk files that
+// belong to an index: no phantom entries, all components (including the
+// optional ones) present, and no file that shares the base name but is not an
+// index file (build logs, materialized-view files, input files).
+TEST(IndexImpl, allIndexFilesAreListed) {
+  auto [directory, cleanup] = makeTemporaryDirectory("allIndexFilesAreListed");
+  std::string base = directory + "/index";
+  makeTestIndex(base, "<a> <b> <c> . <a> <b> <d> . <d> <e> <f> .");
+
+  auto touch = [](const std::string& f) {
+    std::ofstream out{f};
+    out << "x";
+  };
+  // Optional index files that a plain build does not create; once present, they
+  // must be listed.
+  std::string settings = absl::StrCat(base, SETTINGS_FILE_SUFFIX);
+  std::string updates = absl::StrCat(base, UPDATE_TRIPLES_SUFFIX);
+  std::string graphs = absl::StrCat(base, ALLOCATED_GRAPHS_SUFFIX);
+  for (const auto& f : {settings, updates, graphs}) {
+    touch(f);
+  }
+  // Files that share the base name but are NOT index files; they must not be
+  // listed.
+  std::string indexLog = absl::StrCat(base, INDEX_LOG_SUFFIX);
+  std::string rebuildLog = absl::StrCat(base, REBUILD_INDEX_LOG_SUFFIX);
+  std::string viewFile = MaterializedView::getFilenameBase(base, "myView");
+  for (const auto& f : {indexLog, rebuildLog, viewFile}) {
+    touch(f);
+  }
+
+  auto listedPaths = IndexImpl::allIndexFiles(base);
+  std::vector<std::string> listed;
+  listed.reserve(listedPaths.size());
+  for (const auto& path : listedPaths) {
+    listed.push_back(path.string());
+  }
+  ad_utility::HashSet<std::string> listedSet(listed.begin(), listed.end());
+
+  // No phantom entries.
+  for (const auto& f : listed) {
+    EXPECT_TRUE(ql::filesystem::exists(f)) << f;
+  }
+
+  // All core components and the optional files we created are listed.
+  EXPECT_THAT(
+      listedSet,
+      ::testing::IsSupersetOf(
+          {absl::StrCat(base, CONFIGURATION_FILE),
+           absl::StrCat(base, PATTERNS_FILE_SUFFIX),
+           absl::StrCat(base, ".index.pso"),
+           absl::StrCat(base, ".index.pso.meta"),
+           absl::StrCat(base, QLEVER_INTERNAL_INDEX_INFIX, ".index.pso"),
+           settings, updates, graphs}));
+  // At least one vocabulary file is listed (the exact set depends on the
+  // vocabulary type).
+  EXPECT_TRUE(ql::ranges::any_of(listed, [](const std::string& f) {
+    return ql::starts_with(ql::pathFilename(f).string(),
+                           absl::StrCat("index", VOCAB_SUFFIX));
+  }));
+
+  // The non-index files are not listed.
+  for (const auto& f : {indexLog, rebuildLog, viewFile}) {
+    EXPECT_FALSE(listedSet.contains(f)) << f;
+  }
+
+  // Exhaustiveness: every regular file in the directory that shares the base
+  // name is either listed as an index file or one of the files that are
+  // deliberately left out: the build/rebuild logs, the materialized-view files
+  // (`.view.` infix), and the input files left over from the build
+  // (`<base>.ttl` and the settings input `<base>.ttl.settings.json`).
+  std::string baseName = ql::pathFilename(base).string();
+  for (const auto& entry : ql::directoryRange(directory)) {
+    if (!ql::isRegularFile(entry)) {
+      continue;
+    }
+    std::string name = entry.path().filename().string();
+    if (!ql::starts_with(name, baseName) ||
+        listedSet.contains(entry.path().string())) {
+      continue;
+    }
+    std::string_view rest{name};
+    rest.remove_prefix(baseName.size());
+    bool isAllowedNonIndexFile =
+        rest == INDEX_LOG_SUFFIX || rest == REBUILD_INDEX_LOG_SUFFIX ||
+        ql::starts_with(rest, ".view.") || ql::starts_with(rest, ".ttl");
+    EXPECT_TRUE(isAllowedNonIndexFile)
+        << "File is neither an index file nor an allowed exclusion: "
+        << entry.path().string();
+  }
 }
