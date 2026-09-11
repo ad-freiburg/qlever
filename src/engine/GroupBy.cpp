@@ -59,7 +59,7 @@ uint64_t GroupBy::getSizeEstimateBeforeLimit() {
 size_t GroupBy::getCostEstimate() { return _impl->getCostEstimate(); }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> GroupBy::getChildren() {
+std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> GroupBy::getChildren() {
   return _impl->getChildren();
 }
 

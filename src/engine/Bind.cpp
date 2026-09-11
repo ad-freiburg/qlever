@@ -103,8 +103,8 @@ VariableToColumnMap Bind::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> Bind::getChildren() {
-  return {_subtree.get()};
+std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> Bind::getChildren() {
+  return {{_subtree.get()}, allocator().as<QueryExecutionTree*>()};
 }
 
 // _____________________________________________________________________________

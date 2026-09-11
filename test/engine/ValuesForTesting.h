@@ -204,7 +204,11 @@ class ValuesForTesting : public Operation {
     return static_cast<float>(col + 1) * 42.0f;
   }
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+   std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    return std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>(
+        allocator().as<QueryExecutionTree*>());
+  }
 
   bool knownEmptyResult() override {
     return ql::ranges::all_of(

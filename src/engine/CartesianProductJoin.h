@@ -54,7 +54,7 @@ class CartesianProductJoin : public Operation {
 
   /// get non-owning pointers to all the held subtrees to actually use the
   /// Execution Trees as trees
-  std::vector<QueryExecutionTree*> getChildren() override;
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override;
 
  private:
   // The individual implementation of `getCacheKey` (see above) that has to be

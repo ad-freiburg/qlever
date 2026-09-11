@@ -13,7 +13,11 @@ class NeutralElementOperation : public Operation {
  public:
   explicit NeutralElementOperation(QueryExecutionContext* qec)
       : Operation{qec} {}
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    return std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>(
+        allocator().as<QueryExecutionTree*>());
+  }
 
  private:
   // The individual implementation of `getCacheKey` (see above) that has to be

@@ -25,8 +25,8 @@ Describe::Describe(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> Describe::getChildren() {
-  return {subtree_.get()};
+std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> Describe::getChildren() {
+  return {{subtree_.get()}, allocator().as<QueryExecutionTree*>()};
 }
 
 // _____________________________________________________________________________

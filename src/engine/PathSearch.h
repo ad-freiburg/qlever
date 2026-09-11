@@ -183,7 +183,7 @@ class PathSearch : public Operation {
              std::shared_ptr<QueryExecutionTree> subtree,
              PathSearchConfiguration config);
 
-  std::vector<QueryExecutionTree*> getChildren() override;
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>> getChildren() override;
 
   const PathSearchConfiguration& getConfig() const { return config_; }
 

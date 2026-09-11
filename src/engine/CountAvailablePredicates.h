@@ -49,8 +49,11 @@ class CountAvailablePredicates : public Operation {
 
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
-    using R = std::vector<QueryExecutionTree*>;
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    using R =
+        std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>;
+    auto alloc = allocator().as<QueryExecutionTree*>();
     return subtree_ != nullptr ? R{subtree_.get()} : R{};
   }
 

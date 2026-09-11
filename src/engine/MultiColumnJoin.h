@@ -51,8 +51,9 @@ class MultiColumnJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {_left.get(), _right.get()};
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildren() override {
+    return {{_left.get(), _right.get()}, allocator().as<QueryExecutionTree*>()};
   }
 
   bool columnOriginatesFromGraphOrUndef(
