@@ -280,7 +280,9 @@ class CompressedExternalIdTableWriter {
   // parallel. This avoids per-block thread creation, making it suitable for
   // use inside a single persistent background thread (e.g. `runStreamAsync`).
   //
-  // TODO<joka921> This function is unused. Remove it.
+  // TODO<joka921> This function is only used by `getBlockStream` below, which
+  // in turn is only used by the unused `CompressedExternalIdTable`. Remove it
+  // together with that class.
   template <size_t NumCols = 0>
   IdTableStatic<NumCols> readBlockSequential(size_t blockIdx) {
     auto block = makeBlock<NumCols>(blockIdx);
@@ -297,7 +299,8 @@ class CompressedExternalIdTableWriter {
   // within a block; the single background thread already provides concurrency
   // with the consumer.
   //
-  // TODO<joka921> This function is unused. Remove it.
+  // TODO<joka921> This function is only used by the unused
+  // `CompressedExternalIdTable`. Remove it together with that class.
   template <size_t N = 0>
   InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
     file_.wlock()->flush();
@@ -359,8 +362,9 @@ inline MemorySize memoryForBlocksize(size_t blocksize, size_t numColumns) {
 
 }  // namespace compressedExternalIdTable
 
-// The common base implementation of the `CompressedExternalIdTableSorter` (see
-// below). It is implemented as a mixin class.
+// The common base implementation of `CompressedExternalIdTable` and
+// `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
+// class.
 CPP_class_template(size_t NumStaticCols,
                    typename BlockTransformation = ad_utility::Noop)(requires(
     ql::concepts::invocable<
@@ -579,6 +583,67 @@ CPP_class_template(size_t NumStaticCols,
     resetCurrentBlock(false);
     waitForFuture();
     return true;
+  }
+};
+
+// This class allows the external and compressed storing of an `IdTable` that is
+// too large to be stored in RAM. `NumStaticCols == 0` means that the `IdTable`
+// is stored dynamically (see `IdTable.h` and `CallFixedSize.h` for details).
+// The interface is as follows: First there is one call to `push` for each row
+// of the `IdTable`, and then there is one single call to `getRows` which yields
+// a generator that yields the rows that have previously been pushed.
+//
+// TODO<joka921> This class is unused (outside of its own unit tests).
+// Remove it.
+template <size_t NumStaticCols>
+class CompressedExternalIdTable
+    : public CompressedExternalIdTableBase<NumStaticCols> {
+ private:
+  using Base = CompressedExternalIdTableBase<NumStaticCols>;
+
+  using MemorySize = ad_utility::MemorySize;
+
+ public:
+  // Constructor.
+  explicit CompressedExternalIdTable(
+      std::string filename, size_t numCols, ad_utility::MemorySize memory,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
+      : Base{std::move(filename), numCols, memory, std::move(allocator),
+             blocksizeCompression} {}
+
+  // When we have a static number of columns, then the `numCols` argument to the
+  // constructor is redundant.
+  CPP_member explicit CPP_ctor(CompressedExternalIdTable)(
+      std::string filename, ad_utility::MemorySize memory,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)(
+      requires(NumStaticCols > 0))
+      : CompressedExternalIdTable(std::move(filename), NumStaticCols, memory,
+                                  std::move(allocator), blocksizeCompression) {}
+
+  // Transition from the input phase, where `push()` may be called, to the
+  // output phase and return a generator that yields the elements of the
+  // `IdTable` in the order that they were `push`ed. This function may be
+  // called exactly once.
+  auto getRows() {
+    using namespace ad_utility;
+    using Block = IdTableStatic<NumStaticCols>;
+    // Both branches return the same type via this helper.
+    auto joinBlocks = [](InputRangeTypeErased<Block> stream) {
+      return ql::views::join(OwningViewNoConst{std::move(stream)});
+    };
+    if (!this->transformAndPushLastBlock()) {
+      // Single block: wrap currentBlock_ as a one-element block stream.
+      return joinBlocks(InputRangeTypeErased<Block>{lazySingleValueRange(
+          [this]() { return std::move(this->currentBlock_); })});
+    }
+    this->transformAndWriteBlock(std::move(this->currentBlock_));
+    this->resetCurrentBlock(false);
+    this->waitForFuture();
+    // Stream all blocks through a single background thread (O(1) threads total
+    // regardless of block count) with sequential column decompression.
+    return joinBlocks(this->writer_.template getBlockStream<NumStaticCols>());
   }
 };
 
