@@ -102,6 +102,30 @@ void runOnStrand(net::io_context& ioContext, const Strand& strand,
 }  // namespace
 
 // _____________________________________________________________________________
+TEST(GetResult, theThreeStates) {
+  using Result = GetResult<Block>;
+  // A default-constructed result means that the storage was cancelled, so it
+  // holds neither a block nor the end-of-chunk sentinel.
+  Result cancelled;
+  EXPECT_TRUE(cancelled.wasCancelled());
+  EXPECT_FALSE(cancelled.isEndOfChunk());
+  EXPECT_FALSE(cancelled.hasValue());
+  EXPECT_ANY_THROW(std::move(cancelled).get());
+
+  Result endOfChunk = Result::endOfChunk();
+  EXPECT_FALSE(endOfChunk.wasCancelled());
+  EXPECT_TRUE(endOfChunk.isEndOfChunk());
+  EXPECT_FALSE(endOfChunk.hasValue());
+  EXPECT_ANY_THROW(std::move(endOfChunk).get());
+
+  Result withBlock = Result::fromBlock(Block{1, 2, 3});
+  EXPECT_FALSE(withBlock.wasCancelled());
+  EXPECT_FALSE(withBlock.isEndOfChunk());
+  EXPECT_TRUE(withBlock.hasValue());
+  EXPECT_THAT(std::move(withBlock).get(), ::testing::ElementsAre(1, 2, 3));
+}
+
+// _____________________________________________________________________________
 TEST(InMemoryBlockStorage, storeAndRetrieveInOrder) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());

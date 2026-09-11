@@ -13,6 +13,8 @@
 // The sink is implemented with coroutines and therefore does not exist in the
 // C++17 backports mode, see `util/parallelBlockMerge/InOrderBlockSink.h`.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include <absl/functional/any_invocable.h>
+
 #include <atomic>
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -24,12 +26,16 @@
 #include <cstddef>
 #include <exception>
 #include <functional>
+#include <memory>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "../util/AsyncTestHelpers.h"
 #include "./InMemoryBlockStorage.h"
+#include "util/Exception.h"
 #include "util/parallelBlockMerge/BlockSinkPolicy.h"
 #include "util/parallelBlockMerge/InOrderBlockSink.h"
 
@@ -115,6 +121,140 @@ net::awaitable<void> yieldUntil(net::io_context& ioContext,
   while (!condition()) {
     co_await net::post(ioContext, net::use_awaitable);
   }
+}
+
+// The state that a `ControlledBlockStorage` (see below) shares with the test
+// that drives it: the completion handlers of the at most one `storeBlock` and
+// the at most one `getBlock` that may be in flight (see the PRECONDITIONS of
+// the `BlockStorageConcept`), plus the result with which a pending `storeBlock`
+// completes when the storage is cancelled.
+struct StorageControl {
+  absl::AnyInvocable<void(bool)> pendingStore_;
+  absl::AnyInvocable<void(GetResult<Block>)> pendingGet_;
+  // A storage whose blocking work has already begun may well complete a
+  // `storeBlock` successfully although it was cancelled in the meantime, see
+  // `BlockStorageConcept::cancelAll`. Set this to `true` to exercise that case.
+  bool storeSucceedsOnCancel_ = false;
+
+  bool hasPendingStore() const { return pendingStore_ != nullptr; }
+  bool hasPendingGet() const { return pendingGet_ != nullptr; }
+};
+using SharedStorageControl = std::shared_ptr<StorageControl>;
+
+// A model of the `BlockStorageConcept` that never completes an operation on its
+// own: a `storeBlock` and a `getBlock` stay in flight until the storage is
+// cancelled. It thereby makes those interactions of the sink with the storage
+// deterministic that the `InMemoryBlockStorage` only ever produces in a race,
+// namely a `getBlock` that is cancelled while it is in flight, and a
+// `storeBlock` that succeeds although the merge was stopped in the meantime.
+//
+// NOTE: This is a handle to the `StorageControl` that the test holds, because
+// the sink owns its storage by value and the test therefore cannot refer to the
+// storage itself.
+class ControlledBlockStorage {
+ public:
+  using OptionalBlock = ad_utility::parallelBlockMerge::OptionalBlock<Block>;
+
+ private:
+  Strand strand_;
+  SharedStorageControl control_;
+
+ public:
+  ControlledBlockStorage(Strand strand, SharedStorageControl control)
+      : strand_{std::move(strand)}, control_{std::move(control)} {}
+
+  // Keep the completion handler until the storage is cancelled.
+  template <typename CompletionToken>
+  auto storeBlock([[maybe_unused]] size_t chunkIndex,
+                  [[maybe_unused]] OptionalBlock block,
+                  CompletionToken&& completionToken) {
+    return net::async_initiate<CompletionToken, void(std::exception_ptr, bool)>(
+        [this](auto handler) mutable {
+          AD_CORRECTNESS_CHECK(!control_->hasPendingStore());
+          control_->pendingStore_ =
+              [handler = std::move(handler)](bool wasStored) mutable {
+                std::move(handler)(std::exception_ptr{}, wasStored);
+              };
+        },
+        completionToken);
+  }
+
+  // Keep the completion handler until the storage is cancelled.
+  template <typename CompletionToken>
+  auto getBlock([[maybe_unused]] size_t chunkIndex,
+                CompletionToken&& completionToken) {
+    return net::async_initiate<CompletionToken,
+                               void(std::exception_ptr, GetResult<Block>)>(
+        [this](auto handler) mutable {
+          AD_CORRECTNESS_CHECK(!control_->hasPendingGet());
+          control_->pendingGet_ =
+              [handler = std::move(handler)](GetResult<Block> result) mutable {
+                std::move(handler)(std::exception_ptr{}, std::move(result));
+              };
+        },
+        completionToken);
+  }
+
+  // Complete the pending operations. NOTE: They are completed via `net::post`
+  // and not inline, exactly as the channels of the `InMemoryBlockStorage` do
+  // it, so that nothing is resumed while `cancelAll` still runs.
+  void cancelAll() noexcept {
+    net::post(strand_, [control = control_] {
+      if (control->hasPendingStore()) {
+        std::exchange(control->pendingStore_,
+                      nullptr)(control->storeSucceedsOnCancel_);
+      }
+      if (control->hasPendingGet()) {
+        std::exchange(control->pendingGet_, nullptr)(GetResult<Block>{});
+      }
+    });
+  }
+};
+static_assert(BlockStorageConcept<ControlledBlockStorage, Block>);
+using ControlledSink = InOrderBlockSink<Block, ControlledBlockStorage>;
+
+// Construct a sink for `numChunks` chunks whose storage is driven by `control`.
+ControlledSink makeControlledSink(net::any_io_executor executor,
+                                  size_t numChunks,
+                                  SharedStorageControl control) {
+  return ControlledSink{std::move(executor), numChunks,
+                        [control = std::move(control)](const Strand& strand) {
+                          return ControlledBlockStorage{strand, control};
+                        }};
+}
+
+// Push a single `block` to the `sink`, record in `wasPushed` whether it was
+// stored, and open the `latch`.
+net::awaitable<void> pushOneBlock(ControlledSink& sink, size_t chunkIndex,
+                                  Block block, std::optional<bool>& wasPushed,
+                                  Latch& latch) {
+  wasPushed =
+      co_await sink.asyncPush(chunkIndex, std::move(block), net::use_awaitable);
+  latch.try_send(boost::system::error_code{});
+}
+
+// Retrieve a single value from the `sink`, record it in `received`, and open
+// the `latch`.
+net::awaitable<void> getOneBlock(
+    ControlledSink& sink,
+    std::optional<ControlledSink::OptionalBlock>& received, Latch& latch) {
+  received = co_await sink.asyncGetNextBlock(net::use_awaitable);
+  latch.try_send(boost::system::error_code{});
+}
+
+// Retrieve a single value from the `sink`, expecting that it rethrows a pushed
+// `std::runtime_error` with the message `expectedMessage`. Record in `didThrow`
+// that it did, and open the `latch`.
+net::awaitable<void> getOneBlockExpectingThrow(ControlledSink& sink,
+                                               std::string expectedMessage,
+                                               bool& didThrow, Latch& latch) {
+  try {
+    co_await sink.asyncGetNextBlock(net::use_awaitable);
+  } catch (const std::runtime_error& exception) {
+    didThrow = true;
+    EXPECT_EQ(exception.what(), expectedMessage);
+  }
+  latch.try_send(boost::system::error_code{});
 }
 }  // namespace
 
@@ -318,5 +458,90 @@ ASYNC_TEST_N(InOrderBlockSink, stopRacesWithProducers, 4) {
   co_await waitForLatch(latch, numChunks);
   auto block = co_await sink.asyncGetNextBlock(net::use_awaitable);
   EXPECT_FALSE(block.has_value());
+}
+
+// _____________________________________________________________________________
+TEST(InOrderBlockSink, theChunkIndexIsChecked) {
+  net::io_context ioContext;
+  auto sink = makeSink(ioContext.get_executor(), 2, 1);
+  EXPECT_ANY_THROW(sink.asyncPush(2, Block{1}, net::detached));
+  EXPECT_ANY_THROW(sink.asyncFinishChunk(2, net::detached));
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(InOrderBlockSink, onlyTheFirstExceptionIsKept) {
+  auto sink = makeSink(ioContext.get_executor(), 2, 2);
+  co_await sink.asyncPushException(
+      std::make_exception_ptr(std::runtime_error{"first"}), net::use_awaitable);
+  // The second exception is silently ignored, and in particular it does not
+  // sweep over the storage a second time.
+  co_await sink.asyncPushException(
+      std::make_exception_ptr(std::runtime_error{"second"}),
+      net::use_awaitable);
+  bool didThrow = false;
+  try {
+    co_await sink.asyncGetNextBlock(net::use_awaitable);
+  } catch (const std::runtime_error& exception) {
+    didThrow = true;
+    EXPECT_STREQ(exception.what(), "first");
+  }
+  EXPECT_TRUE(didThrow);
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(InOrderBlockSink, aCancelledGetEndsTheRange) {
+  // A `getBlock` that was in flight when the merge was stopped completes as
+  // cancelled. The consumer then has to report the end of the range instead of
+  // mistaking that cancellation for an end-of-chunk sentinel.
+  auto control = std::make_shared<StorageControl>();
+  auto sink = makeControlledSink(ioContext.get_executor(), 1, control);
+  Latch latch{ioContext.get_executor(), 1};
+  std::optional<ControlledSink::OptionalBlock> received;
+  net::co_spawn(ioContext, getOneBlock(sink, received, latch), net::detached);
+  co_await yieldUntil(ioContext,
+                      [&control] { return control->hasPendingGet(); });
+  co_await sink.asyncStop(net::use_awaitable);
+  co_await waitForLatch(latch);
+  EXPECT_FALSE(received.value().has_value());
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(InOrderBlockSink, aCancelledGetRethrowsThePushedException) {
+  // The same as `aCancelledGetEndsTheRange`, but the stop comes from a pushed
+  // exception, which the consumer has to rethrow after the cancellation.
+  auto control = std::make_shared<StorageControl>();
+  auto sink = makeControlledSink(ioContext.get_executor(), 1, control);
+  Latch latch{ioContext.get_executor(), 1};
+  bool didThrow = false;
+  net::co_spawn(ioContext,
+                getOneBlockExpectingThrow(sink, "kaboom", didThrow, latch),
+                net::detached);
+  co_await yieldUntil(ioContext,
+                      [&control] { return control->hasPendingGet(); });
+  co_await sink.asyncPushException(
+      std::make_exception_ptr(std::runtime_error{"kaboom"}),
+      net::use_awaitable);
+  co_await waitForLatch(latch);
+  EXPECT_TRUE(didThrow);
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(InOrderBlockSink, aBlockThatIsStoredAfterTheStopIsDropped) {
+  // A storage may complete a `storeBlock` successfully although it was
+  // cancelled in the meantime. The block is then still lost, because no
+  // consumer will ever read it, so the push has to report `false` such that its
+  // producer stops producing.
+  auto control = std::make_shared<StorageControl>();
+  control->storeSucceedsOnCancel_ = true;
+  auto sink = makeControlledSink(ioContext.get_executor(), 1, control);
+  Latch latch{ioContext.get_executor(), 1};
+  std::optional<bool> wasPushed;
+  net::co_spawn(ioContext, pushOneBlock(sink, 0, Block{1}, wasPushed, latch),
+                net::detached);
+  co_await yieldUntil(ioContext,
+                      [&control] { return control->hasPendingStore(); });
+  co_await sink.asyncStop(net::use_awaitable);
+  co_await waitForLatch(latch);
+  EXPECT_FALSE(wasPushed.value());
 }
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

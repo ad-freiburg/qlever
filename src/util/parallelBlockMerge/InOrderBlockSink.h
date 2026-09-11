@@ -318,7 +318,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   // PRECONDITION: This runs on `strand_`, see `spawnOnStrand`.
   net::awaitable<OptionalBlock> receiveNextBlock() {
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
-    while (true) {
+    for (;;) {
       if (exception_ != nullptr) {
         // NOTE: The consumer rethrows this on its own executor, because the
         // completion signature starts with an `std::exception_ptr`.
