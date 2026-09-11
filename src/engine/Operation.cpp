@@ -317,7 +317,7 @@ std::shared_ptr<const Result> Operation::getResult(
 
   if (isRoot) {
     // Reset runtime info, tests may reuse Operation objects.
-    _runtimeInfo = std::make_shared<RuntimeInformation>();
+    _runtimeInfo = makeShared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
     signalQueryUpdate(RuntimeInformation::SendPriority::Always);
@@ -360,7 +360,7 @@ std::shared_ptr<const Result> Operation::getResult(
       if (computationMode == ComputationMode::ONLY_IF_CACHED) {
         return nullptr;
       }
-      return std::make_shared<Result>(runComputation(timer, computationMode));
+      return makeShared<Result>(runComputation(timer, computationMode));
     }
 
     auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
@@ -589,6 +589,16 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
 // __________________________________________________________________
 void Operation::applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
   limitOffset_.mergeLimitAndOffset(limitOffsetClause);
+  // The new limit changes the size estimates and thereby possibly the sort
+  // order (see the caution note in the header), so a previously cached value
+  // must be discarded. Operations that merely forward the claim of a child
+  // (e.g. `Bind`) read the child's cache via
+  // `QueryExecutionTree::resultSortedOn`, so a stale value would otherwise
+  // survive the re-reading during the repair described in the header.
+  {
+    std::lock_guard l{_resultSortedColumnsMutex};
+    _resultSortedColumns.reset();
+  }
   // We can safely ignore members that are not `_offset` and `_limit` since
   // they are unused by subclasses of `Operation`.
   onLimitOffsetChanged(limitOffsetClause);

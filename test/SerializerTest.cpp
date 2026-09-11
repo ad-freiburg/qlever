@@ -1246,3 +1246,102 @@ TEST(BufferedWriteSerializer, IsWriteSerializer) {
   static_assert(
       WriteSerializer<BufferedWriteSerializer<ByteBufferWriteSerializer>>);
 }
+
+// _____________________________________________________________________________
+// The serialization position of a `BufferedWriteSerializer` also accounts for
+// the bytes that are still sitting in its buffer, and `serializeAtPosition`
+// (which first flushes that buffer) can overwrite data that has already been
+// written.
+TEST(BufferedWriteSerializer, SerializeAtPosition) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+
+  for (MemorySize blockSize : {1_B, 3_B, 64_B, 1024_B}) {
+    uint32_t placeholder = 0;
+    uint32_t trailer = 12345;
+    uint32_t actualValue = 42;
+    {
+      BufferedWriteSerializer writer{FileWriteSerializer{filename}, blockSize};
+      EXPECT_EQ(writer.getSerializationPosition(), 0u);
+      writer << placeholder;
+      // The position advances even for bytes that may still be buffered.
+      EXPECT_EQ(writer.getSerializationPosition(), sizeof(placeholder));
+      writer << trailer;
+      auto positionAfter = writer.getSerializationPosition();
+
+      serializeAtPosition(writer, 0, actualValue);
+      // The position is restored, such that the following bytes are appended.
+      EXPECT_EQ(writer.getSerializationPosition(), positionAfter);
+      writer << trailer;
+    }
+
+    FileReadSerializer reader{filename};
+    uint32_t read = 0;
+    reader >> read;
+    EXPECT_EQ(read, actualValue) << "block size was " << blockSize;
+    reader >> read;
+    EXPECT_EQ(read, trailer) << "block size was " << blockSize;
+    reader >> read;
+    EXPECT_EQ(read, trailer) << "block size was " << blockSize;
+  }
+}
+
+// _____________________________________________________________________________
+// A `VectorIncrementalSerializer` on top of a `BufferedWriteSerializer` writes
+// exactly the same format as one that writes to the file directly, also if the
+// vector does not start at position 0.
+TEST(VectorIncrementalSerializer, WithBufferedWriteSerializer) {
+  std::vector<int> original{9, 7, 5, 3, 1, -1, -3, 5, 5, 6, 67498235, 0, 42};
+  double firstDouble = 42.42;
+  double secondDouble = -13.123;
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+
+  using Writer = BufferedWriteSerializer<FileWriteSerializer>;
+  for (MemorySize blockSize : {1_B, 5_B, 64_B, 1024_B}) {
+    {
+      Writer bufferedWriter{FileWriteSerializer{filename}, blockSize};
+      bufferedWriter << firstDouble;
+      VectorIncrementalSerializer<int, Writer> writer{
+          std::move(bufferedWriter)};
+      for (int element : original) {
+        writer.push(element);
+      }
+      bufferedWriter = std::move(writer).serializer();
+      bufferedWriter << secondDouble;
+    }
+
+    FileReadSerializer reader{filename};
+    double doubleRead = 0.0;
+    reader >> doubleRead;
+    EXPECT_EQ(doubleRead, firstDouble) << "block size was " << blockSize;
+    std::vector<int> vectorRead;
+    reader >> vectorRead;
+    EXPECT_EQ(vectorRead, original) << "block size was " << blockSize;
+    reader >> doubleRead;
+    EXPECT_EQ(doubleRead, secondDouble) << "block size was " << blockSize;
+  }
+}
+
+// _____________________________________________________________________________
+// A moved-from `VectorIncrementalSerializer` writes nothing anymore, in
+// particular its destructor doesn't touch the serializer that has been moved
+// away.
+TEST(VectorIncrementalSerializer, MoveConstructor) {
+  std::vector<int> original{1, 2, 3, 4, 5};
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  {
+    VectorIncrementalSerializer<int, FileWriteSerializer> writer{filename};
+    writer.push(original.at(0));
+    auto movedTo = std::move(writer);
+    for (size_t i = 1; i < original.size(); ++i) {
+      movedTo.push(original.at(i));
+    }
+  }
+
+  FileReadSerializer reader{filename};
+  std::vector<int> read;
+  reader >> read;
+  EXPECT_EQ(read, original);
+}
