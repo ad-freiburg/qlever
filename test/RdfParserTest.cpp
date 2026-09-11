@@ -8,6 +8,9 @@
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
+#include <future>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -20,6 +23,7 @@
 #include "global/ValueId.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/TripleComponentConversions.h"
+#include "parser/RdfAsyncParallelParser.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
@@ -951,6 +955,8 @@ template <typename Function, typename... Args>
 auto forAllParallelParsers(const Function& function, const Args&... args) {
   function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, args...);
   function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, args...);
+  function(ti<RdfParallelParserViaAsync<TurtleParser<Tokenizer>>>, args...);
+  function(ti<RdfParallelParserViaAsync<TurtleParser<TokenizerCtre>>>, args...);
 }
 template <typename Function, typename... Args>
 auto forAllMultifileParsers(const Function& function, const Args&... args) {
@@ -971,9 +977,9 @@ TEST(RdfParserTest, TurtleStreamAndParallelParser) {
   {
     auto of = ad_utility::makeOfstream(filename);
     for (size_t i = 0; i < 1'000; ++i) {
-      auto subject = absl::StrCat("<", i / 1000, ">");
-      auto predicate = absl::StrCat("<", i / 100, ">");
-      auto object = absl::StrCat("<", i / 10, ">");
+      auto subject = absl::StrCat("<", i / 100, ">");
+      auto predicate = absl::StrCat("<", i / 10, ">");
+      auto object = absl::StrCat("<", i, ">");
       of << subject << ' ' << predicate << ' ' << object << ".\n";
       expectedTriples.emplace_back(iri(subject), iri(predicate), iri(object));
     }
@@ -1290,6 +1296,233 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
   }();
   forAllParallelParsers(testWithParser, input);
   forAllMultifileParsers(testWithParser, input);
+}
+
+// Drain an `RdfAsyncParallelParser` (given as `AsyncParser`, e.g.
+// `RdfAsyncParallelParser<TurtleParser<Tokenizer>>`) for `filename`, keeping
+// up to `concurrency` calls to `asyncGetBatch()` in flight at once, and return
+// all the triples that were parsed. Because several calls may be in flight
+// concurrently, batches (and hence triples) can complete out of order.
+template <typename AsyncParser>
+std::vector<TurtleTriple> parseFromFileAsync(
+    const std::string& filename, ad_utility::MemorySize bufferSize = 1_kB,
+    size_t concurrency = 4) {
+  boost::asio::thread_pool pool{concurrency};
+  AsyncParser parser{pool.get_executor(),
+                     qlever::InputFileSpecification{
+                         filename, qlever::Filetype::Turtle, std::nullopt},
+                     bufferSize, encodedIriManager()};
+  // The parser has to outlive all of its in-flight `asyncGetBatch()` calls, so
+  // the pool has to be joined while the parser is still alive. This matters on
+  // the error path below, where `future.get()` throws and the calls that are
+  // still in flight are abandoned.
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+
+  using FutureBatch = std::future<std::optional<std::vector<TurtleTriple>>>;
+  std::vector<FutureBatch> inFlight;
+  for (size_t i = 0; i < concurrency; ++i) {
+    inFlight.push_back(parser.asyncGetBatch(boost::asio::use_future));
+  }
+
+  std::vector<TurtleTriple> result;
+  while (!inFlight.empty()) {
+    auto future = std::move(inFlight.front());
+    inFlight.erase(inFlight.begin());
+    auto batch = future.get();
+    if (batch.has_value()) {
+      result.insert(result.end(), batch.value().begin(), batch.value().end());
+      inFlight.push_back(parser.asyncGetBatch(boost::asio::use_future));
+    }
+  }
+  return result;
+}
+
+// Run a function that takes a type identity of the parser as the first
+// argument and possible additional args, and run this function for all the
+// `RdfAsyncParallelParser` instantiations that correspond to the parsers
+// exercised by `forAllParallelParsers`.
+template <typename Function, typename... Args>
+auto forAllAsyncParallelParsers(const Function& function, const Args&... args) {
+  function(ti<RdfAsyncParallelParser<TurtleParser<Tokenizer>>>, args...);
+  function(ti<RdfAsyncParallelParser<TurtleParser<TokenizerCtre>>>, args...);
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, asyncParallelParserBasic) {
+  std::string filename{absl::StrCat(gtestCurrentTestName(), ".dat")};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  std::vector<TurtleTriple> expectedTriples;
+  {
+    auto of = ad_utility::makeOfstream(filename);
+    for (size_t i = 0; i < 1'000; ++i) {
+      auto subject = absl::StrCat("<", i / 100, ">");
+      auto predicate = absl::StrCat("<", i / 10, ">");
+      auto object = absl::StrCat("<", i, ">");
+      of << subject << ' ' << predicate << ' ' << object << ".\n";
+      expectedTriples.emplace_back(iri(subject), iri(predicate), iri(object));
+    }
+  }
+
+  auto testWithParser = [&](auto t, size_t concurrency) {
+    using Parser = typename decltype(t)::type;
+    auto result = parseFromFileAsync<Parser>(filename, 1_kB, concurrency);
+    EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expectedTriples));
+  };
+  // Test with a single call in flight at a time as well as with several
+  // concurrent calls, to exercise both the sequential and the concurrent
+  // code paths of `asyncGetBatch()`.
+  forAllAsyncParallelParsers(testWithParser, 1);
+  forAllAsyncParallelParsers(testWithParser, 8);
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, asyncParallelParserEmptyInput) {
+  std::string filename{absl::StrCat(gtestCurrentTestName(), ".dat")};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  auto testWithParser = [&](auto t, std::string_view input) {
+    using Parser = typename decltype(t)::type;
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    auto result = parseFromFileAsync<Parser>(filename);
+    EXPECT_THAT(result, ::testing::ElementsAre());
+  };
+
+  forAllAsyncParallelParsers(testWithParser, "");
+  std::string onlyPrefixes = "PREFIX bim: <http://www.bimm.bam.de/blubb/>";
+  forAllAsyncParallelParsers(testWithParser, onlyPrefixes);
+}
+
+// Test that exceptions during the turtle parsing are properly propagated
+// through the completion handler of `asyncGetBatch()`.
+TEST(RdfParserTest, asyncParallelParserExceptionPropagation) {
+  std::string filename{absl::StrCat(gtestCurrentTestName(), ".dat")};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  auto testWithParser = [&](auto t, std::string_view input) {
+    using Parser = typename decltype(t)::type;
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE((parseFromFileAsync<Parser>(filename)),
+                                 ::testing::ContainsRegex("Parse error"));
+  };
+  forAllAsyncParallelParsers(testWithParser, "<missing> <object> .");
+}
+
+// Test that once a batch fails to parse, the error is reported exactly once and
+// subsequent calls return `nullopt` to stop the caller's pipeline cleanly,
+// instead of silently reporting EOF or re-throwing on every call.
+TEST(RdfParserTest, asyncParallelParserHaltsOnFirstError) {
+  std::string filename{absl::StrCat(gtestCurrentTestName(), ".dat")};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  auto testWithParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    {
+      // The whole (small) input consists of a single unparsable batch, so
+      // without the "halt on first error" behavior, any call after the first
+      // one would simply see a real end of input and report `nullopt`.
+      auto of = ad_utility::makeOfstream(filename);
+      of << "<missing> <object> .\n";
+    }
+
+    boost::asio::thread_pool pool{4};
+    Parser parser{pool.get_executor(),
+                  qlever::InputFileSpecification{
+                      filename, qlever::Filetype::Turtle, std::nullopt},
+                  1_kB, encodedIriManager()};
+    // See the comment in `parseFromFileAsync` above.
+    absl::Cleanup joinPool = [&pool] { pool.join(); };
+
+    // The first call encounters the parse error and propagates it.
+    EXPECT_ANY_THROW(parser.asyncGetBatch(boost::asio::use_future).get());
+    // Subsequent calls return nullopt to stop the pipeline cleanly.
+    EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
+              std::nullopt);
+    EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
+              std::nullopt);
+  };
+  forAllAsyncParallelParsers(testWithParser);
+}
+
+// Test that an error during the parsing of the header is treated exactly like
+// an error during the parsing of a batch: the call that runs into it reports
+// the error, and all subsequent calls return `nullopt`.
+// _____________________________________________________________________________
+TEST(RdfParserTest, asyncParallelParserHaltsOnHeaderError) {
+  std::string filename{absl::StrCat(gtestCurrentTestName(), ".dat")};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  auto testWithParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    // The prefix declaration is broken, so the input fails to parse before a
+    // single batch has been looked at.
+    ad_utility::makeOfstream(filename)
+        << "@prefix ex: notAnIri .\n<a> <b> <c> .\n";
+
+    // The error of the first call is only inspected after the pool has been
+    // joined, see the NOTE below.
+    std::exception_ptr error;
+    {
+      boost::asio::thread_pool pool{4};
+      Parser parser{pool.get_executor(),
+                    qlever::InputFileSpecification{
+                        filename, qlever::Filetype::Turtle, std::nullopt},
+                    1_kB, encodedIriManager()};
+      // See the comment in `parseFromFileAsync` above.
+      absl::Cleanup joinPool = [&pool] { pool.join(); };
+
+      // The first call parses the header and runs into the error.
+      try {
+        parser.asyncGetBatch(boost::asio::use_future).get();
+        ADD_FAILURE() << "No exception was thrown";
+      } catch (...) {
+        error = std::current_exception();
+      }
+      // Subsequent calls return nullopt to stop the pipeline cleanly.
+      EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
+                std::nullopt);
+      EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(),
+                std::nullopt);
+    }
+
+    // NOTE: The exception is captured above and only rethrown here, once the
+    // pool is joined, because the exception object is owned by the shared
+    // state of the `std::future` and the teardown of the coroutine releases
+    // that state on a thread of the pool. Reading the message while that
+    // teardown may still be running is reported as a data race by the thread
+    // sanitizer, which cannot see the reference counting that makes it safe,
+    // because that lives in an uninstrumented `libstdc++`.
+    //
+    // Byte position 12 lies inside the prefix declaration, so the error indeed
+    // comes from the parsing of the header and not from the triple.
+    ASSERT_NE(error, nullptr);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        std::rethrow_exception(error),
+        ::testing::ContainsRegex("Parse error at byte position 12"));
+  };
+  forAllAsyncParallelParsers(testWithParser);
+}
+
+// Test that the parallel parsers report a parse position of 0, because they
+// parse several blocks at once and hence have no single meaningful position
+// (see `AsyncParserDriver::getParsePosition`).
+// _____________________________________________________________________________
+TEST(RdfParserTest, parallelParserGetParsePosition) {
+  std::string filename{absl::StrCat(gtestCurrentTestName(), ".dat")};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  ad_utility::makeOfstream(filename) << "<subject> <predicate> <object> .\n";
+  auto testWithParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    Parser parser{qlever::InputFileSpecification{
+                      filename, qlever::Filetype::Turtle, std::nullopt},
+                  1_kB, encodedIriManager()};
+    EXPECT_EQ(parser.getParsePosition(), 0u);
+    // The position also stays 0 once the input has actually been parsed.
+    EXPECT_THAT(parser.getBatch(), ::testing::Optional(::testing::SizeIs(1)));
+    EXPECT_EQ(parser.getParsePosition(), 0u);
+  };
+  forAllParallelParsers(testWithParser);
 }
 
 // _____________________________________________________________________________

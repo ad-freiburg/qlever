@@ -10,9 +10,11 @@
 #ifndef QLEVER_SRC_PARSER_RDFPARSER_H
 #define QLEVER_SRC_PARSER_RDFPARSER_H
 
+#include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
 
+#include <atomic>
 #include <future>
 #include <locale>
 #include <optional>
@@ -55,6 +57,11 @@ std::optional<size_t> findEndOfLastNewline(std::string_view input);
 // `std::nullopt` if there is no match. Used to split a block of input at a
 // Turtle statement boundary.
 std::optional<size_t> findEndOfLastStatement(std::string_view input);
+
+// The human-readable description of what `findEndOfLastStatement` looks for,
+// used in the error messages of `AsyncStatementBoundaryBlockSource`.
+inline constexpr std::string_view statementBoundaryDescription =
+    "a dot followed by a newline";
 }  // namespace detail
 
 struct TurtleTriple {
@@ -636,13 +643,103 @@ class RdfStreamParser : public Parser {
   std::optional<qlever::parser::AsyncFileBlockDriver> driver_;
 };
 
+// The state that all the parallel parsers of a single input file share, plus
+// the operations that need it. Both `RdfParallelParser` and
+// `RdfAsyncParallelParser` (see `RdfAsyncParallelParser.h`) hold one of these:
+// they differ only in how they schedule their work, not in how a single block
+// is turned into triples.
+//
+// The state consists of the header of the input file (see `RdfParserHeader`),
+// the file-level blank node prefix that all workers share, and the part of the
+// first block that is left over after the header (see `parseHeader`).
+template <typename Parser>
+class RdfParallelParsingState {
+ private:
+  const EncodedIriManager* encodedIriManager_;
+  TripleComponent defaultGraphIri_;
+
+  // The header of the input file, parsed once by `parseHeader` and then set on
+  // each of the worker parsers by `parseBatch`.
+  RdfParserHeader header_;
+
+  // The blank node prefix that all the workers for this file share, such that
+  // user-specified blank node labels get the same ID across batches.
+  size_t fileBlankNodePrefix_ = Parser::nextBlankNodePrefix();
+
+  // The part of the first block that is left over after the header, see
+  // `parseHeader` and `takeRemainderFromInitialization`.
+  qlever::parser::ByteBlock remainderFromInitialization_;
+  std::atomic_bool remainderWasTaken_{false};
+
+  // The parser that parses the leading declarations. It has to live across
+  // several calls to `parseHeaderStep`, because the declarations may be spread
+  // over several blocks. It is reset as soon as the header is complete.
+  std::optional<RdfStringParser<Parser>> declarationParser_;
+
+ public:
+  RdfParallelParsingState(const EncodedIriManager* encodedIriManager,
+                          TripleComponent defaultGraphIri)
+      : encodedIriManager_{encodedIriManager},
+        defaultGraphIri_{std::move(defaultGraphIri)} {}
+
+  // Parse the leading `@base`/`@prefix` declarations of the input by pulling
+  // blocks from `getNextBlock` (which has to return `nullopt` at the end of
+  // the input) until the first block is found that has something left after
+  // the declarations. Store that header in `header_` and the rest of the block
+  // for `takeRemainderFromInitialization`.
+  //
+  // NOTE: This is the only function that writes the shared state, and it is
+  // not thread-safe. Call it exactly once, before any worker calls
+  // `parseBatch` (both parsers do so in their constructor).
+  void parseHeader(
+      absl::AnyInvocable<std::optional<qlever::parser::ByteBlock>()>
+          getNextBlock);
+
+  // The incremental version of `parseHeader` for callers that cannot
+  // synchronously pull the next block (see `RdfAsyncParallelParser`). Feed the
+  // blocks of the input one by one (`nullopt` meaning the end of the input);
+  // return `true` as long as another block is needed, and `false` once the
+  // header is complete and `takeRemainderFromInitialization` may be called.
+  //
+  // NOTE: The thread-safety of this function is that of `parseHeader`: the
+  // sequence of calls has to be finished before any worker calls `parseBatch`.
+  bool parseHeaderStep(std::optional<qlever::parser::ByteBlock> block);
+
+  // Hand out the block remainder that `parseHeader` has left over. The first
+  // caller becomes its sole owner, every subsequent call returns `nullopt`, so
+  // that the block is parsed exactly once.
+  //
+  // This is thread-safe: the atomic `exchange` on `remainderWasTaken_`
+  // guarantees that exactly one of several concurrent callers sees it as
+  // `false`, and only that caller touches `remainderFromInitialization_` at
+  // all.
+  std::optional<qlever::parser::ByteBlock> takeRemainderFromInitialization() {
+    if (remainderWasTaken_.exchange(true)) {
+      return std::nullopt;
+    }
+    return std::move(remainderFromInitialization_);
+  }
+
+  // Parse a single `batch` of raw bytes into triples, using a fresh worker
+  // parser that is set up from the shared state. `positionOffset` is the offset
+  // of `batch` in the input file and is only used for error messages. Throw on
+  // a parse error.
+  //
+  // This is thread-safe (and hence `const`): it only reads the shared state
+  // and each call has its own worker parser, so arbitrarily many calls may run
+  // concurrently. This requires that `parseHeader`, which writes that state,
+  // has already returned.
+  std::vector<TurtleTriple> parseBatch(qlever::parser::ByteBlock batch,
+                                       size_t positionOffset = 0) const;
+};
+
 // This class parses an uncompressed file (which can also be a stream like
 // stdin) in parallel. It parses the header (see `RdfParserHeader`) itself, then
 // splits the rest of the input into blocks at statement boundaries (see
 // `detail::findEndOfLastStatement`) and lets several worker parsers of type
 // `RdfStringParser<Parser>` parse those blocks in parallel. Apart from the
 // header it parses nothing itself, it only owns the state that the workers
-// share (the header and `fileBlankNodePrefix_`) and collects their results, in
+// share (see `RdfParallelParsingState`) and collects their results, in
 // no particular order. Because the workers see neither the other blocks nor the
 // order in which they are parsed, `@base` and `@prefix` may only be declared in
 // the header, and multiline literals are disallowed (a `.` followed by a
@@ -662,7 +759,7 @@ class RdfParallelParser : public RdfParserBase {
                     std::chrono::milliseconds sleepTimeForTesting =
                         std::chrono::milliseconds{0})
       : RdfParserBase{ev},
-        defaultGraphIri_{defaultGraphIri},
+        state_{ev, defaultGraphIri},
         sleepTimeForTesting_(sleepTimeForTesting) {
     initialize(spec, blocksize);
   }
@@ -702,13 +799,9 @@ class RdfParallelParser : public RdfParserBase {
   template <typename Batch>
   void feedBatchesToParser(Batch remainingBatchFromInitialization);
 
-  // The header of the input file, parsed once by `initialize` and then set on
-  // each of the worker parsers.
-  RdfParserHeader header_;
-
-  // The blank node prefix that all the workers for this file share, such that
-  // user-specified blank node labels get the same ID across batches.
-  size_t fileBlankNodePrefix_ = Parser::nextBlankNodePrefix();
+  // The state that this parser shares with all of its workers, in particular
+  // the header of the input file.
+  RdfParallelParsingState<Parser> state_;
 
   // Initialized in the call to `initialize`.
   std::optional<qlever::parser::AsyncFileBlockDriver> driver_;
@@ -723,8 +816,6 @@ class RdfParallelParser : public RdfParserBase {
   // for keeping track of this condition.
   std::atomic<size_t> batchIdx_ = 0;
   std::atomic<size_t> numBatchesTotal_ = 0;
-
-  TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
 
   std::chrono::milliseconds sleepTimeForTesting_{0};
 
