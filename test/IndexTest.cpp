@@ -1416,6 +1416,37 @@ TEST(IndexImpl, graphNameManagerIntegration) {
 }
 
 // _____________________________________________________________________________
+// Build an index for IRIs that match a general `encodedIri::Pattern` and check
+// that the pattern is correctly stored in the index and restored from it, and
+// that the matching IRIs are not stored in the vocabulary.
+TEST(IndexImpl, encodedIriPatterns) {
+  std::string encodedIri = "<http://example.org/range_545554944_3_4P>";
+  std::string plainIri = "<http://example.org/range_1_2_3P>";
+  TestIndexConfig c{
+      absl::StrCat("<a> <b> ", encodedIri, " . <a> <b> ", plainIri, " .")};
+  c.encodedIriPatterns = {encodedIri::Pattern{
+      "http://example.org/range_",
+      {encodedIri::Part{32, {{29, 32, 1}}, "_"}, encodedIri::Part{8, {}, "_"},
+       encodedIri::Part{8, {}, "P"}}}};
+  const auto& index = getQec(c)->getIndex();
+  const auto& manager = index.encodedIriManager();
+
+  // The IRI that matches the pattern is encoded in an `Id` and therefore not
+  // part of the vocabulary.
+  auto id = manager.encode(encodedIri);
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(manager.toString(id.value()), encodedIri);
+  auto [lower, upper] = index.getVocab().getPositionOfWord(encodedIri);
+  EXPECT_EQ(lower, upper);
+
+  // The first number of the other IRI doesn't have the required bits, so the
+  // IRI is stored in the vocabulary as usual.
+  EXPECT_FALSE(manager.encode(plainIri).has_value());
+  auto [lower2, upper2] = index.getVocab().getPositionOfWord(plainIri);
+  EXPECT_NE(lower2, upper2);
+}
+
+// _____________________________________________________________________________
 // Checks that `IndexImpl::allIndexFiles` lists exactly the on-disk files that
 // belong to an index: no phantom entries, all components (including the
 // optional ones) present, and no file that shares the base name but is not an
