@@ -36,6 +36,36 @@ RdfAsyncMultifileParser::RdfAsyncMultifileParser(
       useRelaxedParsing_{useRelaxedParsing},
       fileState_{FileState{std::move(files)}} {}
 
+namespace {
+// Create an asynchronous parser for the file in `spec`, which is parsed by the
+// given `InnerParser` (for example `TurtleParser<Tokenizer>`).
+//
+// NOTE: This is a free function template and not simply a part of the lambda in
+// `makeFileParser` below, because GCC rejects a nested lambda that uses a type
+// which depends on a parameter of the enclosing lambda (see the type alias
+// `InnerParser` there).
+template <typename InnerParser>
+std::unique_ptr<AsyncRdfParserBase> makeFileParserForInnerParser(
+    const ql::any_io_executor& executor,
+    const qlever::InputFileSpecification& spec,
+    ad_utility::MemorySize bufferSize,
+    const EncodedIriManager* encodedIriManager, TripleComponent graph) {
+  if (spec.parseInParallel_) {
+    return std::make_unique<RdfAsyncParallelParser<InnerParser>>(
+        executor, spec, bufferSize, encodedIriManager, graph);
+  }
+  // NOTE: The inner parser is created lazily (see `AsyncSerialParserAdapter`),
+  // so that this function stays cheap.
+  return std::make_unique<AsyncSerialParserAdapter>(
+      executor,
+      [spec, bufferSize, encodedIriManager,
+       graph = std::move(graph)]() -> std::unique_ptr<RdfParserBase> {
+        return std::make_unique<RdfStreamParser<InnerParser>>(
+            spec, bufferSize, encodedIriManager, graph);
+      });
+}
+}  // namespace
+
 // _____________________________________________________________________________
 std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
     const qlever::InputFileSpecification& spec) const {
@@ -49,20 +79,8 @@ std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
         using InnerParser =
             std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
                                NQuadParser<TokenizerT>>;
-        if (spec.parseInParallel_) {
-          return std::make_unique<RdfAsyncParallelParser<InnerParser>>(
-              executor(), spec, bufferSize_, encodedIriManager_, graph);
-        }
-        // NOTE: The inner parser is created lazily (see
-        // `AsyncSerialParserAdapter`), so that this function stays cheap.
-        return std::make_unique<AsyncSerialParserAdapter>(
-            executor(),
-            [spec, bufferSize = bufferSize_,
-             encodedIriManager = encodedIriManager_,
-             graph]() -> std::unique_ptr<RdfParserBase> {
-              return std::make_unique<RdfStreamParser<InnerParser>>(
-                  spec, bufferSize, encodedIriManager, graph);
-            });
+        return makeFileParserForInnerParser<InnerParser>(
+            executor(), spec, bufferSize_, encodedIriManager_, graph);
       }};
   // The call to `callFixedSize` lifts the runtime booleans to compile-time
   // integers, exactly like `makeSingleRdfParser` in `RdfParser.cpp` (which
