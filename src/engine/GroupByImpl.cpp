@@ -1074,8 +1074,8 @@ GroupByImpl::checkIfJoinWithFullScan(const Join& join) const {
 
   // Determine if any of the two children of the join operation is a
   // triple with three variables that fulfills the condition.
-  auto* child1 = static_cast<const Operation&>(join).getChildren().at(0);
-  auto* child2 = static_cast<const Operation&>(join).getChildren().at(1);
+  auto* child1 = join.getChildren().at(0);
+  auto* child2 = join.getChildren().at(1);
 
   // TODO<joka921, C++23> Use `optional::or_else`
   auto permutation = getPermutationForThreeVariableTriple(

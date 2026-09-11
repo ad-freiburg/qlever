@@ -731,6 +731,10 @@ include_directories(SYSTEM ${range-v3_SOURCE_DIR}/include)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
 target_compile_options(civetweb PRIVATE -Wno-missing-field-initializers)
+# The `pull` target of `prometheus-cpp` (vendored by `opentelemetry-cpp`)
+# includes `CivetServer.h`, in which `CivetHandler` hides several of its own
+# overloaded virtual functions.
+target_compile_options(pull PRIVATE -Wno-overloaded-virtual)
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})

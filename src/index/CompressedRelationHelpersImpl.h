@@ -127,10 +127,18 @@ class DistinctIdCounter {
     lastSeen_ = id;
   }
 
+  // Reset the counter, so that it can be reused for the next relation. Use
+  // this instead of `getAndReset` if the count itself is not needed.
+  void reset() {
+    lastSeen_ = std::numeric_limits<Id>::max();
+    count_ = 0;
+  }
+
   // ___________________________________________________________________________
   size_t getAndReset() {
-    lastSeen_ = std::numeric_limits<Id>::max();
-    return std::exchange(count_, 0);
+    auto count = count_;
+    reset();
+    return count;
   }
 };
 

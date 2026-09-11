@@ -56,7 +56,7 @@ bool Join::knownEmptyResult() { return impl_->knownEmptyResult(); }
 float Join::getMultiplicity(size_t col) { return impl_->getMultiplicity(col); }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> Join::getChildren() {
+std::vector<QueryExecutionTree*> Join::getChildrenImpl() const {
   return impl_->getChildren();
 }
 

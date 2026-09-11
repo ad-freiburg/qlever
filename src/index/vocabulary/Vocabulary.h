@@ -260,6 +260,25 @@ class Vocabulary {
     }
   }
 
+  // Set the geo cell grid of the geo vocabulary (see `GeoVocabulary`), which
+  // must happen before the vocabulary is opened. No-op unless the underlying
+  // vocabulary might have a grid (see `MaybeProvidesGeoCellGrid`).
+  void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
+    if constexpr (MaybeProvidesGeoCellGrid<UnderlyingVocabulary>) {
+      vocabulary_.getUnderlyingVocabulary().setGeoCellGrid(std::move(grid));
+    }
+  }
+
+  // The geo cell grid of the geo vocabulary, or `std::nullopt` if there is
+  // none.
+  std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
+    if constexpr (MaybeProvidesGeoCellGrid<UnderlyingVocabulary>) {
+      return vocabulary_.getUnderlyingVocabulary().getGeoCellGrid();
+    } else {
+      return std::nullopt;
+    }
+  }
+
   // Replace the words of the currently held vocabulary with a non-owning,
   // zero-copy view directly into `serializer`'s buffer (see e.g.
   // `VocabularyInMemory::fromZeroCopyDeserializer`). This only works for

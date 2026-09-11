@@ -204,8 +204,12 @@ class ValuesForTesting : public Operation {
     return static_cast<float>(col + 1) * 42.0f;
   }
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {};
+  }
 
+ public:
   bool knownEmptyResult() override {
     return ql::ranges::all_of(
         tables(), [](const IdTable& table) { return table.empty(); });
