@@ -796,9 +796,11 @@ auto IndexImpl::convertPartialToGlobalIds(
 
     // Partitioning makes each of the two kinds of triples contiguous, so that
     // each of them can be copied to its sorter in one go. The QLever-internal
-    // triples come first.
-    auto normalTriples = ql::ranges::partition(triples, isQLeverInternalTriple);
-    size_t numInternalTriples = normalTriples.begin() - triples.begin();
+    // triples come first. NOTE: We deliberately use `::ranges::partition` and
+    // not `ql::ranges::partition`, because the latter returns an iterator in
+    // C++17 mode but a `subrange` in C++20 mode (see `backports/algorithm.h`).
+    auto normalTriples = ::ranges::partition(triples, isQLeverInternalTriple);
+    size_t numInternalTriples = normalTriples - triples.begin();
     size_t numNormalTriples = triples.size() - numInternalTriples;
     output.wlock()->push(triples.subView(numInternalTriples, numNormalTriples),
                          triples.subView(0, numInternalTriples));
