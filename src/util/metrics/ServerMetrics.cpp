@@ -18,17 +18,19 @@
 
 // _____________________________________________________________________________
 ServerMetrics::ServerMetrics(
-    absl::AnyInvocable<int64_t() const> getDeltaTriples,
+    absl::AnyInvocable<DeltaTriplesCount() const> getDeltaTriples,
     absl::AnyInvocable<int64_t() const> getMemoryLeft,
     absl::AnyInvocable<int64_t() const> getCacheUsed,
     absl::AnyInvocable<int64_t() const> getCacheLimit,
     absl::AnyInvocable<int64_t() const> getRebuildInProgress,
-    std::optional<ad_utility::MemorySize> maxMem)
+    std::optional<ad_utility::MemorySize> maxMem,
+    absl::AnyInvocable<int64_t() const> getNumTriplesIndex)
     : getDeltaTriples_(std::move(getDeltaTriples)),
       getMemoryLeft_(std::move(getMemoryLeft)),
       getCacheUsed_(std::move(getCacheUsed)),
       getCacheLimit_(std::move(getCacheLimit)),
-      getRebuildInProgress_(std::move(getRebuildInProgress)) {
+      getRebuildInProgress_(std::move(getRebuildInProgress)),
+      getNumTriplesIndex_(std::move(getNumTriplesIndex)) {
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
   buildInfoMetric_ = meter->CreateInt64Gauge(
@@ -75,6 +77,9 @@ ServerMetrics::ServerMetrics(
   rebuildInProgressMetric_ = meter->CreateInt64ObservableGauge(
       "qlever.index.rebuild_in_progress",
       "Whether an index rebuild is currently in progress (1) or not (0)");
+  numTriplesIndex_ = meter->CreateInt64ObservableGauge(
+      "qlever.num_triples.index",
+      "Total number of triples in the index (excluding delta triples)");
 
   auto now = std::chrono::duration_cast<std::chrono::seconds>(
                  std::chrono::system_clock::now().time_since_epoch())
@@ -113,8 +118,7 @@ ServerMetrics::ServerMetrics(
 
 // _____________________________________________________________________________
 ServerMetrics::~ServerMetrics() {
-  deltaTriplesMetric_->RemoveCallback(
-      &observeCallback<&ServerMetrics::getDeltaTriples_>, this);
+  deltaTriplesMetric_->RemoveCallback(&deltaTriplesCallback, this);
   memoryQueryFree_->RemoveCallback(
       &observeCallback<&ServerMetrics::getMemoryLeft_>, this);
   memoryCacheUsed_->RemoveCallback(
@@ -123,12 +127,13 @@ ServerMetrics::~ServerMetrics() {
       &observeCallback<&ServerMetrics::getCacheLimit_>, this);
   rebuildInProgressMetric_->RemoveCallback(
       &observeCallback<&ServerMetrics::getRebuildInProgress_>, this);
+  numTriplesIndex_->RemoveCallback(
+      &observeCallback<&ServerMetrics::getNumTriplesIndex_>, this);
 }
 
 // _____________________________________________________________________________
 void ServerMetrics::registerCallbacks() {
-  deltaTriplesMetric_->AddCallback(
-      &observeCallback<&ServerMetrics::getDeltaTriples_>, this);
+  deltaTriplesMetric_->AddCallback(&deltaTriplesCallback, this);
   memoryQueryFree_->AddCallback(
       &observeCallback<&ServerMetrics::getMemoryLeft_>, this);
   memoryCacheUsed_->AddCallback(&observeCallback<&ServerMetrics::getCacheUsed_>,
@@ -137,6 +142,8 @@ void ServerMetrics::registerCallbacks() {
       &observeCallback<&ServerMetrics::getCacheLimit_>, this);
   rebuildInProgressMetric_->AddCallback(
       &observeCallback<&ServerMetrics::getRebuildInProgress_>, this);
+  numTriplesIndex_->AddCallback(
+      &observeCallback<&ServerMetrics::getNumTriplesIndex_>, this);
 }
 
 // _____________________________________________________________________________
@@ -148,9 +155,28 @@ void ServerMetrics::observe(opentelemetry::metrics::ObserverResult result,
 }
 
 // _____________________________________________________________________________
+void ServerMetrics::observe(opentelemetry::metrics::ObserverResult result,
+                            int64_t value, const std::string& label,
+                            const std::string& labelValue) {
+  opentelemetry::nostd::get<opentelemetry::nostd::shared_ptr<
+      opentelemetry::metrics::ObserverResultT<int64_t>>>(result)
+      ->Observe(value, {{label, labelValue}});
+}
+
+// _____________________________________________________________________________
 template <absl::AnyInvocable<int64_t() const> ServerMetrics::*Getter>
 void ServerMetrics::observeCallback(
     opentelemetry::metrics::ObserverResult result, void* state) {
   const auto& self = *static_cast<const ServerMetrics*>(state);
   observe(std::move(result), (self.*Getter)());
+}
+
+// _____________________________________________________________________________
+void ServerMetrics::deltaTriplesCallback(
+    opentelemetry::metrics::ObserverResult result, void* state) {
+  const auto& self = *static_cast<const ServerMetrics*>(state);
+  auto deltaTriples = self.getDeltaTriples_();
+  observe(result, deltaTriples.triplesInserted_, "type", "added");
+  observe(result, deltaTriples.triplesDeleted_, "type", "removed");
+  observe(result, deltaTriples.triplesInserted_ + deltaTriples.triplesDeleted_);
 }
