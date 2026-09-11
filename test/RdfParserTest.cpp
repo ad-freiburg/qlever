@@ -1276,13 +1276,11 @@ TEST(RdfParserTest, betterErrorMessageOnMultilineLiteralError) {
 // August 2026).
 TEST(RdfParserTest, stopParsingOnOutsideFailure) {
   QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
-  std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};
+  std::string filename{absl::StrCat(gtestCurrentTestName(), ".dat")};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
   auto testWithParser = [&](auto t, std::string_view input) {
     using Parser = typename decltype(t)::type;
-    {
-      auto of = ad_utility::makeOfstream(filename);
-      of << input;
-    }
+    ad_utility::makeOfstream(filename) << input;
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     {
       [[maybe_unused]] Parser parserChild = [&]() {
@@ -1730,16 +1728,14 @@ TEST(RdfParserTest, multifileParser) {
         TurtleTriple{iri("<x2>"), iri("<y2>"), iri("<z2>"), iri("<g1>")});
     expected.push_back(TurtleTriple{iri("<x3>"), iri("<y3>"), iri("<z3>"),
                                     iri("<defaultGraphNQ>")});
-    std::string file1 = "multifileParserTest1.ttl";
-    std::string file2 = "multifileParserTest2.nq";
-    {
-      auto f = ad_utility::makeOfstream(file1);
-      f << ttl;
-    }
-    {
-      auto f = ad_utility::makeOfstream(file2);
-      f << nq;
-    }
+    std::string file1 = absl::StrCat(gtestCurrentTestName(), "1.ttl");
+    std::string file2 = absl::StrCat(gtestCurrentTestName(), "2.nq");
+    ad_utility::makeOfstream(file1) << ttl;
+    ad_utility::makeOfstream(file2) << nq;
+    absl::Cleanup cleanup = [&file1, &file2] {
+      ad_utility::deleteFile(file1);
+      ad_utility::deleteFile(file2);
+    };
     std::vector<qlever::InputFileSpecification> specs;
     specs.emplace_back(file1, qlever::Filetype::Turtle, "defaultGraphTTL",
                        useParallelParser);
