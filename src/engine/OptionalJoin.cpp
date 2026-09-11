@@ -33,6 +33,7 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
       _left{std::move(t1)},
       _right{std::move(t2)},
       _joinColumns(QueryExecutionTree::getJoinColumns(*_left, *_right)),
+      _multiplicities{allocator().template as<float>()},
       keepJoinColumns_{keepJoinColumns} {
   AD_CORRECTNESS_CHECK(!_joinColumns.empty());
 
@@ -411,7 +412,8 @@ void OptionalJoin::optionalJoin(
   }
 
   ad_utility::JoinColumnMapping joinColumnData{
-      joinColumns, left.numColumns(), right.numColumns(), keepJoinColumns_};
+      joinColumns, left.numColumns(), right.numColumns(),
+      allocator().template as<ColumnIndex>(), keepJoinColumns_};
 
   IdTableView<0> joinColumnsLeft =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
@@ -524,7 +526,7 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
   AD_CORRECTNESS_CHECK(_joinColumns.size() == 1);
   ad_utility::JoinColumnMapping joinColMap{
       _joinColumns, _left->getResultWidth(), _right->getResultWidth(),
-      keepJoinColumns_};
+      allocator().template as<ColumnIndex>(), keepJoinColumns_};
 
   auto resultPermutation = joinColMap.permutationResult();
 
@@ -559,7 +561,7 @@ Result OptionalJoin::optionalJoinWithIndexScan(
                            Implementation::OnlyUndefInLastJoinColumnOfLeft);
   ad_utility::JoinColumnMapping joinColMap{
       _joinColumns, _left->getResultWidth(), _right->getResultWidth(),
-      keepJoinColumns_};
+      allocator().template as<ColumnIndex>(), keepJoinColumns_};
 
   auto resultPermutation = joinColMap.permutationResult();
 

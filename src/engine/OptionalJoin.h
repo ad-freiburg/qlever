@@ -8,6 +8,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/Allocator.h"
 
 // Forward declaration
 class IndexScan;
@@ -28,7 +29,7 @@ class OptionalJoin : public Operation {
 
   std::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
-  std::vector<float> _multiplicities;
+  std::vector<float, qlever::Allocator<float>> _multiplicities;
   size_t _sizeEstimate;
   std::optional<size_t> _costEstimate;
   bool _multiplicitiesComputed = false;

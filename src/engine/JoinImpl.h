@@ -12,11 +12,14 @@
 #ifndef QLEVER_SRC_ENGINE_JOINIMPL_H
 #define QLEVER_SRC_ENGINE_JOINIMPL_H
 
+#include <vector>
+
 #include "backports/concepts.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/Allocator.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
 
@@ -33,7 +36,7 @@ class JoinImpl : public Operation {
   bool sizeEstimateComputed_;
   size_t sizeEstimate_;
 
-  std::vector<float> multiplicities_;
+  std::vector<float, qlever::Allocator<float>> multiplicities_;
 
   // If set to false, the join column will not be part of the result.
   bool keepJoinColumn_ = true;

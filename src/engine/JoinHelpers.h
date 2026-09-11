@@ -22,6 +22,7 @@
 #include "engine/idTable/IdTable.h"
 #include "index/CompressedRelation.h"
 #include "index/Permutation.h"
+#include "util/Allocator.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/InputRangeUtils.h"
@@ -37,7 +38,8 @@ using namespace ad_utility;
 
 // Forward declaration for `getRowAdderForJoin`.
 
-using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
+using OptionalPermutation =
+    std::optional<std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>>>;
 
 // _____________________________________________________________________________
 inline void applyPermutation(IdTable& idTable,
@@ -113,7 +115,9 @@ using MaterializedInputView =
 // lazy join algorithms. Note: The `convertGenerator` function above
 // conceptually does exactly the same for lazy inputs.
 inline MaterializedInputView asSingleTableView(
-    const Result& result, const std::vector<ColumnIndex>& permutation) {
+    const Result& result,
+    const std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>>&
+        permutation) {
   return {makeIdTableAndFirstCols<1>(
       result.idTableView().asColumnSubsetView(permutation),
       result.getCopyOfLocalVocab())};
@@ -123,7 +127,9 @@ inline MaterializedInputView asSingleTableView(
 // the lazy result generator. Note that the lifetime of the view is coupled to
 // the lifetime of the result.
 inline std::variant<LazyInputView<1>, MaterializedInputView> resultToView(
-    const Result& result, const std::vector<ColumnIndex>& permutation) {
+    const Result& result,
+    const std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>>&
+        permutation) {
   if (result.isFullyMaterialized()) {
     return asSingleTableView(result, permutation);
   }

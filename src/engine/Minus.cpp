@@ -21,7 +21,7 @@ using std::string;
 Minus::Minus(QueryExecutionContext* qec,
              std::shared_ptr<QueryExecutionTree> left,
              std::shared_ptr<QueryExecutionTree> right)
-    : Operation{qec} {
+    : Operation{qec}, _multiplicities{allocator().template as<float>()} {
   std::tie(_left, _right, _matchedColumns) =
       QueryExecutionTree::getSortedSubtreesAndJoinColumns(std::move(left),
                                                           std::move(right));
@@ -147,7 +147,8 @@ IdTable Minus::copyMatchingRows(
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
 
   // Transform into dense vector of indices.
-  std::vector<size_t> nonMatchingIndices;
+  std::vector<size_t, qlever::Allocator<size_t>> nonMatchingIndices(
+      left.getAllocator().template as<size_t>());
   for (size_t row = 0; row < left.numRows(); ++row) {
     if (keepEntry.at(row) == reference) {
       nonMatchingIndices.push_back(row);
@@ -178,8 +179,9 @@ IdTable Minus::computeMinus(
     return IdTable{left.clone()};
   }
 
-  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
-                                               right.numColumns()};
+  ad_utility::JoinColumnMapping joinColumnData{
+      joinColumns, left.numColumns(), right.numColumns(),
+      allocator().template as<ColumnIndex>()};
 
   IdTableView<0> joinColumnsLeft =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
@@ -324,7 +326,8 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
   // Currently only supports a single join column.
   AD_CORRECTNESS_CHECK(_matchedColumns.size() == 1);
 
-  std::vector<ColumnIndex> permutation;
+  std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>> permutation(
+      allocator().template as<ColumnIndex>());
   permutation.resize(_left->getResultWidth());
   ql::ranges::copy(ad_utility::integerRange(permutation.size()),
                    permutation.begin());
@@ -333,15 +336,20 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
   ColumnIndex leftJoinColumn = _matchedColumns.at(0).at(0);
   std::swap(permutation.at(0), permutation.at(leftJoinColumn));
 
+  std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>> rightPermutation(
+      allocator().template as<ColumnIndex>());
+  rightPermutation.push_back(_matchedColumns.at(0).at(1));
+
   auto action =
-      [this, left = std::move(left), right = std::move(right),
-       permutation](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+      [this, left = std::move(left), right = std::move(right), permutation,
+       rightPermutation](std::function<void(IdTable&, LocalVocab&)>
+                             yieldTable) {
         ad_utility::MinusRowHandler rowAdder{
             _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
             cancellationHandle_, std::move(yieldTable)};
         auto leftRange = qlever::joinHelpers::resultToView(*left, permutation);
-        auto rightRange = qlever::joinHelpers::resultToView(
-            *right, {_matchedColumns.at(0).at(1)});
+        auto rightRange =
+            qlever::joinHelpers::resultToView(*right, rightPermutation);
         std::visit(
             [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
               ad_utility::zipperJoinForBlocksWithPotentialUndef(
