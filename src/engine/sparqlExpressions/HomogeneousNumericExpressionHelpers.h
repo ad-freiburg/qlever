@@ -76,7 +76,7 @@ constexpr bool supportsHomogeneousNumericOperand() {
 
 // Classify all values in a span as integer, double, or other.
 inline HomogeneousNumericType classifyNumericOperand(
-    ql::span<const ValueId> values, EvaluationContext* context) {
+    ql::span<const ValueId> values, const EvaluationContext* context) {
   // An empty vector has no meaningful homogeneous numeric type.
   if (values.empty()) {
     return HomogeneousNumericType::Other;
@@ -90,7 +90,7 @@ inline HomogeneousNumericType classifyNumericOperand(
   // caused a significant regression for homogeneous inputs.
   ad_utility::chunkedForLoop<1000>(
       0, values.size(),
-      [&](size_t i) {
+      [&values, &allInt, &allDouble](size_t i) {
         const auto type = values[i].getDatatype();
 
         allInt &= type == Datatype::Int;
@@ -125,7 +125,7 @@ inline HomogeneousNumericType classifyNumericOperand(ValueId value) {
 // directly, while vector-like operands are viewed as spans of `ValueId`.
 template <typename Operand>
 inline HomogeneousNumericType classifyNumericOperand(
-    const Operand& operand, EvaluationContext* context) {
+    const Operand& operand, const EvaluationContext* context) {
   using OperandType = std::decay_t<Operand>;
 
   static_assert(supportsHomogeneousNumericOperand<Operand>(),
@@ -142,7 +142,7 @@ inline HomogeneousNumericType classifyNumericOperand(
 
 // Classify all operands by their homogeneous numeric datatype.
 template <typename... Operands>
-inline auto classifyNumericOperands(EvaluationContext* context,
+inline auto classifyNumericOperands(const EvaluationContext* context,
                                     const Operands&... operands) {
   return std::array<HomogeneousNumericType, sizeof...(Operands)>{
       classifyNumericOperand(operands, context)...};
@@ -242,10 +242,10 @@ decltype(auto) dispatchHomogeneousNumericTypes(
 // don't require a size check.
 template <typename Operand>
 void checkHomogeneousNumericOperandSize(const Operand& operand,
-                                        EvaluationContext* context) {
+                                        const EvaluationContext* context) {
   using OperandType = std::decay_t<Operand>;
   if constexpr (isVectorResult<OperandType>) {
-    AD_CORRECTNESS_CHECK(operand.size() == context->size());
+    AD_CORRECTNESS_CHECK(ql::ranges::size(operand) == context->size());
   }
 }
 
@@ -289,9 +289,9 @@ ExpressionResult evaluateHomogeneousNumericOperation(
 
   ad_utility::chunkedForLoop<1000>(
       0, context->size(),
-      [&](size_t i) {
+      [&result, &function, &getters](size_t i) {
         std::apply(
-            [&](const auto&... getter) {
+            [&result, &function, i](const auto&... getter) {
               result.push_back(function(getter(i)...));
             },
             getters);

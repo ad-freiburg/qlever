@@ -90,6 +90,14 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedOperandTypes) {
 }
 
 // _____________________________________________________________________________
+TEST_F(HomogeneousNumericExpressionHelpersTest, HomogeneousNumericTypeToIndex) {
+  EXPECT_EQ(homogeneousNumericTypeToIndex(HomogeneousNumericType::Int), 0);
+  EXPECT_EQ(homogeneousNumericTypeToIndex(HomogeneousNumericType::Double), 1);
+  EXPECT_ANY_THROW(
+      homogeneousNumericTypeToIndex(HomogeneousNumericType::Other));
+}
+
+// _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySingleValueId) {
   EXPECT_EQ(classifyNumericOperand(I(42)), HomogeneousNumericType::Int);
   EXPECT_EQ(classifyNumericOperand(D(3.5)), HomogeneousNumericType::Double);

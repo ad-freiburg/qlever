@@ -105,7 +105,9 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
             return type != HomogeneousNumericType::Other;
           })) {
         return dispatchHomogeneousNumericTypes(
-            types, [&](auto leftType, auto rightType) -> ExpressionResult {
+            types,
+            [&left, &right, context](auto leftType,
+                                     auto rightType) -> ExpressionResult {
               using LeftNumericType = typename decltype(leftType)::type;
               using RightNumericType = typename decltype(rightType)::type;
 
