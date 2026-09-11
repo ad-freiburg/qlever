@@ -1,13 +1,23 @@
 include(GoogleTest)
 
 # The test binaries are not shipped, so there is no point in paying the (large)
-# cost of link-time optimizing them. When `ENABLE_LTO` is on, the shared
-# libraries are compiled with `-ffat-lto-objects` (see the top-level
-# `CMakeLists.txt`), so disabling LTO here via `-fno-lto` makes the test
-# binaries link against the embedded machine code instead of triggering a
-# whole-program optimization at link time. This must be set before any test
-# targets (including `testUtil` below) are created so that it applies to them.
-if (ENABLE_LTO)
+# cost of link-time optimizing them. With GCC the libraries are compiled with
+# `-ffat-lto-objects` (see the top-level `CMakeLists.txt`), i.e. every object
+# also contains ordinary machine code, so disabling LTO here via `-fno-lto`
+# makes the test binaries link against that machine code instead of triggering a
+# whole-program optimization at link time.
+#
+# This only works for GCC: the Clang branch of the top-level `CMakeLists.txt`
+# cannot use fat objects (see the explanation there), and linking bitcode-only
+# objects with `-fno-lto` fails outright, so on Clang the tests are link-time
+# optimized along with everything else.
+#
+# NOTE: `add_compile_options`/`add_link_options` set *directory* properties.
+# They therefore apply to all targets created afterwards in this directory and
+# its subdirectories (in particular `testUtil` below, which is why this block
+# has to come first), and never leak into the parent directory, so the shipped
+# binaries keep their LTO regardless of where `add_subdirectory(test)` appears.
+if (ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-fno-lto)
     add_link_options(-fno-lto)
 endif()

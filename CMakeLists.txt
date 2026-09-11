@@ -474,6 +474,11 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+# LTO noticeably increases build time, so it is off by default (e.g. for CI and
+# local builds). It is opted into explicitly for the published Docker image
+# built on `master` (see `Dockerfile` / `.github/workflows/docker-publish.yml`).
+option(ENABLE_LTO "Enable link-time optimization" OFF)
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
 # GCC 11–15 emit spurious `-Wmaybe-uninitialized` for template instantiations
 # that cross the system-header boundary (e.g. absl containers instantiated with
@@ -503,8 +508,14 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     # These are all emitted in the whole-program/`lto1` phase, where the
     # governing warning flags are read from the link command line, so they are
     # disabled via the link options (a compile-time suppression would not apply).
-    add_link_options(-Wno-stringop-overflow -Wno-odr -Wno-maybe-uninitialized
-            -Wno-stringop-overread)
+    # This is deliberately restricted to LTO builds: without LTO none of these
+    # warnings (in particular `-Wodr`, which is one of the main reasons to use
+    # LTO in the first place) can fire spuriously, so there is no reason to give
+    # up the diagnostics for the default build.
+    if (ENABLE_LTO)
+        add_link_options(-Wno-stringop-overflow -Wno-odr -Wno-maybe-uninitialized
+                -Wno-stringop-overread)
+    endif ()
 endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
@@ -558,10 +569,6 @@ endif ()
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 
-# LTO noticeably increases build time, so it is off by default (e.g. for CI and
-# local builds). It is opted into explicitly for the published Docker image
-# built on `master` (see `Dockerfile` / `.github/workflows/docker-publish.yml`).
-option(ENABLE_LTO "Enable link-time optimization" OFF)
 if (ENABLE_LTO)
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         # `-ffat-lto-objects` makes every object contain both GIMPLE bytecode and
@@ -573,8 +580,21 @@ if (ENABLE_LTO)
         add_compile_options(-flto=auto -ffat-lto-objects)
         add_link_options(-flto=auto)
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-        add_compile_options(-flto=thin -ffat-lto-objects)
+        # NOTE: Deliberately *no* `-ffat-lto-objects` here, even though Clang
+        # supports it since version 18. Unlike GCC, Clang's linkers prefer the
+        # embedded machine code of a fat object and only run LTO when explicitly
+        # told to via `--fat-lto-objects`, which `lld` understands but `mold`
+        # (which we use for the Docker build) rejects outright. Passing
+        # `-ffat-lto-objects` would therefore silently turn LTO *off* rather than
+        # on. Without fat objects the test binaries cannot take the `-fno-lto`
+        # shortcut either (see `test/CMakeLists.txt`), so on Clang they are
+        # link-time optimized along with everything else.
+        add_compile_options(-flto=thin)
         add_link_options(-flto=thin)
+    else()
+        message(WARNING "`ENABLE_LTO` is ON, but link-time optimization is not "
+                "configured for the compiler `${CMAKE_CXX_COMPILER_ID}`. "
+                "Building without LTO.")
     endif()
 endif()
 
