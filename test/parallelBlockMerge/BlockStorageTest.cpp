@@ -65,15 +65,15 @@ void get(Storage& storage, size_t chunkIndex, GetOutcomes& outcomes,
       chunkIndex, [&storage, chunkIndex, &outcomes, keepGoing](
                       std::exception_ptr exception, Storage::GetResult result) {
         ASSERT_EQ(exception, nullptr);
-        if (!result.has_value()) {
+        if (result.wasCancelled()) {
           outcomes.wasCancelled_ = true;
           return;
         }
-        if (!result.value().has_value()) {
+        if (result.isEndOfChunk()) {
           outcomes.sawSentinel_ = true;
           return;
         }
-        outcomes.blocks_.push_back(std::move(result).value().value());
+        outcomes.blocks_.push_back(std::move(result).get());
         if (keepGoing) {
           get(storage, chunkIndex, outcomes, keepGoing);
         }
@@ -211,22 +211,26 @@ TEST(InMemoryBlockStorage, cancelAllWakesUpASuspendedProducer) {
 }
 
 // _____________________________________________________________________________
-TEST(InMemoryBlockStorage, eraseChunkDropsTheBufferedBlocks) {
+TEST(InMemoryBlockStorage, theSentinelDropsTheChunk) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
-  Storage storage{strand, 1};
+  Storage storage{strand, 2};
   StoreOutcomes stores;
   GetOutcomes gets;
   runOnStrand(ioContext, strand, [&] {
     store(storage, 0, Storage::OptionalBlock{Block{1}}, stores);
-    storage.eraseChunk(0);
-    // The buffer of the chunk is empty again, so this does not suspend, and the
-    // block that was buffered before is gone.
-    store(storage, 0, Storage::OptionalBlock{Block{2}}, stores);
+    store(storage, 0, Storage::OptionalBlock{std::nullopt}, stores);
     get(storage, 0, gets, false);
   });
-  EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true, true));
-  EXPECT_THAT(gets.blocks_, ::testing::ElementsAre(Block{2}));
+  // The block was retrieved, but the end-of-chunk sentinel was not, so the
+  // chunk is still alive.
+  EXPECT_THAT(gets.blocks_, ::testing::ElementsAre(Block{1}));
+  EXPECT_FALSE(gets.sawSentinel_);
+  EXPECT_EQ(storage.numLiveChunksForTesting(), 1u);
+  // Retrieving the sentinel drops the chunk.
+  runOnStrand(ioContext, strand, [&] { get(storage, 0, gets, false); });
+  EXPECT_TRUE(gets.sawSentinel_);
+  EXPECT_EQ(storage.numLiveChunksForTesting(), 0u);
 }
 
 // _____________________________________________________________________________

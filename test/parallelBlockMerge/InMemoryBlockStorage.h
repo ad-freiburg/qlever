@@ -58,8 +58,8 @@ class InMemoryBlockStorage {
   using BlockChannel = net::experimental::channel<void(
       boost::system::error_code, OptionalBlock)>;
   // The channels are shared, because both the producer of a chunk and the
-  // consumer may hold on to one across a suspension, while `eraseChunk` removes
-  // the map entry as soon as that chunk is done.
+  // consumer hold on to one across a suspension, while the map entry is removed
+  // as soon as that chunk is done (see `getBlock`).
   using SharedBlockChannel = std::shared_ptr<BlockChannel>;
 
  private:
@@ -96,18 +96,21 @@ class InMemoryBlockStorage {
             std::move(handler)(std::current_exception(), false);
             return;
           }
-          channel->async_send(boost::system::error_code{}, std::move(block),
-                              [handler = std::move(handler)](
-                                  boost::system::error_code errorCode) mutable {
-                                // NOTE: This runs on `strand_`, because the
-                                // channel was created with `strand_` as its
-                                // executor and this handler has no executor of
-                                // its own that would override that. The only
-                                // error that can occur is that the channel was
-                                // cancelled, see `cancelAll`.
-                                std::move(handler)(std::exception_ptr{},
-                                                   !errorCode);
-                              });
+          // NOTE: The `channel` is moved into the completion handler, so that
+          // it stays alive while this operation is suspended, no matter what
+          // happens to the map entry in the meantime.
+          auto* channelPtr = channel.get();
+          channelPtr->async_send(
+              boost::system::error_code{}, std::move(block),
+              [channel = std::move(channel), handler = std::move(handler)](
+                  boost::system::error_code errorCode) mutable {
+                // NOTE: This runs on `strand_`, because the channel was created
+                // with `strand_` as its executor and this handler has no
+                // executor of its own that would override that. The only error
+                // that can occur is that the channel was cancelled, see
+                // `cancelAll`.
+                std::move(handler)(std::exception_ptr{}, !errorCode);
+              });
         },
         completionToken);
   }
@@ -126,24 +129,33 @@ class InMemoryBlockStorage {
             std::move(handler)(std::current_exception(), GetResult{});
             return;
           }
-          channel->async_receive([handler = std::move(handler)](
-                                     boost::system::error_code errorCode,
-                                     OptionalBlock block) mutable {
+          // NOTE: The `channel` is moved into the completion handler, see
+          // `storeBlock` above. Here it also keeps the channel alive while the
+          // handler erases the very map entry that owns it.
+          auto* channelPtr = channel.get();
+          channelPtr->async_receive([this, chunkIndex,
+                                     channel = std::move(channel),
+                                     handler = std::move(handler)](
+                                        boost::system::error_code errorCode,
+                                        OptionalBlock block) mutable {
             // NOTE: This runs on `strand_`, see `storeBlock` above.
-            std::move(handler)(
-                std::exception_ptr{},
-                errorCode ? GetResult{} : GetResult{std::move(block)});
+            if (errorCode) {
+              std::move(handler)(std::exception_ptr{}, GetResult{});
+              return;
+            }
+            if (!block.has_value()) {
+              // The end-of-chunk sentinel, so this chunk is done and
+              // everything that belongs to it may be dropped, see
+              // `BlockStorageConcept::getBlock`.
+              eraseChunk(chunkIndex);
+              std::move(handler)(std::exception_ptr{}, GetResult::endOfChunk());
+              return;
+            }
+            std::move(handler)(std::exception_ptr{},
+                               GetResult::fromBlock(std::move(block).value()));
           });
         },
         completionToken);
-  }
-
-  // Destroy the channel of the chunk, see `BlockStorageConcept::eraseChunk`.
-  void eraseChunk(size_t chunkIndex) noexcept {
-    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
-    // NOTE: Erasing the entry is safe even if the producer of that chunk still
-    // holds the channel, because the channels are shared.
-    chunks_.erase(chunkIndex);
   }
 
   // Cancel all the channels, see `BlockStorageConcept::cancelAll`.
@@ -166,7 +178,20 @@ class InMemoryBlockStorage {
     }
   }
 
+  // The number of chunks for which a channel currently exists. Only used to
+  // test that a chunk is indeed dropped as soon as its end-of-chunk sentinel
+  // was handed out.
+  size_t numLiveChunksForTesting() const noexcept { return chunks_.size(); }
+
  private:
+  // Destroy the channel of the chunk with the given `chunkIndex`.
+  void eraseChunk(size_t chunkIndex) noexcept {
+    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
+    // NOTE: Erasing the entry is safe even if the producer or the consumer of
+    // that chunk still holds the channel, because the channels are shared.
+    chunks_.erase(chunkIndex);
+  }
+
   // Return the channel of the chunk with the given `chunkIndex`, creating it if
   // it does not exist yet.
   SharedBlockChannel getOrCreateChannel(size_t chunkIndex) {

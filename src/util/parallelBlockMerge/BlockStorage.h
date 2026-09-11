@@ -25,6 +25,8 @@
 #include <optional>
 #include <utility>
 
+#include "util/Exception.h"
+
 namespace ad_utility::parallelBlockMerge {
 
 namespace net = boost::asio;
@@ -43,17 +45,66 @@ using Strand = net::strand<net::any_io_executor>;
 template <typename Block>
 using OptionalBlock = std::optional<Block>;
 
-// The result of `getBlock`: an empty `GetResult` means that the operation was
-// cancelled (see `cancelAll`), whereas an empty `OptionalBlock` inside it is
-// the end-of-chunk sentinel.
+// The result of `getBlock`, which is exactly one of the following three: an
+// actual block, the end-of-chunk sentinel, or the information that the storage
+// was cancelled (see `cancelAll`) while the operation was in flight.
 template <typename Block>
-using GetResult = std::optional<OptionalBlock<Block>>;
+class GetResult {
+ private:
+  // `std::nullopt` means "cancelled", an empty `OptionalBlock` is the
+  // end-of-chunk sentinel.
+  std::optional<OptionalBlock<Block>> result_;
+
+  explicit GetResult(std::optional<OptionalBlock<Block>> result)
+      : result_{std::move(result)} {}
+
+ public:
+  // Construct the "the storage was cancelled" state.
+  //
+  // NOTE: This is also the default, because Boost.Asio requires the arguments
+  // of a completion handler to be default-constructible, and because that is
+  // the state in which a storage that has nothing to report may complete.
+  GetResult() = default;
+
+  // Construct the end-of-chunk sentinel.
+  static GetResult endOfChunk() {
+    return GetResult{OptionalBlock<Block>{std::nullopt}};
+  }
+
+  // Construct from an actual `block`.
+  static GetResult fromBlock(Block block) {
+    return GetResult{OptionalBlock<Block>{std::move(block)}};
+  }
+
+  // Return true if the storage was cancelled while the operation was in
+  // flight, in which case there is neither a block nor a sentinel.
+  bool wasCancelled() const noexcept { return !result_.has_value(); }
+
+  // Return true if this is the end-of-chunk sentinel, which means that the
+  // chunk has no further blocks.
+  bool isEndOfChunk() const noexcept {
+    return result_.has_value() && !result_.value().has_value();
+  }
+
+  // Return true if this holds an actual block.
+  bool hasValue() const noexcept {
+    return result_.has_value() && result_.value().has_value();
+  }
+
+  // Move the block out.
+  //
+  // PRECONDITION: `hasValue()` is true.
+  Block get() && {
+    AD_CONTRACT_CHECK(hasValue());
+    return std::move(result_).value().value();
+  }
+};
 
 // The place where the `InOrderBlockSink` keeps the output blocks between the
 // producer that has finished a block and the consumer that will eventually
 // yield it. A storage holds one independent FIFO queue per chunk, and a queue
-// transports the blocks of that chunk plus a single end-of-chunk sentinel (an
-// empty `OptionalBlock`) that terminates it.
+// transports the blocks of that chunk plus a single end-of-chunk sentinel that
+// terminates it.
 //
 // The storage is thereby responsible for three things at once: the buffering,
 // the FIFO order within a chunk, and the rendezvous between the producer and
@@ -72,23 +123,19 @@ using GetResult = std::optional<OptionalBlock<Block>>;
 //   `chunkIndex`, creating that queue if it does not exist yet. Complete with
 //   `false` if the value was *not* stored, in which case the caller has to drop
 //   it. An implementation reports `false` whenever nothing will ever consume
-//   that value anymore, and the exact conditions under which that happens are
-//   up to it: a storage may report it when it was cancelled while the operation
-//   was in flight, and one that spills the blocks to disk may also report it
-//   for a chunk that was erased in the meantime.
+//   that value anymore, e.g. because the storage was cancelled from the
+//   consumer side.
 //
 // * `getBlock(chunkIndex, token)` — remove the front of the queue of the chunk
 //   with the given `chunkIndex` and complete with it, waiting until that queue
-//   is non-empty. Complete with an empty `GetResult` if the storage was
+//   is non-empty. Complete with a cancelled `GetResult` if the storage was
 //   cancelled while the operation was in flight. A queue that does not exist
 //   yet is created (and is then simply empty), because the consumer of a chunk
-//   may well be faster than its producer.
-//
-// * `eraseChunk(chunkIndex) noexcept` — drop everything that belongs to the
-//   chunk with the given `chunkIndex`. The sink calls this once the
-//   end-of-chunk sentinel of that chunk was retrieved, so that the memory (and
-//   the disk space) that a storage occupies is proportional to the number of
-//   chunks that are in flight and not to their total number.
+//   may well be faster than its producer. Once the end-of-chunk sentinel of a
+//   chunk was handed out, that chunk is done, and the implementation has to
+//   drop everything that belongs to it, so that the memory (and the disk space)
+//   that a storage occupies is proportional to the number of chunks that are in
+//   flight and not to their total number.
 //
 // * `cancelAll() noexcept` — wake up every operation that is currently
 //   suspended, completing it as "not stored" respectively "cancelled", and
@@ -105,8 +152,9 @@ using GetResult = std::optional<OptionalBlock<Block>>;
 // `net::use_awaitable` rethrows a failure on the executor of the caller.
 //
 // CONTRACT: All the operations of a storage
-// * run on the single executor that the storage was constructed with (which is
-//   the strand of the sink, see `InOrderBlockSink`),
+// * run on the single executor that the storage is associated with, on which it
+//   schedules its asynchronous work and which is also the fallback for
+//   completion handlers that have no associated executor of their own,
 // * complete their token exactly once, on that same executor,
 // * and may throw only *before* they have consumed their handler, in which case
 //   the caller is responsible for completing its own operation (the sink does
@@ -127,8 +175,6 @@ concept BlockStorageConcept =
                          [](std::exception_ptr, bool) {});
       // Remove the front of the queue of a chunk and complete with it.
       storage.getBlock(chunkIndex, [](std::exception_ptr, GetResult<Block>) {});
-      // Drop everything that belongs to a chunk.
-      { storage.eraseChunk(chunkIndex) } noexcept;
       // Wake up every operation that is currently suspended.
       { storage.cancelAll() } noexcept;
     };

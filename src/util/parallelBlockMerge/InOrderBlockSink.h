@@ -33,119 +33,94 @@
 #include <optional>
 #include <utility>
 
+#include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Forward.h"
 #include "util/NoCopyNoMove.h"
-#include "util/RunFunctionOnExecutor.h"
 #include "util/parallelBlockMerge/BlockStorage.h"
 
 namespace ad_utility::parallelBlockMerge {
 
 // Turn the concurrently produced output blocks of the merge back into a single
-// sequential range in which the blocks of chunk `0` come first, then those of
-// chunk `1`, and so on. Within a chunk, the blocks appear in the order in which
-// they were pushed. The sink never blocks a thread: a producer that has to wait
-// for the consumer to catch up, as well as a consumer that has to wait for the
-// next block, suspend instead of occupying their thread.
+// sequential range: the blocks of chunk `0` come first, then those of chunk
+// `1`, and so on, and within a chunk in the order in which they were pushed. A
+// producer that waits for the consumer to catch up, and a consumer that waits
+// for the next block, both suspend instead of blocking their thread.
 //
-// The blocks themselves do not live in this class but in a `Storage` that
-// models the `BlockStorageConcept` (see
-// `util/parallelBlockMerge/BlockStorage.h`), which holds one FIFO queue per
-// chunk and is at the same time the buffer, the FIFO order, and the rendezvous
-// between a producer and the consumer. This class only adds the global order on
-// top of those queues: it drains the queue of the lowest chunk that has not
-// been fully consumed yet, and moves on to the next chunk when it sees that
-// chunk's end-of-chunk sentinel (an empty `OptionalBlock`), upon which it also
-// erases the state of that chunk from the storage, so that the memory
-// consumption is proportional to the number of chunks that are in flight and
-// not to the total number of chunks.
+// The blocks do not live in this class but in a `Storage` that models the
+// `BlockStorageConcept` (see `util/parallelBlockMerge/BlockStorage.h`) and that
+// holds one FIFO queue per chunk. This class only adds the global order on top
+// of those queues: it drains the queue of the lowest chunk that is not done
+// yet, and moves on to the next chunk when it sees that chunk's end-of-chunk
+// sentinel. The storage also decides what happens to a producer that has
+// finished a block while the consumer has not caught up: a storage that keeps
+// the blocks in memory bounds its buffer, so its producers suspend and that
+// back-pressure is what bounds the memory consumption of the merge; a storage
+// that spills to disk lets a producer run ahead instead. It is owned by value
+// and created by the factory that the constructor takes, so that it can be
+// configured at the single place where a sink is created.
 //
-// Which storage is used decides what happens to a producer that has finished a
-// block while the consumer has not caught up yet: a storage that keeps the
-// blocks in memory bounds the number of blocks that it buffers per chunk, so
-// its producers suspend and that back-pressure is what bounds the memory
-// consumption of the merge; a storage that spills to disk lets a producer run
-// ahead instead. The storage is owned by value and is created by the factory
-// that the constructor takes, so that it can be configured (in particular with
-// the size of its buffer) at the single place where a sink is created.
-//
-// INTERFACE: All the asynchronous operations of this class (their names all
-// start with `async`) are ordinary Boost.Asio operations that take a completion
+// INTERFACE: All the asynchronous operations of this class (their names start
+// with `async`) are ordinary Boost.Asio operations that take a completion
 // token, so a caller may await them, attach a callback, obtain a `std::future`,
-// or detach them, whatever fits. They may all be initiated from any thread and
-// any executor, and their completion handler runs on the executor that is
-// associated with the completion token. The completion signature is
-// `void(std::exception_ptr, T)` (or `void(std::exception_ptr)` for `T == void`)
-// with `T` as documented at the respective operation, so a token such as
-// `net::use_awaitable` rethrows on the executor of the caller.
+// or detach them. They may be initiated from any thread and any executor, and
+// their completion handler runs on the executor that is associated with the
+// token. The completion signature is `void(std::exception_ptr, T)` (or
+// `void(std::exception_ptr)` for `T == void`) with `T` as documented at the
+// respective operation, so a token such as `net::use_awaitable` rethrows on the
+// executor of the caller.
 //
-// STRAND CONFINEMENT: All the mutable state of this class (the index of the
-// chunk that is currently read and the exception) as well as *every* operation
-// of the storage is confined to a single `strand_`, so that no mutex of our own
-// is required and the storage needs no synchronization of its own. Every
-// operation therefore consists of a hop onto the strand, the actual work, and a
-// hop back to the executor of the caller. The work itself is a coroutine that
-// is spawned onto the strand (see `spawnOnStrand`). The only member that is
-// ever read off the strand is the atomic `stopRequested_`, which exists so that
-// a producer can cheaply poll "should I keep merging?" between two output
+// STRAND CONFINEMENT: All the mutable state of this class and *every* operation
+// of the storage are confined to a single `strand_`, so that neither needs a
+// mutex. Every operation therefore consists of a hop onto the strand, the
+// actual work (a coroutine, see `spawnOnStrand`), and a hop back to the
+// executor of the caller. The only member that is ever read off the strand is
+// the atomic `stopRequested_`, which a producer polls between two output
 // blocks; it is *written* on the strand only.
 //
-// IMPORTANT: Only this short bookkeeping ever runs on the strand, and the hop
-// back is always a `net::post` (see `spawnOnStrand` and
-// `ad_utility::runFunctionOnExecutor`), so a completion handler of this class
-// never runs while the strand is held. That guarantee matters, because
-// everything that runs on a strand is serialized. The producer of a chunk for
-// example merges a whole output block in its completion handler, which is
-// ordinary blocking CPU work that may even do I/O, and running that on the
-// strand would serialize the entire merge. A storage that does blocking work of
-// its own (such as compressing a block and writing it to disk) therefore has to
-// offload that work to another executor as well.
+// IMPORTANT: The hop back is always a `net::post`, so a completion handler of
+// this class never runs while the strand is held. That matters because
+// everything on a strand is serialized, and a producer merges a whole output
+// block in its completion handler, which is blocking CPU work that may even do
+// I/O. A storage that does blocking work of its own has to offload it likewise.
 //
-// The strand is also what makes the teardown airtight, and it is the reason why
+// The strand is also what makes the teardown airtight and is the reason why
 // cancelling the storage alone suffices: the check of `stopRequested_` and the
-// *initiation* of the storage operation happen in a single strand-serialized
-// step, with no other strand handler in between. `requestStop` sets the flag
-// and then cancels the storage, which wakes everybody who is currently
-// suspended; an operation that starts later runs on the strand *after* that,
-// sees the flag, and never touches the storage at all, so it cannot suspend. In
-// particular no queue is ever created after the stop, so the teardown cannot
-// miss one. Without the strand this would not work: cancellation is
-// edge-triggered and does not stop an operation that is initiated afterwards,
-// which is why the `BlockStorageConcept` requires that no operation is
-// initiated after `cancelAll`.
+// *initiation* of a storage operation happen in a single strand-serialized
+// step. `requestStop` sets the flag and cancels the storage, which wakes
+// everybody who is suspended; an operation that starts later sees the flag and
+// never touches the storage, so it cannot suspend and no queue is created after
+// the stop. Cancellation alone would not do, because it is edge-triggered and
+// does not stop an operation that is initiated afterwards, which is why the
+// `BlockStorageConcept` forbids initiating one.
 //
-// DEADLOCK-FREEDOM: The consumer always drains the lowest chunk that has not
-// yet been fully consumed, so the producer of a *higher* chunk may well fill
-// its queue and suspend. That is not a problem even if there is only a single
-// thread, because such a producer suspends instead of blocking its thread. In
-// particular the number of chunks that are in flight does not have to be
+// DEADLOCK-FREEDOM: The consumer always drains the lowest chunk that is not
+// done yet, so the producer of a *higher* chunk may well fill its queue and
+// suspend. That is fine even with a single thread, because it suspends instead
+// of blocking; the number of chunks that are in flight therefore need not be
 // bounded by the available parallelism, see `ParallelMergeState`.
 //
-// TODO<joka921> The following properties of this sink are still worth
-// revisiting before it is used more widely than by the parallel merge. All of
-// them are benign for that use case.
+// NOTE: The following properties of this sink are worth revisiting should this
+// class be used by anything else than the parallel merge. All of them are
+// benign for that use case.
 //
-// 1. `asyncGetNextBlock` interprets a cancelled `getBlock` as "the merge was
-//    stopped" and asserts `stopRequested_`. If a caller ever attaches a
-//    cancellation slot to one of these operations, or cancels the surrounding
-//    coroutine, that assertion fires instead of the cancellation being handled.
+// 1. `asyncGetNextBlock` reads a cancelled `getBlock` as "the merge was
+//    stopped" and asserts `stopRequested_`, so a caller that attaches a
+//    cancellation slot or cancels the surrounding coroutine would hit that
+//    assertion instead of having its cancellation handled.
 // 2. `asyncPush` drops its block whenever the storage reports that it was not
-//    stored, without distinguishing "was not delivered" from "was delivered".
-//    That is correct here because a storage is only ever cancelled while the
-//    merge is being torn down, but it would silently lose data if the
-//    cancellation were used for anything else.
+//    stored, without distinguishing "not delivered" from "delivered". That is
+//    correct here because a storage is only ever cancelled during the teardown,
+//    but it would silently lose data if the cancellation were used for anything
+//    else.
 // 3. Every operation costs two executor hops plus a coroutine frame. That is
 //    negligible next to an output block of 100k elements (or 16 MB), but it
-//    makes this sink a poor fit for small payloads; such a user would have to
-//    batch, or run on the strand to begin with.
-// 4. All those hops allocate (the coroutine frame, the handler that is posted
-//    back to the caller, and the one that `ParallelMergeState::stop` posts), so
-//    the teardown itself can fail once memory is exhausted. The failure is then
-//    swallowed and the consumer simply sees the end of the range.
-// 5. Once the merge was stopped, nothing calls `eraseChunk` anymore, so the
-//    queues of the chunks that were still in flight, and the blocks that they
-//    still buffer, live until the storage is destroyed.
+//    makes this sink a poor fit for small payloads, which would have to be
+//    batched.
+// 4. All those hops allocate, so the teardown itself can fail once memory is
+//    exhausted; the failure is then swallowed and the consumer simply sees the
+//    end of the range.
 //
 // NOTE: The class is neither copyable nor movable, because the producers and
 // the consumer refer to it by reference.
@@ -161,6 +136,10 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   using Strand = parallelBlockMerge::Strand;
 
  private:
+  // The executor from which `strand_` is derived. It is the fallback for
+  // completion handlers that have no associated executor of their own, see
+  // `spawnOnStrand`.
+  net::any_io_executor executor_;
   Strand strand_;
   Storage storage_;
   size_t numChunks_;
@@ -184,7 +163,8 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   requires std::invocable<StorageFactory, const Strand&>
   InOrderBlockSink(net::any_io_executor executor, size_t numChunks,
                    StorageFactory storageFactory)
-      : strand_{net::make_strand(std::move(executor))},
+      : executor_{std::move(executor)},
+        strand_{net::make_strand(executor_)},
         storage_{std::move(storageFactory)(strand_)},
         numChunks_{numChunks} {}
 
@@ -288,7 +268,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
                      CompletionToken&& completionToken) {
     return net::async_initiate<CompletionToken, void(std::exception_ptr, T)>(
         [this, awaitable = std::move(awaitable)](auto handler) mutable {
-          auto executor = net::get_associated_executor(handler, strand_);
+          auto executor = net::get_associated_executor(handler, executor_);
           net::co_spawn(
               strand_, std::move(awaitable),
               [executor, handler = std::move(handler)](
@@ -327,8 +307,6 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
       // above.
       co_return false;
     }
-    // NOTE: The storage completes on `strand_` (see the CONTRACT of the
-    // `BlockStorageConcept`), so this coroutine is resumed there as well.
     bool wasStored = co_await storage_.storeBlock(
         chunkIndex, std::move(optionalBlock), net::use_awaitable);
     co_return wasStored && !stopRequested_.load();
@@ -351,18 +329,19 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
       }
       GetResult<Block> result =
           co_await storage_.getBlock(nextChunkToRead_, net::use_awaitable);
-      if (!result.has_value()) {
+      if (result.wasCancelled()) {
         // The storage was cancelled, which only happens while the merge is torn
         // down. Continue, such that the next round either rethrows the pushed
         // exception or reports the end of the range.
         AD_CORRECTNESS_CHECK(stopRequested_.load());
         continue;
       }
-      if (result.value().has_value()) {
-        co_return std::move(result).value();
+      if (result.hasValue()) {
+        co_return OptionalBlock{std::move(result).get()};
       }
-      // The end-of-chunk sentinel, so move on to the next chunk.
-      storage_.eraseChunk(nextChunkToRead_);
+      // The end-of-chunk sentinel, so move on to the next chunk. NOTE: The
+      // storage drops that chunk on its own, see `BlockStorageConcept`.
+      AD_CORRECTNESS_CHECK(result.isEndOfChunk());
       ++nextChunkToRead_;
     }
   }
