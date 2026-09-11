@@ -9,8 +9,12 @@
 
 #include "parser/RdfAsyncMultifileParser.h"
 
+#include <absl/cleanup/cleanup.h>
+
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <memory>
+#include <optional>
 #include <utility>
 
 #include "backports/algorithm.h"
@@ -32,7 +36,37 @@ RdfAsyncMultifileParser::RdfAsyncMultifileParser(
       encodedIriManager_{encodedIriManager},
       bufferSize_{bufferSize},
       useRelaxedParsing_{useRelaxedParsing},
-      files_{std::move(files)} {}
+      fileState_{FileState{std::move(files)}} {}
+
+namespace {
+// Create an asynchronous parser for the file in `spec`, which is parsed by the
+// given `InnerParser` (for example `TurtleParser<Tokenizer>`).
+//
+// NOTE: This is a free function template and not simply a part of the lambda in
+// `makeFileParser` below, because GCC rejects a nested lambda that uses a type
+// which depends on a parameter of the enclosing lambda (see the type alias
+// `InnerParser` there).
+template <typename InnerParser>
+std::unique_ptr<AsyncRdfParserBase> makeFileParserForInnerParser(
+    const ql::any_io_executor& executor,
+    const qlever::InputFileSpecification& spec,
+    ad_utility::MemorySize bufferSize,
+    const EncodedIriManager* encodedIriManager, TripleComponent graph) {
+  if (spec.parseInParallel_) {
+    return std::make_unique<RdfAsyncParallelParser<InnerParser>>(
+        executor, spec, bufferSize, encodedIriManager, graph);
+  }
+  // NOTE: The inner parser is created lazily (see `AsyncSerialParserAdapter`),
+  // so that this function stays cheap.
+  return std::make_unique<AsyncSerialParserAdapter>(
+      executor,
+      [spec, bufferSize, encodedIriManager,
+       graph = std::move(graph)]() -> std::unique_ptr<RdfParserBase> {
+        return std::make_unique<RdfStreamParser<InnerParser>>(
+            spec, bufferSize, encodedIriManager, graph);
+      });
+}
+}  // namespace
 
 // _____________________________________________________________________________
 std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
@@ -47,13 +81,8 @@ std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
         using InnerParser =
             std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
                                NQuadParser<TokenizerT>>;
-        if (spec.parseInParallel_) {
-          return std::make_unique<RdfAsyncParallelParser<InnerParser>>(
-              executor(), spec, bufferSize_, encodedIriManager_, graph);
-        }
-        return std::make_unique<AsyncSerialParserAdapter>(
-            executor(), std::make_unique<RdfStreamParser<InnerParser>>(
-                            spec, bufferSize_, encodedIriManager_, graph));
+        return makeFileParserForInnerParser<InnerParser>(
+            executor(), spec, bufferSize_, encodedIriManager_, graph);
       }};
   // The call to `callFixedSize` lifts the runtime booleans to compile-time
   // integers, exactly like `makeSingleRdfParser` in `RdfParser.cpp` (which
@@ -67,69 +96,95 @@ std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
 // _____________________________________________________________________________
 std::shared_ptr<RdfAsyncMultifileParser::OpenFile>
 RdfAsyncMultifileParser::pickFile() {
-  std::lock_guard lock{mutex_};
-  // Prefer the earliest-opened open file that can take another call.
-  // `openFiles_` is in the order in which the files were opened.
-  for (auto& file : openFiles_) {
-    if (file->supportsConcurrentCalls_ || file->numCallsInFlight_ == 0) {
-      ++file->numCallsInFlight_;
+  // NOTE: The whole scheduling decision, including the opening of a new file,
+  // has to happen inside a single critical section. Were a file opened outside
+  // of the lock, then a concurrent call could see neither an unopened nor an
+  // open file and wrongly conclude that all inputs are exhausted, although it
+  // should simply have waited for that file. This is only affordable because
+  // `makeFileParser` is cheap, see there.
+  return fileState_.withWriteLock([this](FileState& state)
+                                      -> std::shared_ptr<OpenFile> {
+    // Step 1: prefer an open file that currently has no call in flight at all.
+    auto idle = ql::ranges::find_if(state.openFiles_, [](const auto& f) {
+      return f->numCallsInFlight_ == 0;
+    });
+    if (idle != state.openFiles_.end()) {
+      ++(*idle)->numCallsInFlight_;
+      return *idle;
+    }
+    // Step 2: no open file is idle; open the next unopened file, if there is
+    // one.
+    if (auto spec = state.files_.get(); spec.has_value()) {
+      auto file = std::make_shared<OpenFile>(
+          OpenFile{.parser_ = makeFileParser(spec.value()),
+                   .supportsConcurrentCalls_ = spec.value().parseInParallel_,
+                   .numCallsInFlight_ = 1});
+      state.openFiles_.push_back(file);
       return file;
     }
-  }
-  // No open file has spare capacity; open the next unopened file, if there is
-  // one.
-  if (!noFilesLeft_) {
-    auto spec = files_.get();
-    if (spec.has_value()) {
-      auto file = std::make_shared<OpenFile>(OpenFile{
-          makeFileParser(spec.value()), spec.value().parseInParallel_, 1});
-      openFiles_.push_back(file);
-      return file;
+    // Step 3: no unopened files are left either, so if there is no open file,
+    // every input is exhausted.
+    if (state.openFiles_.empty()) {
+      return nullptr;
     }
-    noFilesLeft_ = true;
-  }
-  // No unopened files are left either. If there is no open file, every input
-  // is exhausted.
-  if (openFiles_.empty()) {
-    return nullptr;
-  }
-  // Otherwise every open file is serial and busy (a parallel file would have
-  // been picked by the loop above); pick the one with the fewest calls in
-  // flight. The call is then queued by that file's own
-  // `AsyncSerialParserAdapter`, so no thread blocks.
-  auto it = ql::ranges::min_element(
-      openFiles_, {}, [](const auto& file) { return file->numCallsInFlight_; });
-  ++(*it)->numCallsInFlight_;
-  return *it;
+    // Step 4: every open file is busy; pick the one with the fewest calls in
+    // flight, preferring parallel files. For a serial file, the call is then
+    // queued by that file's own `AsyncSerialParserAdapter`, so no thread
+    // blocks either way.
+    auto it = ql::ranges::min_element(state.openFiles_, {}, [](const auto& f) {
+      return std::pair{!f->supportsConcurrentCalls_, f->numCallsInFlight_};
+    });
+    ++(*it)->numCallsInFlight_;
+    return *it;
+  });
+}
+
+// _____________________________________________________________________________
+void RdfAsyncMultifileParser::releaseFile(const std::shared_ptr<OpenFile>& file,
+                                          bool wasExhausted) {
+  fileState_.withWriteLock([&file, wasExhausted](FileState& state) {
+    --file->numCallsInFlight_;
+    if (!wasExhausted) {
+      return;
+    }
+    // This file is exhausted; remove it from the open list, unless another
+    // concurrent call for the very same file already did so.
+    auto it = ql::ranges::find(state.openFiles_, file);
+    if (it != state.openFiles_.end()) {
+      state.openFiles_.erase(it);
+    }
+  });
 }
 
 // _____________________________________________________________________________
 net::awaitable<RdfAsyncMultifileParser::OptionalTriples>
 RdfAsyncMultifileParser::getBatchCoroutine() {
-  while (true) {
+  for (;;) {
     // Another call has failed in the meantime, so there is nothing left to
     // parse.
     if (errorWasEncountered_.load()) {
       co_return std::nullopt;
     }
-    auto file = pickFile();
-    if (file == nullptr) {
-      co_return std::nullopt;
-    }
+    // NOTE: `pickFile()` is called inside the `try` because it may throw (the
+    // constructor of `RdfAsyncParallelParser` opens its input file), and such
+    // an error has to be reported with the same semantics as a parse error. It
+    // is deliberately called before the `absl::Cleanup` below is set up: if it
+    // throws, then no file was picked, and hence none has to be released.
     try {
-      auto batch = co_await file->parser_->asyncGetBatch(net::use_awaitable);
-      {
-        std::lock_guard lock{mutex_};
-        --file->numCallsInFlight_;
-        if (!batch.has_value()) {
-          // This file is exhausted; remove it from the open list, unless
-          // another concurrent call for the very same file already did so.
-          auto it = ql::ranges::find(openFiles_, file);
-          if (it != openFiles_.end()) {
-            openFiles_.erase(it);
-          }
-        }
+      auto file = pickFile();
+      if (file == nullptr) {
+        co_return std::nullopt;
       }
+      // Give the file back on every path out of this scope, including the one
+      // taken when `asyncGetBatch` below throws. `wasExhausted` is only known
+      // after that call has completed, hence the separate variable; on the
+      // exception path it keeps its initial value `false`.
+      bool wasExhausted = false;
+      absl::Cleanup release = [this, &file, &wasExhausted] {
+        releaseFile(file, wasExhausted);
+      };
+      auto batch = co_await file->parser_->asyncGetBatch(net::use_awaitable);
+      wasExhausted = !batch.has_value();
       if (batch.has_value()) {
         co_return batch;
       }
@@ -137,10 +192,6 @@ RdfAsyncMultifileParser::getBatchCoroutine() {
       // (possibly) another file.
       continue;
     } catch (...) {
-      {
-        std::lock_guard lock{mutex_};
-        --file->numCallsInFlight_;
-      }
       // Only the first error is propagated to its caller, all subsequent
       // calls get a clean end of the input instead, see the class comment.
       if (!errorWasEncountered_.exchange(true)) {

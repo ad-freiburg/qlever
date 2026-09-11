@@ -540,8 +540,9 @@ class Qlever {
   void loadMaterializedView(std::string name) const;
 
   // Unload a materialized view that was previously loaded via
-  // `loadMaterializedView`. Has no effect if the view is not currently loaded.
-  void unloadMaterializedView(const std::string& name) const;
+  // `loadMaterializedView` and return `true`. Return `false` (and do nothing
+  // else) if the view is not currently loaded.
+  bool unloadMaterializedView(const std::string& name) const;
 
   // Check if a materialized view with the given name is currently loaded.
   bool isMaterializedViewLoaded(const std::string& name) const;
@@ -554,10 +555,13 @@ class Qlever {
   // `NamedResultCache` of this instance into a single, self-contained,
   // ZSTD-compressed blob that can later be loaded via
   // `deserializeVocabAndNamedCacheFromCompressedBlob` (e.g. by a different
-  // process, without needing access to the on-disk index). For details see
+  // process, without needing access to the on-disk index). Via the `config`,
+  // vocabulary entries that are not needed in the blob can be excluded from it
+  // (see `BlobSerializationConfig`). For details see
   // `NamedCachedQueryBlobManager::serialize`.
-  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob() const {
-    return blobManager_.serialize(*this);
+  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob(
+      const BlobSerializationConfig& config = {}) const {
+    return blobManager_.serialize(*this, config);
   }
 
   // Load a blob previously written by

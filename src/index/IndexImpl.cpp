@@ -121,12 +121,20 @@ std::unique_ptr<AsyncRdfParserBase> IndexImpl::makeRdfParser(
     file.parseInParallel_ = false;
     serialFiles.push_back(std::move(file));
   }
+  // NOTE: The adapter creates the parser lazily on the first `asyncGetBatch()`
+  // call, see the constructor of `AsyncSerialParserAdapter`.
   return std::make_unique<AsyncSerialParserAdapter>(
       executor,
-      std::make_unique<RdfMultifileParser>(
-          ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{
-              std::move(serialFiles)},
-          &encodedIriManager(), parserBufferSize(), onlyAsciiTurtlePrefixes_));
+      [serialFiles = std::move(serialFiles),
+       encodedIriManager = &encodedIriManager(),
+       bufferSize = parserBufferSize(),
+       useRelaxedParsing = onlyAsciiTurtlePrefixes_]() mutable
+      -> std::unique_ptr<RdfParserBase> {
+        return std::make_unique<RdfMultifileParser>(
+            ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{
+                std::move(serialFiles)},
+            encodedIriManager, bufferSize, useRelaxedParsing);
+      });
 #else
   return std::make_unique<RdfAsyncMultifileParser>(
       executor, std::move(files), &encodedIriManager(), parserBufferSize(),
@@ -839,10 +847,9 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
-    auto sortPred = [&cmp = vocab_.getCaseComparator()](
-                        std::string_view a, bool aIsExternal,
-                        std::string_view b, bool bIsExternal) {
-      return cmp.isLessInTotalWithExternalFlag(a, aIsExternal, b, bIsExternal);
+    auto sortPred = [&cmp = vocab_.getCaseComparator()](std::string_view a,
+                                                        std::string_view b) {
+      return cmp(a, b, TripleComponentComparator::Level::TOTAL);
     };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
@@ -904,7 +911,7 @@ auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
     IdTableStatic<NumColumnsIndexBuilding> triples_;
     IdTableStatic<NumColumnsIndexBuilding> internalTriples_;
   };
-  using Map = ad_utility::HashMap<Id, Id>;
+  using Map = ad_utility::HashMap<VocabIndex, Id>;
 
   ad_utility::TaskQueue<true> lookupQueue(30, 10,
                                           "looking up local to global IDs");
@@ -914,18 +921,16 @@ auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
   ad_utility::TaskQueue<true> writeQueue(30, 1, "Writing global Ids to file");
 
   // For all triple elements find their mapping from partial to global ids.
-  auto transformTriple = [](Buffer::row_reference& curTriple, auto& idMap) {
+  auto transformTriple = [](Buffer::row_reference& curTriple,
+                            const auto& idMap) {
     for (auto& id : curTriple) {
-      // TODO<joka92> Since the mapping only maps `VocabIndex->VocabIndex`,
-      // probably the mapping should also be defined as `HashMap<VocabIndex,
-      // VocabIndex>` instead of `HashMap<Id, Id>`
       if (id.getDatatype() != Datatype::VocabIndex) {
         // Check that all the internal, special IDs which we have introduced
         // for performance reasons are eliminated.
         AD_CORRECTNESS_CHECK(id.getDatatype() != Datatype::Undefined);
         continue;
       }
-      auto iterator = idMap.find(id);
+      auto iterator = idMap.find(id.getVocabIndex());
       AD_CORRECTNESS_CHECK(iterator != idMap.end());
       id = iterator->second;
     }
@@ -1687,6 +1692,25 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
       ad_utility::VocabularyType::Enum::OnDiskCompressed);
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
+
+  // The geo cell grid of the geo vocabulary, if the index was built with one
+  // (see `GeoCellGrid`). The vocabulary needs it before it is opened, because
+  // the grid determines how its indices are composed.
+  uint64_t geoCellGridLevel = 0;
+  loadDataMember("geo-cell-grid-level", geoCellGridLevel, geoCellGridLevel);
+  if (geoCellGridLevel > 0) {
+    if (geoCellGridLevel > std::numeric_limits<uint8_t>::max()) {
+      throw std::runtime_error{absl::StrCat(
+          "Invalid value ", geoCellGridLevel,
+          " for the key \"geo-cell-grid-level\" in the `meta-data.json`")};
+    }
+    ad_utility::GeoCellGridScheme geoCellGridScheme =
+        ad_utility::GeoCellGridScheme::Flat;
+    loadDataMember("geo-cell-grid-scheme", geoCellGridScheme,
+                   geoCellGridScheme);
+    vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
+        static_cast<uint8_t>(geoCellGridLevel), geoCellGridScheme});
+  }
 
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;

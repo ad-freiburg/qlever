@@ -163,7 +163,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   using V = Variable;
   auto subjectVar = V{"?subject"};
   auto valuesOp = ad_utility::makeExecutionTree<ExplicitIdTableOperation>(
-      getExecutionContext(), std::make_shared<IdTable>(std::move(input)),
+      getExecutionContext(), makeShared<IdTable>(std::move(input)),
       VariableToColumnMap{
           {subjectVar,
            ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},

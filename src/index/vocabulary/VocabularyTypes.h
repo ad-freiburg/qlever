@@ -328,6 +328,29 @@ class WordAndIndex {
       : wordAndIndex_{std::in_place, std::string{word}, index} {}
 };
 
+// The suffixes that have to be appended to the base filename of a vocabulary
+// in order to obtain the names of all the files that the vocabulary consists
+// of. These are exactly the files that its `WordWriter` writes and that its
+// `open` reads. The suffix of the file that is stored under the base filename
+// itself (which most vocabularies have) is the empty string.
+//
+// Every vocabulary declares its suffixes via a
+// `static FileSuffixes fileSuffixes()`. A vocabulary that is composed of other
+// vocabularies composes its suffixes from theirs via
+// `addFileSuffixesWithPrefix` below.
+using FileSuffixes = std::vector<std::string>;
+
+// Append the `suffixes` of an underlying vocabulary to `out`, where that
+// vocabulary is stored under the base filename of the composing vocabulary plus
+// the given `prefix`.
+inline void addFileSuffixesWithPrefix(FileSuffixes& out,
+                                      std::string_view prefix,
+                                      const FileSuffixes& suffixes) {
+  for (const std::string& suffix : suffixes) {
+    out.push_back(absl::StrCat(prefix, suffix));
+  }
+}
+
 // A common base class for the `WordWriter` types of different vocabulary
 // implementations. It has to be called for each of the words (in the correct
 // order).

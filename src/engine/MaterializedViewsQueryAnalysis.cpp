@@ -252,7 +252,8 @@ QueryPatternCache::makeJoinReplacementIndexScans(
 }
 
 // _____________________________________________________________________________
-bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
+bool QueryPatternCache::analyzeView(ViewPtr view,
+                                    const QueryExecutionContext* qec) {
   auto explainIgnore = [&](const std::string& reason) {
     AD_LOG_INFO << "Materialized view '" << view->name()
                 << "' will not be added to the query pattern cache for "

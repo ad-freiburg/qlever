@@ -7,9 +7,12 @@
 
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "backports/span.h"
+#include "util/ExceptionHandling.h"
+#include "util/ResetWhenMoved.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
@@ -108,7 +111,10 @@ CPP_template(typename T, typename Serializer)(
   Serializer _serializer;
   uint64_t _startPosition;
   typename std::vector<T>::size_type _size = 0;
-  bool _isFinished = false;
+  // A moved-from `VectorIncrementalSerializer` must not write anything anymore,
+  // as its serializer has been moved away. The `ResetWhenMoved` takes care of
+  // this, such that the move constructor can simply be defaulted.
+  ad_utility::ResetWhenMoved<bool, true> _isFinished = false;
 
  public:
   explicit VectorIncrementalSerializer(Serializer&& serializer)
@@ -120,6 +126,18 @@ CPP_template(typename T, typename Serializer)(
     alignSerializerForType<T>(_serializer);
   }
 
+  // This class is move-only, as the underlying serializers are.
+  VectorIncrementalSerializer(const VectorIncrementalSerializer&) = delete;
+  VectorIncrementalSerializer& operator=(const VectorIncrementalSerializer&) =
+      delete;
+  // The defaulted move constructor has the correct semantics because of the
+  // usage of `ResetWhenMoved` for the `_isFinished` member.
+  //
+  // NOTE: There deliberately is no move assignment operator. It would have to
+  // `finish()` the assigned-to object first (which might already have been
+  // written to), and no caller currently needs it.
+  VectorIncrementalSerializer(VectorIncrementalSerializer&&) = default;
+
   void push(const T& element) {
     _serializer << element;
     _size++;
@@ -130,10 +148,7 @@ CPP_template(typename T, typename Serializer)(
       return;
     }
     _isFinished = true;
-    auto endPosition = _serializer.getSerializationPosition();
-    _serializer.setSerializationPosition(_startPosition);
-    _serializer << _size;
-    _serializer.setSerializationPosition(endPosition);
+    serializeAtPosition(_serializer, _startPosition, _size);
   }
 
   Serializer serializer() && {
@@ -141,7 +156,11 @@ CPP_template(typename T, typename Serializer)(
     return std::move(_serializer);
   }
 
-  ~VectorIncrementalSerializer() { finish(); }
+  ~VectorIncrementalSerializer() {
+    ad_utility::terminateIfThrows(
+        [this]() { finish(); },
+        "The finishing of a `VectorIncrementalSerializer` failed");
+  }
 };
 
 }  // namespace ad_utility::serialization

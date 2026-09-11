@@ -20,6 +20,7 @@
 #include <fstream>
 #include <future>
 #include <iterator>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -42,6 +43,7 @@
 // server-integration test below is compiled out there.
 #ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
+#include "util/ResourceMonitor.h"
 #endif
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
@@ -871,7 +873,15 @@ TEST(IndexRebuilder, serverIntegration) {
   // `serverIntegrationKeepPreviousIndexDirs` below.
   config.keepPreviousIndexDirs_ = qlever::KeepPreviousIndexDirs::All;
   constexpr std::string_view accessToken = "accessToken";
-  Server server{4321, 1, std::string{accessToken}, config};
+  // Assigns the IDs for the `index_rebuild_id` column of the resource-usage
+  // log. The test reads it in place of the `ResourceMonitor`.
+  auto indexRebuildIdTracker =
+      std::make_shared<ad_utility::IndexRebuildIdTracker>();
+  Server server{4321,  1,       std::string{accessToken}, config,
+                false, nullptr, indexRebuildIdTracker};
+
+  // No rebuild has run yet.
+  EXPECT_FALSE(indexRebuildIdTracker->currentId().has_value());
 
   // Create a GET request that triggers a rebuild of the index. The
   // `additionalParameters` are appended to the URL as they are, and the access
@@ -929,6 +939,16 @@ TEST(IndexRebuilder, serverIntegration) {
   EXPECT_EQ(response1.base().result(), boost::beast::http::status::ok);
   EXPECT_EQ(response2.base().result(),
             boost::beast::http::status::too_many_requests);
+  // Both rebuilds are over, so no ID is reported any more.
+  EXPECT_FALSE(indexRebuildIdTracker->currentId().has_value());
+  // The rebuild that ran took the ID 1, and the rejected one took none
+  // because it was turned away before an ID was given out. So the next
+  // rebuild gets the ID 2.
+  indexRebuildIdTracker->markStart();
+  EXPECT_THAT(indexRebuildIdTracker->currentId(), ::testing::Optional(2u));
+  // End it again, so that the assertion after the failing rebuilds below sees
+  // a tracker that reports no ID.
+  indexRebuildIdTracker->markEnd();
 
   // With the default parameters, the old index was moved to a
   // `previous.<datetime>` directory, the new index took over the base name of
@@ -965,6 +985,11 @@ TEST(IndexRebuilder, serverIntegration) {
 
   auto request6 = makeRebuildRequest("&rebuild-tmp-dir=..%2Fother");
   expectRequestFailsWith(request6, ::testing::HasSubstr("not a subdirectory"));
+
+  // These three rebuilds threw after they had started. The cleanup in
+  // `rebuildIndexUnlessInProgress` cleared the ID, which the log would
+  // otherwise report forever.
+  EXPECT_FALSE(indexRebuildIdTracker->currentId().has_value());
 
   threadPool.join();
 }

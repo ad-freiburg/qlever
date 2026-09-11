@@ -133,6 +133,12 @@ class RdfAsyncParallelParser : public AsyncRdfParserBase {
   // `getBatchCoroutine()` on `executor()`. The completion signature of that
   // coroutine (`void(std::exception_ptr, OptionalTriples)`) matches `Handler`
   // exactly, so `handler` itself is a valid completion token for `co_spawn`.
+  //
+  // NOTE: There is deliberately nothing to return here. `Handler` is a plain
+  // callable and not a completion token with an associated async result type
+  // (like `boost::asio::use_future`), so `co_spawn` returns `void` for it, and
+  // the whole completion-token machinery lives one level up, in
+  // `AsyncRdfParserBase::asyncGetBatch`.
   void asyncGetBatchImpl(Handler handler) override;
 
  private:
