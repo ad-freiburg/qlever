@@ -11,6 +11,7 @@
 #include <absl/strings/str_split.h>
 
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "backports/concepts.h"
@@ -90,13 +91,21 @@ CPP_template(typename Type, typename FromString, typename ToString)(
     set(FromString{}(stringInput));
   }
 
-  /// Set the value.
+  /// Set the value. If the `onUpdateAction` throws (e.g. because the new
+  /// value cannot be applied), the old value is restored before the exception
+  /// is propagated, so that the parameter always reflects the state that was
+  /// actually applied.
   void set(Type newValue) {
     if (parameterConstraint_.has_value()) {
       std::invoke(parameterConstraint_.value(), newValue, name_);
     }
-    value_ = std::move(newValue);
-    triggerOnUpdateAction();
+    Type oldValue = std::exchange(value_, std::move(newValue));
+    try {
+      triggerOnUpdateAction();
+    } catch (...) {
+      value_ = std::move(oldValue);
+      throw;
+    }
   }
 
   const Type& get() const { return value_; }
@@ -108,6 +117,9 @@ CPP_template(typename Type, typename FromString, typename ToString)(
     onUpdateAction_ = std::move(onUpdateAction);
     triggerOnUpdateAction();
   }
+
+  /// Remove a previously set `onUpdateAction` (if any) without triggering it.
+  void clearOnUpdateAction() { onUpdateAction_ = std::nullopt; }
 
   /// Set an constraint that will be executed every time the value changes
   /// and once initially when setting it. It is intended to throw an exception

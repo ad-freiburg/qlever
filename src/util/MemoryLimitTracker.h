@@ -58,10 +58,13 @@ class AllocationExceedsLimitException : public std::exception {
 class AllocationMemoryLeft {
   // Remaining free memory.
   MemorySize free_;
+  // The total pool size (the memory limit). Invariant: `free_ <= total_`,
+  // and `total_ - free_` is the amount currently allocated.
+  MemorySize total_;
 
  public:
   // Constructor from the initial amount of free memory.
-  explicit AllocationMemoryLeft(MemorySize n) : free_(n) {}
+  explicit AllocationMemoryLeft(MemorySize n) : free_(n), total_(n) {}
 
   // Called before memory is allocated.
   bool decrease_if_enough_left_or_return_false(MemorySize n) noexcept {
@@ -85,6 +88,25 @@ class AllocationMemoryLeft {
 
   // Returns the amount of memory still available.
   [[nodiscard]] MemorySize amountMemoryLeft() const { return free_; }
+
+  // Returns the total pool size (the memory limit).
+  [[nodiscard]] MemorySize total() const { return total_; }
+
+  // Change the total pool size (the memory limit) to `newTotal`. Increasing
+  // always succeeds and adds the difference to the free memory. Decreasing
+  // requires the difference to be currently free, otherwise an exception is
+  // thrown and nothing is changed.
+  void setTotal(MemorySize newTotal) {
+    if (newTotal >= total_) {
+      free_ += newTotal - total_;
+    } else if (!decrease_if_enough_left_or_return_false(total_ - newTotal)) {
+      throw std::runtime_error{absl::StrCat(
+          "Cannot reduce the memory limit to ", newTotal.asString(),
+          ", because only ", free_.asString(), " of the current limit of ",
+          total_.asString(), " are unused")};
+    }
+    total_ = newTotal;
+  }
 };
 
 // Threadsafe Wrapper around `AllocationMemoryLeft`.
@@ -237,6 +259,17 @@ class MemoryLimitTracker {
   // Returns the amount of memory still available.
   [[nodiscard]] MemorySize amountMemoryLeft() const {
     return sharedMemoryLeft_.ptr()->wlock()->amountMemoryLeft();
+  }
+
+  // Returns the memory limit (the total pool size).
+  [[nodiscard]] MemorySize memoryLimit() const {
+    return sharedMemoryLeft_.ptr()->wlock()->total();
+  }
+
+  // Change the memory limit to `newLimit`, see `AllocationMemoryLeft::setTotal`
+  // for the semantics.
+  void setMemoryLimit(MemorySize newLimit) {
+    sharedMemoryLeft_.ptr()->wlock()->setTotal(newLimit);
   }
 
   // Compares whether two trackers share the same memory counter.
