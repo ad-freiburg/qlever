@@ -12,9 +12,7 @@
 
 #include <absl/functional/any_invocable.h>
 
-#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
-#include <boost/asio/post.hpp>
 #include <exception>
 #include <optional>
 #include <utility>
@@ -22,6 +20,7 @@
 
 #include "backports/asio.h"
 #include "parser/RdfParser.h"
+#include "util/AsyncHandlerUtils.h"
 
 // Abstract base class for RDF parsers that deliver their batches of triples
 // asynchronously via `boost::asio`. This is the asynchronous counterpart of
@@ -49,6 +48,8 @@ class AsyncRdfParserBase {
   // the arguments. It may be called synchronously (from within
   // `asyncGetBatchImpl`) and from within a strand of the derived class, see
   // `asyncGetBatchImpl` below.
+  // NOTE: Such a handler is always obtained via `makeHandlerExecutorAware`,
+  // hence it may be invoked directly, also from within a strand.
   using Handler = absl::AnyInvocable<void(std::exception_ptr, OptionalTriples)>;
 
  private:
@@ -82,25 +83,16 @@ class AsyncRdfParserBase {
   // An instance must outlive all of its in-flight calls.
   //
   // The completion handler is always `post`ed (never `dispatch`ed) onto its
-  // associated executor. It is therefore never invoked inline, in particular
-  // neither from within this function nor from within a strand of the derived
-  // class. This is what makes it safe for the derived classes to invoke the
-  // handler of `asyncGetBatchImpl` directly, see there.
+  // associated executor, and is therefore never invoked inline.
   template <typename CompletionToken>
   auto asyncGetBatch(CompletionToken&& token) {
     namespace net = boost::asio;
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr, OptionalTriples)>(
         [this](auto handler) mutable {
-          auto ex = net::get_associated_executor(handler, executor_);
-          asyncGetBatchImpl([h = std::move(handler), ex](
-                                std::exception_ptr ep,
-                                OptionalTriples batch) mutable {
-            net::post(
-                ex, [h = std::move(h), ep, batch = std::move(batch)]() mutable {
-                  std::move(h)(ep, std::move(batch));
-                });
-          });
+          asyncGetBatchImpl(
+              ad_utility::makeHandlerExecutorAware<OptionalTriples>(
+                  std::move(handler), executor_));
         },
         // NOTE: `async_initiate` always takes its token as an lvalue, see the
         // corresponding comment in `AsyncBlockSource::asyncGetNextBlock`.
@@ -112,12 +104,8 @@ class AsyncRdfParserBase {
   // `handler` exactly once (synchronously or asynchronously, from any thread),
   // see `asyncGetBatch` for the semantics of the arguments. Must never throw,
   // but report errors via the `exception_ptr` argument of the handler.
-  //
-  // `handler` may be invoked directly, also from within a strand: it does
-  // nothing but `post` the actual completion handler onto its associated
-  // executor (see `asyncGetBatch` above), so neither the expensive work of the
-  // caller nor a completion inline in the initiating function can leak back
-  // into the derived class's context.
+  // `handler` may be invoked directly, also from within a strand, see the
+  // comment on `Handler` above.
   virtual void asyncGetBatchImpl(Handler handler) = 0;
 };
 

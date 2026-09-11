@@ -19,11 +19,11 @@ namespace net = boost::asio;
 
 // _____________________________________________________________________________
 AsyncSerialParserAdapter::AsyncSerialParserAdapter(
-    const ql::any_io_executor& executor, std::unique_ptr<RdfParserBase> parser)
+    const ql::any_io_executor& executor, ParserFactory parserFactory)
     : AsyncRdfParserBase{executor},
       strand_{net::make_strand(executor)},
-      parser_{std::move(parser)} {
-  AD_CONTRACT_CHECK(parser_ != nullptr);
+      parserFactory_{std::move(parserFactory)} {
+  AD_CONTRACT_CHECK(parserFactory_ != nullptr);
 }
 
 // _____________________________________________________________________________
@@ -33,18 +33,19 @@ void AsyncSerialParserAdapter::asyncGetBatchImpl(Handler handler) {
     OptionalTriples batch;
     if (!finished_) {
       try {
+        // The first call also has to create the parser, see the constructor.
+        if (parser_ == nullptr) {
+          parser_ = std::move(parserFactory_)();
+          AD_CORRECTNESS_CHECK(parser_ != nullptr);
+        }
         batch = parser_->getBatch();
       } catch (...) {
         exception = std::current_exception();
       }
       finished_ = !batch.has_value();
     }
-    // NOTE: `h` may be invoked directly from within the strand, because
-    // `AsyncRdfParserBase::asyncGetBatch` does nothing but `post` the actual
-    // completion handler onto its associated executor (see the comment on
-    // `asyncGetBatchImpl` there). The caller's processing of the batch, which
-    // typically runs inline in that completion handler and is expensive, hence
-    // does not block the strand and thus not the next `getBatch()` call.
-    std::move(h)(exception, std::move(batch));
+    // NOTE: `h` may be invoked directly from within the strand, see the
+    // comment on `AsyncRdfParserBase::Handler`.
+    std::move(h)(std::move(exception), std::move(batch));
   });
 }

@@ -23,7 +23,6 @@
 #include "global/ValueId.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/TripleComponentConversions.h"
-#include "parser/AsyncParserDriver.h"
 #include "parser/AsyncSerialParserAdapter.h"
 #include "parser/RdfAsyncMultifileParser.h"
 #include "parser/RdfAsyncParallelParser.h"
@@ -919,27 +918,14 @@ TEST(RdfParserTest, iriref) {
   runTestsForParser(ctreParser());
 }
 
-// Construct a multifile parser of type `Parser` (one of the types that
-// `forAllMultifileParsers` iterates over) for `files`, forwarding `args` to the
-// constructor after the `EncodedIriManager`. This hides the different argument
-// orders of the constructors: `AsyncParserDriver`'s constructor takes the
-// `EncodedIriManager` first (for its own `RdfParserBase` base class) and then
-// forwards the remaining arguments to the `RdfAsyncMultifileParser`
-// constructor after the executor, hence `encodedIriManager()` appears twice
-// there.
-template <typename Parser, typename... Args>
-Parser makeMultifileParser(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-    Args&&... args) {
-  if constexpr (ad_utility::isSimilar<
-                    Parser, AsyncParserDriver<RdfAsyncMultifileParser>>) {
-    return Parser{encodedIriManager(), std::move(files), encodedIriManager(),
-                  std::forward<Args>(args)...};
-  } else {
-    return Parser{std::move(files), encodedIriManager(),
-                  std::forward<Args>(args)...};
-  }
-}
+// True iff `Parser` is one of the parsers that read several input files at
+// once, which `forAllMultifileParsers` below iterates over. These are
+// constructed from an `InputRangeTypeErased` of file specifications, unlike all
+// the other parsers, which read a single file.
+template <typename Parser>
+CPP_concept isMultifileParser =
+    ad_utility::SimilarToAny<Parser, RdfMultifileParser,
+                             RdfMultifileParserViaAsync>;
 
 // Parse the file at `filename` using a parser of type `Parser` and return the
 // sorted result. The default size for the parse buffer in the following tests
@@ -951,14 +937,12 @@ template <typename Parser>
 std::vector<TurtleTriple> parseFromFile(
     const std::string& filename, ad_utility::MemorySize bufferSize = 1_kB) {
   auto parser = [&]() {
-    if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser> ||
-                  ad_utility::isSimilar<
-                      Parser, AsyncParserDriver<RdfAsyncMultifileParser>>) {
-      return makeMultifileParser<Parser>(
+    if constexpr (isMultifileParser<Parser>) {
+      return Parser{
           ad_utility::InputRangeTypeErased{
               std::vector<qlever::InputFileSpecification>{
                   {filename, qlever::Filetype::Turtle, std::nullopt}}},
-          bufferSize);
+          encodedIriManager(), bufferSize};
     } else {
       return Parser{qlever::InputFileSpecification{
                         filename, qlever::Filetype::Turtle, std::nullopt},
@@ -988,7 +972,7 @@ auto forAllParallelParsers(const Function& function, const Args&... args) {
 template <typename Function, typename... Args>
 auto forAllMultifileParsers(const Function& function, const Args&... args) {
   function(ti<RdfMultifileParser>, args...);
-  function(ti<AsyncParserDriver<RdfAsyncMultifileParser>>, args...);
+  function(ti<RdfMultifileParserViaAsync>, args...);
 }
 
 template <typename Function, typename... Args>
@@ -1296,14 +1280,12 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     {
       [[maybe_unused]] Parser parserChild = [&]() {
-        if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser> ||
-                      ad_utility::isSimilar<
-                          Parser, AsyncParserDriver<RdfAsyncMultifileParser>>) {
-          return makeMultifileParser<Parser>(
+        if constexpr (isMultifileParser<Parser>) {
+          return Parser{
               ad_utility::InputRangeTypeErased{
                   std::vector<qlever::InputFileSpecification>{
                       {filename, qlever::Filetype::Turtle, std::nullopt}}},
-              40_B);
+              encodedIriManager(), 40_B};
         } else {
           return Parser{qlever::InputFileSpecification{
                             filename, qlever::Filetype::Turtle, std::nullopt},
@@ -1549,11 +1531,12 @@ TEST(RdfParserTest, asyncParallelParserHaltsOnHeaderError) {
 AsyncSerialParserAdapter makeSerialAdapterForFile(
     boost::asio::thread_pool& pool, const std::string& filename) {
   return AsyncSerialParserAdapter{
-      pool.get_executor(),
-      std::make_unique<RdfStreamParser<TurtleParser<Tokenizer>>>(
-          qlever::InputFileSpecification{filename, qlever::Filetype::Turtle,
-                                         std::nullopt},
-          1_kB, encodedIriManager())};
+      pool.get_executor(), [filename]() -> std::unique_ptr<RdfParserBase> {
+        return std::make_unique<RdfStreamParser<TurtleParser<Tokenizer>>>(
+            qlever::InputFileSpecification{filename, qlever::Filetype::Turtle,
+                                           std::nullopt},
+            1_kB, encodedIriManager());
+      }};
 }
 
 // _____________________________________________________________________________
@@ -1703,8 +1686,9 @@ TEST(RdfParserTest, noGetBatchInStringParser) {
 TEST(RdfParserTest, dummyParsePositionOfMultifileParsers) {
   auto runTestsForParser = [](auto t) {
     using Parser = typename decltype(t)::type;
-    auto parser = makeMultifileParser<Parser>(
-        ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{});
+    Parser parser{
+        ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{},
+        encodedIriManager()};
     EXPECT_EQ(parser.getParsePosition(), 0u);
   };
   forAllMultifileParsers(runTestsForParser);
@@ -1740,8 +1724,8 @@ TEST(RdfParserTest, multifileParser) {
                        useParallelParser);
     specs.emplace_back(file2, qlever::Filetype::NQuad, "defaultGraphNQ",
                        useParallelParser);
-    auto p = makeMultifileParser<Parser>(
-        ad_utility::InputRangeTypeErased{std::move(specs)});
+    Parser p{ad_utility::InputRangeTypeErased{std::move(specs)},
+             encodedIriManager()};
     std::vector<TurtleTriple> result;
     while (auto batch = p.getBatch()) {
       ql::ranges::copy(batch.value(), std::back_inserter(result));

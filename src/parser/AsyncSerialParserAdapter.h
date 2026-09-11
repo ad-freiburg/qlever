@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_PARSER_ASYNCSERIALPARSERADAPTER_H
 #define QLEVER_SRC_PARSER_ASYNCSERIALPARSERADAPTER_H
 
+#include <absl/functional/any_invocable.h>
+
 #include <boost/asio/strand.hpp>
 #include <memory>
 
@@ -29,8 +31,18 @@
 // `REDUCED_FEATURE_SET_FOR_CPP17` build, which has no coroutines and hence
 // cannot use `RdfAsyncMultifileParser`.
 class AsyncSerialParserAdapter : public AsyncRdfParserBase {
+ public:
+  // A factory for the wrapped parser, see the constructor below. The `&&` in
+  // the signature expresses that it is called (and thus destroyed) exactly
+  // once.
+  using ParserFactory = absl::AnyInvocable<std::unique_ptr<RdfParserBase>() &&>;
+
  private:
   boost::asio::strand<ql::any_io_executor> strand_;
+  ParserFactory parserFactory_;
+  // The wrapped parser, created by the first `asyncGetBatch()` call, see the
+  // constructor below. Only accessed from within `strand_`, so no further
+  // synchronization is needed.
   std::unique_ptr<RdfParserBase> parser_;
   // Set once the wrapped parser has reported the end of the input or has
   // thrown. All subsequent calls complete with `nullopt`. Only accessed from
@@ -38,10 +50,19 @@ class AsyncSerialParserAdapter : public AsyncRdfParserBase {
   bool finished_ = false;
 
  public:
-  // Wrap `parser`. All of its `getBatch()` calls will be run on a strand of
-  // `executor`.
+  // Wrap the parser that `parserFactory` creates. All of its `getBatch()`
+  // calls will be run on a strand of `executor`.
+  //
+  // NOTE: The parser is deliberately not passed in ready-made, but created
+  // lazily on `strand_` by the first `asyncGetBatch()` call. The constructors
+  // of the synchronous parsers are expensive (that of `RdfStreamParser` even
+  // reads the first block of the input), which would make this constructor
+  // expensive as well. Callers rely on it being cheap;
+  // `RdfAsyncMultifileParser` for example creates its per-file parsers while
+  // holding a lock. An exception from `parserFactory` is reported like a parse
+  // error, that is, through the completion handler of that first call.
   AsyncSerialParserAdapter(const ql::any_io_executor& executor,
-                           std::unique_ptr<RdfParserBase> parser);
+                           ParserFactory parserFactory);
 
  protected:
   void asyncGetBatchImpl(Handler handler) override;

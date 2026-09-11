@@ -53,9 +53,16 @@ std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
           return std::make_unique<RdfAsyncParallelParser<InnerParser>>(
               executor(), spec, bufferSize_, encodedIriManager_, graph);
         }
+        // NOTE: The inner parser is created lazily (see
+        // `AsyncSerialParserAdapter`), so that this function stays cheap.
         return std::make_unique<AsyncSerialParserAdapter>(
-            executor(), std::make_unique<RdfStreamParser<InnerParser>>(
-                            spec, bufferSize_, encodedIriManager_, graph));
+            executor(),
+            [spec, bufferSize = bufferSize_,
+             encodedIriManager = encodedIriManager_,
+             graph]() -> std::unique_ptr<RdfParserBase> {
+              return std::make_unique<RdfStreamParser<InnerParser>>(
+                  spec, bufferSize, encodedIriManager, graph);
+            });
       }};
   // The call to `callFixedSize` lifts the runtime booleans to compile-time
   // integers, exactly like `makeSingleRdfParser` in `RdfParser.cpp` (which
@@ -69,50 +76,45 @@ std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
 // _____________________________________________________________________________
 std::shared_ptr<RdfAsyncMultifileParser::OpenFile>
 RdfAsyncMultifileParser::pickFile() {
-  auto fileOrSpec = fileState_.withWriteLock([](FileState& state) {
-    // Prefer the earliest-opened open file that can take another call.
-    // `openFiles_` is in the order in which the files were opened.
-    for (auto& file : state.openFiles_) {
-      if (file->supportsConcurrentCalls_ || file->numCallsInFlight_ == 0) {
-        ++file->numCallsInFlight_;
-        return FileOrSpec{file, std::nullopt};
-      }
+  // NOTE: The whole scheduling decision, including the opening of a new file,
+  // has to happen inside a single critical section. Were a file opened outside
+  // of the lock, then a concurrent call could see neither an unopened nor an
+  // open file and wrongly conclude that all inputs are exhausted, although it
+  // should simply have waited for that file. This is only affordable because
+  // `makeFileParser` is cheap, see there.
+  return fileState_.withWriteLock([this](FileState& state)
+                                      -> std::shared_ptr<OpenFile> {
+    // Step 1: prefer an open file that currently has no call in flight at all.
+    auto idle = ql::ranges::find_if(state.openFiles_, [](const auto& f) {
+      return f->numCallsInFlight_ == 0;
+    });
+    if (idle != state.openFiles_.end()) {
+      ++(*idle)->numCallsInFlight_;
+      return *idle;
     }
-    // No open file has spare capacity; open the next unopened file, if there
-    // is one. The actual opening happens outside of the lock, see below.
+    // Step 2: no open file is idle; open the next unopened file, if there is
+    // one.
     if (auto spec = state.files_.get(); spec.has_value()) {
-      return FileOrSpec{nullptr, std::move(spec)};
+      auto file = std::make_shared<OpenFile>(OpenFile{
+          makeFileParser(spec.value()), spec.value().parseInParallel_, 1});
+      state.openFiles_.push_back(file);
+      return file;
     }
-    // No unopened files are left either. If there is no open file, every input
-    // is exhausted.
+    // Step 3: no unopened files are left either, so if there is no open file,
+    // every input is exhausted.
     if (state.openFiles_.empty()) {
-      return FileOrSpec{nullptr, std::nullopt};
+      return nullptr;
     }
-    // Otherwise every open file is serial and busy (a parallel file would have
-    // been picked by the loop above); pick the one with the fewest calls in
-    // flight. The call is then queued by that file's own
-    // `AsyncSerialParserAdapter`, so no thread blocks.
+    // Step 4: every open file is busy; pick the one with the fewest calls in
+    // flight, preferring parallel files. For a serial file, the call is then
+    // queued by that file's own `AsyncSerialParserAdapter`, so no thread
+    // blocks either way.
     auto it = ql::ranges::min_element(state.openFiles_, {}, [](const auto& f) {
-      return f->numCallsInFlight_;
+      return std::pair{!f->supportsConcurrentCalls_, f->numCallsInFlight_};
     });
     ++(*it)->numCallsInFlight_;
-    return FileOrSpec{*it, std::nullopt};
+    return *it;
   });
-  if (!fileOrSpec.specToOpen_.has_value()) {
-    return std::move(fileOrSpec.file_);
-  }
-  // Construct the per-file parser (which opens the input file, and hence may
-  // block) *without* holding the lock, and only then publish it. Note that
-  // this means that concurrent calls may publish their files in a different
-  // order than the one in which they took the specifications; the scheduling
-  // policy only treats `openFiles_` as a preference order, so this is
-  // harmless.
-  const auto& spec = fileOrSpec.specToOpen_.value();
-  auto file = std::make_shared<OpenFile>(
-      OpenFile{makeFileParser(spec), spec.parseInParallel_, 1});
-  fileState_.withWriteLock(
-      [&file](FileState& state) { state.openFiles_.push_back(file); });
-  return file;
 }
 
 // _____________________________________________________________________________
@@ -141,11 +143,15 @@ RdfAsyncMultifileParser::getBatchCoroutine() {
     if (errorWasEncountered_.load()) {
       co_return std::nullopt;
     }
-    auto file = pickFile();
-    if (file == nullptr) {
-      co_return std::nullopt;
-    }
+    // NOTE: `pickFile()` is called inside the `try` because it may throw (the
+    // constructor of `RdfAsyncParallelParser` opens its input file), and such
+    // an error has to be reported with the same semantics as a parse error.
+    std::shared_ptr<OpenFile> file;
     try {
+      file = pickFile();
+      if (file == nullptr) {
+        co_return std::nullopt;
+      }
       auto batch = co_await file->parser_->asyncGetBatch(net::use_awaitable);
       releaseFile(file, !batch.has_value());
       if (batch.has_value()) {
@@ -155,7 +161,9 @@ RdfAsyncMultifileParser::getBatchCoroutine() {
       // (possibly) another file.
       continue;
     } catch (...) {
-      releaseFile(file, false);
+      if (file != nullptr) {
+        releaseFile(file, false);
+      }
       // Only the first error is propagated to its caller, all subsequent
       // calls get a clean end of the input instead, see the class comment.
       if (!errorWasEncountered_.exchange(true)) {
