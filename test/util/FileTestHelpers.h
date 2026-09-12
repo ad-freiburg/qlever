@@ -65,8 +65,8 @@ inline auto makeTemporaryDirectory(std::string_view name) {
     ql::error_code ec;
     ql::filesystem::remove_all(directory, ec);
     if (ec) {
-      AD_LOG(ERROR) << "Could not remove temporary directory " << directory
-                    << ": " << ec.message();
+      AD_LOG_ERROR << "Could not remove temporary directory " << directory
+                   << ": " << ec.message();
     }
   }};
   return std::make_pair(std::move(directory), std::move(cleanup));

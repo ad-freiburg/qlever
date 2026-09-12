@@ -113,14 +113,15 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
       templateTriples, variableColumns, config.index_);
   IdCache cache = makeIdCache(preprocessedTemplate);
 
+  const QueryExecutionContext& qec = config.qec_;
   std::shared_ptr<ConstructDeduplicator> deduplicator;
   if (!std::holds_alternative<DeduplicationMode::None>(config.mode_.value_)) {
     deduplicator =
-        std::make_shared<ConstructDeduplicator>(config.mode_, config.qec_);
+        qec.makeShared<ConstructDeduplicator>(config.mode_, config.qec_);
   }
 
   auto preprocessedTemplatePtr =
-      std::make_shared<const PreprocessedConstructTemplate>(
+      qec.makeShared<const PreprocessedConstructTemplate>(
           std::move(preprocessedTemplate));
 
   auto processTable =

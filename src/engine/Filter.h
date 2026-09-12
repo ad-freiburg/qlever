@@ -45,10 +45,13 @@ class Filter : public Operation {
   size_t getCostEstimate() override;
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
-  std::vector<QueryExecutionTree*> getChildren() override {
+
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {_subtree.get()};
   }
 
+ public:
   bool knownEmptyResult() override { return _subtree->knownEmptyResult(); }
 
   float getMultiplicity(size_t col) override {

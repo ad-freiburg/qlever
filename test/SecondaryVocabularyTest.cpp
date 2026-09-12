@@ -526,7 +526,7 @@ std::string runQuery(QueryExecutionContext* qec, const std::string& query) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string result;
   for (const auto& block : ExportQueryExecutionTrees::computeResult(
-           parsedQuery, executionTree, ad_utility::MediaType::tsv, timer,
+           parsedQuery, *executionTree, ad_utility::MediaType::tsv, timer,
            cancellationHandle)) {
     result += block;
   }
@@ -565,7 +565,7 @@ void runUpdate(ContextWithSecondaryVocab& context, const std::string& update) {
           QueryPlanner queryPlanner{&context.qec_, cancellationHandle};
           auto executionTree = queryPlanner.createExecutionTree(parsedQuery);
           ExecuteUpdate::executeUpdate(*context.index_, parsedQuery,
-                                       executionTree, deltaTriples,
+                                       *executionTree, deltaTriples,
                                        cancellationHandle);
         }
       });
