@@ -282,8 +282,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
                        c.contentsOfWordsFileAndDocsfile.value().second.size());
         wordsFile.close();
         docsFile.close();
-        textIndexBuilder.setKbName(indexBasename);
-        textIndexBuilder.setTextName(indexBasename);
+        textIndexBuilder.setIndexDescription(indexBasename);
+        textIndexBuilder.setTextIndexDescription(indexBasename);
         textIndexBuilder.setOnDiskBase(indexBasename);
         buildTextIndex(
             std::pair<std::string, std::string>{indexBasename + ".wordsfile",

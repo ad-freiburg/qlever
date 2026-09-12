@@ -217,7 +217,7 @@ size_t IndexImpl::getSizeOfTextBlocksSum(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setTextName(const std::string& name) {
+void IndexImpl::setTextIndexDescription(const std::string& name) {
   textMeta_.setName(name);
 }
 

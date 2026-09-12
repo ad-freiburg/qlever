@@ -28,6 +28,8 @@ TEST(ResponseJsonTest, composeIndexStats) {
   json expectedJson{{"git-hash-index", "git short hash not set"},
                     {"git-hash-server", "git short hash not set"},
                     {"version-server", "project version not set"},
+                    {"index-description", ""},
+                    {"text-description", ""},
                     {"name-index", ""},
                     {"name-text-index", ""},
                     {"num-entity-occurrences", 0},

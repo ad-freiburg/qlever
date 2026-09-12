@@ -1106,7 +1106,7 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.loadConfigFromOldIndex(onDiskBase, other, stats);
   EXPECT_EQ(index.getOnDiskBase(), onDiskBase);
-  EXPECT_EQ(index.getKbName(), other.getKbName());
+  EXPECT_EQ(index.getIndexDescription(), other.getIndexDescription());
   EXPECT_EQ(index.numTriples(), numTriples);
   EXPECT_EQ(index.numDistinctPredicates(), numPredicates);
   EXPECT_EQ(index.numSubjects_, numSubjects);

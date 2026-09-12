@@ -235,10 +235,10 @@ class Permutation {
       const LocatedTriplesState& locatedTriplesState) const;
 
   // _______________________________________________________
-  void setKbName(const std::string& name) { meta_.setName(name); }
+  void setIndexDescription(const std::string& name) { meta_.setName(name); }
 
   // _______________________________________________________
-  const std::string& getKbName() const { return meta_.getName(); }
+  const std::string& getIndexDescription() const { return meta_.getName(); }
 
   // _______________________________________________________
   const std::string& readableName() const { return readableName_; }

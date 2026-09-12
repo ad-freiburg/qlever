@@ -180,9 +180,9 @@ class Index {
 
   [[nodiscard]] float getAverageNofEntityContexts() const;
 
-  void setKbName(const std::string& name);
+  void setIndexDescription(const std::string& name);
 
-  void setTextName(const std::string& name);
+  void setTextIndexDescription(const std::string& name);
 
   bool& usePatterns();
 
@@ -208,8 +208,8 @@ class Index {
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
 
-  const std::string& getTextName() const;
-  const std::string& getKbName() const;
+  const std::string& getTextIndexDescription() const;
+  const std::string& getIndexDescription() const;
   const std::string& getOnDiskBase() const;
   const std::string& getIndexId() const;
   const std::string& getGitShortHash() const;

@@ -935,15 +935,15 @@ CPP_template_def(typename RequestT, typename SendT)(
     response = processMetrics(accessTokenOk, request);
   }
 
-  // Set description of KB index.
+  // Set the description of the index.
   if (auto description = checkAndLogParameterSetting("index-description")) {
-    index.setKbName(description.value());
+    index.setIndexDescription(description.value());
     response = jsonResponse(composeIndexStats(index));
   }
 
-  // Set description of text index.
+  // Set the description of the text index.
   if (auto description = checkAndLogParameterSetting("text-description")) {
-    index.setTextName(description.value());
+    index.setTextIndexDescription(description.value());
     response = jsonResponse(composeIndexStats(index));
   }
 

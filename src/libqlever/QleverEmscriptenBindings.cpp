@@ -113,7 +113,9 @@ EMSCRIPTEN_BINDINGS(qlever) {
 
   class_<qlever::CommonConfig>("CommonConfig")
       .property("baseName", &qlever::CommonConfig::baseName_)
-      .property("kbIndexName", &qlever::CommonConfig::kbIndexName_)
+      .property("indexDescription", &qlever::CommonConfig::indexDescription_)
+      .property("textIndexDescription",
+                &qlever::CommonConfig::textIndexDescription_)
       .property("noPatterns", &qlever::CommonConfig::noPatterns_)
       .property("onlyPsoAndPos", &qlever::CommonConfig::onlyPsoAndPos_)
       .property("addHasWordTriples", &qlever::CommonConfig::addHasWordTriples_)
