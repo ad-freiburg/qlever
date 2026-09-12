@@ -1016,11 +1016,12 @@ CPP_template_def(typename RequestT, typename SendT)(
     response = makeJsonResponse(updatedSettings.value());
   }
 
-  // `write-materialized-view` uses `operation` as the view-defining query and
-  // already executes it inside `processCommands`; `load-materialized-view`
-  // and `delete-materialized-view` don't take a query at all but reuse the
-  // same result type. Clear `operation_` for all three so the code below
-  // doesn't also run it as a regular query and overwrite `response`.
+  // A command that has already consumed the query (currently only
+  // `write-materialized-view`, which uses it as the view-defining query and
+  // executes it inside `processCommands`) must not have it run again as a
+  // regular query below, which would also overwrite `response`. All other
+  // commands reject a query or update in `processCommands`, so for them the
+  // operation is `None` here anyway.
   if (commandResult.queryOperationWasConsumed_) {
     parsedHttpRequest.operation_ = None{};
   }
