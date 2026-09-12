@@ -29,7 +29,11 @@ class Bind : public Operation {
   const parsedQuery::Bind& bind() const { return _bind; }
   [[nodiscard]] std::string getDescriptor() const override;
   [[nodiscard]] size_t getResultWidth() const override;
-  std::vector<QueryExecutionTree*> getChildren() override;
+
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
+ public:
   size_t getCostEstimate() override;
   LimitOffsetHandling handlesLimitOffset() const override;
   void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;

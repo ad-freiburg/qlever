@@ -11,7 +11,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <stdexcept>
 #include <string_view>

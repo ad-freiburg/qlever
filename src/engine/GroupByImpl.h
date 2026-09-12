@@ -90,10 +90,12 @@ class GroupByImpl : public Operation {
    */
   vector<ColumnIndex> computeSortColumns(const QueryExecutionTree* subtree);
 
-  vector<QueryExecutionTree*> getChildren() override {
+ private:
+  vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {_subtree.get()};
   }
 
+ public:
   // Getters for testing
   const auto& groupByVariables() const { return _groupByVariables; }
   const auto& aliases() const { return _aliases; }

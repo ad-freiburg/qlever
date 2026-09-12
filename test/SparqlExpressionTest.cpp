@@ -466,6 +466,49 @@ TEST(SparqlExpression, logicalOperators) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(SparqlExpression, multiplyExpressionWithVariable) {
+  TestContext testContext;
+
+  auto expression = makeMultiplyExpression(
+      std::make_unique<VariableExpression>(Variable{"?ints"}),
+      std::make_unique<IdExpression>(I(2)));
+
+  V<Id> expected{{I(2), I(0), I(-2)}, testContext.qec->getAllocator()};
+
+  auto result = expression->evaluate(&testContext.context);
+
+  ASSERT_THAT(result, ::testing::VariantWith<V<Id>>(
+                          sparqlExpressionResultMatcher(expected)));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
+  V<Id> ints{{I(1), I(-2), I(3)}, alloc};
+  V<Id> doubles{{D(0.5), D(2.0), D(-1.5)}, alloc};
+
+  // Vector-vector: Int/Int, Int/Double, Double/Double.
+  testPlus(V<Id>{{I(2), I(-4), I(6)}, alloc}, ints, ints);
+  testPlus(V<Id>{{D(1.5), D(0.0), D(1.5)}, alloc}, ints, doubles);
+  testPlus(V<Id>{{D(1.0), D(4.0), D(-3.0)}, alloc}, doubles, doubles);
+
+  // Vector-constant and constant-vector. `testPlus` checks both operand orders.
+  testPlus(V<Id>{{I(3), I(0), I(5)}, alloc}, ints, I(2));
+  testPlus(V<Id>{{D(2.5), D(4.0), D(0.5)}, alloc}, doubles, D(2.0));
+
+  // Exercise the `MakeNumericExpression` -> `NumericIdWrapper` fast-path
+  // mapping.
+  testMultiply(V<Id>{{I(2), I(-4), I(6)}, alloc}, ints, I(2));
+  testMultiply(V<Id>{{D(0.5), D(-4.0), D(-4.5)}, alloc}, ints, doubles);
+
+  // Preserve `NanOrInfToUndef` in the homogeneous numeric fast path.
+  testDivide(V<Id>{{U, U, U}, alloc}, ints, I(0));
+
+  // A mixed numeric vector must fall back to the generic path.
+  V<Id> mixed{{I(1), D(2.0), I(3)}, alloc};
+  testPlus(V<Id>{{I(2), D(3.0), I(4)}, alloc}, mixed, I(1));
+}
+
 // _____________________________________________________________________________________
 TEST(SparqlExpression, arithmeticOperators) {
   // Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
@@ -539,8 +582,14 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMinus(minus22, mixed, D(2.2));
   testPlus(minus22, mixed, D(-2.2));
 
+  using S = ad_utility::SetOfIntervals;
+  S alternating{{{0, 2}, {3, 4}}};
+  V<Id> alternatingTimes2{{I(2), I(2), I(0), I(2)}, alloc};
+
   testMultiply(times2, mixed, I(2));
   testMultiply(times13, mixed, D(1.3));
+  testMultiply(I(6), I(2), I(3));
+  testMultiply(alternatingTimes2, alternating, I(2));
 
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
   // Test for `DateTime` - `DateTime`.
@@ -584,6 +633,15 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMultiply(by2, mixed, D(0.5));
   testDivide(times13, mixed, D(1.0 / 1.3));
 
+  V<Id> divisors{{I(2), I(4), D(0.5)}, alloc};
+  V<Id> eightDividedBy{{D(4), D(2), D(16)}, alloc};
+
+  // constant–vector
+  testDivide(eightDividedBy, I(8), divisors);
+
+  // constant–constant
+  testDivide(D(4), I(8), I(2));
+
   // Division by zero is either `UNDEF` or `NaN/infinity`, depending on a
   // runtime parameter.
   V<Id> undef{{U, U, U, U}, alloc};
@@ -595,6 +653,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(undef, divByZeroInputsInt, I(0));
   testDivide(undef, divByZeroInputsDouble, D(0));
   testDivide(undef, divByZeroInputsInt, D(0));
+  testDivide(U, I(1), I(0));
 
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::divisionByZeroIsUndef_>(
@@ -603,6 +662,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(nanAndInf, divByZeroInputsInt, I(0));
   testDivide(nanAndInf, divByZeroInputsDouble, D(0));
   testDivide(nanAndInf, divByZeroInputsInt, D(0));
+  testDivide(D(inf), I(1), I(0));
 }
 
 // Test that the unary expression that is specified by the `makeFunction` yields
@@ -1255,6 +1315,9 @@ TEST(SparqlExpression, customNumericFunctions) {
   auto checkPow = std::bind_front(testNaryExpression, &makePowExpression);
   checkPow(Ids{D(1), D(32), U, U}, Ids{I(5), D(2), U, D(0)},
            IdOrLocalVocabEntryVec{I(0), D(5), I(0), lit("abc")});
+  checkPow(Ids{D(4), D(9), U}, Ids{I(2), I(3), U}, I(2));
+  checkPow(Ids{D(1), D(8), U}, I(2), Ids{I(0), I(3), U});
+  checkPow(D(8), I(2), I(3));
 }
 
 // ____________________________________________________________________________

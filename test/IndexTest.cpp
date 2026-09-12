@@ -34,6 +34,7 @@
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
@@ -454,6 +455,47 @@ TEST(IndexTest, emptyTextIndex) {
   }
 }
 
+// Test that the geo cell grid (see `GeoVocabulary`) is read from the index
+// configuration when an index is loaded, with `flat` as the default scheme.
+// NOTE: Building an index with a grid is a follow-up change, so the
+// configuration of an index built without a grid is edited by hand here.
+TEST(IndexTest, geoCellGridFromConfiguration) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> \"LINESTRING(7 48, 8 49)\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral> ."};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& base = qec->getIndex().getOnDiskBase();
+  EXPECT_FALSE(qec->getIndex().getVocab().getGeoCellGrid().has_value());
+
+  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
+  auto loadWithConfiguration = [&](const nlohmann::json& additionalKeys) {
+    nlohmann::json configuration;
+    {
+      std::ifstream in{configFilename};
+      in >> configuration;
+    }
+    configuration.update(additionalKeys);
+    {
+      auto out = ad_utility::makeOfstream(configFilename);
+      out << configuration;
+    }
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.createFromOnDiskIndex(base, false);
+    return index.getVocab().getGeoCellGrid();
+  };
+  EXPECT_EQ(loadWithConfiguration({{"geo-cell-grid-level", 2}}),
+            std::optional{ad_utility::GeoCellGrid{2}});
+  EXPECT_EQ(loadWithConfiguration(
+                {{"geo-cell-grid-level", 3}, {"geo-cell-grid-scheme", "flat"}}),
+            std::optional{ad_utility::GeoCellGrid{3}});
+
+  // A level that does not fit the grid is rejected.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration({{"geo-cell-grid-level", 300}}),
+      ::testing::HasSubstr("Invalid value 300"));
+}
+
 // Regression test for #3191.
 TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
   ad_utility::testing::TestIndexConfig config{
@@ -731,12 +773,13 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   using namespace ::testing;
 
   // Wrap a matcher for a substring that comes from an `AD_LOG_INFO` line so
-  // that the assertion is only active when `LOGLEVEL >= INFO`. At
-  // `LOGLEVEL=WARN` the INFO output is suppressed, but the test still runs to
-  // cover the WARN-level `"deprecated"` assertions; the wrapper degrades to
-  // `testing::_` (match anything) in that case.
+  // that the assertion is only active when the compile-time log level is at
+  // least `INFO`. At `LOGLEVEL=WARN` the INFO output is suppressed, but the
+  // test still runs to cover the WARN-level `"deprecated"` assertions; the
+  // wrapper degrades to `testing::_` (match anything) in that case.
   auto onlyAtInfoOrAbove = [](auto matcher) {
-    if constexpr (LOGLEVEL < INFO) {
+    if constexpr (ad_utility::compileTimeLogLevel <
+                  ad_utility::LogLevel::Enum::INFO) {
       return testing::_;
     } else {
       return matcher;

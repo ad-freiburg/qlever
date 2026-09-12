@@ -165,7 +165,7 @@ TEST(ServerTest, createResponseMetadata) {
   EXPECT_THAT(pqs, testing::SizeIs(1));
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  auto qet = qp.createExecutionTree(pq);
   const qlever::PlannedQuery plannedQuery{std::move(pq), std::move(qet), *qec};
 
   // Execute the update

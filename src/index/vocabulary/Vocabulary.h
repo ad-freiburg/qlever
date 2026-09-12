@@ -243,12 +243,39 @@ class Vocabulary {
     return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
   }
 
+  // Return a reference to the vocabulary that actually holds the words, i.e.
+  // the vocabulary below the wrapping `UnicodeVocabulary`. The latter is
+  // bypassed because its only additional state is a comparator (see
+  // `applyToUnderlyingZeroCopyVocab` below).
+  const UnderlyingVocabulary& getUnderlyingVocabulary() const {
+    return vocabulary_.getUnderlyingVocabulary();
+  }
+
   // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the
   // vocabulary and set the type of the vocabulary according to the `type`
   // argument (see the `PolymorphicVocabulary` class for details).
   void resetToType(ad_utility::VocabularyType type) {
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
       vocabulary_.getUnderlyingVocabulary().resetToType(type);
+    }
+  }
+
+  // Set the geo cell grid of the geo vocabulary (see `GeoVocabulary`), which
+  // must happen before the vocabulary is opened. No-op unless the underlying
+  // vocabulary might have a grid (see `MaybeProvidesGeoCellGrid`).
+  void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
+    if constexpr (MaybeProvidesGeoCellGrid<UnderlyingVocabulary>) {
+      vocabulary_.getUnderlyingVocabulary().setGeoCellGrid(std::move(grid));
+    }
+  }
+
+  // The geo cell grid of the geo vocabulary, or `std::nullopt` if there is
+  // none.
+  std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
+    if constexpr (MaybeProvidesGeoCellGrid<UnderlyingVocabulary>) {
+      return vocabulary_.getUnderlyingVocabulary().getGeoCellGrid();
+    } else {
+      return std::nullopt;
     }
   }
 
@@ -263,7 +290,8 @@ class Vocabulary {
   // `resetToType` that the active alternative matches the blob's format); if it
   // is a concrete type that does not support zero-copy, this fails to compile
   // (via a `static_assert`). Note that the wrapping `UnicodeVocabulary` is
-  // bypassed via `getUnderlyingVocabulary()`, so its comparator is left
+  // bypassed by `applyToUnderlyingZeroCopyVocab` (via
+  // `UnicodeVocabulary::getUnderlyingVocabulary()`), so its comparator is left
   // untouched and is not part of the blob. The vocabulary is only valid as long
   // as the memory backing `serializer`'s buffer is valid and unchanged.
   CPP_template(typename Serializer)(

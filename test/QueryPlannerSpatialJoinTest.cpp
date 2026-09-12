@@ -1127,7 +1127,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
     auto qec = ad_utility::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", std::nullopt};
     auto plan = h::parseAndPlan(pinned, qec);
-    [[maybe_unused]] auto pinResult = plan.getResult();
+    [[maybe_unused]] auto pinResult = plan->getResult();
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         h::expect(testQuery, ::testing::_, qec),
@@ -1139,7 +1139,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
     auto qec = ad_utility::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", V{"?o"}};
     auto plan = h::parseAndPlan(pinned, qec);
-    [[maybe_unused]] auto pinResult = plan.getResult();
+    [[maybe_unused]] auto pinResult = plan->getResult();
 
     h::expect(
         "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1184,7 +1184,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
     auto qec = ad_utility::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", V{"?o"}};
     auto plan = h::parseAndPlan(pinned, qec);
-    [[maybe_unused]] auto pinResult = plan.getResult();
+    [[maybe_unused]] auto pinResult = plan->getResult();
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         h::expect(
