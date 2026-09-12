@@ -335,8 +335,10 @@ class TransitivePathBase : public Operation {
       size_t maxDist, Graphs activeGraphs = Graphs::All(),
       const std::optional<Variable>& graphVariable = std::nullopt);
 
-  std::vector<QueryExecutionTree*> getChildren() override;
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
+ public:
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   bool columnOriginatesFromGraphOrUndef(

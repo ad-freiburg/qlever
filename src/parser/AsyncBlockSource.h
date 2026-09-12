@@ -12,9 +12,7 @@
 
 #include <absl/functional/any_invocable.h>
 
-#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
-#include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
 #include <exception>
 #include <memory>
@@ -23,6 +21,7 @@
 #include <string_view>
 
 #include "backports/asio.h"
+#include "util/AsyncHandlerUtils.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
@@ -41,8 +40,11 @@ class AsyncBlockSource {
   using Block = ByteBlock;
 
   // Completion handler signature for `asyncGetNextBlockImpl`. Called exactly
-  // once, from any thread. A null `exception_ptr` together with `nullopt`
+  // once, from any thread, and possibly synchronously (from within
+  // `asyncGetNextBlockImpl`). A null `exception_ptr` together with `nullopt`
   // signals EOF; a non-null `exception_ptr` signals an error.
+  // NOTE: Such a handler is always obtained via `makeHandlerExecutorAware`,
+  // hence it may be invoked directly, also from within a strand.
   using Handler =
       absl::AnyInvocable<void(std::exception_ptr, std::optional<Block>)>;
 
@@ -51,9 +53,9 @@ class AsyncBlockSource {
   ad_utility::MemorySize blocksize_;
 
  public:
-  // `exec` is the default executor onto which completions are dispatched if
-  // the completion token passed to `asyncGetNextBlock` has no executor of its
-  // own associated with it. `blocksize` is the preferred size for the blocks
+  // `exec` is the default executor onto which completions are posted if the
+  // completion token passed to `asyncGetNextBlock` has no executor of its own
+  // associated with it. `blocksize` is the preferred size for the blocks
   // to be received (a common implementation detail of all derived classes,
   // hence lives in the base class).
   AsyncBlockSource(const ql::any_io_executor& exec,
@@ -67,16 +69,9 @@ class AsyncBlockSource {
   // `exception_ptr` signals success, a non-null one signals an exception that
   // was thrown while retrieving the next block. A successful result with
   // `std::nullopt` means EOF (no more blocks available in this source).
-  // The handler is posted onto the executor associated with `token`, or onto
-  // the executor passed to the constructor if `token` has none of its own.
-  //
-  // NOTE: It is deliberately posted and not dispatched. A `BlockingBlockSource`
-  // invokes the handler from inside the strand that serializes its reads, and
-  // `dispatch` would run the handler (and hence everything that the caller
-  // does after the fetch, e.g. the parsing of the block in a coroutine that
-  // awaits it) inline inside that strand, which blocks the next read until
-  // that work is done. The `post` guarantees that the caller's continuation
-  // leaves the strand first.
+  // The handler is `post`ed (never `dispatch`ed) onto the executor associated
+  // with `token`, or onto the executor passed to the constructor if `token`
+  // has none of its own, and is therefore never invoked inline.
   // IMPORTANT: At most one request may be outstanding at any time; the next
   // call to `asyncGetNextBlock` may only be initiated after the completion
   // handler of the previous call has run. Sources with state (e.g.
@@ -89,15 +84,9 @@ class AsyncBlockSource {
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr, std::optional<Block>)>(
         [this](auto handler) mutable {
-          auto ex = net::get_associated_executor(handler, executor_);
-          asyncGetNextBlockImpl([h = std::move(handler), ex](
-                                    std::exception_ptr ep,
-                                    std::optional<Block> block) mutable {
-            net::post(
-                ex, [h = std::move(h), ep, block = std::move(block)]() mutable {
-                  std::move(h)(ep, std::move(block));
-                });
-          });
+          asyncGetNextBlockImpl(
+              ad_utility::makeHandlerExecutorAware<std::optional<Block>>(
+                  std::move(handler), executor_));
         },
         // NOTE: `BOOST_ASIO_NONDEDUCED_MOVE_ARG(T)` expands to `T&`, so
         // `async_initiate` always takes its token as an lvalue; the internal
@@ -113,15 +102,23 @@ class AsyncBlockSource {
   // The single extension point required from every block source. Must invoke
   // `handler` exactly once (synchronously or asynchronously, from any
   // thread). Implementations are responsible for their own synchronization.
+  // `handler` may be invoked directly, also from within a strand, see the
+  // comment on `Handler` above.
   virtual void asyncGetNextBlockImpl(Handler handler) = 0;
 
   // Helper for wrapper sources like `AsyncStatementBoundaryBlockSource`: call
   // `asyncGetNextBlockImpl` on a different `AsyncBlockSource` instance. C++
   // protected-access rules prevent calling a protected method on a sibling
   // object directly, so this static trampoline is provided in the base.
+  // `handler` is made executor-aware exactly like in `asyncGetNextBlock`, so
+  // that the (cheap, but non-trivial) block assembly of the wrapper source
+  // does not run inline in `src`'s context, in particular not while a strand
+  // of `src` is held.
   static void callAsyncGetNextBlockImpl(AsyncBlockSource& src,
                                         Handler handler) {
-    src.asyncGetNextBlockImpl(std::move(handler));
+    src.asyncGetNextBlockImpl(
+        ad_utility::makeHandlerExecutorAware<std::optional<Block>>(
+            std::move(handler), src.executor_));
   }
 
   // Helper for combinator sources that call `callAsyncGetNextBlockImpl` on an
@@ -227,7 +224,7 @@ class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
   // Wrap `inner` and cut its blocks at the positions determined by
   // `findEndPosition`. `description` is used in error messages to describe what
   // marks the end of a statement. `exec` is only used as the default executor
-  // for dispatching completions (see `AsyncBlockSource`'s constructor).
+  // for the completions (see `AsyncBlockSource`'s constructor).
   AsyncStatementBoundaryBlockSource(const ql::any_io_executor& exec,
                                     std::unique_ptr<AsyncBlockSource> inner,
                                     EndPositionFinder findEndPosition,

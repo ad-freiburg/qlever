@@ -111,17 +111,22 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 // capture log output and make assertions about it. This macro enforces that
 // `level` is the runtime log level for the remainder of the enclosing scope, by
 // declaring an `ad_utility::ScopedLogLevel` object that restores the previous
-// level when the scope is left. If the compile-time `LOGLEVEL` is less verbose
-// than `level`, the test is skipped instead: such log levels are compiled out
-// and can never become the runtime log level, so the test could never pass.
-#define ENFORCE_LOG_LEVEL_OR_SKIP(level)                                     \
-  if (LOGLEVEL < ad_utility::LogLevel{level}) {                              \
-    GTEST_SKIP() << "This test requires a compile-time log level of at "     \
-                    "least "                                                 \
-                 << ad_utility::LogLevel{level}.toString() << ", but it is " \
-                 << ad_utility::LogLevel{LOGLEVEL}.toString();               \
-  }                                                                          \
-  ad_utility::ScopedLogLevel AD_SCOPED_LOG_LEVEL_NAME(__COUNTER__) { level }
+// level when the scope is left. If `ad_utility::compileTimeLogLevel` is less
+// verbose than `level`, the test is skipped instead: such log levels are
+// compiled out and can never become the runtime log level, so the test could
+// never pass. The `level` is the plain name of a log level, for example
+// `ENFORCE_LOG_LEVEL_OR_SKIP(INFO)`.
+#define ENFORCE_LOG_LEVEL_OR_SKIP(level)                                      \
+  if (ad_utility::compileTimeLogLevel < ad_utility::LogLevel::Enum::level) {  \
+    GTEST_SKIP()                                                              \
+        << "This test requires a compile-time log level of at least "         \
+        << ad_utility::LogLevel{ad_utility::LogLevel::Enum::level}.toString() \
+        << ", but it is "                                                     \
+        << ad_utility::LogLevel{ad_utility::compileTimeLogLevel}.toString();  \
+  }                                                                           \
+  ad_utility::ScopedLogLevel AD_SCOPED_LOG_LEVEL_NAME(__COUNTER__) {          \
+    ad_utility::LogLevel::Enum::level                                         \
+  }
 
 // _____________________________________________________________________________
 // Skip the enclosing test if the `_NO_TIMING_TESTS` CMake option is set. Use
