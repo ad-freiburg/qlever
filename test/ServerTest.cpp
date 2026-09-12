@@ -15,7 +15,6 @@
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
-#include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
@@ -29,24 +28,7 @@
 #include "util/metrics/Metrics.h"
 
 using nlohmann::json;
-
-namespace {
 using namespace ad_utility::testing;
-// Expect that `call()` throws an `HttpError` with status 403 Forbidden and
-// with a message that matches `messageMatcher`.
-auto expectForbiddenError = [](auto call, auto messageMatcher,
-                               ad_utility::source_location l =
-                                   AD_CURRENT_SOURCE_LOC()) {
-  auto trace = generateLocationTrace(l);
-  try {
-    call();
-    FAIL() << "Expected an `HttpError` to be thrown";
-  } catch (const HttpError& e) {
-    EXPECT_EQ(e.status(), boost::beast::http::status::forbidden);
-    EXPECT_THAT(e.what(), messageMatcher);
-  }
-};
-}  // namespace
 
 // _____________________________________________________________________________
 TEST(ServerTest, chooseBestFittingMediaType) {
@@ -275,12 +257,13 @@ TEST(ServerTest, configurePinnedResultWithName) {
   qec->pinResultWithName() = std::nullopt;
 
   // Pinning without a valid access token is rejected with 403 Forbidden.
-  expectForbiddenError(
+  serverTestHelpers::expectHttpError(
       [&] {
         Server::configurePinnedResultWithName(
             QueryExecutionContext::PinResultWithName{"test_query_name"}, false,
             *qec);
       },
+      boost::beast::http::status::forbidden,
       testing::HasSubstr(
           "Pinning a result with a name requires a valid access token"));
 
@@ -295,14 +278,16 @@ TEST(ServerTest, checkAccessToken) {
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
 
   // An invalid access token results in a 403 Forbidden response.
-  expectForbiddenError(
+  serverTestHelpers::expectHttpError(
       [&] { server.checkAccessToken("invalidAccessToken"); },
+      boost::beast::http::status::forbidden,
       testing::HasSubstr("Access token was provided but it was invalid"));
 
   // Same when the server was started without `--access-token` at all.
   Server serverWithoutToken{4322, 1, "", config};
-  expectForbiddenError(
+  serverTestHelpers::expectHttpError(
       [&] { serverWithoutToken.checkAccessToken("someToken"); },
+      boost::beast::http::status::forbidden,
       testing::HasSubstr("Access token was provided but server was started "
                          "without --access-token"));
 
@@ -665,6 +650,18 @@ TEST(ServerTest, vacuumDeltaTriples) {
   ASSERT_TRUE(body.has_value());
   EXPECT_EQ(body.value()["external"]["insertionsRemoved"], 1);
   expectCounts(DeltaTriplesCount{0, 0});
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, processCommands) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+
+  // An unknown `cmd=` value results in a 400 Bad Request response.
+  expectHttpError(
+      [&] { server.process(makeGetRequest("/?cmd=not-a-real-command")); },
+      boost::beast::http::status::bad_request,
+      testing::HasSubstr(
+          "Unknown value \"not-a-real-command\" for parameter \"cmd\""));
 }
 
 // _____________________________________________________________________________
