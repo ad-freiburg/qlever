@@ -63,7 +63,8 @@ class Distinct : public Operation {
 
   bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {subtree_.get()};
   }
 

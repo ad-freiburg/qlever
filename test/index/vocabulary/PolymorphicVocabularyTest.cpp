@@ -245,6 +245,25 @@ TEST(PolymorphicVocabulary, lookupBatchesStreamedMatchesIndividualLookups) {
   }
 }
 
+// The geo cell grid (see `GeoVocabulary`) is forwarded to the underlying
+// vocabulary if that is a `SplitVocabulary` with a `GeoVocabulary`, and
+// ignored otherwise.
+TEST(PolymorphicVocabulary, geoCellGrid) {
+  for (auto vocabType : VocabularyType::all()) {
+    PolymorphicVocabulary vocab;
+    vocab.resetToType(VocabularyType{vocabType});
+    EXPECT_FALSE(vocab.getGeoCellGrid().has_value());
+    ad_utility::GeoCellGrid grid{3};
+    vocab.setGeoCellGrid(grid);
+    bool isGeoSplit =
+        vocabType == VocabularyType::Enum::OnDiskCompressedGeoSplit;
+    EXPECT_EQ(vocab.getGeoCellGrid().has_value(), isGeoSplit);
+    if (isGeoSplit) {
+      EXPECT_EQ(vocab.getGeoCellGrid().value(), grid);
+    }
+  }
+}
+
 // Test a corner case in a `switch` statement.
 TEST(PolymorphicVocabulary, invalidVocabularyType) {
   PolymorphicVocabulary vocab;

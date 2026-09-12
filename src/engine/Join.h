@@ -46,7 +46,11 @@ class Join : public Operation {
   size_t getCostEstimate() override;
   bool knownEmptyResult() override;
   float getMultiplicity(size_t col) override;
-  std::vector<QueryExecutionTree*> getChildren() override;
+
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
+ public:
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
   std::string getCacheKeyImpl() const override;

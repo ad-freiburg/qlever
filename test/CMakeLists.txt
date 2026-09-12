@@ -280,6 +280,8 @@ addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
 
 addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
 
+addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
+
 addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
@@ -403,6 +405,8 @@ addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
 addLinkAndDiscoverTestNoLibs(NoCopyNoMoveTest)
 
+addLinkAndDiscoverTestNoLibs(CopyOnWritePtrTest)
+
 addLinkAndDiscoverTestSerial(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
@@ -510,6 +514,13 @@ addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
+
+addLinkAndDiscoverTestNoLibs(RunsInputPolicyTest)
+
+addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
+
+addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
+addLinkAndDiscoverTestNoLibs(MergeHelpersTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 

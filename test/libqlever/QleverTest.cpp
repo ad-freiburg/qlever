@@ -270,6 +270,19 @@ TEST(IndexBuilderConfig, validate) {
 }
 
 // _____________________________________________________________________________
+// The descriptions from the `EngineConfig` replace the names stored in the
+// index files.
+TEST(LibQlever, indexAndTextDescription) {
+  EngineConfig ec = buildTestIndex("<s> <p> <o> .");
+  ec.indexDescription_ = "Some dataset, version 42";
+  ec.textDescription_ = "Some text";
+  Qlever engine{ec};
+  const auto& index = engine.indexAndViewsSnapshot()->index_;
+  EXPECT_EQ(index.getKbName(), "Some dataset, version 42");
+  EXPECT_EQ(index.getTextName(), "Some text");
+}
+
+// _____________________________________________________________________________
 TEST(LibQlever, loadIndexWithoutPermutations) {
   EngineConfig ec = buildTestIndex("<s> <p> <o>. <s2> <p2> \"literal\".");
 
@@ -942,4 +955,16 @@ TEST(Qlever, makeIndexRebuildConfig) {
   AD_EXPECT_THROW_WITH_MESSAGE(makeConfig(std::nullopt, std::nullopt),
                                AllOf(HasSubstr("all already exist"),
                                      HasSubstr("rebuild-previous-index-dir")));
+}
+
+// _____________________________________________________________________________
+// A `PlannedQuery` always needs an actual `QueryExecutionTree`, as all of its
+// accessors dereference it.
+TEST(LibQlever, plannedQueryRequiresQueryExecutionTree) {
+  auto* qec = ad_utility::testing::getQec();
+  ParsedQuery parsedQuery = SparqlParser::parseQuery(
+      &qec->getIndex().encodedIriManager(), "SELECT * { ?s ?p ?o }");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      PlannedQuery(std::move(parsedQuery), nullptr, *qec),
+      HasSubstr("Assertion `queryExecutionTree_ != nullptr` failed."));
 }
