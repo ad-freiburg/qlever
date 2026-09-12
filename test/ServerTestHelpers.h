@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "backports/filesystem.h"
+#include "engine/HttpError.h"
 #include "engine/Server.h"
 #include "libqlever/Qlever.h"
 #include "util/GTestHelpers.h"
@@ -40,6 +41,21 @@ inline std::string responseBodyToString(
   return absl::StrJoin(respWithCommonIterators.begin(),
                        respWithCommonIterators.end(), "");
 }
+
+// Expect that `call()` throws an `HttpError` with the given `status` and
+// with a message that matches `messageMatcher`.
+inline auto expectHttpError =
+    [](auto call, http::status status, auto messageMatcher,
+       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+      auto trace = generateLocationTrace(l);
+      try {
+        call();
+        FAIL() << "Expected an `HttpError` to be thrown";
+      } catch (const HttpError& e) {
+        EXPECT_EQ(e.status(), status);
+        EXPECT_THAT(e.what(), messageMatcher);
+      }
+    };
 
 // Expect that calling `fn()` throws with a message stating that `actionName`
 // requires a valid access token.
