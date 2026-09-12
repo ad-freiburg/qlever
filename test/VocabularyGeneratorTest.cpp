@@ -556,3 +556,39 @@ TEST(MergeVocabulary, manyWordsWithSeveralIdMapBatches) {
                 ::testing::ElementsAreArray(expected));
   }
 }
+
+// Test the round trip of the file that holds the ID triples of a single
+// partial vocabulary (see `writeMappedIdsToFile` and `readMappedIdsFromFile`).
+TEST(MergeVocabulary, mappedIdsFileRoundTrip) {
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
+  const std::string filename = "mapped-ids.dat";
+  auto vocabId = [](uint64_t i) {
+    return Id::makeFromVocabIndex(VocabIndex::make(i));
+  };
+  ad_utility::HashMap<uint64_t, uint64_t> map{{0, 10}, {1, 11}, {2, 12}};
+
+  // The `VocabIndex` IDs are mapped, all other IDs are written unchanged, and
+  // the order of the triples is preserved.
+  std::vector<std::array<Id, NumColumnsIndexBuilding>> input{
+      {vocabId(0), vocabId(1), vocabId(2), Id::makeFromInt(7)},
+      {vocabId(2), Id::makeFromInt(3), Id::makeUndefined(), vocabId(0)}};
+  writeMappedIdsToFile(input, map, filename);
+  auto triples = readMappedIdsFromFile(filename);
+  ASSERT_EQ(triples.numRows(), 2u);
+  EXPECT_THAT(std::vector(triples[0].begin(), triples[0].end()),
+              ::testing::ElementsAre(vocabId(10), vocabId(11), vocabId(12),
+                                     Id::makeFromInt(7)));
+  EXPECT_THAT(std::vector(triples[1].begin(), triples[1].end()),
+              ::testing::ElementsAre(vocabId(12), Id::makeFromInt(3),
+                                     Id::makeUndefined(), vocabId(10)));
+
+  // An empty batch yields an empty table.
+  writeMappedIdsToFile({}, map, filename);
+  EXPECT_EQ(readMappedIdsFromFile(filename).numRows(), 0u);
+
+  // A `VocabIndex` without a mapping is an error.
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      writeMappedIdsToFile({{vocabId(5), vocabId(0), vocabId(0), vocabId(0)}},
+                           map, filename),
+      ::testing::HasSubstr("not found in mapping"), ad_utility::Exception);
+}
