@@ -79,13 +79,8 @@ class MergeVocabularyTest : public ::testing::Test {
   // Constructor. TODO: Better write Setup method because of complex logic which
   // may throw?
   MergeVocabularyTest() {
-    basePath_ = std::string("vocabularyGeneratorTestFiles");
-    // those names are required by mergeVocabulary
-    path0_ = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(0));
-    path1_ = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(1));
-
     // Create a subdirectory for the test files in the working directory.
-    basePath_ = basePath_ + "/";
+    basePath_ = std::string("vocabularyGeneratorTestFiles/");
     ql::error_code errorCode;
     ql::filesystem::create_directories(basePath_, errorCode);
     if (errorCode) {
@@ -93,9 +88,9 @@ class MergeVocabularyTest : public ::testing::Test {
                    "might lead to test failures\n";
     }
 
-    // Prepend the created directory to the paths.
-    path0_ = basePath_ + path0_;
-    path1_ = basePath_ + path1_;
+    // Those names are required by `mergeVocabulary`.
+    path0_ = partialVocabularyWordsFilename(basePath_, 0);
+    path1_ = partialVocabularyWordsFilename(basePath_, 1);
 
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
@@ -196,8 +191,8 @@ class MergeVocabularyTest : public ::testing::Test {
 
 // Test for merge Vocabulary
 TEST_F(MergeVocabularyTest, mergeVocabulary) {
-  // mergeVocabulary only gets the name of the directory and the filename
-  // suffixes of the partial vocabularies.
+  // mergeVocabulary only gets the name of the directory and the number of
+  // partial vocabularies.
   VocabularyMetaData res;
   std::vector<std::pair<std::string, bool>> mergeResult;
   std::vector<std::pair<std::string, bool>> geoMergeResult;
@@ -219,7 +214,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 
     TripleComponentComparator comparator;
     res = mergeVocabulary(
-        basePath_, {"0", "1"},
+        basePath_, 2,
         [&comparator](std::string_view a, std::string_view b) {
           return comparator(a, b, TripleComponentComparator::Level::TOTAL);
         },
@@ -238,11 +233,9 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   ASSERT_EQ(res.internalEntities().begin(), Id::makeUndefined());
   ASSERT_EQ(res.internalEntities().end(), Id::makeUndefined());
   // Check that vocabulary has the right form.
-  IdMap idMap0 = getIdMapFromFile(basePath_ + PARTIAL_VOCAB_IDMAP_INFIX +
-                                  std::to_string(0));
+  IdMap idMap0 = getIdMapFromFile(partialVocabularyIdMapFilename(basePath_, 0));
   EXPECT_THAT(idMap0, ::testing::ElementsAreArray(expectedIdMap0_));
-  IdMap idMap1 = getIdMapFromFile(basePath_ + PARTIAL_VOCAB_IDMAP_INFIX +
-                                  std::to_string(1));
+  IdMap idMap1 = getIdMapFromFile(partialVocabularyIdMapFilename(basePath_, 1));
   EXPECT_THAT(idMap1, ::testing::ElementsAreArray(expectedIdMap1_));
 }
 
@@ -264,8 +257,8 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
   writePartialVocabularyFile(filenames.wordsFiles_[1], unorderedWords);
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      mergeVocabulary(partialVocabBasename, filenames.suffixes_, std::less{},
-                      callback, 1_GB),
+      mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
+                      std::less{}, callback, 1_GB),
       ::testing::HasSubstr("vocabulary order violated"), ad_utility::Exception);
 }
 
@@ -301,8 +294,8 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
   //   partial match it would have wrongly converted `<http://ex/apple>`.
   ad_utility::RegexSet blankNodeIriRegexes{
       {"<http://ex/bn_.*>", "<http://ex/apple"}, "for the test"};
-  mergeVocabulary(partialVocabBasename, filenames.suffixes_, std::less{},
-                  wordCallback, 1_GB, blankNodeIriRegexes);
+  mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
+                  std::less{}, wordCallback, 1_GB, blankNodeIriRegexes);
 
   // Only the two `bn_` IRIs became blank nodes; the two other IRIs and the
   // literal remain in the vocabulary, in sorted order.
@@ -418,8 +411,9 @@ TEST(MergeVocabulary, duplicateWordsAcrossBatchBoundaries) {
 
   size_t numWordsInCallback = 0;
   auto wordCallback = makeCountingWordCallback(numWordsInCallback);
-  auto result = mergeVocabulary(partialVocabBasename, filenames.suffixes_,
-                                std::less{}, wordCallback, 1_GB);
+  auto result =
+      mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
+                      std::less{}, wordCallback, 1_GB);
   // Each word is written to the vocabulary exactly once.
   EXPECT_EQ(numWordsInCallback, numWords);
   EXPECT_EQ(result.numWordsTotal(), numWords);
@@ -476,8 +470,9 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
 
   std::vector<std::pair<std::string, bool>> vocabulary;
   auto wordCallback = makeCollectingWordCallback(vocabulary);
-  auto result = mergeVocabulary(partialVocabBasename, filenames.suffixes_,
-                                std::less{}, wordCallback, 1_GB);
+  auto result =
+      mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
+                      std::less{}, wordCallback, 1_GB);
   EXPECT_EQ(result.numWordsTotal(), numWords);
 
   // `"zzz"` is written exactly once, and it is externalized because one of its
@@ -512,8 +507,8 @@ TEST(MergeVocabulary, exceptionFromWritingThreadIsPropagated) {
     throw std::runtime_error{"The vocabulary could not be written"};
   };
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      mergeVocabulary(partialVocabBasename, filenames.suffixes_, std::less{},
-                      wordCallback, 1_GB),
+      mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
+                      std::less{}, wordCallback, 1_GB),
       ::testing::HasSubstr("could not be written"), std::runtime_error);
   // The first word of the first batch threw, and the second batch was skipped.
   EXPECT_EQ(numCalls, 1u);
@@ -544,8 +539,9 @@ TEST(MergeVocabulary, manyWordsWithSeveralIdMapBatches) {
   // `0, 1, ...` in sorted order.
   size_t numWordsInCallback = 0;
   auto wordCallback = makeCountingWordCallback(numWordsInCallback);
-  auto result = mergeVocabulary(partialVocabBasename, filenames.suffixes_,
-                                std::less{}, wordCallback, 1_GB);
+  auto result =
+      mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
+                      std::less{}, wordCallback, 1_GB);
   EXPECT_EQ(numWordsInCallback, numWords);
   EXPECT_EQ(result.numWordsTotal(), numWords);
 

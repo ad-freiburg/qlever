@@ -22,6 +22,7 @@
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/MergePipeline.h"
 #include "index/vocabulary_merger/WordBatchBuilder.h"
+#include "util/Iterators.h"
 #include "util/SourceLocation.h"
 #include "util/TransparentFunctors.h"
 
@@ -47,11 +48,11 @@ const std::string partialVocabBasename = "vocab-";
 // to test that a failure of that stage is propagated.
 class ThrowingIdMapBatchWriter {
  public:
-  // Same interface as the `IdMapBatchWriter`, but the arguments are ignored
+  // Same interface as the `IdMapBatchWriter`, but the argument is ignored
   // (nothing is written, so there also are no files to clean up).
-  ThrowingIdMapBatchWriter([[maybe_unused]] const std::string& basename,
-                           [[maybe_unused]] const std::vector<std::string>&
-                               partialVocabularySuffixes) {}
+  explicit ThrowingIdMapBatchWriter(
+      [[maybe_unused]] ad_utility::InputRangeTypeErased<std::string>
+          idMapFilenames) {}
 
   void writeBatch([[maybe_unused]] const IdMapBatch& batch) {
     throw std::runtime_error{"The ID map could not be written"};
@@ -119,7 +120,8 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
 
   VocabularyMetaData metaData;
   {
-    VocabularyMergePipeline pipeline{partialVocabBasename, filenames.suffixes_};
+    VocabularyMergePipeline pipeline{
+        ad_utility::InputRangeTypeErased{filenames.idMapFiles_}};
     WordBatchBuilder builder;
     auto push = makePush(pipeline, wordCallback, noRegexes);
     // `"a"` is only in the first partial vocabulary, `"b"` in both (and
@@ -151,7 +153,8 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
 TEST(VocabularyMergePipeline, noBatches) {
   auto [filenames, cleanup] =
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
-  VocabularyMergePipeline pipeline{partialVocabBasename, filenames.suffixes_};
+  VocabularyMergePipeline pipeline{
+      ad_utility::InputRangeTypeErased{filenames.idMapFiles_}};
   auto metaData = pipeline.finish();
   EXPECT_EQ(metaData.numWordsTotal(), 0u);
   EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]), ::testing::IsEmpty());
@@ -173,7 +176,8 @@ TEST(VocabularyMergePipeline, exceptionFromAStageIsPropagated) {
   };
   ad_utility::RegexSet noRegexes;
 
-  VocabularyMergePipeline pipeline{partialVocabBasename, filenames.suffixes_};
+  VocabularyMergePipeline pipeline{
+      ad_utility::InputRangeTypeErased{filenames.idMapFiles_}};
   expectFailureIsPropagated(pipeline, wordCallback, noRegexes,
                             "could not be written");
   // A batch that is pushed after the failure is skipped, so the callback is
@@ -192,7 +196,7 @@ TEST(VocabularyMergePipeline, exceptionFromTheIdMapWritingIsPropagated) {
   ad_utility::RegexSet noRegexes;
 
   VocabularyMergePipelineImpl<ThrowingIdMapBatchWriter> pipeline{
-      partialVocabBasename, {"0"}};
+      ad_utility::InputRangeTypeErased<std::string>{}};
   expectFailureIsPropagated(
       pipeline, wordCallback, noRegexes, "ID map could not be written",
       [&vocabulary] {

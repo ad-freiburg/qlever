@@ -55,6 +55,13 @@ constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
 
+// The infix of the (compressed) files that hold the parsed triples with their
+// partial IDs, before they are sorted into the permutations. There is one such
+// file per partial vocabulary, holding exactly the triples that were mapped
+// using it (see `unsortedTriplesFilename` in
+// `index/PartialVocabularyFilenames.h`).
+constexpr inline std::string_view UNSORTED_TRIPLES_INFIX = ".unsorted-triples.";
+
 // _________________________________________________________________
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 
@@ -64,6 +71,10 @@ constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 // is a good value. On systems with very few CPUs, a lower value might be
 // beneficial.
 constexpr inline size_t NUM_PARALLEL_ITEM_MAPS = 10;
+
+// The number of workers that convert the partial to the global IDs (see
+// `IndexImpl::convertPartialToGlobalIds`).
+constexpr inline size_t NUM_PARALLEL_ID_CONVERSION_WORKERS = 10;
 
 // The number of threads that are parsing in parallel, when the parallel Turtle
 // parser is used.
@@ -106,14 +117,6 @@ constexpr inline ad_utility::MemorySize VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE =
 // be full at the same time, so the additional memory footprint of the merging
 // is a multiple of this number of batches.
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE = 3;
-
-// A buffer size used during the second pass of the Index build.
-// It is not const, so we can set it to a much lower value for unit tests to
-// increase the test coverage.
-inline std::atomic<size_t>& BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() {
-  static std::atomic<size_t> value = 10'000;
-  return value;
-}
 
 // The uncompressed size in bytes of a block of a single column of the
 // permutations. If chosen too large, then we lose performance for very small
