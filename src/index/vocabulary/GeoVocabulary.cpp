@@ -1,19 +1,38 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/GeoVocabulary.h"
 
 #include <stdexcept>
+#include <vector>
 
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
+#include "util/File.h"
 
 using ad_utility::GeometryInfo;
+
+// ____________________________________________________________________________
+template <typename V>
+GeoVocabulary<V>::GeoVocabulary() {
+  // The index of a word is computed from its position in the underlying
+  // vocabulary (see `indexFromPosition`), which requires contiguous positions
+  // and a plain `getPositionOfWord`. The vocabularies with "holes" and the
+  // composite vocabularies do not qualify.
+  static_assert(!HasSpecialGetPositionOfWord<V>);
+}
 
 // ____________________________________________________________________________
 template <typename V>
@@ -34,6 +53,8 @@ void GeoVocabulary<V>::open(const std::string& filename) {
         ad_utility::GEOMETRY_INFO_VERSION,
         " as required by this version of QLever. Please rebuild your index."));
   }
+
+  endIndex_ = computeEndIndex();
 }
 
 // ____________________________________________________________________________
@@ -41,14 +62,59 @@ template <typename V>
 void GeoVocabulary<V>::close() {
   literals_.close();
   geoInfoFile_.close();
+  endIndex_ = 0;
 }
 
 // ____________________________________________________________________________
 template <typename V>
-GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
-                                         const std::string& filename)
+uint64_t GeoVocabulary<V>::indexFromPosition(uint64_t position,
+                                             std::string_view word) const {
+  if (!grid_.has_value()) {
+    return position;
+  }
+  return grid_->indexFromCellAndPosition(
+      cellIndexOfWord(grid_.value(), geoInfoAtPosition(position), word),
+      position);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+uint64_t GeoVocabulary<V>::computeEndIndex() const {
+  auto numWords = size();
+  if (!grid_.has_value() || numWords == 0) {
+    return numWords;
+  }
+  // One past the largest index: the cell of the last word combined with the
+  // past-the-end position.
+  auto lastPosition = numWords - 1;
+  auto lastCell = cellIndexOfWord(
+      grid_.value(), geoInfoAtPosition(lastPosition), literals_[lastPosition]);
+  return grid_->indexFromCellAndPosition(lastCell, numWords);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+VocabBatchLookupResult GeoVocabulary<V>::lookupBatch(
+    ql::span<const size_t> indices) const {
+  if (!grid_.has_value()) {
+    return literals_.lookupBatch(indices);
+  }
+  std::vector<size_t> positions;
+  positions.reserve(indices.size());
+  for (size_t index : indices) {
+    positions.push_back(positionFromIndex(index));
+  }
+  return literals_.lookupBatch(positions);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+GeoVocabulary<V>::WordWriter::WordWriter(
+    const V& vocabulary, const std::string& filename,
+    std::optional<ad_utility::GeoCellGrid> grid)
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
-      geoInfoFile_{getGeoInfoFilename(filename), "w"} {
+      geoInfoFile_{getGeoInfoFilename(filename), "w"},
+      grid_{grid} {
   // Initialize geo info file with header
   geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
 }
@@ -77,6 +143,22 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   }
   geoInfoFile_.write(ptr, geoInfoOffset);
 
+  if (grid_.has_value()) {
+    AD_CORRECTNESS_CHECK(index == numWords_);
+    // Keep one position free, so that `endIndex` (the past-the-end position
+    // combined with the cell of the last word) is always a valid index.
+    AD_CONTRACT_CHECK(numWords_ + 1 < grid_->maxNumWords(),
+                      "Too many WKT literals for the configured geo cell "
+                      "grid, please rebuild with a smaller grid level");
+    auto cellIndex = cellIndexOfWord(grid_.value(), info, word);
+    AD_CONTRACT_CHECK(
+        !lastCellIndex_.has_value() || lastCellIndex_.value() <= cellIndex,
+        "WKT literals were not passed to the GeoVocabulary in the order of "
+        "their geo grid cells");
+    lastCellIndex_ = cellIndex;
+    index = grid_->indexFromCellAndPosition(cellIndex, numWords_);
+  }
+  ++numWords_;
   return index;
 }
 
@@ -112,14 +194,16 @@ GeoVocabulary<V>::WordWriter::~WordWriter() {
 
 // ____________________________________________________________________________
 template <typename V>
-std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
-  AD_CONTRACT_CHECK(index < size());
+std::optional<GeometryInfo> GeoVocabulary<V>::geoInfoAtPosition(
+    uint64_t position) const {
+  AD_CONTRACT_CHECK(position < size());
   // Allocate the required number of bytes
   std::array<uint8_t, geoInfoOffset> buffer;
   void* ptr = &buffer;
 
   // Read into the buffer
-  geoInfoFile_.read(ptr, geoInfoOffset, geoInfoHeader + index * geoInfoOffset);
+  geoInfoFile_.read(ptr, geoInfoOffset,
+                    geoInfoHeader + position * geoInfoOffset);
 
   // If all bytes are zero, this record on disk represents an invalid geometry.
   // The `GeometryInfo` class makes the guarantee that it can not have an

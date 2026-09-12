@@ -3,17 +3,20 @@
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_format.h>
 #include <gmock/gmock.h>
 
+#include <array>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
-#include "./util/IdTestHelpers.h"
+#include "./index/vocabulary_merger/VocabularyMergerTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
 #include "global/Constants.h"
@@ -25,14 +28,16 @@
 #include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Algorithm.h"
-#include "util/File.h"
 #include "util/GTestHelpers.h"
 
 using namespace ad_utility::vocabulary_merger;
+using namespace vocabularyMergerTestHelpers;
 namespace {
-auto V = ad_utility::testing::VocabId;
-// Shorthand for the local index that a word has inside a partial vocabulary.
-auto L = &VocabIndex::make;
+// The base name of the partial vocabulary files that the tests below create.
+// Each of those tests runs in its own fresh working directory (see
+// `makePartialVocabularyFilenamesInFreshDirectory`), so a short fixed name is
+// unambiguous.
+const std::string partialVocabBasename = "vocab-";
 
 // Write the given `words` as a partial vocabulary file at `path`, assigning
 // them consecutive local ids `0, 1, ...` in the given order and marking all of
@@ -215,10 +220,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
     TripleComponentComparator comparator;
     res = mergeVocabulary(
         basePath_, {"0", "1"},
-        [&comparator](std::string_view a, bool aIsExternal, std::string_view b,
-                      bool bIsExternal) {
-          return comparator.isLessInTotalWithExternalFlag(a, aIsExternal, b,
-                                                          bIsExternal);
+        [&comparator](std::string_view a, std::string_view b) {
+          return comparator(a, b, TripleComponentComparator::Level::TOTAL);
         },
         internalVocabularyAction, 1_GB);
   }
@@ -245,24 +248,24 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 
 // _____________________________________________________________________________
 TEST(MergeVocabulary, mergeVocabularyAssertion) {
+  // The violated order is only detected if the expensive checks are enabled
+  // (see `WordBatchBuilder::addMergedWords`).
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP();
+  }
   auto callback = [](const auto&, bool) { return uint64_t{0}; };
 
-  std::string basePath = gtestCurrentTestName();
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 2);
 
   // Intentionally in wrong order, so that the merge detects a violated order.
   std::array<std::string_view, 3> unorderedWords{"\"c\"", "\"b\"", "\"a\""};
-  writePartialVocabularyFile(
-      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0), unorderedWords);
-  writePartialVocabularyFile(
-      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1), unorderedWords);
+  writePartialVocabularyFile(filenames.wordsFiles_[0], unorderedWords);
+  writePartialVocabularyFile(filenames.wordsFiles_[1], unorderedWords);
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      mergeVocabulary(
-          basePath, {"0", "1"},
-          [](std::string_view a, bool, std::string_view b, bool) {
-            return std::less{}(a, b);
-          },
-          callback, 1_GB),
+      mergeVocabulary(partialVocabBasename, filenames.suffixes_, std::less{},
+                      callback, 1_GB),
       ::testing::HasSubstr("vocabulary order violated"), ad_utility::Exception);
 }
 
@@ -273,13 +276,8 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
 // literals are left untouched. In particular, matching is a *full* match, so a
 // regex that only matches a prefix of an IRI does not convert it.
 TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
-  std::string basePath = gtestCurrentTestName();
-  std::string wordsFile = absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0);
-  std::string idMapFile = absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, 0);
-  absl::Cleanup cleanup = [&wordsFile, &idMapFile] {
-    ad_utility::deleteFile(wordsFile, false);
-    ad_utility::deleteFile(idMapFile, false);
-  };
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
 
   // A single partial vocabulary. The words must be in ascending order according
   // to the comparator used below (plain `std::less`); note that literals (which
@@ -287,16 +285,13 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
   std::array<std::string_view, 5> words{"\"bn_lit\"", "<http://ex/apple>",
                                         "<http://ex/bn_1>", "<http://ex/bn_2>",
                                         "<http://ex/cherry>"};
-  writePartialVocabularyFile(wordsFile, words);
+  writePartialVocabularyFile(filenames.wordsFiles_[0], words);
 
   // Collect the words that are actually written to the vocabulary (i.e. not
-  // treated as blank nodes), together with the vocabulary index they get.
-  std::vector<std::string> vocabularyWords;
-  auto wordCallback = [&vocabularyWords](std::string_view word,
-                                         bool) -> uint64_t {
-    vocabularyWords.emplace_back(word);
-    return vocabularyWords.size() - 1;
-  };
+  // treated as blank nodes), together with the vocabulary index they get. None
+  // of the words is external.
+  std::vector<std::pair<std::string, bool>> vocabularyWords;
+  auto wordCallback = makeCollectingWordCallback(vocabularyWords);
 
   // Two (compiled) regexes:
   // - `<http://ex/bn_.*>` fully matches the two `bn_` IRIs (and neither the
@@ -306,27 +301,22 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
   //   partial match it would have wrongly converted `<http://ex/apple>`.
   ad_utility::RegexSet blankNodeIriRegexes{
       {"<http://ex/bn_.*>", "<http://ex/apple"}, "for the test"};
-  mergeVocabulary(
-      basePath, {"0"},
-      [](std::string_view a, bool, std::string_view b, bool) {
-        return std::less{}(a, b);
-      },
-      wordCallback, 1_GB, blankNodeIriRegexes);
+  mergeVocabulary(partialVocabBasename, filenames.suffixes_, std::less{},
+                  wordCallback, 1_GB, blankNodeIriRegexes);
 
   // Only the two `bn_` IRIs became blank nodes; the two other IRIs and the
   // literal remain in the vocabulary, in sorted order.
-  EXPECT_THAT(vocabularyWords,
-              ::testing::ElementsAre("\"bn_lit\"", "<http://ex/apple>",
-                                     "<http://ex/cherry>"));
+  EXPECT_THAT(
+      vocabularyWords,
+      ::testing::ElementsAre(::testing::Pair("\"bn_lit\"", false),
+                             ::testing::Pair("<http://ex/apple>", false),
+                             ::testing::Pair("<http://ex/cherry>", false)));
 
   // Check the exact id mapping. The local ids `0..4` are assigned in the input
   // (sorted) order above; the two `bn_` IRIs get consecutive, distinct blank
   // node ids, the other three words get vocabulary ids in their appearance
   // order.
-  auto BN = [](uint64_t index) {
-    return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(index));
-  };
-  IdMap idMap = getIdMapFromFile(idMapFile);
+  IdMap idMap = getIdMapFromFile(filenames.idMapFiles_[0]);
   EXPECT_THAT(idMap, ::testing::ElementsAreArray(
                          IdMap{{L(0), V(0)},     // "bn_lit"
                                {L(1), V(1)},     // <http://ex/apple>
@@ -396,4 +386,177 @@ TEST(VocabularyGeneratorTest, createInternalMappingFirstWordDuplicates) {
   EXPECT_EQ(0u, res[99]);
   EXPECT_EQ(1u, res[3]);
   EXPECT_EQ(1u, res[55]);
+}
+
+// _____________________________________________________________________________
+// Merge words that occur in *every* partial vocabulary, such that the
+// occurrences of a single word are spread over two consecutive batches of
+// merged words. Such a word is only written to the vocabulary (and hence only
+// gets its global ID) after the first of those batches has been handed to the
+// writing thread, so this exercises the deliberate holding back of the last
+// distinct word by the `WordBatchBuilder`.
+TEST(MergeVocabulary, duplicateWordsAcrossBatchBoundaries) {
+  // The words are currently collected in batches of 100000. Three partial
+  // vocabularies with the same 120000 words yield 360000 index mappings, so we
+  // get several batches, and as 100000 is not divisible by three, the
+  // occurrences of a word are indeed split by a batch boundary.
+  static constexpr size_t numWords = 120'000;
+  static constexpr size_t numFiles = 3;
+  auto [filenames, cleanup] = makePartialVocabularyFilenamesInFreshDirectory(
+      partialVocabBasename, numFiles);
+
+  // Each of the partial vocabularies contains all the words (zero-padded, such
+  // that their lexicographic order is the same as the order of their indices),
+  // with the local index `i` for the `i`-th word.
+  std::vector<std::string> words;
+  for (size_t i = 0; i < numWords; ++i) {
+    words.push_back(absl::StrFormat("\"word%08d\"", i));
+  }
+  for (size_t i = 0; i < numFiles; ++i) {
+    writePartialVocabularyFile(filenames.wordsFiles_[i], words);
+  }
+
+  size_t numWordsInCallback = 0;
+  auto wordCallback = makeCountingWordCallback(numWordsInCallback);
+  auto result = mergeVocabulary(partialVocabBasename, filenames.suffixes_,
+                                std::less{}, wordCallback, 1_GB);
+  // Each word is written to the vocabulary exactly once.
+  EXPECT_EQ(numWordsInCallback, numWords);
+  EXPECT_EQ(result.numWordsTotal(), numWords);
+
+  // In each of the partial vocabularies, the word with local index `j` is the
+  // word with global id `j`.
+  IdMap expected;
+  for (size_t j = 0; j < numWords; ++j) {
+    expected.push_back({L(j), V(j)});
+  }
+  for (size_t f = 0; f < numFiles; ++f) {
+    EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[f]),
+                ::testing::ElementsAreArray(expected));
+  }
+}
+
+// _____________________________________________________________________________
+// Merge a word that occurs in two partial vocabularies with different
+// `isExternal` flags, such that the two occurrences are split by a batch
+// boundary. The merged word has to become external, which is only correct
+// because the `WordBatchBuilder` holds the word back until no further
+// occurrence of it can arrive.
+TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
+  // The last word is the only one that occurs in both partial vocabularies,
+  // and only its occurrence in the second one is marked as external.
+  static constexpr size_t numWords = 100'000;
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 2);
+
+  // The first partial vocabulary fills a whole batch and ends with `"zzz"`,
+  // which is the only word of the second partial vocabulary, there marked as
+  // external.
+  {
+    ad_utility::serialization::FileWriteSerializer partialVocab{
+        filenames.wordsFiles_[0]};
+    partialVocab << numWords;
+    for (size_t i = 0; i + 1 < numWords; ++i) {
+      partialVocab << absl::StrFormat("\"word%08d\"", i);
+      partialVocab << false;
+      partialVocab << i;
+    }
+    partialVocab << std::string{"\"zzz\""};
+    partialVocab << false;
+    partialVocab << numWords - 1;
+  }
+  {
+    ad_utility::serialization::FileWriteSerializer partialVocab{
+        filenames.wordsFiles_[1]};
+    partialVocab << size_t{1};
+    partialVocab << std::string{"\"zzz\""};
+    partialVocab << true;
+    partialVocab << size_t{0};
+  }
+
+  std::vector<std::pair<std::string, bool>> vocabulary;
+  auto wordCallback = makeCollectingWordCallback(vocabulary);
+  auto result = mergeVocabulary(partialVocabBasename, filenames.suffixes_,
+                                std::less{}, wordCallback, 1_GB);
+  EXPECT_EQ(result.numWordsTotal(), numWords);
+
+  // `"zzz"` is written exactly once, and it is externalized because one of its
+  // two occurrences was.
+  ASSERT_EQ(vocabulary.size(), numWords);
+  EXPECT_THAT(vocabulary.back(), ::testing::Pair("\"zzz\"", true));
+  // Both occurrences of `"zzz"` map to its single global id.
+  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[1]),
+              ::testing::ElementsAre(IdMapEntry{L(0), V(numWords - 1)}));
+}
+// _____________________________________________________________________________
+// An exception that is thrown while a batch is written (here by the word
+// callback, in practice e.g. by a full disk) happens on the writing thread. It
+// must be propagated to the caller of `mergeVocabulary` and must not terminate
+// the process, and the batches that are still queued must not be written.
+TEST(MergeVocabulary, exceptionFromWritingThreadIsPropagated) {
+  // More words than fit into a single batch (see
+  // `VOCAB_MERGER_WORD_BATCH_SIZE`), so that there is a second batch that
+  // has to be skipped after the first one has failed.
+  static constexpr size_t numWords = 120'000;
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
+  std::vector<std::string> words;
+  for (size_t i = 0; i < numWords; ++i) {
+    words.push_back(absl::StrFormat("\"word%08d\"", i));
+  }
+  writePartialVocabularyFile(filenames.wordsFiles_[0], words);
+
+  size_t numCalls = 0;
+  auto wordCallback = [&numCalls](std::string_view, bool) -> uint64_t {
+    ++numCalls;
+    throw std::runtime_error{"The vocabulary could not be written"};
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      mergeVocabulary(partialVocabBasename, filenames.suffixes_, std::less{},
+                      wordCallback, 1_GB),
+      ::testing::HasSubstr("could not be written"), std::runtime_error);
+  // The first word of the first batch threw, and the second batch was skipped.
+  EXPECT_EQ(numCalls, 1u);
+}
+
+// _____________________________________________________________________________
+// Merge a number of words that is large enough for the index mappings to be
+// handed to the asynchronous writer in several batches, and check that all the
+// mappings arrive in the correct ID map, in the correct order.
+TEST(MergeVocabulary, manyWordsWithSeveralIdMapBatches) {
+  // The mappings are currently written in batches of 100000, so this leads to
+  // several batches, of which the last one is only partially filled.
+  static constexpr size_t numWords = 250'000;
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 2);
+
+  // The `i`-th word (in sorted order) goes to the partial vocabulary
+  // `i % 2`. The words are zero-padded, such that their lexicographic order is
+  // the same as the order of their indices.
+  std::array<std::vector<std::string>, 2> words;
+  for (size_t i = 0; i < numWords; ++i) {
+    words.at(i % 2).push_back(absl::StrFormat("\"word%08d\"", i));
+  }
+  writePartialVocabularyFile(filenames.wordsFiles_[0], words[0]);
+  writePartialVocabularyFile(filenames.wordsFiles_[1], words[1]);
+
+  // All the words are distinct, so they simply get the vocabulary indices
+  // `0, 1, ...` in sorted order.
+  size_t numWordsInCallback = 0;
+  auto wordCallback = makeCountingWordCallback(numWordsInCallback);
+  auto result = mergeVocabulary(partialVocabBasename, filenames.suffixes_,
+                                std::less{}, wordCallback, 1_GB);
+  EXPECT_EQ(numWordsInCallback, numWords);
+  EXPECT_EQ(result.numWordsTotal(), numWords);
+
+  // In the partial vocabulary `f`, the word with local id `j` is the word with
+  // global id `2 * j + f`.
+  for (size_t f = 0; f < 2; ++f) {
+    IdMap expected;
+    for (size_t j = 0; j < words.at(f).size(); ++j) {
+      expected.push_back({L(j), V(2 * j + f)});
+    }
+    EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[f]),
+                ::testing::ElementsAreArray(expected));
+  }
 }

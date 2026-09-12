@@ -390,7 +390,8 @@ TYPED_TEST(HttpServerBodyTest, ErrorHandlingInSession) {
   // normally they are silently caught and ignored.
   s = throwAndCaptureLog(beast::system_error{beast::error::timeout});
   s += throwAndCaptureLog(beast::system_error{boost::asio::error::eof});
-  if (LOGLEVEL >= TRACE) {
+  if constexpr (ad_utility::compileTimeLogLevel >=
+                ad_utility::LogLevel::Enum::TRACE) {
     EXPECT_THAT(s,
                 AllOf(HasSubstr("due to a timeout"), HasSubstr("End of file")));
   } else {
@@ -398,13 +399,15 @@ TYPED_TEST(HttpServerBodyTest, ErrorHandlingInSession) {
   }
 
   // Handling of `std::exception`.
-  if constexpr (LOGLEVEL >= ERROR) {
+  if constexpr (ad_utility::compileTimeLogLevel >=
+                ad_utility::LogLevel::Enum::ERROR) {
     s = throwAndCaptureLog(std::runtime_error{"The runtime error for testing"});
     EXPECT_THAT(s, HasSubstr("The runtime error for testing"));
   }
 
   // Thrown object that is not a `std::exception`.
-  if constexpr (LOGLEVEL >= ERROR) {
+  if constexpr (ad_utility::compileTimeLogLevel >=
+                ad_utility::LogLevel::Enum::ERROR) {
     s = throwAndCaptureLog(47);
     EXPECT_THAT(
         s, HasSubstr("Weird exception not inheriting from std::exception"));
