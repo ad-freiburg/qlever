@@ -40,9 +40,11 @@ namespace ad_utility {
 //
 // Otherwise the following can happen: thread A calls `write()` and sees that
 // the pointee is not shared, thread B then creates a copy, and thread A mutates
-// the pointee in place, which thread B now reads. No copy-on-write scheme can
-// prevent this: a copy that is created while a mutation is in progress observes
-// a partially mutated pointee no matter how the decision to clone is made.
+// the pointee in place, which thread B now reads. This is the price of the
+// `isShared()` check: a scheme that clones on every `write()`, mutates the
+// clone, and only then publishes it would not have this problem, but it would
+// also clone on every write, and avoiding exactly that clone when the pointee
+// is not shared is the point of this class.
 //
 // Everything else is safe without further synchronization: reading via any copy
 // (also concurrently with a `write()` on another copy, which operates on a
