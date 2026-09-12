@@ -249,6 +249,14 @@ struct EngineConfig : CommonConfig {
   // Names of materialized views to load from disk during initialization.
   // If a view doesn't exist, a warning is logged and startup continues.
   std::vector<std::string> preloadMaterializedViews_ = {};
+
+  // Descriptions of the index and of the text index. They are returned by the
+  // API (`cmd=stats`, fields `name-index` and `name-text-index`), which is
+  // used, for example, by the QLever UI. If set, they replace the names stored
+  // in the index files. Both can also be changed while the server is running,
+  // via the `index-description` and `text-description` API commands.
+  std::optional<std::string> indexDescription_;
+  std::optional<std::string> textDescription_;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See

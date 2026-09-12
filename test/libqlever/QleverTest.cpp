@@ -270,6 +270,19 @@ TEST(IndexBuilderConfig, validate) {
 }
 
 // _____________________________________________________________________________
+// The descriptions from the `EngineConfig` replace the names stored in the
+// index files.
+TEST(LibQlever, indexAndTextDescription) {
+  EngineConfig ec = buildTestIndex("<s> <p> <o> .");
+  ec.indexDescription_ = "Some dataset, version 42";
+  ec.textDescription_ = "Some text";
+  Qlever engine{ec};
+  const auto& index = engine.indexAndViewsSnapshot()->index_;
+  EXPECT_EQ(index.getKbName(), "Some dataset, version 42");
+  EXPECT_EQ(index.getTextName(), "Some text");
+}
+
+// _____________________________________________________________________________
 TEST(LibQlever, loadIndexWithoutPermutations) {
   EngineConfig ec = buildTestIndex("<s> <p> <o>. <s2> <p2> \"literal\".");
 
