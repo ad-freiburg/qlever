@@ -132,6 +132,18 @@ int main(int argc, char** argv) {
   add("text,t", po::bool_switch(&config.loadTextIndex_),
       "Also load the text index. The text index must have been built before "
       "using `qlever-index` with options `-d` and `- w`.");
+  add("index-description",
+      po::value<std::string>()->notifier(
+          [&config](const std::string& d) { config.indexDescription_ = d; }),
+      "A description of the index (typically the dataset and its version). "
+      "It is returned by the API (`cmd=stats`, field `name-index`), which is "
+      "used, for example, by the QLever UI. Can also be changed while the "
+      "server is running, via the `index-description` API command.");
+  add("text-description",
+      po::value<std::string>()->notifier(
+          [&config](const std::string& d) { config.textDescription_ = d; }),
+      "A description of the text index, analogous to `--index-description` "
+      "(field `name-text-index`).");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&config.onlyPsoAndPos_),
       "Only load the PSO and POS permutations. This disables queries with "
@@ -240,7 +252,7 @@ int main(int argc, char** argv) {
   auto logLevelDescription = absl::StrCat(
       "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
       "Default is INFO. The compile-time level (",
-      LogLevel{LOGLEVEL}.toString(),
+      LogLevel{ad_utility::compileTimeLogLevel}.toString(),
       ") applies as an upper bound — messages above it are never emitted "
       "regardless of this setting.");
   add("log-level",
