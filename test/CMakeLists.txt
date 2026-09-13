@@ -403,6 +403,8 @@ addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
 addLinkAndDiscoverTestNoLibs(NoCopyNoMoveTest)
 
+addLinkAndDiscoverTestNoLibs(CopyOnWritePtrTest)
+
 addLinkAndDiscoverTestSerial(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
