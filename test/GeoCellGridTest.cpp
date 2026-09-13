@@ -231,6 +231,11 @@ TEST(GeoCellGrid, cellIndicesFitTheField) {
                                            std::clamp(lng + w, -180.0, 180.0)}};
       auto cellIndex = grid.cellIndexFromBoundingBox(box);
       EXPECT_LT(cellIndex, uint64_t{1} << grid.numCellBits());
+      // Every cell (also those of the shifted copies, which are larger than
+      // the sentinel) can be stored in and recovered from a vocabulary index.
+      auto index = grid.indexFromCellAndPosition(cellIndex, 4711);
+      EXPECT_EQ(grid.cellOfIndex(index), cellIndex);
+      EXPECT_EQ(grid.positionOfIndex(index), 4711u);
     }
   }
 }
@@ -382,6 +387,106 @@ TEST(GeoCellIdPrefilter, canBeSkipped) {
   EXPECT_TRUE(prefilter.canBeSkipped(geoId(9, 7)));
   EXPECT_TRUE(prefilter.canBeSkipped(geoId(11, 7)));
   EXPECT_TRUE(prefilter.canBeSkipped(geoId(grid.sentinelCell() - 1, 0)));
+}
+
+// The following tests exercise the three schemes beyond `Flat`.
+
+// _____________________________________________________________________________
+TEST(GeoCellGrid, cellBitsPerScheme) {
+  EXPECT_EQ(GeoCellGrid(10, GeoCellGridScheme::Flat).numCellBits(), 21u);
+  EXPECT_EQ(GeoCellGrid(10, GeoCellGridScheme::Flat4Shifts).numCellBits(), 23u);
+  EXPECT_EQ(GeoCellGrid(10, GeoCellGridScheme::Hierarchical).numCellBits(),
+            21u);
+  EXPECT_EQ(
+      GeoCellGrid(10, GeoCellGridScheme::Hierarchical3Shifts).numCellBits(),
+      23u);
+  // The hierarchical schemes have no separate sentinel; the root of the
+  // first copy takes its role.
+  EXPECT_EQ(GeoCellGrid(10, GeoCellGridScheme::Hierarchical).sentinelCell(),
+            uint64_t{1} << 20);
+  EXPECT_EQ(GeoCellGrid(10, GeoCellGridScheme::Flat).sentinelCell(),
+            (uint64_t{1} << 21) - 1);
+}
+
+// _____________________________________________________________________________
+TEST(GeoCellGrid, hierarchicalEncoding) {
+  GeoCellGrid grid{3, GeoCellGridScheme::Hierarchical};
+  // The root is the middle of the ID space of 2 * 3 + 1 = 7 bits.
+  EXPECT_EQ(grid.sentinelCell(), 64u);
+  // A point geometry gets a leaf cell (odd cell number).
+  ad_utility::BoundingBox point{GeoPoint{10.0, 10.0}, GeoPoint{10.0, 10.0}};
+  auto leaf = grid.cellIndexFromBoundingBox(point);
+  EXPECT_EQ(leaf & 1, 1u);
+  // A geometry spanning the whole world gets the root.
+  ad_utility::BoundingBox world{GeoPoint{-90.0, -180.0}, GeoPoint{90.0, 180.0}};
+  EXPECT_EQ(grid.cellIndexFromBoundingBox(world), grid.sentinelCell());
+  // The cover of a tiny rectangle consists of one leaf (or few leaves) plus
+  // all their ancestors, root included.
+  auto ranges = grid.coveringCellRanges(10.0, 10.0, 10.1, 10.1);
+  bool containsRoot = false;
+  bool containsLeaf = false;
+  for (auto [first, last] : ranges) {
+    containsRoot |=
+        (grid.sentinelCell() >= first && grid.sentinelCell() <= last);
+    containsLeaf |= (leaf >= first && leaf <= last);
+  }
+  EXPECT_TRUE(containsRoot);
+  EXPECT_TRUE(containsLeaf);
+}
+
+// _____________________________________________________________________________
+TEST(GeoCellGrid, shiftedSchemesBoundTheSentinelPopulation) {
+  std::mt19937_64 gen{815};
+  std::uniform_real_distribution<double> lngDist{-170.0, 160.0};
+  std::uniform_real_distribution<double> latDist{-80.0, 70.0};
+
+  // Flat-4-shifts: every geometry of at most half a cell in both dimensions
+  // fits a regular cell of one of the four copies.
+  {
+    GeoCellGrid grid{5, GeoCellGridScheme::Flat4Shifts};
+    double cellLng = 360.0 / 32.0;
+    double cellLat = 180.0 / 32.0;
+    for (int i = 0; i < 3000; ++i) {
+      double lng = lngDist(gen);
+      double lat = latDist(gen);
+      ad_utility::BoundingBox box{
+          GeoPoint{lat, lng},
+          GeoPoint{lat + 0.49 * cellLat, lng + 0.49 * cellLng}};
+      EXPECT_NE(grid.cellIndexFromBoundingBox(box), grid.sentinelCell());
+    }
+  }
+
+  // Hierarchical-3-shifts: every geometry is stored at a cell of side at
+  // most ~6 times its own extent (Chan's guarantee; we allow a factor of 8
+  // for the quantization at the borders), so nothing escalates towards the
+  // root by more than a constant number of levels.
+  {
+    uint8_t level = 8;
+    GeoCellGrid grid{level, GeoCellGridScheme::Hierarchical3Shifts};
+    for (int i = 0; i < 3000; ++i) {
+      double lng = lngDist(gen);
+      double lat = latDist(gen);
+      // Extent: 1/64 of the domain, i.e. natural level 6 of 8.
+      double w = 360.0 / 64.0;
+      double h = 180.0 / 64.0;
+      ad_utility::BoundingBox box{GeoPoint{lat, lng},
+                                  GeoPoint{lat + h, lng + w}};
+      auto cell = grid.cellIndexFromBoundingBox(box);
+      // Depth below the leaves is encoded in the trailing zeros of the cell
+      // number; the stored cell has side length 2^depthBelow leaves.
+      uint64_t cellWithoutShift =
+          cell & ((uint64_t{1} << (2 * uint64_t{level} + 1)) - 1);
+      uint64_t depthBelow = 0;
+      while (((cellWithoutShift >> depthBelow) & 1) == 0) {
+        ++depthBelow;
+      }
+      AD_CORRECTNESS_CHECK(depthBelow % 2 == 0);
+      depthBelow /= 2;
+      // Natural level 6 -> stored level >= 3 (cell side <= 8x extent).
+      EXPECT_LE(depthBelow, uint64_t{5})
+          << "geometry at [" << lng << ", " << lat << "]";
+    }
+  }
 }
 
 }  // namespace

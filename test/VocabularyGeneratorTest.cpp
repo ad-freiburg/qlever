@@ -366,13 +366,17 @@ TEST(MergeVocabulary, geoSortKeyOrder) {
                                                   "\"w\"", "\"x\"", "\"y\""));
 
   // Keys out of order within a file violate the vocabulary order, even
-  // though the words are in lexicographic order.
-  mergedWords.clear();
-  writeFile(file0, std::vector<P>{{"\"a\"", 13}, {"\"b\"", 4}});
-  writeFile(file1, std::vector<P>{});
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      mergeVocabulary(basePath, 2, lessThan, wordCallback, 1_GB),
-      ::testing::HasSubstr("vocabulary order violated"), ad_utility::Exception);
+  // though the words are in lexicographic order. NOTE: The order is only
+  // checked if the expensive checks are enabled (see `WordBatchBuilder`).
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    mergedWords.clear();
+    writeFile(file0, std::vector<P>{{"\"a\"", 13}, {"\"b\"", 4}});
+    writeFile(file1, std::vector<P>{});
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        mergeVocabulary(basePath, 2, lessThan, wordCallback, 1_GB),
+        ::testing::HasSubstr("vocabulary order violated"),
+        ad_utility::Exception);
+  }
 }
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {

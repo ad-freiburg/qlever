@@ -282,8 +282,9 @@ int main(int argc, char** argv) {
       "joins. 0 (the default) means no grid. A grid requires "
       "`--vocabulary-type on-disk-compressed-geo-split`.");
   add("geo-cell-grid-scheme", po::value(&config.geoCellGridScheme_),
-      "The scheme by which the geo cell grid assigns cells, currently only "
-      "`flat` (the default). Only relevant with a grid level > 0.");
+      "The scheme by which the geo cell grid assigns cells: `flat` (the "
+      "default), `flat-4-shifts`, `hierarchical`, or `hierarchical-3-shifts` "
+      "(see `GeoCellGrid`). Only relevant with a grid level > 0.");
 
   add("encode-as-id",
       po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
