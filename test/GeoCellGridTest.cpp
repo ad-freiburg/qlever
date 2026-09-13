@@ -22,6 +22,7 @@ namespace {
 using ad_utility::GeoCellGrid;
 using ad_utility::GeoCellGridScheme;
 using ad_utility::GeoCellIdPrefilter;
+using ad_utility::GeoRectangle;
 
 // Build a full WKT literal (with quotes and datatype suffix) from the given
 // content.
@@ -384,4 +385,37 @@ TEST(GeoCellIdPrefilter, canBeSkipped) {
   EXPECT_TRUE(prefilter.canBeSkipped(geoId(grid.sentinelCell() - 1, 0)));
 }
 
+// _____________________________________________________________________________
+TEST(GeoCellIdPrefilter, canBeSkippedForValueIds) {
+  GeoCellGrid grid{2};
+  // Rectangle [10, 11] x [10, 11] (lng x lat), inside cell 10 (see above).
+  GeoCellIdPrefilter prefilter{grid, 10.0, 10.0, 11.0, 11.0};
+  auto geoId = [&grid](uint64_t cell, uint64_t position) {
+    return ValueId::makeFromVocabIndex(
+        VocabIndex::make(GeoCellGrid::geoVocabMarkerBit |
+                         grid.indexFromCellAndPosition(cell, position)));
+  };
+  // WKT literals are decided by their cell, as for the raw index.
+  EXPECT_FALSE(prefilter.canBeSkipped(geoId(10, 3)));
+  EXPECT_TRUE(prefilter.canBeSkipped(geoId(9, 3)));
+  // Points are decided by their coordinates (`GeoPoint{lat, lng}`).
+  EXPECT_FALSE(
+      prefilter.canBeSkipped(ValueId::makeFromGeoPoint(GeoPoint{10.5, 10.5})));
+  EXPECT_FALSE(
+      prefilter.canBeSkipped(ValueId::makeFromGeoPoint(GeoPoint{10.0, 11.0})));
+  EXPECT_TRUE(
+      prefilter.canBeSkipped(ValueId::makeFromGeoPoint(GeoPoint{10.5, 11.5})));
+  EXPECT_TRUE(
+      prefilter.canBeSkipped(ValueId::makeFromGeoPoint(GeoPoint{11.5, 10.5})));
+  EXPECT_TRUE(prefilter.canBeSkipped(
+      ValueId::makeFromGeoPoint(GeoPoint{10.5, -170.0})));
+  // Without a grid, only points can be skipped.
+  GeoCellIdPrefilter noGrid{std::nullopt, GeoRectangle{10.0, 10.0, 11.0, 11.0}};
+  EXPECT_FALSE(noGrid.canBeSkipped(geoId(9, 3)));
+  EXPECT_TRUE(
+      noGrid.canBeSkipped(ValueId::makeFromGeoPoint(GeoPoint{12.0, 0.0})));
+  // Other datatypes are never skipped.
+  EXPECT_FALSE(prefilter.canBeSkipped(ValueId::makeFromInt(42)));
+  EXPECT_FALSE(prefilter.canBeSkipped(ValueId::makeUndefined()));
+}
 }  // namespace

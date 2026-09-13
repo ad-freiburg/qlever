@@ -182,17 +182,29 @@ GeoCellGrid::CellRanges GeoCellGrid::mergeRanges(const CellRanges& ranges) {
 // ____________________________________________________________________________
 GeoCellIdPrefilter::GeoCellIdPrefilter(const GeoCellGrid& grid, double minLng,
                                        double minLat, double maxLng,
-                                       double maxLat) {
+                                       double maxLat)
+    : GeoCellIdPrefilter{std::optional{grid},
+                         GeoRectangle{minLng, minLat, maxLng, maxLat}} {}
+
+// ____________________________________________________________________________
+GeoCellIdPrefilter::GeoCellIdPrefilter(const std::optional<GeoCellGrid>& grid,
+                                       const GeoRectangle& rectangle)
+    : rectangle_{rectangle} {
+  if (!grid.has_value()) {
+    return;
+  }
   for (auto [first, last] :
-       grid.coveringCellRanges(minLng, minLat, maxLng, maxLat)) {
-    keepRanges_.push_back(grid.vocabIndexRangeForCells(first, last));
+       grid->coveringCellRanges(rectangle.minLng_, rectangle.minLat_,
+                                rectangle.maxLng_, rectangle.maxLat_)) {
+    keepRanges_.push_back(grid->vocabIndexRangeForCells(first, last));
   }
 }
 
 // ____________________________________________________________________________
 bool GeoCellIdPrefilter::canBeSkipped(uint64_t vocabIndexBits) const {
-  if (!GeoCellGrid::isGeoVocabIndex(vocabIndexBits)) {
-    // Not a WKT literal of the geo vocabulary, so we cannot decide anything.
+  if (keepRanges_.empty() || !GeoCellGrid::isGeoVocabIndex(vocabIndexBits)) {
+    // No grid, or not a WKT literal of the geo vocabulary, so we cannot
+    // decide anything.
     return false;
   }
   // Find the first keep-range that ends after the index; the index is kept
@@ -200,6 +212,27 @@ bool GeoCellIdPrefilter::canBeSkipped(uint64_t vocabIndexBits) const {
   auto it = ql::ranges::upper_bound(keepRanges_, vocabIndexBits, {},
                                     &std::pair<uint64_t, uint64_t>::second);
   return it == keepRanges_.end() || vocabIndexBits < it->first;
+}
+
+// ____________________________________________________________________________
+bool GeoCellIdPrefilter::canBeSkipped(ValueId id) const {
+  switch (id.getDatatype()) {
+    case Datatype::VocabIndex:
+      return canBeSkipped(id.getVocabIndex().get());
+    case Datatype::GeoPoint: {
+      // The coordinates are quantized when encoded into the ID (see
+      // `GeoPoint::toBitRepresentation`), so allow one quantization step of
+      // slack in each direction.
+      constexpr double eps = 360.0 / GeoPoint::maxCoordinateEncoded;
+      auto point = id.getGeoPoint();
+      return point.getLat() < rectangle_.minLat_ - eps ||
+             point.getLat() > rectangle_.maxLat_ + eps ||
+             point.getLng() < rectangle_.minLng_ - eps ||
+             point.getLng() > rectangle_.maxLng_ + eps;
+    }
+    default:
+      return false;
+  }
 }
 
 }  // namespace ad_utility
