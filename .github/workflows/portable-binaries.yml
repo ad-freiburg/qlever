@@ -95,7 +95,11 @@ jobs:
           pattern: qlever-binaries-linux-*
           path: dist
 
-      - name: Move the tag, update the release notes, and replace the assets
+      # The three updates cannot be one atomic operation, so the assets come
+      # first and the tag last: if a step fails, the tag still points to the
+      # commit whose notes and assets the release had before, and the next
+      # successful build of `master` replaces everything anyway.
+      - name: Replace the assets, update the release notes, and move the tag
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -103,17 +107,17 @@ jobs:
             (cd "dist/qlever-binaries-linux-$arch" \
               && zip "../qlever-binaries-linux-$arch.zip" qlever-index qlever-server)
           done
-          git push --force origin "$GITHUB_SHA:refs/tags/latest-master"
           notes="Portable Linux binaries (x86_64 and arm64, statically linked \
           except for glibc) of the latest successfully built commit on \`master\`: \
-          $GITHUB_SHA ($(git log -1 --format=%s)), built $(date -u +'%Y-%m-%d %H:%M UTC'). \
+          $GITHUB_SHA ($(git log -1 --format=%s)), published $(date -u +'%Y-%m-%d %H:%M UTC'). \
           This pre-release is replaced by every successful build of \`master\`. \
           For a stable download, use one of the versioned releases."
           if gh release view latest-master > /dev/null 2>&1; then
+            gh release upload latest-master dist/*.zip --clobber
             gh release edit latest-master --title "Latest master build" \
               --notes "$notes" --prerelease --latest=false
           else
-            gh release create latest-master --title "Latest master build" \
-              --notes "$notes" --prerelease --latest=false
+            gh release create latest-master dist/*.zip --target "$GITHUB_SHA" \
+              --title "Latest master build" --notes "$notes" --prerelease --latest=false
           fi
-          gh release upload latest-master dist/*.zip --clobber
+          git push --force origin "$GITHUB_SHA:refs/tags/latest-master"
