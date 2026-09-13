@@ -582,7 +582,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
   auto& plan = *ql::ranges::min_element(
       candidates, {}, [](const auto& tree) { return tree->getCostEstimate(); });
 
-  copyPayloadColumnsToPlan(op, plan, leftCol, rightCol);
+  computePayloadColumnOffsets(op, plan, leftCol, rightCol);
   // Since we also put the side column(s) and graph variables in the result,
   // we only have to add the amount of new (payload) columns to the resulting
   // output table's width.
@@ -604,10 +604,9 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
 }
 
 // _____________________________________________________________________________
-void TransitivePathBase::copyPayloadColumnsToPlan(
+void TransitivePathBase::computePayloadColumnOffsets(
     auto& op, auto& plan, std::optional<size_t> leftCol,
     std::optional<size_t> rightCol) const {
-  // Copy the payload columns to the plan.
   // Note: The `variable` in the following structured binding is `const`, even
   // if we bind by value. We deliberately make one unnecessary copy of the
   // `variable` to keep the code simpler.
@@ -616,9 +615,7 @@ void TransitivePathBase::copyPayloadColumnsToPlan(
     // Do not add the actual joining columns as payload columns.
     if ((leftCol.has_value() && columnIndex == leftCol.value()) ||
         (rightCol.has_value() && columnIndex == rightCol.value()) ||
-        variable == graphVariable_ ||
-        (leftCol.has_value() && rightCol.has_value() &&
-         leftCol.value() == rightCol.value())) {
+        (graphVariable_.has_value() && variable == graphVariable_)) {
       continue;
     }
 
@@ -627,24 +624,22 @@ void TransitivePathBase::copyPayloadColumnsToPlan(
     // right) always come first, while they can be in any order in the input
     // table. Hence, we need to shift indices here.
     auto singleColBoundIndexShift = [](size_t columnIndex, size_t col) {
-      AD_CORRECTNESS_CHECK(col != columnIndex);
-      return col < columnIndex ? 1 : 2;
+      return 1 + (col < columnIndex);
     };
     auto bothColsBoundIndexShift = [](size_t columnIndex, size_t colL,
                                       size_t colR) {
-      AD_CORRECTNESS_CHECK(colL != columnIndex && colR != columnIndex);
-      auto leftOrMiddle = columnIndex < colL ? 2 : 1;
-      return columnIndex < colR ? leftOrMiddle : 0;
+      auto [lowerCol, higherCol] = std::minmax(colL, colR);
+      size_t leftOrMiddle = 1 + (columnIndex < lowerCol);
+      return columnIndex < higherCol ? leftOrMiddle : 0;
     };
     if (!leftCol.has_value() || !rightCol.has_value()) {
       // Single side is bound case.
       columnIndexWithType.columnIndex_ += singleColBoundIndexShift(
-          columnIndex, leftCol.has_value() ? *leftCol : *rightCol);
+          columnIndex, (leftCol.has_value() ? leftCol : rightCol).value());
     } else {
       // Both sides bound, left side comes first in input table.
       columnIndexWithType.columnIndex_ += bothColsBoundIndexShift(
-          columnIndex, leftCol < rightCol ? *leftCol : *rightCol,
-          leftCol < rightCol ? *rightCol : *leftCol);
+          columnIndex, leftCol.value(), rightCol.value());
     }
 
     // When we have a graph variable, we write it last, so we have to

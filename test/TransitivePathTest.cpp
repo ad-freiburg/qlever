@@ -878,6 +878,56 @@ TEST_P(TransitivePathTest, bothBoundToVar) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVarFlippedOrder) {
+  // Test that the binding (index shifting therein) also works if the target
+  // column is located before the start column in the `opTable`.
+  auto sub = makeIdTableFromVector({
+      {0, 5},
+      {1, 2},
+      {1, 4},
+      {4, 3},
+      {4, 4},
+  });
+
+  auto opTable = makeIdTableFromVector({
+      {10, 2, 30, 0, 20},
+      {11, 3, 31, 1, 21},
+      {12, 3, 32, 2, 23},
+      {13, 4, 33, 4, 24},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {1, 3, 11, 31, 21},
+      {4, 4, 13, 33, 24},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+
+  auto testCaseFunc = [&](auto tableVariant, bool forceFullyMaterialized) {
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        std::move(tableVariant), 3, 1,
+        {
+            Variable{"?side1"},
+            Variable{"?target"},
+            Variable{"?side3"},
+            Variable{"?start"},
+            Variable{"?side2"},
+        },
+        left, right, 1, std::numeric_limits<size_t>::max(),
+        forceFullyMaterialized);
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  };
+
+  runTestWithForcedSideTableScenarios(testCaseFunc, opTable.clone());
+
+  runTestWithForcedSideTableScenarios(testCaseFunc, std::move(opTable));
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, amountOfPayloadColumnsExceedsStaticLimit) {
   // This tests the specific behaviour of the code when there are more payload
   // columns given as defined in `DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE`.

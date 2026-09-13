@@ -37,7 +37,7 @@ struct TableColumnWithVocab {
                        LocalVocab vocab, ql::span<const Id> targetNodes = {})
       : payload_{std::move(payload)},
         startNodes_{std::move(nodes)},
-        targetNodes_{std::move(targetNodes)},
+        targetNodes_{targetNodes},
         vocab_{std::move(vocab)} {}
 
   // Return a range substituting undefined values with all corresponding values
