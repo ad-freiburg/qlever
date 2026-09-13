@@ -19,6 +19,7 @@
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
+#include "engine/EmptyPath.h"
 #include "engine/ExistsJoin.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/Filter.h"
@@ -319,6 +320,17 @@ constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<::OptionalJoin>;
 constexpr auto NeutralOptional = MatchTypeAndOrderedChildren<::NeutralOptional>;
 
 constexpr auto Minus = MatchTypeAndOrderedChildren<::Minus>;
+
+// Match an `EmptyPath` operation with the given `variable`, the given optional
+// `graphVariable` and the given (optional) child.
+inline auto EmptyPath = [](const Variable& variable,
+                           const std::optional<Variable>& graphVariable,
+                           const auto&... childMatchers) -> QetMatcher {
+  return RootOperation<::EmptyPath>(
+      AllOf(children(childMatchers...),
+            AD_PROPERTY(::EmptyPath, variable, Eq(variable)),
+            AD_PROPERTY(::EmptyPath, graphVariable, Eq(graphVariable))));
+};
 
 // Return a matcher that matches a query execution tree that consists of
 // multiple JOIN operations that join the `children`. The `INTERNAL SORT BY`
@@ -626,8 +638,8 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`
 template <typename QueryPlannerClass = QueryPlanner>
-inline QueryExecutionTree parseAndPlan(std::string query,
-                                       QueryExecutionContext* qec) {
+inline std::shared_ptr<QueryExecutionTree> parseAndPlan(
+    std::string query, QueryExecutionContext* qec) {
   ParsedQuery pq = parseQuery(std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
   // a queryExecutionContext.
@@ -635,7 +647,7 @@ inline QueryExecutionTree parseAndPlan(std::string query,
       QueryPlannerClass{qec,
                         std::make_shared<ad_utility::CancellationHandle<>>()}
           .createExecutionTree(pq);
-  tree.isRoot() = true;
+  tree->isRoot() = true;
   return tree;
 }
 
@@ -665,9 +677,9 @@ void expectWithGivenBudget(std::string query, MatcherT matcher,
   QueryExecutionContext* qec =
       optQec.has_value() ? *optQec : ad_utility::testing::getQec();
   auto qet = parseAndPlan<QueryPlannerClass>(std::move(query), qec);
-  qet.getRootOperation()->createRuntimeInfoFromEstimates(
-      qet.getRootOperation()->getRuntimeInfoPointer());
-  EXPECT_THAT(qet, matcher);
+  qet->getRootOperation()->createRuntimeInfoFromEstimates(
+      qet->getRootOperation()->getRuntimeInfoPointer());
+  EXPECT_THAT(*qet, matcher);
 }
 
 // Same as `expectWithGivenBudget` but allows multiple budgets to be tested.

@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 
+#include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./ValuesForTesting.h"
@@ -303,4 +304,18 @@ TEST(QueryExecutionTree,
                             ->getRootOperation();
   EXPECT_TRUE(std::dynamic_pointer_cast<IndexScan>(childOperation));
   EXPECT_EQ(childOperation->getLimitOffset(), limitOffset);
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, constructorRequiresQecAndRootOperation) {
+  auto* qec = getQec();
+  auto operation = std::make_shared<ValuesForTesting>(
+      qec, makeIdTableFromVector({{3}}),
+      std::vector<std::optional<Variable>>{Variable{"?x"}});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      QueryExecutionTree(nullptr, operation),
+      ::testing::HasSubstr("Assertion `qec_ != nullptr` failed."));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      QueryExecutionTree(qec, nullptr),
+      ::testing::HasSubstr("Assertion `rootOperation_ != nullptr` failed."));
 }

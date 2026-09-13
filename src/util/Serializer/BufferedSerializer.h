@@ -11,7 +11,9 @@
 #ifndef QLEVER_SRC_UTIL_SERIALIZER_BUFFEREDSERIALIZER_H
 #define QLEVER_SRC_UTIL_SERIALIZER_BUFFEREDSERIALIZER_H
 
+#include <cstdint>
 #include <optional>
+#include <type_traits>
 #include <vector>
 
 #include "backports/span.h"
@@ -124,6 +126,47 @@ CPP_template(typename UnderlyingSerializer,
     UnderlyingSerializer serializer = std::move(underlyingSerializer_.value());
     underlyingSerializer_.reset();
     return serializer;
+  }
+
+  // Return the position at which the next serialized byte will end up in the
+  // underlying serializer. This includes the bytes that are still sitting in
+  // the buffer.
+  //
+  // NOTE: This is only meaningful if the blocks arrive at the underlying
+  // serializer unchanged, which is the case for the
+  // `PassthroughBlockProcessor`, but for example not for the
+  // `CompressingBlockProcessor` (see `CompressedSerializer.h`), where a
+  // position in the buffered stream bears no relation to a position in the
+  // underlying serializer.
+  [[nodiscard]] uint64_t getSerializationPosition() const {
+    static_assert(
+        std::is_same_v<BlockProcessor, PassthroughBlockProcessor>,
+        "`getSerializationPosition` is only supported by a "
+        "`BufferedWriteSerializer` that forwards its blocks unchanged");
+    AD_CORRECTNESS_CHECK(underlyingSerializer_.has_value());
+    return underlyingSerializer_.value().getSerializationPosition() +
+           buffer_.size();
+  }
+
+  // Overload of `serializeAtPosition` (see `Serializer.h`) for a
+  // `BufferedWriteSerializer`. First flush the buffer, such that the
+  // positions can then be handled entirely by the underlying serializer.
+  //
+  // NOTE: This is a hidden friend (and hence only found via ADL) because it
+  // needs access to the buffer and to the underlying serializer, neither of
+  // which is part of the public interface of this class. The same restriction
+  // as for `getSerializationPosition` above applies.
+  template <typename T>
+  friend void serializeAtPosition(BufferedWriteSerializer& serializer,
+                                  uint64_t position, const T& element) {
+    static_assert(
+        std::is_same_v<BlockProcessor, PassthroughBlockProcessor>,
+        "`serializeAtPosition` is only supported by a "
+        "`BufferedWriteSerializer` that forwards its blocks unchanged");
+    serializer.flushBlock();
+    AD_CORRECTNESS_CHECK(serializer.underlyingSerializer_.has_value());
+    serializeAtPosition(serializer.underlyingSerializer_.value(), position,
+                        element);
   }
 
  private:

@@ -71,7 +71,7 @@ SpatialJoin::SpatialJoin(
     AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());
 
     auto key = config_.rightCacheName_.value();
-    childRight_ = std::make_shared<QueryExecutionTree>(
+    childRight_ = qec->makeShared<QueryExecutionTree>(
         qec, qec->namedResultCache().getOperation(key, qec));
 
     // Early check that the query was pinned together with a geometry index
@@ -104,13 +104,12 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     const Variable& varOfChild) const {
   std::shared_ptr<SpatialJoin> sj;
   if (varOfChild == config_.left_) {
-    sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                       std::move(child), childRight_,
-                                       substitutesFilterOp_);
+    sj = makeShared<SpatialJoin>(getExecutionContext(), config_,
+                                 std::move(child), childRight_,
+                                 substitutesFilterOp_);
   } else if (varOfChild == config_.right_) {
-    sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                       childLeft_, std::move(child),
-                                       substitutesFilterOp_);
+    sj = makeShared<SpatialJoin>(getExecutionContext(), config_, childLeft_,
+                                 std::move(child), substitutesFilterOp_);
   } else {
     AD_THROW("variable does not match");
   }
@@ -151,19 +150,11 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
 
 // ____________________________________________________________________________
 std::optional<De9imFilterString> SpatialJoin::getDe9imFilter() const {
-  auto visitor = [](const auto& config) -> std::optional<De9imFilterString> {
-    using T = std::decay_t<decltype(config)>;
-    if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
-      return config.de9imFilter_;
-    } else {
-      return std::nullopt;
-    }
-  };
-  return std::visit(visitor, config_.task_);
+  return config_.getDe9imFilter();
 }
 
 // ____________________________________________________________________________
-std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
+std::vector<QueryExecutionTree*> SpatialJoin::getChildrenImpl() const {
   std::vector<QueryExecutionTree*> result;
   auto addChild = [&](std::shared_ptr<QueryExecutionTree> child) {
     if (child) {
@@ -483,8 +474,7 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
 // ____________________________________________________________________________
 SpatialJoin::SwappedJoinSides SpatialJoin::getSwappedJoinSides() const {
   // Swap sides for within spatial join type computed using contains
-  auto swapSides = config_.joinType_.has_value() &&
-                   config_.joinType_.value() == SpatialJoinType::WITHIN;
+  auto swapSides = config_.getJoinType() == SpatialJoinType::WITHIN;
   return swapSides ? SwappedJoinSides{childRight_, childLeft_, config_.right_,
                                       config_.left_}
                    : SwappedJoinSides{childLeft_, childRight_, config_.left_,
@@ -652,7 +642,8 @@ std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
   return std::make_unique<SpatialJoin>(
       _executionContext, config_,
       childLeft_ ? std::optional{childLeft_->clone()} : std::nullopt,
-      childRight_ ? std::optional{childRight_->clone()} : std::nullopt);
+      childRight_ ? std::optional{childRight_->clone()} : std::nullopt,
+      substitutesFilterOp_);
 }
 
 // _____________________________________________________________________________
@@ -664,7 +655,8 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
         auto& left = newChildren.at(0);
         auto& right = newChildren.at(1);
         return ad_utility::makeExecutionTree<SpatialJoin>(
-            _executionContext, config_, std::move(left), std::move(right));
+            _executionContext, config_, std::move(left), std::move(right),
+            substitutesFilterOp_);
       });
 }
 
@@ -748,8 +740,9 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
   if (!left.has_value() && !right.has_value()) {
     return std::nullopt;
   }
-  return std::make_shared<SpatialJoin>(
+  return makeShared<SpatialJoin>(
       _executionContext, config_,
       // Potentially unchanged child retrieved with `value_or`.
-      left.value_or(childLeft_), right.value_or(childRight_));
+      left.value_or(childLeft_), right.value_or(childRight_),
+      substitutesFilterOp_);
 }

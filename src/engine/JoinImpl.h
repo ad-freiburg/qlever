@@ -71,10 +71,12 @@ class JoinImpl : public Operation {
 
   float getMultiplicity(size_t col) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {left_.get(), right_.get()};
   }
 
+ public:
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
 

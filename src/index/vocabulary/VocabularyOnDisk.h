@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
@@ -73,6 +74,12 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     // Finish the writing. After this no more calls to `operator()` are allowed.
     void finishImpl() override;
   };
+
+  // The words are stored under the base filename itself, the IDs and offsets
+  // in an additional file (see `offsetSuffix_`).
+  static FileSuffixes fileSuffixes() {
+    return {"", std::string{offsetSuffix_}};
+  }
 
   // Open the vocabulary from file. It must have been previously written to
   // this file via a `WordWriter`.

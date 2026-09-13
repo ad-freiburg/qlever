@@ -18,6 +18,21 @@
 
 namespace ad_utility {
 
+// True iff all the elements of the given `array` are distinct. Note that this
+// needs a quadratic number of comparisons, which is fine for the small
+// compile-time arrays that this is intended for.
+template <typename T, size_t N>
+constexpr bool allDistinct(const std::array<T, N>& array) {
+  for (size_t i = 0; i < N; ++i) {
+    for (size_t j = i + 1; j < N; ++j) {
+      if (array[i] == array[j]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 // Compute `base ^ exponent` where `^` denotes exponentiation. This is consteval
 // because for all runtime calls, a better optimized algorithm from the standard
 // library should be chosen.

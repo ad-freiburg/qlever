@@ -100,14 +100,13 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
                      " on both sides. Is this what you intended?"));
   }
 
-  auto joinType = call.function_;
   auto left = resolveGeoOperand(call.left_, qec, generateUniqueVarName);
   auto right = resolveGeoOperand(call.right_, qec, generateUniqueVarName);
-  return std::make_shared<SpatialJoin>(
+  return qec->makeShared<SpatialJoin>(
       qec,
       SpatialJoinConfiguration{
           std::move(config), std::move(left.variable_),
           std::move(right.variable_), std::nullopt, PayloadVariables::all(),
-          SpatialJoinAlgorithm::LIBSPATIALJOIN, joinType, std::nullopt},
+          SpatialJoinAlgorithm::LIBSPATIALJOIN, std::nullopt},
       std::move(left.child_), std::move(right.child_), true);
 }
