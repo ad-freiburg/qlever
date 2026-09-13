@@ -812,20 +812,18 @@ auto IndexImpl::convertPartialToGlobalIds(
   // `NUM_PARALLEL_ID_CONVERSION_WORKERS`, and additionally such that the
   // triples of all the workers together fit into the memory limit of the index
   // build (the ID maps are much smaller than the triples and are not accounted
-  // for). There is always at least one worker.
+  // for). There is always at least one worker. NOTE: For the usual batch sizes
+  // (5 to 10 million triples) and the default memory limit, the memory bound
+  // is far above `NUM_PARALLEL_ID_CONVERSION_WORKERS` and hence irrelevant.
   std::atomic<size_t> nextPartialVocabIdx = 0;
-  size_t triplesBytesPerWorker = std::max<size_t>(
-      1, numTriplesPerBatch_ * NumColumnsIndexBuilding * sizeof(Id));
-  size_t numWorkersThatFitInMemory = std::max<size_t>(
-      1, memoryLimitIndexBuilding().getBytes() / triplesBytesPerWorker);
+  size_t triplesBytesPerWorker =
+      numTriplesPerBatch_ * NumColumnsIndexBuilding * sizeof(Id);
+  size_t numWorkersThatFitInMemory =
+      std::max<size_t>(1, memoryLimitIndexBuilding().getBytes() /
+                              std::max<size_t>(1, triplesBytesPerWorker));
   size_t numWorkers =
       std::min({data.numPartialVocabularies_,
                 NUM_PARALLEL_ID_CONVERSION_WORKERS, numWorkersThatFitInMemory});
-  if (numWorkersThatFitInMemory < NUM_PARALLEL_ID_CONVERSION_WORKERS) {
-    AD_LOG_DEBUG << "Converting the IDs with " << numWorkers
-                 << " workers instead of " << NUM_PARALLEL_ID_CONVERSION_WORKERS
-                 << " because of the memory limit" << std::endl;
-  }
   auto tasks =
       ad_utility::integerRange(numWorkers) |
       ql::views::transform([&convertTriplesOfPartialVocabulary,
