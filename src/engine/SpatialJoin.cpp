@@ -636,28 +636,31 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   std::tie(childLeft, childRight) = applyRuntimeGeoBlockPrefilter(
       childLeft, childRight, joinVarLeft, joinVarRight, timeBlockPrefilter);
 
-  // If a side was replaced by a tree with prefiltered blocks, wire the
-  // replacement's runtime information into the tree in place of the
-  // original's, which would otherwise be shown as "not yet started" although
-  // the replacement does the actual work.
-  auto relinkRuntimeInfo =
+  // If a side was replaced by a tree with prefiltered blocks, the replacement
+  // does the actual work, but the parent's runtime information keeps pointing
+  // to the original's object (`Operation::updateRuntimeInformationOnSuccess`
+  // re-links the children from `getChildren()`). So the replacement gets its
+  // own runtime information for the computation, which is copied into the
+  // original's object afterwards (see `adoptRuntimeInfo` below); otherwise the
+  // side would be shown as "not yet started".
+  auto prepareRuntimeInfo =
       [this](const std::shared_ptr<QueryExecutionTree>& original,
              const std::shared_ptr<QueryExecutionTree>& replacement) {
-        if (original == replacement) {
-          return;
-        }
-        auto originalRti =
-            original->getRootOperation()->getRuntimeInfoPointer();
-        auto* replacementOp = replacement->getRootOperation().get();
-        replacementOp->createRuntimeInfoFromEstimates(rootRuntimeInfo());
-        for (auto& childRti : runtimeInfo().children_) {
-          if (childRti == originalRti) {
-            childRti = replacementOp->getRuntimeInfoPointer();
-          }
+        if (original != replacement) {
+          replacement->getRootOperation()->createRuntimeInfoFromEstimates(
+              rootRuntimeInfo());
         }
       };
-  relinkRuntimeInfo(originalLeft, childLeft);
-  relinkRuntimeInfo(originalRight, childRight);
+  prepareRuntimeInfo(originalLeft, childLeft);
+  prepareRuntimeInfo(originalRight, childRight);
+  auto adoptRuntimeInfo =
+      [](const std::shared_ptr<QueryExecutionTree>& original,
+         const std::shared_ptr<QueryExecutionTree>& replacement) {
+        if (original != replacement) {
+          original->getRootOperation()->runtimeInfo() =
+              replacement->getRootOperation()->runtimeInfo();
+        }
+      };
 
   // If a side contains a block-prefiltered scan (the prefilter may have been
   // forwarded through sorts and joins), remember the unprefiltered row total
@@ -685,6 +688,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   // Input tables.
   auto [idTableLeft, resultLeft] = getIdTable(childLeft);
   auto [idTableRight, resultRight] = getIdTable(childRight);
+  adoptRuntimeInfo(originalLeft, childLeft);
+  adoptRuntimeInfo(originalRight, childRight);
 
   // Input table columns for the join.
   ColumnIndex leftJoinCol = childLeft->getVariableColumn(joinVarLeft);
