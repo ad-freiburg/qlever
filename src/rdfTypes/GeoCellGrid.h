@@ -12,6 +12,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -335,24 +336,34 @@ class GeoCellGrid {
                                 CellRanges& ranges) const;
 };
 
-// A prefilter for the canonical spatial join situation: given the (padded)
-// query rectangle, it decides from a WKT literal's vocabulary index alone -
-// two bit operations and a binary search over a handful of ranges, no disk
-// access - whether the literal can be skipped because its grid cell does not
-// intersect the rectangle. Conservative: literals without cell information
-// and indices outside the WKT region are never skipped.
+// Row-level counterpart of the block prefilter: decide for a single `ValueId`
+// - without any disk access - whether the geometry it stands for is certainly
+// outside a query rectangle. For a WKT literal of the geo vocabulary this is
+// a bit extraction and a binary search over a handful of cell ranges; for a
+// `GeoPoint` it is a comparison of the coordinates encoded in the ID.
+// Conservative: literals without cell information, indices outside the WKT
+// region, and all other datatypes are never skipped.
 class GeoCellIdPrefilter {
   // Half-open, ascending ranges of vocabulary index payloads that must be
   // kept (covering cells plus the "no information" cells).
   std::vector<std::pair<uint64_t, uint64_t>> keepRanges_;
+  // The query rectangle, for the `GeoPoint` test.
+  GeoRectangle rectangle_;
 
  public:
   GeoCellIdPrefilter(const GeoCellGrid& grid, double minLng, double minLat,
                      double maxLng, double maxLat);
+  // Without a grid, only the `GeoPoint` test can decide anything.
+  GeoCellIdPrefilter(const std::optional<GeoCellGrid>& grid,
+                     const GeoRectangle& rectangle);
 
   // Return true iff the word with the given vocabulary index payload is
   // certainly outside the query rectangle.
   bool canBeSkipped(uint64_t vocabIndexBits) const;
+
+  // Return true iff the geometry with the given ID is certainly outside the
+  // query rectangle (see above).
+  bool canBeSkipped(ValueId id) const;
 };
 
 }  // namespace ad_utility

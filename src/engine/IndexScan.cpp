@@ -16,6 +16,7 @@
 #include <string>
 #include <utility>
 
+#include "engine/GeoRectangleRowFilter.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -306,8 +307,20 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
                                 colIndex),
             scanSpecAndBlocks_.blockMetadata_);
 
-    return makeCopyWithPrefilteredScanSpecAndBlocks(
+    auto copy = makeCopyWithPrefilteredScanSpecAndBlocks(
         {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
+    // A geo rectangle can only prune whole blocks here (and for `GeoPoint`s
+    // only by latitude), so also drop the remaining rows outside the
+    // rectangle one by one, before any operation above the scan sees them.
+    if (const auto* geoRectangle =
+            dynamic_cast<const prefilterExpressions::GeoRectangleExpression*>(
+                it->first.get())) {
+      auto geometryColumn = copy->getVariableColumn(sortedVar);
+      return ad_utility::makeExecutionTree<GeoRectangleRowFilter>(
+          getExecutionContext(), std::move(copy), geometryColumn,
+          geoRectangle->rectangle());
+    }
+    return copy;
   }
 
   // If no prefilter applies, return `std::nullopt`.

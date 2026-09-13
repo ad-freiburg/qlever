@@ -14,6 +14,7 @@
 #include "QueryPlannerTestHelpers.h"
 #include "QueryRewriteUtilTestHelpers.h"
 #include "absl/cleanup/cleanup.h"
+#include "engine/GeoRectangleRowFilter.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
@@ -362,6 +363,61 @@ TEST_P(GeoRectanglePrefilterSchemeTest, spatialJoinPushesBlockPrefilter) {
   EXPECT_EQ(result.idTableView().numRows(), 3u);
   auto resultPso = sjPso->computeResultOnlyForTesting();
   EXPECT_EQ(resultPso.idTableView().numRows(), 3u);
+}
+
+// The geo rectangle prefilter on an `IndexScan` prunes whole blocks and then
+// drops the remaining rows outside the rectangle one by one (in particular
+// points, which the block prefilter can only restrict by latitude), so that
+// the operations above the scan only see rows that may match.
+TEST_P(GeoRectanglePrefilterSchemeTest, rowFilterOnPrefilteredScan) {
+  auto* qec = geoQec(2, GetParam());
+  Variable wktVar{"?wkt"};
+  SparqlTripleSimple triple{
+      TripleComponent{Variable{"?s"}},
+      TripleComponent{TripleComponent::Iri::fromIriref("<hasGeom>")},
+      TripleComponent{wktVar}};
+  auto scan =
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
+
+  // A rectangle around the cell-10 geometries and the nearby point.
+  std::vector<Operation::PrefilterVariablePair> pairs;
+  pairs.emplace_back(std::make_unique<GeoRectangleExpression>(
+                         GeoRectangle{9.5, 9.5, 13.5, 10.5}),
+                     wktVar);
+  auto prefiltered =
+      scan->getRootOperation()
+          ->getUpdatedQueryExecutionTreeWithPrefilterApplied(pairs);
+  ASSERT_TRUE(prefiltered.has_value());
+  auto* rowFilter = dynamic_cast<GeoRectangleRowFilter*>(
+      prefiltered.value()->getRootOperation().get());
+  ASSERT_NE(rowFilter, nullptr);
+  EXPECT_FALSE(rowFilter->canResultBeCached());
+  EXPECT_EQ(rowFilter->getResultWidth(), scan->getResultWidth());
+  EXPECT_EQ(rowFilter->getResultSortedOn(), scan->resultSortedOn());
+
+  // The far-away points (all in one latitude band with `<pointFar>`) survive
+  // the block prefilter only if they share a block with kept rows; the row
+  // filter drops them in any case. The nearby point and the two cell-10
+  // linestrings are kept, and so is `<spanning>` (no cell information).
+  auto result = rowFilter->getResult();
+  const auto& table = result->idTableView();
+  auto wktCol = prefiltered.value()->getVariableColumn(wktVar);
+  size_t numPoints = 0;
+  for (size_t row = 0; row < table.numRows(); ++row) {
+    Id id = table(row, wktCol);
+    if (id.getDatatype() == Datatype::GeoPoint) {
+      ++numPoints;
+      EXPECT_NEAR(id.getGeoPoint().getLat(), 10.01, 0.01);
+    }
+  }
+  EXPECT_EQ(numPoints, 1u);
+  EXPECT_EQ(table.numRows(), 4u);
+  EXPECT_LT(table.numRows(), rowFilter->getChildren()
+                                 .at(0)
+                                 ->getRootOperation()
+                                 ->getResult()
+                                 ->idTableView()
+                                 .numRows());
 }
 
 // The runtime block prefilter: with a non-constant (here: two-row) small

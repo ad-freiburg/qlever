@@ -303,6 +303,8 @@ class GeoRectangleExpression : public PrefilterExpression {
   explicit GeoRectangleExpression(const ad_utility::GeoRectangle& rectangle)
       : rectangle_(rectangle) {}
 
+  const ad_utility::GeoRectangle& rectangle() const { return rectangle_; }
+
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
   std::unique_ptr<PrefilterExpression> clone() const override;
