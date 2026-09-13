@@ -14,6 +14,7 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/DistinctCol0Ids.h"
 #include "index/GraphComputation.h"
 #include "index/IdTableUtils.h"
 #include "index/LocatedTriples.h"
@@ -987,6 +988,107 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   return lower;
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// ____________________________________________________________________________
+cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
+CompressedRelationReader::getDistinctCol0Ids(
+    ScanSpecAndBlocks scanSpecAndBlocks, bool addGraphColumn,
+    std::optional<std::vector<Id>> idFilter,
+    CancellationHandle cancellationHandle,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+  using namespace distinctCol0Ids;
+  AD_CONTRACT_CHECK(cancellationHandle != nullptr);
+  AD_CONTRACT_CHECK(scanSpecAndBlocks.scanSpec_.firstFreeColIndex() == 0,
+                    "`getDistinctCol0Ids` only supports full scans.");
+  AD_EXPENSIVE_CHECK(!idFilter.has_value() ||
+                     ql::ranges::is_sorted(idFilter.value()));
+
+  ColumnIndices additionalColumns =
+      addGraphColumn ? ColumnIndices{ADDITIONAL_COLUMN_GRAPH_ID}
+                     : ColumnIndices{};
+  // Set up the same scan configuration that the actual scan below will use.
+  // Out of that configuration we only need the `graphFilter_`, which knows
+  // which blocks can be skipped entirely and which graphs are allowed; the
+  // columns that `getScanConfig` also computes are only relevant for the scan
+  // itself, which computes them again for its own blocks.
+  auto scanConfig = getScanConfig(scanSpecAndBlocks.scanSpec_,
+                                  additionalColumns, locatedTriplesPerBlock);
+  auto [blocksToRead, fromMetadata] =
+      BlockSelector{scanConfig.graphFilter_, addGraphColumn, idFilter,
+                    locatedTriplesPerBlock, allocator_}
+          .select(scanSpecAndBlocks);
+
+  // Let the inner scan write its statistics (most importantly the number of
+  // blocks it actually read) directly into our own details, such that the
+  // consumer of this generator sees them.
+  auto& details = co_await cppcoro::getDetails;
+  details.numBlocksAll_ = scanSpecAndBlocks.sizeBlockMetadata_;
+  auto scan = lazyScan(scanSpecAndBlocks.scanSpec_, std::move(blocksToRead),
+                       std::move(additionalColumns), cancellationHandle,
+                       locatedTriplesPerBlock, {});
+  scan.setDetailsPointer(&details);
+
+  // The IDs are computed by merging two ascending sources: the IDs that are
+  // known from the block metadata alone, and the IDs from the blocks that had
+  // to be read. We process one ID at a time and collect its graph IDs (if
+  // requested) from both sources before appending it to the result.
+  IdCursor fromMetadataCursor{
+      std::move(fromMetadata),
+      graphColumnIfRequested(addGraphColumn, graphColumnInResult)};
+  IdCursor fromBlocksCursor{
+      [&scan]() { return scan.get(); },
+      graphColumnIfRequested(addGraphColumn, graphColumnInBlock)};
+  RequestedIdsCursor requestedIds{idFilter};
+
+  GraphSet graphs{allocator_};
+  ResultBuilder result{addGraphColumn, idFilter, allocator_};
+  for (;;) {
+    cancellationHandle->throwIfCancelled();
+    auto id = smallerId(fromMetadataCursor.peek(), fromBlocksCursor.peek());
+    if (!id.has_value()) {
+      break;
+    }
+    graphs.clear();
+    fromMetadataCursor.consumeId(id.value(), graphs);
+    fromBlocksCursor.consumeId(id.value(), graphs);
+    // Blocks that had to be read can contain IDs that weren't requested.
+    if (requestedIds.advanceTo(id.value())) {
+      result.addId(id.value(), graphs);
+    }
+    if (result.chunkIsFull()) {
+      co_yield result.extractChunk();
+    }
+  }
+  if (!result.chunkIsEmpty()) {
+    co_yield result.extractChunk();
+  }
+}
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+// ____________________________________________________________________________
+bool CompressedRelationReader::columnValuesAreKnownFromMetadata(
+    const CompressedBlockMetadata& block, size_t numColumns,
+    const LocatedTriplesPerBlock& locatedTriples) {
+  if (block.containsInconsistentTriples(numColumns)) {
+    return false;
+  }
+  // Each of the delta triples can delete at most one of the block's triples, so
+  // if there are fewer of them than the block has rows, then at least one of
+  // its triples remains. Note that `numTriples` only returns an upper bound
+  // (which is on the safe side here), and that the block that purely consists
+  // of delta triples has `numRows_ == 0` and is thus handled correctly, too.
+  return locatedTriples.numTriples(block.blockIndex_).numDeleted_ <
+         block.numRows_;
+}
+
+// ____________________________________________________________________________
+bool CompressedRelationReader::contentsAreKnownFromMetadata(
+    const CompressedBlockMetadata& block, size_t numColumns,
+    const LocatedTriplesPerBlock& locatedTriples) {
+  return !block.containsInconsistentTriples(numColumns) &&
+         !locatedTriples.containsTriples(block.blockIndex_);
+}
+
 // ____________________________________________________________________________
 IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
     ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
@@ -1055,12 +1157,10 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
   // contain more than one different `colId`. For the others, we can determine
   // the count from the metadata.
   for (const auto& [i, blockMetadata] : ranges::views::enumerate(blocks)) {
-    // The `numRows_` metadata shortcut is safe iff all rows of the block
-    // agree on the grouped column AND the block has no delta triples. The
-    // column uniformity is equivalent to `firstTriple_` and `lastTriple_`
-    // agreeing on the first `columnIndex + 1` columns.
-    if (!blockMetadata.containsInconsistentTriples(columnIndex + 1) &&
-        !locatedTriplesPerBlock.containsTriples(blockMetadata.blockIndex_)) {
+    // The `numRows_` metadata shortcut is safe iff all rows of the block agree
+    // on the grouped column AND the block has no delta triples.
+    if (contentsAreKnownFromMetadata(blockMetadata, columnIndex + 1,
+                                     locatedTriplesPerBlock)) {
       // The whole block has the same `colId` and no delta triples ->
       // we get all the information from the metadata.
       Id colId = getMaskedTriple(blockMetadata.firstTriple_)[columnIndex];
@@ -1455,40 +1555,6 @@ std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
 }
 
 // _____________________________________________________________________________
-CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
-    Id col0Id, size_t numDistinctC1, const IdTable& relation) {
-  AD_CORRECTNESS_CHECK(!relation.empty());
-  size_t numRows = relation.numRows();
-  // Make sure that the blocks don't become too large: If the previously
-  // buffered small relations together with the new relations would exceed
-  // `1.5 * blocksize` then we start a new block for the current relation.
-  //
-  // NOTE: there are some unit tests that rely on this factor being `1.5`.
-  if (static_cast<double>(numRows + smallRelationsBuffer_.numRows()) >
-      static_cast<double>(blocksize()) * 1.5) {
-    writeBufferedRelationsToSingleBlock();
-  }
-  auto offsetInBlock = smallRelationsBuffer_.size();
-
-  // We have to keep track of the first and last `col0` of each block.
-  if (smallRelationsBuffer_.numRows() == 0) {
-    currentBlockFirstCol0_ = col0Id;
-  }
-  currentBlockLastCol0_ = col0Id;
-
-  smallRelationsBuffer_.resize(offsetInBlock + numRows);
-  for (size_t i = 0; i < relation.numColumns(); ++i) {
-    ql::ranges::copy(
-        relation.getColumn(i),
-        smallRelationsBuffer_.getColumn(i).begin() + offsetInBlock);
-  }
-  // Note: the multiplicity of the `col2` (where we set the dummy here) will
-  // be set later in `createPermutationPair`.
-  return {col0Id, numRows, computeMultiplicity(numRows, numDistinctC1),
-          multiplicityDummy, offsetInBlock};
-}
-
-// _____________________________________________________________________________
 CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
     size_t numDistinctC1) {
   AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ != 0);
@@ -1623,10 +1689,11 @@ auto CompressedRelationWriter::createPermutationPair(
 auto CompressedRelationWriter::createPermutation(
     WriterAndCallback writerAndCallback,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    qlever::KeyOrder permutation,
-    const PerBlockCallbacks& perBlockCallbacks) -> PermutationSingleResult {
+    qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks,
+    bool showProgressBar) -> PermutationSingleResult {
   PermutationWriter<false> permutationWriter{
-      std::move(writerAndCallback), std::move(permutation), perBlockCallbacks};
+      std::move(writerAndCallback), std::move(permutation), perBlockCallbacks,
+      showProgressBar};
   return permutationWriter.writePermutation(std::move(sortedTriples));
 }
 

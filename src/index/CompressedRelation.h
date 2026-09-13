@@ -20,6 +20,7 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
+#include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -319,9 +320,6 @@ class CompressedRelationWriter {
   using SmallBlocksCallback = std::function<void(IdTable)>;
   SmallBlocksCallback smallBlocksCallback_;
 
-  // A dummy value for multiplicities that can only later be determined.
-  static constexpr float multiplicityDummy = 42.4242f;
-
  public:
   /// Create using a filename, to which the relation data will be written.
   /// If `numWriterThreads` is set, it determines the number of threads that
@@ -378,10 +376,15 @@ class CompressedRelationWriter {
   // The `permutation` contains the column indices indicating the permutation to
   // be built (as an array, for example `[0, 1, 2]`). The `sortedTriples` must
   // be sorted by this permutation.
+  //
+  // With `showProgressBar` set to `false`, this writes no progress bar of its
+  // own. That is for callers that write several permutations and want to
+  // report the overall progress themselves.
   static PermutationSingleResult createPermutation(
       WriterAndCallback writerAndCallback,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
+      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks,
+      bool showProgressBar = true);
 
  private:
   // Internal helper for `PermutationWriter<true>` (that is, in pair mode).
@@ -494,10 +497,98 @@ class CompressedRelationWriter {
   void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id, IdTable block,
                              bool invokeCallback);
 
-  // Add a small relation that will be stored in a single block, possibly
-  // together with other small relations.
-  CompressedRelationMetadata addSmallRelation(Id col0Id, size_t numDistinctC1,
-                                              const IdTable& relation);
+  // Return the number of rows that a single block of small relations may hold
+  // at most.
+  //
+  // Note: The `blocksize()` is only a soft target which blocks may exceed in
+  // two independent ways. First, a block of small relations is filled up to
+  // the 1.5-fold of the `blocksize()` (which is exactly the capacity returned
+  // here), and it is only completed once the rows that are to be added next
+  // don't fit into it anymore, so the last relation that is added to a block
+  // may push it even beyond that capacity. Second, a block of a large relation
+  // grows beyond the `blocksize()` whenever equal triples (when disregarding
+  // the graph and the payload columns) would otherwise be split across two
+  // blocks, see `PermutationWriter::addRowsOfCurrentRelation`.
+  //
+  // NOTE: there are some unit tests that rely on the factor `3 / 2` below.
+  size_t smallRelationBlockCapacity() const { return (3 * blocksize()) / 2; }
+
+  // Return the number of rows that can still be added to the current block of
+  // small relations without starting a new block. May be zero.
+  size_t numRowsUntilSmallRelationBlockIsFull() const {
+    size_t capacity = smallRelationBlockCapacity();
+    size_t numBuffered = smallRelationsBuffer_.numRows();
+    return numBuffered >= capacity ? 0 : capacity - numBuffered;
+  }
+
+  // Add a batch of one or more small relations that will be stored in a single
+  // block, possibly together with other small relations. The rows
+  // `[beginIdx, endIdx)` of `relations` have to consist of the complete rows of
+  // those relations, in ascending order of their `col0` ID, where `firstCol0Id`
+  // and `lastCol0Id` are the `col0` IDs of the first and of the last of them.
+  // The individual relations don't have to be delimited any further, because a
+  // block of small relations only stores the first and the last `col0` ID (see
+  // `writeBufferedRelationsToSingleBlock`). The `relations` may be an
+  // arbitrary kind of `IdTable`, in particular a view. That way a range of
+  // rows of a larger table can be added directly, without materializing it in
+  // an intermediate buffer first.
+  //
+  // Note: For all current callers the `col0` IDs are stored in column 0 of
+  // `relations`, so that `firstCol0Id == relations(beginIdx, 0)` and
+  // `lastCol0Id == relations(endIdx - 1, 0)` (this is checked below). They are
+  // still passed explicitly, because the callers have them at hand anyway, and
+  // because the function otherwise doesn't depend on the layout of the
+  // arbitrary `Table`.
+  //
+  // Note: A new block is started if the complete batch doesn't fit into the
+  // current one. The resulting blocks are therefore exactly the same as if the
+  // relations of the batch were added one by one, provided that the caller has
+  // limited the batch to the number of rows reported by
+  // `numRowsUntilSmallRelationBlockIsFull` above (see
+  // `PermutationWriter::writeCompleteSmallRelations`).
+  //
+  // Note: In contrast to `finishLargeRelation` this function computes no
+  // `CompressedRelationMetadata`, because no metadata is persisted for small
+  // relations. It is instead computed lazily at query time, see
+  // `CompressedRelationReader::getMetadataForSmallRelation`.
+  template <typename Table>
+  void addSmallRelations(Id firstCol0Id, Id lastCol0Id, const Table& relations,
+                         size_t beginIdx, size_t endIdx) {
+    AD_CORRECTNESS_CHECK(beginIdx < endIdx && endIdx <= relations.numRows());
+    AD_CORRECTNESS_CHECK(firstCol0Id == relations(beginIdx, 0) &&
+                         lastCol0Id == relations(endIdx - 1, 0));
+    size_t numRows = endIdx - beginIdx;
+    // Make sure that the blocks don't become too large: If the previously
+    // buffered small relations together with the new relations would exceed
+    // the capacity of a block, then we start a new block for the batch.
+    if (numRows + smallRelationsBuffer_.numRows() >
+        smallRelationBlockCapacity()) {
+      writeBufferedRelationsToSingleBlock();
+    }
+    // We have to keep track of the first and last `col0` of each block.
+    if (smallRelationsBuffer_.numRows() == 0) {
+      currentBlockFirstCol0_ = firstCol0Id;
+    }
+    currentBlockLastCol0_ = lastCol0Id;
+
+    // Note: `insertAtEnd` appends the columns of the input contiguously, which
+    // is much faster than appending the rows one by one, because the
+    // `IdTable`s are stored column-based. Appending a whole batch of relations
+    // at once is therefore much more efficient than appending each of them
+    // separately.
+    smallRelationsBuffer_.insertAtEnd(relations, beginIdx, endIdx);
+  }
+
+  // Add a single small relation. This is the special case of
+  // `addSmallRelations` above with a batch that consists of one relation. Only
+  // the rows `[beginIdx, endIdx)` of the `relation` are added; if `endIdx` is
+  // not specified, all rows starting at `beginIdx` are added.
+  template <typename Table>
+  void addSmallRelation(Id col0Id, const Table& relation, size_t beginIdx = 0,
+                        std::optional<size_t> endIdx = std::nullopt) {
+    addSmallRelations(col0Id, col0Id, relation, beginIdx,
+                      endIdx.value_or(relation.numRows()));
+  }
 
   // Add a new block for a large relation that is to be stored in multiple
   // blocks. This function may only be called if one of the following holds:
@@ -531,7 +622,8 @@ class CompressedRelationWriter {
   friend std::pair<std::vector<CompressedBlockMetadata>,
                    std::vector<CompressedRelationMetadata>>
   compressedRelationTestWriteCompressedRelations(
-      T inputs, std::string filename, ad_utility::MemorySize blocksize);
+      T inputs, std::string filename, ad_utility::MemorySize blocksize,
+      size_t inputBlockSize);
 
   // Create a `TaskQueue` for the compression and writing of blocks. The number
   // of threads is `numThreadsOverride` if set, and otherwise determined by the
@@ -845,6 +937,71 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
  public:
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Lazily compute the distinct `col0Id`s of a full scan of the permutation
+  // that this reader reads from (none of the columns of
+  // `scanSpecAndBlocks.scanSpec_` may be fixed).
+  //
+  // If `addGraphColumn` is false, the yielded `IdTable`s have a single column
+  // that contains the distinct `col0Id`s. If it is true, they have a second
+  // column with the graph IDs, and the pairs of `col0Id` and graph ID are
+  // distinct. In both cases the yielded tables are sorted, and their
+  // concatenation is sorted and free of duplicates.
+  //
+  // If `idFilter` is specified, only `col0Id`s that are contained in it are
+  // returned. It has to be sorted in ascending order and must neither contain
+  // duplicates nor undefined IDs. Blocks that cannot contain any of the
+  // requested IDs are then not read at all.
+  //
+  // Blocks whose contribution can already be determined from their metadata
+  // alone (which is the case for almost all blocks that only contain a single
+  // `col0Id`, see `columnValuesAreKnownFromMetadata`) are never read, which
+  // makes this much cheaper than a full scan followed by a `DISTINCT`.
+  //
+  // The `LazyScanMetadata` of the returned generator is that of the inner scan
+  // over the blocks that actually had to be read, with `numBlocksAll_` set to
+  // the total number of blocks of the scan.
+  //
+  // NOTE: This reader and `locatedTriplesPerBlock` have to be kept alive until
+  // the returned generator has been fully consumed.
+  //
+  // The helper classes for the implementation live in `DistinctCol0Ids.h`.
+  cppcoro::generator<IdTable, LazyScanMetadata> getDistinctCol0Ids(
+      ScanSpecAndBlocks scanSpecAndBlocks, bool addGraphColumn,
+      std::optional<std::vector<Id>> idFilter,
+      CancellationHandle cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+#endif
+
+  // Return true iff the values of the first `numColumns` columns of all the
+  // triples of the given block are already known from its metadata alone,
+  // which is the case iff
+  // 1. All the triples of the block agree on those columns. The metadata knows
+  //    this because it stores the first and the last triple of the block,
+  //    including the delta triples that were inserted into it (see
+  //    `LocatedTriplesPerBlock::updateAugmentedMetadata`), so if those agree,
+  //    then so do all the triples in between.
+  // 2. The block still contains at least one triple. Delta triples might have
+  //    deleted all of them, but we can rule that out if there are fewer delta
+  //    triples for the block than it has rows, as each delta triple can delete
+  //    at most one of them.
+  //
+  // NOTE: The *number* of triples of the block is not known in this case, as
+  // delta triples may have deleted some of them (and inserted others). Use
+  // `contentsAreKnownFromMetadata` if you need that.
+  static bool columnValuesAreKnownFromMetadata(
+      const CompressedBlockMetadata& block, size_t numColumns,
+      const LocatedTriplesPerBlock& locatedTriples);
+
+  // Return true iff the complete contents of the given block, restricted to
+  // its first `numColumns` columns, are already known from its metadata alone,
+  // including the number of triples. In addition to
+  // `columnValuesAreKnownFromMetadata` this requires that there are no delta
+  // triples for the block at all.
+  static bool contentsAreKnownFromMetadata(
+      const CompressedBlockMetadata& block, size_t numColumns,
+      const LocatedTriplesPerBlock& locatedTriples);
+
   // Determine the distinct values and their counts for the column at
   // `columnIndex` (must be 0 or 1). Used for GROUP BY optimizations.
   IdTable getDistinctColIdsAndCounts(

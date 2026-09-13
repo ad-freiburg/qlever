@@ -279,6 +279,10 @@ class CompressedExternalIdTableWriter {
   // Like `readBlock`, but decompresses columns sequentially rather than in
   // parallel. This avoids per-block thread creation, making it suitable for
   // use inside a single persistent background thread (e.g. `runStreamAsync`).
+  //
+  // TODO<joka921> This function is only used by `getBlockStream` below, which
+  // in turn is only used by the unused `CompressedExternalIdTable`. Remove it
+  // together with that class.
   template <size_t NumCols = 0>
   IdTableStatic<NumCols> readBlockSequential(size_t blockIdx) {
     auto block = makeBlock<NumCols>(blockIdx);
@@ -294,6 +298,9 @@ class CompressedExternalIdTableWriter {
   // of the number of stored blocks. Columns are decompressed sequentially
   // within a block; the single background thread already provides concurrency
   // with the consumer.
+  //
+  // TODO<joka921> This function is only used by the unused
+  // `CompressedExternalIdTable`. Remove it together with that class.
   template <size_t N = 0>
   InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
     file_.wlock()->flush();
@@ -310,6 +317,50 @@ class CompressedExternalIdTableWriter {
         CallbackOnEndView{std::move(readBlocks), std::move(callback)}, 2);
   }
 };
+
+// A callback that pushes complete blocks (instead of single rows) into a
+// `CompressedExternalIdTableBase` (see `makePushBlockCallback` below). This is
+// a named type and not a lambda, such that callers that accept both per-row
+// and per-block callbacks can tell the two apart (see e.g. `liftCallback` in
+// `IndexImpl.cpp`).
+template <typename Table>
+struct PushBlockCallback {
+  Table* table_;
+
+  template <typename Block>
+  void operator()(const Block& block) const {
+    table_->pushBlock(block);
+  }
+};
+
+// The conversion between the memory limit and the number of rows per block of
+// a `CompressedExternalIdTableBase` (see below). These functions have rather
+// general names, but are tied to that class, hence the dedicated namespace.
+namespace compressedExternalIdTable {
+
+// The amount of memory that a `CompressedExternalIdTableBase` with
+// `numColumns` columns requires per row of its block size. The factor of two is
+// there because we store two blocks at the same time: One that is currently
+// being sorted and written to disk in the background, and one that is used to
+// collect rows in the calls to `push`.
+inline size_t blockMemoryPerRow(size_t numColumns) {
+  return numColumns * sizeof(Id) * 2;
+}
+
+// The number of rows per block that a `CompressedExternalIdTableBase` with
+// `numColumns` columns uses for the given `memory` limit.
+inline size_t blocksizeForMemory(MemorySize memory, size_t numColumns) {
+  return memory.getBytes() / blockMemoryPerRow(numColumns);
+}
+
+// The inverse of `blocksizeForMemory`: the memory limit for which a
+// `CompressedExternalIdTableBase` with `numColumns` columns uses exactly
+// `blocksize` rows per block.
+inline MemorySize memoryForBlocksize(size_t blocksize, size_t numColumns) {
+  return MemorySize::bytes(blocksize * blockMemoryPerRow(numColumns));
+}
+
+}  // namespace compressedExternalIdTable
 
 // The common base implementation of `CompressedExternalIdTable` and
 // `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
@@ -340,10 +391,8 @@ CPP_class_template(size_t NumStaticCols,
   MemorySize memory_;
 
   // The number of rows per block in the first phase.
-  // The division by two is there because we store two blocks at the same time:
-  // One that is currently being sorted and written to disk in the background,
-  // and one that is used to collect rows in the calls to `push`.
-  size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(Id) * 2)};
+  size_t blocksize_{
+      compressedExternalIdTable::blocksizeForMemory(memory_, numColumns_)};
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
@@ -401,8 +450,39 @@ CPP_class_template(size_t NumStaticCols,
     ++numElementsPushed_;
     currentBlock_.push_back(row);
     if (currentBlock_.size() >= blocksize_) {
-      pushBlock(std::move(currentBlock_));
+      transformAndWriteBlock(std::move(currentBlock_));
       resetCurrentBlock(true);
+    }
+  }
+
+  // Add all rows of the `table` (which has to be some kind of `IdTable`) to
+  // the input. This is much more efficient than calling `push` for each of the
+  // rows, because the `IdTable`s are stored column-based: Each column of the
+  // `table` is copied contiguously into the corresponding column of the
+  // internal buffer, instead of scattering each single row over all the
+  // columns. The `table` may be arbitrarily large, it is automatically split
+  // into blocks. The resulting blocks are exactly the same as if `push` had
+  // been called for each row individually.
+  CPP_template(typename Table)(requires IdTableLike<Table>) void pushBlock(
+      const Table& table) {
+    AD_CONTRACT_CHECK(table.numColumns() == numColumns_);
+    const size_t numRows = table.numRows();
+    numElementsPushed_ += numRows;
+    size_t numPushed = 0;
+    while (numPushed < numRows) {
+      // Note: `blocksize_` may be zero for very small memory limits (which
+      // only happens in unit tests), so we always insert at least one row to
+      // guarantee progress.
+      size_t remainingSpace = blocksize_ > currentBlock_.numRows()
+                                  ? blocksize_ - currentBlock_.numRows()
+                                  : 1;
+      size_t numToPush = std::min(remainingSpace, numRows - numPushed);
+      currentBlock_.insertAtEnd(table, numPushed, numPushed + numToPush);
+      numPushed += numToPush;
+      if (currentBlock_.numRows() >= blocksize_) {
+        transformAndWriteBlock(std::move(currentBlock_));
+        resetCurrentBlock(true);
+      }
     }
   }
 
@@ -414,10 +494,18 @@ CPP_class_template(size_t NumStaticCols,
     return [self = this](auto&& value) { self->push(AD_FWD(value)); };
   }
 
+  // Return a callback that takes a complete block and calls `pushBlock` for
+  // it. Prefer this over `makePushCallback` above whenever complete blocks are
+  // available, because pushing a complete block is much more efficient than
+  // pushing its rows one by one (see `pushBlock` above).
+  PushBlockCallback<CompressedExternalIdTableBase> makePushBlockCallback() {
+    return {this};
+  }
+
   // Delete the underlying file and reset the sorter. May only be called if no
   // active `getBlocks()` generator that has not been fully iterated over is
   // currently active, else an exception is thrown by the underlying
-  // `CompressedExternalIdTable`.
+  // `CompressedExternalIdTableWriter`.
   void clear() {
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
@@ -442,7 +530,7 @@ CPP_class_template(size_t NumStaticCols,
   // `writer_`. Before compressing, apply the transformation that is specified
   // by the `Impl` via the `transformBlock` function.
   template <typename Transformation = ql::identity>
-  void pushBlock(IdTableStatic<NumStaticCols> block) {
+  void transformAndWriteBlock(IdTableStatic<NumStaticCols> block) {
     waitForFuture();
     if (block.empty()) {
       if (numBlocksPushed_ > 0) {
@@ -464,9 +552,10 @@ CPP_class_template(size_t NumStaticCols,
 
   // If there is less than one complete block (meaning that the number of calls
   // to `push` was `< blocksize_`), apply the transformation to `currentBlock_`
-  // and return `false`. Else, push the `currentBlock_` via `pushBlock_`, block
-  // until the pushing is actually finished, and return `true`. Using this
-  // function allows for an efficient usage of this class for very small inputs.
+  // and return `false`. Else, write the `currentBlock_` via
+  // `transformAndWriteBlock`, block until the writing is actually finished,
+  // and return `true`. Using this function allows for an efficient usage of
+  // this class for very small inputs.
   bool transformAndPushLastBlock() {
     if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
@@ -490,7 +579,7 @@ CPP_class_template(size_t NumStaticCols,
       blockTransformation_(this->currentBlock_);
       return false;
     }
-    pushBlock(std::move(this->currentBlock_));
+    transformAndWriteBlock(std::move(this->currentBlock_));
     resetCurrentBlock(false);
     waitForFuture();
     return true;
@@ -503,6 +592,9 @@ CPP_class_template(size_t NumStaticCols,
 // The interface is as follows: First there is one call to `push` for each row
 // of the `IdTable`, and then there is one single call to `getRows` which yields
 // a generator that yields the rows that have previously been pushed.
+//
+// TODO<joka921> This class is unused (outside of its own unit tests).
+// Remove it.
 template <size_t NumStaticCols>
 class CompressedExternalIdTable
     : public CompressedExternalIdTableBase<NumStaticCols> {
@@ -546,7 +638,7 @@ class CompressedExternalIdTable
       return joinBlocks(InputRangeTypeErased<Block>{lazySingleValueRange(
           [this]() { return std::move(this->currentBlock_); })});
     }
-    this->pushBlock(std::move(this->currentBlock_));
+    this->transformAndWriteBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
     this->waitForFuture();
     // Stream all blocks through a single background thread (O(1) threads total
@@ -582,7 +674,7 @@ class CompressedExternalIdTableSorterTypeErased {
 // large to be stored in RAM. `NumStaticCols == 0` means that the IdTable is
 // stored dynamically (see `IdTable.h` and `CallFixedSize.h` for details). The
 // interface is as follows: First there is one call to `push` for each row of
-// the IdTable, and then there is one single call to `getRows` which yields a
+// the IdTable, and then there is one single call to `sortedView` which yields a
 // generator that yields the sorted rows one by one.
 
 // When using very small block sizes in unit tests, then sometimes there are
@@ -708,12 +800,14 @@ class CompressedExternalIdTableSorter
   // The implementation of the type-erased interface. Push a complete block at
   // once.
   void pushBlock(const IdTableStatic<0>& block) override {
-    pushBlockImpl(block);
+    Base::pushBlock(block);
   }
 
   // The implementation of the type-erased interface. Push a complete block
   // given as a non-owning view at once.
-  void pushBlock(const IdTableView<0>& block) override { pushBlockImpl(block); }
+  void pushBlock(const IdTableView<0>& block) override {
+    Base::pushBlock(block);
+  }
 
   // The implementation of the type-erased interface. Get the sorted blocks as
   // dynamic IdTables.
@@ -723,14 +817,6 @@ class CompressedExternalIdTableSorter
   }
 
  private:
-  // Common implementation for the two `pushBlock` overloads above.
-  template <typename IdTableLike>
-  void pushBlockImpl(const IdTableLike& block) {
-    AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
-    ql::ranges::for_each(block,
-                         [ptr = this](const auto& row) { ptr->push(row); });
-  }
-
   template <typename RowGenVectorType, typename CompType>
   struct SortState
       : ad_utility::InputRangeMixin<SortState<RowGenVectorType, CompType>> {

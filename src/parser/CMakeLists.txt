@@ -13,7 +13,19 @@ qlever_target_link_libraries(basicParser qlever_util rdfTypes parserData)
 # The parser for the RDF input formats. It is used by `index` (which builds an
 # index from RDF input files), so it must not depend on `index` itself. It needs
 # the `vocabulary` library for the `EncodedIriManager`.
-add_library(rdfParser RdfParser.cpp AsyncFileBlockDriver.cpp)
+set(RDF_PARSER_SOURCES RdfParser.cpp AsyncFileBlockDriver.cpp AsyncSerialParserAdapter.cpp)
+# `RdfAsyncParallelParser` and `RdfAsyncMultifileParser` are implemented using
+# C++20 coroutines, and the former uses `ad_utility::AsyncResourcePool`, which
+# needs `boost::asio::experimental::concurrent_channel` (Boost 1.80 or newer),
+# whereas the `REDUCED_FEATURE_SET_FOR_CPP17` build targets C++17 and Boost
+# 1.71. Nothing inside `src` uses these two parsers yet (they are only exercised
+# by the unit tests; a follow-up PR uses them in the index builder, where the
+# reduced build then falls back to `AsyncSerialParserAdapter` around the
+# synchronous `RdfMultifileParser`), so they are simply excluded there.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    list(APPEND RDF_PARSER_SOURCES RdfAsyncParallelParser.cpp RdfAsyncMultifileParser.cpp)
+endif ()
+add_library(rdfParser ${RDF_PARSER_SOURCES})
 qlever_target_link_libraries(rdfParser basicParser vocabulary localVocab)
 
 add_library(sparqlParser

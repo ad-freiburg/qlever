@@ -103,7 +103,7 @@ VariableToColumnMap Bind::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> Bind::getChildren() {
+std::vector<QueryExecutionTree*> Bind::getChildrenImpl() const {
   return {_subtree.get()};
 }
 

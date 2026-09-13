@@ -50,7 +50,7 @@ RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_T
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
     else \
-      cmake --build . --target qlever-index qlever-server && echo "Skipping tests"; \
+      cmake --build . --target qlever-index qlever-server qlever-upgrade-index && echo "Skipping tests"; \
     fi
 
 # Install the packages needed for the final image.

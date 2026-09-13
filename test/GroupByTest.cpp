@@ -18,7 +18,6 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
-#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -31,6 +30,7 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
@@ -2471,7 +2471,7 @@ TEST(GroupBy, AddedHavingRows) {
   QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto tree = qp.createExecutionTree(pq);
 
-  auto res = tree.getResult();
+  auto res = tree->getResult();
 
   // The HAVING is implemented as an alias that creates an internal variable
   // which becomes part of the result, but is not selected by the query.
@@ -2482,7 +2482,7 @@ TEST(GroupBy, AddedHavingRows) {
       {Variable{"?x"}, {0, AlwaysDefined}},
       {Variable{"?count"}, {1, PossiblyUndefined}},
       {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}};
-  EXPECT_THAT(tree.getVariableColumns(),
+  EXPECT_THAT(tree->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   const auto& table = res->idTableView();
   auto i = IntId;

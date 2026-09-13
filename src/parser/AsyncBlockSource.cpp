@@ -11,7 +11,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <stdexcept>
 #include <string_view>
@@ -42,7 +41,7 @@ std::exception_ptr getNoStatementBoundaryError(std::string_view description,
 }  // namespace
 
 // ____________________________________________________________________________
-BlockingBlockSource::BlockingBlockSource(const net::any_io_executor& exec,
+BlockingBlockSource::BlockingBlockSource(const ql::any_io_executor& exec,
                                          ad_utility::MemorySize blocksize)
     : AsyncBlockSource{exec, blocksize}, strand_{net::make_strand(exec)} {}
 
@@ -66,7 +65,7 @@ void BlockingBlockSource::asyncGetNextBlockImpl(Handler handler) {
 }
 
 // ____________________________________________________________________________
-FileBlockSource::FileBlockSource(const net::any_io_executor& exec,
+FileBlockSource::FileBlockSource(const ql::any_io_executor& exec,
                                  ad_utility::MemorySize blocksize,
                                  const std::string& filename)
     : BlockingBlockSource{exec, blocksize} {
@@ -92,7 +91,7 @@ std::optional<ByteBlock> FileBlockSource::getNextBlockImpl() {
 
 // ____________________________________________________________________________
 AsyncStatementBoundaryBlockSource::AsyncStatementBoundaryBlockSource(
-    const net::any_io_executor& exec, std::unique_ptr<AsyncBlockSource> inner,
+    const ql::any_io_executor& exec, std::unique_ptr<AsyncBlockSource> inner,
     EndPositionFinder findEndPosition, std::string description)
     : AsyncBlockSource{exec, inner->getBlocksize()},
       inner_{std::move(inner)},

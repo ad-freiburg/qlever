@@ -500,6 +500,32 @@ endif ()
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 
+# The `mold` linker (2.30, as shipped by Ubuntu 24.04, up to 2.42, the current
+# release) indexes zero-length FDEs in `.eh_frame_hdr`, which makes the runtime
+# unwinder miss the unwind information of whatever function shares their
+# address: an exception thrown there terminates the process instead of being
+# caught, and in a coroutine even the implicit `catch (...)` around the body
+# never runs. GCC produces those zero-length FDEs for the empty cold partitions
+# of `-freorder-blocks-and-partition` (on by default from `-O2`), so turning the
+# partitioning off leaves mold nothing to mis-index. GNU ld and gold are not
+# affected. See https://github.com/rui314/mold/issues/1648. Observed as an abort
+# in `MaterializedViewsTest`s `serverIntegration` in the Release Docker build.
+#
+# Ask the compiler driver which linker it would actually use, so that a
+# `-fuse-ld=mold` arriving through any of the flag variables above is caught.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    separate_arguments(QLEVER_LINKER_PROBE_FLAGS NATIVE_COMMAND
+            "${CMAKE_CXX_FLAGS} ${CMAKE_EXE_LINKER_FLAGS}")
+    execute_process(
+            COMMAND ${CMAKE_CXX_COMPILER} ${QLEVER_LINKER_PROBE_FLAGS} -Wl,--version
+            OUTPUT_VARIABLE QLEVER_LINKER_VERSION
+            ERROR_VARIABLE QLEVER_LINKER_VERSION)
+    if (QLEVER_LINKER_VERSION MATCHES "mold")
+        message(STATUS "Linking with mold, whose .eh_frame_hdr breaks unwinding through GCC's cold partitions; adding -fno-reorder-blocks-and-partition")
+        add_compile_options(-fno-reorder-blocks-and-partition)
+    endif ()
+endif ()
+
 
 if (${PERFTOOLS_PROFILER})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lprofiler")
@@ -705,6 +731,10 @@ include_directories(SYSTEM ${range-v3_SOURCE_DIR}/include)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
 target_compile_options(civetweb PRIVATE -Wno-missing-field-initializers)
+# The `pull` target of `prometheus-cpp` (vendored by `opentelemetry-cpp`)
+# includes `CivetServer.h`, in which `CivetHandler` hides several of its own
+# overloaded virtual functions.
+target_compile_options(pull PRIVATE -Wno-overloaded-virtual)
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
@@ -740,26 +770,48 @@ add_custom_command(OUTPUT ${COMPILATION_INFO_EXTRA_OUTPUT}
         -DCXX_STANDARD=${CMAKE_CXX_STANDARD}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 
-set(LOG_LEVEL_FATAL FATAL)
-set(LOG_LEVEL_ERROR ERROR)
-set(LOG_LEVEL_WARN WARN)
-set(LOG_LEVEL_INFO INFO)
-set(LOG_LEVEL_DEBUG DEBUG)
-set(LOG_LEVEL_TIMING TIMING)
-set(LOG_LEVEL_TRACE TRACE)
+# The numeric values of the log levels. These have to be kept in sync with the
+# `QLEVER_...` macros in `src/util/Log.h`. The compile definition deliberately
+# is a number and not a name like `DEBUG`, because such a name would have to be
+# resolved by name lookup in every translation unit, which clashes with other
+# libraries and platform SDKs that define or declare `DEBUG` themselves.
+set(LOG_LEVEL_FATAL 0)
+set(LOG_LEVEL_ERROR 1)
+set(LOG_LEVEL_WARN 2)
+set(LOG_LEVEL_INFO 3)
+set(LOG_LEVEL_DEBUG 4)
+set(LOG_LEVEL_TIMING 5)
+set(LOG_LEVEL_TRACE 6)
 
 set(LOGLEVEL DEBUG CACHE STRING
     "The maximum log level QLever is compiled with. Less verbose log levels can be chosen at runtime via the 'log-level' runtime parameter."
 )
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
-add_compile_definitions(LOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
+# The `LOGLEVEL` option is still specified by its name (for example
+# `-DLOGLEVEL=INFO`); translate it to the numeric value that `src/util/Log.h`
+# expects.
+string(TOUPPER "${LOGLEVEL}" LOGLEVEL_NAME)
+if (NOT DEFINED LOG_LEVEL_${LOGLEVEL_NAME})
+    message(FATAL_ERROR "Invalid value `${LOGLEVEL}` for `LOGLEVEL`, it has to be one of FATAL, ERROR, WARN, INFO, DEBUG, TIMING, TRACE")
+endif ()
+add_compile_definitions(QLEVER_COMPILETIME_LOGLEVEL=${LOG_LEVEL_${LOGLEVEL_NAME}})
 
+# The `AD_LOG_...` macros have two implementations, see `src/util/Log.h`. By
+# default, the branching logger is used, which doesn't evaluate the arguments of
+# a suppressed log message, but introduces a branch at every call site. The
+# branchless logger always evaluates its arguments, but is friendlier to
+# coverage measurements, because the branch lives in `Log.h` instead of in each
+# of the hundreds of call sites. It is used for the coverage build.
+option(BRANCHLESS_LOGGING "Use the coverage-friendly branchless implementation of the `AD_LOG_...` macros" OFF)
+if (BRANCHLESS_LOGGING)
+    add_compile_definitions(QLEVER_BRANCHLESS_LOGGING)
+endif ()
 
 ##################################################
 # Warnings about incorrect combination of CMake variables
 
-if (LOGLEVEL MATCHES "FATAL|ERROR|WARN|INFO" AND QUERY_CANCELLATION_MODE EQUAL "ENABLED")
-  message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but there is a dedicated thread that decides when to print those messages)")
+if (LOGLEVEL_NAME MATCHES "FATAL|ERROR|WARN|INFO" AND QUERY_CANCELLATION_MODE STREQUAL "ENABLED")
+  message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL_NAME}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but there is a dedicated thread that decides when to print those messages)")
 endif ()
 
 add_subdirectory(src/parser)
@@ -851,6 +903,9 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     if (USE_PRECOMPILED_HEADERS)
         target_precompile_headers(qlever-server REUSE_FROM engine)
     endif()
+
+    add_executable(qlever-upgrade-index src/IndexUpgraderMain.cpp)
+    qlever_target_link_libraries(qlever-upgrade-index index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
@@ -866,6 +921,7 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     install(TARGETS
         qlever-index
         qlever-server
+        qlever-upgrade-index
         RUNTIME DESTINATION bin
     )
 endif()
@@ -947,6 +1003,7 @@ set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/ad-freiburg/qlever")
 
 set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/packages")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_STRIP_FILES YES)
 
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 

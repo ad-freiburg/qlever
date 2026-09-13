@@ -1165,11 +1165,11 @@ TEST(ParserTest, Group) {
   {
     // grouping by a builtin call
     ParsedQuery pq = parseQuery(
-        "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY COUNT(?x) ?x");
+        "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY STR(?x) ?x");
     auto variant = pq._rootGraphPattern._graphPatterns[1];
     ASSERT_TRUE(holds_alternative<p::Bind>(variant));
     auto helperBind = get<p::Bind>(variant);
-    ASSERT_THAT(helperBind, m::BindExpression("COUNT(?x)"));
+    ASSERT_THAT(helperBind, m::BindExpression("STR(?x)"));
     EXPECT_THAT(pq, m::GroupByVariables({helperBind._target, Var{"?x"}}));
   }
   {
