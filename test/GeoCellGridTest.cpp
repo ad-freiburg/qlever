@@ -21,6 +21,7 @@ namespace {
 
 using ad_utility::GeoCellGrid;
 using ad_utility::GeoCellGridScheme;
+using ad_utility::GeoCellIdPrefilter;
 
 // Build a full WKT literal (with quotes and datatype suffix) from the given
 // content.
@@ -357,6 +358,30 @@ TEST(GeoCellGrid, unknownSchemeIsDefendedAgainst) {
 
   EXPECT_THROW(grid.coveringCellRanges(-10.0, -10.0, 10.0, 10.0),
                ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(GeoCellIdPrefilter, canBeSkipped) {
+  GeoCellGrid grid{2};
+  // Query box entirely inside cell (2 << 2) | 2 = 10.
+  GeoCellIdPrefilter prefilter{grid, 10.0, 10.0, 11.0, 11.0};
+
+  auto geoId = [&grid](uint64_t cell, uint64_t position) {
+    return GeoCellGrid::geoVocabMarkerBit |
+           grid.indexFromCellAndPosition(cell, position);
+  };
+
+  // Indices outside the WKT region can never be skipped.
+  EXPECT_FALSE(prefilter.canBeSkipped(42));
+  // The covered cell and the sentinel cell are kept.
+  EXPECT_FALSE(prefilter.canBeSkipped(geoId(10, 0)));
+  EXPECT_FALSE(prefilter.canBeSkipped(geoId(10, 12345)));
+  EXPECT_FALSE(prefilter.canBeSkipped(geoId(grid.sentinelCell(), 3)));
+  // All other cells are skipped.
+  EXPECT_TRUE(prefilter.canBeSkipped(geoId(0, 0)));
+  EXPECT_TRUE(prefilter.canBeSkipped(geoId(9, 7)));
+  EXPECT_TRUE(prefilter.canBeSkipped(geoId(11, 7)));
+  EXPECT_TRUE(prefilter.canBeSkipped(geoId(grid.sentinelCell() - 1, 0)));
 }
 
 }  // namespace

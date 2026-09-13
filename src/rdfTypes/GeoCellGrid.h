@@ -25,6 +25,25 @@
 
 namespace ad_utility {
 
+// A geographic rectangle in plain degrees. In contrast to `BoundingBox` it
+// is a simple aggregate without invariants, suitable for query rectangles
+// that may cover the whole world.
+struct GeoRectangle {
+  double minLng_;
+  double minLat_;
+  double maxLng_;
+  double maxLat_;
+  bool operator==(const GeoRectangle&) const = default;
+};
+
+// Grow `rectangle` on all sides by at least `distanceMeters` (measured on the
+// earth's surface) and clamp it to the valid coordinate ranges. The result is
+// conservative: every point within `distanceMeters` of the input rectangle is
+// contained in the result. Near the poles and across the antimeridian the
+// longitude range degrades to [-180, 180].
+GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
+                             double distanceMeters);
+
 namespace detail {
 // The available schemes for the `GeoCellGrid` class below.
 //
@@ -237,6 +256,26 @@ class GeoCellGrid {
   CellIndex flatCell(double u1, double v1, double u2, double v2) const;
   void flatCover(double u1, double v1, double u2, double v2,
                  CellRanges& ranges) const;
+};
+
+// A prefilter for the canonical spatial join situation: given the (padded)
+// query rectangle, it decides from a WKT literal's vocabulary index alone -
+// two bit operations and a binary search over a handful of ranges, no disk
+// access - whether the literal can be skipped because its grid cell does not
+// intersect the rectangle. Conservative: literals without cell information
+// and indices outside the WKT region are never skipped.
+class GeoCellIdPrefilter {
+  // Half-open, ascending ranges of vocabulary index payloads that must be
+  // kept (covering cells plus the "no information" cells).
+  std::vector<std::pair<uint64_t, uint64_t>> keepRanges_;
+
+ public:
+  GeoCellIdPrefilter(const GeoCellGrid& grid, double minLng, double minLat,
+                     double maxLng, double maxLat);
+
+  // Return true iff the word with the given vocabulary index payload is
+  // certainly outside the query rectangle.
+  bool canBeSkipped(uint64_t vocabIndexBits) const;
 };
 
 }  // namespace ad_utility
