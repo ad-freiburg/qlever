@@ -291,9 +291,9 @@ class IsInExpression : public PrefilterExpression {
 // bounding box intersects the rectangle. WKT literals are prefiltered via the
 // geo cell bits of their vocabulary indices (see `GeoCellGrid`; on an index
 // without a grid the whole WKT region of the vocabulary is kept), `GeoPoint`s
-// via the latitude band of the rectangle (their IDs are ordered by latitude
-// first). Values of all other datatypes cannot be geometries that satisfy a
-// spatial condition and are pruned (blocks with mixed datatypes are always
+// via the Z-order ranges of the rectangle (their IDs are Z-order codes of the
+// coordinates). Values of all other datatypes cannot be geometries that satisfy
+// a spatial condition and are pruned (blocks with mixed datatypes are always
 // kept by the surrounding framework).
 class GeoRectangleExpression : public PrefilterExpression {
  private:

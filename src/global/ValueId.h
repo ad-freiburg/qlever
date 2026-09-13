@@ -454,6 +454,11 @@ class ValueId {
   // TODO<joka921> implement dates
 
   // Create a `ValueId` for a GeoPoint object (representing a POINT from WKT).
+  // Make a `GeoPoint` ID directly from a bit representation (see
+  // `GeoPoint::toBitRepresentation`), without the lossy detour via `double`s.
+  static constexpr ValueId makeFromGeoPointBits(T bits) {
+    return addDatatypeBits(bits, Datatype::GeoPoint);
+  }
   static ValueId makeFromGeoPoint(GeoPoint p) {
     return addDatatypeBits(p.toBitRepresentation(), Datatype::GeoPoint);
   }

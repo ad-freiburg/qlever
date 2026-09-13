@@ -5,8 +5,10 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <random>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
@@ -91,13 +93,22 @@ TEST(GeoPoint, string) {
 
 // _____________________________________________________________________________
 TEST(GeoPoint, bitRepresentation) {
+  using T = GeoPoint::T;
   GeoPoint g = GeoPoint(-70.5, -130.2);
-  constexpr double lat = ((-70.5 + 90) / (2 * 90)) * (1 << 30);
-  ASSERT_EQ(g.toBitRepresentation() >> 30, round(lat));
-  constexpr double lng = ((-130.2 + 180) / (2 * 180)) * (1 << 30);
-  ASSERT_EQ(g.toBitRepresentation() & ((1 << 30) - 1), round(lng));
+  constexpr double lat = ((-70.5 + 90) / (2 * 90)) * ((1 << 30) - 1);
+  constexpr double lng = ((-130.2 + 180) / (2 * 180)) * ((1 << 30) - 1);
+  // The two quantized coordinates are bit-interleaved, lat in the odd bits.
+  auto [latBits, lngBits] =
+      GeoPoint::deinterleaveCoordinates(g.toBitRepresentation());
+  ASSERT_EQ(latBits, round(lat));
+  ASSERT_EQ(lngBits, round(lng));
+  ASSERT_EQ(GeoPoint::interleaveCoordinates(latBits, lngBits),
+            g.toBitRepresentation());
+  ASSERT_EQ(GeoPoint::interleaveCoordinates(1, 0), 2u);
+  ASSERT_EQ(GeoPoint::interleaveCoordinates(0, 1), 1u);
+  ASSERT_EQ(GeoPoint::interleaveCoordinates(0b11, 0b01), 0b1011u);
 
-  constexpr size_t expect1 = (static_cast<size_t>(1) << 60) - 1;
+  constexpr T expect1 = (static_cast<T>(1) << 60) - 1;
   g = GeoPoint(90, 180);
   ASSERT_EQ(g.toBitRepresentation(), expect1);
   // Upper 4 bits must be 0 for ValueId Datatype
@@ -106,12 +117,15 @@ TEST(GeoPoint, bitRepresentation) {
   g = GeoPoint(-90, -180);
   ASSERT_EQ(g.toBitRepresentation(), 0);
 
-  constexpr size_t expect2 = (static_cast<size_t>(1) << 30) - 1;
+  // Only the longitude bits (the even positions) are set.
+  constexpr T expect2 = 0x0555555555555555ull;
   g = GeoPoint(-90, 180);
   ASSERT_EQ(g.toBitRepresentation(), expect2);
+  g = GeoPoint(90, -180);
+  ASSERT_EQ(g.toBitRepresentation(), expect2 << 1);
 
-  const size_t expect3 =
-      (static_cast<size_t>(round(lat)) << 30) | static_cast<size_t>(round(lng));
+  const T expect3 = GeoPoint::interleaveCoordinates(static_cast<T>(round(lat)),
+                                                    static_cast<T>(round(lng)));
   g = GeoPoint::fromBitRepresentation(expect3);
   constexpr auto precision = 0.00001;
   ASSERT_NEAR(g.getLat(), -70.5, precision);
@@ -120,6 +134,59 @@ TEST(GeoPoint, bitRepresentation) {
   g = GeoPoint::fromBitRepresentation(0);
   ASSERT_DOUBLE_EQ(g.getLat(), -90);
   ASSERT_DOUBLE_EQ(g.getLng(), -180);
+
+  // The quantization is idempotent, so the round trip through the bits is
+  // exact for every representable point.
+  for (T bits : {T{0}, T{1}, T{12345678901ull}, expect2, expect1}) {
+    ASSERT_EQ(GeoPoint::fromBitRepresentation(bits).toBitRepresentation(),
+              bits);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(GeoPoint, bitRangesForRectangle) {
+  using T = GeoPoint::T;
+  auto ranges = GeoPoint::bitRangesForRectangle(47.9, 48.1, 7.7, 8.0);
+  ASSERT_FALSE(ranges.empty());
+  // Ascending, disjoint, and not too many.
+  for (size_t i = 1; i < ranges.size(); ++i) {
+    ASSERT_LT(ranges[i - 1].second, ranges[i].first);
+  }
+  EXPECT_LT(ranges.size(), 400u);
+  auto covered = [&ranges](GeoPoint p) {
+    T bits = p.toBitRepresentation();
+    return ql::ranges::any_of(ranges, [bits](const auto& r) {
+      return r.first <= bits && bits <= r.second;
+    });
+  };
+  // Points inside (also on the boundary) are covered.
+  std::mt19937_64 gen{42};
+  std::uniform_real_distribution<double> latDist{47.9, 48.1};
+  std::uniform_real_distribution<double> lngDist{7.7, 8.0};
+  for (int i = 0; i < 1000; ++i) {
+    EXPECT_TRUE(covered(GeoPoint{latDist(gen), lngDist(gen)}));
+  }
+  EXPECT_TRUE(covered(GeoPoint{47.9, 7.7}));
+  EXPECT_TRUE(covered(GeoPoint{48.1, 8.0}));
+  // The covered area is not much larger than the rectangle: points a bit
+  // further away are not covered.
+  EXPECT_FALSE(covered(GeoPoint{48.0, 8.1}));
+  EXPECT_FALSE(covered(GeoPoint{47.8, 7.85}));
+  EXPECT_FALSE(covered(GeoPoint{48.0, -172.0}));
+  EXPECT_FALSE(covered(GeoPoint{-48.0, 7.85}));
+
+  // The whole world is a single range.
+  auto world = GeoPoint::bitRangesForRectangle(-90.0, 90.0, -180.0, 180.0);
+  ASSERT_EQ(world.size(), 1u);
+  EXPECT_EQ(world[0].first, 0u);
+  EXPECT_EQ(world[0].second, (T{1} << 60) - 1);
+
+  // A degenerate rectangle (a single point) yields a range that contains it.
+  auto single = GeoPoint::bitRangesForRectangle(48.0, 48.0, 7.85, 7.85);
+  T bits = GeoPoint{48.0, 7.85}.toBitRepresentation();
+  EXPECT_TRUE(ql::ranges::any_of(single, [bits](const auto& r) {
+    return r.first <= bits && bits <= r.second;
+  }));
 }
 
 // _____________________________________________________________________________
