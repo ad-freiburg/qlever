@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -47,10 +48,15 @@ using ad_utility::httpUtils::Url;
 // a request. Byte `i` of the latter is `i % STREAM_BYTE_MODULUS`, so that a
 // consumer can tell whether it received exactly the bytes that were sent, in
 // order (see `expectStreamedBytes`).
-constexpr int LARGE_BODY_SIZE = 500'000;
-constexpr int NUM_STREAM_CHUNKS = 200;
-constexpr int STREAM_CHUNK_SIZE = 1 << 16;  // 64 KiB
-constexpr int STREAM_BYTE_MODULUS = 251;
+constexpr int32_t LARGE_BODY_SIZE = 500'000;
+constexpr int32_t NUM_STREAM_CHUNKS = 200;
+constexpr int32_t STREAM_CHUNK_SIZE = 1 << 16;  // 64 KiB
+constexpr int32_t STREAM_BYTE_MODULUS = 251;
+
+// The length of the `Content-Type` of `/long-content-type`, which is longer
+// than the buffer that the client has for a header value (`STRING_CAPACITY` in
+// `HttpClientEmscripten.cpp`), so that the request has to fail.
+constexpr int32_t LONG_HEADER_SIZE = 4096;
 
 // NOTE: `clang-format` is disabled below because it breaks JavaScript (it turns
 // `===` into `== =`).
@@ -66,8 +72,9 @@ EM_JS(bool, isNodeJs, (void), {
 // (that of an `std::atomic<int32_t>`), thereby signalling that it is ready. For
 // the meaning of the sizes, see the constants above.
 EM_JS(void, startTestServer,
-      (void* portAddress, int largeBodySize, int numStreamChunks,
-       int streamChunkSize, int streamByteModulus), {
+      (void* portAddress, int32_t largeBodySize, int32_t numStreamChunks,
+       int32_t streamChunkSize, int32_t streamByteModulus,
+       int32_t longHeaderSize), {
   const http = require("http");
   const server = http.createServer((request, response) => {
     if (request.url === "/hello") {
@@ -127,6 +134,9 @@ EM_JS(void, startTestServer,
     } else if (request.url === "/redirect") {
       response.writeHead(308, {"Location" : "/hello"});
       response.end();
+    } else if (request.url === "/long-content-type") {
+      response.writeHead(200, {"Content-Type" : "text/plain;x=" + "y".repeat(longHeaderSize)});
+      response.end("body");
     } else if (request.url === "/empty") {
       response.writeHead(204);
       response.end();
@@ -158,7 +168,7 @@ const std::string& testServerUrl() {
     static std::atomic<int32_t> port{0};
     std::thread{[]() {
       startTestServer(&port, LARGE_BODY_SIZE, NUM_STREAM_CHUNKS,
-                      STREAM_CHUNK_SIZE, STREAM_BYTE_MODULUS);
+                      STREAM_CHUNK_SIZE, STREAM_BYTE_MODULUS, LONG_HEADER_SIZE);
       // Keep the Web Worker of this thread (and hence the server) alive.
       emscripten_exit_with_live_runtime();
     }}.detach();
@@ -376,6 +386,13 @@ TEST_F(HttpClientEmscriptenTest, unreachableEndpoint) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       sendHttpOrHttpsRequest(Url{"http://127.0.0.1:1/unreachable"}, handle_),
       ::testing::HasSubstr("failed"));
+}
+
+// _____________________________________________________________________________
+TEST_F(HttpClientEmscriptenTest, headerValueThatIsTooLongFailsTheRequest) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      sendHttpOrHttpsRequest(Url{url_ + "/long-content-type"}, handle_),
+      ::testing::HasSubstr("Content-Type header of the response is longer"));
 }
 
 // _____________________________________________________________________________

@@ -14,24 +14,22 @@
 // operations that need HTTP requests (in particular `SERVICE` and `LOAD`) work.
 //
 // `fetch` is asynchronous, but our callers are synchronous, and a thread that
-// blocks cannot run the event loop that would settle the promises of its own
-// `fetch` call. A dedicated thread (`networkThread`) therefore performs the
-// requests and never blocks, while the requesting thread waits for it.
-// Emscripten implements its synchronous filesystem API on top of the
-// asynchronous OPFS API in the same way, see `ProxyWorker` in
+// blocks cannot run the event loop that settles the promises of its own `fetch`
+// call. A dedicated thread (`networkThread`) therefore performs the requests
+// and never blocks, while the requesting thread waits for it. Emscripten's
+// synchronous filesystem API works the same way, see `ProxyWorker` in
 // `system/lib/wasmfs/thread_utils.h`.
 //
 // All the state of a request lives in one `Request` object that the two sides
 // share: `qleverFetchStart` starts a request, the `EMSCRIPTEN_KEEPALIVE`
 // functions report its response through the queue of that object, and
-// `Request::wakeUpJavaScript` is how the requesting thread asks the JavaScript
-// side to look at the object again.
+// `Request::wakeUpJavaScript` asks the JavaScript side to look at it again.
 //
 // Differences to the native implementation:
 //
 // * Requests must not be issued from the main thread of a browser, where
-//   blocking is not allowed. This is checked, so that the result is an error
-//   and not a frozen page.
+//   blocking is not allowed. This is checked, so the result is an error and not
+//   a frozen page.
 // * In a browser, CORS applies, and `Content-Type` is the only response header
 //   that is reliably readable for a cross-origin response.
 // * `maxRedirects` only distinguishes 0 ("don't follow", a redirect then fails
@@ -39,7 +37,11 @@
 //   the JavaScript environment"). Following redirects ourselves would need
 //   `redirect: "manual"`, whose response is opaque in a browser, without a
 //   readable `Location`.
-// * A browser does not let us set `User-Agent`.
+// * `User-Agent` cannot be set in a browser, `Content-Type` is only sent with a
+//   non-empty body, and `fetch` rejects a `GET` or `HEAD` that has one.
+// * The proxy configured for the process (see `globalProxy()`) is ignored,
+//   because `fetch` has no such setting. Configure the browser or Node.js to
+//   honour proxies instead.
 // * A request that fails is reported when the consumer asks for the next chunk,
 //   and whatever was received but not yet consumed is discarded. A response
 //   that fails right after its head may therefore make `sendHttpOrHttpsRequest`
@@ -79,14 +81,18 @@ using ad_utility::data_structures::TryPushResult;
 
 // The number of body chunks that the JavaScript side may read ahead of the
 // consumer, and the largest chunk it may hand over at once. Their product (plus
-// one chunk that is being handed over) bounds how much of a response is
-// buffered, however large it is.
+// the chunk being handed over) bounds how much of a response is buffered,
+// however large it is.
+//
+// NOTE: The constants that cross the boundary to JavaScript are `int32_t`,
+// because that is the width in which they arrive there. `MAX_CHUNKS_AHEAD`
+// stays behind it and is a container capacity, hence `size_t`.
 constexpr size_t MAX_CHUNKS_AHEAD = 8;
-constexpr int MAX_CHUNK_SIZE = 1 << 17;  // 128 KiB
+constexpr int32_t MAX_CHUNK_SIZE = 1 << 17;  // 128 KiB
 
 // The capacity of the buffers for the short strings of a response, see
 // `StringFromJavaScript`.
-constexpr int STRING_CAPACITY = 1024;
+constexpr int32_t STRING_CAPACITY = 1024;
 
 // The interval at which the requesting thread wakes up while it waits for the
 // JavaScript side, in order to check whether the query has been cancelled.
@@ -95,7 +101,8 @@ constexpr std::chrono::milliseconds CANCELLATION_CHECK_INTERVAL{100};
 // A buffer for one of the short strings that the JavaScript side reports: the
 // value of a response header we are interested in, or the message of an error.
 // A fixed capacity means that such a string needs neither an allocation nor an
-// owner across the language boundary; a longer one is truncated.
+// owner across the language boundary. A header value that does not fit is an
+// error (see `writeHeader` there); only an error message is truncated.
 class StringFromJavaScript {
  private:
   std::array<char, STRING_CAPACITY> characters_{};
@@ -103,7 +110,7 @@ class StringFromJavaScript {
  public:
   // The address that the JavaScript side writes to, see `writeString` there.
   char* buffer() { return characters_.data(); }
-  static constexpr int capacity() { return STRING_CAPACITY; }
+  static constexpr int32_t capacity() { return STRING_CAPACITY; }
 
   // What was written, or an empty string if nothing was. The JavaScript side
   // always writes a null terminator, and the buffer starts out zeroed.
@@ -171,6 +178,7 @@ struct Request {
   // bumps it itself to end the watch in `qleverFetchStart`.
   std::atomic<int32_t> wakeUps_{0};
   static_assert(sizeof(std::atomic<int32_t>) == sizeof(int32_t));
+  static_assert(alignof(std::atomic<int32_t>) >= alignof(int32_t));
   static_assert(std::atomic<int32_t>::is_always_lock_free);
   int32_t* wakeUpAddress() { return reinterpret_cast<int32_t*>(&wakeUps_); }
 
@@ -181,7 +189,7 @@ struct Request {
     wakeUps_.fetch_add(1);
     // The JavaScript side may be waiting twice (for space and for an abort),
     // hence not just for a single waiter.
-    emscripten_futex_wake(&wakeUps_, std::numeric_limits<int>::max());
+    emscripten_futex_wake(wakeUpAddress(), std::numeric_limits<int>::max());
   }
 
   // Give up on the response: nothing is accepted into the queue anymore, and
@@ -215,7 +223,7 @@ extern "C" {
 // written to `Request::contentType_` and `Request::location_`. Returns whether
 // it should go on at all, which it should not if the requesting thread has
 // given up in the meantime.
-EMSCRIPTEN_KEEPALIVE bool qleverFetchOnHead(void* handle, int status) {
+EMSCRIPTEN_KEEPALIVE bool qleverFetchOnHead(void* handle, int32_t status) {
   Request& request = requestFor(handle);
   ResponseEvent head =
       ResponseHead{static_cast<http::status>(status),
@@ -230,7 +238,7 @@ EMSCRIPTEN_KEEPALIVE bool qleverFetchOnHead(void* handle, int status) {
 // the JavaScript side has to write it, before handing it over with
 // `qleverFetchPushChunk`. Writing the bytes to the place where they are
 // consumed right away is what keeps the body from being copied twice.
-EMSCRIPTEN_KEEPALIVE void* qleverFetchChunkBuffer(void* handle, int size) {
+EMSCRIPTEN_KEEPALIVE void* qleverFetchChunkBuffer(void* handle, int32_t size) {
   AD_CORRECTNESS_CHECK(size >= 0 && size <= MAX_CHUNK_SIZE);
   BodyChunk& chunk = eventAs<BodyChunk>(requestFor(handle).pendingChunk_);
   chunk.resize(static_cast<size_t>(size));
@@ -279,23 +287,21 @@ EMSCRIPTEN_KEEPALIVE void qleverFetchOnEnd(void* handle, bool failed) {
 
 // Perform a whole request: fetch the URL, report the head of the response, then
 // hand the chunks of its body over until it ends, fails, or the requesting
-// thread gives up. Runs on the network thread and returns as soon as the `fetch`
-// is under way; everything else happens in its callbacks.
+// thread gives up. Runs on the network thread and returns as soon as the
+// `fetch` is under way; everything else happens in its callbacks.
 //
-// The parameters are everything the JavaScript side needs: what to request
-// (`url` to `followRedirects`), the `handle` that names the request in the calls
-// back into C++, the address of its wake-up counter, and the buffers to write
-// the short strings of the response to. Note that `MEMORY64` passes pointers as
-// `BigInt`, which cannot index the heap views, hence the `Number(...)`
-// conversions (which are no-ops without it). `handle` is passed on to the
-// functions above unchanged, because they expect it in exactly the form in
-// which it arrived here.
+// The parameters are what to request (`url` to `followRedirects`), the `handle`
+// that names the request in the calls back into C++, the address of its wake-up
+// counter, and the buffers for the short strings of the response. NOTE:
+// `MEMORY64` passes pointers as `BigInt`, which cannot index the heap views,
+// hence the `Number(...)` conversions (no-ops without it); `handle` is passed
+// on unchanged, because the functions above expect it as it arrived.
 EM_JS(void, qleverFetchStart,
       (const char* url, const char* method, const char* requestBody,
-       int requestBodySize, const char* contentTypeHeader,
+       int32_t requestBodySize, const char* contentTypeHeader,
        const char* acceptHeader, bool followRedirects, void* handle,
-       int32_t* wakeUps, int maxChunkSize, char* contentType, char* location,
-       char* errorMessage, int stringCapacity),
+       int32_t* wakeUps, int32_t maxChunkSize, char* contentType,
+       char* location, char* errorMessage, int32_t stringCapacity),
       {
         // Views of the WebAssembly memory. They are built fresh on every use,
         // because Emscripten's cached `HEAPU8` can be stale after the memory
@@ -311,6 +317,15 @@ EM_JS(void, qleverFetchStart,
           const text = value === null || value === undefined ? "" : String(value);
           stringToUTF8Array(text, bytes(), Number(buffer), stringCapacity);
         };
+        // Like `writeString`, but for a header value, which must not be
+        // truncated, as that would silently corrupt it. The null terminator is
+        // why a value of exactly `stringCapacity` bytes does not fit either.
+        const writeHeader = (buffer, name, value) => {
+          if (value !== null && lengthBytesUTF8(value) >= stringCapacity) {
+            throw new Error(`the ${name} header of the response is longer than the ${stringCapacity} bytes that QLever supports`);
+          }
+          writeString(buffer, value);
+        };
 
         // How the requesting thread reaches us: it bumps the counter at
         // `wakeUps` whenever there may be something new for us to see (space in
@@ -324,18 +339,14 @@ EM_JS(void, qleverFetchStart,
           Atomics.notify(array, wakeUpIndex);
         };
 
-        // Call `attempt` until it returns something other than `RETRY`, waiting
-        // for a wake-up in between. Reading the counter before each attempt is
-        // what makes this race-free: a wake-up that arrives while we attempt
-        // changes the counter, so that the wait afterwards returns right away.
-        // We wait asynchronously, because blocking would stop the event loop
-        // that our own `fetch` needs to make progress.
-        //
-        // `RETRY` is the "not yet, wake me up when something changed" of an
-        // `attempt`, and has to be distinguishable from every value that an
-        // `attempt` may legitimately return. A `Symbol` is exactly that: a value
-        // that is equal to no other value in the program, so no `attempt` can
-        // return it by accident.
+        // `RETRY` is an `attempt`'s "not yet, wake me up when something
+        // changed"; a `Symbol` is equal to no other value in the program, so no
+        // `attempt` can return it by accident. Call `attempt` until it returns
+        // something else, waiting for a wake-up in between. Reading the counter
+        // before each attempt is what makes this race-free: a wake-up that
+        // arrives while we attempt changes the counter, so the wait afterwards
+        // returns right away. We wait asynchronously, because blocking would
+        // stop the event loop that our own `fetch` needs.
         const RETRY = Symbol("retry");
         const retryOnWakeUp = async (attempt) => {
           while (true) {
@@ -429,8 +440,8 @@ EM_JS(void, qleverFetchStart,
 
         const streamResponse = async () => {
           const response = await fetch(readString(url), requestOptions());
-          writeString(contentType, response.headers.get("content-type"));
-          writeString(location, response.headers.get("location"));
+          writeHeader(contentType, "Content-Type", response.headers.get("content-type"));
+          writeHeader(location, "Location", response.headers.get("location"));
           if (!_qleverFetchOnHead(handle, response.status)) {
             return;
           }
@@ -474,19 +485,20 @@ EM_JS(void, qleverFetchStart,
           // A no-op unless we stopped early, in which case this closes the
           // connection of a response that nobody is going to read.
           controller.abort();
-          if (failed) {
+          // An abort that we caused ourselves is not a failure of the request,
+          // and reporting one would push an exception that nobody will read.
+          const reportFailure = failed && !_qleverFetchIsAbandoned(handle);
+          if (reportFailure) {
             writeString(errorMessage, describeError(error));
           }
-          _qleverFetchOnEnd(handle, failed);
+          _qleverFetchOnEnd(handle, reportFailure);
         };
 
-        // The watch should never fail, but if it does (which would be a bug in
-        // the code above), then it must not take the whole request down with it:
-        // `finish` awaits it, and an exception there would skip the report that
-        // the requesting thread is waiting for, leaving it waiting forever. So
-        // we log the failure and go on. Handling it here rather than at the
-        // `await` also keeps it from being an unhandled rejection in the
-        // meantime.
+        // The watch should never fail, but if it does, it must not take the
+        // request down with it: `finish` awaits it, and an exception there
+        // would skip the report that the requesting thread waits for, leaving
+        // it waiting forever. So we log and go on. Catching here rather than at
+        // the `await` also avoids an unhandled rejection in the meantime.
         const watching = abortWhenAbandoned().catch(
             (error) => console.error(
                 "QLever: watching for an abandoned HTTP request failed:",
@@ -516,17 +528,22 @@ EM_JS(bool, isBrowserMainThread, (void), {
 
 // The JavaScript code above uses these functions of Emscripten's JavaScript
 // runtime, which have to be kept alive explicitly.
-EM_JS_DEPS(qleverFetch, "$stringToUTF8Array,$UTF8ArrayToString");
+EM_JS_DEPS(qleverFetch, "$stringToUTF8Array,$UTF8ArrayToString,$lengthBytesUTF8");
 
 // clang-format on
 
 namespace {
 
 // The thread on which the requests are performed, created on first use and then
-// alive until the process exits. We deliberately don't use the main runtime
-// thread (although it always has a live event loop), because it might itself be
-// the thread that waits, for example when a query is run directly from the main
+// alive until the process exits. Deliberately not the main runtime thread
+// (although that always has a live event loop), because it might itself be the
+// thread that waits, for example when a query is run directly from the main
 // thread of a Node.js application.
+//
+// NOTE: Emscripten spawns Web Workers only from the JavaScript main thread, so
+// this thread only comes up once that thread reaches its event loop. A build
+// whose `main` may block (one without `-sPROXY_TO_PTHREAD`) must therefore not
+// block it while waiting for the very first request.
 pthread_t networkThread() {
   static pthread_t thread = []() {
     std::thread thread{[]() {
@@ -554,7 +571,7 @@ void runRequest(void* handle) {
   qleverFetchStart(
       request.url_.c_str(), request.method_.c_str(),
       request.requestBody_.data(),
-      static_cast<int>(request.requestBody_.size()),
+      static_cast<int32_t>(request.requestBody_.size()),
       request.contentTypeHeader_.c_str(), request.acceptHeader_.c_str(),
       request.followRedirects_, handle, request.wakeUpAddress(), MAX_CHUNK_SIZE,
       request.contentType_.buffer(), request.location_.buffer(),
@@ -588,17 +605,19 @@ class RequestOwner {
   Request* operator->() const { return request_.get(); }
 
   // Start the request on the network thread. Throws if that thread cannot be
-  // reached, in which case nothing was started.
+  // created or reached, in which case nothing was started.
   void start() const {
     // The reference of the JavaScript side, which `qleverFetchOnEnd` releases.
-    auto* handle = new std::shared_ptr<Request>{request_};
+    // Owned until the hand-over has succeeded, so that it is not leaked if
+    // `networkThread()` throws.
+    auto handle = std::make_unique<std::shared_ptr<Request>>(request_);
     // The system queue is the one that every thread with a live event loop (see
     // `networkThread`) processes automatically.
     if (!emscripten_proxy_async(emscripten_proxy_get_system_queue(),
-                                networkThread(), &runRequest, handle)) {
-      delete handle;
+                                networkThread(), &runRequest, handle.get())) {
       AD_THROW("Could not reach the thread that performs the HTTP requests");
     }
+    static_cast<void>(handle.release());
   }
 };
 
@@ -660,8 +679,9 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
         "the response is not possible. Run QLever in a Web Worker (which is "
         "required for its potentially long-running operations anyway)."));
   }
-  AD_CORRECTNESS_CHECK(requestData.size() <=
-                       static_cast<size_t>(std::numeric_limits<int>::max()));
+  AD_CORRECTNESS_CHECK(
+      requestData.size() <=
+      static_cast<size_t>(std::numeric_limits<int32_t>::max()));
 
   RequestOwner request;
   request->url_ = url.asString();
