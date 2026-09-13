@@ -86,7 +86,7 @@ class PolymorphicVocabulary {
     std::visit(
         [&grid](auto& vocab) {
           using T = std::decay_t<decltype(vocab)>;
-          if constexpr (isSplitVocabulary<T>) {
+          if constexpr (MaybeProvidesGeoCellGrid<T>) {
             vocab.setGeoCellGrid(grid);
           }
         },
@@ -99,7 +99,7 @@ class PolymorphicVocabulary {
     return std::visit(
         [](const auto& vocab) -> std::optional<ad_utility::GeoCellGrid> {
           using T = std::decay_t<decltype(vocab)>;
-          if constexpr (isSplitVocabulary<T>) {
+          if constexpr (MaybeProvidesGeoCellGrid<T>) {
             return vocab.getGeoCellGrid();
           } else {
             return std::nullopt;

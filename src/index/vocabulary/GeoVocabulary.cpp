@@ -11,8 +11,10 @@
 #include "index/vocabulary/GeoVocabulary.h"
 
 #include <stdexcept>
+#include <vector>
 
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "rdfTypes/GeoPoint.h"
@@ -21,6 +23,16 @@
 #include "util/File.h"
 
 using ad_utility::GeometryInfo;
+
+// ____________________________________________________________________________
+template <typename V>
+GeoVocabulary<V>::GeoVocabulary() {
+  // The index of a word is computed from its position in the underlying
+  // vocabulary (see `indexFromPosition`), which requires contiguous positions
+  // and a plain `getPositionOfWord`. The vocabularies with "holes" and the
+  // composite vocabularies do not qualify.
+  static_assert(!HasSpecialGetPositionOfWord<V>);
+}
 
 // ____________________________________________________________________________
 template <typename V>
@@ -41,6 +53,8 @@ void GeoVocabulary<V>::open(const std::string& filename) {
         ad_utility::GEOMETRY_INFO_VERSION,
         " as required by this version of QLever. Please rebuild your index."));
   }
+
+  endIndex_ = computeEndIndex();
 }
 
 // ____________________________________________________________________________
@@ -48,6 +62,7 @@ template <typename V>
 void GeoVocabulary<V>::close() {
   literals_.close();
   geoInfoFile_.close();
+  endIndex_ = 0;
 }
 
 // ____________________________________________________________________________
@@ -64,7 +79,7 @@ uint64_t GeoVocabulary<V>::indexFromPosition(uint64_t position,
 
 // ____________________________________________________________________________
 template <typename V>
-uint64_t GeoVocabulary<V>::endIndex() const {
+uint64_t GeoVocabulary<V>::computeEndIndex() const {
   auto numWords = size();
   if (!grid_.has_value() || numWords == 0) {
     return numWords;
@@ -132,11 +147,11 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
     AD_CORRECTNESS_CHECK(index == numWords_);
     // Keep one position free, so that `endIndex` (the past-the-end position
     // combined with the cell of the last word) is always a valid index.
-    AD_CORRECTNESS_CHECK(numWords_ + 1 < grid_->maxNumWords(),
-                         "Too many WKT literals for the configured geo cell "
-                         "grid, please rebuild with a smaller grid level");
+    AD_CONTRACT_CHECK(numWords_ + 1 < grid_->maxNumWords(),
+                      "Too many WKT literals for the configured geo cell "
+                      "grid, please rebuild with a smaller grid level");
     auto cellIndex = cellIndexOfWord(grid_.value(), info, word);
-    AD_CORRECTNESS_CHECK(
+    AD_CONTRACT_CHECK(
         !lastCellIndex_.has_value() || lastCellIndex_.value() <= cellIndex,
         "WKT literals were not passed to the GeoVocabulary in the order of "
         "their geo grid cells");

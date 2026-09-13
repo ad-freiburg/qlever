@@ -494,12 +494,13 @@ TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
 
 // Test that the indices of a `GeoVocabulary` with a geo cell grid (cell index
 // in the upper bits) pass correctly through a `SplitGeoVocabulary`: they carry
-// the marker bit, exceed the size of the geo vocabulary by construction, and
-// the past-the-end bounds come from `GeoVocabulary::endIndex`.
+// the marker bit, and the past-the-end bounds come from
+// `GeoVocabulary::endIndex`.
 TEST(SplitVocabulary, geoCellGridIndicesThroughSplitVocabulary) {
   using SGV = SplitGeoVocabulary<VocabularyInMemory>;
   ad_utility::GeoCellGrid grid{2};
-  const std::string fn = "geocellsplitvocab-test.dat";
+  const std::string fn = absl::StrCat(gtestCurrentTestName(), ".dat");
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<SGV>(fn);
   auto wkt = [](std::string_view content) {
     return absl::StrCat("\"", content, GEO_LITERAL_SUFFIX);
   };
@@ -545,6 +546,11 @@ TEST(SplitVocabulary, geoCellGridIndicesThroughSplitVocabulary) {
   EXPECT_EQ(vocab[SGV::addMarker(grid.indexFromCellAndPosition(12, 1), 1)],
             wkt12);
   EXPECT_EQ(vocab[0], iri);
+
+  // An index beyond the past-the-end index of the geo vocabulary is rejected,
+  // even if its position part is valid.
+  EXPECT_ANY_THROW(vocab[SGV::addMarker(
+      grid.indexFromCellAndPosition(grid.sentinelCell(), 0), 1)]);
 
   // Exact lookup returns the index and its successor as bounds.
   auto [lo3, hi3] = vocab.getPositionOfWord(wkt3, comparator);

@@ -62,6 +62,16 @@ CPP_concept MaybeProvidesGeometryInfo =
     std::is_same_v<T, PolymorphicVocabulary> || isSplitVocabulary<T> ||
     ad_utility::isInstantiation<T, GeoVocabulary>;
 
+// This concept states that the given vocabulary implementation `T` might have
+// a geo cell grid (see `GeoVocabulary`), and hence has the member functions
+// `setGeoCellGrid` and `getGeoCellGrid`. As for `MaybeProvidesGeometryInfo`,
+// this is a static property of the type; whether there actually is a grid is
+// only known at runtime.
+template <typename T>
+CPP_concept MaybeProvidesGeoCellGrid =
+    std::is_same_v<T, PolymorphicVocabulary> || isSplitVocabulary<T> ||
+    ad_utility::isInstantiation<T, GeoVocabulary>;
+
 // As a safeguard for the future: This concept states that a vocabulary
 // implementation will never provide precomputed `GeometryInfo` via a
 // `getGeoInfo` method. A vocabulary class should only be added if it can be

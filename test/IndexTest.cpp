@@ -514,7 +514,7 @@ TEST(IndexTest, geoCellGridIndexBuild) {
   auto query = absl::StrCat("SELECT ?s WHERE { ?s <p> ", w12, " }");
   auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), query);
   QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
-  auto result = qp.createExecutionTree(pq).getResult();
+  auto result = qp.createExecutionTree(pq)->getResult();
   VocabIndex idxOfA;
   ASSERT_TRUE(vocab.getId("<a>", &idxOfA));
   EXPECT_EQ(result->idTableView(),
@@ -530,6 +530,9 @@ TEST(IndexTest, geoCellGridRequiresGeoSplitVocabulary) {
       ad_utility::testing::getQec(config),
       ::testing::HasSubstr("requires the vocabulary type"));
 }
+
+// NOTE: The configuration of an index built without a grid is edited by hand
+// here, so that only the reading of the configuration is tested.
 
 // Test that the geo cell grid (see `GeoVocabulary`) is read from the index
 // configuration when an index is loaded, with `flat` as the default scheme.
@@ -565,6 +568,11 @@ TEST(IndexTest, geoCellGridFromConfiguration) {
   EXPECT_EQ(loadWithConfiguration(
                 {{"geo-cell-grid-level", 3}, {"geo-cell-grid-scheme", "flat"}}),
             std::optional{ad_utility::GeoCellGrid{3}});
+
+  // A level that does not fit the grid is rejected.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration({{"geo-cell-grid-level", 300}}),
+      ::testing::HasSubstr("Invalid value 300"));
 }
 
 // Regression test for #3191.
@@ -844,12 +852,13 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   using namespace ::testing;
 
   // Wrap a matcher for a substring that comes from an `AD_LOG_INFO` line so
-  // that the assertion is only active when `LOGLEVEL >= INFO`. At
-  // `LOGLEVEL=WARN` the INFO output is suppressed, but the test still runs to
-  // cover the WARN-level `"deprecated"` assertions; the wrapper degrades to
-  // `testing::_` (match anything) in that case.
+  // that the assertion is only active when the compile-time log level is at
+  // least `INFO`. At `LOGLEVEL=WARN` the INFO output is suppressed, but the
+  // test still runs to cover the WARN-level `"deprecated"` assertions; the
+  // wrapper degrades to `testing::_` (match anything) in that case.
   auto onlyAtInfoOrAbove = [](auto matcher) {
-    if constexpr (LOGLEVEL < INFO) {
+    if constexpr (ad_utility::compileTimeLogLevel <
+                  ad_utility::LogLevel::Enum::INFO) {
       return testing::_;
     } else {
       return matcher;

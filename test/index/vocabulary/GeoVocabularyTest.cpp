@@ -300,12 +300,15 @@ TEST(GeoVocabularyTest, WordWriterDestructor) {
 
 // Test that a `GeoVocabulary` with a geo cell grid hands out indices with the
 // cell index in the upper bits and translates between indices and positions
-// in all its operations. Templated on the underlying vocabulary, see the
-// `TEST` below.
-template <typename UnderlyingVocabulary>
-void testGeoCellGridIndices(const std::string& fn) {
-  using GV = GeoVocabulary<UnderlyingVocabulary>;
+// in all its operations.
+TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, GeoCellGridIndices) {
+  using GV = GeoVocabulary<TypeParam>;
   GeoCellGrid grid{2};
+  const std::string fn = this->filename();
+  auto cleanup = this->getFileCleanup();
+  auto cleanupBad = vocabulary_test::makeVocabFileCleanup<GV>(fn + ".bad");
+  auto cleanupEmpty = vocabulary_test::makeVocabFileCleanup<GV>(fn + ".empty");
+  auto cleanupFull = vocabulary_test::makeVocabFileCleanup<GV>(fn + ".full");
   auto wkt = [](std::string_view content) {
     return absl::StrCat("\"", content, GEO_LITERAL_SUFFIX);
   };
@@ -353,8 +356,12 @@ void testGeoCellGridIndices(const std::string& fn) {
   }
   EXPECT_TRUE(geoVocab.getGeoInfo(expectedIndices[0]).has_value());
   EXPECT_FALSE(geoVocab.getGeoInfo(expectedIndices[3]).has_value());
+  // NOTE: `lookupBatch` takes `size_t` indices, which is not the same type as
+  // `uint64_t` on all platforms.
+  std::vector<size_t> batchIndices(expectedIndices.begin(),
+                                   expectedIndices.end());
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
-      geoVocab, geoVocab.lookupBatch(expectedIndices), expectedIndices);
+      geoVocab, geoVocab.lookupBatch(batchIndices), batchIndices);
 
   // An index whose position part is out of range is rejected.
   EXPECT_ANY_THROW(geoVocab[grid.indexFromCellAndPosition(3, words.size())]);
@@ -362,7 +369,7 @@ void testGeoCellGridIndices(const std::string& fn) {
       geoVocab.getGeoInfo(grid.indexFromCellAndPosition(3, words.size())));
 
   // The grid of an opened vocabulary cannot be changed anymore.
-  geoVocab.setGeoCellGrid(std::nullopt);
+  EXPECT_ANY_THROW(geoVocab.setGeoCellGrid(std::nullopt));
   EXPECT_EQ(geoVocab.getGeoCellGrid(), std::optional{grid});
 
   // The past-the-end index is larger than every valid index.
@@ -392,8 +399,20 @@ void testGeoCellGridIndices(const std::string& fn) {
     EXPECT_EQ(wordAndIndex.word(), words[i]);
   }
   // A word larger than all words (same sentinel cell, but lexicographically
-  // larger) yields the past-the-end result.
+  // larger) yields the past-the-end result. `upper_bound` translates the
+  // same way.
   EXPECT_TRUE(geoVocab.lower_bound(wkt("ZZZ"), comparator).isEnd());
+  EXPECT_EQ(geoVocab.upper_bound(w0, comparator).index(), expectedIndices[1]);
+  EXPECT_TRUE(geoVocab.upper_bound(w3, comparator).isEnd());
+
+  // The streamed batch lookup translates the indices, too.
+  std::vector<std::vector<size_t>> batches{
+      {expectedIndices[2]}, {expectedIndices[0], expectedIndices[3]}};
+  const auto expectedBatches = batches;
+  auto streamedResults =
+      geoVocab.lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
+  vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
+      geoVocab, streamedResults, expectedBatches);
 
   // Without the grid, the same files are read with plain positions as
   // indices.
@@ -440,13 +459,6 @@ void testGeoCellGridIndices(const std::string& fn) {
                                  ::testing::HasSubstr("Too many WKT literals"));
     ww->finish();
   }
-}
-
-// Run the test above for both underlying vocabularies of a `GeoVocabulary`.
-TEST(GeoVocabulary, geoCellGridIndices) {
-  testGeoCellGridIndices<VocabularyInMemory>("geocellvocab-test-inmemory.dat");
-  testGeoCellGridIndices<CompressedVocabulary<VocabularyInternalExternal>>(
-      "geocellvocab-test-compressed.dat");
 }
 
 }  // namespace

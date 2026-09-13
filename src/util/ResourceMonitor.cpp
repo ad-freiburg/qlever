@@ -19,6 +19,7 @@
 #include <array>
 #include <charconv>
 #include <fstream>
+#include <memory>
 #include <string_view>
 #include <type_traits>
 
@@ -232,7 +233,8 @@ std::string formatTsvRow(const Sample& sample) {
                             formatCell(sample.cpuPercent_),
                             formatCell(sample.bytesReadPerSecond_),
                             formatCell(sample.bytesWrittenPerSecond_),
-                            formatCell(sample.ioStallPercent_)};
+                            formatCell(sample.ioStallPercent_),
+                            formatCell(sample.indexRebuildId_)};
   return absl::StrCat(absl::StrJoin(tsvCells, "\t"), "\n");
 }
 
@@ -342,6 +344,12 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
 }
 
 // _____________________________________________________________________________
+std::shared_ptr<IndexRebuildIdTracker> ResourceMonitor::indexRebuildIdTracker()
+    const {
+  return indexRebuildIdTracker_;
+}
+
+// _____________________________________________________________________________
 void ResourceMonitor::setReadersForTesting(resource_monitor::Readers readers) {
   AD_CONTRACT_CHECK(!started_,
                     "The readers must be swapped before `start` is called, "
@@ -405,6 +413,7 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     sample.bytesWrittenPerSecond_ =
         bytesWrittenTracker.update(numBytesWritten, elapsed);
     sample.ioStallPercent_ = ioStallPercent;
+    sample.indexRebuildId_ = indexRebuildIdTracker_->currentId();
     stream_ << resource_monitor::formatTsvRow(sample);
     stream_.flush();
     if (stream_.fail()) {

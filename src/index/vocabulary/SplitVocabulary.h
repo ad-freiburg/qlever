@@ -237,10 +237,7 @@ class SplitVocabulary {
           // For a `GeoVocabulary` with a geo cell grid, the indices exceed
           // its size by construction (the cell index is in the upper bits);
           // it checks the position itself.
-          using T = std::decay_t<decltype(vocab)>;
-          if constexpr (!ad_utility::isInstantiation<T, GeoVocabulary>) {
-            AD_CORRECTNESS_CHECK(unmarkedIdx < vocab.size());
-          }
+          AD_CORRECTNESS_CHECK(unmarkedIdx < endIndexOf(vocab));
           // TODO<ullingerc>: How to handle if the different underlying
           // vocabularies return different types (std::string / std::string_view
           // / ...) on their operator[] implementations? A variant will probably
@@ -351,8 +348,8 @@ class SplitVocabulary {
   // plus the corresponding one of the `FilenameSuffixes`.
   void open(const std::string& filename);
 
-  // Forward the geo cell grid to any underlying `GeoVocabulary` (see there
-  // for the effect). No-op if there is none.
+  // Forward the geo cell grid to the underlying `GeoVocabulary`, if there is
+  // one (see there for the effect). No-op otherwise.
   void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
     for (auto& vocab : underlying_) {
       std::visit(
@@ -366,8 +363,9 @@ class SplitVocabulary {
     }
   }
 
-  // The geo cell grid of an underlying `GeoVocabulary`, or `std::nullopt` if
-  // there is none or it has no grid.
+  // The geo cell grid of the underlying `GeoVocabulary` (there is at most
+  // one, see the `static_assert` above), or `std::nullopt` if there is none
+  // or it has no grid.
   std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
     std::optional<ad_utility::GeoCellGrid> result = std::nullopt;
     for (const auto& vocab : underlying_) {
@@ -375,9 +373,7 @@ class SplitVocabulary {
           [&result](const auto& v) {
             using T = std::decay_t<decltype(v)>;
             if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
-              if (v.getGeoCellGrid().has_value()) {
-                result = v.getGeoCellGrid();
-              }
+              result = v.getGeoCellGrid();
             }
           },
           vocab);
@@ -385,20 +381,22 @@ class SplitVocabulary {
     return result;
   }
 
-  // The past-the-end index of the underlying vocabulary with the given
-  // `marker`. For a `GeoVocabulary` with a geo cell grid this is not simply
-  // the size (see `GeoVocabulary::endIndex`).
+  // The past-the-end index of an underlying vocabulary, which is also the
+  // upper bound for its valid indices. For a `GeoVocabulary` with a geo cell
+  // grid this is not simply the size (see `GeoVocabulary::endIndex`).
+  template <typename V>
+  static uint64_t endIndexOf(const V& vocab) {
+    if constexpr (ad_utility::isInstantiation<V, GeoVocabulary>) {
+      return vocab.endIndex();
+    } else {
+      return vocab.size();
+    }
+  }
+
+  // The same for the underlying vocabulary with the given `marker`.
   uint64_t endIndexOfUnderlying(uint8_t marker) const {
-    return std::visit(
-        [](const auto& v) -> uint64_t {
-          using T = std::decay_t<decltype(v)>;
-          if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
-            return v.endIndex();
-          } else {
-            return v.size();
-          }
-        },
-        underlying_[marker]);
+    return std::visit([](const auto& v) { return endIndexOf(v); },
+                      underlying_[marker]);
   }
 
   // This word writer writes words to different vocabularies depending on the

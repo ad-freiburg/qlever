@@ -260,6 +260,14 @@ struct EngineConfig : CommonConfig {
   // Names of materialized views to load from disk during initialization.
   // If a view doesn't exist, a warning is logged and startup continues.
   std::vector<std::string> preloadMaterializedViews_ = {};
+
+  // Descriptions of the index and of the text index. They are returned by the
+  // API (`cmd=stats`, fields `name-index` and `name-text-index`), which is
+  // used, for example, by the QLever UI. If set, they replace the names stored
+  // in the index files. Both can also be changed while the server is running,
+  // via the `index-description` and `text-description` API commands.
+  std::optional<std::string> indexDescription_;
+  std::optional<std::string> textDescription_;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -566,10 +574,13 @@ class Qlever {
   // `NamedResultCache` of this instance into a single, self-contained,
   // ZSTD-compressed blob that can later be loaded via
   // `deserializeVocabAndNamedCacheFromCompressedBlob` (e.g. by a different
-  // process, without needing access to the on-disk index). For details see
+  // process, without needing access to the on-disk index). Via the `config`,
+  // vocabulary entries that are not needed in the blob can be excluded from it
+  // (see `BlobSerializationConfig`). For details see
   // `NamedCachedQueryBlobManager::serialize`.
-  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob() const {
-    return blobManager_.serialize(*this);
+  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob(
+      const BlobSerializationConfig& config = {}) const {
+    return blobManager_.serialize(*this, config);
   }
 
   // Load a blob previously written by
