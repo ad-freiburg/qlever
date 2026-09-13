@@ -12,6 +12,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/Values.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
@@ -961,6 +962,91 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
        siblingOperation->precomputedResultBecauseSiblingOfService()
            .value()
            ->idTables()) {
+  }
+}
+
+// ____________________________________________________________________________
+// The query planner puts a `StripColumns` (and a `Sort`) on top of a `Service`
+// when not all of its variables are needed further up, e.g. for a `GROUP BY`.
+// The sibling optimization must look through these operations (see #2967).
+TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
+  auto makeService = [&]() {
+    return std::make_shared<Service>(
+        testQec,
+        parsedQuery::Service{
+            {Variable{"?x"}, Variable{"?y"}},
+            TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+            "PREFIX doof: <http://doof.org>",
+            "{ }",
+            true},
+        getResultFunctionFactory(
+            "http://localhorst:80/api",
+            "PREFIX doof: <http://doof.org> SELECT ?x ?y { }",
+            genJsonResult({"x", "y"}, {{"a", "b"}}),
+            boost::beast::http::status::ok, "application/sparql-results+json"));
+  };
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+  auto makeValues = [&]() {
+    return std::make_shared<Values>(
+        testQec, parsedQuery::SparqlValues{{Variable{"?x"}, Variable{"?y"}},
+                                           {{TC(iri("<x>")), TC(iri("<y>"))}}});
+  };
+  // Wrap `op` into a `StripColumns` that only keeps `?x`, and that into a
+  // `Sort`, which is the shape the query planner produces.
+  auto makeTree = [&](std::shared_ptr<Operation> op) {
+    return std::make_shared<QueryExecutionTree>(testQec, std::move(op));
+  };
+  auto wrap = [&](std::shared_ptr<Operation> op,
+                  std::optional<LimitOffsetClause> limitForStripColumns =
+                      std::nullopt) -> std::shared_ptr<Operation> {
+    auto strip = std::make_shared<StripColumns>(
+        testQec, makeTree(std::move(op)), std::set<Variable>{Variable{"?x"}});
+    if (limitForStripColumns.has_value()) {
+      strip->applyLimitOffset(limitForStripColumns.value());
+    }
+    return std::make_shared<Sort>(testQec, makeTree(std::move(strip)),
+                                  std::vector<ColumnIndex>{0});
+  };
+  auto onlyX = [](const Service& service) {
+    const auto& vars = service.siblingInfo_.value().variables_;
+    return vars.size() == 1 && vars.contains(Variable{"?x"});
+  };
+
+  // `Sort(StripColumns(Service))` on the right: the `Service` is found, the
+  // sibling result is precomputed, and only `?x`, which is visible above the
+  // `StripColumns`, is used for the `VALUES` clause (`?y` is hidden, so the
+  // sibling's `?y` is a different variable).
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    Service::precomputeSiblingResult(sibling, wrap(service), true, false);
+    ASSERT_TRUE(service->siblingInfo_.has_value());
+    EXPECT_TRUE(onlyX(*service));
+    EXPECT_TRUE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
+  }
+
+  // Same, but the `Service` is on the left and the sibling is wrapped.
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    Service::precomputeSiblingResult(service, wrap(sibling), false, false);
+    ASSERT_TRUE(service->siblingInfo_.has_value());
+    EXPECT_TRUE(onlyX(*service));
+    EXPECT_TRUE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
+  }
+
+  // A `LIMIT` on a skipped operation disables the optimization.
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    Service::precomputeSiblingResult(
+        sibling, wrap(service, LimitOffsetClause{1}), true, false);
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+    EXPECT_FALSE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
   }
 }
 
