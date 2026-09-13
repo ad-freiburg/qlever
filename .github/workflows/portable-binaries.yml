@@ -67,19 +67,31 @@ jobs:
         run: .github/scripts/build-portable-binaries.sh
 
       # The binaries of PR builds are only built and smoke-tested, not kept.
+      # As a tar archive, uploaded as is, so that the binaries keep their
+      # executable bit (a zipped artifact loses all file permissions).
+      - name: Pack binaries
+        if: github.event_name != 'pull_request'
+        run: |
+          tar czf qlever-binaries-linux-${{ matrix.arch }}.tar.gz \
+            -C build-portable/dist qlever-index qlever-server
+
       - name: Upload binaries
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v7
         with:
           name: qlever-binaries-linux-${{ matrix.arch }}
-          path: build-portable/dist/
+          path: qlever-binaries-linux-${{ matrix.arch }}.tar.gz
+          archive: false
           if-no-files-found: error
 
   # The artifacts above can only be downloaded with a GitHub token, so publish
   # the binaries of the latest successfully built `master` commit also as the
   # assets of the pre-release `latest-master`, from where anyone can download
-  # them (for example, the end-to-end tests of qlever-control). The tag moves
-  # to the built commit, and the assets replace the previous ones.
+  # them (for example, the end-to-end tests of qlever-control). The assets and
+  # the notes are replaced first and the tag is moved last (the release action
+  # only creates a tag, it does not move one): if a step fails, the tag still
+  # points to the commit whose notes and assets the release had before, and
+  # the next successful build of `master` replaces everything anyway.
   release:
     name: Update the `latest-master` release
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
@@ -90,34 +102,35 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: qlever-binaries-linux-*
           path: dist
+          merge-multiple: true
 
-      # The three updates cannot be one atomic operation, so the assets come
-      # first and the tag last: if a step fails, the tag still points to the
-      # commit whose notes and assets the release had before, and the next
-      # successful build of `master` replaces everything anyway.
-      - name: Replace the assets, update the release notes, and move the tag
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Describe the built commit
+        id: commit
         run: |
-          for arch in x86_64 arm64; do
-            (cd "dist/qlever-binaries-linux-$arch" \
-              && zip "../qlever-binaries-linux-$arch.zip" qlever-index qlever-server)
-          done
-          notes="Portable Linux binaries (x86_64 and arm64, statically linked \
-          except for glibc) of the latest successfully built commit on \`master\`: \
-          $GITHUB_SHA ($(git log -1 --format=%s)), published $(date -u +'%Y-%m-%d %H:%M UTC'). \
-          This pre-release is replaced by every successful build of \`master\`. \
-          For a stable download, use one of the versioned releases."
-          if gh release view latest-master > /dev/null 2>&1; then
-            gh release upload latest-master dist/*.zip --clobber
-            gh release edit latest-master --title "Latest master build" \
-              --notes "$notes" --prerelease --latest=false
-          else
-            gh release create latest-master dist/*.zip --target "$GITHUB_SHA" \
-              --title "Latest master build" --notes "$notes" --prerelease --latest=false
-          fi
-          git push --force origin "$GITHUB_SHA:refs/tags/latest-master"
+          echo "subject=$(git log -1 --format=%s)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_OUTPUT"
+
+      - name: Replace the assets and the notes of the release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: latest-master
+          target_commitish: ${{ github.sha }}
+          name: Latest master build
+          body: >-
+            Portable Linux binaries (x86_64 and arm64, statically linked except
+            for glibc) of the latest successfully built commit on `master`:
+            ${{ github.sha }} (${{ steps.commit.outputs.subject }}), published
+            ${{ steps.commit.outputs.date }}. This pre-release is replaced by
+            every successful build of `master`. For a stable download, use one
+            of the versioned releases.
+          prerelease: true
+          make_latest: false
+          files: dist/qlever-binaries-linux-*.tar.gz
+          fail_on_unmatched_files: true
+
+      - name: Move the tag to the built commit
+        run: git push --force origin "${{ github.sha }}:refs/tags/latest-master"
