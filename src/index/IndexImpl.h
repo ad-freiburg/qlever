@@ -33,6 +33,7 @@
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
 #include "index/LocalVocabContextImpl.h"
+#include "index/PartialVocabularyFilenames.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
 #include "index/TextMetaData.h"
@@ -63,7 +64,10 @@ using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
 using SecondPermutation = SortByOSP;
 using ThirdPermutation = SortByPSO;
 
-// Data produced after parsing: vocabulary metadata and unsorted ID triples.
+// Data produced after parsing: vocabulary metadata and the number of partial
+// vocabularies. The ID triples and partial vocabularies themselves are written
+// to disk (one file per partial vocabulary, see `unsortedTriplesFilename`) and
+// read back by `IndexImpl::convertPartialToGlobalIds`.
 struct IndexBuilderDataAsExternalVector {
   ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   BuildPartialVocabulariesResult parsedTriples_;
@@ -88,8 +92,6 @@ struct IndexBuilderDataAsFirstPermutationSorter {
 class IndexImpl {
  public:
   using TextScoringMetric = qlever::TextScoringMetric;
-  using TripleVec =
-      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
   // Block Id, isEntity, Context Id, Word Id, Score
   using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
 
@@ -630,11 +632,11 @@ class IndexImpl {
  protected:
   // Private member functions
 
-  // Create Vocabulary and directly write it to disk. Create TripleVec with all
-  // the triples converted to id space. This Vec can be used for creating
-  // permutations. Member vocab_ will be empty after this because it is not
-  // needed for index creation once the TripleVec is set up and it would be a
-  // waste of RAM.
+  // Create the vocabulary and directly write it to disk. Write all the triples
+  // converted to id space to disk, sorted into the first permutation, so that
+  // they can be used for creating the permutations. Member vocab_ will be empty
+  // after this because it is not needed for index creation once the triples are
+  // set up and it would be a waste of RAM.
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
 
@@ -663,10 +665,12 @@ class IndexImpl {
   // private `ItemMapManager` (so no synchronization with the other chains is
   // needed while mapping triples to local IDs) and a private buffer of the
   // resulting `MappedTriple`s. Once `linesPerPartial` triples have been
-  // collected (or the input is exhausted), the chain writes the vocabulary and
-  // the triples (into their own `CompressedExternalIdTable`, see
-  // `BuildPartialVocabulariesResult`) and, if there is more input, starts a
-  // fresh `ItemMapManager` for the next partial vocabulary.
+  // collected (or the input is exhausted), the chain atomically claims the next
+  // free partial vocabulary index from a shared counter, writes the vocabulary
+  // and the corresponding ID triples under that index (see
+  // `writePartialVocabulary` and `BuildPartialVocabulariesResult`) and, if
+  // there is more input, starts a fresh `ItemMapManager` for the next partial
+  // vocabulary.
   //
   // Error handling: if any chain's handler throws, the first such exception is
   // recorded, a `stopRequested` flag is set, and that chain ends without
@@ -682,16 +686,13 @@ class IndexImpl {
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       size_t linesPerPartial);
 
-  // Write the partial vocabulary given by `items` to the file
-  // `onDiskBase_ + PARTIAL_VOCAB_WORDS_INFIX + filenameSuffix`, and write the
-  // corresponding triples in `localIds` to a `TripleVec` of their own, whose
-  // input phase is finished afterwards (see
-  // `CompressedExternalIdTable::finishPushing`). Return the suffix and the
-  // `TripleVec` as a `PartialVocabulary`. Both `items` and the `TripleVec`
-  // belong to a single task chain (see `buildPartialVocabularies`), so no
-  // locking is required.
-  BuildPartialVocabulariesResult::PartialVocabulary writePartialVocabulary(
-      const std::string& filenameSuffix, ItemMapAndBuffer items,
+  // Write the partial vocabulary with index `partialVocabIdx` given by `items`
+  // to its `partialVocabularyWordsFilename` and the corresponding triples in
+  // `localIds` to its `unsortedTriplesFilename`. All data associated with the
+  // `partialVocabIdx` is exclusively owned by the calling task chain (see
+  // `buildPartialVocabularies`), so no locking is required.
+  void writePartialVocabulary(
+      size_t partialVocabIdx, ItemMapAndBuffer items,
       std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds) const;
 
   // Return an asynchronous RDF parser (see `AsyncRdfParserBase`) that parses
@@ -707,9 +708,13 @@ class IndexImpl {
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
       const;
 
+  // Read the unsorted ID triples (written by `buildPartialVocabularies`, one
+  // file per partial vocabulary) back from disk, convert their partial to
+  // global IDs using the corresponding partial-vocabulary mappings, and feed
+  // them into the sorter for the first permutation.
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
-      BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple);
+      const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple);
 
   // Helper function to get the filename for a given permutation.
   std::string getFilenameForPermutation(const Permutation& permutation,

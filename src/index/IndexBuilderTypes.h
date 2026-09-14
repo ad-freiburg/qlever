@@ -15,10 +15,10 @@
 #define QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 
 #include <absl/container/inlined_vector.h>
-#include <absl/strings/str_cat.h>
 
 #include <atomic>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -380,41 +380,15 @@ MappedTriples mapTripleToIds(
 
 // Return type of `IndexImpl::buildPartialVocabularies`.
 struct BuildPartialVocabulariesResult {
-  using TripleVec =
-      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // A partial vocabulary together with the triples that were mapped using it.
-  struct PartialVocabulary {
-    // The suffix of the filenames of this partial vocabulary (words file and
-    // ID map file), see `partialVocabularySuffix`.
-    std::string filenameSuffix_;
-    // The triples of this partial vocabulary, with the local IDs of this
-    // partial vocabulary. The input phase is already finished
-    // (`finishPushing`), so only `getRows()` may be called.
-    std::unique_ptr<TripleVec> idTriples_;
-  };
-  // In the order: all partial vocabularies of the first task chain, then those
-  // of the second, etc.
-  std::vector<PartialVocabulary> partialVocabularies_;
-
-  // The suffix of the filenames of the `partialVocabIdx`-th partial vocabulary
-  // of the task chain with index `taskChainIdx`. The partial vocabularies are
-  // named after the task chain that created them, so that the task chains
-  // don't need a shared counter for the filenames.
-  static std::string partialVocabularySuffix(size_t taskChainIdx,
-                                             size_t partialVocabIdx) {
-    return absl::StrCat(taskChainIdx, ".", partialVocabIdx);
-  }
-
-  // The suffixes of all partial vocabularies that were written, in the order in
-  // which the corresponding triples are stored in `partialVocabularies_`.
-  std::vector<std::string> partialVocabularySuffixes() const {
-    std::vector<std::string> suffixes;
-    suffixes.reserve(partialVocabularies_.size());
-    for (const auto& partialVocab : partialVocabularies_) {
-      suffixes.push_back(partialVocab.filenameSuffix_);
-    }
-    return suffixes;
-  }
+  // The number of partial vocabularies that were written. Each partial
+  // vocabulary has exactly one file with the ID triples that were mapped using
+  // it (see `unsortedTriplesFilename`), so the partial vocabulary with index
+  // `i` and the triples in the file with index `i` always belong together. The
+  // workers that write those pairs work completely independently of each
+  // other; they only share the counter for the indices.
+  size_t numPartialVocabularies_ = 0;
+  // The total number of triples that were written. Only used for logging.
+  size_t numTriples_ = 0;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H

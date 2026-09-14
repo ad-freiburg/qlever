@@ -279,6 +279,10 @@ class CompressedExternalIdTableWriter {
   // Like `readBlock`, but decompresses columns sequentially rather than in
   // parallel. This avoids per-block thread creation, making it suitable for
   // use inside a single persistent background thread (e.g. `runStreamAsync`).
+  //
+  // TODO<joka921> This function is only used by `getBlockStream` below, which
+  // in turn is only used by the unused `CompressedExternalIdTable`. Remove it
+  // together with that class.
   template <size_t NumCols = 0>
   IdTableStatic<NumCols> readBlockSequential(size_t blockIdx) {
     auto block = makeBlock<NumCols>(blockIdx);
@@ -294,6 +298,9 @@ class CompressedExternalIdTableWriter {
   // of the number of stored blocks. Columns are decompressed sequentially
   // within a block; the single background thread already provides concurrency
   // with the consumer.
+  //
+  // TODO<joka921> This function is only used by the unused
+  // `CompressedExternalIdTable`. Remove it together with that class.
   template <size_t N = 0>
   InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
     file_.wlock()->flush();
@@ -498,7 +505,7 @@ CPP_class_template(size_t NumStaticCols,
   // Delete the underlying file and reset the sorter. May only be called if no
   // active `getBlocks()` generator that has not been fully iterated over is
   // currently active, else an exception is thrown by the underlying
-  // `CompressedExternalIdTable`.
+  // `CompressedExternalIdTableWriter`.
   void clear() {
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
@@ -585,6 +592,9 @@ CPP_class_template(size_t NumStaticCols,
 // The interface is as follows: First there is one call to `push` for each row
 // of the `IdTable`, and then there is one single call to `getRows` which yields
 // a generator that yields the rows that have previously been pushed.
+//
+// TODO<joka921> This class is unused (outside of its own unit tests).
+// Remove it.
 template <size_t NumStaticCols>
 class CompressedExternalIdTable
     : public CompressedExternalIdTableBase<NumStaticCols> {
@@ -612,22 +622,6 @@ class CompressedExternalIdTable
       : CompressedExternalIdTable(std::move(filename), NumStaticCols, memory,
                                   std::move(allocator), blocksizeCompression) {}
 
-  // End the input phase early, without transitioning to the output phase. This
-  // writes the current (last, possibly incomplete) block to disk, so that no
-  // `blocksize_`-sized buffer is kept in memory for this table until `getRows`
-  // is eventually called. Useful when many instances of this class are alive
-  // at the same time (e.g. one per partial vocabulary during the first pass of
-  // the index build), so that their input buffers don't all have to be held in
-  // memory simultaneously. May be called at most once, and no `push`/
-  // `pushBlock` call may follow it.
-  void finishPushing() {
-    AD_CONTRACT_CHECK(!pushingFinished_);
-    this->transformAndWriteBlock(std::move(this->currentBlock_));
-    this->resetCurrentBlock(false);
-    this->waitForFuture();
-    pushingFinished_ = true;
-  }
-
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the elements of the
   // `IdTable` in the order that they were `push`ed. This function may be
@@ -639,13 +633,6 @@ class CompressedExternalIdTable
     auto joinBlocks = [](InputRangeTypeErased<Block> stream) {
       return ql::views::join(OwningViewNoConst{std::move(stream)});
     };
-    if (pushingFinished_) {
-      // `finishPushing` has already written the (possibly empty) last block
-      // and waited for it, so we can directly stream all the blocks from the
-      // `writer_` (this also correctly yields an empty stream for a
-      // completely empty table, for which no block was ever written).
-      return joinBlocks(this->writer_.template getBlockStream<NumStaticCols>());
-    }
     if (!this->transformAndPushLastBlock()) {
       // Single block: wrap currentBlock_ as a one-element block stream.
       return joinBlocks(InputRangeTypeErased<Block>{lazySingleValueRange(
@@ -658,10 +645,6 @@ class CompressedExternalIdTable
     // regardless of block count) with sequential column decompression.
     return joinBlocks(this->writer_.template getBlockStream<NumStaticCols>());
   }
-
- private:
-  // Set by `finishPushing`, see there.
-  bool pushingFinished_ = false;
 };
 
 // A virtual base class for the `CompressedExternalIdTableSorter` (see below)
@@ -691,7 +674,7 @@ class CompressedExternalIdTableSorterTypeErased {
 // large to be stored in RAM. `NumStaticCols == 0` means that the IdTable is
 // stored dynamically (see `IdTable.h` and `CallFixedSize.h` for details). The
 // interface is as follows: First there is one call to `push` for each row of
-// the IdTable, and then there is one single call to `getRows` which yields a
+// the IdTable, and then there is one single call to `sortedView` which yields a
 // generator that yields the sorted rows one by one.
 
 // When using very small block sizes in unit tests, then sometimes there are

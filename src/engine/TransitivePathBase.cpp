@@ -384,7 +384,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> TransitivePathBase::getChildren() {
+std::vector<QueryExecutionTree*> TransitivePathBase::getChildrenImpl() const {
   std::vector<QueryExecutionTree*> res;
   auto addChildren = [](std::vector<QueryExecutionTree*>& res,
                         TransitivePathSide side) {

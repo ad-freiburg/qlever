@@ -23,7 +23,7 @@
 #include "../../util/FileTestHelpers.h"
 #include "../../util/IdTestHelpers.h"
 #include "global/VocabIndex.h"
-#include "index/ConstantsIndexBuilding.h"
+#include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary_merger/QueueWord.h"
 
 // Helpers that are shared by the tests of the vocabulary merger (see
@@ -51,19 +51,21 @@ inline ad_utility::vocabulary_merger::detail::QueueWord makeQueueWord(
       partialFileId};
 }
 
-// The suffixes and filenames of a set of partial vocabularies, as created by
+// The number and filenames of a set of partial vocabularies, as created by
 // `makePartialVocabularyFiles`.
 struct PartialVocabularyFiles {
-  // The suffixes `"0"`, `"1"`, ..., in the form in which `mergeVocabulary`
-  // expects them.
-  std::vector<std::string> suffixes_;
+  // The number of partial vocabularies, in the form in which `mergeVocabulary`
+  // expects it.
+  size_t numPartialVocabularies_ = 0;
   // The file that holds the words of each of the partial vocabularies.
   std::vector<std::string> wordsFiles_;
-  // The file that holds the ID map of each of the partial vocabularies.
+  // The file that holds the ID map of each of the partial vocabularies. Hand
+  // these to the `IdMapBatchWriter` and the `VocabularyMergePipeline`, which
+  // take the filenames directly.
   std::vector<std::string> idMapFiles_;
 };
 
-// Return the suffixes and the filenames for `numPartialVocabularies` partial
+// Return the number and the filenames of `numPartialVocabularies` partial
 // vocabularies with the given `basename`, exactly as the vocabulary merger
 // derives them.
 //
@@ -74,12 +76,10 @@ struct PartialVocabularyFiles {
 inline PartialVocabularyFiles makePartialVocabularyFiles(
     const std::string& basename, size_t numPartialVocabularies) {
   PartialVocabularyFiles files;
+  files.numPartialVocabularies_ = numPartialVocabularies;
   for (size_t i = 0; i < numPartialVocabularies; ++i) {
-    files.suffixes_.push_back(std::to_string(i));
-    files.wordsFiles_.push_back(
-        absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, i));
-    files.idMapFiles_.push_back(
-        absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
+    files.wordsFiles_.push_back(partialVocabularyWordsFilename(basename, i));
+    files.idMapFiles_.push_back(partialVocabularyIdMapFilename(basename, i));
   }
   return files;
 }

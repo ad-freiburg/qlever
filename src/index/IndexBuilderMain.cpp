@@ -325,7 +325,7 @@ int main(int argc, char** argv) {
   auto logLevelDescription = absl::StrCat(
       "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
       "Default is INFO. The compile-time level (",
-      LogLevel{LOGLEVEL}.toString(),
+      LogLevel{ad_utility::compileTimeLogLevel}.toString(),
       ") applies as an upper bound — messages above it are never emitted "
       "regardless of this setting.");
   add("log-level",

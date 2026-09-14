@@ -49,11 +49,13 @@ class CountAvailablePredicates : public Operation {
 
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
     using R = std::vector<QueryExecutionTree*>;
     return subtree_ != nullptr ? R{subtree_.get()} : R{};
   }
 
+ public:
   bool knownEmptyResult() override {
     if (subtree_ != nullptr) {
       return subtree_->knownEmptyResult();
