@@ -176,7 +176,7 @@ void ServerMetrics::deltaTriplesCallback(
     opentelemetry::metrics::ObserverResult result, void* state) {
   const auto& self = *static_cast<const ServerMetrics*>(state);
   auto deltaTriples = self.getDeltaTriples_();
-  observe(result, deltaTriples.triplesInserted_, "type", "added");
-  observe(result, deltaTriples.triplesDeleted_, "type", "removed");
+  observe(result, deltaTriples.triplesInserted_, "type", "inserted");
+  observe(result, deltaTriples.triplesDeleted_, "type", "deleted");
   observe(result, deltaTriples.triplesInserted_ + deltaTriples.triplesDeleted_);
 }
