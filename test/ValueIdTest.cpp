@@ -162,6 +162,19 @@ TEST_F(ValueIdTest, Indices) {
 TEST_F(ValueIdTest, Undefined) {
   auto id = ValueId::makeUndefined();
   ASSERT_EQ(id.getDatatype(), Datatype::Undefined);
+
+  // `getUndefined()` returns the single value of `UndefinedType`. Its main
+  // purpose is the generic code in `visit`, which has to dispatch on the
+  // datatype, so we also test it via that path.
+  static_assert(
+      std::is_same_v<decltype(id.getUndefined()), ValueId::UndefinedType>);
+  auto isUndefinedType = [](const auto& value) {
+    return std::is_same_v<std::decay_t<decltype(value)>,
+                          ValueId::UndefinedType>;
+  };
+  EXPECT_TRUE(isUndefinedType(id.getUndefined()));
+  EXPECT_TRUE(id.visit(isUndefinedType));
+  EXPECT_FALSE(ValueId::makeFromInt(42).visit(isUndefinedType));
 }
 
 TEST_F(ValueIdTest, OrderingDifferentDatatypes) {
