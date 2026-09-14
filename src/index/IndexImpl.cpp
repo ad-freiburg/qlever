@@ -13,7 +13,6 @@
 #include <sys/stat.h>
 
 #include <atomic>
-#include <boost/asio/thread_pool.hpp>
 #include <cstdio>
 #include <functional>
 #include <future>
@@ -559,30 +558,17 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   // Counter for the number of ql:has-word triples created.
   std::atomic<size_t> numHasWordTriples = 0;
 
-  // `pool` is declared before `parser`, so that `parser` (whose asynchronous
-  // operations are scheduled on `pool`'s executor and must not outlive it) is
-  // destroyed first when this function returns, in reverse declaration order.
-  boost::asio::thread_pool pool{numThreads};
-  std::unique_ptr<AsyncRdfParserBase> parser =
-      makeRdfParser(pool.get_executor(), std::move(files));
-
   using namespace qlever::partialVocabularyBuilder;
   FirstPassSharedState<IndexImpl> shared{
-      this,
-      parser.get(),
-      &pool,
-      &vocab_.getCaseComparator(),
-      itemAlloc,
-      linesPerPartial,
-      numThreads,
-      &progressBar,
-      addHasWordTriples_ ? &numHasWordTriples : nullptr};
-  runTaskChains(shared);
-
-  // The parser's asynchronous operations must not outlive the executor they
-  // run on, so destroy it now, before `pool` (and its executor) go out of
-  // scope.
-  parser.reset();
+      this,         &vocab_.getCaseComparator(),
+      itemAlloc,    linesPerPartial,
+      &progressBar, addHasWordTriples_ ? &numHasWordTriples : nullptr};
+  // The thread pool and the parser are owned by `runTaskChains`, which only
+  // returns once no asynchronous operation is left.
+  runTaskChains(shared, numThreads,
+                [this, &files](const ql::any_io_executor& executor) {
+                  return makeRdfParser(executor, std::move(files));
+                });
 
   // If the input didn't contain a single triple, we still have to write one
   // partial vocabulary, because the vocabulary has to contain the special IDs

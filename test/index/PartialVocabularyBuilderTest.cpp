@@ -11,8 +11,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <boost/asio/thread_pool.hpp>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <set>
@@ -203,12 +203,15 @@ RunResult run(MockIndex& index, std::vector<std::vector<TurtleTriple>> batches,
   TripleComponentComparator comparator;
   std::atomic<size_t> numHasWordTriples = 0;
 
-  boost::asio::thread_pool pool{numThreads};
-  MockParser parser{pool.get_executor(), std::move(batches), failAtBatch};
-  FirstPassSharedState<MockIndex> shared{
-      &index,          &parser,    &pool,        &comparator,       itemAlloc,
-      linesPerPartial, numThreads, &progressBar, &numHasWordTriples};
-  runTaskChains(shared);
+  FirstPassSharedState<MockIndex> shared{&index,       &comparator,
+                                         itemAlloc,    linesPerPartial,
+                                         &progressBar, &numHasWordTriples};
+  runTaskChains(shared, numThreads,
+                [&batches, failAtBatch](const ql::any_io_executor& executor)
+                    -> std::unique_ptr<AsyncRdfParserBase> {
+                  return std::make_unique<MockParser>(
+                      executor, std::move(batches), failAtBatch);
+                });
   return {shared.nextPartialVocabIdx_.load(), shared.numTriples_.load(),
           shared.stopRequested_.load()};
 }

@@ -11,6 +11,7 @@
 #define QLEVER_SRC_INDEX_PARTIALVOCABULARYBUILDER_H
 
 #include <atomic>
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <exception>
@@ -20,17 +21,21 @@
 #include <utility>
 #include <vector>
 
+#include "backports/asio.h"
 #include "index/IndexBuilderTypes.h"
 #include "parser/AsyncRdfParserBase.h"
 #include "util/Log.h"
 #include "util/ProgressBar.h"
+#include "util/Synchronized.h"
 
 // The building blocks of the first pass of the index building (see
 // `IndexImpl::buildPartialVocabularies`): a single `boost::asio::thread_pool`
-// is driven by several "task chains", each of which repeatedly asks the
-// asynchronous RDF parser for a batch of triples, maps the triples to local IDs
-// and writes a partial vocabulary (together with the corresponding ID triples)
-// whenever enough triples have been collected.
+// (owned by `runTaskChains` below) is driven by several "task chains", each of
+// which repeatedly asks the asynchronous RDF parser for a batch of triples,
+// maps the triples to local IDs and writes a partial vocabulary (together with
+// the corresponding ID triples) whenever enough triples have been collected.
+// The parser runs on the same thread pool, so that there is exactly one
+// compute resource for the whole first pass.
 //
 // The classes are templated on the `Index` type (`IndexImpl` in production)
 // so that the pipeline can be unit-tested in isolation with a mock index. An
@@ -40,7 +45,7 @@
 // - `void writePartialVocabulary(size_t partialVocabIdx, ItemMapAndBuffer
 //   items, std::vector<IdRow> localIds)`, which writes the partial vocabulary
 //   with the given index and its triples. It is called concurrently from
-//   several task chains, but never twice for the same index.
+//   several task chains, but never twice for the same `partialVocabIdx`.
 namespace qlever::partialVocabularyBuilder {
 
 // A row with the components already mapped to IDs. NOTE: Deliberately not
@@ -49,19 +54,18 @@ namespace qlever::partialVocabularyBuilder {
 using IdRow = std::array<Id, NumColumnsIndexBuilding>;
 
 // Shared, mostly read-only state for all the task chains of a single first
-// pass. Must outlive every task chain, which is guaranteed by `runTaskChains`
-// below, because `boost::asio::thread_pool::join()` only returns once every
-// chain has ended (no more calls in flight and no more steps queued).
+// pass. An aggregate: the caller initializes the first six members, the
+// remaining ones are the counters and flags that the chains update while they
+// run and that the caller reads once `runTaskChains` has returned. Must
+// outlive every task chain, which is guaranteed by `runTaskChains` below,
+// because the chains are local to that function.
 template <typename Index>
 struct FirstPassSharedState {
   Index* index_;
-  AsyncRdfParserBase* parser_;
-  boost::asio::thread_pool* pool_;
   // The comparator for the `ItemMapManager`s of the task chains.
   const TripleComponentComparator* comparator_;
   ItemAlloc itemAlloc_;
   size_t linesPerPartial_;
-  size_t numThreads_;
   ad_utility::ConcurrentProgressBar* progressBar_;
   // May be `nullptr` if no `ql:has-word` triples are created.
   std::atomic<size_t>* numHasWordTriples_;
@@ -80,48 +84,30 @@ struct FirstPassSharedState {
   // this flag at the start of handling its next batch and, if it is set, ends
   // without doing further work or scheduling another step.
   std::atomic<bool> stopRequested_ = false;
-  // Guard `firstError_`.
-  std::mutex errorMutex_;
-  std::exception_ptr firstError_;
 
-  // `ItemAlloc` (a `ql::pmr::polymorphic_allocator`) is copyable but not
-  // copy-assignable, and `std::mutex`/`std::atomic` are neither, so this
-  // constructor (rather than member-by-member assignment after default
-  // construction) is used to set up all the members in one go.
-  FirstPassSharedState(Index* index, AsyncRdfParserBase* parser,
-                       boost::asio::thread_pool* pool,
-                       const TripleComponentComparator* comparator,
-                       ItemAlloc itemAlloc, size_t linesPerPartial,
-                       size_t numThreads,
-                       ad_utility::ConcurrentProgressBar* progressBar,
-                       std::atomic<size_t>* numHasWordTriples)
-      : index_{index},
-        parser_{parser},
-        pool_{pool},
-        comparator_{comparator},
-        itemAlloc_{itemAlloc},
-        linesPerPartial_{linesPerPartial},
-        numThreads_{numThreads},
-        progressBar_{progressBar},
-        numHasWordTriples_{numHasWordTriples} {}
+  // The first error that was reported by any task chain (see `reportError`),
+  // or a null `exception_ptr` if no chain has failed. Rethrown by
+  // `runTaskChains` after all chains have ended.
+  ad_utility::Synchronized<std::exception_ptr, std::mutex> firstError_{};
 
   // Record `ep` as `firstError_` (unless an error has already been recorded)
   // and set `stopRequested_`. Thread-safe; may be called concurrently by
   // several task chains.
   void reportError(std::exception_ptr ep) {
-    std::lock_guard l{errorMutex_};
-    if (!firstError_) {
-      firstError_ = ep;
-    }
+    firstError_.withWriteLock([&ep](std::exception_ptr& firstError) {
+      if (!firstError) {
+        firstError = std::move(ep);
+      }
+    });
     stopRequested_.store(true, std::memory_order_relaxed);
   }
 };
 
 // A single task chain of the first pass. This is *not* a thread: after
 // construction, `start()` schedules the first step as a `boost::asio`
-// completion handler on the shared thread pool, and every subsequent step is
-// likewise scheduled via `boost::asio::post` (never called inline from within
-// a handler), so that the call stack never grows with the number of processed
+// completion handler on `executor_`, and every subsequent step is likewise
+// scheduled via `boost::asio::post` (never called inline from within a
+// handler), so that the call stack never grows with the number of processed
 // batches. A chain contributes its share of the work simply by keeping one
 // call to `AsyncRdfParserBase::asyncGetBatch` in flight at a time; since the
 // parser supports concurrent calls, several chains together parse and map
@@ -144,34 +130,41 @@ template <typename Index>
 class PartialVocabularyTaskChain {
  private:
   FirstPassSharedState<Index>& shared_;
+  AsyncRdfParserBase& parser_;
+  // The executor on which all the steps of this chain run. The completion
+  // handlers of the `asyncGetBatch` calls are explicitly bound to it (see
+  // `step`), so that the chain does not depend on the executor of the parser.
+  ql::any_io_executor executor_;
   // The `ItemMapManager` and buffered local-ID triples of the partial
   // vocabulary that is currently being built by this chain; re-created with a
   // fresh, empty state every time a partial vocabulary is written (see
-  // `writeCurrentPartialVocabulary`). `ItemMapManager` is `alignas(256)` and
+  // `writeCurrentPartialVocabulary`). `ItemMapManager` is
   // not movable, hence the `optional`.
   std::optional<ItemMapManager> itemMap_;
   std::vector<IdRow> localTriples_;
   size_t numInputTriples_ = 0;
 
  public:
-  explicit PartialVocabularyTaskChain(FirstPassSharedState<Index>& shared)
-      : shared_{shared} {
+  PartialVocabularyTaskChain(FirstPassSharedState<Index>& shared,
+                             AsyncRdfParserBase& parser,
+                             ql::any_io_executor executor)
+      : shared_{shared}, parser_{parser}, executor_{std::move(executor)} {
     startNewPartialVocabulary();
   }
 
   // Schedule the first step of this chain. Must be called exactly once, after
-  // all task chains have been constructed and before `shared_.pool_->join()`.
+  // all task chains have been constructed and before the thread pool behind
+  // `executor_` is joined.
   void start() { postNextStep(); }
 
  private:
   // (Re-)initialize `itemMap_` for a fresh partial vocabulary and clear the
   // triple buffer and the input-triple counter. Reserve space for the
-  // expected number of distinct words, which is a heuristic of five words per
-  // triple, divided among the `numThreads_` task chains.
+  // expected number of distinct words, which is a heuristic of three words per
+  // triple.
   void startNewPartialVocabulary() {
     itemMap_.emplace(0, shared_.comparator_, shared_.itemAlloc_);
-    itemMap_->map_.map_.reserve(5 * shared_.linesPerPartial_ /
-                                shared_.numThreads_);
+    itemMap_->map_.map_.reserve(3 * shared_.linesPerPartial_);
     localTriples_.clear();
     numInputTriples_ = 0;
   }
@@ -189,19 +182,19 @@ class PartialVocabularyTaskChain {
                                            std::move(localTriples_));
   }
 
-  // Schedule the next step of this chain on the shared thread pool.
+  // Schedule the next step of this chain on `executor_`.
   void postNextStep() {
-    boost::asio::post(*shared_.pool_, [this] { step(); });
+    boost::asio::post(executor_, [this] { step(); });
   }
 
   // A single step of this chain: ask the parser for the next batch of
-  // triples and, once it arrives, handle it in `handleBatch`.
+  // triples and, once it arrives, handle it in `handleBatch` on `executor_`.
   void step() {
-    shared_.parser_->asyncGetBatch(
-        [this](std::exception_ptr ep,
-               std::optional<std::vector<TurtleTriple>> batch) {
+    parser_.asyncGetBatch(boost::asio::bind_executor(
+        executor_, [this](std::exception_ptr ep,
+                          std::optional<std::vector<TurtleTriple>> batch) {
           handleBatch(std::move(ep), std::move(batch));
-        });
+        }));
   }
 
   // Handle the result of one `asyncGetBatch` call: map the triples in `batch`
@@ -239,6 +232,8 @@ class PartialVocabularyTaskChain {
         writeCurrentPartialVocabulary();
         startNewPartialVocabulary();
       }
+      // This is the `continue` of the asynchronous loop: schedule the next
+      // step of this chain.
       postNextStep();
     } catch (...) {
       shared_.reportError(std::current_exception());
@@ -247,33 +242,46 @@ class PartialVocabularyTaskChain {
   }
 };
 
-// Run `shared.numThreads_` task chains on `shared.pool_` and block until all
-// of them have ended, i.e. until the parser has delivered the end of its
-// input to every chain or a chain has failed. In the latter case, rethrow the
-// first recorded error. Afterwards, `shared.nextPartialVocabIdx_` is the
-// number of partial vocabularies that were written (each index below it was
-// claimed by exactly one chain) and `shared.numTriples_` the total number of
-// triples that were written.
-template <typename Index>
-void runTaskChains(FirstPassSharedState<Index>& shared) {
+// Run `numThreads` task chains on a thread pool with `numThreads` threads,
+// which is created (and destroyed) by this function, and block until all of
+// them have ended, i.e. until the parser has delivered the end of its input to
+// every chain or a chain has failed. In the latter case, rethrow the first
+// recorded error. The parser is created by `makeParser`, which is called with
+// the executor of the thread pool and must return a
+// `std::unique_ptr<AsyncRdfParserBase>` that schedules all of its work on that
+// executor. Afterwards, `shared.nextPartialVocabIdx_` is the number of partial
+// vocabularies that were written (each index below it was claimed by exactly
+// one chain) and `shared.numTriples_` the total number of triples that were
+// written.
+template <typename Index, typename MakeParser>
+void runTaskChains(FirstPassSharedState<Index>& shared, size_t numThreads,
+                   MakeParser makeParser) {
+  // `pool` is declared before `parser` and `chains`, so that these (whose
+  // asynchronous operations are scheduled on `pool`) are destroyed first, in
+  // reverse declaration order.
+  boost::asio::thread_pool pool{numThreads};
+  std::unique_ptr<AsyncRdfParserBase> parser =
+      std::move(makeParser)(pool.get_executor());
   // The chains are owned here, outside of the thread pool, and are kept alive
   // until `join()` has returned. This is simpler than passing `shared_ptr`s to
   // the chains through every asynchronous step.
   std::vector<std::unique_ptr<PartialVocabularyTaskChain<Index>>> chains;
-  chains.reserve(shared.numThreads_);
-  for (size_t i = 0; i < shared.numThreads_; ++i) {
-    chains.push_back(
-        std::make_unique<PartialVocabularyTaskChain<Index>>(shared));
+  chains.reserve(numThreads);
+  for (size_t i = 0; i < numThreads; ++i) {
+    chains.push_back(std::make_unique<PartialVocabularyTaskChain<Index>>(
+        shared, *parser, pool.get_executor()));
   }
   for (auto& chain : chains) {
     chain->start();
   }
   // Block until every task chain has ended, i.e. no more `asyncGetBatch`
-  // calls are in flight and no more steps are queued.
-  shared.pool_->join();
+  // calls are in flight and no more steps are queued. As the parser also runs
+  // on `pool`, this means that no asynchronous operation at all is left.
+  pool.join();
 
-  if (shared.firstError_) {
-    std::rethrow_exception(shared.firstError_);
+  std::exception_ptr firstError = *shared.firstError_.wlock();
+  if (firstError) {
+    std::rethrow_exception(firstError);
   }
 }
 
