@@ -13,12 +13,10 @@
 #include <sys/stat.h>
 
 #include <atomic>
-#include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <cstdio>
 #include <functional>
 #include <future>
-#include <mutex>
 #include <numeric>
 #include <optional>
 #include <type_traits>
@@ -34,6 +32,7 @@
 #include "index/Index.h"
 #include "index/IndexFormatConverter.h"
 #include "index/IndexFormatVersion.h"
+#include "index/PartialVocabularyBuilder.h"
 #include "index/TripleComponentConversions.h"
 #include "index/VocabularyMerger.h"
 #include "parser/AsyncRdfParserBase.h"
@@ -534,206 +533,6 @@ void IndexImpl::addInternalStatisticsToConfiguration(
   writeConfiguration();
 }
 
-namespace {
-// A row with the components already mapped to IDs. NOTE: Deliberately not
-// named `IdTriple`, which is a class with a similar purpose defined in
-// `index/IdTriple.h`.
-using IdRow = std::array<Id, NumColumnsIndexBuilding>;
-
-// Shared, mostly read-only state for all the task chains of a single call to
-// `IndexImpl::buildPartialVocabularies` (see the documentation there for the
-// overall design of the first pass of the index building). Owned by
-// `buildPartialVocabularies` itself as a local variable, which outlives every
-// task chain, because `boost::asio::thread_pool::join()` only returns once
-// every chain has ended (no more calls in flight and no more steps queued).
-struct FirstPassSharedState {
-  using WritePartialVocabularyFunction =
-      std::function<void(size_t, ItemMapAndBuffer, std::vector<IdRow>)>;
-
-  IndexImpl* index_;
-  AsyncRdfParserBase* parser_;
-  boost::asio::thread_pool* pool_;
-  ItemAlloc itemAlloc_;
-  size_t linesPerPartial_;
-  size_t numThreads_;
-  ad_utility::ConcurrentProgressBar* progressBar_;
-  std::atomic<size_t>* numHasWordTriples_;
-
-  // Forward to the private `IndexImpl::writePartialVocabulary`, so that the
-  // (free-standing) task chains below can write a partial vocabulary without
-  // needing access to `IndexImpl`'s private members.
-  WritePartialVocabularyFunction writePartialVocabulary_;
-
-  // The shared counter for the indices of the partial vocabularies. Each task
-  // chain claims the next free index whenever it has to write a partial
-  // vocabulary, together with the corresponding triples (see
-  // `BuildPartialVocabulariesResult`).
-  std::atomic<size_t> nextPartialVocabIdx_ = 0;
-
-  // Set to `true` as soon as any task chain has failed. Every chain checks
-  // this flag at the start of handling its next batch and, if it is set, ends
-  // without doing further work or scheduling another step.
-  std::atomic<bool> stopRequested_ = false;
-  // Guard `firstError_`.
-  std::mutex errorMutex_;
-  std::exception_ptr firstError_;
-
-  // `ItemAlloc` (a `ql::pmr::polymorphic_allocator`) is copyable but not
-  // copy-assignable, and `std::mutex`/`std::atomic` are neither, so this
-  // constructor (rather than member-by-member assignment after default
-  // construction) is used to set up all the members in one go.
-  FirstPassSharedState(IndexImpl* index, AsyncRdfParserBase* parser,
-                       boost::asio::thread_pool* pool, ItemAlloc itemAlloc,
-                       size_t linesPerPartial, size_t numThreads,
-                       ad_utility::ConcurrentProgressBar* progressBar,
-                       std::atomic<size_t>* numHasWordTriples,
-                       WritePartialVocabularyFunction writePartialVocabulary)
-      : index_{index},
-        parser_{parser},
-        pool_{pool},
-        itemAlloc_{itemAlloc},
-        linesPerPartial_{linesPerPartial},
-        numThreads_{numThreads},
-        progressBar_{progressBar},
-        numHasWordTriples_{numHasWordTriples},
-        writePartialVocabulary_{std::move(writePartialVocabulary)} {}
-
-  // Record `ep` as `firstError_` (unless an error has already been recorded)
-  // and set `stopRequested_`. Thread-safe; may be called concurrently by
-  // several task chains.
-  void reportError(std::exception_ptr ep) {
-    std::lock_guard l{errorMutex_};
-    if (!firstError_) {
-      firstError_ = ep;
-    }
-    stopRequested_.store(true, std::memory_order_relaxed);
-  }
-};
-
-// A single task chain of `IndexImpl::buildPartialVocabularies` (see the
-// documentation there for the overall design). This is *not* a thread: after
-// construction, `start()` schedules the first step as a `boost::asio`
-// completion handler on the shared thread pool, and every subsequent step is
-// likewise scheduled via `boost::asio::post` (never called inline from within
-// a handler), so that the call stack never grows with the number of processed
-// batches.
-class PartialVocabularyTaskChain {
- private:
-  FirstPassSharedState& shared_;
-  // The `ItemMapManager` and buffered local-ID triples of the partial
-  // vocabulary that is currently being built by this chain; re-created with a
-  // fresh, empty state every time a partial vocabulary is written (see
-  // `writeCurrentPartialVocabulary`). `ItemMapManager` is `alignas(256)` and
-  // not movable, hence the `optional`.
-  std::optional<ItemMapManager> itemMap_;
-  std::vector<IdRow> localTriples_;
-  size_t numInputTriples_ = 0;
-  // The total number of triples that this chain has written (only used for
-  // logging, see `BuildPartialVocabulariesResult::numTriples_`).
-  size_t numTriples_ = 0;
-
- public:
-  explicit PartialVocabularyTaskChain(FirstPassSharedState& shared)
-      : shared_{shared} {
-    startNewPartialVocabulary();
-  }
-
-  // Schedule the first step of this chain. Must be called exactly once, after
-  // all task chains have been constructed and before `shared_.pool_->join()`.
-  void start() { postNextStep(); }
-
-  // The total number of triples that this chain has written. Must only be
-  // called after `shared_.pool_->join()` has returned.
-  size_t numTriples() const { return numTriples_; }
-
- private:
-  // (Re-)initialize `itemMap_` for a fresh partial vocabulary and clear the
-  // triple buffer and the input-triple counter. Use the same `reserve`
-  // heuristic as the previous, per-worker implementation, but divided among
-  // `numThreads` task chains instead of the previously fixed number of worker
-  // threads.
-  void startNewPartialVocabulary() {
-    itemMap_.emplace(0, &shared_.index_->getVocab().getCaseComparator(),
-                     shared_.itemAlloc_);
-    itemMap_->map_.map_.reserve(5 * shared_.linesPerPartial_ /
-                                shared_.numThreads_);
-    localTriples_.clear();
-    numInputTriples_ = 0;
-  }
-
-  // Claim the next free partial vocabulary index from the shared counter and
-  // write the current (non-empty) partial vocabulary and its triples under
-  // that index. Both files are exclusively owned by this chain, so no further
-  // synchronization is needed.
-  void writeCurrentPartialVocabulary() {
-    size_t partialVocabIdx = shared_.nextPartialVocabIdx_.fetch_add(1);
-    numTriples_ += localTriples_.size();
-    shared_.writePartialVocabulary_(partialVocabIdx,
-                                    std::move(*itemMap_).moveMap(),
-                                    std::move(localTriples_));
-  }
-
-  // Schedule the next step of this chain on the shared thread pool.
-  void postNextStep() {
-    boost::asio::post(*shared_.pool_, [this] { step(); });
-  }
-
-  // A single step of this chain: ask the parser for the next batch of
-  // triples and, once it arrives, handle it in `handleBatch`.
-  void step() {
-    shared_.parser_->asyncGetBatch(
-        [this](std::exception_ptr ep,
-               std::optional<std::vector<TurtleTriple>> batch) {
-          handleBatch(std::move(ep), std::move(batch));
-        });
-  }
-
-  // Handle the result of one `asyncGetBatch` call: map the triples in `batch`
-  // to local IDs, write and (re-)start partial vocabularies as needed, and
-  // either schedule the next step or end this chain (by not scheduling one).
-  // See the documentation of `IndexImpl::buildPartialVocabularies` for the
-  // exact semantics.
-  void handleBatch(std::exception_ptr ep,
-                   std::optional<std::vector<TurtleTriple>> batch) {
-    try {
-      if (ep) {
-        std::rethrow_exception(ep);
-      }
-      if (shared_.stopRequested_.load(std::memory_order_relaxed)) {
-        // Another chain has failed; end this chain without further work.
-        return;
-      }
-      if (!batch.has_value()) {
-        // End of input for this chain. Write the current partial vocabulary,
-        // unless this chain never received a single batch for it.
-        if (!localTriples_.empty()) {
-          writeCurrentPartialVocabulary();
-        }
-        return;
-      }
-      for (auto& triple : batch.value()) {
-        auto ids = mapTripleToIds(std::move(triple), itemMap_.value(),
-                                  shared_.index_, shared_.numHasWordTriples_);
-        localTriples_.insert(localTriples_.end(), ids.begin(), ids.end());
-      }
-      numInputTriples_ += batch->size();
-      shared_.progressBar_->add(batch->size());
-      if (auto update = shared_.progressBar_->update()) {
-        AD_LOG_INFO << update->getProgressString() << std::flush;
-      }
-      if (numInputTriples_ >= shared_.linesPerPartial_) {
-        writeCurrentPartialVocabulary();
-        startNewPartialVocabulary();
-      }
-      postNextStep();
-    } catch (...) {
-      shared_.reportError(std::current_exception());
-      // End this chain: do not schedule another step.
-    }
-  }
-};
-}  // namespace
-
 // _____________________________________________________________________________
 BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
@@ -767,37 +566,19 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   std::unique_ptr<AsyncRdfParserBase> parser =
       makeRdfParser(pool.get_executor(), std::move(files));
 
-  FirstPassSharedState shared{
+  using namespace qlever::partialVocabularyBuilder;
+  FirstPassSharedState<IndexImpl> shared{
       this,
       parser.get(),
       &pool,
+      &vocab_.getCaseComparator(),
       itemAlloc,
       linesPerPartial,
       numThreads,
       &progressBar,
-      addHasWordTriples_ ? &numHasWordTriples : nullptr,
-      [this](size_t partialVocabIdx, ItemMapAndBuffer items,
-             std::vector<IdRow> localIds) {
-        writePartialVocabulary(partialVocabIdx, std::move(items),
-                               std::move(localIds));
-      }};
+      addHasWordTriples_ ? &numHasWordTriples : nullptr};
+  runTaskChains(shared);
 
-  std::vector<std::unique_ptr<PartialVocabularyTaskChain>> chains;
-  chains.reserve(numThreads);
-  for ([[maybe_unused]] size_t chainIdx :
-       ad_utility::integerRange(numThreads)) {
-    chains.push_back(std::make_unique<PartialVocabularyTaskChain>(shared));
-  }
-  for (auto& chain : chains) {
-    chain->start();
-  }
-  // Block until every task chain has ended, i.e. no more `asyncGetBatch`
-  // calls are in flight and no more steps are queued.
-  pool.join();
-
-  if (shared.firstError_) {
-    std::rethrow_exception(shared.firstError_);
-  }
   // The parser's asynchronous operations must not outlive the executor they
   // run on, so destroy it now, before `pool` (and its executor) go out of
   // scope.
@@ -815,11 +596,8 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
 
   // The task chains have claimed all the indices below the counter, and each
   // of them exactly once (see `BuildPartialVocabulariesResult`).
-  BuildPartialVocabulariesResult result{
-      shared.nextPartialVocabIdx_.load(),
-      ::ranges::accumulate(chains, size_t{0}, {}, [](const auto& chain) {
-        return chain->numTriples();
-      })};
+  BuildPartialVocabulariesResult result{shared.nextPartialVocabIdx_.load(),
+                                        shared.numTriples_.load()};
 
   progressBar.logFinalProgressString();
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
@@ -1932,10 +1710,9 @@ void IndexImpl::writePartialVocabulary(
   }();
   {
     ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
-    // `doParallelSort` is `false` because this function is now called from
-    // within one of the task chains of `buildPartialVocabularies`, and the
-    // shared thread pool that runs those chains already keeps all cores busy,
-    // so an additional parallel sort here would only add contention.
+    // `doParallelSort` is `false` because this function runs on the shared
+    // thread pool of `buildPartialVocabularies`, which already keeps all cores
+    // busy, so an additional parallel sort here would only add contention.
     sortVocabVector(
         &vec,
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
@@ -1959,9 +1736,6 @@ void IndexImpl::writePartialVocabulary(
                           }),
               vec.end());
   }
-  // The triples are written synchronously (and not on a separate thread as
-  // before) for the same reason as the sequential sort above: this function
-  // runs on the shared thread pool of `buildPartialVocabularies`.
   {
     ad_utility::TimeBlockAndLog l{"writing to file"};
     writeMappedIdsToFile(std::move(localIds), mapping,

@@ -54,6 +54,12 @@
 #include "util/TransparentFunctors.h"
 #include "util/json.h"
 
+// Forward declaration, see `PartialVocabularyBuilder.h`.
+namespace qlever::partialVocabularyBuilder {
+template <typename Index>
+class PartialVocabularyTaskChain;
+}
+
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
 using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, I>;
@@ -641,42 +647,13 @@ class IndexImpl {
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
 
   // Parse all triples from `files` and build the partial vocabularies, one per
-  // batch of (approximately) `linesPerPartial` triples. This is the first pass
-  // of the index building and is completely asynchronous: a single
-  // `boost::asio::thread_pool`, with a runtime-configurable number of threads
-  // (`RuntimeParameters::indexBuildFirstPassNumThreads_`), does all of the
-  // work. The parser (see `makeRdfParser`) is created on the pool's executor,
-  // right before the pool starts working, and is destroyed after the pool has
-  // finished (in particular, it is destroyed before the pool itself, because
-  // its asynchronous operations must not outlive the executor they run on).
-  //
-  // The pool is driven by `numThreads` "task chains". A task chain is *not* a
-  // thread: it is a chain of completion handlers, each of which calls
-  // `AsyncRdfParserBase::asyncGetBatch` and, once the batch has arrived and has
-  // been mapped to local IDs, schedules (via `boost::asio::post`, never
-  // inline) the next step of the same chain. A chain contributes its share of
-  // the work simply by keeping one call to `asyncGetBatch` in flight at a
-  // time; since the parser supports concurrent calls, the `numThreads` chains
-  // together parse and map triples in parallel. `pool.join()` returns once
-  // every chain has ended (i.e. no more calls are in flight and no more steps
-  // are queued).
-  //
-  // Each chain builds its own sequence of partial vocabularies: it owns a
-  // private `ItemMapManager` (so no synchronization with the other chains is
-  // needed while mapping triples to local IDs) and a private buffer of the
-  // resulting `MappedTriple`s. Once `linesPerPartial` triples have been
-  // collected (or the input is exhausted), the chain atomically claims the next
-  // free partial vocabulary index from a shared counter, writes the vocabulary
-  // and the corresponding ID triples under that index (see
-  // `writePartialVocabulary` and `BuildPartialVocabulariesResult`) and, if
-  // there is more input, starts a fresh `ItemMapManager` for the next partial
-  // vocabulary.
-  //
-  // Error handling: if any chain's handler throws, the first such exception is
-  // recorded, a `stopRequested` flag is set, and that chain ends without
-  // starting another step. Every other chain notices `stopRequested` at the
-  // start of its own next step and likewise ends without doing further work.
-  // Once `pool.join()` returns, the recorded exception (if any) is re-thrown.
+  // batch of (approximately) `linesPerPartial` triples, together with the
+  // corresponding ID triples (see `writePartialVocabulary`). This is the first
+  // pass of the index building. It runs as a fully asynchronous pipeline on a
+  // thread pool with `RuntimeParameters::indexBuildFirstPassNumThreads_`
+  // threads for efficient CPU utilization (see `PartialVocabularyBuilder.h`
+  // for the details). If parsing or writing fails, the first error is
+  // rethrown after the pipeline has stopped.
   BuildPartialVocabulariesResult buildPartialVocabularies(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       size_t linesPerPartial);
@@ -865,6 +842,11 @@ class IndexImpl {
       TextScanMode textScanMode) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
+
+  // The task chains of the first pass of the index building call the private
+  // `writePartialVocabulary`, see `PartialVocabularyBuilder.h`.
+  template <typename Index>
+  friend class qlever::partialVocabularyBuilder::PartialVocabularyTaskChain;
 
   // FRIEND TESTS
   friend class IndexTest_createFromTsvTest_Test;
