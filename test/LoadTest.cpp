@@ -386,13 +386,13 @@ TEST_F(LoadTest, IntegrationWithBlankNodes) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp(qec, cancellationHandle);
   auto executionTree = qp.createExecutionTree(parsedUpdate[0]);
-  Load* load = dynamic_cast<Load*>(executionTree.getRootOperation().get());
+  Load* load = dynamic_cast<Load*>(executionTree->getRootOperation().get());
   ASSERT_THAT(load, testing::NotNull()) << "Root operation is not a Load";
   load->resetGetResultFunctionForTesting(
       getResultFunctionFactory("_:b1 <b> <c> . <d> <e> _:b1 . [] <b> <c> .",
                                boost::beast::http::status::ok, "text/turtle"));
   DeltaTriples deltaTriples{qec->getIndex()};
-  ExecuteUpdate::executeUpdate(qec->getIndex(), parsedUpdate[0], executionTree,
+  ExecuteUpdate::executeUpdate(qec->getIndex(), parsedUpdate[0], *executionTree,
                                deltaTriples, cancellationHandle);
   EXPECT_THAT(deltaTriples, deltaTriplesTestHelpers::NumTriples(3, 0, 3));
 }
