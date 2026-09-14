@@ -132,6 +132,8 @@ EMSCRIPTEN_BINDINGS(qlever) {
                 &qlever::IndexBuilderConfig::keepTemporaryFiles_)
       .property("prefixesForIdEncodedIris",
                 &qlever::IndexBuilderConfig::prefixesForIdEncodedIris_)
+      .property("widePrefixesForIdEncodedIris",
+                &qlever::IndexBuilderConfig::widePrefixesForIdEncodedIris_)
       .property("addWordsFromLiterals",
                 &qlever::IndexBuilderConfig::addWordsFromLiterals_)
       .property("vocabType",
