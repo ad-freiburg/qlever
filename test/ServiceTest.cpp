@@ -1025,7 +1025,8 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
         sibling->precomputedResultBecauseSiblingOfService().has_value());
   }
 
-  // Same, but the `Service` is on the left and the sibling is wrapped.
+  // Same, but the sibling is wrapped (`?y` hidden on the sibling's side), once
+  // with the `Service` on the left and once on the right.
   {
     auto service = makeService();
     auto sibling = makeValues();
@@ -1035,13 +1036,32 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
     EXPECT_TRUE(
         sibling->precomputedResultBecauseSiblingOfService().has_value());
   }
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    Service::precomputeSiblingResult(wrap(sibling), service, true, false);
+    ASSERT_TRUE(service->siblingInfo_.has_value());
+    EXPECT_EQ(service->getSiblingValuesClause(), valuesClauseX);
+    EXPECT_TRUE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
+  }
 
-  // A `LIMIT` on a skipped operation disables the optimization.
+  // A `LIMIT` on a skipped operation disables the optimization, on either
+  // side.
   {
     auto service = makeService();
     auto sibling = makeValues();
     Service::precomputeSiblingResult(
         sibling, wrap(service, LimitOffsetClause{1}), true, false);
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+    EXPECT_FALSE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
+  }
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    Service::precomputeSiblingResult(wrap(service, LimitOffsetClause{1}),
+                                     sibling, false, false);
     EXPECT_FALSE(service->siblingInfo_.has_value());
     EXPECT_FALSE(
         sibling->precomputedResultBecauseSiblingOfService().has_value());
