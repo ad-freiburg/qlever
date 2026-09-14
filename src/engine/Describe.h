@@ -34,7 +34,6 @@ class Describe : public Operation {
   const auto& getDescribe() const { return describe_; }
 
   // The following functions override those from the base class `Operation`.
-  std::vector<QueryExecutionTree*> getChildren() override;
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
@@ -48,6 +47,7 @@ class Describe : public Operation {
   bool knownEmptyResult() override;
 
  private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;

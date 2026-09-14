@@ -41,8 +41,12 @@ class Load final : public Operation {
 
   ~Load() override = default;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {};
+  }
 
+ public:
   std::string getCacheKeyImpl() const override;
 
   std::string getDescriptor() const override;

@@ -71,12 +71,12 @@ struct PlannedQuery {
   std::shared_ptr<QueryExecutionTree> queryExecutionTree_;
 
  public:
-  PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
+  PlannedQuery(ParsedQuery pq, std::shared_ptr<QueryExecutionTree> qet,
                QueryExecutionContext& qec)
       : qec_{qec.shared_from_this()},
         parsedQuery_{std::move(pq)},
-        queryExecutionTree_{
-            qec.makeShared<QueryExecutionTree>(std::move(qet))} {
+        queryExecutionTree_{std::move(qet)} {
+    AD_CONTRACT_CHECK(queryExecutionTree_ != nullptr);
     AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_->getQec());
   }
 

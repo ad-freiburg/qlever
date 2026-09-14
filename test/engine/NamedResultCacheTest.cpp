@@ -184,9 +184,9 @@ TEST(NamedResultCache, emptyResultInsteadOfExceptionE2E) {
       &RuntimeParameters::emptyResultInsteadOfExceptions_>(true);
   auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
   // `false` means `not lazy` so `fully materialized`.
-  auto result = qet.getResult(false);
+  auto result = qet->getResult(false);
   EXPECT_EQ(result->idTableView().numRows(), 0);
-  EXPECT_THAT(qet.getVariableColumns(), ::testing::IsEmpty());
+  EXPECT_THAT(qet->getVariableColumns(), ::testing::IsEmpty());
 
   // The empty result also propagates through the rest of the query: the
   // pattern `?s <p> <o>` alone would match two triples.
@@ -194,8 +194,8 @@ TEST(NamedResultCache, emptyResultInsteadOfExceptionE2E) {
       "SELECT * { ?s <p> <o> . SERVICE ql:cached-result-with-name-notPinned "
       "{}}",
       qec);
-  EXPECT_EQ(qet.getResult(false)->idTableView().numRows(), 0);
-  EXPECT_THAT(qet.getVariableColumns(),
+  EXPECT_EQ(qet->getResult(false)->idTableView().numRows(), 0);
+  EXPECT_THAT(qet->getVariableColumns(),
               ::testing::ElementsAre(::testing::Key(Variable{"?s"})));
 }
 
@@ -208,14 +208,14 @@ TEST(NamedResultCache, E2E) {
       "SORT BY ?s";
   qec->pinResultWithName() = {"dummyQuery"};
   auto qet = queryPlannerTestHelpers::parseAndPlan(pinnedQuery, qec);
-  [[maybe_unused]] auto pinnedResult = qet.getResult();
+  [[maybe_unused]] auto pinnedResult = qet->getResult();
 
   qec->pinResultWithName() = std::nullopt;
   std::string query =
       "SELECT ?s { SERVICE ql:cached-result-with-name-dummyQuery {}}";
   qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
   // `false` means `not lazy` so `fully materialized`.
-  auto result = qet.getResult(false);
+  auto result = qet->getResult(false);
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   LocalVocab dummyVocab;
@@ -230,7 +230,7 @@ TEST(NamedResultCache, E2E) {
   EXPECT_THAT(result->sortedBy(), ::testing::ElementsAre(0));
   VariableToColumnMap expectedVars{
       {Variable{"?s"}, makeAlwaysDefinedColumn(0)}};
-  EXPECT_THAT(qet.getVariableColumns(),
+  EXPECT_THAT(qet->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVars));
 }
 }  // namespace

@@ -12,7 +12,7 @@ NeutralOptional::NeutralOptional(QueryExecutionContext* qec,
     : Operation{qec}, tree_{std::move(tree)} {}
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> NeutralOptional::getChildren() {
+std::vector<QueryExecutionTree*> NeutralOptional::getChildrenImpl() const {
   return {tree_.get()};
 }
 
