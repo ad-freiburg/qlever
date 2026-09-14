@@ -30,6 +30,9 @@ jobs:
     timeout-minutes: 180
     env:
       PATH: /home/userNoPriv/.local/bin:/home/userNoPriv/.local/share/npm/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      # Path-independent build cache: the action checkout lands at a different
+      # absolute path every run, which would defeat GOCACHE without this.
+      GOFLAGS: -trimpath
     steps:
       - name: Resolve PR context for comment-triggered reviews
         id: pr-context
@@ -64,6 +67,18 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
+      - name: Restore OCR source-build caches
+        # The fork's fan-out flag is not on npm, so the action must build from
+        # source; cache the Go/npm caches keyed by the pinned action revision
+        # so only the first run per pin pays the full build. A miss behaves
+        # exactly like today. Bump the trailing SHA with the action pin below.
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.npm
+          key: ocr-build-linux-x64-48cc191fc147f0b4642e9658717805f6a3dfefa5
       - name: Review pull request with fan-out project rules
         uses: marvin7122/open-code-review@48cc191fc147f0b4642e9658717805f6a3dfefa5
         with:
@@ -83,6 +98,19 @@ jobs:
           incremental: 'true'
           upload_artifacts: 'true'
           stream_progress: 'true'
+      - name: Save OCR source-build caches
+        # Runs even when the review is cancelled or times out (the common
+        # case), so the next run still benefits. Conflicts with an existing
+        # entry are harmless: the step may warn, the job continues.
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.npm
+          key: ocr-build-linux-x64-48cc191fc147f0b4642e9658717805f6a3dfefa5
       - name: Mint fresh App token for stamping
         id: app-token-stamp
         if: ${{ vars.OCR_FANOUT_APP_ID != '' }}
