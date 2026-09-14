@@ -278,7 +278,8 @@ class TransitivePathBase : public Operation {
   // Calculate their correct offsets and set the payload columns' indices  in
   // the `plan`. `leftCol` and/or `rightCol` are the sides to which the
   // transitive path is bound to. This method is called from within `bindSides`.
-  void computePayloadColumnOffsets(auto& op, auto& plan,
+  void computePayloadColumnOffsets(std::shared_ptr<QueryExecutionTree>& op,
+                                   std::shared_ptr<TransitivePathBase>& plan,
                                    std::optional<size_t> leftCol,
                                    std::optional<size_t> rightCol) const;
 

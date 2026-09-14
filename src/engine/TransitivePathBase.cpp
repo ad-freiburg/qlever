@@ -516,8 +516,19 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
 
 // _____________________________________________________________________________
 void TransitivePathBase::computePayloadColumnOffsets(
-    auto& op, auto& plan, std::optional<size_t> leftCol,
+    std::shared_ptr<QueryExecutionTree>& op,
+    std::shared_ptr<TransitivePathBase>& plan, std::optional<size_t> leftCol,
     std::optional<size_t> rightCol) const {
+  auto singleColBoundIndexShift = [](size_t columnIndex, size_t col) {
+    return col > columnIndex ? 2 : 1;
+  };
+  auto bothColsBoundIndexShift = [](size_t columnIndex, size_t colL,
+                                    size_t colR) {
+    auto [lowerCol, higherCol] = std::minmax(colL, colR);
+    auto leftOrMiddle = columnIndex < lowerCol ? 2 : 1;
+    return columnIndex < higherCol ? leftOrMiddle : 0;
+  };
+
   // Note: The `variable` in the following structured binding is `const`, even
   // if we bind by value. We deliberately make one unnecessary copy of the
   // `variable` to keep the code simpler.
@@ -534,15 +545,6 @@ void TransitivePathBase::computePayloadColumnOffsets(
     // In the output table, the transitive path's side columns (left and
     // right) always come first, while they can be in any order in the input
     // table. Hence, we need to shift indices here.
-    auto singleColBoundIndexShift = [](size_t columnIndex, size_t col) {
-      return col > columnIndex ? 2 : 1;
-    };
-    auto bothColsBoundIndexShift = [](size_t columnIndex, size_t colL,
-                                      size_t colR) {
-      auto [lowerCol, higherCol] = std::minmax(colL, colR);
-      auto leftOrMiddle = columnIndex < lowerCol ? 2 : 1;
-      return columnIndex < higherCol ? leftOrMiddle : 0;
-    };
     if (!leftCol.has_value() || !rightCol.has_value()) {
       // Single side is bound case.
       columnIndexWithType.columnIndex_ += singleColBoundIndexShift(

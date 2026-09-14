@@ -238,7 +238,7 @@ class TransitivePathImpl : public TransitivePathBase {
         start.isVariable() && graphVariable_ == start.getVariable();
     bool targetNodesAreBound = lhs_.isBoundVariable() && rhs_.isBoundVariable();
 
-    // Expand the `targetId` into a pair of `std::optional<Id>`s.
+    // Undef-expand the `targetId` into a pair of `std::optional<Id>`s.
     using OptionalIdPair = std::pair<std::optional<Id>, std::optional<Id>>;
     using TargetNodeExpanded = ad_utility::InputRangeTypeErased<OptionalIdPair>;
     auto targetExpandUndef = [&](auto& graphId) {

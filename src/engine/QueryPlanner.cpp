@@ -2654,7 +2654,7 @@ auto QueryPlanner::createJoinWithTransitivePath(
     auto firstSide = firstColOther;
     auto secondSide = std::optional<decltype(firstSide)>();
 
-    // Assign the targeet side if given.
+    // Assign the target side if given.
     if (joinCols.targetCols_.has_value()) {
       const auto& [secondColTransPath, secondColOther] =
           joinCols.targetCols_.value();
