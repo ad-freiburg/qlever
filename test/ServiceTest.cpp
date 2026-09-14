@@ -1008,10 +1008,8 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
     return std::make_shared<Sort>(testQec, makeTree(std::move(strip)),
                                   std::vector<ColumnIndex>{0});
   };
-  auto onlyX = [](const Service& service) {
-    const auto& vars = service.siblingInfo_.value().variables_;
-    return vars.size() == 1 && vars.contains(Variable{"?x"});
-  };
+  // The `VALUES` clause that is expected when only `?x` is pushed down.
+  const std::string valuesClauseX = "VALUES (?x) { (<x>) } ";
 
   // `Sort(StripColumns(Service))` on the right: the `Service` is found, the
   // sibling result is precomputed, and only `?x`, which is visible above the
@@ -1022,7 +1020,7 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
     auto sibling = makeValues();
     Service::precomputeSiblingResult(sibling, wrap(service), true, false);
     ASSERT_TRUE(service->siblingInfo_.has_value());
-    EXPECT_TRUE(onlyX(*service));
+    EXPECT_EQ(service->getSiblingValuesClause(), valuesClauseX);
     EXPECT_TRUE(
         sibling->precomputedResultBecauseSiblingOfService().has_value());
   }
@@ -1033,7 +1031,7 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
     auto sibling = makeValues();
     Service::precomputeSiblingResult(service, wrap(sibling), false, false);
     ASSERT_TRUE(service->siblingInfo_.has_value());
-    EXPECT_TRUE(onlyX(*service));
+    EXPECT_EQ(service->getSiblingValuesClause(), valuesClauseX);
     EXPECT_TRUE(
         sibling->precomputedResultBecauseSiblingOfService().has_value());
   }
@@ -1044,6 +1042,22 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
     auto sibling = makeValues();
     Service::precomputeSiblingResult(
         sibling, wrap(service, LimitOffsetClause{1}), true, false);
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+    EXPECT_FALSE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
+  }
+
+  // Also for nested `Sort`s (as for a subquery with `ORDER BY ... LIMIT`),
+  // where the `LIMIT` sits on the inner `Sort`.
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    auto innerSort = std::make_shared<Sort>(testQec, makeTree(service),
+                                            std::vector<ColumnIndex>{0});
+    innerSort->applyLimitOffset(LimitOffsetClause{1});
+    auto outerSort = std::make_shared<Sort>(testQec, makeTree(innerSort),
+                                            std::vector<ColumnIndex>{0});
+    Service::precomputeSiblingResult(sibling, outerSort, true, false);
     EXPECT_FALSE(service->siblingInfo_.has_value());
     EXPECT_FALSE(
         sibling->precomputedResultBecauseSiblingOfService().has_value());

@@ -608,7 +608,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
     }
     return true;
   };
-  // Remember the original operations, see `getSiblingVariables` below.
+  // Remember the original operations, see `siblingVariables` below.
   const auto outerLeft = left;
   const auto outerRight = right;
   if (!skipSortAndStripColumns(left) || !skipSortAndStripColumns(right)) {
@@ -651,17 +651,12 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // variable hidden by a `StripColumns` (e.g. a variable that is not selected
   // by a subquery) is a different variable from an equally named one on the
   // other side, so it must not be constrained.
-  auto getSiblingVariables = [&]() {
-    auto vars = sibling->getExternallyVisibleVariableColumns();
-    const auto& visibleLeft = outerLeft->getExternallyVisibleVariableColumns();
-    const auto& visibleRight =
-        outerRight->getExternallyVisibleVariableColumns();
-    absl::erase_if(vars, [&](const auto& varAndCol) {
-      const auto& var = varAndCol.first;
-      return !visibleLeft.contains(var) || !visibleRight.contains(var);
-    });
-    return vars;
-  };
+  auto siblingVariables = sibling->getExternallyVisibleVariableColumns();
+  absl::erase_if(siblingVariables, [&](const auto& varAndCol) {
+    const auto& var = varAndCol.first;
+    return !outerLeft->getExternallyVisibleVariableColumns().contains(var) ||
+           !outerRight->getExternallyVisibleVariableColumns().contains(var);
+  });
 
   auto addRuntimeInfo = [&](bool siblingUsed) {
     std::string_view v = siblingUsed ? "yes"sv : "no"sv;
@@ -678,7 +673,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
         siblingResult->idTableView().size() <=
         getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
     if (resultIsSmall) {
-      service->siblingInfo_.emplace(siblingResult, getSiblingVariables(),
+      service->siblingInfo_.emplace(siblingResult, std::move(siblingVariables),
                                     sibling->getCacheKey());
     }
     sibling->precomputedResultBecauseSiblingOfService() =
@@ -736,7 +731,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   service->siblingInfo_.emplace(
       service->makeShared<Result>(std::move(siblingPair),
                                   siblingResult->sortedBy()),
-      getSiblingVariables(), sibling->getCacheKey());
+      std::move(siblingVariables), sibling->getCacheKey());
 
   sibling->precomputedResultBecauseSiblingOfService() =
       service->siblingInfo_->precomputedResult_;
