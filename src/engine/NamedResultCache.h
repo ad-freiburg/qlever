@@ -93,7 +93,10 @@ class NamedResultCache {
 
   // Get a pointer to the cached result with the given `name`, and convert
   // it into an `ExplicitIdTableOperation` that can be used as part of a
-  // `QueryExecutionTree`.
+  // `QueryExecutionTree`. If no such result exists, throw an exception, unless
+  // the runtime parameter `empty-result-instead-of-exceptions` is set, in
+  // which case an operation with an empty result (no rows and no columns) is
+  // returned.
   std::shared_ptr<ExplicitIdTableOperation> getOperation(
       const Key& name, QueryExecutionContext* qec);
 
@@ -118,6 +121,21 @@ class NamedResultCache {
                                                Value::Allocator allocator,
                                                const LocalVocabContext&
                                                    context);
+
+ private:
+  // Get a pointer to the cached result with the given `name`, or `nullptr` if
+  // the cache contains no result with that name.
+  std::shared_ptr<const Value> getIfContained(const Key& name) const;
+
+  // Throw an exception that reports that the cache contains no result with the
+  // given `name`.
+  [[noreturn]] static void throwNotContained(const Key& name);
+
+  // Return an `ExplicitIdTableOperation` with an empty result (no rows and no
+  // columns), used as the substitute for a result that is not contained in the
+  // cache, see `getOperation`.
+  static std::shared_ptr<ExplicitIdTableOperation> makeEmptyOperation(
+      const Key& name, QueryExecutionContext* qec);
 };
 
 #endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H
