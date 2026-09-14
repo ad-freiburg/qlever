@@ -1,22 +1,26 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_ENCODEDIRIMANAGER_H
 #define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_ENCODEDIRIMANAGER_H
 
 #include "backports/StartsWithAndEndsWith.h"
-#include "backports/algorithm.h"
 #include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/vocabulary/encodedIris/NibbleEncoding.h"
 #include "util/BitUtils.h"
-#include "util/Log.h"
+#include "util/Exception.h"
 #include "util/json.h"
 
-// This class allows the encoding of IRIs that start with a fixed prefix
+// This file implements the encoding of IRIs that start with a fixed prefix
 // followed by a sequence of decimal digits directly into an `Id`. For
 // example, <http://example.org/12345> with digit sequence `12345` and
 // prefix `http://example.org/`. This is implemented as follows:
@@ -145,17 +149,24 @@ class EncodedIriManager {
   std::optional<uint64_t> getIndexOfPrefix(
       std::string_view prefixWithoutAngleBrackets) const;
 
-  // Combine the integer representation of the prefix and of the payload into a
-  // single `Id` with datatype `EncodedValue`.
-  static Id makeIdFromPrefixIdxAndPayload(uint64_t prefixIdx,
-                                          uint64_t payload) {
-    return Id::makeFromEncodedVal(payload |
-                                  (prefixIdx << encodedIri::NumBitsEncoding));
+  // Combine the integer representation of the prefix and of the payload into
+  // the value of an `Id` with datatype `EncodedVal`.
+  static uint64_t makeValueFromPrefixIdxAndPayload(uint64_t prefixIdx,
+                                                   uint64_t payload) {
+    return payload | (prefixIdx << encodedIri::NumBitsEncoding);
   }
 
-  // The second half of `toString` above: combine the integer encoding of the
-  // payload and the prefix string into a result string that represents an IRI.
-  // Note: This function expects, that the prefix starts with `<`.
+  // The same as `makeValueFromPrefixIdxAndPayload`, but return the complete
+  // `Id` with datatype `EncodedVal`.
+  static Id makeIdFromPrefixIdxAndPayload(uint64_t prefixIdx,
+                                          uint64_t payload) {
+    return Id::makeFromEncodedVal(
+        makeValueFromPrefixIdxAndPayload(prefixIdx, payload));
+  }
+
+  // The second half of `decodeValue` above: combine the integer encoding of
+  // the payload and the prefix string into a result string that represents an
+  // IRI. Note: This function expects, that the prefix starts with `<`.
   static std::string toStringWithGivenPrefix(uint64_t digitEncoding,
                                              std::string_view prefix) {
     AD_EXPENSIVE_CHECK(ql::starts_with(prefix, '<'));
@@ -167,19 +178,27 @@ class EncodedIriManager {
     return result;
   }
 
-  // From the `Id` (which is expected to be of type `EncodedVal`, else an
-  // `AD_CONTRACT_CHECK` fails), extract the integer encoding of the prefix and
-  // of the payload.
+  // The inverse of `makeValueFromPrefixIdxAndPayload`: From the value of an
+  // `Id` with datatype `EncodedVal`, extract the integer encoding of the
+  // prefix and of the payload.
+  static std::pair<uint64_t, uint64_t> splitValueIntoPrefixIdxAndPayload(
+      uint64_t encodedValue) {
+    static constexpr auto mask =
+        ad_utility::bitMaskForLowerBits(encodedIri::NumBitsEncoding);
+    auto digitEncoding = encodedValue & mask;
+    // Get the index of the prefix.
+    auto prefixIdx = encodedValue >> encodedIri::NumBitsEncoding;
+    return std::make_pair(prefixIdx, digitEncoding);
+  }
+
+  // The same as `splitValueIntoPrefixIdxAndPayload`, but take the complete
+  // `Id`, which is expected to be of type `EncodedVal`, else an
+  // `AD_CONTRACT_CHECK` fails.
   static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndPayload(Id id) {
     AD_CONTRACT_CHECK(
         id.getDatatype() == Datatype::EncodedVal,
         "datatype must be `EncodedVal` for `splitIntoPrefixIdxAndPayload`");
-    static constexpr auto mask =
-        ad_utility::bitMaskForLowerBits(encodedIri::NumBitsEncoding);
-    auto digitEncoding = id.getEncodedVal() & mask;
-    // Get the index of the prefix.
-    auto prefixIdx = id.getEncodedVal() >> encodedIri::NumBitsEncoding;
-    return std::make_pair(prefixIdx, digitEncoding);
+    return splitValueIntoPrefixIdxAndPayload(id.getEncodedVal());
   }
 
   // The same as `splitIntoPrefixIdxAndPayload` except that the payload is

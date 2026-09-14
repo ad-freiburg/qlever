@@ -38,6 +38,7 @@
 // order.
 //
 // For example, with `numBits = 32`, the encodings (as hexadecimal numbers) are
+// as follows.
 //
 // 1    ->  0x20000000
 // 10   ->  0x21000000

@@ -13,6 +13,8 @@
 
 #include <stdexcept>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "util/Algorithm.h"
 #include "util/CtreHelpers.h"
 
@@ -69,32 +71,21 @@ std::optional<uint64_t> EncodedIriManager::encodeValue(
     return std::nullopt;
   }
   std::string_view numString = numStringOpt.value();
-  if (numString.size() * encodedIri::NibbleSize > encodedIri::NumBitsEncoding) {
+  if (numString.size() > encodedIri::NumDigits) {
     return std::nullopt;
   }
 
   // Get the index of the used prefix, and run the actual encoding.
   auto prefixIndex = static_cast<uint64_t>(it - prefixes_.begin());
-  return encodedIri::encodeDigitsAsNibbles(numString,
-                                           encodedIri::NumBitsEncoding) |
-         (prefixIndex << encodedIri::NumBitsEncoding);
+  return makeValueFromPrefixIdxAndPayload(prefixIndex,
+                                          encodeDecimalToNBit(numString));
 }
 
 // _____________________________________________________________________________
 std::string EncodedIriManager::decodeValue(uint64_t encodedValue) const {
-  // The tag is stored above the bits of the digits.
-  uint64_t prefixIdx = encodedValue >> encodedIri::NumBitsEncoding;
-  uint64_t digitEncoding = encodedValue & ad_utility::bitMaskForLowerBits(
-                                              encodedIri::NumBitsEncoding);
-  const auto& prefix = prefixes_.at(prefixIdx);
-  std::string result;
-  result.reserve(prefix.size() +
-                 encodedIri::NumBitsEncoding / encodedIri::NibbleSize + 1);
-  result = prefix;
-  encodedIri::decodeNibblesToDigits(result, digitEncoding,
-                                    encodedIri::NumBitsEncoding);
-  result.push_back('>');
-  return result;
+  auto [prefixIdx, digitEncoding] =
+      splitValueIntoPrefixIdxAndPayload(encodedValue);
+  return toStringWithGivenPrefix(digitEncoding, prefixes_.at(prefixIdx));
 }
 
 // _____________________________________________________________________________
