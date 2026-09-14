@@ -22,11 +22,19 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP10 [SHOULD] Public generic APIs constrain template params. [Core Guidelines T.10]  (project mechanism: QC6)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP10 [SHOULD] Public generic APIs constrain template params. [Core Guidelines T.10]  (project mechanism: QC6)",
+      "trigger": [
+        "template"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP11 [MUST] Lifetime-by-design for returned lazy views/generators: never capture a reference parameter, stack local, or temporary *by reference* into a lambda/view/coroutine that outlives the current statement. The returned pipeline must be self-contained: value-capture cheap handles, or own data via value/`shared_ptr` when ownership is shared. \"Safe under current join consumption\" is not enough \u2014 correctness must not depend on an implicit iteration order. Applies to `views::transform`/`filter`/`join`, coroutines, and any deferred callback. Prefer by-value of a small non-owning handle (`TableWithRange`, `TableConstRefWithVocab`, `reference_wrapper`) over `shared_ptr` unless true shared ownership of the *resource* is required; `shared_ptr` of a non-owning handle does not extend the underlying `IdTable`/`LocalVocab` lifetime."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP11 [MUST] Lifetime-by-design for returned lazy views/generators: never capture a reference parameter, stack local, or temporary *by reference* into a lambda/view/coroutine that outlives the current statement. The returned pipeline must be self-contained: value-capture cheap handles, or own data via value/`shared_ptr` when ownership is shared. \"Safe under current join consumption\" is not enough \u2014 correctness must not depend on an implicit iteration order. Applies to `views::transform`/`filter`/`join`, coroutines, and any deferred callback. Prefer by-value of a small non-owning handle (`TableWithRange`, `TableConstRefWithVocab`, `reference_wrapper`) over `shared_ptr` unless true shared ownership of the *resource* is required; `shared_ptr` of a non-owning handle does not extend the underlying `IdTable`/`LocalVocab` lifetime.",
+      "trigger": [
+        "views::",
+        "ranges::",
+        "generator"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -38,35 +46,72 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP14 [MUST] PMR allocators: when using PMR (polymorphic memory resource) buffers, wrap in `ql::pmr::polymorphic_allocator` and use `ql::ranges::copy`, container constructors with allocator params, or allocator-aware algorithms \u2014 never raw `allocate()` + `memcpy`/manual transfer. The allocator-based interface provides safety (abstracts `void*` casts, clarifies lifetime), clarity (self-documenting intent), and zero runtime cost (`ql::ranges::copy` compiles to `memcpy`). Applies to all PMR-backed result construction: `CompressedVocabulary`, `VocabularyTypes`, `IndexBuilder`, `NamedCachedQueryBlobManager`."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP14 [MUST] PMR allocators: when using PMR (polymorphic memory resource) buffers, wrap in `ql::pmr::polymorphic_allocator` and use `ql::ranges::copy`, container constructors with allocator params, or allocator-aware algorithms \u2014 never raw `allocate()` + `memcpy`/manual transfer. The allocator-based interface provides safety (abstracts `void*` casts, clarifies lifetime), clarity (self-documenting intent), and zero runtime cost (`ql::ranges::copy` compiles to `memcpy`). Applies to all PMR-backed result construction: `CompressedVocabulary`, `VocabularyTypes`, `IndexBuilder`, `NamedCachedQueryBlobManager`.",
+      "trigger": [
+        "pmr",
+        "memory_resource",
+        "polymorphic_allocator"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP15 [MUST] Do NOT `std::move` a function-local variable that is the function's return value \u2014 it suppresses copy elision (RVO/NRVO). Return the local by name."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP15 [MUST] Do NOT `std::move` a function-local variable that is the function's return value \u2014 it suppresses copy elision (RVO/NRVO). Return the local by name.",
+      "trigger": [
+        "std::move"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP16 [SHOULD] Perfect-forwarding functions must forward with `std::forward<T>(t)` using the exact deduced template parameter type; do not forward a forwarding reference as a value or to the wrong overload (that silently turns an rvalue into an lvalue or vice-versa)."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP16 [SHOULD] Perfect-forwarding functions must forward with `std::forward<T>(t)` using the exact deduced template parameter type; do not forward a forwarding reference as a value or to the wrong overload (that silently turns an rvalue into an lvalue or vice-versa).",
+      "trigger": [
+        "std::forward"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP17 [MUST] A destructor (or anything it calls) must never let an exception escape; a throw during stack unwinding calls `std::terminate`."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP17 [MUST] A destructor (or anything it calls) must never let an exception escape; a throw during stack unwinding calls `std::terminate`.",
+      "trigger": [
+        "~",
+        "terminate",
+        "noexcept",
+        "throw",
+        "catch"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP18 [MUST] A `noexcept` function's body must not call potentially-throwing code without handling it; a throw inside `noexcept` calls `std::terminate`."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP18 [MUST] A `noexcept` function's body must not call potentially-throwing code without handling it; a throw inside `noexcept` calls `std::terminate`.",
+      "trigger": [
+        "noexcept"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP19 [SHOULD] Catch clauses must be ordered most-derived-first; catching a base by value or reference before a derived handler slices away the derived information."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP19 [SHOULD] Catch clauses must be ordered most-derived-first; catching a base by value or reference before a derived handler slices away the derived information.",
+      "trigger": [
+        "catch"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP2 [MUST] No owning raw pointers / manual new-delete; ownership via unique_ptr/values."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP2 [MUST] No owning raw pointers / manual new-delete; ownership via unique_ptr/values.",
+      "trigger": [
+        "\\bnew\\b",
+        "delete",
+        "unique_ptr",
+        "shared_ptr",
+        "make_unique",
+        "make_shared"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP20 [SHOULD] Constructors acquire every resource via RAII and throw on failure rather than leaving a half-built \"isValid\" object that callers must remember to check."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP20 [SHOULD] Constructors acquire every resource via RAII and throw on failure rather than leaving a half-built \"isValid\" object that callers must remember to check.",
+      "trigger": [
+        "isValid",
+        "is_valid",
+        "IsValid"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -78,31 +123,64 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP23 [SHOULD] Use `std::scoped_lock` / `std::lock_guard`, never manual `mutex.lock()`/`unlock()` that an early return or throw can skip."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP23 [SHOULD] Use `std::scoped_lock` / `std::lock_guard`, never manual `mutex.lock()`/`unlock()` that an early return or throw can skip.",
+      "trigger": [
+        "mutex",
+        "lock_guard",
+        "scoped_lock",
+        "unique_lock",
+        "[.>]lock\\(\\)",
+        "[.>]unlock\\(\\)"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP24 [SHOULD] Lock multiple mutexes via `std::lock` / `std::scoped_lock` to avoid deadlock; never lock the same pair of mutexes in inconsistent order on different code paths."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP24 [SHOULD] Lock multiple mutexes via `std::lock` / `std::scoped_lock` to avoid deadlock; never lock the same pair of mutexes in inconsistent order on different code paths.",
+      "trigger": [
+        "scoped_lock",
+        "std::lock",
+        "mutex"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP25 [MUST] Shared mutable state across threads requires a mutex or atomic; a plain variable written by one thread and read by another without synchronization is a data race (UB)."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP25 [MUST] Shared mutable state across threads requires a mutex or atomic; a plain variable written by one thread and read by another without synchronization is a data race (UB).",
+      "trigger": [
+        "mutex",
+        "atomic",
+        "thread",
+        "jthread"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP26 [SHOULD] `std::shared_ptr` is thread-safe only for its control block; the pointee is NOT automatically thread-safe \u2014 protect shared data behind a mutex."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP26 [SHOULD] `std::shared_ptr` is thread-safe only for its control block; the pointee is NOT automatically thread-safe \u2014 protect shared data behind a mutex.",
+      "trigger": [
+        "shared_ptr"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP27 [MUST] A `std::thread`/`std::jthread` must be joined or detached (or its stop requested) before the owning scope ends; a detached thread that still references stack locals is UB."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP27 [MUST] A `std::thread`/`std::jthread` must be joined or detached (or its stop requested) before the owning scope ends; a detached thread that still references stack locals is UB.",
+      "trigger": [
+        "thread",
+        "jthread"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP28 [SHOULD] Use `std::atomic<T>` (not `volatile`) for cross-thread flags/counters; `volatile` gives no inter-thread ordering in C++."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP28 [SHOULD] Use `std::atomic<T>` (not `volatile`) for cross-thread flags/counters; `volatile` gives no inter-thread ordering in C++.",
+      "trigger": [
+        "atomic",
+        "volatile"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP29 [MUST] A condition-variable `wait` must use a predicate (spurious wakeups) and avoid lost-wakeup; notify only after the guarded state change, with correct lock discipline."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP29 [MUST] A condition-variable `wait` must use a predicate (spurious wakeups) and avoid lost-wakeup; notify only after the guarded state change, with correct lock discipline.",
+      "trigger": [
+        "condition_variable"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -110,19 +188,40 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP30 [SHOULD] Weaker memory orders (`memory_order_relaxed`/`acquire`/`release`) on atomics must be provably correct; default to `seq_cst` unless you can justify that a weaker order guards no other shared data."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP30 [SHOULD] Weaker memory orders (`memory_order_relaxed`/`acquire`/`release`) on atomics must be provably correct; default to `seq_cst` unless you can justify that a weaker order guards no other shared data.",
+      "trigger": [
+        "memory_order"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP31 [MUST] A coroutine (generator / Task) that captures references or stack locals across an await point must keep the frame alive for the entire suspension; dangling captures after the producer frame is destroyed are UB."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP31 [MUST] A coroutine (generator / Task) that captures references or stack locals across an await point must keep the frame alive for the entire suspension; dangling captures after the producer frame is destroyed are UB.",
+      "trigger": [
+        "co_await",
+        "co_return",
+        "co_yield",
+        "generator",
+        "coroutine"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP32 [MUST] A generator/range returned by a coroutine that borrows from its own or the caller's locals must not be iterated after that frame is destroyed (the classic dangling-generator bug)."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP32 [MUST] A generator/range returned by a coroutine that borrows from its own or the caller's locals must not be iterated after that frame is destroyed (the classic dangling-generator bug).",
+      "trigger": [
+        "co_await",
+        "co_return",
+        "co_yield",
+        "generator",
+        "coroutine"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP33 [SHOULD] Do not resume a coroutine after it has reached its final suspension / been destroyed; `co_await` on a destroyed frame is UB."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP33 [SHOULD] Do not resume a coroutine after it has reached its final suspension / been destroyed; `co_await` on a destroyed frame is UB.",
+      "trigger": [
+        "co_await",
+        "coroutine"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -130,7 +229,13 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP35 [SHOULD] Template code that could hard-error for some types must be guarded (`if constexpr` / SFINAE) so substitution failure is soft; do not let the primary template instantiate with an invalid type."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP35 [SHOULD] Template code that could hard-error for some types must be guarded (`if constexpr` / SFINAE) so substitution failure is soft; do not let the primary template instantiate with an invalid type.",
+      "trigger": [
+        "if constexpr",
+        "enable_if",
+        "SFINAE",
+        "concept"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -142,7 +247,11 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP38 [SHOULD] Provide custom `swap`/operators as hidden friends in the type's namespace (ADL-friendly); use the `using std::swap; swap(a,b);` pattern, never an unqualified `std::swap` for user types."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP38 [SHOULD] Provide custom `swap`/operators as hidden friends in the type's namespace (ADL-friendly); use the `using std::swap; swap(a,b);` pattern, never an unqualified `std::swap` for user types.",
+      "trigger": [
+        "friend",
+        "swap"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -150,11 +259,21 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP4 [SHOULD] std::move on last use of sink params; std::forward only for forwarding refs; no move on const or on returned locals."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP4 [SHOULD] std::move on last use of sink params; std::forward only for forwarding refs; no move on const or on returned locals.",
+      "trigger": [
+        "std::move",
+        "std::forward"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP40 [SHOULD] Do not mix signed and unsigned in comparisons/arithmetic \u2014 unsigned promotion silently swallows negative values; compare like types or cast deliberately."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP40 [SHOULD] Do not mix signed and unsigned in comparisons/arithmetic \u2014 unsigned promotion silently swallows negative values; compare like types or cast deliberately.",
+      "trigger": [
+        "unsigned",
+        "size_t",
+        ".size()",
+        "uint"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -162,7 +281,11 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP42 [SHOULD] Store sizes/indices in `size_t`/`ptrdiff_t` consistently; do not keep them in `int` and then compare with `container.size()`."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP42 [SHOULD] Store sizes/indices in `size_t`/`ptrdiff_t` consistently; do not keep them in `int` and then compare with `container.size()`.",
+      "trigger": [
+        "size_t",
+        ".size()"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -174,7 +297,11 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP45 [SHOULD] Do not compare `float`/`double` with `==`; use a tolerance (`std::abs(a-b) < eps`) and watch accumulation order for precision loss."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP45 [SHOULD] Do not compare `float`/`double` with `==`; use a tolerance (`std::abs(a-b) < eps`) and watch accumulation order for precision loss.",
+      "trigger": [
+        "float",
+        "double"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -182,27 +309,55 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP47 [MUST] Do not hold iterators/references/pointers into a `vector` across a mutating `push_back`/`insert`/`emplace` that may reallocate; a range/view over it dangles on modification."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP47 [MUST] Do not hold iterators/references/pointers into a `vector` across a mutating `push_back`/`insert`/`emplace` that may reallocate; a range/view over it dangles on modification.",
+      "trigger": [
+        "push_back",
+        "emplace",
+        "insert",
+        "reserve",
+        "resize"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP48 [SHOULD] When erasing from `vector`/`deque` while iterating, use the iterator `erase()` returns (or the erase\u2013remove idiom), not a blindly incremented index."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP48 [SHOULD] When erasing from `vector`/`deque` while iterating, use the iterator `erase()` returns (or the erase\u2013remove idiom), not a blindly incremented index.",
+      "trigger": [
+        "erase",
+        "remove"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP49 [SHOULD] References/pointers into `unordered_map`/`unordered_set` do not survive a rehash; `reserve()` up front for many inserts and do not keep element pointers across unknown rehashes."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP49 [SHOULD] References/pointers into `unordered_map`/`unordered_set` do not survive a rehash; `reserve()` up front for many inserts and do not keep element pointers across unknown rehashes.",
+      "trigger": [
+        "unordered_map",
+        "unordered_set",
+        "reserve",
+        "rehash"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP5 [SHOULD] Special members: rule of zero preferred; if any of dtor/copy/move is user-defined, all are considered."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP5 [SHOULD] Special members: rule of zero preferred; if any of dtor/copy/move is user-defined, all are considered.",
+      "trigger": [
+        "= default",
+        "= delete"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP50 [SHOULD] Do not store or use the pointer from `.c_str()`/`.data()` after the `std::string` is modified, moved, or destroyed \u2014 it dangles."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP50 [SHOULD] Do not store or use the pointer from `.c_str()`/`.data()` after the `std::string` is modified, moved, or destroyed \u2014 it dangles.",
+      "trigger": [
+        "c_str",
+        "\\.data\\(\\)"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP51 [SHOULD] Use `enum class` (scoped, no implicit `int` conversion) not a plain `enum`; unrelated enums then cannot be mixed or implicitly compared as integers."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP51 [SHOULD] Use `enum class` (scoped, no implicit `int` conversion) not a plain `enum`; unrelated enums then cannot be mixed or implicitly compared as integers.",
+      "trigger": [
+        "enum"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -210,19 +365,38 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP53 [MUST] A lazy view pipeline (`views::filter`/`transform`/...) is non-owning; storing or returning the view from a function that owns the underlying range dangles once that range dies."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP53 [MUST] A lazy view pipeline (`views::filter`/`transform`/...) is non-owning; storing or returning the view from a function that owns the underlying range dangles once that range dies.",
+      "trigger": [
+        "views::",
+        "ranges::",
+        "generator"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP54 [MUST] `views::transform` with a lambda capturing locals, or `views::filter` whose predicate references locals, dangles if the view outlives those captures."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP54 [MUST] `views::transform` with a lambda capturing locals, or `views::filter` whose predicate references locals, dangles if the view outlives those captures.",
+      "trigger": [
+        "views::",
+        "ranges::",
+        "generator"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP54b [MUST] **Lifetime-by-design (hard rule):** A function that *returns* a lazy range/view/generator must not leave that object holding a reference (or pointer) to any of the function's parameters or locals. Capture only by value (cheap handles / `reference_wrapper` copies / `shared_ptr` when true shared ownership of the resource is required). Do not rely on \"the caller fully drains this before the outer iterator advances\" as the sole safety argument \u2014 that is an implicit contract the type system cannot check and a later refactor can break. Pattern to reject: `auto f(const T& x) { return views::transform([&x](...){...}); }`. Pattern to accept: take `T` by value (if cheap) or copy the needed fields into the lambda before building the view. Note: `shared_ptr` of a non-owning *handle* does not extend the lifetime of the underlying buffer/`IdTable`/`LocalVocab` \u2014 only value-owning or true shared ownership of those resources does."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP54b [MUST] **Lifetime-by-design (hard rule):** A function that *returns* a lazy range/view/generator must not leave that object holding a reference (or pointer) to any of the function's parameters or locals. Capture only by value (cheap handles / `reference_wrapper` copies / `shared_ptr` when true shared ownership of the resource is required). Do not rely on \"the caller fully drains this before the outer iterator advances\" as the sole safety argument \u2014 that is an implicit contract the type system cannot check and a later refactor can break. Pattern to reject: `auto f(const T& x) { return views::transform([&x](...){...}); }`. Pattern to accept: take `T` by value (if cheap) or copy the needed fields into the lambda before building the view. Note: `shared_ptr` of a non-owning *handle* does not extend the lifetime of the underlying buffer/`IdTable`/`LocalVocab` \u2014 only value-owning or true shared ownership of those resources does.",
+      "trigger": [
+        "views::",
+        "ranges::",
+        "generator"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP55 [SHOULD] Do not chain adaptors over a temporary container and store the result without materializing it (e.g. into a `vector`); the temporary dies at the end of the full expression."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP55 [SHOULD] Do not chain adaptors over a temporary container and store the result without materializing it (e.g. into a `vector`); the temporary dies at the end of the full expression.",
+      "trigger": [
+        "views::",
+        "ranges::"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -234,11 +408,17 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP58 [MUST] Never call virtual functions from constructors or destructors \u2014 dispatch does not reach the most-derived override while the object is half-built/destroyed."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP58 [MUST] Never call virtual functions from constructors or destructors \u2014 dispatch does not reach the most-derived override while the object is half-built/destroyed.",
+      "trigger": [
+        "virtual"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP59 [SHOULD] A base class with virtual functions has a virtual (or protected) destructor so deletion through a base pointer is well-defined."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP59 [SHOULD] A base class with virtual functions has a virtual (or protected) destructor so deletion through a base pointer is well-defined.",
+      "trigger": [
+        "virtual"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -250,11 +430,20 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP61 [MUST] Do not pass or return polymorphic objects by value of the base type (slicing); use `const` reference, `Base*`, or `unique_ptr<Base>`."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP61 [MUST] Do not pass or return polymorphic objects by value of the base type (slicing); use `const` reference, `Base*`, or `unique_ptr<Base>`.",
+      "trigger": [
+        ": public",
+        "virtual"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP62 [SHOULD] Containers of polymorphic objects hold (smart) pointers, not base-by-value, which would slice off derived parts."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP62 [SHOULD] Containers of polymorphic objects hold (smart) pointers, not base-by-value, which would slice off derived parts.",
+      "trigger": [
+        "virtual",
+        "unique_ptr",
+        "shared_ptr"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -270,19 +459,32 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP66 [SHOULD] `auto` drops reference/cv from the initializer unless `auto&`/`const auto&`; confirm the deduced type (e.g. `auto n = v.size()` is `size_t`, not `int`)."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP66 [SHOULD] `auto` drops reference/cv from the initializer unless `auto&`/`const auto&`; confirm the deduced type (e.g. `auto n = v.size()` is `size_t`, not `int`).",
+      "trigger": [
+        "auto"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP67 [SHOULD] Do not overload `&&`, `||`, or `,` \u2014 they destroy short-circuit evaluation / sequencing; keep operators semantically unsurprising."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP67 [SHOULD] Do not overload `&&`, `||`, or `,` \u2014 they destroy short-circuit evaluation / sequencing; keep operators semantically unsurprising.",
+      "trigger": [
+        "operator"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP68 [SHOULD] Symmetric binary operators (`==`, `<`, `+`) should be non-member hidden friends so conversions apply to the left operand too; C++20 generates `!=` from `==` and `==`/`<` from `operator<=>`."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP68 [SHOULD] Symmetric binary operators (`==`, `<`, `+`) should be non-member hidden friends so conversions apply to the left operand too; C++20 generates `!=` from `==` and `==`/`<` from `operator<=>`.",
+      "trigger": [
+        "friend",
+        "operator"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP69 [SHOULD] Assignment operators return `*this` by reference and handle self-assignment; keep copy / move / assign consistent."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP69 [SHOULD] Assignment operators return `*this` by reference and handle self-assignment; keep copy / move / assign consistent.",
+      "trigger": [
+        "operator="
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -290,15 +492,32 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP70 [SHOULD] Prefer a `= default`ed `operator<=>`; do not define pairwise comparison operators inconsistently with one another."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP70 [SHOULD] Prefer a `= default`ed `operator<=>`; do not define pairwise comparison operators inconsistently with one another.",
+      "trigger": [
+        "<=>",
+        "operator<",
+        "operator==",
+        "operator>"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP71 [SHOULD] Represent time with `std::chrono` duration/clock types, not a raw `int` \"milliseconds\"; encoding units in the type prevents silent unit swaps."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP71 [SHOULD] Represent time with `std::chrono` duration/clock types, not a raw `int` \"milliseconds\"; encoding units in the type prevents silent unit swaps.",
+      "trigger": [
+        "chrono",
+        "duration",
+        "clock",
+        "milliseconds",
+        "seconds"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP72 [SHOULD] Use `steady_clock` for elapsed-time measurement (monotonic) and `system_clock` for wall-clock; never measure elapsed time with `system_clock` (it can jump backward)."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCPP72 [SHOULD] Use `steady_clock` for elapsed-time measurement (monotonic) and `system_clock` for wall-clock; never measure elapsed time with `system_clock` (it can jump backward).",
+      "trigger": [
+        "steady_clock",
+        "system_clock"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -354,7 +573,10 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ26 [SHOULD] Switch / Repeated Conditionals: the same type/enum dispatch repeated across >=2 functions (or a type-switch in a hot path) \u2014 replace with polymorphism / a dispatch table / visitor."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ26 [SHOULD] Switch / Repeated Conditionals: the same type/enum dispatch repeated across >=2 functions (or a type-switch in a hot path) \u2014 replace with polymorphism / a dispatch table / visitor.",
+      "trigger": [
+        "switch"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -422,19 +644,38 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ43 [SHOULD] Error handling doesn't obscure flow: error handling is localized (early return / RAII) and doesn't interleave with the happy path like band-aids \u2014 exceptions or std::expected used consistently, not scattered errno-style checks."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ43 [SHOULD] Error handling doesn't obscure flow: error handling is localized (early return / RAII) and doesn't interleave with the happy path like band-aids \u2014 exceptions or std::expected used consistently, not scattered errno-style checks.",
+      "trigger": [
+        "catch",
+        "throw",
+        "expected"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ44 [MUST] Errors not swallowed: no empty catch, no catch(...){} that discards, no ignored return of error codes / ignored std::expected \u2014 either handle meaningfully or propagate."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ44 [MUST] Errors not swallowed: no empty catch, no catch(...){} that discards, no ignored return of error codes / ignored std::expected \u2014 either handle meaningfully or propagate.",
+      "trigger": [
+        "catch",
+        "expected",
+        "Expected"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ45 [SHOULD] Errors carry context: thrown exceptions / returned errors include enough info (what failed, the offending id/value) to diagnose without a debugger \u2014 no bare \"failed\"/\"error\"."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ45 [SHOULD] Errors carry context: thrown exceptions / returned errors include enough info (what failed, the offending id/value) to diagnose without a debugger \u2014 no bare \"failed\"/\"error\".",
+      "trigger": [
+        "throw",
+        "AD_THROW",
+        "expected"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ46 [SHOULD] Invariants on error paths: resources are released / state rolled back on every failure path (RAII, not manual cleanup that an early return can skip) \u2014 no leaked locks/handles/files/connections."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ46 [SHOULD] Invariants on error paths: resources are released / state rolled back on every failure path (RAII, not manual cleanup that an early return can skip) \u2014 no leaked locks/handles/files/connections.",
+      "trigger": [
+        "catch",
+        "throw"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -450,7 +691,16 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ50 [MAY] Determinism for tests: new code under test doesn't depend on wall-clock/timeouts/unordered containers in ways that make tests flaky \u2014 inject or fix ordering."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ50 [MAY] Determinism for tests: new code under test doesn't depend on wall-clock/timeouts/unordered containers in ways that make tests flaky \u2014 inject or fix ordering.",
+      "trigger": [
+        "system_clock",
+        "steady_clock",
+        "chrono",
+        "unordered_map",
+        "unordered_set",
+        "rand",
+        "timeout"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -474,11 +724,20 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ56 [SHOULD] Config vs code: behavior plausibly environment-dependent (cache sizes, timeouts, thread counts) is a config/flag, not a recompiled constant \u2014 flag hard-coded tunables that should be configurable."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ56 [SHOULD] Config vs code: behavior plausibly environment-dependent (cache sizes, timeouts, thread counts) is a config/flag, not a recompiled constant \u2014 flag hard-coded tunables that should be configurable.",
+      "trigger": [
+        "constexpr",
+        "timeout",
+        "Timeout"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ57 [SHOULD] Logging is actionable, not noisy: new log lines are at the right level (DEBUG for verbose detail, not INFO/ERROR) and don't emit per-row/per-element in hot loops \u2014 flag log spam."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ57 [SHOULD] Logging is actionable, not noisy: new log lines are at the right level (DEBUG for verbose detail, not INFO/ERROR) and don't emit per-row/per-element in hot loops \u2014 flag log spam.",
+      "trigger": [
+        "AD_LOG_",
+        "LOG\\("
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -486,7 +745,13 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ59 [MAY] Log level discipline: ERROR/WARN reserved for actionable operator-visible problems; DEBUG for dev detail \u2014 flag ERROR used for expected/normal conditions, or DEBUG used for things operators must see."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ59 [MAY] Log level discipline: ERROR/WARN reserved for actionable operator-visible problems; DEBUG for dev detail \u2014 flag ERROR used for expected/normal conditions, or DEBUG used for things operators must see.",
+      "trigger": [
+        "AD_LOG_ERROR",
+        "AD_LOG_WARN",
+        "LOG\\(ERROR",
+        "LOG\\(WARN"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -506,7 +771,15 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ64 [MAY] No leftover dev artifacts: no commented-out debugging, no stray cout/printf/cerr left for \"temporary\" diagnosis, no .orig/.rej files in the diff. [Google eng-practices; Fowler, Refactoring 2nd ed: Dead Code]  (overlaps CQ14 \u2014 report CQ14)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nCQ64 [MAY] No leftover dev artifacts: no commented-out debugging, no stray cout/printf/cerr left for \"temporary\" diagnosis, no .orig/.rej files in the diff. [Google eng-practices; Fowler, Refactoring 2nd ed: Dead Code]  (overlaps CQ14 \u2014 report CQ14)",
+      "trigger": [
+        "cout",
+        "printf",
+        "cerr",
+        "TODO",
+        "FIXME",
+        "XXX"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -530,7 +803,13 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP14 [SHOULD] Impossible states encoded in types (needless optionals/variant alternatives): No `optional` or variant alternative exists for a state that is filtered out earlier or never constructed; control flow uses early return instead of nesting."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP14 [SHOULD] Impossible states encoded in types (needless optionals/variant alternatives): No `optional` or variant alternative exists for a state that is filtered out earlier or never constructed; control flow uses early return instead of nesting.",
+      "trigger": [
+        "optional",
+        "variant",
+        "std::optional",
+        "std::variant"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -566,19 +845,39 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP22 [SHOULD] Overly permissive typed interfaces: New overloads and compile-time APIs reject invalid type combinations at compile time rather than silently converting values across semantic domains (for example Boolean and Integer columns)."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP22 [SHOULD] Overly permissive typed interfaces: New overloads and compile-time APIs reject invalid type combinations at compile time rather than silently converting values across semantic domains (for example Boolean and Integer columns).",
+      "trigger": [
+        "template",
+        "static_assert"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP23 [SHOULD] Benchmark measurements must be meaningful: New benchmarks report the metric they claim to measure, avoid redundant/manual timing when the framework already measures it, and exercise the intended workload rather than parsing unused inputs."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP23 [SHOULD] Benchmark measurements must be meaningful: New benchmarks report the metric they claim to measure, avoid redundant/manual timing when the framework already measures it, and exercise the intended workload rather than parsing unused inputs.",
+      "trigger": [
+        "BENCHMARK",
+        "DoNotOptimize",
+        "benchmark::"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP24 [SHOULD] Test-only hooks must not weaken production interfaces: Test/benchmark-only mutation and topology injection are isolated from production APIs through test-only hooks, friends, builders, or test-target-only code."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP24 [SHOULD] Test-only hooks must not weaken production interfaces: Test/benchmark-only mutation and topology injection are isolated from production APIs through test-only hooks, friends, builders, or test-target-only code.",
+      "trigger": [
+        "FRIEND_TEST",
+        "friend"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP25 [SHOULD] Build flags must be scoped and singular: New compiler options are applied only to the affected compiler/language/target, are not duplicated, and do not globally weaken diagnostics or semantics without a narrowly documented justification."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP25 [SHOULD] Build flags must be scoped and singular: New compiler options are applied only to the affected compiler/language/target, are not duplicated, and do not globally weaken diagnostics or semantics without a narrowly documented justification.",
+      "trigger": [
+        "COMPILE_OPTIONS",
+        "compile_options",
+        "target_compile",
+        "CMAKE_CXX_FLAGS",
+        "add_compile_options"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -598,7 +897,14 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP7 [SHOULD] Weak test assertions and repetitive test setup: Tests use gmock matchers (`EXPECT_THAT`, `ElementsAre`, custom matchers via `AD_FIELD`) rather than element-wise `EXPECT_EQ`; repeated setup code is factored into helpers/parameterized suites."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nPP7 [SHOULD] Weak test assertions and repetitive test setup: Tests use gmock matchers (`EXPECT_THAT`, `ElementsAre`, custom matchers via `AD_FIELD`) rather than element-wise `EXPECT_EQ`; repeated setup code is factored into helpers/parameterized suites.",
+      "trigger": [
+        "EXPECT_THAT",
+        "ElementsAre",
+        "AD_FIELD",
+        "gmock",
+        "TEST\\("
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -618,7 +924,10 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC13 [SHOULD] Correct namespace for location: `ad_utility` for `src/util/`, `ql`/`ql::ranges`/`ql::views` for backports, `sparqlExpression` for expressions, `qlever::constructExport` for CONSTRUCT pipeline, global namespace for most engine classes."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC13 [SHOULD] Correct namespace for location: `ad_utility` for `src/util/`, `ql`/`ql::ranges`/`ql::views` for backports, `sparqlExpression` for expressions, `qlever::constructExport` for CONSTRUCT pipeline, global namespace for most engine classes.",
+      "trigger": [
+        "namespace"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -646,7 +955,11 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC19 [SHOULD] Test files named `<Subject>Test.cpp`, located in `test/` mirroring `src/` subdirs, registered in `test/CMakeLists.txt` via `addLinkAndDiscoverTest(BaseName, [libs...])`."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC19 [SHOULD] Test files named `<Subject>Test.cpp`, located in `test/` mirroring `src/` subdirs, registered in `test/CMakeLists.txt` via `addLinkAndDiscoverTest(BaseName, [libs...])`.",
+      "trigger": [
+        "TEST",
+        "CMakeLists"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -654,11 +967,20 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC20 [SHOULD] Tests needing a real index use `ad_utility::testing::getQec(...)` from `test/util/IndexTestHelpers.h` (static-cached `QueryExecutionContext*`)."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC20 [SHOULD] Tests needing a real index use `ad_utility::testing::getQec(...)` from `test/util/IndexTestHelpers.h` (static-cached `QueryExecutionContext*`).",
+      "trigger": [
+        "getQec",
+        "IndexTestHelpers",
+        "QueryExecutionContext"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC21 [SHOULD] Repeated per-test setup goes in a `TEST_F` fixture (fixture name = suite name \u2014 keep test names stable). White-box access via `FRIEND_TEST`."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC21 [SHOULD] Repeated per-test setup goes in a `TEST_F` fixture (fixture name = suite name \u2014 keep test names stable). White-box access via `FRIEND_TEST`.",
+      "trigger": [
+        "TEST\\(",
+        "FRIEND_TEST"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -670,7 +992,11 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC23 [SHOULD] `TEST_P` + `INSTANTIATE_TEST_SUITE_P` only at ~4+ instances with one identical body; at 2 divergent instances keep separate `TEST_F`s."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC23 [SHOULD] `TEST_P` + `INSTANTIATE_TEST_SUITE_P` only at ~4+ instances with one identical body; at 2 divergent instances keep separate `TEST_F`s.",
+      "trigger": [
+        "TEST_P",
+        "INSTANTIATE_TEST"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -682,19 +1008,36 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC26 [MUST] Every member that influences the computed result is reflected in `getCacheKeyImpl()`; descriptors/estimates are NOT part of the cache key. Non-cacheable results call `disableStoringInCache()` / override `canResultBeCached()` correctly. (see src/engine/Operation.h `getCacheKey`)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC26 [MUST] Every member that influences the computed result is reflected in `getCacheKeyImpl()`; descriptors/estimates are NOT part of the cache key. Non-cacheable results call `disableStoringInCache()` / override `canResultBeCached()` correctly. (see src/engine/Operation.h `getCacheKey`)",
+      "trigger": [
+        "getCacheKey",
+        "getCacheKeyImpl"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC27 [SHOULD] `cloneImpl()` deep-copies children and all state; never override the final `clone()` wrapper. New operations get clone coverage via test/util/OperationTestHelpers.h. (see src/engine/Operation.h:414, test/util/OperationTestHelpers.h)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC27 [SHOULD] `cloneImpl()` deep-copies children and all state; never override the final `clone()` wrapper. New operations get clone coverage via test/util/OperationTestHelpers.h. (see src/engine/Operation.h:414, test/util/OperationTestHelpers.h)",
+      "trigger": [
+        "cloneImpl",
+        "clone()"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC28 [MUST] `IdTable`s created in `computeResult` use the context allocator (`allocator()` \u2192 `QueryExecutionContext::getAllocator()`, an `AllocatorWithLimit<Id>`), never a fresh unlimited allocator. (see src/engine/Operation.h:382, src/engine/QueryExecutionContext.h:157)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC28 [MUST] `IdTable`s created in `computeResult` use the context allocator (`allocator()` \u2192 `QueryExecutionContext::getAllocator()`, an `AllocatorWithLimit<Id>`), never a fresh unlimited allocator. (see src/engine/Operation.h:382, src/engine/QueryExecutionContext.h:157)",
+      "trigger": [
+        "AllocatorWithLimit",
+        "getAllocator"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC29 [MUST] Long-running loops in operators call `checkCancellation()` (or `cancellationHandle_->throwIfCancelled`) periodically, incl. inside lambdas passed to `chunkedForLoop`. (see src/engine/Operation.h:484, src/engine/CartesianProductJoin.cpp:131, src/engine/Bind.cpp:205)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC29 [MUST] Long-running loops in operators call `checkCancellation()` (or `cancellationHandle_->throwIfCancelled`) periodically, incl. inside lambdas passed to `chunkedForLoop`. (see src/engine/Operation.h:484, src/engine/CartesianProductJoin.cpp:131, src/engine/Bind.cpp:205)",
+      "trigger": [
+        "checkCancellation",
+        "throwIfCancelled",
+        "CancellationHandle"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -702,131 +1045,292 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC30 [SHOULD] Lazy results are produced as `Result::IdTableVocabPair` chunks via `Result::Generator` (`cppcoro::generator<IdTableVocabPair>`) or `Result::LazyResult` (`ad_utility::InputRangeTypeErased`); `requestLaziness` is honored, not silently materialized without reason. (see src/engine/Result.h:47-56)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC30 [SHOULD] Lazy results are produced as `Result::IdTableVocabPair` chunks via `Result::Generator` (`cppcoro::generator<IdTableVocabPair>`) or `Result::LazyResult` (`ad_utility::InputRangeTypeErased`); `requestLaziness` is honored, not silently materialized without reason. (see src/engine/Result.h:47-56)",
+      "trigger": [
+        "Generator",
+        "generator",
+        "cppcoro",
+        "IdTableVocabPair"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC31 [SHOULD] `resultSortedOn()` claims match the actual order of the produced `IdTable`; sortedness is never claimed speculatively. (see src/engine/Operation.h:475)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC31 [SHOULD] `resultSortedOn()` claims match the actual order of the produced `IdTable`; sortedness is never claimed speculatively. (see src/engine/Operation.h:475)",
+      "trigger": [
+        "resultSortedOn"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC32 [SHOULD] `VariableToColumnMap` entries are built with `makeAlwaysDefinedColumn` / `makePossiblyUndefinedColumn` and the UNDEF status is correct (e.g. OPTIONAL introduces possibly-undefined). (see src/engine/VariableToColumnMap.h:52-59)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC32 [SHOULD] `VariableToColumnMap` entries are built with `makeAlwaysDefinedColumn` / `makePossiblyUndefinedColumn` and the UNDEF status is correct (e.g. OPTIONAL introduces possibly-undefined). (see src/engine/VariableToColumnMap.h:52-59)",
+      "trigger": [
+        "makeAlwaysDefinedColumn",
+        "makePossiblyUndefinedColumn",
+        "VariableToColumnMap"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC33 [MUST] `IdTable` is never copied implicitly (copy ctor is disabled); explicit copies use `.clone()`; tables are moved or passed by reference/span. (see src/engine/idTable/IdTable.h:246-249)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC33 [MUST] `IdTable` is never copied implicitly (copy ctor is disabled); explicit copies use `.clone()`; tables are moved or passed by reference/span. (see src/engine/idTable/IdTable.h:246-249)",
+      "trigger": [
+        "IdTable"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC34 [SHOULD] Runtime dispatch on column count uses `CALL_FIXED_SIZE`/`callFixedSize` with `IdTableStatic`/`toStatic()`/`toDynamic()`, not hand-written switch ladders over widths. (see src/engine/CallFixedSize.h, src/engine/Result.h:41)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC34 [SHOULD] Runtime dispatch on column count uses `CALL_FIXED_SIZE`/`callFixedSize` with `IdTableStatic`/`toStatic()`/`toDynamic()`, not hand-written switch ladders over widths. (see src/engine/CallFixedSize.h, src/engine/Result.h:41)",
+      "trigger": [
+        "callFixedSize",
+        "CALL_FIXED_SIZE",
+        "toStatic",
+        "toDynamic",
+        "IdTableStatic"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC35 [MUST] Strings/IRIs created at query time go into the `LocalVocab` via `getIndexAndAddIfNotContained` (or the `...IfContained` lookup variant); the local vocabs of all input results are propagated/merged into the output `Result`, never dropped. (see src/index/LocalVocab.h:86)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC35 [MUST] Strings/IRIs created at query time go into the `LocalVocab` via `getIndexAndAddIfNotContained` (or the `...IfContained` lookup variant); the local vocabs of all input results are propagated/merged into the output `Result`, never dropped. (see src/index/LocalVocab.h:86)",
+      "trigger": [
+        "LocalVocab",
+        "getIndexAndAddIfNotContained",
+        "IfContained"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC36 [MUST] No code stores raw pointers/`LocalVocabIndex`es beyond the lifetime of the owning `LocalVocab`; entry address stability relies on the `absl::node_hash_set` storage \u2014 do not move entries out. (see src/index/LocalVocab.h:33-43)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC36 [MUST] No code stores raw pointers/`LocalVocabIndex`es beyond the lifetime of the owning `LocalVocab`; entry address stability relies on the `absl::node_hash_set` storage \u2014 do not move entries out. (see src/index/LocalVocab.h:33-43)",
+      "trigger": [
+        "LocalVocabIndex"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC37 [SHOULD] Fresh runtime blank nodes come from `ad_utility::BlankNodeManager` / its `LocalBlankNodeManager`, not from ad-hoc counters or string suffixes. (see src/util/BlankNodeManager.h)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC37 [SHOULD] Fresh runtime blank nodes come from `ad_utility::BlankNodeManager` / its `LocalBlankNodeManager`, not from ad-hoc counters or string suffixes. (see src/util/BlankNodeManager.h)",
+      "trigger": [
+        "BlankNode"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC38 [SHOULD] A new `SparqlExpression` implements `evaluate(EvaluationContext*)`, `getCacheKey(VariableToColumnMap)`, `isDeterministic()`, and children access; aggregate/lang-filter hooks (`isAggregate`, `getLanguageFilterExpression`) only when semantically applicable. (see src/engine/sparqlExpressions/SparqlExpression.h)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC38 [SHOULD] A new `SparqlExpression` implements `evaluate(EvaluationContext*)`, `getCacheKey(VariableToColumnMap)`, `isDeterministic()`, and children access; aggregate/lang-filter hooks (`isAggregate`, `getLanguageFilterExpression`) only when semantically applicable. (see src/engine/sparqlExpressions/SparqlExpression.h)",
+      "trigger": [
+        "getCacheKey",
+        "isDeterministic",
+        "EvaluationContext",
+        "SparqlExpression"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC39 [SHOULD] Id \u2192 value conversion inside expressions uses the existing value getters (`StringValueGetter`, `LiteralFromIdGetter`, etc. in SparqlExpressionValueGetters.h) instead of a manual `Datatype` switch. (see src/engine/sparqlExpressions/SparqlExpressionValueGetters.h:169,310)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC39 [SHOULD] Id \u2192 value conversion inside expressions uses the existing value getters (`StringValueGetter`, `LiteralFromIdGetter`, etc. in SparqlExpressionValueGetters.h) instead of a manual `Datatype` switch. (see src/engine/sparqlExpressions/SparqlExpressionValueGetters.h:169,310)",
+      "trigger": [
+        "ValueGetter"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC4 [SHOULD] Read-only sequence parameters are `ql::span<const T>`, never `const std::vector<T>&`. Beware `size_t` vs `ColumnIndex` element-type mismatch (differ on wasm even at 64 bits); prefer domain typedef `ColumnIndex` for column indices."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC4 [SHOULD] Read-only sequence parameters are `ql::span<const T>`, never `const std::vector<T>&`. Beware `size_t` vs `ColumnIndex` element-type mismatch (differ on wasm even at 64 bits); prefer domain typedef `ColumnIndex` for column indices.",
+      "trigger": [
+        "span",
+        "vector",
+        "std::vector"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC40 [SHOULD] IRIs/literals are handled via the `src/rdfTypes` classes (`Iri`/`IriView`, `Literal`) with the `fromStringRepresentation`/`toStringRepresentation` inverse pair; escaping via `RdfEscaping.h`; no hand-concatenated `\"<\" + iri + \">\"`. (see src/rdfTypes/Iri.h:73-76, src/rdfTypes/RdfEscaping.h)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC40 [SHOULD] IRIs/literals are handled via the `src/rdfTypes` classes (`Iri`/`IriView`, `Literal`) with the `fromStringRepresentation`/`toStringRepresentation` inverse pair; escaping via `RdfEscaping.h`; no hand-concatenated `\"<\" + iri + \">\"`. (see src/rdfTypes/Iri.h:73-76, src/rdfTypes/RdfEscaping.h)",
+      "trigger": [
+        "fromStringRepresentation",
+        "toStringRepresentation",
+        "Iri",
+        "Literal",
+        "rdfTypes"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC41 [SHOULD] New global constants go to src/global/Constants.h; special/typed IDs use src/global/SpecialIds.h / TypedIndex.h \u2014 no new magic `ValueId` bit patterns invented inline. (see src/global/Constants.h, src/global/SpecialIds.h)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC41 [SHOULD] New global constants go to src/global/Constants.h; special/typed IDs use src/global/SpecialIds.h / TypedIndex.h \u2014 no new magic `ValueId` bit patterns invented inline. (see src/global/Constants.h, src/global/SpecialIds.h)",
+      "trigger": [
+        "SpecialIds",
+        "TypedIndex",
+        "Constants.h"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC42 [SHOULD] Hash containers are `ad_utility::HashMap`/`HashSet` (absl wrappers), not `std::unordered_map/set` or raw absl types; use `HashMapWithMemoryLimit`/`HashSetWithMemoryLimit` when size depends on query data. (see src/util/HashMap.h:20, src/util/HashSet.h:25-35)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC42 [SHOULD] Hash containers are `ad_utility::HashMap`/`HashSet` (absl wrappers), not `std::unordered_map/set` or raw absl types; use `HashMapWithMemoryLimit`/`HashSetWithMemoryLimit` when size depends on query data. (see src/util/HashMap.h:20, src/util/HashSet.h:25-35)",
+      "trigger": [
+        "HashMap",
+        "HashSet",
+        "unordered_map",
+        "unordered_set"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC43 [SHOULD] Memory quantities are `ad_utility::MemorySize` (`_GB`/`_MB` literals); query-data-sized allocations go through `AllocatorWithLimit`/`makeAllocatorWithLimit`, not unlimited default allocation. (see src/util/AllocatorWithLimit.h:140,272)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC43 [SHOULD] Memory quantities are `ad_utility::MemorySize` (`_GB`/`_MB` literals); query-data-sized allocations go through `AllocatorWithLimit`/`makeAllocatorWithLimit`, not unlimited default allocation. (see src/util/AllocatorWithLimit.h:140,272)",
+      "trigger": [
+        "MemorySize",
+        "_GB",
+        "_MB",
+        "AllocatorWithLimit"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC44 [MAY] JSON uses `#include \"util/json.h\"` (the sanctioned nlohmann include point with the `ad_utility::SameAsAny<T, nlohmann::json, nlohmann::ordered_json>` helpers), not a direct `<nlohmann/json.hpp>` include in new code. (see src/util/json.h)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC44 [MAY] JSON uses `#include \"util/json.h\"` (the sanctioned nlohmann include point with the `ad_utility::SameAsAny<T, nlohmann::json, nlohmann::ordered_json>` helpers), not a direct `<nlohmann/json.hpp>` include in new code. (see src/util/json.h)",
+      "trigger": [
+        "nlohmann",
+        "json.h"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC45 [SHOULD] Binary persistence uses the serialization framework: `AD_SERIALIZE_FUNCTION` / `AD_SERIALIZE_FRIEND_FUNCTION` and existing (de)serializers \u2014 no hand-rolled fread/fwrite of struct bytes. (see src/util/Serializer/Serializer.h:110-133)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC45 [SHOULD] Binary persistence uses the serialization framework: `AD_SERIALIZE_FUNCTION` / `AD_SERIALIZE_FRIEND_FUNCTION` and existing (de)serializers \u2014 no hand-rolled fread/fwrite of struct bytes. (see src/util/Serializer/Serializer.h:110-133)",
+      "trigger": [
+        "AD_SERIALIZE"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC46 [SHOULD] String work reuses src/util/StringUtils.h (`utf8ToLower`/`utf8ToUpper`, `getUTF8Prefix`, `constantTimeEquals`, `truncateOperationString`) and compile-time regex via CtreHelpers \u2014 not reimplemented. (see src/util/StringUtils.h:43-281)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC46 [SHOULD] String work reuses src/util/StringUtils.h (`utf8ToLower`/`utf8ToUpper`, `getUTF8Prefix`, `constantTimeEquals`, `truncateOperationString`) and compile-time regex via CtreHelpers \u2014 not reimplemented. (see src/util/StringUtils.h:43-281)",
+      "trigger": [
+        "StringUtils",
+        "utf8ToLower",
+        "utf8ToUpper",
+        "getUTF8Prefix",
+        "constantTimeEquals"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC47 [SHOULD] Range plumbing reuses src/util/Views.h and src/util/views/: `OwningView`, `bufferedAsyncView`, `integerRange` (overflow-safe counted range), `TakeUntilInclusiveView`, `ZipMergeUniqueView` \u2014 before writing a custom view/iterator (Iterators.h, InputRangeUtils.h also exist). (see src/util/Views.h:43,528,540; src/util/views/)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC47 [SHOULD] Range plumbing reuses src/util/Views.h and src/util/views/: `OwningView`, `bufferedAsyncView`, `integerRange` (overflow-safe counted range), `TakeUntilInclusiveView`, `ZipMergeUniqueView` \u2014 before writing a custom view/iterator (Iterators.h, InputRangeUtils.h also exist). (see src/util/Views.h:43,528,540; src/util/views/)",
+      "trigger": [
+        "bufferedAsyncView",
+        "integerRange",
+        "OwningView",
+        "Views.h"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC48 [SHOULD] Generators use the in-repo `cppcoro::generator` (src/util/Generator.h) or `ad_utility::streams::stream_generator` for chunked HTTP output \u2014 no new coroutine machinery; a simple state-machine range via InputRangeUtils.h is preferred when it suffices. (see src/util/Generator.h:47, src/util/stream_generator.h)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC48 [SHOULD] Generators use the in-repo `cppcoro::generator` (src/util/Generator.h) or `ad_utility::streams::stream_generator` for chunked HTTP output \u2014 no new coroutine machinery; a simple state-machine range via InputRangeUtils.h is preferred when it suffices. (see src/util/Generator.h:47, src/util/stream_generator.h)",
+      "trigger": [
+        "cppcoro",
+        "stream_generator",
+        "Generator.h"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC49 [SHOULD] Logging uses the Log.h macros (`AD_LOG_INFO`, `AD_LOG_DEBUG`, `AD_LOG_TIMING`, ... with `LogLevelEnum`), not std::cout/cerr; long index-build loops report progress via `ad_utility::ProgressBar` and end with `getFinalProgressString()`. (see src/util/Log.h:84-86, src/util/ProgressBar.h:54,142)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC49 [SHOULD] Logging uses the Log.h macros (`AD_LOG_INFO`, `AD_LOG_DEBUG`, `AD_LOG_TIMING`, ... with `LogLevelEnum`), not std::cout/cerr; long index-build loops report progress via `ad_utility::ProgressBar` and end with `getFinalProgressString()`. (see src/util/Log.h:84-86, src/util/ProgressBar.h:54,142)",
+      "trigger": [
+        "AD_LOG_",
+        "std::cout",
+        "std::cerr",
+        "Log.h"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC5 [SHOULD] Use `ql::` backports (`ql::span`, `ql::ranges::sort`, `ql::views::*` from `src/backports/`) instead of `std::` equivalents where C++17 compat matters."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC5 [SHOULD] Use `ql::` backports (`ql::span`, `ql::ranges::sort`, `ql::views::*` from `src/backports/`) instead of `std::` equivalents where C++17 compat matters.",
+      "trigger": [
+        "backports",
+        "std::span",
+        "std::ranges",
+        "std::views"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC50 [SHOULD] HTTP/WebSocket code goes through src/util/http (`HttpClient`, `HttpServer`, `UrlParser`, `MediaTypes`, `streamable_body`) and includes Boost.Beast only via the `util/http/beast.h` wrapper. (see src/util/http/)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC50 [SHOULD] HTTP/WebSocket code goes through src/util/http (`HttpClient`, `HttpServer`, `UrlParser`, `MediaTypes`, `streamable_body`) and includes Boost.Beast only via the `util/http/beast.h` wrapper. (see src/util/http/)",
+      "trigger": [
+        "HttpClient",
+        "HttpServer",
+        "UrlParser",
+        "MediaTypes"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC51 [SHOULD] Shared mutable state uses `ad_utility::Synchronized`, `TaskQueue`, `ThreadSafeQueue`, or `jthread.h` \u2014 not bare `std::mutex` + manual lock discipline scattered across the class. (see src/util/Synchronized.h, src/util/TaskQueue.h, src/util/ThreadSafeQueue.h)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC51 [SHOULD] Shared mutable state uses `ad_utility::Synchronized`, `TaskQueue`, `ThreadSafeQueue`, or `jthread.h` \u2014 not bare `std::mutex` + manual lock discipline scattered across the class. (see src/util/Synchronized.h, src/util/TaskQueue.h, src/util/ThreadSafeQueue.h)",
+      "trigger": [
+        "Synchronized",
+        "TaskQueue",
+        "ThreadSafeQueue",
+        "jthread"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC52 [MUST] Cleanup code paths that may throw are wrapped with `ad_utility::terminateIfThrows` / `ignoreExceptionIfThrows` (ExceptionHandling.h) or `OnDestructionDontThrowDuringStackUnwinding` \u2014 destructors never propagate exceptions. (see src/util/ExceptionHandling.h:32,61; src/util/OnDestructionDontThrowDuringStackUnwinding.h)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC52 [MUST] Cleanup code paths that may throw are wrapped with `ad_utility::terminateIfThrows` / `ignoreExceptionIfThrows` (ExceptionHandling.h) or `OnDestructionDontThrowDuringStackUnwinding` \u2014 destructors never propagate exceptions. (see src/util/ExceptionHandling.h:32,61; src/util/OnDestructionDontThrowDuringStackUnwinding.h)",
+      "trigger": [
+        "terminateIfThrows",
+        "ignoreExceptionIfThrows",
+        "ExceptionHandling"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC53 [MAY] Timing/measurement uses `ad_utility::Timer` (util/Timer.h) and durations `ParseableDuration`, not manual `std::chrono` arithmetic strewn through the diff. (see src/util/Timer.h, src/util/ParseableDuration.h)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC53 [MAY] Timing/measurement uses `ad_utility::Timer` (util/Timer.h) and durations `ParseableDuration`, not manual `std::chrono` arithmetic strewn through the diff. (see src/util/Timer.h, src/util/ParseableDuration.h)",
+      "trigger": [
+        "ParseableDuration",
+        "Timer.h"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC54 [SHOULD] Type-trait needs check src/util/TypeTraits.h first (`ad_utility::SameAsAny`, etc.) before adding new metaprogramming. (see src/util/TypeTraits.h; usage in src/util/json.h:37)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC54 [SHOULD] Type-trait needs check src/util/TypeTraits.h first (`ad_utility::SameAsAny`, etc.) before adding new metaprogramming. (see src/util/TypeTraits.h; usage in src/util/json.h:37)",
+      "trigger": [
+        "TypeTraits",
+        "SameAsAny"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC55 [SHOULD] Backport coverage check before using a C++20/23 std facility directly: src/backports provides span, concepts, algorithm, iterator, functional, type_traits, three_way_comparison, shift, memory_resource, atomic_flag, filesystem, StartsWithAndEndsWith (`ql::starts_with`/`ends_with`), keywords, cppTemplate2. Use the `ql::` form where present. (see src/backports/)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC55 [SHOULD] Backport coverage check before using a C++20/23 std facility directly: src/backports provides span, concepts, algorithm, iterator, functional, type_traits, three_way_comparison, shift, memory_resource, atomic_flag, filesystem, StartsWithAndEndsWith (`ql::starts_with`/`ends_with`), keywords, cppTemplate2. Use the `ql::` form where present. (see src/backports/)",
+      "trigger": [
+        "backports",
+        "std::span",
+        "std::ranges"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC56 [SHOULD] absl boundary: absl is used via the ad_utility wrappers (HashMap/HashSet, `Set = absl::node_hash_set` in LocalVocab) and `absl::StrCat`/`absl::Cleanup`-style utilities; new code doesn't introduce additional raw absl container types when a wrapper exists. (see src/util/HashMap.h, src/index/LocalVocab.h:43)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC56 [SHOULD] absl boundary: absl is used via the ad_utility wrappers (HashMap/HashSet, `Set = absl::node_hash_set` in LocalVocab) and `absl::StrCat`/`absl::Cleanup`-style utilities; new code doesn't introduce additional raw absl container types when a wrapper exists. (see src/util/HashMap.h, src/index/LocalVocab.h:43)",
+      "trigger": [
+        "absl::",
+        "StrCat",
+        "HashMap"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC57 [SHOULD] Runtime-tunable behavior goes through `RuntimeParameters` (src/global/RuntimeParameters.h; non-copyable struct) or `ad_utility::ConfigManager` \u2014 not new globals or env-var reads; tests scope changes via test/util/RuntimeParametersTestHelpers.h. (see src/global/RuntimeParameters.h:16,209,225)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC57 [SHOULD] Runtime-tunable behavior goes through `RuntimeParameters` (src/global/RuntimeParameters.h; non-copyable struct) or `ad_utility::ConfigManager` \u2014 not new globals or env-var reads; tests scope changes via test/util/RuntimeParametersTestHelpers.h. (see src/global/RuntimeParameters.h:16,209,225)",
+      "trigger": [
+        "RuntimeParameters",
+        "ConfigManager"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC58 [SHOULD] New engine/util sources are added to the `add_library(...)` source list of the directory's CMakeLists.txt and dependencies linked via the `qlever_target_link_libraries` wrapper (not raw `target_link_libraries`, except the existing http special case). (see src/engine/CMakeLists.txt:2-38)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC58 [SHOULD] New engine/util sources are added to the `add_library(...)` source list of the directory's CMakeLists.txt and dependencies linked via the `qlever_target_link_libraries` wrapper (not raw `target_link_libraries`, except the existing http special case). (see src/engine/CMakeLists.txt:2-38)",
+      "trigger": [
+        "CMakeLists",
+        "add_library",
+        "target_link"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC59 [SHOULD] Test `IdTable`s are built with `makeIdTableFromVector` and IDs with test/util/IdTestHelpers.h factories (`IntId`, `VocabId`, ...); result comparison uses the `matchesIdTable` / `matchesIdTableFromVector` GMock matchers, not element-wise loops. (see test/util/IdTableHelpers.h:76,116,150; test/util/IdTestHelpers.h)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC59 [SHOULD] Test `IdTable`s are built with `makeIdTableFromVector` and IDs with test/util/IdTestHelpers.h factories (`IntId`, `VocabId`, ...); result comparison uses the `matchesIdTable` / `matchesIdTableFromVector` GMock matchers, not element-wise loops. (see test/util/IdTableHelpers.h:76,116,150; test/util/IdTestHelpers.h)",
+      "trigger": [
+        "makeIdTableFromVector",
+        "IdTestHelpers",
+        "IntId",
+        "VocabId",
+        "TEST\\("
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -834,11 +1338,24 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC60 [SHOULD] Exception assertions use `AD_EXPECT_THROW_WITH_MESSAGE` / `AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE` from test/util/GTestHelpers.h, not bare `EXPECT_THROW` when the message matters. (see test/util/GTestHelpers.h:61,81)"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC60 [SHOULD] Exception assertions use `AD_EXPECT_THROW_WITH_MESSAGE` / `AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE` from test/util/GTestHelpers.h, not bare `EXPECT_THROW` when the message matters. (see test/util/GTestHelpers.h:61,81)",
+      "trigger": [
+        "AD_EXPECT_THROW",
+        "GTestHelpers",
+        "EXPECT_THROW",
+        "TEST\\("
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC61 [SHOULD] Domain-specific test helpers are reused before writing new scaffolding: AllocatorTestHelpers, OperationTestHelpers, TripleComponentTestHelpers, HttpClientTestHelpers/BeastTestHelpers, AsyncTestHelpers, RandomTestHelpers, JoinHelpers (see test/util/ directory listing)."
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nQC61 [SHOULD] Domain-specific test helpers are reused before writing new scaffolding: AllocatorTestHelpers, OperationTestHelpers, TripleComponentTestHelpers, HttpClientTestHelpers/BeastTestHelpers, AsyncTestHelpers, RandomTestHelpers, JoinHelpers (see test/util/ directory listing).",
+      "trigger": [
+        "AllocatorTestHelpers",
+        "OperationTestHelpers",
+        "TripleComponentTestH",
+        "IndexTestHelpers",
+        "TEST\\("
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -910,11 +1427,21 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nrule:cpp-template-macro \u2014 use CPP_template / CPP_template_lambda, not raw requires"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nrule:cpp-template-macro \u2014 use CPP_template / CPP_template_lambda, not raw requires",
+      "trigger": [
+        "CPP_template",
+        "requires",
+        "template",
+        "enable_if",
+        "concept"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nrule:includes \u2014 missing, unused, or non-repo-relative include"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nrule:includes \u2014 missing, unused, or non-repo-relative include",
+      "trigger": [
+        "#include"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
@@ -966,7 +1493,11 @@
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
-      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nrule:todo-resolved \u2014 TODO is done; do not silently delete it"
+      "rule": "You are reviewing a QLever C++17 pull-request diff. Review only added or changed lines. You may report an adjacent stale comment or a deleted comment only when this diff makes it wrong. Report only concrete, evidence-backed violations. Do not invent generic style findings. Do not report formatting caught by clang-format or clang-tidy. QLever uses '// ___________' section-divider comments intentionally; do not flag a correctly placed divider as redundant. Check only the single rule below. If it does not apply, report no finding.\n\nrule:todo-resolved \u2014 TODO is done; do not silently delete it",
+      "trigger": [
+        "TODO",
+        "FIXME"
+      ]
     },
     {
       "path": "**/*.{h,hpp,cpp,cc,cxx}",
