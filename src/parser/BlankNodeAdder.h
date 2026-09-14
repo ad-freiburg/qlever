@@ -51,9 +51,9 @@ struct BlankNodeAdder {
   // that query, hence the default of an unlimited allocator.
   explicit BlankNodeAdder(
       ad_utility::BlankNodeManager* bnodeManager,
-      Allocator allocator =
+      const Allocator& allocator =
           ad_utility::makeUnlimitedAllocator<Map::value_type>())
-      : map_{std::move(allocator)}, bnodeManager_{bnodeManager} {}
+      : map_{allocator}, bnodeManager_{bnodeManager} {}
 
   // Get an `Id` for the `label`, which has to include the leading `_:` (as
   // blank nodes are written in Turtle and SPARQL). If the same `label` was
