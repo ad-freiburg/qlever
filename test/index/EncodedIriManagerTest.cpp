@@ -37,7 +37,7 @@ TEST(EncodedIriManger, SimpleExample) {
 // _____________________________________________________________________________
 TEST(EncodedIriManger, EncodingAndDecoding) {
   auto indices =
-      getRandomIndices(0, (1ull << EncodedIriManager::NumDigits) - 1, 10'000);
+      getRandomIndices(0, (1ull << encodedIri::NumDigits) - 1, 10'000);
   std::vector<std::pair<std::string, uint64_t>> stringsAndEncodings;
   std::vector<std::string> prefixes = {"http://www.wikidata.org/entity/Q"};
   EncodedIriManager encodedIriManager{prefixes};
@@ -166,7 +166,7 @@ TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
     EXPECT_EQ(number, m::decodeDecimalFrom64Bit(
                           m::encodeDecimalToNBit(std::to_string(number))));
   };
-  uint64_t MAX = std::stoull(std::string(EncodedIriManager::NumDigits, '9'));
+  uint64_t MAX = std::stoull(std::string(encodedIri::NumDigits, '9'));
   testNumber(0);
   testNumber(MAX);
   auto intGenerator = ad_utility::SlowRandomIntGenerator<uint64_t>(0, MAX);
@@ -179,9 +179,9 @@ TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
 TEST(EncodedIriManager, getIndexOfPrefix) {
   {
     auto manager = EncodedIriManager();
-    // No custom prefixes so only need to test the hardcoded ones.
+    // No custom prefixes so only need to test the always-on ones.
     for (const auto& [i, fixedPrefix] :
-         ranges::views::enumerate(AlwaysOnPrefixes::value)) {
+         ranges::views::enumerate(encodedIri::AlwaysOnPrefixes)) {
       EXPECT_THAT(manager.getIndexOfPrefix(fixedPrefix),
                   testing::Optional(testing::Eq(i)));
     }
@@ -191,10 +191,10 @@ TEST(EncodedIriManager, getIndexOfPrefix) {
   {
     std::vector<std::string> customPrefixes = {"http://qlever.dev"};
     auto manager = EncodedIriManager(customPrefixes);
-    // Create a list of all prefixes, including the hardcoded ones, for testing
-    // the function.
+    // Create a list of all prefixes, including the always-on ones, for
+    // testing the function.
     auto allPrefixes = customPrefixes;
-    for (auto prefix : AlwaysOnPrefixes::value) {
+    for (auto prefix : encodedIri::AlwaysOnPrefixes) {
       allPrefixes.emplace_back(prefix);
     }
     ql::ranges::sort(allPrefixes);
@@ -207,25 +207,21 @@ TEST(EncodedIriManager, getIndexOfPrefix) {
   }
 }
 
-// _____________________________________________________________________________
-struct TestHardcodedPrefixes {
-  static constexpr std::array<std::string_view, 1> value = {
-      "http://example.org/always/"};
-};
+// A set of always-on prefixes that differs from the default
+// `encodedIri::AlwaysOnPrefixes`, for the tests below.
+constexpr std::array<std::string_view, 1> testAlwaysOnPrefixes = {
+    "http://example.org/always/"};
 
 // _____________________________________________________________________________
-TEST(EncodedIriManager, HardcodedPrefixes) {
-  using Manager =
-      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
-
-  // Default constructor includes hardcoded prefix.
-  Manager em;
+TEST(EncodedIriManager, AlwaysOnPrefixes) {
+  // Without any explicit prefixes, the always-on prefix is still encoded.
+  EncodedIriManager em{{}, testAlwaysOnPrefixes};
   auto id = em.encode("<http://example.org/always/42>");
   ASSERT_TRUE(id.has_value());
   EXPECT_EQ(em.toString(id.value()), "<http://example.org/always/42>");
 
-  // Constructor with additional prefixes also includes hardcoded.
-  Manager em2{{"http://other.org/"}};
+  // Additional prefixes are added on top of the always-on ones.
+  EncodedIriManager em2{{"http://other.org/"}, testAlwaysOnPrefixes};
   auto id2 = em2.encode("<http://example.org/always/99>");
   ASSERT_TRUE(id2.has_value());
   auto id3 = em2.encode("<http://other.org/1>");
@@ -233,25 +229,22 @@ TEST(EncodedIriManager, HardcodedPrefixes) {
 }
 
 // _____________________________________________________________________________
-TEST(EncodedIriManager, cannotAddHarcodedPrefixes) {
-  using Manager =
-      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
-
-  // Adding a hardcoded prefix a second time in the constructor is an error.
+TEST(EncodedIriManager, cannotAddAlwaysOnPrefixes) {
+  // Adding an always-on prefix a second time in the constructor is an error.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Manager({std::string{TestHardcodedPrefixes::value.at(0)}}),
+      EncodedIriManager({std::string{testAlwaysOnPrefixes.at(0)}},
+                        testAlwaysOnPrefixes),
       testing::HasSubstr(
           "!ad_utility::contains(prefixesWithoutAngleBrackets, prefix)"));
 }
 
 // _____________________________________________________________________________
-TEST(EncodedIriManager, HardcodedPrefixesJson) {
-  using Manager =
-      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
-
-  Manager em{{"http://other.org/"}};
+TEST(EncodedIriManager, AlwaysOnPrefixesJson) {
+  // The always-on prefixes are part of the JSON representation, so that an
+  // index that was built with different ones can still be read.
+  EncodedIriManager em{{"http://other.org/"}, testAlwaysOnPrefixes};
   nlohmann::json j = em;
-  Manager em2 = j.get<Manager>();
+  auto em2 = j.get<EncodedIriManager>();
   auto id = em2.encode("<http://example.org/always/42>");
   ASSERT_TRUE(id.has_value());
   EXPECT_EQ(em2.toString(id.value()), "<http://example.org/always/42>");

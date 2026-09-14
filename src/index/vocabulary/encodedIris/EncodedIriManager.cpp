@@ -13,6 +13,7 @@
 
 #include <stdexcept>
 
+#include "util/Algorithm.h"
 #include "util/CtreHelpers.h"
 
 // The regex that matches the digits at the end of an encodable IRI, and the
@@ -37,16 +38,20 @@ std::optional<std::string_view> matchDigitsPrefix(std::string_view repr) {
 }  // namespace
 
 // _____________________________________________________________________________
-EncodedIriManagerBase::EncodedIriManagerBase(size_t numBitsEncoding,
-                                             size_t maxNumPrefixes)
-    : numBitsEncoding_{numBitsEncoding}, maxNumPrefixes_{maxNumPrefixes} {
-  // The tag is stored by shifting it by `numBitsEncoding_`, which requires
-  // `numBitsEncoding_` to be smaller than 64.
-  AD_CONTRACT_CHECK(numBitsEncoding_ < 64);
+EncodedIriManager::EncodedIriManager(
+    std::vector<std::string> prefixesWithoutAngleBrackets,
+    ql::span<const std::string_view> alwaysOnPrefixes) {
+  for (const auto& prefix : alwaysOnPrefixes) {
+    // Adding an always-on prefix a second time in the constructor is an error.
+    AD_CONTRACT_CHECK(
+        !ad_utility::contains(prefixesWithoutAngleBrackets, prefix));
+    prefixesWithoutAngleBrackets.emplace_back(prefix);
+  }
+  addPlainPrefixes(std::move(prefixesWithoutAngleBrackets));
 }
 
 // _____________________________________________________________________________
-std::optional<uint64_t> EncodedIriManagerBase::encodeValue(
+std::optional<uint64_t> EncodedIriManager::encodeValue(
     std::string_view repr) const {
   // Find the matching prefix.
   auto it = ql::ranges::find_if(prefixes_, [&repr](std::string_view prefix) {
@@ -64,33 +69,36 @@ std::optional<uint64_t> EncodedIriManagerBase::encodeValue(
     return std::nullopt;
   }
   std::string_view numString = numStringOpt.value();
-  if (numString.size() * encodedIri::NibbleSize > numBitsEncoding_) {
+  if (numString.size() * encodedIri::NibbleSize > encodedIri::NumBitsEncoding) {
     return std::nullopt;
   }
 
   // Get the index of the used prefix, and run the actual encoding.
   auto prefixIndex = static_cast<uint64_t>(it - prefixes_.begin());
-  return encodedIri::encodeDigitsAsNibbles(numString, numBitsEncoding_) |
-         (prefixIndex << numBitsEncoding_);
+  return encodedIri::encodeDigitsAsNibbles(numString,
+                                           encodedIri::NumBitsEncoding) |
+         (prefixIndex << encodedIri::NumBitsEncoding);
 }
 
 // _____________________________________________________________________________
-std::string EncodedIriManagerBase::decodeValue(uint64_t encodedValue) const {
+std::string EncodedIriManager::decodeValue(uint64_t encodedValue) const {
   // The tag is stored above the bits of the digits.
-  uint64_t prefixIdx = encodedValue >> numBitsEncoding_;
-  uint64_t digitEncoding =
-      encodedValue & ad_utility::bitMaskForLowerBits(numBitsEncoding_);
+  uint64_t prefixIdx = encodedValue >> encodedIri::NumBitsEncoding;
+  uint64_t digitEncoding = encodedValue & ad_utility::bitMaskForLowerBits(
+                                              encodedIri::NumBitsEncoding);
   const auto& prefix = prefixes_.at(prefixIdx);
   std::string result;
-  result.reserve(prefix.size() + numBitsEncoding_ / encodedIri::NibbleSize + 1);
+  result.reserve(prefix.size() +
+                 encodedIri::NumBitsEncoding / encodedIri::NibbleSize + 1);
   result = prefix;
-  encodedIri::decodeNibblesToDigits(result, digitEncoding, numBitsEncoding_);
+  encodedIri::decodeNibblesToDigits(result, digitEncoding,
+                                    encodedIri::NumBitsEncoding);
   result.push_back('>');
   return result;
 }
 
 // _____________________________________________________________________________
-std::optional<uint64_t> EncodedIriManagerBase::getIndexOfPrefix(
+std::optional<uint64_t> EncodedIriManager::getIndexOfPrefix(
     std::string_view prefixWithoutAngleBrackets) const {
   auto it = ql::ranges::find(prefixes_,
                              absl::StrCat("<", prefixWithoutAngleBrackets));
@@ -101,18 +109,17 @@ std::optional<uint64_t> EncodedIriManagerBase::getIndexOfPrefix(
 }
 
 // _____________________________________________________________________________
-void EncodedIriManagerBase::toJson(nlohmann::json& j) const {
+void EncodedIriManager::toJson(nlohmann::json& j) const {
   j[jsonKey_] = prefixes_;
 }
 
 // _____________________________________________________________________________
-void EncodedIriManagerBase::fromJson(const nlohmann::json& j) {
+void EncodedIriManager::fromJson(const nlohmann::json& j) {
   prefixes_ = static_cast<std::vector<std::string>>(j[jsonKey_]);
 }
 
 // _____________________________________________________________________________
-void EncodedIriManagerBase::addPlainPrefixes(
-    std::vector<std::string> prefixes) {
+void EncodedIriManager::addPlainPrefixes(std::vector<std::string> prefixes) {
   if (prefixes.empty()) {
     return;
   }
@@ -126,11 +133,11 @@ void EncodedIriManagerBase::addPlainPrefixes(
   // return types between `std::ranges` and `range-v3`.
   prefixes.erase(::ranges::unique(prefixes), prefixes.end());
 
-  if (prefixes.size() > maxNumPrefixes_) {
+  if (prefixes.size() > encodedIri::MaxNumPrefixes) {
     throw std::runtime_error(
         absl::StrCat("Number of prefixes specified with `--encode-as-id` is ",
                      prefixes.size(), ", which is too many; ",
-                     "the maximum is ", maxNumPrefixes_));
+                     "the maximum is ", encodedIri::MaxNumPrefixes));
   }
 
   // TODO<C++23> use `std::views::adjacent`.
