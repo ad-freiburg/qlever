@@ -19,7 +19,7 @@
 
 #include "backports/asio.h"
 #include "index/InputFileSpecification.h"
-#include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/encodedIris/EncodedIriManager.h"
 #include "parser/AsyncParserDriver.h"
 #include "parser/AsyncRdfParserBase.h"
 #include "parser/RdfParser.h"

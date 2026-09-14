@@ -10,7 +10,7 @@
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/ValueId.h"
 #include "index/TripleComponentConversions.h"
-#include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/encodedIris/EncodedIriManager.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/Literal.h"

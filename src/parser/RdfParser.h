@@ -26,7 +26,7 @@
 #include "global/SpecialIds.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/InputFileSpecification.h"
-#include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/encodedIris/EncodedIriManager.h"
 #include "parser/AsyncBlockSource.h"
 #include "parser/AsyncFileBlockDriver.h"
 #include "parser/TripleComponent.h"

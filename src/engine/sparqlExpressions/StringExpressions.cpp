@@ -14,7 +14,7 @@
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
 #include "index/TripleComponentConversions.h"
-#include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/encodedIris/EncodedIriManager.h"
 #include "parser/RdfParser.h"
 #include "util/ParsedUri.h"
 #include "util/StringUtils.h"
