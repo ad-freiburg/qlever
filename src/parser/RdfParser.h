@@ -62,10 +62,11 @@ struct RdfParserSettings {
   bool invalidLiteralsAreSkipped_ = false;
   // If true, the faster `TokenizerCtre` is used instead of the
   // standard-compliant `Tokenizer` (see the comment on `TurtleParser` below
-  // for the limitations of the relaxed mode). NOTE: This setting is only
-  // evaluated by the parsers that handle several files, when they choose the
-  // parser for a single file; the parsers for a single file have the tokenizer
-  // as a template parameter.
+  // for the limitations of the relaxed mode).
+  //
+  // NOTE: This setting is only evaluated by the parsers that handle several
+  // files, when they choose the parser for a single file. The parsers for a
+  // single file have the tokenizer as a template parameter.
   bool useRelaxedParsing_ = false;
 };
 
