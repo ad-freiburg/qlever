@@ -1,21 +1,14 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-//
+
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-//
+
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "index/vocabulary/encodedIris/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriManager.h"
 
-#include <absl/strings/str_cat.h>
-
-#include <stdexcept>
-
-#include "backports/StartsWithAndEndsWith.h"
-#include "backports/algorithm.h"
-#include "util/Algorithm.h"
 #include "util/CtreHelpers.h"
 
 // The regex that matches the digits at the end of an encodable IRI, and the
@@ -39,27 +32,15 @@ std::optional<std::string_view> matchDigitsPrefix(std::string_view repr) {
 }
 }  // namespace
 
-// _____________________________________________________________________________
-EncodedIriManager::EncodedIriManager(
-    std::vector<std::string> prefixesWithoutAngleBrackets,
-    ql::span<const std::string_view> alwaysOnPrefixes) {
-  for (const auto& prefix : alwaysOnPrefixes) {
-    // Adding an always-on prefix a second time in the constructor is an error.
-    AD_CONTRACT_CHECK(
-        !ad_utility::contains(prefixesWithoutAngleBrackets, prefix));
-    prefixesWithoutAngleBrackets.emplace_back(prefix);
-  }
-  addPlainPrefixes(std::move(prefixesWithoutAngleBrackets));
-}
-
-// _____________________________________________________________________________
-std::optional<uint64_t> EncodedIriManager::encodeValue(
-    std::string_view repr) const {
+// ____________________________________________________________________________
+std::optional<std::pair<size_t, std::string_view>> detail::matchPrefixAndDigits(
+    const std::vector<std::string>& prefixes, std::string_view repr,
+    size_t maxNumDigits) {
   // Find the matching prefix.
-  auto it = ql::ranges::find_if(prefixes_, [&repr](std::string_view prefix) {
+  auto it = ql::ranges::find_if(prefixes, [&repr](std::string_view prefix) {
     return ql::starts_with(repr, prefix);
   });
-  if (it == prefixes_.end()) {
+  if (it == prefixes.end()) {
     return std::nullopt;
   }
 
@@ -71,48 +52,17 @@ std::optional<uint64_t> EncodedIriManager::encodeValue(
     return std::nullopt;
   }
   std::string_view numString = numStringOpt.value();
-  if (numString.size() > encodedIri::NumDigits) {
+  if (numString.size() > maxNumDigits) {
     return std::nullopt;
   }
-
-  // Get the index of the used prefix, and run the actual encoding.
-  auto prefixIndex = static_cast<uint64_t>(it - prefixes_.begin());
-  return makeValueFromPrefixIdxAndPayload(prefixIndex,
-                                          encodeDecimalToNBit(numString));
+  return std::pair{static_cast<size_t>(it - prefixes.begin()), numString};
 }
 
-// _____________________________________________________________________________
-std::string EncodedIriManager::decodeValue(uint64_t encodedValue) const {
-  auto [prefixIdx, digitEncoding] =
-      splitValueIntoPrefixIdxAndPayload(encodedValue);
-  return toStringWithGivenPrefix(digitEncoding, prefixes_.at(prefixIdx));
-}
-
-// _____________________________________________________________________________
-std::optional<uint64_t> EncodedIriManager::getIndexOfPrefix(
-    std::string_view prefixWithoutAngleBrackets) const {
-  auto it = ql::ranges::find(prefixes_,
-                             absl::StrCat("<", prefixWithoutAngleBrackets));
-  if (it == prefixes_.end()) {
-    return std::nullopt;
-  }
-  return static_cast<size_t>(it - prefixes_.begin());
-}
-
-// _____________________________________________________________________________
-void EncodedIriManager::toJson(nlohmann::json& j) const {
-  j[jsonKey_] = prefixes_;
-}
-
-// _____________________________________________________________________________
-void EncodedIriManager::fromJson(const nlohmann::json& j) {
-  prefixes_ = static_cast<std::vector<std::string>>(j[jsonKey_]);
-}
-
-// _____________________________________________________________________________
-void EncodedIriManager::addPlainPrefixes(std::vector<std::string> prefixes) {
+// ____________________________________________________________________________
+std::vector<std::string> detail::sortAndCheckPrefixes(
+    std::vector<std::string> prefixes, size_t maxNumPrefixes) {
   if (prefixes.empty()) {
-    return;
+    return {};
   }
   // Sort the prefixes lexicographically to make the ordering deterministic
   // (provided that the prefixes do not end with digits).
@@ -124,11 +74,11 @@ void EncodedIriManager::addPlainPrefixes(std::vector<std::string> prefixes) {
   // return types between `std::ranges` and `range-v3`.
   prefixes.erase(::ranges::unique(prefixes), prefixes.end());
 
-  if (prefixes.size() > encodedIri::MaxNumPrefixes) {
+  if (prefixes.size() > maxNumPrefixes) {
     throw std::runtime_error(
         absl::StrCat("Number of prefixes specified with `--encode-as-id` is ",
                      prefixes.size(), ", which is too many; ",
-                     "the maximum is ", encodedIri::MaxNumPrefixes));
+                     "the maximum is ", maxNumPrefixes));
   }
 
   // TODO<C++23> use `std::views::adjacent`.
@@ -142,7 +92,8 @@ void EncodedIriManager::addPlainPrefixes(std::vector<std::string> prefixes) {
           a, "\" and \"", b, "\"."));
     }
   }
-  prefixes_.reserve(prefixes.size());
+  std::vector<std::string> result;
+  result.reserve(prefixes.size());
   for (const auto& prefix : prefixes) {
     if (ql::starts_with(prefix, '<')) {
       throw std::runtime_error(absl::StrCat(
@@ -150,6 +101,7 @@ void EncodedIriManager::addPlainPrefixes(std::vector<std::string> prefixes) {
           "be enclosed in angle brackets; here is a violating prefix: \"",
           prefix, "\""));
     }
-    prefixes_.push_back(absl::StrCat("<", prefix));
+    result.push_back(absl::StrCat("<", prefix));
   }
+  return result;
 }

@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_NIBBLEENCODING_H
-#define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_NIBBLEENCODING_H
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_NIBBLEENCODING_H
+#define QLEVER_SRC_INDEX_VOCABULARY_NIBBLEENCODING_H
 
 #include <absl/numeric/bits.h>
 
@@ -23,7 +23,7 @@
 
 // The nibble encoding of a sequence of decimal digits, which is the encoding
 // that the `EncodedIriManager` (see `EncodedIriManager.h`) uses for the digits
-// that follow a plain prefix. It has the following properties:
+// that follow the prefix of an encoded IRI. It has the following properties:
 //
 // 1. It preserves the lexicographic order of the digit sequences, that is, the
 //    order of the encoded numbers is the same as the order of the original
@@ -134,4 +134,4 @@ inline uint64_t decodeNibblesToNumber(uint64_t encoded, size_t numBits) {
 
 }  // namespace encodedIri
 
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_NIBBLEENCODING_H
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_NIBBLEENCODING_H

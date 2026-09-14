@@ -23,7 +23,7 @@
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
 #include "index/InputFileSpecification.h"
-#include "index/vocabulary/encodedIris/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "parser/NormalizedString.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
