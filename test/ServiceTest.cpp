@@ -755,8 +755,8 @@ TEST_F(ServiceTest, blankNodesAcrossResponseChunks) {
     };
   };
 
-  // The blank node `_:b` occurs in both chunks (in the rows 1 and 3), the blank
-  // node `_:c` only in the second chunk.
+  // The blank node `_:b` occurs in both chunks (as the 2nd and the 4th
+  // binding), the blank node `_:c` only in the second chunk.
   const std::vector<std::string> chunks{
       R"({"head":{"vars":["x"]},"results":{"bindings":[)"
       R"({"x":{"type":"uri","value":"http://ex.org/1"}},)"

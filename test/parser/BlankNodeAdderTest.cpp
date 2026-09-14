@@ -11,6 +11,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <vector>
+
 #include "parser/BlankNodeAdder.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -44,6 +46,37 @@ TEST(BlankNodeAdderTest, labelsAreResolvedConsistently) {
   // A different `BlankNodeAdder` yields different `Id`s for the same labels.
   BlankNodeAdder otherAdder{&manager};
   EXPECT_THAT(otherAdder.getBlankNodeIndex("_:b0"), testing::Ne(b0));
+}
+
+// _____________________________________________________________________________
+TEST(BlankNodeAdderTest, resolveParsedComponent) {
+  ad_utility::BlankNodeManager manager;
+  BlankNodeAdder adder{&manager};
+
+  // The RDF parsers represent a blank node as a plain string (including the
+  // leading `_:`), which is resolved to an `Id` consistently with
+  // `getBlankNodeIndex`.
+  TripleComponent resolved =
+      adder.resolveParsedComponent(TripleComponent{"_:b0"});
+  ASSERT_TRUE(resolved.isId());
+  EXPECT_THAT(resolved.getId(), testing::Eq(adder.getBlankNodeIndex("_:b0")));
+  EXPECT_THAT(adder.map_, testing::SizeIs(1));
+
+  // All other components are strongly typed and are passed through unchanged.
+  std::vector<TripleComponent> others{
+      TripleComponent::Iri::fromIriref("<http://example.org/x>"),
+      TripleComponent::Literal::literalWithoutQuotes("lit"),
+      int64_t{42},
+      42.0,
+      true,
+      TripleComponent::UNDEF{},
+      Variable{"?x"},
+      Id::makeFromInt(1)};
+  for (const TripleComponent& tripleComponent : others) {
+    EXPECT_THAT(adder.resolveParsedComponent(TripleComponent{tripleComponent}),
+                testing::Eq(tripleComponent));
+  }
+  EXPECT_THAT(adder.map_, testing::SizeIs(1));
 }
 
 // _____________________________________________________________________________
