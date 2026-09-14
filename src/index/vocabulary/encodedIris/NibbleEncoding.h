@@ -13,6 +13,7 @@
 #include <absl/numeric/bits.h>
 
 #include <cstdint>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -56,9 +57,19 @@ static constexpr size_t NibbleSize = 4;
 // Encode the `digits` (which may only consist of decimal digits, at most
 // `numBits / NibbleSize` many) into the lowest `numBits` bits of the result,
 // using the nibble encoding described at the top of this file.
+//
+// NOTE: The precondition is reported via `throw` and not via
+// `AD_CORRECTNESS_CHECK`, because the latter is not `constexpr`. An
+// unconditional call to it would make this a function that can never yield a
+// constant expression, which is ill-formed (no diagnostic required); GCC 11 and
+// 12 as well as Clang reject it outright. A `throw` on a branch that is not
+// taken is fine in a constant expression. See
+// `ad_utility::bitMaskForLowerBits` in `util/BitUtils.h` for the same pattern.
 constexpr uint64_t encodeDigitsAsNibbles(std::string_view digits,
                                          size_t numBits) {
-  AD_CORRECTNESS_CHECK(digits.size() * NibbleSize <= numBits);
+  if (digits.size() * NibbleSize > numBits) {
+    throw std::out_of_range{"too many digits for the nibble encoding"};
+  }
   uint64_t result = 0;
   size_t shift = numBits - NibbleSize;
   for (const char digitChar : digits) {

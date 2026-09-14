@@ -1,6 +1,11 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
@@ -202,6 +207,15 @@ TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
       1, EncodedIriManager::encodeDecimalToNBit("7643"));
   EXPECT_EQ(em.toString(id), "<blubb7643>");
 }
+
+// The encoding is usable in a constant expression. This is not only a nice
+// property, but also required: a `constexpr` function that can never yield a
+// constant expression is ill-formed, and several compilers reject it (see the
+// note in `NibbleEncoding.h`).
+// The digit `1` is stored as the nibble `2` in the leftmost nibble.
+static_assert(EncodedIriManager::encodeDecimalToNBit("1") ==
+              uint64_t{2} << (encodedIri::NumBitsEncoding -
+                              encodedIri::NibbleSize));
 
 // _____________________________________________________________________________
 TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
