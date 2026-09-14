@@ -115,18 +115,7 @@ class RdfParserBase {
                          RdfParserSettings settings = {})
       : settings_{settings}, encodedIriManager_{encodedIriManager} {}
 
-  virtual TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() final {
-    return settings_.integerOverflowBehavior_;
-  }
-
-  // If true then triples with invalid literals (for example
-  // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
-  // such literals are encountered.
-  virtual bool& invalidLiteralsAreSkipped() final {
-    return settings_.invalidLiteralsAreSkipped_;
-  }
-
-  // Access all the settings at once, see `RdfParserSettings`.
+  // The settings of this parser, see `RdfParserSettings`.
   RdfParserSettings& settings() { return settings_; }
   const RdfParserSettings& settings() const { return settings_; }
 
@@ -320,7 +309,7 @@ class TurtleParser : public RdfParserBase {
   [[noreturn]] void raise(std::string_view error_message) const;
 
   // Throw an exception or simply ignore the current triple, depending on the
-  // setting of `invalidLiteralsAreSkipped()`.
+  // setting of `settings().invalidLiteralsAreSkipped_`.
   void raiseOrIgnoreTriple(std::string_view errorMessage);
 
  protected:

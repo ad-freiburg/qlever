@@ -631,7 +631,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
       Parser parser{encodedIriManager()};
       parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
-      parser.integerOverflowBehavior() =
+      parser.settings().integerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
       for (const auto& input : nonWorkingInputs) {
         assertParsingFails(parser, input);
@@ -651,7 +651,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
       Parser parser{encodedIriManager()};
       parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
-      parser.integerOverflowBehavior() =
+      parser.settings().integerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::AllToDouble;
       for (const auto& input : nonWorkingInputs) {
         assertParsingFails(parser, input);
@@ -684,7 +684,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       std::vector<TurtleTriple> expected{{iri("<a>"), iri("<b>"), 123},
                                          {iri("<e>"), iri("<f>"), 234}};
       Parser parser{encodedIriManager()};
-      parser.invalidLiteralsAreSkipped() = true;
+      parser.settings().invalidLiteralsAreSkipped_ = true;
       auto result = parseAllTriples(parser, input);
       ASSERT_EQ(result, expected);
     }
@@ -699,8 +699,8 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           {iri("<e>"), iri("<f>"), 234}};
       Parser parser{encodedIriManager()};
       parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
-      parser.invalidLiteralsAreSkipped() = true;
-      parser.integerOverflowBehavior() =
+      parser.settings().invalidLiteralsAreSkipped_ = true;
+      parser.settings().integerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
       auto result = parseAllTriples(parser, input);
       ASSERT_EQ(result, expected);

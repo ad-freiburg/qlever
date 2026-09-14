@@ -109,7 +109,7 @@ void TurtleParser<Tokenizer_T>::raise(std::string_view error_message) const {
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::raiseOrIgnoreTriple(
     std::string_view errorMessage) {
-  if (invalidLiteralsAreSkipped()) {
+  if (settings().invalidLiteralsAreSkipped_) {
     currentTripleIgnoredBecauseOfInvalidLiteral_ = true;
   } else {
     raise(errorMessage);
@@ -384,7 +384,7 @@ void TurtleParser<T>::parseDoubleConstant(std::string_view input) {
 // ____________________________________________________________________________
 template <class T>
 void TurtleParser<T>::parseIntegerConstant(std::string_view input) {
-  if (integerOverflowBehavior() ==
+  if (settings().integerOverflowBehavior_ ==
       TurtleParserIntegerOverflowBehavior::AllToDouble) {
     return parseDoubleConstant(input);
   }
@@ -398,7 +398,7 @@ void TurtleParser<T>::parseIntegerConstant(std::string_view input) {
   auto [firstNonMatching, errorCode] =
       std::from_chars(input.data(), input.data() + input.size(), result);
   if (errorCode == std::errc::result_out_of_range) {
-    if (integerOverflowBehavior() ==
+    if (settings().integerOverflowBehavior_ ==
         TurtleParserIntegerOverflowBehavior::OverflowingToDouble) {
       return parseDoubleConstant(input);
     } else {
