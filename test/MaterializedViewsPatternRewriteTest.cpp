@@ -425,7 +425,6 @@ TEST_P(MaterializedViewsPatternRewriteTestP, simpleChain) {
 
   // Write a chain structure to the materialized view.
   qlv.writeMaterializedView(viewName, writeQuery);
-  qlv.loadMaterializedView(viewName);
   auto chainView = std::bind_front(&viewScanSimple, viewName);
 
   // With the materialized view loaded, an index scan on the view is performed
@@ -441,7 +440,6 @@ TEST_P(MaterializedViewsPatternRewriteTestP, simpleChain) {
   // If the view is sorted such that the subject of the chain is not the first
   // column, rewriting cannot be applied with a fixed subject.
   qlv.writeMaterializedView(viewName, std::string{simpleChainDifferentSort});
-  qlv.loadMaterializedView(viewName);
   qpExpect(qlv, simpleChainFixed,
            h::Join(h::IndexScanFromStrings("<s2>", "<p1>",
                                            "?_QLever_internal_variable_qp_0"),
@@ -472,7 +470,6 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_F(MaterializedViewsPatternRewriteContextTest,
        DegenerateChainsAndGraphClause) {
   qlv().writeMaterializedView("testViewChain", std::string{simpleChain});
-  qlv().loadMaterializedView("testViewChain");
 
   // A degenerate chain (`?a <p1> ?b . ?b <p2> ?a`) must be rejected for
   // rewriting (thus planned normally).

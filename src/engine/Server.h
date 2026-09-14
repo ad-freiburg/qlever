@@ -52,6 +52,11 @@ namespace serverTestHelpers {
 class ServerForTesting;
 }
 
+// Defined in `util/ResourceMonitor.h`, which only `Server.cpp` includes.
+namespace ad_utility {
+class IndexRebuildIdTracker;
+}
+
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
@@ -75,11 +80,13 @@ class Server {
   friend serverTestHelpers::ServerForTesting;
 
  public:
-  explicit Server(unsigned short port, size_t numThreads,
-                  std::string accessToken, const qlever::EngineConfig& config,
-                  bool noAccessCheck = false,
-                  std::shared_ptr<ad_utility::metrics::MetricsReader>
-                      metricsReader = nullptr);
+  explicit Server(
+      unsigned short port, size_t numThreads, std::string accessToken,
+      const qlever::EngineConfig& config, bool noAccessCheck = false,
+      std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader =
+          nullptr,
+      std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker =
+          nullptr);
 
   virtual ~Server() = default;
 
@@ -130,6 +137,13 @@ class Server {
   // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
   // disabled (--enable-metrics not passed).
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
+
+  // Holds the ID of the currently running index rebuild, which the resource
+  // sampler reads for the `index_rebuild_id` column. The `shared_ptr` is never
+  // null, as the constructor creates a tracker even if the caller passes none.
+  // Note: This member is purely observational. Preventing a second concurrent
+  // index rebuild is the job of the `rebuildInProgress_` data member above.
+  std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker_;
 
   // Deregisters callbacks on destruction. Declared after `qlever_` so that it
   // is destroyed before `qlever_` which the callbacks access.
@@ -216,9 +230,7 @@ class Server {
 
   // Handle a `load-materialized-view` command: extract the view name from
   // `parameters` and load it via `indexAndViews`'s materialized views
-  // manager. The caller is responsible for resetting the request's operation
-  // to `None{}` so that `process()` doesn't also try to execute it as a
-  // regular query. Unlike `processWriteMaterializedView` above, this neither
+  // manager. Unlike `processWriteMaterializedView` above, this neither
   // executes a query nor honors a timeout, so it runs synchronously and
   // either returns its result or throws.
   json processLoadMaterializedView(const ParamValueMap& parameters,
@@ -227,10 +239,13 @@ class Server {
   // Handle a `delete-materialized-view` command: extract the view name from
   // `parameters`, delete it via a freshly taken index/views snapshot (not the
   // one from the beginning of `process()`, so that a concurrent rebuild
-  // cannot make this operate on a stale manager). The caller is responsible
-  // for resetting the request's operation to `None{}`, like
-  // `processLoadMaterializedView` above.
+  // cannot make this operate on a stale manager).
   json processDeleteMaterializedView(const ParamValueMap& parameters) const;
+
+  // Handle an `unload-materialized-view` command: unload the view named in
+  // `parameters` if loaded, keeping its on-disk files (unlike `delete`). The
+  // response tells whether the view was loaded before.
+  json processUnloadMaterializedView(const ParamValueMap& parameters) const;
 
   // Handle the `/ping` endpoint: log the alive check (with or without an
   // accompanying "msg" parameter) and return a fixed confirmation response.
@@ -262,6 +277,36 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<ResponseT> processRebuildIndex(const ParamValueMap& parameters,
                                                const RequestT& request);
+
+  // Result of `processCommands` below.
+  struct ProcessCommandsResult {
+    // The response produced by the matched `cmd=` URL parameter, if any.
+    std::optional<ResponseT> response_;
+
+    // Set to true for commands whose `serverProcessHelpers::CommandMeta::
+    // supportsOperation_` is true (currently only `write-materialized-view`,
+    // which uses the given query as the view-defining query and already
+    // executes it) to tell `process()` not to run the operation again via
+    // `processOperation`.
+    bool queryOperationWasConsumed_ = false;
+  };
+
+  // Handle the `cmd=<name>` URL parameter (see `serverProcessHelpers::
+  // commands` in `Server.cpp` for the full list); throws an `HttpError` if
+  // `cmd` is set but not one of those, or if the matched command's
+  // `CommandMeta::supportsOperation_` is `false` while the request supplies a
+  // "query"/"update"/graph-store `operation` anyway. `write-materialized-
+  // view` is currently the only command with `supportsOperation_` set to
+  // `true`; its `operation` doubles as the view-defining query, and the
+  // returned `ProcessCommandsResult::queryOperationWasConsumed_` is set to
+  // tell `process()` not to also execute it as a regular query.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<ProcessCommandsResult> processCommands(
+          const SharedIndexAndView& indexAndViews,
+          const ParamValueMap& parameters, const SparqlOperation& operation,
+          bool accessTokenOk, const ad_utility::Timer& requestTimer,
+          RequestT& request);
 
   // Initialize and register server metrics which are stored in `metrics_`.
   void initializeServerMetrics(

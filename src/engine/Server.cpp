@@ -37,8 +37,10 @@
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/ParseException.h"
 #include "util/ParseableDuration.h"
 #include "util/QueryEventLog.h"
+#include "util/ResourceMonitor.h"
 #include "util/TimeTracer.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
@@ -58,7 +60,8 @@ using ad_utility::MediaType;
 Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
-    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader)
+    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
+    std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker)
     : qlever_(config),
       numThreads_(numThreads),
       port_(port),
@@ -67,7 +70,11 @@ Server::Server(
       queryThreadPool_{numThreads},
       rebuildIndexStrategy_(config.rebuildIndexStrategy_),
       keepPreviousIndexDirs_(config.keepPreviousIndexDirs_),
-      metricsReader_(std::move(metricsReader)) {
+      metricsReader_(std::move(metricsReader)),
+      indexRebuildIdTracker_(
+          indexRebuildIdTracker
+              ? std::move(indexRebuildIdTracker)
+              : std::make_shared<ad_utility::IndexRebuildIdTracker>()) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   initializeServerMetrics(config.memoryLimit_);
@@ -455,16 +462,32 @@ nlohmann::json Server::processDeleteMaterializedView(
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
 
-  // Snapshot again instead of reusing the snapshot taken at the beginning of
-  // `process()` (see `clear-delta-triples` above for the same pattern), so
-  // that we delete the view from the index that is currently being served
-  // and not from a stale one that a concurrent rebuild has swapped out in the
-  // meantime. Deleting from a stale manager is not unsafe (the rebuild called
-  // `MaterializedViewsManager::retireOnDiskFiles` on it, which makes
-  // `deleteView` throw), it would just needlessly fail.
-  indexAndViewsSnapshot()->materializedViewsManager_.deleteView(name);
+  // `Qlever::deleteMaterializedView` takes a fresh snapshot instead of reusing
+  // the one taken at the beginning of `process()` (see `clear-delta-triples`
+  // above for the same pattern), so that the view is deleted from the index
+  // that is currently being served and not from a stale one that a concurrent
+  // rebuild has swapped out in the meantime. Deleting from a stale manager is
+  // not unsafe (rebuild called `MaterializedViewsManager::retireOnDiskFiles` on
+  // it, which makes `deleteView` throw), it would just needlessly fail.
+  qlever().deleteMaterializedView(name);
 
   return json{{"materialized-view-deleted", name}};
+}
+
+// _____________________________________________________________________________
+nlohmann::json Server::processUnloadMaterializedView(
+    const ParamValueMap& parameters) const {
+  auto name =
+      qlever::http_api_helpers::getViewNameParameter(parameters, "Unloading");
+
+  // `Qlever::unloadMaterializedView` takes a fresh snapshot for the same reason
+  // as in `processDeleteMaterializedView` above (unloading from a stale
+  // manager would silently leave the view loaded in the served one). Report
+  // whether the view was actually loaded, so that a request with a wrong
+  // name does not look like a success.
+  bool wasLoaded = qlever().unloadMaterializedView(name);
+
+  return json{{"materialized-view-unloaded", name}, {"was-loaded", wasLoaded}};
 }
 
 // _____________________________________________________________________________
@@ -484,15 +507,19 @@ CPP_template_def(typename RequestT)(
 }
 
 namespace {
-// Helpers used only by `Server::process` below, for dispatching its `cmd=`
-// URL parameter.
+// Helpers used by `Server::processCommands` below to dispatch its `cmd=` URL
+// parameter, and by other command/setting handlers in this file.
 namespace serverProcessHelpers {
+using namespace ad_utility::url_parser;
+using namespace ad_utility::httpUtils;
 // Metadata for a `cmd=<name>` URL parameter handled by `Server::process`:
-// the log message and whether it requires a valid access token.
+// the log message, whether it requires a valid access token, and whether it
+// accepts (and uses) an additional query/update alongside `cmd=`.
 struct CommandMeta {
   std::string_view name_;
   std::string_view description_;
   bool requiresAuth_;
+  bool supportsOperation_ = false;
 };
 
 constexpr std::array commands = {
@@ -510,10 +537,12 @@ constexpr std::array commands = {
     CommandMeta{"get-index-id", "get index ID", false},
     CommandMeta{"dump-active-queries", "dump active queries", true},
     CommandMeta{"rebuild-index", "rebuilding index", true},
-    CommandMeta{"write-materialized-view", "write materialized view", true},
+    CommandMeta{"write-materialized-view", "write materialized view", true,
+                true},
     CommandMeta{"load-materialized-view", "explicitly load materialized view",
                 true},
     CommandMeta{"delete-materialized-view", "delete materialized view", true},
+    CommandMeta{"unload-materialized-view", "unload materialized view", true},
 };
 
 // Throw a 403 `HttpError` if `accessTokenOk` is false; `actionName` names the
@@ -527,16 +556,27 @@ void requireValidAccessToken(bool accessTokenOk, std::string_view actionName) {
   }
 }
 
+// Throw a 400 `HttpError` if `operation` is not `None`; `actionName` names the
+// command being checked, for the error message.
+void requireNoOperation(const sparqlOperation::Operation& operation,
+                        std::string_view actionName) {
+  if (!std::holds_alternative<sparqlOperation::None>(operation)) {
+    throw HttpError(
+        boost::beast::http::status::bad_request,
+        absl::StrCat("cmd=", actionName,
+                     " does not accept an additional query or update"));
+  }
+}
+
 // Check if `paramName=<newValue>` is set in `parameters`. If so, verify the
 // access token (using `actionName` if given, `paramName` otherwise for the
 // error message on invalid access), log the `<newValue>` and return it. Return
 // `std::nullopt` if no such parameter is found.
 std::optional<std::string> checkAndLogParameterSetting(
-    const ad_utility::url_parser::ParamValueMap& parameters,
-    std::string_view paramName, bool accessTokenOk,
+    const ParamValueMap& parameters, std::string_view paramName,
+    bool accessTokenOk,
     std::optional<std::string_view> actionName = std::nullopt) {
-  auto value = ad_utility::url_parser::checkParameter(parameters, paramName,
-                                                      std::nullopt);
+  auto value = checkParameter(parameters, paramName, std::nullopt);
   if (value.has_value()) {
     requireValidAccessToken(accessTokenOk, actionName.value_or(paramName));
     AD_LOG_INFO << "Setting \"" << paramName << "\" to: \"" << value.value()
@@ -545,22 +585,36 @@ std::optional<std::string> checkAndLogParameterSetting(
   return value;
 }
 
-// Create a bound version of `checkParameter` with `parameters` as the first
-// bound argument.
-auto makeCheckParameter(
-    const ad_utility::url_parser::ParamValueMap& parameters) {
-  return absl::bind_front(&ad_utility::url_parser::checkParameter,
-                          std::cref(parameters));
+// Create a factory for a bound version of `createJsonResponse` with
+// `request` as the second bound argument.
+CPP_template(typename RequestT)(
+    requires HttpRequest<RequestT>) auto makeJsonResponseFactory(const RequestT&
+                                                                     request) {
+  return [&request](const nlohmann::json& j) {
+    return createJsonResponse(j, request);
+  };
 }
 
-// Look up metadata for `cmd` in `commands`, run the access-token check (if
-// required), and log it. `cmd` must name an entry in `commands`. It always
-// comes from a literal used in the `process()` dispatch below.
-void dispatchLog(std::string_view cmd, bool accessTokenOk) {
+// Create a bound version of `checkParameter` with `parameters` as the first
+// bound argument.
+auto makeCheckParameter(const ParamValueMap& parameters) {
+  return absl::bind_front(&checkParameter, std::cref(parameters));
+}
+
+// Look up `cmd`'s metadata in `commands`, run its pre-dispatch checks — the
+// access-token check (if required) and the additional-query/update check —
+// and log that it is being processed. `cmd` must name an entry in
+// `commands`. It always comes from a literal used in the `processCommands()`
+// dispatch below.
+void checkAndLogCommand(std::string_view cmd, bool accessTokenOk,
+                        const sparqlOperation::Operation& operation) {
   auto it = ql::ranges::find(commands, cmd, &CommandMeta::name_);
   AD_CORRECTNESS_CHECK(it != commands.end());
   if (it->requiresAuth_) {
     requireValidAccessToken(accessTokenOk, it->name_);
+  }
+  if (!it->supportsOperation_) {
+    requireNoOperation(operation, it->name_);
   }
   AD_LOG_INFO << "Processing command \"" << it->name_
               << "\": " << it->description_ << std::endl;
@@ -597,6 +651,113 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
     return std::nullopt;
   }
   return nlohmann::json(globalRuntimeParameters.rlock()->toMap());
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename RequestT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Server::Awaitable<Server::ProcessCommandsResult> Server::processCommands(
+        const SharedIndexAndView& indexAndViews,
+        const ParamValueMap& parameters, const SparqlOperation& operation,
+        bool accessTokenOk, const ad_utility::Timer& requestTimer,
+        RequestT& request) {
+  using namespace ad_utility::httpUtils;
+  using namespace responseJson;
+  using namespace serverProcessHelpers;
+
+  const auto& index = indexAndViews->index_;
+
+  auto checkParameter = makeCheckParameter(parameters);
+
+  // Check if `cmd=<cmd>` is set in `parameters`. If so, log this information
+  // via `checkAndLogCommand()` (which also throws if the command requires a
+  // valid access token that wasn't given, or if `cmd` was combined with a
+  // query/update it doesn't support) and return true. Return false
+  // otherwise.
+  auto commandIs = [accessTokenOk, &checkParameter,
+                    &operation](std::string_view cmd) {
+    if (checkParameter("cmd", std::string{cmd})) {
+      checkAndLogCommand(cmd, accessTokenOk, operation);
+      return true;
+    }
+    return false;
+  };
+
+  auto makeJsonResponse = makeJsonResponseFactory(request);
+
+  // We wrap `j` in a `ProcessCommandsResult` always via
+  // `makeJsonResponse()`.
+  auto makeCommandResult = [&makeJsonResponse](const json& j) {
+    return ProcessCommandsResult{makeJsonResponse(j)};
+  };
+
+  // We call `composeCacheStats()` always with the same parameters:
+  // `qlever().cache()` and `qlever().namedResultCache()`.
+  auto cacheStats = [&cache = qlever().cache(),
+                     &namedResultCache = qlever().namedResultCache(),
+                     &makeCommandResult]() {
+    return makeCommandResult(composeCacheStats(cache, namedResultCache));
+  };
+
+  if (!checkParameter("cmd", std::nullopt).has_value()) {
+    // No `cmd=` URL parameter at all, so there is nothing to do here.
+    co_return ProcessCommandsResult{};
+  } else if (commandIs("stats")) {
+    co_return makeCommandResult(composeIndexStats(index));
+  } else if (commandIs("cache-stats")) {
+    co_return cacheStats();
+  } else if (commandIs("clear-cache")) {
+    cache().clearUnpinnedOnly();
+    co_return cacheStats();
+  } else if (commandIs("clear-cache-complete")) {
+    cache().clearAll();
+    co_return cacheStats();
+  } else if (commandIs("clear-named-cache")) {
+    namedResultCache().clear();
+    co_return cacheStats();
+  } else if (commandIs("clear-delta-triples")) {
+    auto countAfterClear = co_await processClearDeltaTriples();
+    co_return makeCommandResult(json(countAfterClear));
+  } else if (commandIs("vacuum-delta-triples")) {
+    auto vacuumStats = co_await processVacuumDeltaTriples(
+        checkParameter("timeout", std::nullopt), accessTokenOk);
+    co_return makeCommandResult(vacuumStats);
+  } else if (commandIs("get-settings")) {
+    co_return makeCommandResult(json(globalRuntimeParameters.rlock()->toMap()));
+  } else if (commandIs("get-index-id")) {
+    co_return ProcessCommandsResult{
+        createOkResponse(index.getIndexId(), request, MediaType::textPlain)};
+  } else if (commandIs("dump-active-queries")) {
+    auto activeQueries = nlohmann::json::object();
+    for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
+      activeQueries[nlohmann::json(key)] = std::move(value);
+    }
+    co_return makeCommandResult(activeQueries);
+  } else if (commandIs("rebuild-index")) {
+    auto rebuildIndexResponse =
+        co_await processRebuildIndex(parameters, request);
+    co_return ProcessCommandsResult{std::move(rebuildIndexResponse)};
+  } else if (commandIs("write-materialized-view")) {
+    auto materializedViewStats = co_await processWriteMaterializedView(
+        parameters, operation, accessTokenOk, requestTimer);
+    // Flag that this command already consumed the query operation, so
+    // `process()` doesn't also try to run it as a regular query.
+    co_return ProcessCommandsResult{makeJsonResponse(materializedViewStats),
+                                    true};
+  } else if (commandIs("load-materialized-view")) {
+    co_return makeCommandResult(
+        processLoadMaterializedView(parameters, indexAndViews));
+  } else if (commandIs("delete-materialized-view")) {
+    co_return makeCommandResult(processDeleteMaterializedView(parameters));
+  } else if (commandIs("unload-materialized-view")) {
+    co_return makeCommandResult(processUnloadMaterializedView(parameters));
+  } else {
+    // `cmd` is set but didn't match any of the commands above.
+    throw HttpError(boost::beast::http::status::bad_request,
+                    absl::StrCat(R"(Unknown value ")",
+                                 checkParameter("cmd", std::nullopt).value(),
+                                 R"(" for parameter "cmd")"));
+  }
 }
 
 // _____________________________________________________________________________
@@ -812,89 +973,18 @@ CPP_template_def(typename RequestT, typename SendT)(
             parameters, paramName, accessTokenOk);
       };
 
-  // Check if the current command is selected in the parameters from the
-  // `parsedHttpRequest.parameters_`. If so, log this information via
-  // `dispatchLog()` and return true. Return false otherwise.
-  auto commandIs = [accessTokenOk, &checkParameter](std::string_view cmd) {
-    if (checkParameter("cmd", std::string{cmd})) {
-      dispatchLog(cmd, accessTokenOk);
-      return true;
-    }
-    return false;
-  };
-
-  // We call `createJsonResponse` always with the same `request` parameter.
-  auto jsonResponse = [&request](const json& j) {
-    return createJsonResponse(j, request);
-  };
-
-  // We call `composeCacheStats()` always with the same parameters:
-  // `qlever().cache()` and `qlever().namedResultCache()`.
-  auto cacheStats = [&cache = qlever().cache(),
-                     &namedResultCache = qlever().namedResultCache()]() {
-    return composeCacheStats(cache, namedResultCache);
-  };
-  std::optional<http::response<streamable_body>> response;
-
   // Process all URL parameters known to QLever. If there is more than one,
   // QLever processes all of them, but only returns the result from the last
   // one. In particular, if there is a "query" parameter, it will be processed
   // last and its result returned.
   //
-  // Some parameters require that "access-token" is set correctly. If not, that
-  // parameter is ignored.
-  if (commandIs("stats")) {
-    response = jsonResponse(composeIndexStats(index));
-  } else if (commandIs("cache-stats")) {
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-cache")) {
-    cache().clearUnpinnedOnly();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-cache-complete")) {
-    cache().clearAll();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-named-cache")) {
-    namedResultCache().clear();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-delta-triples")) {
-    auto countAfterClear = co_await processClearDeltaTriples();
-    response = jsonResponse(json(countAfterClear));
-  } else if (commandIs("vacuum-delta-triples")) {
-    auto vacuumStats = co_await processVacuumDeltaTriples(
-        checkParameter("timeout", std::nullopt), accessTokenOk);
-    response = jsonResponse(vacuumStats);
-  } else if (commandIs("get-settings")) {
-    response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
-  } else if (commandIs("get-index-id")) {
-    response =
-        createOkResponse(index.getIndexId(), request, MediaType::textPlain);
-  } else if (commandIs("dump-active-queries")) {
-    auto json = nlohmann::json::object();
-    for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
-      json[nlohmann::json(key)] = std::move(value);
-    }
-    response = jsonResponse(json);
-  } else if (commandIs("rebuild-index")) {
-    response = co_await processRebuildIndex(parameters, request);
-  } else if (commandIs("write-materialized-view")) {
-    auto materializedViewStats = co_await processWriteMaterializedView(
-        parameters, parsedHttpRequest.operation_, accessTokenOk, requestTimer);
-    response = jsonResponse(materializedViewStats);
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
-  } else if (commandIs("load-materialized-view")) {
-    response =
-        jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
-  } else if (commandIs("delete-materialized-view")) {
-    response = jsonResponse(processDeleteMaterializedView(parameters));
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
-  }
+  // Some parameters require that "access-token" is set correctly. If not, an
+  // `HttpError` with status 403 Forbidden is thrown. A `cmd=` combined with a
+  // query/update it doesn't support throws a 400 Bad Request instead.
+  auto commandResult = co_await processCommands(
+      indexAndViews, parameters, parsedHttpRequest.operation_, accessTokenOk,
+      requestTimer, request);
+  std::optional<ResponseT> response = std::move(commandResult.response_);
 
   // Ping with or without message.
   if (parsedHttpRequest.path_ == "/ping") {
@@ -906,22 +996,34 @@ CPP_template_def(typename RequestT, typename SendT)(
     response = processMetrics(accessTokenOk, request);
   }
 
+  auto makeJsonResponse = makeJsonResponseFactory(request);
+
   // Set description of KB index.
   if (auto description = checkAndLogParameterSetting("index-description")) {
     index.setKbName(description.value());
-    response = jsonResponse(composeIndexStats(index));
+    response = makeJsonResponse(composeIndexStats(index));
   }
 
   // Set description of text index.
   if (auto description = checkAndLogParameterSetting("text-description")) {
     index.setTextName(description.value());
-    response = jsonResponse(composeIndexStats(index));
+    response = makeJsonResponse(composeIndexStats(index));
   }
 
   // Set one or several of the runtime parameters.
   if (auto updatedSettings =
           processSetRuntimeParameters(parameters, accessTokenOk)) {
-    response = jsonResponse(updatedSettings.value());
+    response = makeJsonResponse(updatedSettings.value());
+  }
+
+  // A command that has already consumed the query (currently only
+  // `write-materialized-view`, which uses it as the view-defining query and
+  // executes it inside `processCommands`) must not have it run again as a
+  // regular query below, which would also overwrite `response`. All other
+  // commands reject a query or update in `processCommands`, so for them the
+  // operation is `None` here anyway.
+  if (commandResult.queryOperationWasConsumed_) {
+    parsedHttpRequest.operation_ = None{};
   }
 
   co_return co_await processSparqlOperation(
@@ -1417,22 +1519,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
     co_return co_await send(std::move(resp));
   }
   if (exceptionErrorMsg) {
-    AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
-    if (metadata) {
-      // The `coloredError()` message might fail because of the
-      // different Unicode handling of QLever and ANTLR. Make sure to
-      // detect this case so that we can fix it if it happens.
-      try {
-        AD_LOG_ERROR << metadata.value().coloredError() << std::endl;
-      } catch (const std::exception& e) {
-        exceptionErrorMsg.value().append(absl::StrCat(
-            " Highlighting an error for the command line log failed: ",
-            e.what()));
-        AD_LOG_ERROR << "Failed to highlight error in operation. " << e.what()
-                     << std::endl;
-        AD_LOG_ERROR << metadata.value().query_ << std::endl;
-      }
-    }
+    logErrorAndHighlightedMetadata(exceptionErrorMsg.value(), metadata);
     auto errorResponseJson = responseJson::composeError(
         operationString, exceptionErrorMsg.value(), requestTimer, metadata);
     if (plannedQuery.has_value()) {
@@ -1634,7 +1721,15 @@ Server::rebuildIndexUnlessInProgress(
   if (rebuildInProgress_.exchange(true)) {
     co_return std::nullopt;
   }
-  absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
+  indexRebuildIdTracker_->markStart();
+  // Clear the ID and release `rebuildInProgress_` when this index rebuild
+  // ends, no matter how it ends. The order matters: the next rebuild might
+  // start immediately when `rebuildInProgress_` is set to false, in which case
+  // a later `markEnd` would clear that rebuild's ID instead of this one's.
+  absl::Cleanup cleanup{[this]() {
+    indexRebuildIdTracker_->markEnd();
+    rebuildInProgress_.store(false);
+  }};
   co_return co_await rebuildIndex(std::move(rebuildTmpDir),
                                   std::move(rebuildPreviousIndexDir));
 }

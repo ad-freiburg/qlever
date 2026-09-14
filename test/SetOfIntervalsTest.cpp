@@ -149,3 +149,24 @@ TEST(SetOfIntervals, toBitVector) {
     ASSERT_EQ(elements.contains(i), expanded[i]);
   }
 }
+
+TEST(SetOfIntervals, toIdVector) {
+  auto allocator = makeUnlimitedAllocator<Id>();
+
+  SetOfIntervals intervals{{{1, 3}, {5, 6}}};
+
+  auto result = SetOfIntervals::toIdVector(intervals, 8, allocator);
+
+  VectorWithMemoryLimit<Id> expected{
+      {Id::makeFromBool(false), Id::makeFromBool(true), Id::makeFromBool(true),
+       Id::makeFromBool(false), Id::makeFromBool(false), Id::makeFromBool(true),
+       Id::makeFromBool(false), Id::makeFromBool(false)},
+      allocator};
+
+  ASSERT_EQ(result, expected);
+
+  // An interval must not extend beyond the requested target size.
+  SetOfIntervals tooLarge{{{0, 9}}};
+  ASSERT_THROW(SetOfIntervals::toIdVector(tooLarge, 8, allocator),
+               ad_utility::Exception);
+}

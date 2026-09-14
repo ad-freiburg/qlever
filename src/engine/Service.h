@@ -84,9 +84,13 @@ class Service : public Operation {
   // We know nothing about the result at query planning time.
   bool knownEmptyResult() override { return false; }
 
+ private:
   // A SERVICE clause has no children.
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {};
+  }
 
+ public:
   // Convert the given binding to TripleComponent. Blank nodes are resolved via
   // the `blankNodeAdder`, which has to be the same for all bindings of a single
   // SERVICE result, because blank node labels are scoped to the result set they

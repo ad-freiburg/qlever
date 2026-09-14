@@ -315,8 +315,9 @@ int main(int argc, char** argv) {
       "mapping view names to SELECT queries for writing the view, for example: "
       R"({"view1": "SELECT ...", "view2": "SELECT ..."})");
   add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
-      "Disable the resource-usage log. By default a TSV log of the RSS and "
-      "CPU usage of the index build is written next to the index files "
+      "Disable the resource-usage log. By default a TSV log of the RSS, CPU "
+      "and disk I/O of the index build, plus the system-wide I/O stall (Linux "
+      "only), is written next to the index files "
       "(`<index-basename>.index.resource-usage-log.tsv`).");
   add("resource-usage-interval-s",
       po::value(&resourceUsageIntervalS)->default_value(1),
@@ -324,7 +325,7 @@ int main(int argc, char** argv) {
   auto logLevelDescription = absl::StrCat(
       "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
       "Default is INFO. The compile-time level (",
-      LogLevel{LOGLEVEL}.toString(),
+      LogLevel{ad_utility::compileTimeLogLevel}.toString(),
       ") applies as an upper bound — messages above it are never emitted "
       "regardless of this setting.");
   add("log-level",
