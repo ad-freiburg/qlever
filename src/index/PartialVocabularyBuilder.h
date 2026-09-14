@@ -44,18 +44,14 @@
 //   `IndexBuilderTypes.h`.
 // - `void writePartialVocabulary(size_t partialVocabIdx, ItemMapAndBuffer
 //   items, std::vector<IdRow> localIds)`, which writes the partial vocabulary
-//   with the given index and its triples. It is called concurrently from
-//   several task chains, but never twice for the same `partialVocabIdx`.
+//   with the given index and its triples (`IdRow` is defined in
+//   `IndexBuilderTypes.h`). It is called concurrently from several task
+//   chains, but never twice for the same `partialVocabIdx`.
 namespace qlever::partialVocabularyBuilder {
 
-// A row with the components already mapped to IDs. NOTE: Deliberately not
-// named `IdTriple`, which is a class with a similar purpose defined in
-// `index/IdTriple.h`.
-using IdRow = std::array<Id, NumColumnsIndexBuilding>;
-
-// Shared, mostly read-only state for all the task chains of a single first
-// pass. An aggregate: the caller initializes the first six members, the
-// remaining ones are the counters and flags that the chains update while they
+// Shared state for all the task chains of a single first pass. An aggregate:
+// the caller initializes the first four members, the remaining ones are the
+// progress bar, the counters and the flags that the chains update while they
 // run and that the caller reads once `runTaskChains` has returned. Must
 // outlive every task chain, which is guaranteed by `runTaskChains` below,
 // because the chains are local to that function.
@@ -66,9 +62,17 @@ struct FirstPassSharedState {
   const TripleComponentComparator* comparator_;
   ItemAlloc itemAlloc_;
   size_t linesPerPartial_;
-  ad_utility::ConcurrentProgressBar* progressBar_;
-  // May be `nullptr` if no `ql:has-word` triples are created.
-  std::atomic<size_t>* numHasWordTriples_;
+
+  // Show progress and statistics for the number of parsed input triples. The
+  // total number of triples is not known in advance, and the task chains
+  // report their progress concurrently.
+  ad_utility::ConcurrentProgressBar progressBar_{"Triples parsed: ",
+                                                 std::nullopt};
+
+  // The number of `ql:has-word` triples that were created by all task chains
+  // (see `mapTripleToIds`). Stays zero unless the index is configured to
+  // create such triples. Only used for logging.
+  std::atomic<size_t> numHasWordTriples_ = 0;
 
   // The shared counter for the indices of the partial vocabularies. Each task
   // chain claims the next free index whenever it has to write a partial
@@ -99,7 +103,7 @@ struct FirstPassSharedState {
         firstError = std::move(ep);
       }
     });
-    stopRequested_.store(true, std::memory_order_relaxed);
+    stopRequested_.store(true);
   }
 };
 
@@ -159,12 +163,16 @@ class PartialVocabularyTaskChain {
 
  private:
   // (Re-)initialize `itemMap_` for a fresh partial vocabulary and clear the
-  // triple buffer and the input-triple counter. Reserve space for the
-  // expected number of distinct words, which is a heuristic of three words per
-  // triple.
+  // triple buffer and the input-triple counter. The number of entries that
+  // are reserved for the item map is somewhat arbitrary: half the number of
+  // triples per partial vocabulary was empirically better than larger values.
+  // Note that `reserve` on a hash map has to assume the worst case (many
+  // collisions), so it allocates considerably more than the requested number
+  // of entries. The memory allocation overhead of the first pass should be
+  // systematically analyzed anyway.
   void startNewPartialVocabulary() {
     itemMap_.emplace(0, shared_.comparator_, shared_.itemAlloc_);
-    itemMap_->map_.map_.reserve(3 * shared_.linesPerPartial_);
+    itemMap_->map_.map_.reserve(shared_.linesPerPartial_ / 2);
     localTriples_.clear();
     numInputTriples_ = 0;
   }
@@ -175,8 +183,7 @@ class PartialVocabularyTaskChain {
   // synchronization is needed.
   void writeCurrentPartialVocabulary() {
     size_t partialVocabIdx = shared_.nextPartialVocabIdx_.fetch_add(1);
-    shared_.numTriples_.fetch_add(localTriples_.size(),
-                                  std::memory_order_relaxed);
+    shared_.numTriples_.fetch_add(localTriples_.size());
     shared_.index_->writePartialVocabulary(partialVocabIdx,
                                            std::move(*itemMap_).moveMap(),
                                            std::move(localTriples_));
@@ -187,57 +194,61 @@ class PartialVocabularyTaskChain {
     boost::asio::post(executor_, [this] { step(); });
   }
 
-  // A single step of this chain: ask the parser for the next batch of
-  // triples and, once it arrives, handle it in `handleBatch` on `executor_`.
+  // A single step of this chain: ask the parser for the next batch of triples
+  // and, once it arrives, handle it on `executor_`. The completion handler
+  // contains the control flow of the asynchronous loop and the error handling,
+  // the actual work is done in `handleBatch` and `finish`.
   void step() {
     parser_.asyncGetBatch(boost::asio::bind_executor(
         executor_, [this](std::exception_ptr ep,
                           std::optional<std::vector<TurtleTriple>> batch) {
-          handleBatch(std::move(ep), std::move(batch));
+          try {
+            if (ep) {
+              std::rethrow_exception(ep);
+            }
+            if (shared_.stopRequested_.load()) {
+              // Another chain has failed; end this chain without further work.
+              return;
+            }
+            if (!batch.has_value()) {
+              // End of input for this chain.
+              finish();
+              return;
+            }
+            handleBatch(std::move(batch).value());
+            // This is the `continue` of the asynchronous loop: schedule the
+            // next step of this chain.
+            postNextStep();
+          } catch (...) {
+            shared_.reportError(std::current_exception());
+            // End this chain: do not schedule another step.
+          }
         }));
   }
 
-  // Handle the result of one `asyncGetBatch` call: map the triples in `batch`
-  // to local IDs, write and (re-)start partial vocabularies as needed, and
-  // either schedule the next step or end this chain (by not scheduling one).
-  void handleBatch(std::exception_ptr ep,
-                   std::optional<std::vector<TurtleTriple>> batch) {
-    try {
-      if (ep) {
-        std::rethrow_exception(ep);
-      }
-      if (shared_.stopRequested_.load(std::memory_order_relaxed)) {
-        // Another chain has failed; end this chain without further work.
-        return;
-      }
-      if (!batch.has_value()) {
-        // End of input for this chain. Write the current partial vocabulary,
-        // unless this chain never received a single batch for it.
-        if (!localTriples_.empty()) {
-          writeCurrentPartialVocabulary();
-        }
-        return;
-      }
-      for (auto& triple : batch.value()) {
-        auto ids = mapTripleToIds(std::move(triple), itemMap_.value(),
-                                  shared_.index_, shared_.numHasWordTriples_);
-        localTriples_.insert(localTriples_.end(), ids.begin(), ids.end());
-      }
-      numInputTriples_ += batch->size();
-      shared_.progressBar_->add(batch->size());
-      if (auto update = shared_.progressBar_->update()) {
-        AD_LOG_INFO << update->getProgressString() << std::flush;
-      }
-      if (numInputTriples_ >= shared_.linesPerPartial_) {
-        writeCurrentPartialVocabulary();
-        startNewPartialVocabulary();
-      }
-      // This is the `continue` of the asynchronous loop: schedule the next
-      // step of this chain.
-      postNextStep();
-    } catch (...) {
-      shared_.reportError(std::current_exception());
-      // End this chain: do not schedule another step.
+  // Map the triples in `batch` to local IDs, report the progress and, if the
+  // current partial vocabulary is full, write it and start a new one.
+  void handleBatch(std::vector<TurtleTriple> batch) {
+    for (auto& triple : batch) {
+      mapTripleToIds(std::move(triple), itemMap_.value(), shared_.index_,
+                     localTriples_, shared_.numHasWordTriples_);
+    }
+    numInputTriples_ += batch.size();
+    shared_.progressBar_.add(batch.size());
+    if (auto update = shared_.progressBar_.update()) {
+      AD_LOG_INFO << update->getProgressString() << std::flush;
+    }
+    if (numInputTriples_ >= shared_.linesPerPartial_) {
+      writeCurrentPartialVocabulary();
+      startNewPartialVocabulary();
+    }
+  }
+
+  // Handle the end of the input for this chain: write the current partial
+  // vocabulary, unless this chain never received a single triple for it.
+  void finish() {
+    if (!localTriples_.empty()) {
+      writeCurrentPartialVocabulary();
     }
   }
 };

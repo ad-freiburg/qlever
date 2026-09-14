@@ -28,7 +28,7 @@
 #include "index/PartialVocabularyBuilder.h"
 #include "util/CachingMemoryResource.h"
 #include "util/Conversions.h"
-#include "util/ProgressBar.h"
+#include "util/HashMap.h"
 
 namespace {
 using namespace qlever::partialVocabularyBuilder;
@@ -119,7 +119,7 @@ class MockIndex {
       throw std::runtime_error{"write error"};
     }
     PartialVocabulary vocab;
-    std::map<uint64_t, std::string> wordsByLocalId;
+    ad_utility::HashMap<uint64_t, std::string> wordsByLocalId;
     for (const auto& [word, idAndFlag] : items.map_) {
       vocab.words_.emplace(word);
       wordsByLocalId[idAndFlag.id()] = std::string{word};
@@ -196,16 +196,12 @@ struct RunResult {
 RunResult run(MockIndex& index, std::vector<std::vector<TurtleTriple>> batches,
               size_t linesPerPartial, size_t numThreads,
               std::optional<size_t> failAtBatch = std::nullopt) {
-  ad_utility::ConcurrentProgressBar progressBar{"Triples parsed: ",
-                                                std::nullopt};
   ad_utility::CachingMemoryResource cachingMemoryResource;
   ItemAlloc itemAlloc(&cachingMemoryResource);
   TripleComponentComparator comparator;
-  std::atomic<size_t> numHasWordTriples = 0;
 
-  FirstPassSharedState<MockIndex> shared{&index,       &comparator,
-                                         itemAlloc,    linesPerPartial,
-                                         &progressBar, &numHasWordTriples};
+  FirstPassSharedState<MockIndex> shared{&index, &comparator, itemAlloc,
+                                         linesPerPartial};
   runTaskChains(shared, numThreads,
                 [&batches, failAtBatch](const ql::any_io_executor& executor)
                     -> std::unique_ptr<AsyncRdfParserBase> {

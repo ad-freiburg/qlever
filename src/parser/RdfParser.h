@@ -47,6 +47,22 @@ enum class TurtleParserIntegerOverflowBehavior {
   AllToDouble
 };
 
+// The settings of an RDF parser that control how integer literals that
+// cannot be represented by QLever and how invalid literals are handled. They
+// are the same for all the parsers of an index build, so the parsers that
+// handle several files (`RdfMultifileParser` and `RdfAsyncMultifileParser`)
+// take them in their constructor and pass them on to every parser that they
+// create for a single file or for a block of a file.
+struct RdfParserSettings {
+  // How to handle integer literals that overflow QLever's 64-bit integers.
+  TurtleParserIntegerOverflowBehavior integerOverflowBehavior_ =
+      TurtleParserIntegerOverflowBehavior::Error;
+  // If true then triples with invalid literals (for example
+  // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
+  // such literals are encountered.
+  bool invalidLiteralsAreSkipped_ = false;
+};
+
 namespace detail {
 // Find the end of the last match of the regex `[\r\n]+` in `input`, or
 // `std::nullopt` if there is no match. Used to split a block of input at a line
@@ -80,10 +96,9 @@ struct TurtleTriple {
 // A base class for all the different turtle and N-Quad parsers.
 class RdfParserBase {
  private:
-  // How to handle integer overflow and invalid literals (see below).
-  TurtleParserIntegerOverflowBehavior integerOverflowBehavior_ =
-      TurtleParserIntegerOverflowBehavior::Error;
-  bool invalidLiteralsAreSkipped_ = false;
+  // How to handle integer overflow and invalid literals (see
+  // `RdfParserSettings`).
+  RdfParserSettings settings_;
 
   const EncodedIriManager* encodedIriManager_;
 
@@ -94,15 +109,19 @@ class RdfParserBase {
       : encodedIriManager_{encodedIriManager} {}
 
   virtual TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() final {
-    return integerOverflowBehavior_;
+    return settings_.integerOverflowBehavior_;
   }
 
   // If true then triples with invalid literals (for example
   // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
   // such literals are encountered.
   virtual bool& invalidLiteralsAreSkipped() final {
-    return invalidLiteralsAreSkipped_;
+    return settings_.invalidLiteralsAreSkipped_;
   }
+
+  // Access both of the above settings at once, see `RdfParserSettings`.
+  RdfParserSettings& settings() { return settings_; }
+  const RdfParserSettings& settings() const { return settings_; }
 
   virtual void printAndResetQueueStatistics() {
     // This function only does something for the parallel parser (where it is
@@ -599,8 +618,10 @@ class RdfStreamParser : public Parser {
                            ad_utility::MemorySize blocksize,
                            const EncodedIriManager* ev,
                            TripleComponent defaultGraphIri =
-                               qlever::specialIds().at(DEFAULT_GRAPH_IRI))
+                               qlever::specialIds().at(DEFAULT_GRAPH_IRI),
+                           RdfParserSettings settings = {})
       : Parser{ev, std::move(defaultGraphIri)} {
+    this->settings() = settings;
     initialize(spec, blocksize);
   }
 
@@ -676,11 +697,17 @@ class RdfParallelParsingState {
   // over several blocks. It is reset as soon as the header is complete.
   std::optional<RdfStringParser<Parser>> declarationParser_;
 
+  // The settings that are applied to each of the worker parsers by
+  // `parseBatch`.
+  RdfParserSettings settings_;
+
  public:
   RdfParallelParsingState(const EncodedIriManager* encodedIriManager,
-                          TripleComponent defaultGraphIri)
+                          TripleComponent defaultGraphIri,
+                          RdfParserSettings settings = {})
       : encodedIriManager_{encodedIriManager},
-        defaultGraphIri_{std::move(defaultGraphIri)} {}
+        defaultGraphIri_{std::move(defaultGraphIri)},
+        settings_{settings} {}
 
   // Parse the leading `@base`/`@prefix` declarations of the input by pulling
   // blocks from `getNextBlock` (which has to return `nullopt` at the end of
@@ -756,11 +783,13 @@ class RdfParallelParser : public RdfParserBase {
                     const EncodedIriManager* ev,
                     const TripleComponent& defaultGraphIri =
                         qlever::specialIds().at(DEFAULT_GRAPH_IRI),
+                    RdfParserSettings settings = {},
                     std::chrono::milliseconds sleepTimeForTesting =
                         std::chrono::milliseconds{0})
       : RdfParserBase{ev},
-        state_{ev, defaultGraphIri},
+        state_{ev, defaultGraphIri, settings},
         sleepTimeForTesting_(sleepTimeForTesting) {
+    this->settings() = settings;
     initialize(spec, blocksize);
   }
 
@@ -848,12 +877,13 @@ class RdfMultifileParser : public RdfParserBase {
   // and eagerly start parsing them on background threads. If
   // `useRelaxedParsing` is true, the faster `TokenizerCtre` is used for all
   // files instead of the standard-compliant `Tokenizer` (see the comment on
-  // `TurtleParser` above for the limitations of the relaxed mode).
+  // `TurtleParser` above for the limitations of the relaxed mode). The
+  // `settings` are applied to the parser of every file.
   RdfMultifileParser(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
-      bool useRelaxedParsing = false);
+      bool useRelaxedParsing = false, RdfParserSettings settings = {});
 
   // Retrieve the next batch of triples, or `nullopt` if there are no more
   // batches. There is no guarantee about the order in which batches from
@@ -891,6 +921,10 @@ class RdfMultifileParser : public RdfParserBase {
   // the standard-compliant `Tokenizer`. Only read by the parsing threads, and
   // never modified after construction.
   bool useRelaxedParsing_ = false;
+
+  // The settings for the parser of every file (see `RdfParserSettings`). Only
+  // read by the parsing threads, and never modified after construction.
+  RdfParserSettings fileParserSettings_;
 
   // A thread that feeds the file specifications to the actual parser threads.
   ad_utility::JThread feederThread_;

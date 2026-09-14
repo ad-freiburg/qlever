@@ -79,9 +79,10 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files) {
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    size_t numThreads) {
   auto indexBuilderData =
-      passFileForVocabulary(std::move(files), numTriplesPerBatch_);
+      passFileForVocabulary(std::move(files), numTriplesPerBatch_, numThreads);
 
   auto isQleverInternalTriple = [&indexBuilderData](const auto& triple) {
     auto internal = [&indexBuilderData](Id id) {
@@ -90,8 +91,8 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
     return internal(triple[0]) || internal(triple[1]) || internal(triple[2]);
   };
 
-  auto firstSorter = convertPartialToGlobalIds(indexBuilderData.parsedTriples_,
-                                               isQleverInternalTriple);
+  auto firstSorter = convertPartialToGlobalIds(
+      indexBuilderData.parsedTriples_, isQleverInternalTriple, numThreads);
 
   return {std::move(indexBuilderData.vocabularyMetaData_),
           std::move(firstSorter)};
@@ -108,17 +109,21 @@ std::unique_ptr<AsyncRdfParserBase> IndexImpl::makeRdfParser(
   AD_CONTRACT_CHECK(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
+  RdfParserSettings parserSettings{turtleParserIntegerOverflowBehavior_,
+                                   turtleParserSkipIllegalLiterals_};
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // The reduced feature set has no coroutines (and only Boost 1.71), so the
   // asynchronous multifile parser is not available. Fall back to the
   // synchronous `RdfMultifileParser` behind an `AsyncSerialParserAdapter`, and
   // ignore the request for parallel parsing, so that every file is parsed by
-  // the simple stream parser.
-  std::vector<qlever::InputFileSpecification> serialFiles;
-  for (auto& file : files) {
-    file.parseInParallel_ = false;
-    serialFiles.push_back(std::move(file));
-  }
+  // the simple stream parser. The files are still produced lazily.
+  auto serialFiles =
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{
+          ql::views::transform(std::move(files),
+                               [](qlever::InputFileSpecification file) {
+                                 file.parseInParallel_ = false;
+                                 return file;
+                               })};
   // NOTE: The adapter creates the parser lazily on the first `asyncGetBatch()`
   // call, see the constructor of `AsyncSerialParserAdapter`.
   return std::make_unique<AsyncSerialParserAdapter>(
@@ -126,17 +131,16 @@ std::unique_ptr<AsyncRdfParserBase> IndexImpl::makeRdfParser(
       [serialFiles = std::move(serialFiles),
        encodedIriManager = &encodedIriManager(),
        bufferSize = parserBufferSize(),
-       useRelaxedParsing = onlyAsciiTurtlePrefixes_]() mutable
-      -> std::unique_ptr<RdfParserBase> {
+       useRelaxedParsing = onlyAsciiTurtlePrefixes_,
+       parserSettings]() mutable -> std::unique_ptr<RdfParserBase> {
         return std::make_unique<RdfMultifileParser>(
-            ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{
-                std::move(serialFiles)},
-            encodedIriManager, bufferSize, useRelaxedParsing);
+            std::move(serialFiles), encodedIriManager, bufferSize,
+            useRelaxedParsing, parserSettings);
       });
 #else
   return std::make_unique<RdfAsyncMultifileParser>(
       executor, std::move(files), &encodedIriManager(), parserBufferSize(),
-      onlyAsciiTurtlePrefixes_);
+      onlyAsciiTurtlePrefixes_, parserSettings);
 #endif
 }
 
@@ -423,14 +427,16 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
-    std::vector<Index::InputFileSpecification> files) {
+    std::vector<Index::InputFileSpecification> files, size_t numThreads) {
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
-  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)});
+  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)},
+                  numThreads);
 }
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files) {
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    size_t numThreads) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -445,7 +451,7 @@ void IndexImpl::createFromFiles(
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(std::move(files));
+      createIdTriplesAndVocab(std::move(files), numThreads);
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
@@ -535,34 +541,21 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 // _____________________________________________________________________________
 BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-    size_t linesPerPartial) {
-  size_t numThreads =
-      getRuntimeParameter<&RuntimeParameters::indexBuildFirstPassNumThreads_>();
-  AD_CONTRACT_CHECK(
-      numThreads > 0,
-      "The runtime parameter `index-build-first-pass-num-threads` must be at "
-      "least 1");
+    size_t linesPerPartial, size_t numThreads) {
+  AD_CONTRACT_CHECK(numThreads > 0,
+                    "The number of threads for the index build must be at "
+                    "least 1");
 
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
                  "per batch, using "
               << numThreads << " threads ..." << std::endl;
 
-  // Show progress and statistics for the number of triples parsed. The total
-  // number of triples is not known in advance, and the task chains report
-  // their progress concurrently.
-  ad_utility::ConcurrentProgressBar progressBar{"Triples parsed: ",
-                                                std::nullopt};
-
   ad_utility::CachingMemoryResource cachingMemoryResource;
   ItemAlloc itemAlloc(&cachingMemoryResource);
-  // Counter for the number of ql:has-word triples created.
-  std::atomic<size_t> numHasWordTriples = 0;
 
   using namespace qlever::partialVocabularyBuilder;
-  FirstPassSharedState<IndexImpl> shared{
-      this,         &vocab_.getCaseComparator(),
-      itemAlloc,    linesPerPartial,
-      &progressBar, addHasWordTriples_ ? &numHasWordTriples : nullptr};
+  FirstPassSharedState<IndexImpl> shared{this, &vocab_.getCaseComparator(),
+                                         itemAlloc, linesPerPartial};
   // The thread pool and the parser are owned by `runTaskChains`, which only
   // returns once no asynchronous operation is left.
   runTaskChains(shared, numThreads,
@@ -585,12 +578,12 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   BuildPartialVocabulariesResult result{shared.nextPartialVocabIdx_.load(),
                                         shared.numTriples_.load()};
 
-  progressBar.logFinalProgressString();
+  shared.progressBar_.logFinalProgressString();
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << result.numTriples_ << " [may contain duplicates]" << std::endl;
   if (addHasWordTriples_) {
     AD_LOG_INFO << "Number of `ql:has-word` triples created: "
-                << numHasWordTriples.load() << std::endl;
+                << shared.numHasWordTriples_.load() << std::endl;
   }
   AD_LOG_INFO << "Number of partial vocabularies created: "
               << result.numPartialVocabularies_ << std::endl;
@@ -600,9 +593,9 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
 // _____________________________________________________________________________
 IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-    size_t linesPerPartial) {
+    size_t linesPerPartial, size_t numThreads) {
   auto parsedTriples =
-      buildPartialVocabularies(std::move(files), linesPerPartial);
+      buildPartialVocabularies(std::move(files), linesPerPartial, numThreads);
   size_t numPartialVocabularies = parsedTriples.numPartialVocabularies_;
 
   size_t sizeInternalVocabulary = 0;
@@ -724,8 +717,8 @@ class ConversionOutput {
 // _____________________________________________________________________________
 template <typename Func>
 auto IndexImpl::convertPartialToGlobalIds(
-    const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple)
-    -> FirstPermutationSorterAndInternalTriplesAsPso {
+    const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple,
+    size_t numThreads) -> FirstPermutationSorterAndInternalTriplesAsPso {
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
               << std::endl;
 
@@ -770,22 +763,21 @@ auto IndexImpl::convertPartialToGlobalIds(
 
   // Each worker repeatedly claims the next partial vocabulary from a shared
   // counter and holds the ID map and all the triples of that partial
-  // vocabulary in RAM. Their number is therefore bounded by
-  // `NUM_PARALLEL_ID_CONVERSION_WORKERS`, and additionally such that the
-  // triples of all the workers together fit into the memory limit of the index
-  // build (the ID maps are much smaller than the triples and are not accounted
-  // for). There is always at least one worker. NOTE: For the usual batch sizes
-  // (5 to 10 million triples) and the default memory limit, the memory bound
-  // is far above `NUM_PARALLEL_ID_CONVERSION_WORKERS` and hence irrelevant.
+  // vocabulary in RAM. Their number is therefore bounded by `numThreads`, and
+  // additionally such that the triples of all the workers together fit into
+  // the memory limit of the index build (the ID maps are much smaller than the
+  // triples and are not accounted for). There is always at least one worker.
+  // NOTE: For the usual batch sizes (5 to 10 million triples) and the default
+  // memory limit, the memory bound is far above the usual number of threads
+  // and hence irrelevant.
   std::atomic<size_t> nextPartialVocabIdx = 0;
   size_t triplesBytesPerWorker =
       numTriplesPerBatch_ * NumColumnsIndexBuilding * sizeof(Id);
   size_t numWorkersThatFitInMemory =
       std::max<size_t>(1, memoryLimitIndexBuilding().getBytes() /
                               std::max<size_t>(1, triplesBytesPerWorker));
-  size_t numWorkers =
-      std::min({data.numPartialVocabularies_,
-                NUM_PARALLEL_ID_CONVERSION_WORKERS, numWorkersThatFitInMemory});
+  size_t numWorkers = std::min(
+      {data.numPartialVocabularies_, numThreads, numWorkersThatFitInMemory});
   auto tasks =
       ad_utility::integerRange(numWorkers) |
       ql::views::transform([&convertTriplesOfPartialVocabulary,

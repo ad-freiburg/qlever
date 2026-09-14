@@ -253,13 +253,16 @@ class IndexImpl {
       Permutation::Enum p) const;
 
   // Creates an index from a given set of input files. Will write vocabulary and
-  // on-disk index data.
+  // on-disk index data. `numThreads` is the number of threads for the parallel
+  // stages of the index build (see `Index::createFromFiles`).
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  void createFromFiles(std::vector<Index::InputFileSpecification> files);
+  void createFromFiles(std::vector<Index::InputFileSpecification> files,
+                       size_t numThreads);
 
   void createFromFiles(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t numThreads);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -642,26 +645,27 @@ class IndexImpl {
   // converted to id space to disk, sorted into the first permutation, so that
   // they can be used for creating the permutations. Member vocab_ will be empty
   // after this because it is not needed for index creation once the triples are
-  // set up and it would be a waste of RAM.
+  // set up and it would be a waste of RAM. `numThreads` is the number of
+  // threads for the parallel stages (see `Index::createFromFiles`).
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t numThreads);
 
   // Parse all triples from `files` and build the partial vocabularies, one per
   // batch of (approximately) `linesPerPartial` triples, together with the
   // corresponding ID triples (see `writePartialVocabulary`). This is the first
   // pass of the index building. It runs as a fully asynchronous pipeline on a
-  // thread pool with `RuntimeParameters::indexBuildFirstPassNumThreads_`
-  // threads for efficient CPU utilization (see `PartialVocabularyBuilder.h`
-  // for the details). If parsing or writing fails, the first error is
-  // rethrown after the pipeline has stopped.
+  // thread pool with `numThreads` threads for efficient CPU utilization (see
+  // `PartialVocabularyBuilder.h` for the details). If parsing or writing
+  // fails, the first error is rethrown after the pipeline has stopped.
   BuildPartialVocabulariesResult buildPartialVocabularies(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-      size_t linesPerPartial);
+      size_t linesPerPartial, size_t numThreads);
 
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-      size_t linesPerPartial);
+      size_t linesPerPartial, size_t numThreads);
 
   // Write the partial vocabulary with index `partialVocabIdx` given by `items`
   // to its `partialVocabularyWordsFilename` and the corresponding triples in
@@ -688,10 +692,12 @@ class IndexImpl {
   // Read the unsorted ID triples (written by `buildPartialVocabularies`, one
   // file per partial vocabulary) back from disk, convert their partial to
   // global IDs using the corresponding partial-vocabulary mappings, and feed
-  // them into the sorter for the first permutation.
+  // them into the sorter for the first permutation. Use at most `numThreads`
+  // workers for the conversion.
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
-      const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple);
+      const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple,
+      size_t numThreads);
 
   // Helper function to get the filename for a given permutation.
   std::string getFilenameForPermutation(const Permutation& permutation,

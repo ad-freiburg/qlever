@@ -331,12 +331,11 @@ int main(int argc, char** argv) {
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
       logLevelDescription.c_str());
-  add("num-threads,j",
-      optionFactory.getProgramOption<
-          &RuntimeParameters::indexBuildFirstPassNumThreads_>(),
+  add("num-threads,j", po::value(&config.numThreads_),
       "The number of threads of the thread pool that parses the input and "
       "builds the partial vocabularies (the first pass of the index build). "
-      "Must be at least 1.");
+      "Must be at least 1. Default: the number of hardware threads of the "
+      "machine.");
 
   // Process command line arguments.
   po::variables_map optionsMap;
