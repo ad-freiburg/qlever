@@ -535,12 +535,12 @@ void TransitivePathBase::computePayloadColumnOffsets(
     // right) always come first, while they can be in any order in the input
     // table. Hence, we need to shift indices here.
     auto singleColBoundIndexShift = [](size_t columnIndex, size_t col) {
-      return 1 + (col < columnIndex);
+      return col > columnIndex ? 2 : 1;
     };
     auto bothColsBoundIndexShift = [](size_t columnIndex, size_t colL,
                                       size_t colR) {
       auto [lowerCol, higherCol] = std::minmax(colL, colR);
-      size_t leftOrMiddle = 1 + (columnIndex < lowerCol);
+      auto leftOrMiddle = columnIndex < lowerCol ? 2 : 1;
       return columnIndex < higherCol ? leftOrMiddle : 0;
     };
     if (!leftCol.has_value() || !rightCol.has_value()) {
