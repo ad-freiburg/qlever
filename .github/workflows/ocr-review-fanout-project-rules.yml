@@ -65,7 +65,7 @@ jobs:
         with:
           go-version: stable
       - name: Review pull request with fan-out project rules
-        uses: marvin7122/open-code-review@48cc191fc147f0b4642e9658717805f6a3dfefa5
+        uses: marvin7122/open-code-review@34ed9d2925e550cf7edb97f3751c6cada6f89d9c
         with:
           github_token: ${{ steps.app-token.outputs.token || github.token }}
           llm_url: ${{ vars.OCR_LLM_URL }}
