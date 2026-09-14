@@ -16,7 +16,7 @@
 #include "backports/algorithm.h"
 #include "global/ValueId.h"
 #include "index/LocalVocabEntry.h"
-#include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/encodedIris/EncodedIriManager.h"
 #include "util/HashSet.h"
 #include "util/Random.h"
 #include "util/Serializer/ByteBufferSerializer.h"

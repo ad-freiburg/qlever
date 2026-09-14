@@ -2,16 +2,18 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIMANAGER_H
-#define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIMANAGER_H
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_ENCODEDIRIMANAGER_H
+#define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_ENCODEDIRIMANAGER_H
 
 #include <absl/strings/str_cat.h>
+
+#include <range/v3/view/enumerate.hpp>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
-#include "index/vocabulary/EncodedIriPattern.h"
+#include "index/vocabulary/encodedIris/EncodedIriPattern.h"
 #include "util/BitUtils.h"
 #include "util/Log.h"
 #include "util/json.h"
@@ -36,12 +38,10 @@
 // in the least significant bits.
 //
 // A number can be encoded in one of two ways (see
-// `encodedIri::NumberEncoding`). A plain prefix uses the `Digits` encoding,
-// which makes sure that the order of the encoded values corresponds to the
-// lexical order of the original IRIs. Each decimal digit is encoded as a 4-bit
-// nibble, where digit `i` is encoded as `i+1` and converted to a hexadecimal
-// number. The nibbles are stored left-aligned (not right-aligned) and filled on
-// the right with zeroes.
+// `encodedIri::NumberEncoding`). A plain prefix uses the `Nibbles` encoding
+// (see `NibbleEncoding.h` for the details), which stores each decimal digit in
+// four bits and makes sure that the order of the encoded values corresponds to
+// the lexical order of the original IRIs.
 //
 // For example, here are a few example encodings, with `NumBitsTotal = 40` and
 // `NumBitsTags = 8`. The prefix is `http://example.org/` and encoded in 8
@@ -129,13 +129,7 @@ class EncodedIriManagerImpl {
       prefixesWithoutAngleBrackets.emplace_back(prefix);
     }
     addPlainPrefixes(std::move(prefixesWithoutAngleBrackets));
-    for (auto& pattern : patterns) {
-      checkNoLeadingAngleBracket(pattern.prefix_,
-                                 "of the patterns for encoded IRIs");
-      encodedIri::validatePattern(pattern, NumBitsEncoding);
-      pattern.prefix_.insert(0, 1, '<');
-      patterns_.push_back(std::move(pattern));
-    }
+    addPatterns(std::move(patterns));
     checkNumberOfPatterns(patterns_.size());
   }
 
@@ -147,8 +141,7 @@ class EncodedIriManagerImpl {
   // 3. One of the numbers of the matching pattern violates its constraints,
   //    for example because it has too many digits.
   std::optional<Id> encode(std::string_view repr) const {
-    for (size_t tag = 0; tag < patterns_.size(); ++tag) {
-      const auto& pattern = patterns_[tag];
+    for (const auto& [tag, pattern] : ::ranges::views::enumerate(patterns_)) {
       if (!ql::starts_with(repr, pattern.prefix_)) {
         continue;
       }
@@ -187,10 +180,10 @@ class EncodedIriManagerImpl {
       shift -= numBits;
       uint64_t stored =
           (payload >> shift) & ad_utility::bitMaskForLowerBits(numBits);
-      if (part.encoding_ == encodedIri::NumberEncoding::Digits) {
-        encodedIri::decodeDigits(result, stored, part.numBits_);
+      if (part.encoding_ == encodedIri::NumberEncoding::Nibbles) {
+        encodedIri::decodeNibblesToDigits(result, stored, part.numBits_);
       } else {
-        absl::StrAppend(&result, encodedIri::decompressNumber(part, stored));
+        encodedIri::decompressNumber(result, part, stored);
       }
       result.append(part.separator_);
     }
@@ -311,19 +304,19 @@ class EncodedIriManagerImpl {
   // Encode the `numberStr` (which may only consist of digits) into a 64-bit
   // number.
   static uint64_t encodeDecimalToNBit(std::string_view numberStr) {
-    return encodedIri::encodeDigits(numberStr, NumBitsEncoding);
+    return encodedIri::encodeDigitsAsNibbles(numberStr, NumBitsEncoding);
   }
 
   // The inverse of `encodeDecimalToNBit`. The result is appended to the
   // `result` string.
   static void decodeDecimalFrom64Bit(std::string& result, uint64_t encoded) {
-    encodedIri::decodeDigits(result, encoded, NumBitsEncoding);
+    encodedIri::decodeNibblesToDigits(result, encoded, NumBitsEncoding);
   }
 
   // Overload of `decodeDecimalFrom64Bit` that returns the result as a
   // `uint64_t`.
   static uint64_t decodeDecimalFrom64Bit(uint64_t encoded) {
-    return encodedIri::decodeDigitsToNumber(encoded, NumBitsEncoding);
+    return encodedIri::decodeNibblesToNumber(encoded, NumBitsEncoding);
   }
 
  private:
@@ -387,6 +380,19 @@ class EncodedIriManagerImpl {
     }
   }
 
+  // Check the `patterns` and add them to the `patterns_` in the given order,
+  // after the plain prefixes. The `prefix_` of each pattern has to be specified
+  // without the leading `<`, which is added here.
+  void addPatterns(std::vector<encodedIri::Pattern> patterns) {
+    for (auto& pattern : patterns) {
+      checkNoLeadingAngleBracket(pattern.prefix_,
+                                 "of the patterns for encoded IRIs");
+      encodedIri::validatePattern(pattern, NumBitsEncoding);
+      pattern.prefix_.insert(0, 1, '<');
+      patterns_.push_back(std::move(pattern));
+    }
+  }
+
   // Try to encode the `suffix` (the part of the IRI that follows the prefix of
   // the `pattern`, including the closing `>`) into the payload bits of an `Id`.
   static std::optional<uint64_t> encodePayload(
@@ -403,11 +409,11 @@ class EncodedIriManagerImpl {
       }
       suffix.remove_prefix(part.separator_.size());
       std::optional<uint64_t> stored;
-      if (part.encoding_ == encodedIri::NumberEncoding::Digits) {
+      if (part.encoding_ == encodedIri::NumberEncoding::Nibbles) {
         if (digits.size() * NibbleSize > part.numBits_) {
           return std::nullopt;
         }
-        stored = encodedIri::encodeDigits(digits, part.numBits_);
+        stored = encodedIri::encodeDigitsAsNibbles(digits, part.numBits_);
       } else {
         auto value = encodedIri::parseDecimal(digits);
         if (!value.has_value()) {
@@ -438,4 +444,4 @@ struct AlwaysOnPrefixes {
 using EncodedIriManager =
     EncodedIriManagerImpl<Id::numDataBits, 8, AlwaysOnPrefixes>;
 
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIMANAGER_H
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_ENCODEDIRIMANAGER_H

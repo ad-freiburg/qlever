@@ -7,7 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "index/vocabulary/EncodedIriPattern.h"
+#include "index/vocabulary/encodedIris/EncodedIriPattern.h"
 
 #include <absl/strings/ascii.h>
 #include <absl/strings/str_cat.h>
@@ -31,7 +31,7 @@ constexpr const char* partsKey = "parts";
 
 // The JSON representations of the `NumberEncoding` enum.
 constexpr const char* binaryEncodingName = "binary";
-constexpr const char* digitsEncodingName = "digits";
+constexpr const char* nibblesEncodingName = "nibbles";
 
 // Throw a `std::runtime_error` that reports an invalid `pattern`.
 [[noreturn]] void throwInvalidPattern(const Pattern& pattern,
@@ -45,7 +45,7 @@ constexpr const char* digitsEncodingName = "digits";
 // _____________________________________________________________________________
 Pattern plainPrefixPattern(std::string prefix, size_t numBits) {
   return Pattern{std::move(prefix),
-                 {Part{numBits, {}, "", NumberEncoding::Digits}}};
+                 {Part{numBits, {}, "", NumberEncoding::Nibbles}}};
 }
 
 // _____________________________________________________________________________
@@ -54,8 +54,9 @@ bool isPlainPrefixPattern(const Pattern& pattern, size_t numBits) {
     return false;
   }
   const auto& part = pattern.parts_.at(0);
-  return part.encoding_ == NumberEncoding::Digits && part.numBits_ == numBits &&
-         part.separator_.empty() && part.fixedBitRanges_.empty();
+  return part.encoding_ == NumberEncoding::Nibbles &&
+         part.numBits_ == numBits && part.separator_.empty() &&
+         part.fixedBitRanges_.empty();
 }
 
 // _____________________________________________________________________________
@@ -98,10 +99,10 @@ void validatePattern(const Pattern& pattern, size_t numBitsAvailable) {
       }
       lastEnd = range.end_;
     }
-    if (part.encoding_ == NumberEncoding::Digits &&
+    if (part.encoding_ == NumberEncoding::Nibbles &&
         (part.numBits_ % NibbleSize != 0 || !part.fixedBitRanges_.empty())) {
       throwInvalidPattern(pattern,
-                          "a number that is encoded digit by digit must have a "
+                          "a number that uses the nibble encoding must have a "
                           "multiple of four bits and no fixed bit ranges");
     }
     if (part.separator_.find_first_of("<>") != std::string::npos) {
@@ -143,6 +144,8 @@ std::optional<uint64_t> compressNumber(const Part& part, uint64_t value) {
   // `result` that hasn't been written yet.
   size_t inputPos = 0;
   size_t outputPos = 0;
+  // Copy the bits `[inputPos, end)` of `value` (which are not part of a fixed
+  // bit range) to the next free bits of `result`, and advance both positions.
   auto copyBits = [&result, &inputPos, &outputPos, value](size_t end) {
     size_t numBits = end - inputPos;
     if (numBits > 0) {
@@ -153,13 +156,18 @@ std::optional<uint64_t> compressNumber(const Part& part, uint64_t value) {
     }
   };
   for (const auto& range : part.fixedBitRanges_) {
+    // Copy the variable bits before the fixed range.
     copyBits(range.begin_);
+    // The bits of `value` in the fixed range must have the fixed value, else
+    // the `value` doesn't match the `part` and cannot be encoded.
     if (((value >> range.begin_) &
          ad_utility::bitMaskForLowerBits(range.numBits())) != range.value_) {
       return std::nullopt;
     }
+    // Skip the fixed range, it is not stored.
     inputPos = range.end_;
   }
+  // Copy the variable bits after the last fixed range.
   copyBits(part.numBits_);
   return result;
 }
@@ -171,6 +179,9 @@ uint64_t decompressNumber(const Part& part, uint64_t compressedValue) {
   // next bit of `result` that hasn't been written yet.
   size_t inputPos = 0;
   size_t outputPos = 0;
+  // Fill the bits `[outputPos, end)` of `result` (which are not part of a fixed
+  // bit range) with the next bits of `compressedValue`, and advance both
+  // positions.
   auto copyBits = [&result, &inputPos, &outputPos,
                    compressedValue](size_t end) {
     size_t numBits = end - outputPos;
@@ -183,12 +194,21 @@ uint64_t decompressNumber(const Part& part, uint64_t compressedValue) {
     }
   };
   for (const auto& range : part.fixedBitRanges_) {
+    // Fill the variable bits before the fixed range.
     copyBits(range.begin_);
+    // Reinsert the fixed value, which was not stored.
     result |= range.value_ << range.begin_;
     outputPos = range.end_;
   }
+  // Fill the variable bits after the last fixed range.
   copyBits(part.numBits_);
   return result;
+}
+
+// _____________________________________________________________________________
+void decompressNumber(std::string& result, const Part& part,
+                      uint64_t compressedValue) {
+  absl::StrAppend(&result, decompressNumber(part, compressedValue));
 }
 
 // _____________________________________________________________________________
@@ -232,8 +252,8 @@ void to_json(nlohmann::json& j, const Part& part) {
   j[numBitsKey] = part.numBits_;
   j[fixedBitRangesKey] = part.fixedBitRanges_;
   j[separatorKey] = part.separator_;
-  j[encodingKey] = part.encoding_ == NumberEncoding::Digits
-                       ? digitsEncodingName
+  j[encodingKey] = part.encoding_ == NumberEncoding::Nibbles
+                       ? nibblesEncodingName
                        : binaryEncodingName;
 }
 
@@ -244,15 +264,15 @@ void from_json(const nlohmann::json& j, Part& part) {
       j.at(fixedBitRangesKey).get<std::vector<FixedBitRange>>();
   part.separator_ = j.at(separatorKey).get<std::string>();
   auto encoding = j.at(encodingKey).get<std::string>();
-  if (encoding == digitsEncodingName) {
-    part.encoding_ = NumberEncoding::Digits;
+  if (encoding == nibblesEncodingName) {
+    part.encoding_ = NumberEncoding::Nibbles;
   } else if (encoding == binaryEncodingName) {
     part.encoding_ = NumberEncoding::Binary;
   } else {
-    throw std::runtime_error(
-        absl::StrCat("Unknown encoding \"", encoding,
-                     "\" for a number of an encoded IRI, expected \"",
-                     binaryEncodingName, "\" or \"", digitsEncodingName, "\""));
+    throw std::runtime_error(absl::StrCat(
+        "Unknown encoding \"", encoding,
+        "\" for a number of an encoded IRI, expected \"", binaryEncodingName,
+        "\" or \"", nibblesEncodingName, "\""));
   }
 }
 

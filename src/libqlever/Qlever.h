@@ -34,7 +34,7 @@
 #include "index/IndexRebuilderTypes.h"
 #include "index/IndexSwap.h"
 #include "index/InputFileSpecification.h"
-#include "index/vocabulary/EncodedIriPattern.h"
+#include "index/vocabulary/encodedIris/EncodedIriPattern.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
 #include "util/Allocator.h"
@@ -155,9 +155,9 @@ struct IndexBuilderConfig : CommonConfig {
   // number, for example `<http://example.org/range_536870912_50_25P>`, where
   // several numbers are separated by fixed strings, and where the individual
   // numbers may have bits that are always known (see
-  // `encodedIri::Pattern` in `index/vocabulary/EncodedIriPattern.h` for the
-  // details and for an example). Such IRIs are also encoded directly in the
-  // internal ID, with the same benefits and limitations as the
+  // `encodedIri::Pattern` in `index/vocabulary/encodedIris/EncodedIriPattern.h`
+  // for the details and for an example). Such IRIs are also encoded directly in
+  // the internal ID, with the same benefits and limitations as the
   // `prefixesForIdEncodedIris_` above. The patterns are stored in the index
   // and restored from it, so they don't have to be specified again when the
   // index is loaded. The order of the patterns determines the IDs of the

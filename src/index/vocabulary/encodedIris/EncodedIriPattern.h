@@ -7,18 +7,18 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIPATTERN_H
-#define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIPATTERN_H
-
-#include <absl/numeric/bits.h>
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_ENCODEDIRIPATTERN_H
+#define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_ENCODEDIRIPATTERN_H
 
 #include <cstdint>
 #include <optional>
+#include <range/v3/numeric/accumulate.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "backports/three_way_comparison.h"
+#include "index/vocabulary/encodedIris/NibbleEncoding.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/json.h"
@@ -28,9 +28,6 @@
 // vocabulary. It is stored in the index, such that an index can be loaded
 // without knowing how it was built.
 namespace encodedIri {
-
-// We use four bits (a nibble) per digit for `NumberEncoding::Digits`.
-static constexpr size_t NibbleSize = 4;
 
 // A range of bits `[begin_, end_)` of a number that is known to always have the
 // fixed value `value_`. The bits are numbered starting from the least
@@ -64,9 +61,9 @@ enum class NumberEncoding {
   Binary,
   // Encode each decimal digit in a nibble (four bits), which preserves the
   // lexicographic order of the digit strings and also encodes leading zeros
-  // (see `EncodedIriManager.h` for the details). For this encoding, `numBits_`
-  // must be a multiple of four and `fixedBitRanges_` must be empty.
-  Digits
+  // (see `NibbleEncoding.h` for the details). For this encoding, `numBits_`
+  // must be a multiple of `NibbleSize` and `fixedBitRanges_` must be empty.
+  Nibbles
 };
 
 // One part of a `Pattern` (see below): a decimal number, followed by a fixed
@@ -86,11 +83,10 @@ struct Part {
 
   // The number of bits that are actually stored in the `Id` for this part.
   size_t numBitsStored() const {
-    size_t result = numBits_;
-    for (const auto& range : fixedBitRanges_) {
-      result -= range.numBits();
-    }
-    return result;
+    return numBits_ - ::ranges::accumulate(fixedBitRanges_, size_t{0},
+                                           [](size_t sum, const auto& range) {
+                                             return sum + range.numBits();
+                                           });
   }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Part, numBits_, fixedBitRanges_,
@@ -122,11 +118,10 @@ struct Pattern {
 
   // The total number of bits that are stored in the `Id` for this pattern.
   size_t numBitsStored() const {
-    size_t result = 0;
-    for (const auto& part : parts_) {
-      result += part.numBitsStored();
-    }
-    return result;
+    return ::ranges::accumulate(parts_, size_t{0},
+                                [](size_t sum, const auto& part) {
+                                  return sum + part.numBitsStored();
+                                });
   }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Pattern, prefix_, parts_)
@@ -138,8 +133,9 @@ struct Pattern {
 };
 
 // The pattern for the simple case of a fixed prefix that is followed by up to
-// `numBits / 4` decimal digits, which is what the `--encode-as-id` option of
-// the index builder specifies.
+// `numBits / NibbleSize` decimal digits that use the nibble encoding (see
+// `NibbleEncoding.h`), which is what the `--encode-as-id` option of the index
+// builder specifies.
 Pattern plainPrefixPattern(std::string prefix, size_t numBits);
 
 // Return true if the `pattern` was created by `plainPrefixPattern` with the
@@ -165,6 +161,11 @@ std::optional<uint64_t> compressNumber(const Part& part, uint64_t value);
 // `2 ^ part.numBitsStored()`.
 uint64_t decompressNumber(const Part& part, uint64_t compressedValue);
 
+// Overload of `decompressNumber` that appends the decimal representation of
+// the decompressed number to `result`.
+void decompressNumber(std::string& result, const Part& part,
+                      uint64_t compressedValue);
+
 // The longest prefix of `input` that consists of decimal digits only.
 std::string_view leadingDigits(std::string_view input);
 
@@ -172,70 +173,6 @@ std::string_view leadingDigits(std::string_view input);
 // Return `std::nullopt` if the number doesn't fit into a `uint64_t`, or if it
 // has a leading zero (see `NumberEncoding::Binary`).
 std::optional<uint64_t> parseDecimal(std::string_view input);
-
-// Encode the `digits` (which may only consist of decimal digits, at most
-// `numBits / NibbleSize` many) into the lowest `numBits` bits of the result,
-// four bits per digit. The digit `d` is stored as `d + 1`, such that the
-// padding nibble `0` is smaller than every digit; together with the
-// left-alignment inside the `numBits` bits this makes the encoding
-// order-preserving.
-inline uint64_t encodeDigits(std::string_view digits, size_t numBits) {
-  AD_CORRECTNESS_CHECK(digits.size() * NibbleSize <= numBits);
-  uint64_t result = 0;
-  size_t shift = numBits - NibbleSize;
-  for (const char digitChar : digits) {
-    result |= static_cast<uint64_t>((digitChar - '0') + 1) << shift;
-    shift -= NibbleSize;
-  }
-  return result;
-}
-
-// Call `processDigit` for each digit (from the most significant one to the
-// least significant one) of the number that `encodeDigits` has encoded into
-// the lowest `numBits` bits of `encoded`. The `encoded` value must be the
-// result of such a call to `encodeDigits`, in particular it must fit into
-// `numBits` bits.
-template <typename F>
-void forEachEncodedDigit(F processDigit, uint64_t encoded, size_t numBits) {
-  AD_CORRECTNESS_CHECK(numBits >= NibbleSize && numBits <= 64);
-  AD_CORRECTNESS_CHECK(encoded <= ad_utility::bitMaskForLowerBits(numBits));
-  size_t shift = numBits - NibbleSize;
-  size_t numDigits = numBits / NibbleSize;
-  size_t numTrailingZeroNibbles =
-      encoded == 0
-          ? numDigits
-          : static_cast<size_t>(absl::countr_zero(encoded)) / NibbleSize;
-  for (size_t i = 0; i < numDigits - numTrailingZeroNibbles; ++i) {
-    uint64_t nibble = (encoded >> shift) & 0xF;
-    // The digit `d` was stored as `d + 1`, see `encodeDigits`.
-    AD_CORRECTNESS_CHECK(nibble >= 1 && nibble <= 10);
-    processDigit(nibble - 1);
-    shift -= NibbleSize;
-  }
-}
-
-// The inverse of `encodeDigits`, appending the digits to `result`.
-inline void decodeDigits(std::string& result, uint64_t encoded,
-                         size_t numBits) {
-  forEachEncodedDigit(
-      [&result](uint64_t digit) {
-        result.push_back(static_cast<char>(digit + '0'));
-      },
-      encoded, numBits);
-}
-
-// Overload of `decodeDigits` that returns the decoded number. Note that
-// leading zeros are lost by this overload.
-inline uint64_t decodeDigitsToNumber(uint64_t encoded, size_t numBits) {
-  uint64_t result = 0;
-  forEachEncodedDigit(
-      [&result](uint64_t digit) {
-        result *= 10;
-        result += digit;
-      },
-      encoded, numBits);
-  return result;
-}
 
 // Conversion to and from JSON, which is how the patterns are stored in the
 // index.
@@ -248,4 +185,4 @@ void from_json(const nlohmann::json& j, Pattern& pattern);
 
 }  // namespace encodedIri
 
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIPATTERN_H
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_ENCODEDIRIPATTERN_H

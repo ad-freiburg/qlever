@@ -5,7 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "../util/GTestHelpers.h"
-#include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/encodedIris/EncodedIriManager.h"
 #include "util/BitUtils.h"
 #include "util/Random.h"
 #include "util/TransparentFunctors.h"
@@ -421,7 +421,7 @@ TEST(EncodedIriManager, DigitEncodingInsideAPattern) {
   EncodedIriManager em{
       {},
       {Pattern{"http://example.org/",
-               {Part{24, {}, "-", encodedIri::NumberEncoding::Digits},
+               {Part{24, {}, "-", encodedIri::NumberEncoding::Nibbles},
                 Part{8, {}, ""}}}}};
   expectRoundTrip(em, "<http://example.org/123456-255>");
   expectRoundTrip(em, "<http://example.org/007-0>");
@@ -459,7 +459,7 @@ TEST(EncodedIriManager, illegalPatterns) {
               "sorted and must not overlap");
   expectThrow({Part{16, {{4, 8, 16}}, ""}},
               "doesn't fit into the fixed bit range");
-  expectThrow({Part{10, {}, "", encodedIri::NumberEncoding::Digits}},
+  expectThrow({Part{10, {}, "", encodedIri::NumberEncoding::Nibbles}},
               "multiple of four bits and no fixed bit ranges");
   expectThrow({Part{8, {}, "a>b"}}, "must not contain an angle bracket");
   expectThrow({Part{8, {}, "1"}}, "must not start with a digit");
@@ -509,7 +509,7 @@ TEST(EncodedIriManager, aPatternWithFewerDigitsIsNotPlain) {
   EncodedIriManager em{
       {},
       {Pattern{"http://example.org/",
-               {Part{16, {}, "", encodedIri::NumberEncoding::Digits}}}}};
+               {Part{16, {}, "", encodedIri::NumberEncoding::Nibbles}}}}};
   nlohmann::json j = em;
   EXPECT_TRUE(j.contains("patterns"));
   EXPECT_EQ(j.get<EncodedIriManager>(), em);

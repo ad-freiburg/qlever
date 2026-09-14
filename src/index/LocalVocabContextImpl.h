@@ -16,9 +16,9 @@
 
 #include "global/Id.h"
 #include "index/LocalVocabContext.h"
-#include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
+#include "index/vocabulary/encodedIris/EncodedIriManager.h"
 #include "util/BlankNodeManager.h"
 
 // The only implementation of the `LocalVocabContext` interface. It stores
