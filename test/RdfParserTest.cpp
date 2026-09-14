@@ -1773,9 +1773,11 @@ TEST(RdfParserTest, multifileParserSelectsTokenizer) {
   auto parse = [&filename](bool useRelaxedParsing) {
     std::vector<qlever::InputFileSpecification> specs;
     specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt, false);
+    RdfParserSettings settings;
+    settings.useRelaxedParsing_ = useRelaxedParsing;
     RdfMultifileParser parser{
         ad_utility::InputRangeTypeErased{std::move(specs)}, encodedIriManager(),
-        DEFAULT_PARSER_BUFFER_SIZE, useRelaxedParsing};
+        DEFAULT_PARSER_BUFFER_SIZE, settings};
     std::vector<TurtleTriple> result;
     while (auto batch = parser.getBatch()) {
       ql::ranges::copy(batch.value(), std::back_inserter(result));
@@ -1877,18 +1879,15 @@ TEST(RdfParserTest, multifileParsersHonorParserSettings) {
   for (bool parseInParallel : {true, false}) {
     {
       RdfMultifileParser parser{makeFiles(parseInParallel), encodedIriManager(),
-                                DEFAULT_PARSER_BUFFER_SIZE, false, settings};
+                                DEFAULT_PARSER_BUFFER_SIZE, settings};
       EXPECT_THAT(drainSyncParser(parser),
                   ::testing::UnorderedElementsAreArray(expected));
     }
     {
       boost::asio::thread_pool pool{defaultConcurrency};
-      RdfAsyncMultifileParser parser{pool.get_executor(),
-                                     makeFiles(parseInParallel),
-                                     encodedIriManager(),
-                                     DEFAULT_PARSER_BUFFER_SIZE,
-                                     false,
-                                     settings};
+      RdfAsyncMultifileParser parser{
+          pool.get_executor(), makeFiles(parseInParallel), encodedIriManager(),
+          DEFAULT_PARSER_BUFFER_SIZE, settings};
       absl::Cleanup joinPool = [&pool] { pool.join(); };
       EXPECT_THAT(drainAsyncParser(parser, defaultConcurrency),
                   ::testing::UnorderedElementsAreArray(expected));
@@ -2061,9 +2060,9 @@ TEST(RdfParserTest, asyncMultifileParserConcurrentErrors) {
 }
 
 // The `RdfAsyncMultifileParser` counterpart of
-// `multifileParserSelectsTokenizer` above: the `useRelaxedParsing` constructor
-// argument selects the tokenizer for all files, exactly like the
-// `ascii-prefixes-only` setting of `RdfMultifileParser`.
+// `multifileParserSelectsTokenizer` above: the `useRelaxedParsing_` setting
+// selects the tokenizer for all files, exactly like the `ascii-prefixes-only`
+// setting of `RdfMultifileParser`.
 // _____________________________________________________________________________
 TEST(RdfParserTest, asyncMultifileParserSelectsTokenizer) {
   std::string filename = gtestCurrentTestName() + ".ttl";
@@ -2075,9 +2074,11 @@ TEST(RdfParserTest, asyncMultifileParserSelectsTokenizer) {
     std::vector<qlever::InputFileSpecification> specs;
     specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt, false);
     boost::asio::thread_pool pool{2};
+    RdfParserSettings settings;
+    settings.useRelaxedParsing_ = useRelaxedParsing;
     RdfAsyncMultifileParser parser{
         pool.get_executor(), ad_utility::InputRangeTypeErased{std::move(specs)},
-        encodedIriManager(), DEFAULT_PARSER_BUFFER_SIZE, useRelaxedParsing};
+        encodedIriManager(), DEFAULT_PARSER_BUFFER_SIZE, settings};
     absl::Cleanup joinPool = [&pool] { pool.join(); };
     return drainAsyncParser(parser, 1);
   };

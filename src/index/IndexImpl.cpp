@@ -104,10 +104,11 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
   // NOTE: The settings have to be passed to the constructor, because the
   // parsers start parsing immediately when they are constructed.
   RdfParserSettings parserSettings{turtleParserIntegerOverflowBehavior_,
-                                   turtleParserSkipIllegalLiterals_};
+                                   turtleParserSkipIllegalLiterals_,
+                                   onlyAsciiTurtlePrefixes_};
   return std::make_unique<RdfMultifileParser>(
       std::move(files), &encodedIriManager(), parserBufferSize(),
-      onlyAsciiTurtlePrefixes_, parserSettings);
+      parserSettings);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.

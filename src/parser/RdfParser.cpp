@@ -1181,8 +1181,8 @@ bool RdfParallelParsingState<Parser>::parseHeaderStep(
 template <typename Parser>
 std::vector<TurtleTriple> RdfParallelParsingState<Parser>::parseBatch(
     qlever::parser::ByteBlock batch, size_t positionOffset) const {
-  RdfStringParser<Parser> parser{encodedIriManager_, defaultGraphIri_};
-  parser.settings() = settings_;
+  RdfStringParser<Parser> parser{encodedIriManager_, defaultGraphIri_,
+                                 settings_};
   parser.header() = header_;
   parser.useSimplifiedGrammar();
   parser.setPositionOffset(positionOffset);
@@ -1382,12 +1382,11 @@ void RdfMultifileParser::parseFileAndPushBatches(
     const qlever::InputFileSpecification& file,
     ad_utility::MemorySize bufferSize) {
   try {
-    auto parser =
-        useRelaxedParsing_
-            ? makeSingleRdfParser<TokenizerCtre>(
-                  file, &encodedIriManager(), bufferSize, fileParserSettings_)
-            : makeSingleRdfParser<Tokenizer>(file, &encodedIriManager(),
-                                             bufferSize, fileParserSettings_);
+    auto parser = settings().useRelaxedParsing_
+                      ? makeSingleRdfParser<TokenizerCtre>(
+                            file, &encodedIriManager(), bufferSize, settings())
+                      : makeSingleRdfParser<Tokenizer>(
+                            file, &encodedIriManager(), bufferSize, settings());
     while (auto batch = parser->getBatch()) {
       bool active = finishedBatchQueue_.push(std::move(batch.value()));
       if (!active) {
@@ -1404,12 +1403,8 @@ void RdfMultifileParser::parseFileAndPushBatches(
 RdfMultifileParser::RdfMultifileParser(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     const EncodedIriManager* encodedIriManager,
-    ad_utility::MemorySize bufferSize, bool useRelaxedParsing,
-    RdfParserSettings settings)
-    : RdfParserBase(encodedIriManager),
-      useRelaxedParsing_{useRelaxedParsing},
-      fileParserSettings_{settings} {
-  this->settings() = settings;
+    ad_utility::MemorySize bufferSize, RdfParserSettings settings)
+    : RdfParserBase(encodedIriManager, settings) {
   // Feed all the input files to the `parsingQueue_`.
   auto makeParsers = [files = std::move(files), bufferSize, this]() mutable {
     for (auto& file : files) {
