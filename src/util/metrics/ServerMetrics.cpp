@@ -78,7 +78,7 @@ ServerMetrics::ServerMetrics(
       "qlever.index.rebuild_in_progress",
       "Whether an index rebuild is currently in progress (1) or not (0)");
   numTriplesIndex_ = meter->CreateInt64ObservableGauge(
-      "qlever.num_triples.index",
+      "qlever.index.num_triples",
       "Total number of triples in the index (excluding delta triples)");
 
   auto now = std::chrono::duration_cast<std::chrono::seconds>(
