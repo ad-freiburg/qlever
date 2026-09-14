@@ -117,6 +117,8 @@ class RdfAsyncMultifileParser : public AsyncRdfParserBase {
   const EncodedIriManager* encodedIriManager_;
   ad_utility::MemorySize bufferSize_;
   bool useRelaxedParsing_;
+  // The settings for the parser of every file (see `RdfParserSettings`).
+  RdfParserSettings settings_;
 
   // Only ever locked exclusively, hence a plain `std::mutex`.
   ad_utility::Synchronized<FileState, std::mutex> fileState_;
@@ -134,13 +136,13 @@ class RdfAsyncMultifileParser : public AsyncRdfParserBase {
   // above. If `useRelaxedParsing` is `true`, the faster `TokenizerCtre` is
   // used for all files instead of the standard-compliant `Tokenizer` (see the
   // comment on `TurtleParser` in `RdfParser.h` for the limitations of the
-  // relaxed mode).
+  // relaxed mode). The `settings` are applied to the parser of every file.
   RdfAsyncMultifileParser(
       const ql::any_io_executor& executor,
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
-      bool useRelaxedParsing = false);
+      bool useRelaxedParsing = false, RdfParserSettings settings = {});
 
  protected:
   // Implement `AsyncRdfParserBase::asyncGetBatchImpl` by `co_spawn`ing
@@ -200,10 +202,10 @@ class RdfMultifileParserViaAsync
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
-      bool useRelaxedParsing = false)
+      bool useRelaxedParsing = false, RdfParserSettings settings = {})
       : AsyncParserDriver<RdfAsyncMultifileParser>{
-            encodedIriManager, std::move(files), encodedIriManager, bufferSize,
-            useRelaxedParsing} {}
+            encodedIriManager, std::move(files),  encodedIriManager,
+            bufferSize,        useRelaxedParsing, settings} {}
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFASYNCMULTIFILEPARSER_H

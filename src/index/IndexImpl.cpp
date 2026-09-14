@@ -101,9 +101,13 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
   AD_CONTRACT_CHECK(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
+  // NOTE: The settings have to be passed to the constructor, because the
+  // parsers start parsing immediately when they are constructed.
+  RdfParserSettings parserSettings{turtleParserIntegerOverflowBehavior_,
+                                   turtleParserSkipIllegalLiterals_};
   return std::make_unique<RdfMultifileParser>(
       std::move(files), &encodedIriManager(), parserBufferSize(),
-      onlyAsciiTurtlePrefixes_);
+      onlyAsciiTurtlePrefixes_, parserSettings);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -565,8 +569,6 @@ size_t IndexImpl::runPartialVocabularyWorker(
 // _____________________________________________________________________________
 BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
-  parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
-  parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
                  "per batch ..."
               << std::endl;
