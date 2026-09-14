@@ -83,13 +83,24 @@ jobs:
           upload_artifacts: 'true'
           stream_progress: 'true'
           ocr_version: '1.11.7'
+      - name: Mint fresh App token for stamping
+        id: app-token-stamp
+        if: ${{ vars.OCR_APP_ID != '' }}
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          # Installation tokens expire after 1 hour; the review above can run
+          # for hours, so the token minted at job start may be dead by now.
+          app-id: ${{ vars.OCR_APP_ID }}
+          private-key: ${{ secrets.OCR_APP_PRIVATE_KEY }}
+          owner: marvin7122
+          repositories: qlever
       - name: Stamp summary with Actions run URL
         if: always()
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           OCR_POSTER_LABEL: OCR stock
         with:
-          github-token: ${{ steps.app-token.outputs.token || github.token }}
+          github-token: ${{ steps.app-token-stamp.outputs.token || steps.app-token.outputs.token || github.token }}
           script: |
             const runId = context.runId;
             const attempt = context.runAttempt || 1;
