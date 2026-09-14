@@ -45,8 +45,12 @@ COPY GitVersion.cmake /qlever/
 # QLever might not be ABI-compatible on ARM with software compiled on a compiler
 # older than GCC10.
 ARG RUN_TESTS=true
+# Link-time optimization is off by default (it slows down the build). The CI
+# enables it via `--build-arg ENABLE_LTO=true` only for the image published from
+# `master`, so released images are optimized while PR builds stay fast.
+ARG ENABLE_LTO=false
 WORKDIR /qlever/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST -DCMAKE_CXX_FLAGS="-Wno-psabi" -GNinja ..
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DENABLE_LTO=${ENABLE_LTO} -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST -DCMAKE_CXX_FLAGS="-Wno-psabi" -GNinja ..
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
     else \
