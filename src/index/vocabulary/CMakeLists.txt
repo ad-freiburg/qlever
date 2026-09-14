@@ -1,6 +1,6 @@
 # All the vocabularies, including the `RdfsVocabulary` (`Vocabulary.cpp`) that
-# combines them, and the patterns (`encodedIris/EncodedIriPattern.cpp`) of the
-# `EncodedIriManager`, which encodes suitable IRIs directly in an `Id` instead
+# combines them, and the `EncodedIriManager` (`encodedIris/`),
+# which encodes suitable IRIs directly in an `Id` instead
 # of storing them in a vocabulary. The latter two used to live in `src/index`
 # and to be compiled into the `index` library, but they belong here: neither of
 # them uses a single symbol of the `index` library. `PrefixHeuristic.cpp` is only used by
@@ -10,6 +10,7 @@ add_library(vocabulary VocabularyInMemory.h VocabularyInMemory.cpp
                        VocabularyInMemoryBinSearch.cpp VocabularyInternalExternal.cpp
                        BuildFilteredVocabulary.cpp
                        VocabularyOnDisk.cpp SplitVocabulary.cpp GeoVocabulary.cpp PolymorphicVocabulary.cpp
-                       Vocabulary.cpp encodedIris/EncodedIriPattern.cpp PrefixHeuristic.cpp
+                       Vocabulary.cpp encodedIris/EncodedIriManager.cpp
+                       encodedIris/EncodedIriPattern.cpp PrefixHeuristic.cpp
                        SecondaryVocabulary.cpp)
 qlever_target_link_libraries(vocabulary qlever_util rdfTypes)
