@@ -83,6 +83,7 @@ NumericValue NumericValueGetter::operator()(
     case Datatype::Date:
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
+    case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
   }
   AD_FAIL();
@@ -109,6 +110,7 @@ NumericOrDateValue NumericOrDateValueGetter::operator()(
       return id.getDate();
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
+    case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
   }
   AD_FAIL();
@@ -140,13 +142,9 @@ auto EffectiveBooleanValueGetter::operator()(
       return context->_qec.getIndex().indexToString(index).empty() ? False
                                                                    : True;
     }
-    case Datatype::LocalVocabIndex: {
-      return (context->_localVocab.getWord(id.getLocalVocabIndex())
-                  .getContent()
-                  .empty())
-                 ? False
-                 : True;
-    }
+    case Datatype::LocalVocabIndex:
+    case Datatype::SecondaryVocabIndex:
+      return getLiteralOrIri(id, context).getContent().empty() ? False : True;
     case Datatype::WordVocabIndex:
     case Datatype::TextRecordIndex:
     case Datatype::Date:
@@ -268,7 +266,8 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
       return Id::makeFromBool(std::invoke(isSomethingFunction,
                                           context->_qec.getIndex().getVocab(),
                                           id.getVocabIndex()));
-    case Datatype::LocalVocabIndex: {
+    case Datatype::LocalVocabIndex:
+    case Datatype::SecondaryVocabIndex: {
       auto word = idToStringAndType<false>(id, context);
       return Id::makeFromBool(word.has_value() &&
                               ql::starts_with(word.value().first, prefix));
@@ -338,6 +337,7 @@ IntDoubleStr ToNumericValueGetter::operator()(
     case Datatype::Date:
     case Datatype::BlankNodeIndex:
     case Datatype::EncodedVal:
+    case Datatype::SecondaryVocabIndex:
       auto optString = LiteralFromIdGetter{}(id, context);
       if (optString.has_value()) {
         return std::move(optString.value());
@@ -378,6 +378,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
     case EncodedVal:
     case LocalVocabIndex:
     case VocabIndex:
+    case SecondaryVocabIndex:
       return (*this)(getLiteralOrIri(id, context), context);
     case Undefined:
     case BlankNodeIndex:
@@ -463,7 +464,8 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     case GeoPoint:
       return id.getGeoPoint();
     case VocabIndex:
-    case LocalVocabIndex: {
+    case LocalVocabIndex:
+    case SecondaryVocabIndex: {
       auto lit = getLiteralOrIri(id, context);
       return GeoPointOrWktValueGetter{}(lit, context);
     }
@@ -503,6 +505,7 @@ CPP_template(typename T, typename ValueGetter)(
     case LocalVocabIndex:
     case EncodedVal:
     case VocabIndex:
+    case SecondaryVocabIndex:
       return valueGetter(getLiteralOrIri(id, context), context);
     case TextRecordIndex:
     case WordVocabIndex:
@@ -548,6 +551,7 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
     case TextRecordIndex:
     case WordVocabIndex:
     case BlankNodeIndex:
+    case SecondaryVocabIndex:
       return getValue<std::optional<std::string>>(id, context, *this);
   }
   AD_FAIL();
@@ -610,7 +614,8 @@ CPP_template_out_def(typename RequestedInfo)(
   switch (id.getDatatype()) {
     case EncodedVal:
     case LocalVocabIndex:
-    case VocabIndex: {
+    case VocabIndex:
+    case SecondaryVocabIndex: {
       auto precomputed = getPrecomputedGeometryInfo(id, context);
       if (precomputed.has_value()) {
         return precomputed.value().getRequestedInfo<RequestedInfo>();

@@ -13,9 +13,12 @@ class NeutralElementOperation : public Operation {
  public:
   explicit NeutralElementOperation(QueryExecutionContext* qec)
       : Operation{qec} {}
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
  private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {};
+  }
+
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
   [[nodiscard]] std::string getCacheKeyImpl() const override {

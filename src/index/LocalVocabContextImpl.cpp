@@ -25,6 +25,20 @@ auto LocalVocabContextImpl::getPositionOfWord(std::string_view word) const
 }
 
 // _____________________________________________________________________________
+bool LocalVocabContextImpl::hasSecondaryVocabulary() const {
+  return *secondaryVocab_ != nullptr;
+}
+
+// _____________________________________________________________________________
+std::optional<SecondaryVocabIndex>
+LocalVocabContextImpl::getSecondaryVocabIndex(std::string_view word) const {
+  if (!hasSecondaryVocabulary()) {
+    return std::nullopt;
+  }
+  return (*secondaryVocab_)->getId(word);
+}
+
+// _____________________________________________________________________________
 std::optional<Id> LocalVocabContextImpl::encodeAsId(
     std::string_view word) const {
   return encodedIriManager_->encode(word);

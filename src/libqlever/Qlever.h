@@ -249,6 +249,14 @@ struct EngineConfig : CommonConfig {
   // Names of materialized views to load from disk during initialization.
   // If a view doesn't exist, a warning is logged and startup continues.
   std::vector<std::string> preloadMaterializedViews_ = {};
+
+  // Descriptions of the index and of the text index. They are returned by the
+  // API (`cmd=stats`, fields `name-index` and `name-text-index`), which is
+  // used, for example, by the QLever UI. If set, they replace the names stored
+  // in the index files. Both can also be changed while the server is running,
+  // via the `index-description` and `text-description` API commands.
+  std::optional<std::string> indexDescription_;
+  std::optional<std::string> textDescription_;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -540,8 +548,9 @@ class Qlever {
   void loadMaterializedView(std::string name) const;
 
   // Unload a materialized view that was previously loaded via
-  // `loadMaterializedView`. Has no effect if the view is not currently loaded.
-  void unloadMaterializedView(const std::string& name) const;
+  // `loadMaterializedView` and return `true`. Return `false` (and do nothing
+  // else) if the view is not currently loaded.
+  bool unloadMaterializedView(const std::string& name) const;
 
   // Check if a materialized view with the given name is currently loaded.
   bool isMaterializedViewLoaded(const std::string& name) const;
@@ -554,10 +563,13 @@ class Qlever {
   // `NamedResultCache` of this instance into a single, self-contained,
   // ZSTD-compressed blob that can later be loaded via
   // `deserializeVocabAndNamedCacheFromCompressedBlob` (e.g. by a different
-  // process, without needing access to the on-disk index). For details see
+  // process, without needing access to the on-disk index). Via the `config`,
+  // vocabulary entries that are not needed in the blob can be excluded from it
+  // (see `BlobSerializationConfig`). For details see
   // `NamedCachedQueryBlobManager::serialize`.
-  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob() const {
-    return blobManager_.serialize(*this);
+  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob(
+      const BlobSerializationConfig& config = {}) const {
+    return blobManager_.serialize(*this, config);
   }
 
   // Load a blob previously written by
@@ -674,7 +686,8 @@ class Qlever {
   //    everything, i.e. performs no cleanup.
   //
   // Steps 1 to 3 are the pure on-disk part of the swap and are performed by
-  // `qlever::moveIndexIntoPlace` (see `index/IndexSwap.h`).
+  // `qlever::moveIndexIntoPlace` (see `index/IndexSwap.h`), which is shared
+  // with `qlever-upgrade-index`.
   //
   // Typically, `config.newIndexTarget()` is `config.oldIndexSource()`, i.e. the
   // new index is served from the place of the old index (so that a later

@@ -22,8 +22,9 @@
 // base name of the old one. This is deliberately the only supported layout:
 // two indexes side by side in the same directory (under different base names)
 // invite confusion about which one is in use. The runtime index rebuild
-// (`Qlever::rebuildIndexToDisk` + `Qlever::swapInRebuiltIndex`) uses this
-// machinery, with its own directory names.
+// (`Qlever::rebuildIndexToDisk` + `Qlever::swapInRebuiltIndex`) and the
+// `qlever-upgrade-index` binary (see `index/IndexFormatConverter.h`) both use
+// this machinery, with their own directory names.
 
 namespace qlever {
 

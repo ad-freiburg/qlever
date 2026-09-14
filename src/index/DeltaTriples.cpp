@@ -230,7 +230,7 @@ DeltaTriplesCount DeltaTriples::getCounts() const {
 DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
                                                         bool insertion) {
   // NOTE: If this logic is ever changed, you need to also change the code
-  // in `IndexBuilderTypes.h`, the function `getIdMapLambdas` specifically,
+  // in `IndexBuilderTypes.h`, the function `mapTripleToIds` specifically,
   // which adds the same extra triples for language tags to the internal triples
   // on the initial index build.
   Triples internalTriples;
