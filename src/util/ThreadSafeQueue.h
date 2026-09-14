@@ -13,6 +13,7 @@
 #include <optional>
 #include <queue>
 
+#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
@@ -273,6 +274,12 @@ CPP_template(typename Queue, typename Producer)(
 // thread throws an exception. In that case the exception is propagated to
 // the resulting generator. The resulting generator yields all the values
 // that have been pushed to the queue.
+// NOTE: GCC (since version 16) produces a false-positive `-Warray-bounds`
+// warning for the local `QueueGenerator` below, which it believes lies partly
+// outside the allocated storage. `-Warray-bounds` is a middle-end warning, but
+// GCC walks the inlining chain when deciding whether it is suppressed, so
+// disabling it around the definition covers every caller.
+DISABLE_ARRAY_BOUNDS_WARNINGS
 template <typename Queue, typename Producer>
 ad_utility::InputRangeTypeErased<typename Queue::value_type> queueManager(
     size_t queueSize, size_t numThreads, Producer producer) {
@@ -305,6 +312,7 @@ ad_utility::InputRangeTypeErased<typename Queue::value_type> queueManager(
   return ad_utility::InputRangeTypeErased{std::make_unique<QueueGenerator>(
       queueSize, numThreads, std::move(producer))};
 }
+GCC_REENABLE_WARNINGS
 
 }  // namespace ad_utility::data_structures
 

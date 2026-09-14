@@ -475,13 +475,13 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
-# GCC 11–15 emit spurious `-Wmaybe-uninitialized` for template instantiations
+# GCC 11–16 emit spurious `-Wmaybe-uninitialized` for template instantiations
 # that cross the system-header boundary (e.g. absl containers instantiated with
 # user types, std::variant). Suppress for the affected version range so the
 # flag can be re-enabled easily once GCC fixes the false-positive behavior.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11" AND
-    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16")
+    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "17")
     # False positives from template instantiation crossing system-header boundaries.
     add_compile_options(-Wno-maybe-uninitialized)
     # Unreliable on large translation units; formatting is enforced by clang-format anyway.
@@ -718,7 +718,12 @@ else ()
     add_library(antlr4_umbrella ALIAS antlr4_static)
 endif ()
 # Disable some warnings in RE2 and GTEST
-target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
+# NOTE: `-Wno-uninitialized` is needed in addition to `-Wno-maybe-uninitialized`
+# (which it does not imply): since GCC 15, the inline storage of the
+# `absl::InlinedVector` inside the priority queue of `S2ClosestEdgeQueryBase` is
+# wrongly reported as definitely used uninitialized. Being a middle-end warning,
+# it is not suppressed by abseil being included via `-isystem`.
+target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
@@ -735,6 +740,12 @@ target_compile_options(civetweb PRIVATE -Wno-missing-field-initializers)
 # includes `CivetServer.h`, in which `CivetHandler` hides several of its own
 # overloaded virtual functions.
 target_compile_options(pull PRIVATE -Wno-overloaded-virtual)
+
+# The utility libraries of `spatialjoin` use `std::wstring_convert`, which is
+# deprecated since C++17 and which libstdc++ marks as such since GCC 15.
+foreach (target pb_util pb_util_geo pb_util_json)
+    target_compile_options(${target} PRIVATE -Wno-deprecated-declarations)
+endforeach ()
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
