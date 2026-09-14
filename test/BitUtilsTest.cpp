@@ -28,7 +28,7 @@ TEST(BitUtils, bitMaskForLowerBits) {
   ASSERT_EQ(bitMaskForLowerBits(64), std::numeric_limits<uint64_t>::max());
 
   for (size_t i = 65; i < 2048; ++i) {
-    ASSERT_THROW(bitMaskForLowerBits(i), std::out_of_range);
+    ASSERT_THROW(bitMaskForLowerBits(i), ad_utility::Exception);
   }
 }
 
@@ -46,7 +46,7 @@ TEST(BitUtils, bitMaskForHigherBits) {
   }
 
   for (size_t i = 65; i < 2048; ++i) {
-    ASSERT_THROW(bitMaskForHigherBits(i), std::out_of_range);
+    ASSERT_THROW(bitMaskForHigherBits(i), ad_utility::Exception);
   }
 }
 
