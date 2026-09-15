@@ -212,9 +212,10 @@ TEST_F(GeoRectangleExpressionTest, evaluate) {
   // Block 5: sentinel cell -> kept.
   blocks.push_back(makeBlock(geoWktId(grid_.sentinelCell(), 13),
                              geoWktId(grid_.sentinelCell(), 15)));
-  // Block 6: GeoPoints within the latitude band -> kept.
-  blocks.push_back(makeBlock(Id::makeFromGeoPoint(GeoPoint{-80.5, 0.0}),
-                             Id::makeFromGeoPoint(GeoPoint{-79.5, 10.0})));
+  // Block 6: a GeoPoint inside the rectangle -> kept (a block that holds a
+  // point inside the rectangle always intersects one of the Z-order ranges).
+  blocks.push_back(makeBlock(Id::makeFromGeoPoint(GeoPoint{-80.0, 171.0}),
+                             Id::makeFromGeoPoint(GeoPoint{-80.0, 171.0})));
   // Block 7: GeoPoints far north -> pruned.
   blocks.push_back(makeBlock(Id::makeFromGeoPoint(GeoPoint{70.0, 0.0}),
                              Id::makeFromGeoPoint(GeoPoint{80.0, 10.0})));
@@ -248,7 +249,7 @@ TEST_F(GeoRectangleExpressionTest, evaluate) {
 }
 
 // Without a geo cell grid the whole WKT region of the vocabulary is kept,
-// GeoPoints are still pruned by latitude.
+// GeoPoints are still pruned via their Z-order ranges.
 TEST_F(GeoRectangleExpressionTest, evaluateWithoutGrid) {
   ad_utility::testing::TestIndexConfig config{geoTurtleInput()};
   config.vocabularyType = ad_utility::VocabularyType{

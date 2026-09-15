@@ -4,6 +4,7 @@
 
 #include "rdfTypes/GeoPoint.h"
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 
@@ -23,40 +24,97 @@ GeoPoint::GeoPoint(double lat, double lng) : lat_{lat}, lng_{lng} {
 }
 
 // _____________________________________________________________________________
+GeoPoint::T GeoPoint::quantizeCoordinate(double value, double maxValue) {
+  // Only positive values between 0 and 1
+  double downscaled = (value + maxValue) / (2 * maxValue);
+  AD_CORRECTNESS_CHECK(0.0 <= downscaled && downscaled <= 1.0, [&]() {
+    return absl::StrCat("downscaled coordinate value ", downscaled,
+                        " does not satisfy [0,1] constraint");
+  });
+  // Stretch to allowed range of values between 0 and maxCoordinateEncoded,
+  // rounded to integer
+  auto newscaled = static_cast<T>(round(downscaled * maxCoordinateEncoded));
+  AD_CORRECTNESS_CHECK(newscaled <= maxCoordinateEncoded, [&]() {
+    return absl::StrCat("scaled coordinate value ", newscaled,
+                        " does not satisfy [0,", maxCoordinateEncoded,
+                        "] constraint");
+  });
+  return newscaled;
+}
+
+// _____________________________________________________________________________
+double GeoPoint::dequantizeCoordinate(T quantized, double maxValue) {
+  AD_CORRECTNESS_CHECK(quantized <= maxCoordinateEncoded);
+  double value =
+      ((static_cast<double>(quantized) / maxCoordinateEncoded) * 2 * maxValue) -
+      maxValue;
+  AD_CORRECTNESS_CHECK(-maxValue <= value && value <= maxValue);
+  return value;
+}
+
+// _____________________________________________________________________________
 GeoPoint::T GeoPoint::toBitRepresentation() const {
-  // Transforms a normal-scaled geographic coordinate to an integer
-  constexpr auto scaleCoordinate = [](double value, double maxValue) {
-    // Only positive values between 0 and 1
-    double downscaled = (value + maxValue) / (2 * maxValue);
-
-    AD_CORRECTNESS_CHECK(0.0 <= downscaled && downscaled <= 1.0, [&]() {
-      return absl::StrCat("downscaled coordinate value ", downscaled,
-                          " does not satisfy [0,1] constraint");
-    });
-
-    // Stretch to allowed range of values between 0 and maxCoordinateEncoded,
-    // rounded to integer
-    auto newscaled =
-        static_cast<size_t>(round(downscaled * maxCoordinateEncoded));
-
-    AD_CORRECTNESS_CHECK(
-        0.0 <= newscaled && newscaled <= maxCoordinateEncoded, [&]() {
-          return absl::StrCat("scaled coordinate value ", newscaled,
-                              " does not satisfy [0,", maxCoordinateEncoded,
-                              "] constraint");
-        });
-    return newscaled;
-  };
-
-  T lat = scaleCoordinate(getLat(), COORDINATE_LAT_MAX);
-  T lng = scaleCoordinate(getLng(), COORDINATE_LNG_MAX);
-
-  // Use shift to obtain 30 bit lat followed by 30 bit lng in lower bits
-  auto bits = (lat << numDataBitsCoordinate) | lng;
-
+  T lat = quantizeCoordinate(getLat(), COORDINATE_LAT_MAX);
+  T lng = quantizeCoordinate(getLng(), COORDINATE_LNG_MAX);
+  auto bits = interleaveCoordinates(lat, lng);
   // Ensure the highest 4 bits are 0
   AD_CORRECTNESS_CHECK((bits & coordinateMaskFreeBits) == 0);
   return bits;
+}
+
+// _____________________________________________________________________________
+std::vector<std::pair<GeoPoint::T, GeoPoint::T>>
+GeoPoint::bitRangesForRectangle(double minLat, double maxLat, double minLng,
+                                double maxLng) {
+  AD_CONTRACT_CHECK(minLat <= maxLat && minLng <= maxLng);
+  // The quantized bounds, clamped to the valid coordinate ranges and widened
+  // by one step on each side.
+  auto bounds = [](double lower, double upper, double maxValue) {
+    T lo = quantizeCoordinate(std::clamp(lower, -maxValue, maxValue), maxValue);
+    T hi = quantizeCoordinate(std::clamp(upper, -maxValue, maxValue), maxValue);
+    return std::pair{lo == 0 ? T{0} : lo - 1,
+                     std::min(hi + 1, maxCoordinateEncoded)};
+  };
+  auto [latLo, latHi] = bounds(minLat, maxLat, COORDINATE_LAT_MAX);
+  auto [lngLo, lngHi] = bounds(minLng, maxLng, COORDINATE_LNG_MAX);
+
+  // Cells that are not fully inside the rectangle are subdivided until their
+  // side is at most a sixteenth of the rectangle's smaller side, which bounds
+  // the number of ranges by a small constant times the aspect ratio.
+  T minSide = std::min(latHi - latLo, lngHi - lngLo) + 1;
+  T stopSide = std::max<T>(T{1}, minSide / 16);
+
+  std::vector<std::pair<T, T>> ranges;
+  // Visit the four children in the order (lat 0, lng 0), (0, 1), (1, 0),
+  // (1, 1), which is ascending Z-order because the latitude bit is the
+  // higher one of each pair.
+  auto recurse = [&](auto& self, T latStart, T lngStart, T side) -> void {
+    T latEnd = latStart + side - 1;
+    T lngEnd = lngStart + side - 1;
+    if (latEnd < latLo || latStart > latHi || lngEnd < lngLo ||
+        lngStart > lngHi) {
+      return;
+    }
+    bool inside = latStart >= latLo && latEnd <= latHi && lngStart >= lngLo &&
+                  lngEnd <= lngHi;
+    if (inside || side <= stopSide) {
+      T lower = interleaveCoordinates(latStart, lngStart);
+      T upper = interleaveCoordinates(latEnd, lngEnd);
+      if (!ranges.empty() && ranges.back().second + 1 == lower) {
+        ranges.back().second = upper;
+      } else {
+        ranges.emplace_back(lower, upper);
+      }
+      return;
+    }
+    T half = side / 2;
+    self(self, latStart, lngStart, half);
+    self(self, latStart, lngStart + half, half);
+    self(self, latStart + half, lngStart, half);
+    self(self, latStart + half, lngStart + half, half);
+  };
+  recurse(recurse, T{0}, T{0}, T{1} << numDataBitsCoordinate);
+  return ranges;
 }
 
 // _____________________________________________________________________________
@@ -76,25 +134,9 @@ std::optional<GeoPoint> GeoPoint::parseFromLiteral(
 
 // _____________________________________________________________________________
 GeoPoint GeoPoint::fromBitRepresentation(T bits) {
-  // Extracts one of the coordinates from a single bitstring
-  constexpr auto extractCoordinate = [](T bits, T mask, T shift,
-                                        double maxValue) {
-    // Obtain raw value from bits
-    auto value = static_cast<double>((bits & mask) >> shift);
-    AD_CORRECTNESS_CHECK(0.0 <= value && value <= maxCoordinateEncoded);
-
-    // Transform to usual scaling
-    value = ((value / maxCoordinateEncoded) * 2 * maxValue) - maxValue;
-    AD_CORRECTNESS_CHECK(-maxValue <= value && value <= maxValue);
-    return value;
-  };
-
-  double lat = extractCoordinate(bits, coordinateMaskLat, numDataBitsCoordinate,
-                                 COORDINATE_LAT_MAX);
-  double lng =
-      extractCoordinate(bits, coordinateMaskLng, 0, COORDINATE_LNG_MAX);
-
-  return {lat, lng};
+  auto [lat, lng] = deinterleaveCoordinates(bits & ~coordinateMaskFreeBits);
+  return {dequantizeCoordinate(lat, COORDINATE_LAT_MAX),
+          dequantizeCoordinate(lng, COORDINATE_LNG_MAX)};
 }
 
 // _____________________________________________________________________________

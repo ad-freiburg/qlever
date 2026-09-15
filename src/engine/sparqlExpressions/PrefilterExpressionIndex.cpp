@@ -822,7 +822,7 @@ BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
   // belong to geometries whose bounding box intersects the rectangle. The
   // intervals are constructed in ascending order: the WKT region of the
   // `VocabIndex` datatype first (`Datatype::VocabIndex` <
-  // `Datatype::GeoPoint`), then the latitude band of the `GeoPoint`s.
+  // `Datatype::GeoPoint`), then the Z-order ranges of the `GeoPoint`s.
   std::vector<std::pair<ValueId, ValueId>> keepIntervals;
   using ad_utility::GeoCellGrid;
   const auto& grid = index.getVocab().getGeoCellGrid();
@@ -848,15 +848,16 @@ BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
         Id::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)));
   }
 
-  // The latitude band of the `GeoPoint` region: `GeoPoint` IDs store the
-  // latitude in their upper coordinate bits, so all points within a latitude
-  // band form one contiguous ID interval. Extend the band by one quantization
-  // step of the encoding so that rounding can never exclude a matching point.
-  constexpr double latStep = 180.0 / GeoPoint::maxCoordinateEncoded;
-  double bandMinLat = std::max(rectangle_.minLat_ - latStep, -90.0);
-  double bandMaxLat = std::min(rectangle_.maxLat_ + latStep, 90.0);
-  keepIntervals.emplace_back(Id::makeFromGeoPoint(GeoPoint{bandMinLat, -180.0}),
-                             Id::makeFromGeoPoint(GeoPoint{bandMaxLat, 180.0}));
+  // The `GeoPoint` region: the IDs of points are Z-order codes of their
+  // quantized coordinates, so the rectangle is a small set of ranges (see
+  // `GeoPoint::bitRangesForRectangle`), which are ascending and come after
+  // the `VocabIndex` intervals (`Datatype::VocabIndex` < `Datatype::GeoPoint`).
+  for (auto [lower, upper] : GeoPoint::bitRangesForRectangle(
+           rectangle_.minLat_, rectangle_.maxLat_, rectangle_.minLng_,
+           rectangle_.maxLng_)) {
+    keepIntervals.emplace_back(Id::makeFromGeoPointBits(lower),
+                               Id::makeFromGeoPointBits(upper));
+  }
 
   // For each interval, find the corresponding range of block-boundary
   // `ValueId`s. Empty ranges are deliberately kept: they indicate a block
@@ -999,8 +1000,8 @@ std::string LogicalExpression<Operation>::asString(size_t depth) const {
   std::stringstream stream;
   stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
          << ">\n"
-         << "child1 {" << child1Info << "}" << "child2 {" << child2Info << "}"
-         << std::endl;
+         << "child1 {" << child1Info << "}"
+         << "child2 {" << child2Info << "}" << std::endl;
   return stream.str();
 }
 
