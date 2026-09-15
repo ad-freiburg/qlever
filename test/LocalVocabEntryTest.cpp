@@ -19,8 +19,16 @@
 #include "index/LocalVocabContext.h"
 #include "index/LocalVocabEntry.h"
 
-// _____________________________________________________________________________
-TEST(LocalVocabEntry, compareThreeWayRequiresMatchingContexts) {
+// Build two `LocalVocabEntry`s for the same word, but belonging to two
+// different indices, and expect that `comparison(entry1, entry2)` throws,
+// because comparing entries of different contexts is not allowed. The test is
+// skipped if expensive checks are disabled, because the check that produces
+// the error is one of them.
+template <typename Comparison>
+void testComparisonRequiresMatchingContexts(
+    Comparison comparison,
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
   if constexpr (!ad_utility::areExpensiveChecksEnabled) {
     GTEST_SKIP() << "This test only makes sense with expensive checks enabled.";
   }
@@ -34,9 +42,17 @@ TEST(LocalVocabEntry, compareThreeWayRequiresMatchingContexts) {
       "<x>", index2.getImpl().getLocalVocabContext());
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      (void)(entry1 < entry2),
+      comparison(entry1, entry2),
       ::testing::HasSubstr(
           "Contexts of LocalVocabEntries have to be identical"));
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocabEntry, compareThreeWayRequiresMatchingContexts) {
+  testComparisonRequiresMatchingContexts(
+      [](const LocalVocabEntry& a, const LocalVocabEntry& b) {
+        (void)(a < b);
+      });
 }
 
 // _____________________________________________________________________________
@@ -134,4 +150,69 @@ TEST(LocalVocabEntry, compareThreeWayOnlyOneEntryIsContainedInVocabulary) {
   // `isContained == false, rhsIsContained == true`.
   EXPECT_EQ(notContained.compareThreeWay(contained), ql::strong_ordering::less);
   EXPECT_LT(notContained, contained);
+}
+
+// _____________________________________________________________________________
+// `compareThreeWaySemantically` compares the string values, whereas
+// `compareThreeWay` implements the internal order, in which a word of the
+// secondary vocabulary is positioned after all words of the main vocabulary,
+// see the class comment of `LocalVocabEntry`.
+TEST(LocalVocabEntry, compareThreeWaySemantically) {
+  using namespace ad_utility::testing;
+  // The two orders only differ if the index has a secondary vocabulary, so
+  // create one. Note that this must not leak into other tests, so build a fresh
+  // index instead of using a shared one.
+  TestIndexConfig config{"<s> <p> <a> . <s> <p> <c> ."};
+  config.secondaryVocabWords = std::vector<std::string>{"<b>"};
+  Index index = makeTestIndex(gtestCurrentTestName(), std::move(config));
+  const auto& ctx = index.getImpl().getLocalVocabContext();
+  ASSERT_TRUE(ctx.hasSecondaryVocabulary());
+  auto entry = [&ctx](std::string_view iriref) {
+    return LocalVocabEntry::fromIriref(iriref, ctx);
+  };
+
+  // `<a>` is a word of the main vocabulary, `<b>` is stored in the secondary
+  // vocabulary, and `<e>` is in neither.
+  LocalVocabEntry entryA = entry("<a>");
+  LocalVocabEntry entryB = entry("<b>");
+  LocalVocabEntry entryE = entry("<e>");
+
+  // Semantically, the entries are ordered by their string values.
+  EXPECT_EQ(entryA.compareThreeWaySemantically(entryB),
+            ql::strong_ordering::less);
+  EXPECT_EQ(entryB.compareThreeWaySemantically(entryE),
+            ql::strong_ordering::less);
+  EXPECT_EQ(entryE.compareThreeWaySemantically(entryB),
+            ql::strong_ordering::greater);
+  EXPECT_EQ(entryB.compareThreeWaySemantically(entryB),
+            ql::strong_ordering::equal);
+  EXPECT_EQ(entryB.compareThreeWaySemantically(entry("<b>")),
+            ql::strong_ordering::equal);
+
+  // Internally, `<b>` is greater than both of the others, because it is
+  // positioned in the secondary vocabulary, and that is also what the
+  // comparison operators (and hence sorting) use.
+  EXPECT_EQ(entryB.compareThreeWay(entryA), ql::strong_ordering::greater);
+  EXPECT_EQ(entryB.compareThreeWay(entryE), ql::strong_ordering::greater);
+  EXPECT_EQ(entryE.compareThreeWay(entryB), ql::strong_ordering::less);
+  EXPECT_LT(entryE, entryB);
+  EXPECT_GT(entryB, entryE);
+
+  // The two orders agree on entries that are not stored in the secondary
+  // vocabulary.
+  EXPECT_EQ(entryA.compareThreeWay(entryE),
+            entryA.compareThreeWaySemantically(entryE));
+  EXPECT_EQ(entryE.compareThreeWay(entryA),
+            entryE.compareThreeWaySemantically(entryA));
+  EXPECT_EQ(entryA.compareThreeWay(entryA), ql::strong_ordering::equal);
+}
+
+// _____________________________________________________________________________
+// Just like `compareThreeWay`, the semantic comparison requires that both
+// entries belong to the same index.
+TEST(LocalVocabEntry, compareThreeWaySemanticallyRequiresMatchingContexts) {
+  testComparisonRequiresMatchingContexts(
+      [](const LocalVocabEntry& a, const LocalVocabEntry& b) {
+        (void)a.compareThreeWaySemantically(b);
+      });
 }
