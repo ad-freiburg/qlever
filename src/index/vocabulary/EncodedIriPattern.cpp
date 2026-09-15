@@ -7,13 +7,15 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "index/vocabulary/encodedIris/EncodedIriPattern.h"
+#include "index/vocabulary/EncodedIriPattern.h"
 
 #include <absl/strings/ascii.h>
 #include <absl/strings/str_cat.h>
 
 #include <limits>
 #include <stdexcept>
+
+#include "backports/StartsWithAndEndsWith.h"
 
 namespace encodedIri {
 
@@ -231,6 +233,69 @@ std::optional<uint64_t> parseDecimal(std::string_view input) {
     value = value * 10 + digit;
   }
   return value;
+}
+
+// _____________________________________________________________________________
+std::optional<uint64_t> encodePayload(const Pattern& pattern,
+                                      std::string_view suffix) {
+  uint64_t payload = 0;
+  for (const auto& part : pattern.parts_) {
+    auto digits = leadingDigits(suffix);
+    if (digits.empty()) {
+      return std::nullopt;
+    }
+    suffix.remove_prefix(digits.size());
+    if (!ql::starts_with(suffix, part.separator_)) {
+      return std::nullopt;
+    }
+    suffix.remove_prefix(part.separator_.size());
+    std::optional<uint64_t> stored;
+    if (part.encoding_ == NumberEncoding::Nibbles) {
+      if (digits.size() * NibbleSize > part.numBits_) {
+        return std::nullopt;
+      }
+      stored = encodeDigitsAsNibbles(digits, part.numBits_);
+    } else {
+      auto value = parseDecimal(digits);
+      if (!value.has_value()) {
+        return std::nullopt;
+      }
+      stored = compressNumber(part, value.value());
+    }
+    if (!stored.has_value()) {
+      return std::nullopt;
+    }
+    payload = (payload << part.numBitsStored()) | stored.value();
+  }
+  if (suffix != ">") {
+    return std::nullopt;
+  }
+  return payload;
+}
+
+// _____________________________________________________________________________
+std::string decodeToIri(const Pattern& pattern, uint64_t payload) {
+  std::string result;
+  // A decimal number needs at most 20 characters; the separators are
+  // typically short.
+  result.reserve(pattern.prefix_.size() + pattern.parts_.size() * 24 + 1);
+  result = pattern.prefix_;
+  // The first part is stored in the most significant bits of the payload.
+  size_t shift = pattern.numBitsStored();
+  for (const auto& part : pattern.parts_) {
+    size_t numBits = part.numBitsStored();
+    shift -= numBits;
+    uint64_t stored =
+        (payload >> shift) & ad_utility::bitMaskForLowerBits(numBits);
+    if (part.encoding_ == NumberEncoding::Nibbles) {
+      decodeNibblesToDigits(result, stored, part.numBits_);
+    } else {
+      decompressNumber(result, part, stored);
+    }
+    result.append(part.separator_);
+  }
+  result.push_back('>');
+  return result;
 }
 
 // _____________________________________________________________________________

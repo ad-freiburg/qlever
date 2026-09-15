@@ -19,7 +19,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
-#include "index/vocabulary/encodedIris/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "libqlever/Qlever.h"
 #include "parser/SparqlParser.h"
 #include "util/Exception.h"

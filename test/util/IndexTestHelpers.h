@@ -15,8 +15,8 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
-#include "index/vocabulary/encodedIris/EncodedIriManager.h"
-#include "index/vocabulary/encodedIris/EncodedIriPattern.h"
+#include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriPattern.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
@@ -78,7 +78,7 @@ struct TestIndexConfig {
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
   // The general patterns for IRIs that are encoded directly in an `Id`, see
-  // `index/vocabulary/encodedIris/EncodedIriPattern.h`.
+  // `index/vocabulary/EncodedIriPattern.h`.
   std::vector<encodedIri::Pattern> encodedIriPatterns{};
   // If true, add `ql:has-word` triples for each word in each literal during
   // index building.

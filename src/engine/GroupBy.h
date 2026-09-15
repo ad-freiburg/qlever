@@ -40,7 +40,11 @@ class GroupBy : public Operation {
   float getMultiplicity(size_t col) override;
   uint64_t getSizeEstimateBeforeLimit() override;
   size_t getCostEstimate() override;
-  std::vector<QueryExecutionTree*> getChildren() override;
+
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
+ public:
   VariableToColumnMap computeVariableToColumnMap() const override;
   Result computeResult(bool requestLaziness) override;
   std::unique_ptr<Operation> cloneImpl() const override;

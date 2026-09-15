@@ -7,12 +7,13 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_NIBBLEENCODING_H
-#define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_NIBBLEENCODING_H
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_NIBBLEENCODING_H
+#define QLEVER_SRC_INDEX_VOCABULARY_NIBBLEENCODING_H
 
 #include <absl/numeric/bits.h>
 
 #include <cstdint>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -22,7 +23,7 @@
 
 // The nibble encoding of a sequence of decimal digits, which is the encoding
 // that the `EncodedIriManager` (see `EncodedIriManager.h`) uses for the digits
-// that follow a plain prefix. It has the following properties:
+// that follow the prefix of an encoded IRI. It has the following properties:
 //
 // 1. It preserves the lexicographic order of the digit sequences, that is, the
 //    order of the encoded numbers is the same as the order of the original
@@ -38,6 +39,7 @@
 // order.
 //
 // For example, with `numBits = 32`, the encodings (as hexadecimal numbers) are
+// as follows.
 //
 // 1    ->  0x20000000
 // 10   ->  0x21000000
@@ -55,8 +57,19 @@ static constexpr size_t NibbleSize = 4;
 // Encode the `digits` (which may only consist of decimal digits, at most
 // `numBits / NibbleSize` many) into the lowest `numBits` bits of the result,
 // using the nibble encoding described at the top of this file.
-inline uint64_t encodeDigitsAsNibbles(std::string_view digits, size_t numBits) {
-  AD_CORRECTNESS_CHECK(digits.size() * NibbleSize <= numBits);
+//
+// NOTE: The precondition is reported via `throw` and not via
+// `AD_CORRECTNESS_CHECK`, because the latter is not `constexpr`. An
+// unconditional call to it would make this a function that can never yield a
+// constant expression, which is ill-formed (no diagnostic required); GCC 11 and
+// 12 as well as Clang reject it outright. A `throw` on a branch that is not
+// taken is fine in a constant expression. See
+// `ad_utility::bitMaskForLowerBits` in `util/BitUtils.h` for the same pattern.
+constexpr uint64_t encodeDigitsAsNibbles(std::string_view digits,
+                                         size_t numBits) {
+  if (digits.size() * NibbleSize > numBits) {
+    throw std::out_of_range{"too many digits for the nibble encoding"};
+  }
   uint64_t result = 0;
   size_t shift = numBits - NibbleSize;
   for (const char digitChar : digits) {
@@ -121,4 +134,4 @@ inline uint64_t decodeNibblesToNumber(uint64_t encoded, size_t numBits) {
 
 }  // namespace encodedIri
 
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_NIBBLEENCODING_H
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_NIBBLEENCODING_H

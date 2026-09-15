@@ -89,6 +89,12 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   if (config.loadTextIndex_) {
     index.addTextFromOnDiskIndex();
   }
+  if (config.indexDescription_.has_value()) {
+    index.setKbName(config.indexDescription_.value());
+  }
+  if (config.textDescription_.has_value()) {
+    index.setTextName(config.textDescription_.value());
+  }
 
   materializedViewsManager.setOnDiskBase(config.baseName_);
 

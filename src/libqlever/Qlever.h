@@ -34,7 +34,7 @@
 #include "index/IndexRebuilderTypes.h"
 #include "index/IndexSwap.h"
 #include "index/InputFileSpecification.h"
-#include "index/vocabulary/encodedIris/EncodedIriPattern.h"
+#include "index/vocabulary/EncodedIriPattern.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
 #include "util/Allocator.h"
@@ -155,7 +155,7 @@ struct IndexBuilderConfig : CommonConfig {
   // number, for example `<http://example.org/range_536870912_50_25P>`, where
   // several numbers are separated by fixed strings, and where the individual
   // numbers may have bits that are always known (see
-  // `encodedIri::Pattern` in `index/vocabulary/encodedIris/EncodedIriPattern.h`
+  // `encodedIri::Pattern` in `index/vocabulary/EncodedIriPattern.h`
   // for the details and for an example). Such IRIs are also encoded directly in
   // the internal ID, with the same benefits and limitations as the
   // `prefixesForIdEncodedIris_` above. The patterns are stored in the index
@@ -264,6 +264,14 @@ struct EngineConfig : CommonConfig {
   // Names of materialized views to load from disk during initialization.
   // If a view doesn't exist, a warning is logged and startup continues.
   std::vector<std::string> preloadMaterializedViews_ = {};
+
+  // Descriptions of the index and of the text index. They are returned by the
+  // API (`cmd=stats`, fields `name-index` and `name-text-index`), which is
+  // used, for example, by the QLever UI. If set, they replace the names stored
+  // in the index files. Both can also be changed while the server is running,
+  // via the `index-description` and `text-description` API commands.
+  std::optional<std::string> indexDescription_;
+  std::optional<std::string> textDescription_;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See

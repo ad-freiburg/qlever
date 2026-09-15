@@ -89,10 +89,12 @@ class Sort : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {subtree_.get()};
   }
 
+ public:
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
       const std::vector<ColumnIndex>& sortColumns) const override;
 

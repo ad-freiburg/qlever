@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_ENCODEDIRIPATTERN_H
-#define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_ENCODEDIRIPATTERN_H
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIPATTERN_H
+#define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIPATTERN_H
 
 #include <cstdint>
 #include <optional>
@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "backports/three_way_comparison.h"
-#include "index/vocabulary/encodedIris/NibbleEncoding.h"
+#include "index/vocabulary/NibbleEncoding.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/json.h"
@@ -174,6 +174,21 @@ std::string_view leadingDigits(std::string_view input);
 // has a leading zero (see `NumberEncoding::Binary`).
 std::optional<uint64_t> parseDecimal(std::string_view input);
 
+// Try to encode the `suffix` of an IRI (the part that follows the `prefix_` of
+// the `pattern`, including the closing `>`) into the `pattern.numBitsStored()`
+// payload bits. The first number of the pattern is stored in the most
+// significant bits of the payload, the last one in the least significant bits.
+// Return `std::nullopt` if the `suffix` doesn't match the `pattern`, or if one
+// of its numbers violates the constraints of the corresponding `Part`.
+std::optional<uint64_t> encodePayload(const Pattern& pattern,
+                                      std::string_view suffix);
+
+// The inverse of `encodePayload`: Reconstruct the complete IRI (the `prefix_`
+// of the `pattern`, the numbers with their separators, and the closing `>`)
+// from the `payload`, which has to be the result of a call to `encodePayload`
+// with the same `pattern`.
+std::string decodeToIri(const Pattern& pattern, uint64_t payload);
+
 // Conversion to and from JSON, which is how the patterns are stored in the
 // index.
 void to_json(nlohmann::json& j, const FixedBitRange& range);
@@ -185,4 +200,4 @@ void from_json(const nlohmann::json& j, Pattern& pattern);
 
 }  // namespace encodedIri
 
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIS_ENCODEDIRIPATTERN_H
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIPATTERN_H
