@@ -1844,9 +1844,7 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsAcrossMultipleBlocks) {
 
 // _____________________________________________________________________________
 TEST(CompressedRelationReader, computeUniqueGraphIdsIncludesDefaultGraph) {
-  auto index = ad_utility::testing::makeTestIndex(
-      "computeUniqueGraphIdsIncludesDefaultGraph",
-      "<x> <p> <y> . <x> <p2> <z> .");
+  auto index = ad_utility::testing::makeTestIndex("<x> <p> <y> . <x> <p2> <z> .");
   auto defaultGraphId = toValueId(
       TripleComponent{
           ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)},
@@ -1870,8 +1868,7 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsHandlesGraphInfoOverflow) {
   ad_utility::testing::TestIndexConfig config{nquads};
   config.indexType = qlever::Filetype::NQuad;
   config.blocksizePermutations = 1_MB;
-  auto index = ad_utility::testing::makeTestIndex(
-      "computeUniqueGraphIdsHandlesGraphInfoOverflow", config);
+  auto index = ad_utility::testing::makeTestIndex(config);
   auto getId = ad_utility::testing::makeGetId(index);
 
   std::vector<Id::T> expectedIds;
@@ -1885,8 +1882,7 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsHandlesGraphInfoOverflow) {
 
 // _____________________________________________________________________________
 TEST(CompressedRelationReader, computeUniqueGraphIdsOnEmptyIndex) {
-  auto index = ad_utility::testing::makeTestIndex(
-      "computeUniqueGraphIdsOnEmptyIndex", "");
+  auto index = ad_utility::testing::makeTestIndex("");
 
   auto graphIds = computeUniqueGraphIdsForIndex(index);
   EXPECT_THAT(graphIds, ::testing::IsEmpty());
@@ -1894,8 +1890,7 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsOnEmptyIndex) {
 
 // _____________________________________________________________________________
 TEST(CompressedRelationReader, computeUniqueGraphIdsRespectsCancellation) {
-  auto index = ad_utility::testing::makeTestIndex(
-      "computeUniqueGraphIdsRespectsCancellation", "<x> <p> <y> .");
+  auto index = ad_utility::testing::makeTestIndex("<x> <p> <y> .");
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
