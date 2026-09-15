@@ -5,6 +5,7 @@
 #ifndef QLEVER_VOCABULARYTESTHELPERS_H
 #define QLEVER_VOCABULARYTESTHELPERS_H
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
@@ -14,6 +15,7 @@
 #include "backports/span.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/File.h"
 
 // human-readable output for the `WordAndIndex` class within GTest.
 inline void PrintTo(const WordAndIndex& wi, std::ostream* osPtr) {
@@ -423,6 +425,57 @@ void assertStreamedLookupMatchesVocabularyAtIndices(
        ::ranges::views::zip(results, expectedBatches)) {
     assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
   }
+}
+
+// The names of all the files that a vocabulary with the given base `filename`
+// and the given `suffixes` consists of (see `FileSuffixes`).
+inline std::vector<std::string> vocabularyFilenames(
+    const std::string& filename, const FileSuffixes& suffixes) {
+  std::vector<std::string> filenames;
+  for (const std::string& suffix : suffixes) {
+    filenames.push_back(absl::StrCat(filename, suffix));
+  }
+  return filenames;
+}
+
+// Same as above, for a vocabulary of the given (statically known) type.
+template <typename Vocabulary>
+std::vector<std::string> vocabularyFilenames(const std::string& filename) {
+  return vocabularyFilenames(filename, Vocabulary::fileSuffixes());
+}
+
+// Delete all the files that a vocabulary with the given base `filename` and the
+// given `suffixes` consists of. Do not warn about files that were never
+// created, which happens for example when a test deliberately throws while
+// writing the vocabulary.
+inline void deleteVocabularyFiles(const std::string& filename,
+                                  const FileSuffixes& suffixes) {
+  for (const std::string& file : vocabularyFilenames(filename, suffixes)) {
+    ad_utility::deleteFile(file, false);
+  }
+}
+
+// Same as above, for a vocabulary of the given (statically known) type.
+template <typename Vocabulary>
+void deleteVocabularyFiles(const std::string& filename) {
+  deleteVocabularyFiles(filename, Vocabulary::fileSuffixes());
+}
+
+// Return an `absl::Cleanup` that deletes all the files that a vocabulary with
+// the given base `filename` and the given `suffixes` consists of (see
+// `deleteVocabularyFiles` above). The arguments are copied into the returned
+// object, which therefore stays valid independently of them.
+inline auto makeVocabFileCleanup(std::string filename, FileSuffixes suffixes) {
+  return absl::Cleanup{
+      [filename = std::move(filename), suffixes = std::move(suffixes)] {
+        deleteVocabularyFiles(filename, suffixes);
+      }};
+}
+
+// Same as above, for a vocabulary of the given (statically known) type.
+template <typename Vocabulary>
+auto makeVocabFileCleanup(std::string filename) {
+  return makeVocabFileCleanup(std::move(filename), Vocabulary::fileSuffixes());
 }
 
 }  // namespace vocabulary_test

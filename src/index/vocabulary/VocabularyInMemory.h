@@ -121,6 +121,9 @@ class VocabularyInMemory
     void finishImpl() override { writer_.finish(); }
   };
 
+  // All the words are stored in a single file under the base filename itself.
+  static FileSuffixes fileSuffixes() { return {""}; }
+
   // Return a `unique_ptr<WordWriter>` that directly writes the words to the
   // given `filename`. The words are not materialized in RAM, but the vocabulary
   // later has to be explicitly initialized via `open(filename)`.

@@ -15,10 +15,11 @@
 #define QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 
 #include <absl/container/inlined_vector.h>
-#include <absl/strings/str_cat.h>
 
 #include <atomic>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -37,6 +38,33 @@
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
+// Return true if `word` is a blank node. A word is a blank node if it starts
+// with `_:`, or, when `blankNodeIriRegexes` is given, if it is an IRI that is
+// fully matched by one of those regexes.
+//
+// The regexes are matched (as a full match, see `ad_utility::RegexSet`)
+// against the full text of the word, *including* the surrounding angle
+// brackets of an IRI. The match has to cover the entire word, so a regex must
+// describe the whole IRI; to allow an arbitrary suffix, end it with `.*`. For
+// example the regex `<https://example\.org/statement/.*>` matches the IRI
+// `<https://example.org/statement/42>`. Only IRIs (words starting with `<`)
+// are ever treated this way; literals are never converted. The regexes are
+// required to describe IRIs (i.e. to start with `<`), which is enforced by
+// `IndexImpl::setBlankNodeIriRegexes`. See also the
+// `--iri-as-blank-node-regexes` option of the index builder.
+inline bool isBlankNode(std::string_view word,
+                        const ad_utility::RegexSet& blankNodeIriRegexes) {
+  if (ql::starts_with(word, "_:")) {
+    return true;
+  }
+  // Only IRIs (which start with `<`) can be treated as blank nodes; this also
+  // avoids running the regexes for the common case of a literal.
+  if (!ql::starts_with(word, "<")) {
+    return false;
+  }
+  return blankNodeIriRegexes.matchesAny(word);
+}
+
 // An IRI or literal together with its index in the global vocabulary. This is
 // used during vocabulary merging.
 //
@@ -51,30 +79,10 @@ struct TripleComponentWithIndex {
   [[nodiscard]] auto& isExternal() { return isExternal_; }
   [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
   [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
-  // Return true if this word is a blank node. A word is a blank node if it
-  // starts with `_:`, or, when `blankNodeIriRegexes` is given, if it is an IRI
-  // that is fully matched by one of those regexes.
-  //
-  // The regexes are matched (as a full match, see `ad_utility::RegexSet`)
-  // against the full text of the word, *including* the surrounding angle
-  // brackets of an IRI. The match has to cover the entire word, so a regex must
-  // describe the whole IRI; to allow an arbitrary suffix, end it with `.*`. For
-  // example the regex `<https://example\.org/statement/.*>` matches the IRI
-  // `<https://example.org/statement/42>`. Only IRIs (words starting with `<`)
-  // are ever treated this way; literals are never converted. The regexes are
-  // required to describe IRIs (i.e. to start with `<`), which is enforced by
-  // `IndexImpl::setBlankNodeIriRegexes`. See also the
-  // `--iri-as-blank-node-regexes` option of the index builder.
+  // Return true if this word is a blank node, see the free `isBlankNode`
+  // function above.
   bool isBlankNode(const ad_utility::RegexSet& blankNodeIriRegexes) const {
-    if (ql::starts_with(iriOrLiteral_, "_:")) {
-      return true;
-    }
-    // Only IRIs (which start with `<`) can be treated as blank nodes; this also
-    // avoids running the regexes for the common case of a literal.
-    if (!ql::starts_with(iriOrLiteral_, "<")) {
-      return false;
-    }
-    return blankNodeIriRegexes.matchesAny(iriOrLiteral_);
+    return ::isBlankNode(iriOrLiteral_, blankNodeIriRegexes);
   }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
@@ -373,49 +381,15 @@ MappedTriples mapTripleToIds(
 
 // Return type of `IndexImpl::buildPartialVocabularies`.
 struct BuildPartialVocabulariesResult {
-  using TripleVec =
-      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // The triples and partial vocabularies that a single worker thread has
-  // created. The workers work completely independently of each other, so each
-  // of them has its own `idTriples_`.
-  struct WorkerResult {
-    // The i-th entry is the actual number of triples in the i-th batch of
-    // this worker (a batch consists of a partial vocabulary and the triples
-    // that were mapped using it). It might be slightly different from the
-    // specified `batchSize` because of internally added triples. The first
-    // `numTriplesPerBatch_[0]` rows of `idTriples_` are the triples of the
-    // first batch, the next `numTriplesPerBatch_[1]` rows are the triples of
-    // the second batch, and so on.
-    std::vector<size_t> numTriplesPerBatch_;
-    std::unique_ptr<TripleVec> idTriples_;
-  };
-  // One entry per worker, in the order of the worker indices.
-  std::vector<WorkerResult> workerResults_;
-
-  // The suffix of the filenames of the `partialVocabIdx`-th partial vocabulary
-  // of the worker with index `workerIdx`. The partial vocabularies are named
-  // after the worker that created them, so that the workers don't need a shared
-  // counter for the filenames.
-  static std::string partialVocabularySuffix(size_t workerIdx,
-                                             size_t partialVocabIdx) {
-    return absl::StrCat(workerIdx, ".", partialVocabIdx);
-  }
-
-  // The suffixes of all partial vocabularies that were written, in the order in
-  // which the corresponding triples are stored (that is, first all the partial
-  // vocabularies of the first worker, then those of the second worker, etc.).
-  std::vector<std::string> partialVocabularySuffixes() const {
-    std::vector<std::string> suffixes;
-    for (size_t workerIdx : ad_utility::integerRange(workerResults_.size())) {
-      const auto& numTriplesPerBatch =
-          workerResults_[workerIdx].numTriplesPerBatch_;
-      for (size_t partialVocabIdx :
-           ad_utility::integerRange(numTriplesPerBatch.size())) {
-        suffixes.push_back(partialVocabularySuffix(workerIdx, partialVocabIdx));
-      }
-    }
-    return suffixes;
-  }
+  // The number of partial vocabularies that were written. Each partial
+  // vocabulary has exactly one file with the ID triples that were mapped using
+  // it (see `unsortedTriplesFilename`), so the partial vocabulary with index
+  // `i` and the triples in the file with index `i` always belong together. The
+  // workers that write those pairs work completely independently of each
+  // other; they only share the counter for the indices.
+  size_t numPartialVocabularies_ = 0;
+  // The total number of triples that were written. Only used for logging.
+  size_t numTriples_ = 0;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H

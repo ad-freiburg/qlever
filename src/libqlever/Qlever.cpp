@@ -89,6 +89,12 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   if (config.loadTextIndex_) {
     index.addTextFromOnDiskIndex();
   }
+  if (config.indexDescription_.has_value()) {
+    index.setKbName(config.indexDescription_.value());
+  }
+  if (config.textDescription_.has_value()) {
+    index.setTextName(config.textDescription_.value());
+  }
 
   materializedViewsManager.setOnDiskBase(config.baseName_);
 
@@ -308,7 +314,7 @@ PlannedQuery Qlever::planQuery(
 
   qp.setEnablePatternTrick(enablePatternTrick_);
   auto qet = qp.createExecutionTree(parsedQuery);
-  qet.isRoot() = true;
+  qet->isRoot() = true;
   PlannedQuery plannedQuery = {std::move(parsedQuery), std::move(qet), qec};
 
   auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
@@ -435,9 +441,9 @@ bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
 }
 
 // ___________________________________________________________________________
-void Qlever::unloadMaterializedView(const std::string& name) const {
+bool Qlever::unloadMaterializedView(const std::string& name) const {
   const auto indexAndViews = indexAndViewsSnapshot();
-  indexAndViews->materializedViewsManager_.unloadViewIfLoaded(name);
+  return indexAndViews->materializedViewsManager_.unloadViewIfLoaded(name);
 }
 
 // ___________________________________________________________________________

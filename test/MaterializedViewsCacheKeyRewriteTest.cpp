@@ -31,7 +31,6 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest, CacheKeyRewrite) {
     auto trace = generateLocationTrace(sourceLocation);
     EXPECT_EQ(getQueryResultAsIdTable(query).numRows(), expectedRows);
     qlv().writeMaterializedView(name, query);
-    qlv().loadMaterializedView(name);
     // The view is always detected if the user query is exactly the view query.
     qpExpect<false>(qlv(), query, qpMatcher);
   };

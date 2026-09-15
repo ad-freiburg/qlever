@@ -362,6 +362,25 @@ CPP_template(typename T, typename S)(
   }
 }
 
+// Serialize the `element` at the given `position` of the `serializer` and
+// restore the serialization position that the `serializer` had before. Use
+// this to fill in a placeholder (for example a size that is only known at the
+// end) that has been written to a fixed position earlier.
+//
+// NOTE: The `serializer` has to support `get/setSerializationPosition`, which
+// not all `WriteSerializer`s do. For a `BufferedWriteSerializer` (which cannot
+// simply seek, because a part of the data might still be sitting in its
+// buffer) there is a dedicated overload in `BufferedSerializer.h`.
+CPP_template(typename S, typename T)(
+    requires WriteSerializer<S>) void serializeAtPosition(S& serializer,
+                                                          uint64_t position,
+                                                          const T& element) {
+  auto previousPosition = serializer.getSerializationPosition();
+  serializer.setSerializationPosition(position);
+  serializer << element;
+  serializer.setSerializationPosition(previousPosition);
+}
+
 }  // namespace ad_utility::serialization
 
 #endif  // QLEVER_SRC_UTIL_SERIALIZER_SERIALIZER_H

@@ -171,9 +171,7 @@ TEST(CancellationHandle, ensureObjectLifetimeIsValidWithoutWatchDogStarted) {
 namespace ad_utility {
 
 TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   CancellationHandle<ENABLED> handle;
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
@@ -190,9 +188,7 @@ TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   CancellationHandle<ENABLED> handle;
   handle.startWatchDog();
 
