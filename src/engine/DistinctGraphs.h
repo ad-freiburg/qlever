@@ -41,8 +41,6 @@ class DistinctGraphs : public Operation {
  public:
   explicit DistinctGraphs(QueryExecutionContext* qec, Variable graphVariable);
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-
   [[nodiscard]] std::string getDescriptor() const override {
     return "Distinct Graphs";
   }
@@ -69,6 +67,11 @@ class DistinctGraphs : public Operation {
   }
 
  private:
+  // `DistinctGraphs` reads directly from the index and has no children.
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {};
+  }
+
   [[nodiscard]] std::string getCacheKeyImpl() const override {
     return "DistinctGraphs";
   }
