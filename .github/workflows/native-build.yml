@@ -147,6 +147,8 @@ jobs:
             -DCHEAPER_COMPILATION=${{matrix.compiler-version == 11 && 'ON' || 'OFF'}}
             -DQLEVER_ALLOCATOR_BACKEND=${{matrix.allocator-backend || 'limit'}}
           # Run the E2E test only once with the index built in one go, but for
-          # GCC add the text index separately. Note that the dispatch by the
-          # compiler is arbitrary, we just want to have both cases tested.
+          # GCC add the text index separately.
+          #
+          # NOTE: The dispatch by the compiler is arbitrary, we just want to
+          # have both cases tested.
           e2e-args: ${{matrix.compiler != 'clang' && '-t' || ''}}
