@@ -1,518 +1,254 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+// Shared test suite for the two implementations of `SortedSequence` (see
+// `util/SortedSequence.h`): every test in this file is a typed test that runs
+// against both `SortedSequenceTwoSortedRanges` and
+// `SortedSequenceManySortedBlocks`, which enforces that the two
+// implementations behave identically. Tests that are specific to one
+// implementation (e.g. of its internal state) live in the respective
+// `SortedSequence<Implementation>Test.cpp`.
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-// Provides `PrintTo<ZipMergeUniqueView>`, required for test printing of
-// `SortedSequence`.
-#include "./ZipMergeUniqueViewTestHelpers.h"
+#include <map>
+#include <random>
+#include <utility>
+#include <vector>
+
 #include "util/GTestHelpers.h"
-#include "util/Random.h"
 #include "util/SortedSequence.h"
 #include "util/TransparentFunctors.h"
 
 namespace ad_utility {
-// `SortedSequence` has a `operator<<` defined but we use `std::pair<int,
-// int>` as value type here which doesn't have such an operator which would
-// cause hard compile errors. `::testing::PrintToString` fails gracefully.
-template <typename V, typename Compare, typename Projection>
-void PrintTo(const SortedSequence<V, Compare, Projection>& s,
-             std::ostream* os) {
-  *os << '[';
-  lazyStrJoin(os,
-              ql::views::transform(s.getSortedView(),
-                                   [](const auto& elem) {
-                                     return ::testing::PrintToString(elem);
-                                   }),
-              ",");
-  *os << ']';
-}
-
 namespace {
 
 using namespace ::testing;
 using Pair = std::pair<int, int>;
-using SV = SortedSequence<Pair, std::less<>, MemberProjection<&Pair::first>>;
 
-auto p10 = Pair{1, 0};
-auto p11 = Pair{1, 1};
-auto p20 = Pair{2, 0};
-auto p21 = Pair{2, 1};
-auto p30 = Pair{3, 0};
-auto p31 = Pair{3, 1};
-auto p40 = Pair{4, 0};
-auto p50 = Pair{5, 0};
-auto p51 = Pair{5, 1};
-auto p60 = Pair{6, 0};
+// The two implementations under test. For the block-based implementation, a
+// small block size is used so that the tests also exercise block splitting.
+using TwoSortedRanges =
+    SortedSequenceTwoSortedRanges<Pair, std::less<>,
+                                  MemberProjection<&Pair::first>>;
+using ManySortedBlocks =
+    SortedSequenceManySortedBlocks<Pair, std::less<>,
+                                   MemberProjection<&Pair::first>, 4>;
+using Implementations = ::testing::Types<TwoSortedRanges, ManySortedBlocks>;
 
-auto SizesAre = [](size_t sizeUpperBound, size_t sizeForTesting) {
-  return AllOf(AD_PROPERTY(SV, sizeUpperBound, Eq(sizeUpperBound)),
-               AD_PROPERTY(SV, sizeForTesting, Eq(sizeForTesting)));
-};
-auto AssertionFailed = [](const std::string& assertion) {
-  return HasSubstr("Assertion `" + assertion + "` failed");
-};
-auto NotConsolidated = AssertionFailed("isConsolidated()");
-auto NotConsolidatedOnSelf = AssertionFailed("self.isConsolidated()");
-auto IsEmpty = AD_PROPERTY(SV, empty, Eq(true));
-auto IsNotEmpty = AD_PROPERTY(SV, empty, Not(Eq(true)));
+template <typename T>
+struct SortedSequenceTypedTest : public ::testing::Test {};
+TYPED_TEST_SUITE(SortedSequenceTypedTest, Implementations);
 
-// ____________________________________________________________________________
-auto testConstOverloads = [](SV& initial, auto testLambda,
-                             source_location l = AD_CURRENT_SOURCE_LOC()) {
-  {
-    auto trace = generateLocationTrace(l, "During execution of const overload");
-    testLambda(std::as_const(initial));
+// Insert `elems` and consolidate.
+template <typename SV>
+void insertAll(SV& s, const std::vector<Pair>& elems) {
+  for (const auto& elem : elems) {
+    s.insert(elem);
   }
-  {
-    auto trace =
-        generateLocationTrace(l, "During execution of non-const overload");
-    testLambda(initial);
-  }
-};
-}  // namespace
-
-// This matcher factory accesses private members of `SortedSequence`, so it
-// has to be a `friend`. Friends cannot be in the anonymous namespace and also
-// cannot be a simple lambda.
-struct SortedSequencePairsTestHelper {
-  auto operator()(const std::vector<Pair>& elements,
-                  size_t numElementsLargePart, bool smallPartIsSorted) const {
-    return AllOf(AD_FIELD(SV, elements_, ElementsAreArray(elements)),
-                 AD_FIELD(SV, numItemsLargePart_, Eq(numElementsLargePart)),
-                 AD_FIELD(SV, smallPartIsSorted_, Eq(smallPartIsSorted)));
-  }
-};
-
-namespace {
-constexpr SortedSequencePairsTestHelper StateIs{};
-}  // namespace
-
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, constructor) {
-  {
-    SV s{};
-    EXPECT_THAT(s, SizesAre(0, 0));
-    EXPECT_TRUE(s.empty());
-    EXPECT_THAT(s.getSortedView(), ElementsAre());
-    EXPECT_THAT(s, StateIs({}, 0, true));
-  }
-  {
-    SV s = SV::fromSorted({});
-    EXPECT_THAT(s, SizesAre(0, 0));
-    EXPECT_TRUE(s.empty());
-    EXPECT_THAT(s.getSortedView(), ElementsAre());
-    EXPECT_THAT(s, StateIs({}, 0, true));
-  }
-  {
-    if (areExpensiveChecksEnabled) {
-      AD_EXPECT_THROW_WITH_MESSAGE(
-          SV::fromSorted({p20, p10}),
-          AssertionFailed("ql::ranges::is_sorted(sortedElements, comp, proj)"));
-      AD_EXPECT_THROW_WITH_MESSAGE(
-          SV::fromSorted({p10, p11}),
-          AssertionFailed(
-              "ql::ranges::adjacent_find(sortedElements, {}, proj) == "
-              "sortedElements.end()"));
-    }
-  }
-  {
-    SV s = SV::fromSorted({p10, p20});
-    EXPECT_THAT(s, SizesAre(2, 2));
-    EXPECT_FALSE(s.empty());
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p20));
-    EXPECT_THAT(s, StateIs({p10, p20}, 2, true));
-  }
-}
-
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, empty) {
-  auto insertInto = [](SV& sv, Pair p,
-                       source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
-    sv.insert(std::move(p));
-    sv.consolidate(0);
-    EXPECT_FALSE(sv.empty());
-  };
-  {
-    SV s{};
-    EXPECT_TRUE(s.empty());
-  }
-  {
-    SV s = SV::fromSorted({});
-    EXPECT_TRUE(s.empty());
-  }
-  {
-    SV s = SV::fromSorted({p10});
-    EXPECT_FALSE(s.empty());
-  }
-  {
-    SV s{};
-    insertInto(s, p10);
-    insertInto(s, p10);
-    insertInto(s, p11);
-    s.erase(p11);
-    EXPECT_TRUE(s.empty());
-  }
-  {
-    SV s{};
-    insertInto(s, p10);
-    s.clear();
-    EXPECT_TRUE(s.empty());
-  }
-  {
-    SV s{};
-    FastRandomIntGenerator<uint64_t> rng{};
-    for (size_t i = 0; i < 100; ++i) {
-      insertInto(
-          s, {static_cast<int>(rng() % 1000), static_cast<int>(rng() % 1000)});
-    }
-    s.clear();
-    EXPECT_TRUE(s.empty());
-  }
-}
-
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, size) {
-  {
-    SV s{};
-    s.insert(p10);
-    EXPECT_EQ(s.sizeUpperBound(), 1);
-    AD_EXPECT_THROW_WITH_MESSAGE(s.sizeForTesting(), NotConsolidatedOnSelf);
-  }
-  {
-    SV s{};
-    EXPECT_THAT(s, SizesAre(0, 0));
-    s.insert(p10);
-    s.consolidate();
-    EXPECT_THAT(s, SizesAre(1, 1));
-    s.insert(p10);  // Inserted twice, does not contribute.
-    s.insert(p20);
-    s.insert(p30);
-    s.insert(p40);
-    s.insert(p50);
-    s.insert(p60);
-    s.consolidate();
-    EXPECT_THAT(s, SizesAre(6, 6));
-    // Due to the relative sizes of the two parts both `p10` and `p11` exist in
-    // the internal storage. When iterating only `p11` will be returned.
-    s.insert(p11);
-    s.consolidate();
-    EXPECT_THAT(s, SizesAre(7, 6));
-    s.erase(p20);
-    EXPECT_THAT(s, SizesAre(6, 5));
-    // `p10` and `p11` are equivalent under the comparison and projection.
-    // Removing `p10` deletes both, resolving the discrepancy between `size` and
-    // `sizeForTesting`.
-    s.erase(p10);
-    EXPECT_THAT(s, SizesAre(4, 4));
-    s.clear();
-    EXPECT_THAT(s, SizesAre(0, 0));
-  }
-}
-
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, clear) {
-  SV s{};
-  EXPECT_THAT(s, IsEmpty);
-  s.clear();
-  EXPECT_THAT(s, IsEmpty);
-  s.insert(p10);
-  s.insert(p20);
-  s.insert(p30);
   s.consolidate();
-  EXPECT_THAT(s, IsNotEmpty);
+}
+
+// The elements of `s` as a vector (requires a consolidated state).
+template <typename SV>
+std::vector<Pair> elementsOf(const SV& s) {
+  std::vector<Pair> result;
+  ql::ranges::copy(s.getSortedView(), std::back_inserter(result));
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TYPED_TEST(SortedSequenceTypedTest, emptyAndClear) {
+  TypeParam s;
+  EXPECT_TRUE(s.empty());
+  EXPECT_EQ(s.sizeUpperBound(), 0);
+  EXPECT_EQ(s.sizeForTesting(), 0);
+  EXPECT_THAT(elementsOf(s), ElementsAre());
+
+  s.insert({1, 0});
+  EXPECT_FALSE(s.empty());
+  s.consolidate();
+  EXPECT_THAT(elementsOf(s), ElementsAre(Pair{1, 0}));
   s.clear();
+  EXPECT_TRUE(s.empty());
+  EXPECT_EQ(s.sizeForTesting(), 0);
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(SortedSequenceTypedTest, insertConsolidateAndDeduplicate) {
+  TypeParam s;
+  // Unsorted input with duplicate keys; the last insert for a key wins.
+  insertAll(s, {{3, 0}, {1, 0}, {2, 0}, {1, 1}, {3, 1}});
+  EXPECT_THAT(elementsOf(s), ElementsAre(Pair{1, 1}, Pair{2, 0}, Pair{3, 1}));
+  EXPECT_EQ(s.sizeForTesting(), 3);
+
+  // A later consolidate overrides keys from earlier rounds and mixes in new
+  // ones.
+  insertAll(s, {{2, 5}, {0, 5}, {4, 5}});
+  EXPECT_THAT(elementsOf(s), ElementsAre(Pair{0, 5}, Pair{1, 1}, Pair{2, 5},
+                                         Pair{3, 1}, Pair{4, 5}));
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(SortedSequenceTypedTest, manyConsolidationRounds) {
+  // Insert 20 keys in descending order across several consolidation rounds
+  // (for the block-based implementation with block size 4, this exercises
+  // block splitting).
+  TypeParam s;
+  for (int round = 0; round < 5; ++round) {
+    for (int i = 19 - round; i >= 0; i -= 5) {
+      s.insert({i, round});
+    }
+    s.consolidate();
+  }
+  auto elems = elementsOf(s);
+  ASSERT_EQ(elems.size(), 20);
+  for (int i = 0; i < 20; ++i) {
+    EXPECT_EQ(elems[i].first, i);
+    EXPECT_EQ(elems[i].second, (19 - i) % 5);
+  }
+  EXPECT_EQ(s.sizeForTesting(), 20);
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(SortedSequenceTypedTest, fromSorted) {
+  std::vector<Pair> sorted;
+  for (int i = 0; i < 11; ++i) {
+    sorted.push_back({i, i});
+  }
+  auto s = TypeParam::fromSorted(sorted);
+  EXPECT_EQ(s.sizeForTesting(), 11);
+  EXPECT_THAT(elementsOf(s), ElementsAreArray(sorted));
+  EXPECT_EQ(s.front(), (Pair{0, 0}));
+  EXPECT_EQ(s.back(), (Pair{10, 10}));
+
+  // Inserting into a `fromSorted` container works (and overrides).
+  insertAll(s, {{5, 100}, {11, 100}});
+  EXPECT_EQ(s.sizeForTesting(), 12);
+  EXPECT_EQ(elementsOf(s)[5], (Pair{5, 100}));
+  EXPECT_EQ(s.back(), (Pair{11, 100}));
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(SortedSequenceTypedTest, frontAndBack) {
+  TypeParam s;
+  insertAll(s, {{5, 0}, {1, 0}, {9, 0}});
+  EXPECT_EQ(s.front(), (Pair{1, 0}));
+  EXPECT_EQ(s.back(), (Pair{9, 0}));
+  // The non-const overloads allow modifying the values (not the keys).
+  s.back().second = 42;
+  s.front().second = 43;
+  EXPECT_THAT(elementsOf(s), ElementsAre(Pair{1, 43}, Pair{5, 0}, Pair{9, 42}));
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(SortedSequenceTypedTest, eraseSingle) {
+  TypeParam s;
+  insertAll(s, {{1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}, {6, 0}});
+  // Erase is by projected key; the value does not matter.
+  s.erase({3, 999});
+  EXPECT_THAT(elementsOf(s), ElementsAre(Pair{1, 0}, Pair{2, 0}, Pair{4, 0},
+                                         Pair{5, 0}, Pair{6, 0}));
+  // Erasing an absent key is a no-op.
+  s.erase({3, 0});
+  s.erase({100, 0});
+  EXPECT_EQ(s.sizeForTesting(), 5);
+  // Erase everything, one by one.
+  for (int i = 1; i <= 6; ++i) {
+    s.erase({i, 0});
+  }
   EXPECT_TRUE(s.empty());
 }
 
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, insert) {
-  SV s{};
-  EXPECT_TRUE(s.smallPartIsSorted_);
-  s.insert(p10);
-  EXPECT_FALSE(s.smallPartIsSorted_);
-  EXPECT_THAT(s, AD_FIELD(SV, elements_, ElementsAre(p10)));
-  s.insert(p11);
-  s.insert(p40);
-  s.insert(p30);
-  s.insert(p20);
-  EXPECT_THAT(s, AD_FIELD(SV, elements_, ElementsAre(p10, p11, p40, p30, p20)));
-  EXPECT_FALSE(s.smallPartIsSorted_);
+// _____________________________________________________________________________
+TYPED_TEST(SortedSequenceTypedTest, eraseSortedAndUnsorted) {
+  TypeParam s;
+  std::vector<Pair> elems;
+  for (int i = 0; i < 20; ++i) {
+    elems.push_back({i, 0});
+  }
+  insertAll(s, elems);
+
+  std::vector<Pair> toDelete{{3, 0}, {4, 0}, {11, 0}, {17, 0}, {17, 1}};
+  s.eraseSorted(ql::span(toDelete));
+  EXPECT_EQ(s.sizeForTesting(), 16);
+  for (const auto& p : elementsOf(s)) {
+    EXPECT_TRUE(p.first != 3 && p.first != 4 && p.first != 11 && p.first != 17);
+  }
+
+  std::vector<Pair> toDeleteUnsorted{{19, 0}, {0, 0}, {10, 0}};
+  s.eraseUnsorted(std::move(toDeleteUnsorted));
+  EXPECT_EQ(s.sizeForTesting(), 13);
+  EXPECT_EQ(s.front(), (Pair{1, 0}));
+  EXPECT_EQ(s.back(), (Pair{18, 0}));
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(SortedSequenceTypedTest, contractChecks) {
+  TypeParam s;
+  s.insert({1, 0});
+  // Reading before `consolidate` fails the contract.
+  AD_EXPECT_THROW_WITH_MESSAGE(s.getSortedView(),
+                               HasSubstr("isConsolidated()"));
+  AD_EXPECT_THROW_WITH_MESSAGE(s.sizeForTesting(),
+                               HasSubstr("isConsolidated()"));
+  AD_EXPECT_THROW_WITH_MESSAGE(s.back(), HasSubstr("isConsolidated()"));
   s.consolidate();
-  // `p11` is the last-inserted element for key=1, so it wins deduplication.
-  EXPECT_THAT(s, AD_FIELD(SV, elements_, ElementsAre(p11, p20, p30, p40)));
-  EXPECT_TRUE(s.smallPartIsSorted_);
-  s.insert(p10);
-  EXPECT_THAT(s, AD_FIELD(SV, elements_, ElementsAre(p11, p20, p30, p40, p10)));
-  EXPECT_FALSE(s.smallPartIsSorted_);
-  s.consolidate();
-  EXPECT_THAT(s, SizesAre(5, 4));
-  EXPECT_TRUE(s.smallPartIsSorted_);
+  EXPECT_NO_THROW(s.getSortedView());
+
+  TypeParam empty;
+  AD_EXPECT_THROW_WITH_MESSAGE(empty.front(), HasSubstr("empty()"));
+  AD_EXPECT_THROW_WITH_MESSAGE(empty.back(), HasSubstr("empty()"));
 }
 
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, back) {
-  {
-    SV s{};
-    testConstOverloads(s, [](auto& s) {
-      AD_EXPECT_THROW_WITH_MESSAGE(s.back(), AssertionFailed("!empty()"));
-    });
-  }
-  {
-    SV s = SV::fromSorted({p10, p20, p30, p40, p50});
-    // The small part is empty.
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p50); });
-    s.insert(p21);
-    s.consolidate();
-    // The small part is non-empty but the large part has the largest element.
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p50); });
-    s.insert(p51);  // `p51` will be in the small part.
-    testConstOverloads(s, [](auto& s) {
-      AD_EXPECT_THROW_WITH_MESSAGE(s.back(), NotConsolidated);
-    });
-    s.consolidate();
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p51); });
-    s.insert(p60);  // `p60` will be in the small part.
-    s.consolidate();
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p60); });
-  }
-  {
-    SV s{};
-    s.insert(p10);
-    s.insert(p30);
-    s.insert(p21);
-    s.insert(p31);
-    s.insert(p20);
-    s.insert(p11);
-    // A threshold `>=1` means that two parts are never merged. Here this leads
-    // to all elements being in the small part.
-    s.consolidate(1);
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.back(), p31); });
-  }
-}
-
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, front) {
-  {
-    SV s{};
-    testConstOverloads(s, [](auto& s) {
-      AD_EXPECT_THROW_WITH_MESSAGE(s.front(), AssertionFailed("!empty()"));
-    });
-  }
-  {
-    SV s = SV::fromSorted({p20, p30, p40, p50});
-    // The small part is empty.
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p20); });
-    s.insert(p21);
-    s.consolidate();
-    // The small part is non-empty and wins the tie for the smallest element.
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p21); });
-    s.insert(p10);  // `p10` will be in the small part.
-    testConstOverloads(s, [](auto& s) {
-      AD_EXPECT_THROW_WITH_MESSAGE(s.front(), NotConsolidated);
-    });
-    s.consolidate();
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p10); });
-    s.consolidate(0);
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p10); });
-    s.insert(p20);
-    s.consolidate();
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p10); });
-  }
-  {
-    SV s{};
-    s.insert(p10);
-    s.insert(p21);
-    s.insert(p20);
-    s.insert(p11);
-    s.insert(p30);
-    // A threshold `>=1` means that two parts are never merged. Here this leads
-    // to all elements being in the small part.
-    s.consolidate(1);
-    testConstOverloads(s, [](auto& s) { EXPECT_EQ(s.front(), p11); });
-  }
-}
-
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, consolidate) {
-  {
-    SV s = SV::fromSorted({p10, p20, p31, p40, p51});
-    EXPECT_THAT(s, StateIs({p10, p20, p31, p40, p51}, 5, true));
-    // `consolidate` does nothing when everything is already sorted.
-    s.consolidate(0.25);
-    EXPECT_THAT(s, StateIs({p10, p20, p31, p40, p51}, 5, true));
-    s.insert(p11);
-    // Only the (one element) small part is sorted because the threshold for
-    // merging is not reached (1/6 < 1/4).
-    s.consolidate(0.25);
-    EXPECT_THAT(s, StateIs({p10, p20, p31, p40, p51, p11}, 5, true));
-    s.insert(p60);
-    // The threshold for merging the two parts is surpassed (2/7 > 1/4).
-    s.consolidate(0.25);
-    EXPECT_THAT(s, StateIs({p11, p20, p31, p40, p51, p60}, 6, true));
-  }
-}
-
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, iteration) {
-  auto expectElements = [&](SV& sv,
-                            const std::vector<std::pair<int, int>>& expected,
-                            source_location l = AD_CURRENT_SOURCE_LOC()) {
-    testConstOverloads(
-        sv,
-        [&expected](auto& sv) {
-          EXPECT_THAT(sv.getSortedView(), ElementsAreArray(expected));
-        },
-        l);
-  };
-  {
-    SV s{};
-    expectElements(s, {});
-  }
-  {
-    SV s = SV::fromSorted({p10, p20});
-    expectElements(s, {p10, p20});
-    s.insert(p11);
-    s.consolidate();
-    expectElements(s, {p11, p20});
-    s.insert(p30);
-    s.insert(p50);
-    s.consolidate();
-    expectElements(s, {p11, p20, p30, p50});
-    s.clear();
-    expectElements(s, {});
-  }
-  {
-    SV s{};
-    s.insert(p10);
-    testConstOverloads(s, [](auto& s) {
-      AD_EXPECT_THROW_WITH_MESSAGE(s.getSortedView(), NotConsolidatedOnSelf);
-    });
-  }
-}
-
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, erase) {
-  {
-    SV s = SV::fromSorted({p10, p20, p30, p40});
-    s.erase(p20);
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30, p40));
-    s.erase(p20);
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30, p40));
-    s.erase(p40);
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30));
-    s.erase(p10);
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p30));
-    s.insert(p20);
-    AD_EXPECT_THROW_WITH_MESSAGE(s.erase(p30), NotConsolidated);
-    s.consolidate();
-    s.erase(p30);
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p20));
-  }
-  {
-    SV s = SV::fromSorted({p10, p20, p30, p40, p50, p60});
-    s.eraseUnsorted(std::vector<std::pair<int, int>>{});
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p20, p30, p40, p50, p60));
-    s.eraseUnsorted(std::vector{p20, p40});
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30, p50, p60));
-    s.eraseUnsorted(std::vector{p10, p20});  // `p2` is no longer contained.
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p30, p50, p60));
-    s.insert(p10);
-    // `eraseUnsorted` sorts the elements.
-    AD_EXPECT_THROW_WITH_MESSAGE(s.eraseUnsorted({p60, p30, p50, p10}),
-                                 NotConsolidated);
-    s.consolidate();
-    s.eraseUnsorted(std::vector{p60, p30, p50, p10});
-    EXPECT_THAT(s.getSortedView(), ElementsAre());
-  }
-  {
-    SV s = SV::fromSorted({p10, p20, p30, p40, p50, p60});
-    auto erase = [&s](std::vector<std::pair<int, int>> pairs) {
-      s.eraseSorted(pairs);
-    };
-    erase({});
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p20, p30, p40, p50, p60));
-    erase({p20, p40});
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p30, p50, p60));
-    s.insert(p40);
-    AD_EXPECT_THROW_WITH_MESSAGE(erase({p10, p20, p40}), NotConsolidated);
-    s.consolidate();
-    erase({p10, p20, p40});  // `p2` is no longer contained.
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p30, p50, p60));
-    if (areExpensiveChecksEnabled) {
-      AD_EXPECT_THROW_WITH_MESSAGE(
-          erase({p60, p30, p50}),
-          AssertionFailed("ql::ranges::is_sorted(sortedElems, comp_, proj_)"));
+// _____________________________________________________________________________
+// Randomized comparison against a simple reference implementation, across
+// many rounds of interleaved batch inserts (with key overrides), single
+// erases, and batch erases.
+TYPED_TEST(SortedSequenceTypedTest, randomizedAgainstReference) {
+  std::mt19937 gen{42};
+  std::uniform_int_distribution<int> keyDist{0, 200};
+  TypeParam s;
+  std::map<int, int> reference;
+  int value = 0;
+  for (int round = 0; round < 50; ++round) {
+    // Insert a batch of random keys.
+    int batchSize = keyDist(gen) % 30 + 1;
+    for (int i = 0; i < batchSize; ++i) {
+      int key = keyDist(gen);
+      s.insert({key, ++value});
+      reference[key] = value;
     }
-    erase({p30, p30, p30, p50, p50});
-    EXPECT_THAT(s.getSortedView(), ElementsAre(p60));
-    erase({p60});
-    EXPECT_THAT(s.getSortedView(), ElementsAre());
+    s.consolidate();
+    // Erase a few random keys.
+    for (int i = 0; i < 5; ++i) {
+      int key = keyDist(gen);
+      s.erase({key, 0});
+      reference.erase(key);
+    }
+    // Batch-erase a random range of keys.
+    if (round % 7 == 0) {
+      std::vector<Pair> toDelete;
+      int lo = keyDist(gen);
+      for (int key = lo; key < lo + 20; ++key) {
+        toDelete.push_back({key, 0});
+        reference.erase(key);
+      }
+      s.eraseSorted(ql::span(toDelete));
+    }
+    // Compare.
+    std::vector<Pair> expected(reference.begin(), reference.end());
+    ASSERT_THAT(elementsOf(s), ElementsAreArray(expected)) << "round " << round;
+    ASSERT_EQ(s.sizeForTesting(), expected.size()) << "round " << round;
   }
-}
-
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, sortAndRemoveDuplicates) {
-  using Pairs = std::vector<std::pair<int, int>>;
-  auto expect = [](Pairs input, const auto& resultMatcher,
-                   std::optional<size_t> subrangeBegin = std::nullopt,
-                   std::optional<size_t> subrangeEnd = std::nullopt,
-                   source_location l = AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(l);
-    auto subrange = ql::ranges::subrange(
-        input.begin() + subrangeBegin.value_or(0),
-        input.begin() + subrangeEnd.value_or(input.size()));
-    SV::sortAndRemoveDuplicates(input, subrange);
-    EXPECT_THAT(input, resultMatcher);
-  };
-
-  expect({}, ElementsAre());
-  expect({p10}, ElementsAre(p10));
-  expect({p11, p20, p31}, ElementsAre(p11, p20, p31));
-  expect({p31, p10, p21}, ElementsAre(p10, p21, p31));
-  expect({p10, p21, p31, p11, p10, p20}, ElementsAre(p10, p20, p31));
-  expect({p11, p10, p11, p10}, ElementsAre(p10));
-  expect({p11, p20, p30, p21, p31}, ElementsAre(p11, p20, p21, p31), 2);
-  expect({p11, p20, p10, p21, p11}, ElementsAre(p11, p20, p11, p21), 2);
-  expect({p11, p20, p10, p21, p11}, ElementsAre(p10, p20, p21, p11), 0, 3);
-}
-
-// ____________________________________________________________________________
-TEST(SortedSequenceTest, eraseSortedSubRange) {
-  using Pairs = std::vector<std::pair<int, int>>;
-
-  auto test = [](Pairs elements, Pairs toDelete, const Pairs& expected,
-                 size_t numDeleted,
-                 source_location l = AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(l);
-    SV s;
-    s.elements_ = std::move(elements);
-    EXPECT_EQ(s.eraseSortedSubRange(s.elements_, toDelete), numDeleted);
-    EXPECT_EQ(s.elements_, expected);
-  };
-
-  test({}, {}, {}, 0);
-  test({}, {p10}, {}, 0);
-  test({p10, p20, p30}, {}, {p10, p20, p30}, 0);
-  test({p10}, {p10}, {}, 1);
-  test({p10}, {p20}, {p10}, 0);
-  test({p10, p20, p30}, {p10}, {p20, p30}, 1);
-  test({p10, p20, p30}, {p20}, {p10, p30}, 1);
-  test({p10, p20, p30}, {p30}, {p10, p20}, 1);
-  test({p10, p20, p30}, {p10, p20, p30}, {}, 3);
-  test({p10, p20, p30}, {p10, p30}, {p20}, 2);
-  test({p20, p30}, {p10, p30}, {p20}, 1);
-  test({p10, p20}, {p10, p40}, {p20}, 1);
-  test({p20, p30, p40}, {p10, p30, p50}, {p20, p40}, 1);
-  test({p20, p30, p40}, {p10, p50}, {p20, p30, p40}, 0);
 }
 
 }  // namespace ad_utility
