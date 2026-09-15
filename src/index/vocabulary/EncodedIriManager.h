@@ -14,21 +14,13 @@
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "index/vocabulary/EncodedIriPattern.h"
 #include "index/vocabulary/NibbleEncoding.h"
 #include "util/BitUtils.h"
 #include "util/Log.h"
 #include "util/json.h"
 
 namespace detail {
-// Find the first prefix in `prefixes` that `repr` starts with, and match the
-// remainder of `repr` against the pattern `([0-9]+)>` with at most
-// `maxNumDigits` digits. Return the index of the matching prefix together with
-// the digits (as a `string_view` into `repr`), or `std::nullopt` if there is no
-// such prefix or the remainder does not match.
-std::optional<std::pair<size_t, std::string_view>> matchPrefixAndDigits(
-    const std::vector<std::string>& prefixes, std::string_view repr,
-    size_t maxNumDigits);
-
 // Sort the `prefixes` (which have to be specified without the enclosing angle
 // brackets) and remove duplicates. Throw if they are invalid, that is, if there
 // are more than `maxNumPrefixes` of them, if one of them is a prefix of another
@@ -36,24 +28,63 @@ std::optional<std::pair<size_t, std::string_view>> matchPrefixAndDigits(
 // with a leading `<`.
 std::vector<std::string> sortAndCheckPrefixes(std::vector<std::string> prefixes,
                                               size_t maxNumPrefixes);
+
+// Build the list of patterns of an `EncodedIriManagerImpl` from the plain
+// `prefixes` (see `sortAndCheckPrefixes`, they become plain prefix patterns
+// with `numBitsEncoding` bits) followed by the general `patterns` in the given
+// order. The `prefix_` of each pattern has to be specified without the leading
+// `<`, which is added here. Throw if one of the patterns needs more than
+// `numBitsEncoding` bits (see `encodedIri::validatePattern`) or if there are
+// more than `maxNumPatterns` patterns in total.
+std::vector<encodedIri::Pattern> makePatterns(
+    std::vector<std::string> prefixes,
+    std::vector<encodedIri::Pattern> patterns, size_t numBitsEncoding,
+    size_t maxNumPatterns);
+
+// Find the first of the `patterns` that `repr` matches (see
+// `encodedIri::encodePayload`). Return the index of that pattern together with
+// the encoded payload, or `std::nullopt` if there is no such pattern.
+std::optional<std::pair<size_t, uint64_t>> matchPatterns(
+    const std::vector<encodedIri::Pattern>& patterns, std::string_view repr);
+
+// Conversion of the `patterns` to and from JSON. As long as only plain prefixes
+// are used (which is the default), the legacy format (a simple list of the
+// prefixes with leading `<`) is written, such that the format of the index
+// metadata doesn't change. `patternsFromJson` reads both formats and validates
+// the patterns (see `makePatterns` for the arguments), because the index
+// metadata might have been manipulated.
+void patternsToJson(nlohmann::json& j,
+                    const std::vector<encodedIri::Pattern>& patterns,
+                    size_t numBitsEncoding);
+std::vector<encodedIri::Pattern> patternsFromJson(const nlohmann::json& j,
+                                                  size_t numBitsEncoding,
+                                                  size_t maxNumPatterns);
 }  // namespace detail
 
-// This class allows the encoding of IRIs that start with a fixed prefix
-// followed by a sequence of decimal digits directly into an `Id`. For
-// example, <http://example.org/12345> with digit sequence `12345` and
-// prefix `http://example.org/`. This is implemented as follows:
+// This class allows the encoding of IRIs that follow a fixed pattern directly
+// into an `Id`. In the simplest case (which is what the `--encode-as-id`
+// option of the index builder configures), such a pattern is a fixed prefix
+// that is followed by a sequence of decimal digits, for example
+// <http://example.org/12345> with the prefix `http://example.org/` and the
+// digit sequence `12345`. Arbitrary patterns of the form
+// `<prefix><number><suffix><number>...>` can be configured via
+// `encodedIri::Pattern` (see `EncodedIriPattern.h`). This is implemented as
+// follows:
 //
 // An `Id` has 64 bits, of which the `NumBitsTotal` rightmost bits are
 // used for the encoding. The `64 - NumBitsTotal` leftmost bits are ignored when
 // decoding and can be used for other purposes. The next `NumBitsTags` bits
-// encode the IRI prefix; that is, at most `2 ** NumBitsTags` different prefixes
-// can be used. The remaining `NumBitsTotal - NumBitsTags` bits are used to
-// encode the digits that follow the prefix.
+// encode the pattern of the IRI; that is, at most `2 ** NumBitsTags` different
+// patterns can be used. The remaining `NumBitsTotal - NumBitsTags` bits (the
+// payload) are used to encode the numbers of the IRI. The first number of a
+// pattern is stored in the most significant bits of the payload, the last one
+// in the least significant bits.
 //
-// The digits are encoded with the nibble encoding (see `NibbleEncoding.h` for
-// the details), which stores each decimal digit in four bits and makes sure
-// that the order of the encoded values corresponds to the lexical order of the
-// original IRIs.
+// A number can be encoded in one of two ways (see
+// `encodedIri::NumberEncoding`). A plain prefix uses the `Nibbles` encoding
+// (see `NibbleEncoding.h` for the details), which stores each decimal digit in
+// four bits and makes sure that the order of the encoded values corresponds to
+// the lexical order of the original IRIs.
 //
 // For example, here are a few example encodings, with `NumBitsTotal = 40` and
 // `NumBitsTags = 8`. The prefix is `http://example.org/` and encoded in 8
@@ -66,10 +97,19 @@ std::vector<std::string> sortAndCheckPrefixes(std::vector<std::string> prefixes,
 // <http://example.org/2>    ->  00 00 00 ff 30 00 00 00
 // <http://example.org/20>   ->  00 00 00 ff 31 00 00 00
 //
-// NOTE: Only IRIs that fulfill these constraints can be encoded. For example,
-// if 4 times the number of digits is larger than `NumBitsTotal - NumBitsTags`,
-// the IRI will not be encoded (but stored as a regular IRI). See the bottom of
-// the file for the default values of `NumBitsTotal` and `NumBitsTags`.
+// The other encoding, `Binary`, stores the value of a number and leaves out
+// the bits that are known in advance. It is the default for the numbers of a
+// general pattern, because it is much more compact, but it is only
+// order-preserving with respect to the numeric and not with respect to the
+// lexicographic order of the IRIs. This is not a correctness problem (`JOIN`,
+// `GROUP BY`, `DISTINCT` etc. only require a consistent order), but `ORDER BY`
+// and range filters on the affected IRIs follow the order of the encoding.
+//
+// NOTE: Only IRIs that fulfill the constraints of a pattern can be encoded. For
+// example, if 4 times the number of digits is larger than
+// `NumBitsTotal - NumBitsTags`, the IRI will not be encoded (but stored as a
+// regular IRI). See the bottom of the file for the default values of
+// `NumBitsTotal` and `NumBitsTags`.
 struct NoHardcodedPrefixes {
   // The fixed prefixes have to be wrapped into a struct because
   // `std::array<std::string_view>` cannot be passed as a template parameter
@@ -93,28 +133,37 @@ class EncodedIriManagerImpl {
   static_assert(NumBitsTotal <= 64);
   static_assert(NumBitsTags <= 64);
   static_assert(NumDigits > 0);
+  // The tag is stored by shifting it by `NumBitsEncoding`, which requires
+  // `NumBitsEncoding` to be smaller than 64.
+  static_assert(NumBitsEncoding < 64);
 
-  // The prefixes of the IRIs that will be encoded.
-  std::vector<std::string> prefixes_;
+  // The patterns of the IRIs that will be encoded. The index of a pattern in
+  // this vector is the tag that is stored in the `Id`. The `prefix_` of each of
+  // them starts with `<`.
+  std::vector<encodedIri::Pattern> patterns_;
 
   static constexpr auto maxNumPrefixes_ = 1ULL << NumBitsTags;
 
-  // By default, `prefixes_` is empty, so no IRI will be encoded.
+  // By default, `patterns_` is empty, so no IRI will be encoded.
   // NOTE: When loading an existing index, in particular one from an older
   // QLever version with different hardcoded prefixes, it is crucial to use the
   // deserialization from JSON to initialize the EncodedIriManager. See the
   // note in `from_json`.
   EncodedIriManagerImpl() : EncodedIriManagerImpl(std::vector<std::string>{}) {}
 
-  // Construct from the list of prefixes. The prefixes have to be specified
-  // without any brackets, so e.g. "http://example.org/" if IRIs of the form
-  // `<http://example.org/1234>` should be encoded.
+  // Construct from a list of plain prefixes and a list of general patterns. The
+  // prefixes and the `prefix_` of the patterns have to be specified without any
+  // brackets, so e.g. "http://example.org/" if IRIs of the form
+  // `<http://example.org/1234>` should be encoded. The prefixes are sorted, and
+  // the patterns are appended to them in the given order, so changing the order
+  // of the patterns changes the `Id`s of the encoded IRIs.
   // NOTE: When loading an existing index, in particular one from an older
   // QLever version with different hardcoded prefixes, it is crucial to use the
   // deserialization from JSON to initialize the EncodedIriManager. See the
   // note in `from_json`.
   explicit EncodedIriManagerImpl(
-      std::vector<std::string> prefixesWithoutAngleBrackets) {
+      std::vector<std::string> prefixesWithoutAngleBrackets,
+      std::vector<encodedIri::Pattern> patterns = {}) {
     // Add hardcoded prefixes.
     for (const auto& prefix : HardcodedPrefixes) {
       // Adding a hardcoded prefix a second time in the constructor is an error.
@@ -122,25 +171,25 @@ class EncodedIriManagerImpl {
           !ad_utility::contains(prefixesWithoutAngleBrackets, prefix));
       prefixesWithoutAngleBrackets.emplace_back(prefix);
     }
-    prefixes_ = detail::sortAndCheckPrefixes(
-        std::move(prefixesWithoutAngleBrackets), maxNumPrefixes_);
+    patterns_ = detail::makePatterns(std::move(prefixesWithoutAngleBrackets),
+                                     std::move(patterns), NumBitsEncoding,
+                                     maxNumPrefixes_);
   }
 
   // Try to encode the given string as an `Id`. If the encoding fails, return
   // `std::nullopt`. This happens in one of the following cases:
   //
-  // 1. The string is not an `<iriref-in-angle-brackets>`
-  // 2. The string does not start with any of the `prefixes_`
-  // 3. After the matching prefix, there are characters other than `[0-9]`
-  // 4. There are more digits than fit into `NumBitsEncoding` (4 bits / digit)
+  // 1. The string is not an `<iriref-in-angle-brackets>`.
+  // 2. The string doesn't match any of the `patterns_`.
+  // 3. One of the numbers of the matching pattern violates its constraints,
+  //    for example because it has too many digits.
   std::optional<Id> encode(std::string_view repr) const {
-    auto match = detail::matchPrefixAndDigits(prefixes_, repr, NumDigits);
+    auto match = detail::matchPatterns(patterns_, repr);
     if (!match.has_value()) {
       return std::nullopt;
     }
-    const auto& [prefixIndex, numString] = match.value();
-    return makeIdFromPrefixIdxAndPayload(prefixIndex,
-                                         encodeDecimalToNBit(numString));
+    const auto& [tag, payload] = match.value();
+    return makeIdFromPrefixIdxAndPayload(tag, payload);
   }
 
   // combine the integer representation of the prefix and of the payload into a
@@ -154,13 +203,14 @@ class EncodedIriManagerImpl {
   // Throw an exception if the `Id` has a datatype different from `EncodedVal`.
   std::string toString(Id id) const {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::EncodedVal);
-    // Get only the rightmost bits that represent the digits.
-    auto [prefixIdx, digitEncoding] = splitIntoPrefixIdxAndPayload(id);
-    return toStringWithGivenPrefix(digitEncoding, prefixes_.at(prefixIdx));
+    auto [tag, payload] = splitIntoPrefixIdxAndPayload(id);
+    return encodedIri::decodeToIri(patterns_.at(tag), payload);
   }
 
-  // The second half of `toString` above: combine the integer encoding of the
-  // payload and the prefix string into a result string that represents an IRI.
+  // Combine the integer encoding of the digits and the prefix string into a
+  // result string that represents an IRI. This is the special case of
+  // `toString` for a plain prefix, for callers that have the prefix at hand
+  // but not the manager.
   // Note: This function expects, that the prefix starts with `<`.
   static std::string toStringWithGivenPrefix(uint64_t digitEncoding,
                                              std::string_view prefix) {
@@ -176,6 +226,9 @@ class EncodedIriManagerImpl {
   // From the `Id` (which is expected to be of type `EncodedVal`, else an
   // `AD_CONTRACT_CHECK` fails), extract the integer encoding of the prefix and
   // of the payload.
+  // NOTE: The payload is only a single nibble-encoded number (which
+  // `decodeDecimalFrom64Bit` can decode) if the prefix is a plain prefix, so
+  // callers have to check the prefix index before decoding the payload.
   static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndPayload(Id id) {
     AD_CONTRACT_CHECK(
         id.getDatatype() == Datatype::EncodedVal,
@@ -188,57 +241,51 @@ class EncodedIriManagerImpl {
     return std::make_pair(prefixIdx, digitEncoding);
   }
 
-  // The same as `splitIntoPrefixIdxAndPayload` except that the payload is
-  // returned decoded.
-  static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndDecodedPayload(
-      Id id) {
-    auto [prefix, payload] = splitIntoPrefixIdxAndPayload(id);
-    return {prefix, decodeDecimalFrom64Bit(payload)};
-  }
-
   // The index of a prefix. This is the same prefix that is used for
   // `makeIdFromPrefixIdxAndPayload` and returned from
-  // `splitIntoPrefixIdxAndPayload`.
+  // `splitIntoPrefixIdxAndPayload`. If several patterns share the same prefix,
+  // then the index of the first of them is returned.
   std::optional<uint64_t> getIndexOfPrefix(
       std::string_view prefixWithoutAngleBrackets) const {
-    auto it = ql::ranges::find(prefixes_,
-                               absl::StrCat("<", prefixWithoutAngleBrackets));
-    if (it == prefixes_.end()) {
+    auto prefix = absl::StrCat("<", prefixWithoutAngleBrackets);
+    auto it =
+        ql::ranges::find(patterns_, prefix, &encodedIri::Pattern::prefix_);
+    if (it == patterns_.end()) {
       return std::nullopt;
     }
-    return static_cast<size_t>(it - prefixes_.begin());
+    return static_cast<size_t>(it - patterns_.begin());
   }
 
-  // Conversion to and from JSON.
-  static constexpr const char* jsonKey_ =
-      "prefixes-with-leading-angle-brackets";
+  // Conversion to and from JSON, see `detail::patternsToJson` and
+  // `detail::patternsFromJson`.
   friend void to_json(nlohmann::json& j,
                       const EncodedIriManagerImpl& encodedIriManager) {
-    j[jsonKey_] = encodedIriManager.prefixes_;
+    detail::patternsToJson(j, encodedIriManager.patterns_, NumBitsEncoding);
   }
   friend void from_json(const nlohmann::json& j,
                         EncodedIriManagerImpl& encodedIriManager) {
     // When loading an existing index, EncodedIriManagers must be de-serialized
     // from json through this method. This is required so that
-    // 1. the user specified prefixes set for the index build are loaded and
+    // 1. the user specified prefixes and patterns set for the index build are
+    // loaded and
     // 2. that exactly the hardcoded prefixes that the index was built with are
     // loaded.
     //
     // This keeps compatibility with already built indices. Newly built indices
     // go through the normal constructor and use the current hardcoded
     // prefixes.
-    encodedIriManager.prefixes_ =
-        static_cast<std::vector<std::string>>(j[jsonKey_]);
+    encodedIriManager.patterns_ =
+        detail::patternsFromJson(j, NumBitsEncoding, maxNumPrefixes_);
   }
 
   // Hash support for use in `TestIndexConfig`.
   template <typename H>
   friend H AbslHashValue(H h, const EncodedIriManagerImpl& manager) {
-    return H::combine(std::move(h), manager.prefixes_);
+    return H::combine(std::move(h), manager.patterns_);
   }
 
   // Equality operator for use in `TestIndexConfig`.
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(EncodedIriManagerImpl, prefixes_)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(EncodedIriManagerImpl, patterns_)
 
   // Encode the `numberStr` (which may only consist of digits) into a 64-bit
   // number.
