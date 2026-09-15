@@ -483,8 +483,9 @@ TEST(IndexTest, buildPartialVocabulariesFirstPassNumThreads) {
 // `.settings.json` file reaches the parsers of the index build, for an input
 // that is parsed in parallel as well as for one that is parsed serially. With
 // the default behavior, an integer literal that overflows QLever's 64-bit
-// integers is an error and the index build fails; with
-// `overflowing-integers-become-doubles`, the literal is stored as a double.
+// integers is an error and the index build fails. With
+// `overflowing-integers-become-doubles`, the literal is stored as a double, and
+// with `all-integers-become-doubles`, all integer literals are.
 // _____________________________________________________________________________
 TEST(IndexTest, parserIntegerOverflowBehaviorFromSettingsFile) {
   using enum Permutation::Enum;
@@ -510,15 +511,20 @@ TEST(IndexTest, parserIntegerOverflowBehaviorFromSettingsFile) {
                                            "overflowing-integers-throw")),
         ::testing::HasSubstr("cannot be represented as an integer"));
 
-    auto* qec = getQec(
-        absl::StrCat(basename, "."),
-        makeConfig(parseInParallel, "overflowing-integers-become-doubles"));
-    auto getId = makeGetId(qec->getIndex());
-    Id a = getId("<a>");
-    auto testTwo = makeTestScanWidthTwo(qec->getIndex().getImpl(), *qec);
-    testTwo(iri("<b>"), PSO,
-            {{a, Id::makeFromDouble(99999999999999999999999.0)}});
-    testTwo(iri("<c>"), PSO, {{a, Id::makeFromInt(42)}});
+    // Build the index with the given `behavior` and check the objects of `<b>`
+    // (the overflowing integer) and `<c>` (the integer `42`).
+    auto checkObjects = [&](std::string_view behavior, Id expectedObjectOfC) {
+      auto* qec = getQec(absl::StrCat(basename, "."),
+                         makeConfig(parseInParallel, behavior));
+      auto getId = makeGetId(qec->getIndex());
+      Id a = getId("<a>");
+      auto testTwo = makeTestScanWidthTwo(qec->getIndex().getImpl(), *qec);
+      testTwo(iri("<b>"), PSO,
+              {{a, Id::makeFromDouble(99999999999999999999999.0)}});
+      testTwo(iri("<c>"), PSO, {{a, expectedObjectOfC}});
+    };
+    checkObjects("overflowing-integers-become-doubles", Id::makeFromInt(42));
+    checkObjects("all-integers-become-doubles", Id::makeFromDouble(42.0));
   }
 }
 

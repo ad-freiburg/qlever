@@ -109,8 +109,11 @@ std::unique_ptr<AsyncRdfParserBase> IndexImpl::makeRdfParser(
   AD_CONTRACT_CHECK(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
+  // NOTE: The settings have to be passed to the constructor, because the
+  // parsers start parsing immediately when they are constructed.
   RdfParserSettings parserSettings{turtleParserIntegerOverflowBehavior_,
-                                   turtleParserSkipIllegalLiterals_};
+                                   turtleParserSkipIllegalLiterals_,
+                                   onlyAsciiTurtlePrefixes_};
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // The reduced feature set has no coroutines (and only Boost 1.71), so the
   // asynchronous multifile parser is not available. Fall back to the
@@ -131,16 +134,15 @@ std::unique_ptr<AsyncRdfParserBase> IndexImpl::makeRdfParser(
       [serialFiles = std::move(serialFiles),
        encodedIriManager = &encodedIriManager(),
        bufferSize = parserBufferSize(),
-       useRelaxedParsing = onlyAsciiTurtlePrefixes_,
        parserSettings]() mutable -> std::unique_ptr<RdfParserBase> {
-        return std::make_unique<RdfMultifileParser>(
-            std::move(serialFiles), encodedIriManager, bufferSize,
-            useRelaxedParsing, parserSettings);
+        return std::make_unique<RdfMultifileParser>(std::move(serialFiles),
+                                                    encodedIriManager,
+                                                    bufferSize, parserSettings);
       });
 #else
   return std::make_unique<RdfAsyncMultifileParser>(
       executor, std::move(files), &encodedIriManager(), parserBufferSize(),
-      onlyAsciiTurtlePrefixes_, parserSettings);
+      parserSettings);
 #endif
 }
 
@@ -1654,7 +1656,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     } else if (value == allIntegersBecomeDoubles) {
       AD_LOG_INFO << "All integers will be converted to doubles" << std::endl;
       turtleParserIntegerOverflowBehavior_ =
-          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+          TurtleParserIntegerOverflowBehavior::AllToDouble;
     } else {
       AD_CONTRACT_CHECK(ql::ranges::find(allModes, value) == allModes.end());
       AD_LOG_ERROR << "Invalid value for " << key << std::endl;

@@ -31,12 +31,10 @@ RdfAsyncMultifileParser::RdfAsyncMultifileParser(
     const ql::any_io_executor& executor,
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     const EncodedIriManager* encodedIriManager,
-    ad_utility::MemorySize bufferSize, bool useRelaxedParsing,
-    RdfParserSettings settings)
+    ad_utility::MemorySize bufferSize, RdfParserSettings settings)
     : AsyncRdfParserBase{executor},
       encodedIriManager_{encodedIriManager},
       bufferSize_{bufferSize},
-      useRelaxedParsing_{useRelaxedParsing},
       settings_{settings},
       fileState_{FileState{std::move(files)}} {}
 
@@ -92,7 +90,7 @@ std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
   // integers, exactly like `makeSingleRdfParser` in `RdfParser.cpp` (which
   // this function mirrors for the asynchronous parsers).
   return ad_utility::callFixedSize(
-      std::array{useRelaxedParsing_ ? 1 : 0,
+      std::array{settings_.useRelaxedParsing_ ? 1 : 0,
                  spec.filetype_ == qlever::Filetype::Turtle ? 1 : 0},
       makeParserImpl);
 }

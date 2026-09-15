@@ -47,12 +47,11 @@ enum class TurtleParserIntegerOverflowBehavior {
   AllToDouble
 };
 
-// The settings of an RDF parser that control how integer literals that
-// cannot be represented by QLever and how invalid literals are handled. They
-// are the same for all the parsers of an index build, so the parsers that
-// handle several files (`RdfMultifileParser` and `RdfAsyncMultifileParser`)
-// take them in their constructor and pass them on to every parser that they
-// create for a single file or for a block of a file.
+// The settings that control how an RDF parser deals with the input. They are
+// the same for all the parsers of an index build, so the parsers that handle
+// several files (`RdfMultifileParser` and `RdfAsyncMultifileParser`) take them
+// in their constructor and pass them on to every parser that they create for a
+// single file or for a block of a file.
 struct RdfParserSettings {
   // How to handle integer literals that overflow QLever's 64-bit integers.
   TurtleParserIntegerOverflowBehavior integerOverflowBehavior_ =
@@ -61,6 +60,14 @@ struct RdfParserSettings {
   // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
   // such literals are encountered.
   bool invalidLiteralsAreSkipped_ = false;
+  // If true, the faster `TokenizerCtre` is used instead of the
+  // standard-compliant `Tokenizer` (see the comment on `TurtleParser` below
+  // for the limitations of the relaxed mode).
+  //
+  // NOTE: This setting is only evaluated by the parsers that handle several
+  // files, when they choose the parser for a single file. The parsers for a
+  // single file have the tokenizer as a template parameter.
+  bool useRelaxedParsing_ = false;
 };
 
 namespace detail {
@@ -96,8 +103,7 @@ struct TurtleTriple {
 // A base class for all the different turtle and N-Quad parsers.
 class RdfParserBase {
  private:
-  // How to handle integer overflow and invalid literals (see
-  // `RdfParserSettings`).
+  // The settings of this parser, see `RdfParserSettings`.
   RdfParserSettings settings_;
 
   const EncodedIriManager* encodedIriManager_;
@@ -105,21 +111,11 @@ class RdfParserBase {
  public:
   virtual ~RdfParserBase() = default;
 
-  explicit RdfParserBase(const EncodedIriManager* encodedIriManager)
-      : encodedIriManager_{encodedIriManager} {}
+  explicit RdfParserBase(const EncodedIriManager* encodedIriManager,
+                         RdfParserSettings settings = {})
+      : settings_{settings}, encodedIriManager_{encodedIriManager} {}
 
-  virtual TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() final {
-    return settings_.integerOverflowBehavior_;
-  }
-
-  // If true then triples with invalid literals (for example
-  // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
-  // such literals are encountered.
-  virtual bool& invalidLiteralsAreSkipped() final {
-    return settings_.invalidLiteralsAreSkipped_;
-  }
-
-  // Access both of the above settings at once, see `RdfParserSettings`.
+  // The settings of this parser, see `RdfParserSettings`.
   RdfParserSettings& settings() { return settings_; }
   const RdfParserSettings& settings() const { return settings_; }
 
@@ -280,11 +276,13 @@ class TurtleParser : public RdfParserBase {
   bool useSimplifiedGrammar_ = false;
 
  public:
-  explicit TurtleParser(const EncodedIriManager* encodedIriManager)
-      : RdfParserBase{encodedIriManager} {}
   explicit TurtleParser(const EncodedIriManager* encodedIriManager,
-                        TripleComponent defaultGraphIri)
-      : RdfParserBase{encodedIriManager},
+                        RdfParserSettings settings = {})
+      : RdfParserBase{encodedIriManager, settings} {}
+  explicit TurtleParser(const EncodedIriManager* encodedIriManager,
+                        TripleComponent defaultGraphIri,
+                        RdfParserSettings settings = {})
+      : RdfParserBase{encodedIriManager, settings},
         defaultGraphIri_{std::move(defaultGraphIri)} {}
   TurtleParser(TurtleParser&& rhs) noexcept = default;
   TurtleParser& operator=(TurtleParser&& rhs) noexcept = default;
@@ -311,7 +309,7 @@ class TurtleParser : public RdfParserBase {
   [[noreturn]] void raise(std::string_view error_message) const;
 
   // Throw an exception or simply ignore the current triple, depending on the
-  // setting of `invalidLiteralsAreSkipped()`.
+  // setting of `settings().invalidLiteralsAreSkipped_`.
   void raiseOrIgnoreTriple(std::string_view errorMessage);
 
  protected:
@@ -455,10 +453,13 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
   using Base = TurtleParser<Tokenizer_T>;
 
  public:
-  explicit NQuadParser(const EncodedIriManager* ev) : Base{ev} {}
   explicit NQuadParser(const EncodedIriManager* ev,
-                       TripleComponent defaultGraphId)
-      : Base{ev}, defaultGraphId_{std::move(defaultGraphId)} {}
+                       RdfParserSettings settings = {})
+      : Base{ev, settings} {}
+  explicit NQuadParser(const EncodedIriManager* ev,
+                       TripleComponent defaultGraphId,
+                       RdfParserSettings settings = {})
+      : Base{ev, settings}, defaultGraphId_{std::move(defaultGraphId)} {}
 
  protected:
   bool statement() override;
@@ -481,11 +482,13 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
  public:
   using Parser::baseIri;
   using Parser::prefixMap;
-  explicit RdfStringParser(const EncodedIriManager* encodedIriManager)
-      : Parser{encodedIriManager} {}
   explicit RdfStringParser(const EncodedIriManager* encodedIriManager,
-                           TripleComponent defaultGraph)
-      : Parser{encodedIriManager, std::move(defaultGraph)} {}
+                           RdfParserSettings settings = {})
+      : Parser{encodedIriManager, settings} {}
+  explicit RdfStringParser(const EncodedIriManager* encodedIriManager,
+                           TripleComponent defaultGraph,
+                           RdfParserSettings settings = {})
+      : Parser{encodedIriManager, std::move(defaultGraph), settings} {}
   std::optional<std::vector<TurtleTriple>> getBatch() override {
     throw std::runtime_error(
         "RdfStringParser doesn't support calls to getBatch. Only use "
@@ -620,8 +623,7 @@ class RdfStreamParser : public Parser {
                            TripleComponent defaultGraphIri =
                                qlever::specialIds().at(DEFAULT_GRAPH_IRI),
                            RdfParserSettings settings = {})
-      : Parser{ev, std::move(defaultGraphIri)} {
-    this->settings() = settings;
+      : Parser{ev, std::move(defaultGraphIri), settings} {
     initialize(spec, blocksize);
   }
 
@@ -786,10 +788,9 @@ class RdfParallelParser : public RdfParserBase {
                     RdfParserSettings settings = {},
                     std::chrono::milliseconds sleepTimeForTesting =
                         std::chrono::milliseconds{0})
-      : RdfParserBase{ev},
+      : RdfParserBase{ev, settings},
         state_{ev, defaultGraphIri, settings},
         sleepTimeForTesting_(sleepTimeForTesting) {
-    this->settings() = settings;
     initialize(spec, blocksize);
   }
 
@@ -874,16 +875,16 @@ class RdfMultifileParser : public RdfParserBase {
       : RdfParserBase{encodedIriManager} {}
 
   // Construct the parser from a type-erased input range of file specifications
-  // and eagerly start parsing them on background threads. If
-  // `useRelaxedParsing` is true, the faster `TokenizerCtre` is used for all
-  // files instead of the standard-compliant `Tokenizer` (see the comment on
-  // `TurtleParser` above for the limitations of the relaxed mode). The
-  // `settings` are applied to the parser of every file.
+  // and eagerly start parsing them on background threads. The `settings` are
+  // applied to the parser of every file; in particular,
+  // `settings.useRelaxedParsing_` selects the tokenizer for all files. They
+  // are only read by the parsing threads, and never modified after
+  // construction.
   RdfMultifileParser(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
-      bool useRelaxedParsing = false, RdfParserSettings settings = {});
+      RdfParserSettings settings = {});
 
   // Retrieve the next batch of triples, or `nullopt` if there are no more
   // batches. There is no guarantee about the order in which batches from
@@ -916,15 +917,6 @@ class RdfMultifileParser : public RdfParserBase {
   // before the `finishedBatchQueue_` (which they are using!) is destroyed.
   ad_utility::TaskQueue<false> parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
                                              NUM_PARALLEL_PARSER_THREADS};
-
-  // If true, all files are parsed with the relaxed `TokenizerCtre` instead of
-  // the standard-compliant `Tokenizer`. Only read by the parsing threads, and
-  // never modified after construction.
-  bool useRelaxedParsing_ = false;
-
-  // The settings for the parser of every file (see `RdfParserSettings`). Only
-  // read by the parsing threads, and never modified after construction.
-  RdfParserSettings fileParserSettings_;
 
   // A thread that feeds the file specifications to the actual parser threads.
   ad_utility::JThread feederThread_;
