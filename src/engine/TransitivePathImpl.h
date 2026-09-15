@@ -457,10 +457,14 @@ class TransitivePathImpl : public TransitivePathBase {
     auto padding = [&joinColumn](const auto& column) -> size_t {
       return column.has_value() && joinColumn != column;
     };
-    AD_CORRECTNESS_CHECK(totalColumns >
+    AD_CORRECTNESS_CHECK(totalColumns >=
                          padding(graphColumn) + padding(targetColumn));
+    size_t graphAndOtherIdentical =
+        !(graphColumn.has_value() && targetColumn.has_value() &&
+          graphColumn.value() == targetColumn.has_value());
     columnsWithoutJoinColumn.reserve(totalColumns - padding(graphColumn) -
-                                     padding(targetColumn) - 1);
+                                     padding(targetColumn) -
+                                     graphAndOtherIdentical);
     ql::ranges::copy(ql::views::iota(static_cast<size_t>(0), totalColumns) |
                          ql::views::filter([joinColumn, &graphColumn,
                                             &targetColumn](size_t i) {

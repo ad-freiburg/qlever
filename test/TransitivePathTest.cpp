@@ -1530,6 +1530,56 @@ TEST_P(TransitivePathTest, sameVariableOnBothSidesBound) {
 }
 
 // _____________________________________________________________________________
+// Extends `sameVariableOnBothSidesBound` by cases where two of the three
+// columns (start, target and graph) are the same variable.
+TEST_P(TransitivePathTest, sameVariableOnBothSidesOrGraphBound) {
+  auto sub = makeIdTableFromVector({
+      {1, 2, 1},
+      {2, 1, 1},
+  });
+
+  {
+    auto sideTable = makeIdTableFromVector({{1, 1}});
+    auto expected = makeIdTableFromVector({{1, 1, 1}});
+
+    TransitivePathSide left(std::nullopt, 0, Variable{"?s"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?t"}, 1);
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?s"}, Variable{"?t"}, Variable{"?t"}},
+        split(sideTable), 0, 1, {Variable{"?s"}, Variable{"?t"}}, left, right,
+        1, std::numeric_limits<size_t>::max(), false, Variable{"?t"});
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto sideTable = makeIdTableFromVector({{1, 2}});
+    auto expected = makeIdTableFromVector({{1, 2, 1}});
+
+    TransitivePathSide left(std::nullopt, 0, Variable{"?s"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?t"}, 1);
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?s"}, Variable{"?t"}, Variable{"?s"}},
+        split(sideTable), 0, 1, {Variable{"?s"}, Variable{"?t"}}, left, right,
+        1, std::numeric_limits<size_t>::max(), false, Variable{"?s"});
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto sideTable = makeIdTableFromVector({{2, 1}});
+    auto expected = makeIdTableFromVector({{2, 2, 1}});
+
+    TransitivePathSide left(std::nullopt, 0, Variable{"?s"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?t"}, 1);
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?s"}, Variable{"?s"}, Variable{"?g"}},
+        split(sideTable), 0, 0, {Variable{"?s"}, Variable{"?g"}}, left, right,
+        1, std::numeric_limits<size_t>::max(), false, Variable{"?g"});
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, sameVariableOnBothSidesUnbound) {
   auto sub = makeIdTableFromVector({
       {1, 2},

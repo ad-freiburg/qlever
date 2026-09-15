@@ -241,10 +241,14 @@ size_t TransitivePathBase::numJoinColumnsWith(
     const std::shared_ptr<QueryExecutionTree>& tree, ColumnIndex joinColumn,
     std::optional<ColumnIndex> otherJoinColumn) const {
   auto graphCol = getActualGraphColumnIndex(tree);
-  if (otherJoinColumn.has_value() && graphCol.has_value() &&
-      otherJoinColumn.value() != graphCol.value() &&
-      otherJoinColumn.value() != joinColumn && graphCol.value() != joinColumn) {
-    return 3;
+
+  if (otherJoinColumn.has_value() && graphCol.has_value()) {
+    const auto& ojc = otherJoinColumn.value();
+    const auto& gc = graphCol.value();
+    if (ojc != gc && ojc != joinColumn && gc != joinColumn) {
+      return 3;
+    }
+    return 2;
   }
   if ((otherJoinColumn.has_value() && joinColumn == otherJoinColumn.value()) ||
       (graphCol.has_value() && joinColumn == graphCol.value()) ||
@@ -516,9 +520,9 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
 
 // _____________________________________________________________________________
 void TransitivePathBase::computePayloadColumnOffsets(
-    std::shared_ptr<QueryExecutionTree>& op,
-    std::shared_ptr<TransitivePathBase>& plan, std::optional<size_t> leftCol,
-    std::optional<size_t> rightCol) const {
+    const std::shared_ptr<QueryExecutionTree>& op,
+    const std::shared_ptr<TransitivePathBase>& plan,
+    std::optional<size_t> leftCol, std::optional<size_t> rightCol) const {
   auto singleColBoundIndexShift = [](size_t columnIndex, size_t col) {
     return col > columnIndex ? 2 : 1;
   };
