@@ -162,6 +162,19 @@ TEST_F(ValueIdTest, Indices) {
 TEST_F(ValueIdTest, Undefined) {
   auto id = ValueId::makeUndefined();
   ASSERT_EQ(id.getDatatype(), Datatype::Undefined);
+
+  // `getUndefined()` returns the single value of `UndefinedType`. Its main
+  // purpose is the generic code in `visit`, which has to dispatch on the
+  // datatype, so we also test it via that path.
+  static_assert(
+      std::is_same_v<decltype(id.getUndefined()), ValueId::UndefinedType>);
+  auto isUndefinedType = [](const auto& value) {
+    return std::is_same_v<std::decay_t<decltype(value)>,
+                          ValueId::UndefinedType>;
+  };
+  EXPECT_TRUE(isUndefinedType(id.getUndefined()));
+  EXPECT_TRUE(id.visit(isUndefinedType));
+  EXPECT_FALSE(ValueId::makeFromInt(42).visit(isUndefinedType));
 }
 
 TEST_F(ValueIdTest, OrderingDifferentDatatypes) {
@@ -392,6 +405,50 @@ TEST_F(ValueIdTest, InvalidDatatypeEnumValue) {
 TEST_F(ValueIdTest, TriviallyCopyable) {
   static_assert(std::is_trivially_copyable_v<ValueId>);
 }
+
+// Pin down that the `ValueId` functions that can be evaluated at compile time
+// actually are `constexpr`. Note that several of them contain an
+// `AD_CONTRACT_CHECK`/`AD_EXPENSIVE_CHECK`, which is only possible because
+// those macros are `constexpr`-friendly, see the note on `constexpr` in
+// `util/Exception.h`.
+// NOTE: The functions that are only `QL_CONSTEXPR` (`constexpr` in C++20 mode
+// only) are excluded in C++17 mode, see the notes in `global/ValueId.h`.
+namespace constexprValueId {
+static_assert(ValueId::makeUndefined().getDatatype() == Datatype::Undefined);
+static_assert(ValueId::makeFromBool(true).getBool());
+static_assert(!ValueId::makeBoolFromZeroOrOne(false).getBool());
+static_assert(ValueId::makeFromInt(42).getDatatype() == Datatype::Int);
+static_assert(ValueId::makeFromVocabIndex(VocabIndex::make(17))
+                  .getVocabIndex() == VocabIndex::make(17));
+static_assert(ValueId::makeFromEncodedVal(17).getEncodedVal() == 17);
+static_assert(ValueId::makeFromTextRecordIndex(TextRecordIndex::make(17))
+                  .getTextRecordIndex() == TextRecordIndex::make(17));
+static_assert(ValueId::makeFromWordVocabIndex(WordVocabIndex::make(17))
+                  .getWordVocabIndex() == WordVocabIndex::make(17));
+static_assert(ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
+                  .getBlankNodeIndex() == BlankNodeIndex::make(17));
+static_assert(
+    ValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(17))
+        .getSecondaryVocabIndex() == SecondaryVocabIndex::make(17));
+static_assert(ValueId::makeFromBool(true).getBoolLiteral() == "true");
+static_assert(ValueId::makeBoolFromZeroOrOne(true).getBoolLiteral() == "1");
+#ifndef QLEVER_CPP_17
+// `getInt` performs a signed left shift, which is only a constant expression
+// since C++20.
+static_assert(ValueId::makeFromInt(-42).getInt() == -42);
+static_assert(ValueId::fromBits(ValueId::makeFromInt(42).getBits()).getInt() ==
+              42);
+static_assert(ValueId::makeUndefined().isTrivial());
+static_assert(ValueId::makeUndefined().isUndefined());
+static_assert(!ValueId::makeFromBool(true).isUndefined());
+static_assert(ValueId::makeFromDouble(0.5).getDouble() == 0.5);
+// The `compareWithoutLocalVocab` contains two `AD_EXPENSIVE_CHECK`s.
+static_assert(ValueId::makeFromBool(true).compareWithoutLocalVocab(
+                  ValueId::makeUndefined()) > 0);
+static_assert(ValueId::makeUndefined().compareWithoutLocalVocab(
+                  ValueId::makeUndefined()) == 0);
+#endif
+}  // namespace constexprValueId
 
 // _____________________________________________________________________________
 TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
