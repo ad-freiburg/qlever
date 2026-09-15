@@ -9,10 +9,12 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <algorithm>
 #include <boost/optional.hpp>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -122,6 +124,12 @@ struct IndexBuilderConfig : CommonConfig {
   // If set to true, then certain temporary files which are created while
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;
+
+  // The number of threads used during the index build (see
+  // `Index::createFromFiles`). Must be at least 1. Defaults to the number of
+  // hardware threads of the machine (`std::thread::hardware_concurrency()`
+  // returns `0` if that number cannot be determined, hence the `max`).
+  size_t numThreads_ = std::max<size_t>(1, std::thread::hardware_concurrency());
 
   // A list of regexes for IRIs that should be treated as blank nodes. During
   // index building, an IRI that is fully matched by one of these regexes (via
