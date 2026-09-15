@@ -13,6 +13,8 @@
 // expect that this will go away with future version of `boost::asio`.
 #include <utility>
 
+#include "util/CompilerWarnings.h"
+
 // Needed for libc++ in C++20 mode, because std::result_of was removed.
 #ifndef BOOST_ASIO_HAS_STD_INVOKE_RESULT
 #define BOOST_ASIO_HAS_STD_INVOKE_RESULT
@@ -25,9 +27,22 @@
 #define BOOST_BEAST_USE_STD_STRING_VIEW
 #endif
 
+// GCC (since version 15) wrongly believes that
+// `boost::asio::ip::basic_resolver_results::create` copies a `tcp::endpoint`
+// out of bounds. GCC 15 reports this as `-Warray-bounds` and GCC 16 as
+// `-Wstringop-overflow`, so both have to be disabled. They are middle-end
+// warnings and are therefore not suppressed by Boost being a system header, but
+// GCC walks the inlining chain when deciding whether they are suppressed, so
+// disabling them around the include covers every translation unit that
+// instantiates the resolver. The two `DISABLE_...` macros each open their own
+// diagnostic scope, hence the two `GCC_REENABLE_WARNINGS` below.
+DISABLE_ARRAY_BOUNDS_WARNINGS
+DISABLE_STRINGOP_OVERFLOW_WARNINGS
 #include <boost/asio.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/beast.hpp>
+GCC_REENABLE_WARNINGS
+GCC_REENABLE_WARNINGS
 
 // For boost versions prior to 1.81 this should be no-op
 #if defined BOOST_BEAST_VERSION && BOOST_BEAST_VERSION < 345
