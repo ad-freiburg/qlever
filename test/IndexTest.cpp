@@ -436,6 +436,55 @@ TEST(IndexTest, emptyIndex) {
   test(iri("<x>"), Permutation::PSO, {});
 }
 
+// Test that the `parser-integer-overflow-behavior` setting from the
+// `.settings.json` file reaches the parsers of the index build, for an input
+// that is parsed in parallel as well as for one that is parsed serially. With
+// the default behavior, an integer literal that overflows QLever's 64-bit
+// integers is an error and the index build fails. With
+// `overflowing-integers-become-doubles`, the literal is stored as a double, and
+// with `all-integers-become-doubles`, all integer literals are.
+// _____________________________________________________________________________
+TEST(IndexTest, parserIntegerOverflowBehaviorFromSettingsFile) {
+  using enum Permutation::Enum;
+  std::string kb = "<a> <b> 99999999999999999999999 .\n<a> <c> 42 .\n";
+  auto makeConfig = [&kb](bool parseInParallel, std::string_view behavior) {
+    TestIndexConfig config{kb};
+    config.parseInParallel = parseInParallel;
+    config.additionalSettings = {{"parser-integer-overflow-behavior",
+                                  absl::StrCat("\"", behavior, "\"")}};
+    return config;
+  };
+
+  for (bool parseInParallel : {true, false}) {
+    std::string basename =
+        absl::StrCat(gtestCurrentTestName(), ".", parseInParallel);
+    absl::Cleanup cleanup = [&basename] {
+      for (const auto& filename : getAllIndexFilenames(basename)) {
+        ad_utility::deleteFile(filename, false);
+      }
+    };
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        makeTestIndex(basename, makeConfig(parseInParallel,
+                                           "overflowing-integers-throw")),
+        ::testing::HasSubstr("cannot be represented as an integer"));
+
+    // Build the index with the given `behavior` and check the objects of `<b>`
+    // (the overflowing integer) and `<c>` (the integer `42`).
+    auto checkObjects = [&](std::string_view behavior, Id expectedObjectOfC) {
+      auto* qec = getQec(absl::StrCat(basename, "."),
+                         makeConfig(parseInParallel, behavior));
+      auto getId = makeGetId(qec->getIndex());
+      Id a = getId("<a>");
+      auto testTwo = makeTestScanWidthTwo(qec->getIndex().getImpl(), *qec);
+      testTwo(iri("<b>"), PSO,
+              {{a, Id::makeFromDouble(99999999999999999999999.0)}});
+      testTwo(iri("<c>"), PSO, {{a, expectedObjectOfC}});
+    };
+    checkObjects("overflowing-integers-become-doubles", Id::makeFromInt(42));
+    checkObjects("all-integers-become-doubles", Id::makeFromDouble(42.0));
+  }
+}
+
 // Regression test for https://github.com/ad-freiburg/qlever/issues/2768
 TEST(IndexTest, emptyTextIndex) {
   std::array<std::string, 2> inputs = {
