@@ -26,6 +26,7 @@
 #include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
+#include "util/Serializer/SerializeVariant.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 
@@ -103,19 +104,6 @@ class BinaryDiff {
   };
 
  private:
-  // The message that is reported when a diff is applied to a base other than
-  // the one that it was created against.
-  static constexpr std::string_view wrongBaseMessage =
-      "The given diff was created against a different base (the size or the "
-      "checksum of the base does not match). Note that a diff has to be "
-      "applied to exactly the base that it was created against";
-
-  // The message that is reported when a diff has an instruction that does not
-  // make sense for the given base.
-  static constexpr std::string_view invalidInstructionMessage =
-      "The given diff contains an invalid instruction; it is either corrupted, "
-      "or it was created against a different base";
-
   // The FNV-1a 64 offset basis, which is the checksum of an empty input, see
   // `checksum`.
   static constexpr uint64_t fnvOffsetBasis = 0xcbf29ce484222325ULL;
@@ -137,7 +125,13 @@ class BinaryDiff {
   // needed for deserialization; to create a diff, use the constructor below.
   BinaryDiff() = default;
 
-  // Start a diff that turns `base` into some target.
+  // Start an empty diff against `base`, to which the instructions that produce
+  // the target are then appended (see `addAlign`, `addCopy` and `addInsert`).
+  //
+  // NOTE: The diff neither stores nor references `base`; it only records its
+  // size and its checksum (see BASE IDENTIFICATION in the class comment). The
+  // `base` therefore does not have to outlive the diff, but the buffer that is
+  // later passed to `apply` has to have exactly the same contents.
   explicit BinaryDiff(ql::span<const char> base);
 
   // Append an instruction that pads the target with zeros until its size is a
@@ -171,7 +165,25 @@ class BinaryDiff {
   // callers to obtain an aligned or a `pmr`-allocated buffer.
   template <typename Allocator = std::allocator<char>>
   std::vector<char, Allocator> apply(ql::span<const char> base,
-                                     Allocator allocator = {}) const;
+                                     Allocator allocator = {}) const {
+    // NOTE: Validate before the target is allocated, so that a `targetSize()`
+    // that comes from a corrupted diff cannot lead to a bogus allocation.
+    checkApplicable(base);
+    std::vector<char, Allocator> target(targetSize(), char{0},
+                                        std::move(allocator));
+    applyToCheckedTarget(base, ql::span<char>{target.data(), target.size()});
+    return target;
+  }
+
+  // Same as `apply` above, but fill the given `target`, which has to have
+  // exactly `targetSize()` bytes, instead of allocating a buffer. Meant for
+  // callers that already have a suitable buffer (for example a memory-mapped
+  // one). The checks are the same as for `apply`.
+  //
+  // NOTE: This deliberately is not an overload of `apply`, because a call
+  // `apply(base, someBuffer)` would silently resolve to the `apply` above,
+  // with the buffer as the allocator.
+  void applyToTarget(ql::span<const char> base, ql::span<char> target) const;
 
   // The exact size of the buffer that `apply` returns.
   size_t targetSize() const { return targetSize_; }
@@ -204,6 +216,10 @@ class BinaryDiff {
   // deserialization, where the instructions are not appended one by one.
   void recomputeTargetSize();
 
+  // Throw if this diff cannot be applied to `base`, see `apply`. This is the
+  // combination of `checkBase` and `checkInstructions` below.
+  void checkApplicable(ql::span<const char> base) const;
+
   // Throw if `base` is not the base that this diff was created against, see
   // `apply`.
   void checkBase(ql::span<const char> base) const;
@@ -211,27 +227,37 @@ class BinaryDiff {
   // Throw if any instruction of this diff is invalid for `base` (a copied range
   // that does not lie within `base`), see `apply`.
   void checkInstructions(ql::span<const char> base) const;
+
+  // Write the target into `target`, which has to have exactly `targetSize()`
+  // bytes, and for which `checkApplicable(base)` has already succeeded.
+  void applyToCheckedTarget(ql::span<const char> base,
+                            ql::span<char> target) const;
 };
 
+// Serialization of the individual instructions. Together with the generic
+// serialization of a `std::variant` (see `util/Serializer/SerializeVariant.h`)
+// and of a `std::vector`, this is all that is needed to serialize the
+// instructions of a diff.
+AD_SERIALIZE_FUNCTION(BinaryDiff::Copy) {
+  serializer | arg.baseOffset_;
+  serializer | arg.length_;
+}
+AD_SERIALIZE_FUNCTION(BinaryDiff::Insert) { serializer | arg.bytes_; }
+AD_SERIALIZE_FUNCTION(BinaryDiff::Align) { serializer | arg.alignment_; }
+
 // The serialization format of a `BinaryDiff`: a header of magic bytes, a format
-// version, and the identification of the base, followed by the number of
-// instructions and the instructions themselves, each of which is preceded by
-// its `InstructionKind`. When reading, verify the magic bytes and the format
-// version, and report a truncated or otherwise unreadable input with a
-// descriptive message.
+// version, and the identification of the base, followed by the instructions
+// (as an ordinary `std::vector` of `std::variant`s). When reading, verify the
+// magic bytes, the format version, and the alignments, and report a truncated
+// or otherwise unreadable input with a descriptive message.
 //
 // This is a separate class so that `BinaryDiff` itself is concerned only with
 // the building and the application of a diff. It is used by the `serialize`
 // function below, which is the only intended entry point.
 class BinaryDiffSerializer {
  private:
-  using Copy = BinaryDiff::Copy;
-  using Insert = BinaryDiff::Insert;
   using Align = BinaryDiff::Align;
   using Instruction = BinaryDiff::Instruction;
-
-  // The kinds of instruction, as stored in the serialization of a diff.
-  enum class InstructionKind : uint8_t { Copy = 0, Insert = 1, Align = 2 };
 
   // The header that is written at the beginning of the serialization of a
   // diff, to guard against reading data that is not a diff at all, or that was
@@ -254,10 +280,7 @@ class BinaryDiffSerializer {
     serializer << formatVersion;
     serializer << diff.baseSize_;
     serializer << diff.baseChecksum_;
-    serializer << static_cast<uint64_t>(diff.instructions_.size());
-    for (const auto& instruction : diff.instructions_) {
-      writeInstruction(serializer, instruction);
-    }
+    serializer << diff.instructions_;
   }
 
   // Read a `diff` that was written by `write`, and throw with a descriptive
@@ -275,13 +298,12 @@ class BinaryDiffSerializer {
         version, ", expected ", formatVersion, ")");
     diff.baseSize_ = readOrThrow<uint64_t>(serializer);
     diff.baseChecksum_ = readOrThrow<uint64_t>(serializer);
-    auto numInstructions = readOrThrow<uint64_t>(serializer);
-    // NOTE: Deliberately no `reserve`, because `numInstructions` comes from a
-    // possibly corrupted input.
-    diff.instructions_.clear();
-    for (uint64_t i = 0; i < numInstructions; ++i) {
-      diff.instructions_.push_back(readInstruction(serializer));
-    }
+    // NOTE: The number of instructions comes from a possibly corrupted input,
+    // so the vector might try to allocate a bogus amount of memory. The
+    // resulting exception is one of those that `readOrThrow` turns into the
+    // `notReadableMessage`, so a corrupted input is still reported properly.
+    diff.instructions_ = readOrThrow<std::vector<Instruction>>(serializer);
+    checkAlignments(diff);
     diff.recomputeTargetSize();
   }
 
@@ -301,44 +323,20 @@ class BinaryDiffSerializer {
     }
   }
 
-  // Write a single instruction, preceded by its `InstructionKind`.
-  template <typename S>
-  static void writeInstruction(S& serializer, const Instruction& instruction) {
-    if (const auto* copy = std::get_if<Copy>(&instruction)) {
-      serializer << static_cast<uint8_t>(InstructionKind::Copy);
-      serializer << copy->baseOffset_;
-      serializer << copy->length_;
-    } else if (const auto* insert = std::get_if<Insert>(&instruction)) {
-      serializer << static_cast<uint8_t>(InstructionKind::Insert);
-      serializer << insert->bytes_;
-    } else {
-      serializer << static_cast<uint8_t>(InstructionKind::Align);
-      serializer << std::get<Align>(instruction).alignment_;
+  // Throw if an `Align` instruction of `diff` has an alignment that is not a
+  // power of two, which can only happen for a corrupted input. NOTE: The
+  // `Copy` instructions cannot be checked here, as their validity depends on
+  // the base (they are checked by `BinaryDiff::apply`).
+  static void checkAlignments(const BinaryDiff& diff) {
+    for (const auto& instruction : diff.instructions_) {
+      const auto* align = std::get_if<Align>(&instruction);
+      if (align == nullptr) {
+        continue;
+      }
+      AD_CONTRACT_CHECK(BinaryDiff::isPowerOfTwo(align->alignment_),
+                        notReadableMessage, ". Details: the alignment ",
+                        align->alignment_, " is not a power of two");
     }
-  }
-
-  // Read a single instruction that was written by `writeInstruction`.
-  template <typename S>
-  static Instruction readInstruction(S& serializer) {
-    auto kind = readOrThrow<uint8_t>(serializer);
-    if (kind == static_cast<uint8_t>(InstructionKind::Copy)) {
-      Copy copy;
-      copy.baseOffset_ = readOrThrow<uint64_t>(serializer);
-      copy.length_ = readOrThrow<uint64_t>(serializer);
-      return copy;
-    }
-    if (kind == static_cast<uint8_t>(InstructionKind::Insert)) {
-      return Insert{readOrThrow<std::vector<char>>(serializer)};
-    }
-    if (kind == static_cast<uint8_t>(InstructionKind::Align)) {
-      auto alignment = readOrThrow<uint64_t>(serializer);
-      AD_CONTRACT_CHECK(BinaryDiff::isPowerOfTwo(alignment), notReadableMessage,
-                        ". Details: the alignment ", alignment,
-                        " is not a power of two");
-      return Align{alignment};
-    }
-    AD_THROW(absl::StrCat(notReadableMessage,
-                          ". Details: unknown instruction kind ", kind));
   }
 };
 
@@ -350,32 +348,6 @@ AD_SERIALIZE_FUNCTION(BinaryDiff) {
   } else {
     BinaryDiffSerializer::read(serializer, arg);
   }
-}
-
-// _____________________________________________________________________________
-template <typename Allocator>
-std::vector<char, Allocator> BinaryDiff::apply(ql::span<const char> base,
-                                               Allocator allocator) const {
-  checkBase(base);
-  // Validate all instructions before the first byte is written, so that
-  // `targetSize` (which is used for the `reserve` below) cannot be a bogus
-  // value that comes from a corrupted diff.
-  checkInstructions(base);
-  std::vector<char, Allocator> target(std::move(allocator));
-  target.reserve(targetSize());
-  for (const auto& instruction : instructions_) {
-    if (const auto* copy = std::get_if<Copy>(&instruction)) {
-      auto copiedBytes = base.subspan(copy->baseOffset_, copy->length_);
-      target.insert(target.end(), copiedBytes.begin(), copiedBytes.end());
-    } else if (const auto* insert = std::get_if<Insert>(&instruction)) {
-      target.insert(target.end(), insert->bytes_.begin(), insert->bytes_.end());
-    } else {
-      uint64_t alignment = std::get<Align>(instruction).alignment_;
-      target.insert(target.end(),
-                    alignUp(target.size(), alignment) - target.size(), char{0});
-    }
-  }
-  return target;
 }
 
 }  // namespace ad_utility

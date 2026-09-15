@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -92,10 +93,16 @@ std::vector<char> writeRawDiff(const RawDiffHeader& header,
   return std::move(writer).data();
 }
 
+// The index of an instruction in the `BinaryDiff::Instruction` variant, which
+// is what the generic serialization of a `std::variant` writes to identify the
+// instruction (see `util/Serializer/SerializeVariant.h`).
+constexpr uint64_t copyIndex = 0;
+constexpr uint64_t alignIndex = 2;
+
 // Return a callable that writes a single copy instruction, for `writeRawDiff`.
 auto writeRawCopy(uint64_t baseOffset, uint64_t length) {
   return [baseOffset, length](ByteBufferWriteSerializer& writer) {
-    writer << static_cast<uint8_t>(0);
+    writer << copyIndex;
     writer << baseOffset;
     writer << length;
   };
@@ -104,7 +111,7 @@ auto writeRawCopy(uint64_t baseOffset, uint64_t length) {
 // Return a callable that writes a single align instruction, for `writeRawDiff`.
 auto writeRawAlign(uint64_t alignment) {
   return [alignment](ByteBufferWriteSerializer& writer) {
-    writer << static_cast<uint8_t>(2);
+    writer << alignIndex;
     writer << alignment;
   };
 }
@@ -257,6 +264,39 @@ TEST(BinaryDiff, applyUsesTheGivenAllocator) {
   std::vector<char, Allocator> target = diff.apply<Allocator>(base);
   EXPECT_EQ(toString(target), std::string(64, 'x'));
   EXPECT_EQ(reinterpret_cast<uintptr_t>(target.data()) % 64, 0U);
+}
+
+// _____________________________________________________________________________
+TEST(BinaryDiff, applyToTarget) {
+  auto base = toBytes("0123456789");
+  BinaryDiff diff{base};
+  diff.addCopy(0, 3);
+  diff.addAlign(8);
+  diff.addInsert(toBytes("XY"));
+  const std::string expected = "012" + std::string(5, '\0') + "XY";
+
+  // The target is filled exactly as the target that the other overload of
+  // `apply` returns, and its previous contents are completely overwritten
+  // (also where the diff only pads with zeros).
+  std::vector<char> target(diff.targetSize(), 'u');
+  diff.applyToTarget(base, target);
+  EXPECT_EQ(toString(target), expected);
+  EXPECT_EQ(toString(diff.apply(base)), expected);
+
+  // A target of the wrong size is rejected.
+  for (size_t size : {diff.targetSize() - 1, diff.targetSize() + 1}) {
+    std::vector<char> targetOfWrongSize(size, 'u');
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        diff.applyToTarget(base, targetOfWrongSize),
+        HasSubstr(absl::StrCat("has to have exactly ", diff.targetSize(),
+                               " bytes, but has ", size)));
+  }
+
+  // The base is checked, just as for the other overload of `apply`.
+  std::vector<char> target2(diff.targetSize(), 'u');
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      diff.applyToTarget(toBytes("012345678X"), target2),
+      HasSubstr("created against a different base"));
 }
 
 // _____________________________________________________________________________
@@ -474,13 +514,15 @@ TEST(BinaryDiff, deserializationChecksTheInput) {
       HasSubstr("written by an incompatible version of QLever (format version "
                 "42, expected 1)"));
 
-  // An unknown instruction kind.
+  // An unknown instruction kind, which is an out of range index of the
+  // `Instruction` variant.
   auto writeUnknownKind = [](ByteBufferWriteSerializer& rawWriter) {
-    rawWriter << static_cast<uint8_t>(7);
+    rawWriter << uint64_t{7};
   };
   AD_EXPECT_THROW_WITH_MESSAGE(
       deserializeDiff(writeRawDiff(RawDiffHeader{}, 1, writeUnknownKind)),
-      HasSubstr("unknown instruction kind 7"));
+      ::testing::AllOf(HasSubstr(notReadableMessage),
+                       HasSubstr("out of range index 7")));
 
   // Truncated input, both inside the header and inside the instructions.
   for (size_t size :

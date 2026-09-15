@@ -9,7 +9,26 @@
 
 #include "util/BinaryDiff.h"
 
+#include <string_view>
+
+#include "backports/algorithm.h"
+
 namespace ad_utility {
+
+namespace {
+// The message that is reported when a diff is applied to a base other than the
+// one that it was created against.
+constexpr std::string_view wrongBaseMessage =
+    "The given diff was created against a different base (the size or the "
+    "checksum of the base does not match). Note that a diff has to be applied "
+    "to exactly the base that it was created against";
+
+// The message that is reported when a diff has an instruction that does not
+// make sense for the given base.
+constexpr std::string_view invalidInstructionMessage =
+    "The given diff contains an invalid instruction; it is either corrupted, "
+    "or it was created against a different base";
+}  // namespace
 
 // _____________________________________________________________________________
 BinaryDiff::BinaryDiff(ql::span<const char> base)
@@ -109,6 +128,48 @@ void BinaryDiff::recomputeTargetSize() {
           alignUp(targetSize_, std::get<Align>(instruction).alignment_);
     }
   }
+}
+
+// _____________________________________________________________________________
+void BinaryDiff::applyToTarget(ql::span<const char> base,
+                               ql::span<char> target) const {
+  checkApplicable(base);
+  AD_CONTRACT_CHECK(target.size() == targetSize(),
+                    "The target of a `BinaryDiff` has to have exactly ",
+                    targetSize(), " bytes, but has ", target.size());
+  applyToCheckedTarget(base, target);
+}
+
+// _____________________________________________________________________________
+void BinaryDiff::applyToCheckedTarget(ql::span<const char> base,
+                                      ql::span<char> target) const {
+  size_t offset = 0;
+  for (const auto& instruction : instructions_) {
+    if (const auto* copy = std::get_if<Copy>(&instruction)) {
+      ql::ranges::copy(base.subspan(copy->baseOffset_, copy->length_),
+                       target.begin() + offset);
+      offset += copy->length_;
+    } else if (const auto* insert = std::get_if<Insert>(&instruction)) {
+      ql::ranges::copy(insert->bytes_, target.begin() + offset);
+      offset += insert->bytes_.size();
+    } else {
+      size_t alignedOffset =
+          alignUp(offset, std::get<Align>(instruction).alignment_);
+      // NOTE: The padding has to be written explicitly, because `target` might
+      // be a buffer of the caller that contains arbitrary bytes.
+      ql::ranges::fill(target.subspan(offset, alignedOffset - offset), char{0});
+      offset = alignedOffset;
+    }
+  }
+  AD_CORRECTNESS_CHECK(offset == target.size());
+}
+
+// _____________________________________________________________________________
+void BinaryDiff::checkApplicable(ql::span<const char> base) const {
+  checkBase(base);
+  // Validate all instructions before the first byte is written, so that a
+  // partially written target cannot result from an invalid instruction.
+  checkInstructions(base);
 }
 
 // _____________________________________________________________________________
