@@ -169,8 +169,11 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
  private:
   std::string onDiskBase_;
   std::string name_;
-  std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
-      Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>(), name_)};
+  // The permutation of the view. Its allocator is the one that all scans of
+  // the view allocate through, so it has to be the allocator of the query
+  // memory limit (see the constructor below), else scans of views are not
+  // counted against the limit.
+  std::shared_ptr<Permutation> permutation_;
   VariableToColumnMap varToColMap_;
   std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
   std::optional<std::string> originalQuery_;
@@ -192,8 +195,15 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
  public:
   // Load a materialized view from disk given the filename components. The
   // constructor will throw an exception if the name is invalid or the view does
-  // not exist.
-  MaterializedView(std::string onDiskBase, std::string name);
+  // not exist. All scans of the view allocate through `allocator`, which
+  // therefore should be the allocator of the query memory limit whenever the
+  // view is used to answer queries; the overload without an allocator (for
+  // standalone uses like the index converter) does not limit the memory.
+  MaterializedView(std::string onDiskBase, std::string name,
+                   ad_utility::AllocatorWithLimit<Id> allocator);
+  MaterializedView(std::string onDiskBase, std::string name)
+      : MaterializedView{std::move(onDiskBase), std::move(name),
+                         ad_utility::makeUnlimitedAllocator<Id>()} {}
 
   // Connect the permutation's back-reference to this view. Must be called
   // after the `MaterializedView` is managed by a `shared_ptr`.
@@ -313,6 +323,12 @@ class MaterializedViewsManager {
  private:
   std::string onDiskBase_;
 
+  // The allocator that the views loaded by this manager allocate through when
+  // they are scanned (see `MaterializedView`). It is the allocator of the
+  // query memory limit when the manager belongs to a `Qlever` engine.
+  ad_utility::AllocatorWithLimit<Id> allocator_ =
+      ad_utility::makeUnlimitedAllocator<Id>();
+
   // Set by `retireOnDiskFiles` (see there) once the files of the index this
   // manager belongs to have been moved away by an index rebuild, after which
   // this manager must not create or delete any file under `onDiskBase_`
@@ -375,6 +391,12 @@ class MaterializedViewsManager {
   MaterializedViewsManager() = default;
   explicit MaterializedViewsManager(std::string onDiskBase)
       : onDiskBase_{std::move(onDiskBase)} {}
+  explicit MaterializedViewsManager(
+      ad_utility::AllocatorWithLimit<Id> allocator)
+      : allocator_{std::move(allocator)} {}
+  MaterializedViewsManager(std::string onDiskBase,
+                           ad_utility::AllocatorWithLimit<Id> allocator)
+      : onDiskBase_{std::move(onDiskBase)}, allocator_{std::move(allocator)} {}
 
   // For use with the default constructor: set the index basename after creation
   // of the `MaterializedViewsManager`. This should only be called once and
