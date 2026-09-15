@@ -2658,6 +2658,15 @@ TEST(QueryPlanner, emptyGraphPattern) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, graphSubqueryWithoutScan) {
+  h::expect(
+      "SELECT ?x WHERE { GRAPH ?g { { SELECT ?x WHERE { VALUES ?x { 1 } } } } "
+      "}",
+      h::CartesianProductJoin(h::DistinctGraphs(),
+                              h::ValuesClause("VALUES (?x) { (1) }")));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, WarningsOnUnboundVariables) {
   using enum ::OrderBy::AscOrDesc;
   // Unbound variable in ORDER BY.
