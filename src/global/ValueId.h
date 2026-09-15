@@ -348,7 +348,7 @@ class ValueId {
   // Create a `ValueId` for a signed integer value. Integers in the range
   // [-2^59, 2^59-1] can be represented. Integers outside of this range will
   // overflow according to the semantics of `NBitInteger<60>`.
-  static constexpr ValueId makeFromInt(int64_t i) noexcept {
+  static constexpr ValueId makeFromInt(int64_t i) {
     auto nbit = IntegerType::toNBit(i);
     return addDatatypeBits(nbit, Datatype::Int);
   }
