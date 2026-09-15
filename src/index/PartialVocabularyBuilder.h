@@ -163,8 +163,11 @@ class PartialVocabularyTaskChain {
 
   // Schedule the first step of this chain. Must be called exactly once, after
   // all task chains have been constructed and before the thread pool behind
-  // `executor_` is joined.
-  void start() { postNextStep(); }
+  // `executor_` is joined. This is `noexcept` because `runTaskChains` starts
+  // the chains one after the other: if starting a later chain threw (which
+  // only `bad_alloc` from `post` could do), the earlier chains would already
+  // be running on the pool while `runTaskChains` unwinds and destroys them.
+  void start() noexcept { postNextStep(); }
 
  private:
   // (Re-)initialize `itemMap_` for a fresh partial vocabulary and clear the
