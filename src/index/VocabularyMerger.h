@@ -94,10 +94,10 @@ ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
  * strings that were connected to x and y in the input were identical. Also
  * modifies the input Ids to their mapped values.
  *
- * @param els  Must be sorted(at least duplicates must be adjacent) according to
- * the strings and the Ids must be unique to work correctly.
+ * @param entries  Must be sorted(at least duplicates must be adjacent)
+ * according to the strings and the Ids must be unique to work correctly.
  */
-ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
+ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& entries);
 
 // The triples that were mapped using a single partial vocabulary are stored in
 // a file of their own (see `unsortedTriplesFilename`). The following two
@@ -117,22 +117,27 @@ IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
     const std::string& filename);
 
 /**
- * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
+ * @brief Serialize an `ItemVec` to a binary file
  *
- * For each string first writes the size of the string (64 bits). Then the
- * actual string content (no trailing zero) and then the Id (sizeof(Id)
+ * First writes the number of entries. Then, for each entry, the word (its
+ * size and then its content, without a trailing zero), the external flag, the
+ * index, and the geo sort key.
  *
- * @param els The input
+ * @param entries The input
  * @param fileName will write to this file. If it exists it will be overwritten
  */
-void writePartialVocabularyToFile(const ItemVec& els,
+void writePartialVocabularyToFile(const ItemVec& entries,
                                   const std::string& fileName);
 
 /**
  * @brief Take a HashMap of strings to Ids and insert all its elements into a
  * single vector. No reordering or deduplication is done, so result.size() ==
- * size of the hash map
+ * size of the hash map. The `geoSortKeyFn` computes the geo sort key of each
+ * word (see `ItemVecEntry`); the overload without it sets all keys to 0.
  */
+template <typename GeoSortKeyFn>
+ItemVec vocabMapsToVector(const ItemMapAndBuffer& map,
+                          const GeoSortKeyFn& geoSortKeyFn);
 ItemVec vocabMapsToVector(const ItemMapAndBuffer& map);
 
 // _____________________________________________________________________________________________________________

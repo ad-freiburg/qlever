@@ -51,6 +51,13 @@ class Join : public Operation {
   std::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
+  // Forward prefilters to the children. This is an inner join, so a
+  // (conservative) prefilter on a child's variable only removes rows whose
+  // value can never satisfy the downstream filter; the join rows built from
+  // them would be removed by that filter as well.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      const std::vector<PrefilterVariablePair>& prefilters) const override;
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
   std::string getCacheKeyImpl() const override;
