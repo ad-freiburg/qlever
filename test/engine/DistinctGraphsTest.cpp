@@ -19,7 +19,6 @@
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "gmock/gmock.h"
-#include "index/ConstantsIndexBuilding.h"
 #include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"
 
@@ -124,6 +123,14 @@ TEST(DistinctGraphs, getResultSortedOn) {
   auto dg = makeDistinctGraphs();
 
   EXPECT_THAT(dg.getResultSortedOn(), ::testing::IsEmpty());
+}
+
+// _____________________________________________________________________________
+TEST(DistinctGraphs, isDistinctBy) {
+  auto dg = makeDistinctGraphs();
+
+  EXPECT_TRUE(dg.isDistinctBy({0}));
+  EXPECT_FALSE(dg.isDistinctBy({}));
 }
 
 // _____________________________________________________________________________

@@ -16,6 +16,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "rdfTypes/Variable.h"
+#include "util/Algorithm.h"
 
 // Operation that produces a single-column result containing all distinct
 // named graph IRIs present in the index. It is used to evaluate SPARQL
@@ -57,6 +58,12 @@ class DistinctGraphs : public Operation {
   float getMultiplicity(size_t) override { return 1.0f; }
 
   bool knownEmptyResult() override { return false; }
+
+  // Each graph ID appears once, so the result is distinct iff column 0 is kept.
+  bool isDistinctByImpl(
+      const std::vector<ColumnIndex>& distinctIndices) const override {
+    return ad_utility::contains(distinctIndices, ColumnIndex{0});
+  }
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
