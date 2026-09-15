@@ -139,23 +139,18 @@ class PartialVocabIndexWithExternalFlag {
 // deallocate all strings from a single batch of triples at once as soon as we
 // have finished processing them.
 
-// Allocator type for the hash map.
-using ItemAlloc = ql::pmr::polymorphic_allocator<
-    std::pair<const std::string_view, PartialVocabIndexWithExternalFlag>>;
-
-// The type of the hash map.
+// The type of the hash map. Note that the hash maps are not thrown away after
+// each partial vocabulary, but cleared and reused (see
+// `ItemMapAndBuffer::clear`), so a caching allocator is not needed.
 using ItemMap =
-    ad_utility::HashMap<std::string_view, PartialVocabIndexWithExternalFlag,
-                        absl::DefaultHashContainerHash<std::string_view>,
-                        absl::DefaultHashContainerEq<std::string_view>,
-                        ItemAlloc>;
+    ad_utility::HashMap<std::string_view, PartialVocabIndexWithExternalFlag>;
 
 // A vector that stores the same values as the hash map.
 using ItemVec =
     std::vector<std::pair<std::string_view, PartialVocabIndexWithExternalFlag>>;
 
 // A buffer that very efficiently handles a set of strings that is deallocated
-// at once when the buffer goes out of scope.
+// at once when the buffer goes out of scope or `clear` is called.
 class MonotonicBuffer {
   std::unique_ptr<ql::pmr::monotonic_buffer_resource> buffer_ =
       std::make_unique<ql::pmr::monotonic_buffer_resource>();
@@ -174,6 +169,11 @@ class MonotonicBuffer {
     ql::ranges::copy(input, ptr);
     return {ptr, input.size()};
   }
+
+  // Deallocate all the strings in this buffer at once. All the `string_view`s
+  // that `addString` has returned dangle afterwards. The allocator stays valid,
+  // so the buffer can be filled again.
+  void clear() { buffer_->release(); }
 };
 
 // The hash map (which only stores pointers) together with the `MonotonicBuffer`
@@ -182,20 +182,28 @@ struct ItemMapAndBuffer {
   ItemMap map_;
   MonotonicBuffer buffer_;
 
-  explicit ItemMapAndBuffer(ItemAlloc alloc) : map_{alloc} {}
-  // Note: For older boost versions + compilers, we unfortunately cannot default
-  // copy constructor because
-  // 1. In older boost versions, the move operations of the polymorphic
-  // allocators were not yet marked `noexcept`
-  // 2. We definitely want this move constructor to be `noexcept`.
-  // 3. GCC 8 complains if we explicitly use `noexcept = default` if the default
-  // implementation wouldn't be noexcept.
-  ItemMapAndBuffer(ItemMapAndBuffer&& rhs) noexcept
-      : map_{std::move(rhs.map_)}, buffer_{std::move(rhs.buffer_)} {}
-  // We have to delete the move-assignment as it would have the wrong semantics
-  // (the monotonic buffer wouldn't be moved, this is one of the oddities of the
-  // `ql::pmr` types.
-  ItemMapAndBuffer& operator=(ItemMapAndBuffer&&) noexcept = delete;
+  ItemMapAndBuffer() = default;
+  // Neither copied nor moved: each task chain of the first pass owns a single
+  // instance for its whole lifetime and reuses it via `clear` (see
+  // `PartialVocabularyBuilder.h`), and writing a partial vocabulary only reads
+  // it. Being immovable also rules out separating `map_` from the `buffer_`
+  // that its `string_view` keys point into.
+  ItemMapAndBuffer(const ItemMapAndBuffer&) = delete;
+  ItemMapAndBuffer& operator=(const ItemMapAndBuffer&) = delete;
+  ItemMapAndBuffer(ItemMapAndBuffer&&) = delete;
+  ItemMapAndBuffer& operator=(ItemMapAndBuffer&&) = delete;
+
+  // Remove all the entries and deallocate all the strings, but keep the memory
+  // of the hash map, so that the next partial vocabulary can reuse it.
+  //
+  // NOTE: `erase(begin(), end())` is deliberately not `clear()`. For all but
+  // very small maps, `clear()` deallocates the hash map's backing array, while
+  // `erase(begin(), end())` only resets the control bytes and keeps the array
+  // (see `ClearBackingArray` in `absl/container/internal/raw_hash_set.cc`).
+  void clear() {
+    map_.erase(map_.begin(), map_.end());
+    buffer_.clear();
+  }
 };
 
 // A hash map that assigns a unique ID for each of a set of strings. The IDs
@@ -212,21 +220,20 @@ struct alignas(256) ItemMapManager {
   const TripleComponentComparator* comparator_;
 
   // Construct with given minimum ID.
-  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
-                          ItemAlloc alloc)
-      : map_(alloc), minId_(minId), comparator_(cmp) {
-    // Precompute the mapping from the `specialIds` to their normal IDs in the
-    // vocabulary. This makes resolving such IRIs much cheaper.
-    for (const auto& [specialIri, specialId] : qlever::specialIds()) {
-      auto iriref = TripleComponent::Iri::fromIriref(specialIri);
-      auto key = PossiblyExternalizedTripleComponent{std::move(iriref), false};
-      specialIdMapping_[specialId] = getId(key);
-    }
+  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp)
+      : minId_(minId), comparator_(cmp) {
+    addSpecialIds();
   }
 
-  // Move the hash map out, as soon as we are done adding triples and only need
-  // the actual vocabulary.
-  ItemMapAndBuffer&& moveMap() && { return std::move(map_); }
+  // Reset to the state right after construction, but keep the memory of the
+  // hash map (see `ItemMapAndBuffer::clear`), so that the next partial
+  // vocabulary can reuse it. All the `string_view`s into this manager (in
+  // particular those of a previously created `ItemVec`) dangle afterwards.
+  void clear() {
+    map_.clear();
+    specialIdMapping_.clear();
+    addSpecialIds();
+  }
 
   // For a given `PossiblyExternalizedTripleComponent`, if we have seen it
   // before, return its assigned ID. Else assign it the next free ID, store it,
@@ -262,6 +269,18 @@ struct alignas(256) ItemMapManager {
   std::array<Id, NumColumnsIndexBuilding> getId(const Triple& t) {
     return std::apply(
         [this](const auto&... els) { return std::array{getId(els)...}; }, t);
+  }
+
+ private:
+  // Precompute the mapping from the `specialIds` to their normal IDs in the
+  // vocabulary. This makes resolving such IRIs much cheaper. Every partial
+  // vocabulary has to contain them.
+  void addSpecialIds() {
+    for (const auto& [specialIri, specialId] : qlever::specialIds()) {
+      auto iriref = TripleComponent::Iri::fromIriref(specialIri);
+      auto key = PossiblyExternalizedTripleComponent{std::move(iriref), false};
+      specialIdMapping_[specialId] = getId(key);
+    }
   }
 };
 

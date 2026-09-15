@@ -42,12 +42,13 @@
 // `Index` must provide:
 // - `ProcessedTriple processTriple(TurtleTriple&&)`, see `mapTripleToIds` in
 //   `IndexBuilderTypes.h`.
-// - `void writePartialVocabulary(size_t partialVocabIdx, ItemMapAndBuffer
-//   items, std::vector<IdRow>& localIds)`, which writes the partial vocabulary
-//   with the given index and its triples (`IdRow` is defined in
-//   `IndexBuilderTypes.h`). It may modify the triples, but not the size of the
-//   vector. It is called concurrently from several task chains, but never
-//   twice for the same `partialVocabIdx`.
+// - `void writePartialVocabulary(size_t partialVocabIdx,
+//   const ItemMapAndBuffer& items, std::vector<IdRow>& localIds)`, which
+//   writes the partial vocabulary with the given index and its triples
+//   (`IdRow` is defined in `IndexBuilderTypes.h`). It may modify the triples,
+//   but not the size of the vector, and must not hold on to anything from
+//   `items` after it returns. It is called concurrently from several task
+//   chains, but never twice for the same `partialVocabIdx`.
 namespace qlever::partialVocabularyBuilder {
 
 // Shared state for all the task chains of a single first pass. An aggregate:
@@ -61,7 +62,6 @@ struct FirstPassSharedState {
   Index* index_;
   // The comparator for the `ItemMapManager`s of the task chains.
   const TripleComponentComparator* comparator_;
-  ItemAlloc itemAlloc_;
   size_t linesPerPartial_;
 
   // Show progress and statistics for the number of parsed input triples. The
@@ -126,7 +126,7 @@ struct FirstPassSharedState {
 // the input is exhausted), the chain atomically claims the next free partial
 // vocabulary index from the shared counter, writes the vocabulary and the
 // corresponding ID triples under that index and, if there is more input,
-// starts a fresh `ItemMapManager` for the next partial vocabulary.
+// resets its `ItemMapManager` for the next partial vocabulary.
 //
 // Error handling: if any step of a chain throws, the exception is recorded in
 // the shared state (see `FirstPassSharedState::reportError`) and the chain
@@ -142,11 +142,10 @@ class PartialVocabularyTaskChain {
   // `step`), so that the chain does not depend on the executor of the parser.
   ql::any_io_executor executor_;
   // The `ItemMapManager` and buffered local-ID triples of the partial
-  // vocabulary that is currently being built by this chain; reset to an empty
-  // state every time a partial vocabulary is written (see
-  // `startNewPartialVocabulary`). `ItemMapManager` is not movable, hence the
-  // `optional`.
-  std::optional<ItemMapManager> itemMap_;
+  // vocabulary that is currently being built by this chain; both are reset to
+  // an empty state, but keep their memory, every time a partial vocabulary is
+  // written (see `startNewPartialVocabulary`).
+  ItemMapManager itemMap_;
   std::vector<IdRow> localTriples_;
   size_t numInputTriples_ = 0;
   // The number of `ql:has-word` triples that this chain has created (see
@@ -158,7 +157,10 @@ class PartialVocabularyTaskChain {
   PartialVocabularyTaskChain(FirstPassSharedState<Index>& shared,
                              AsyncRdfParserBase& parser,
                              ql::any_io_executor executor)
-      : shared_{shared}, parser_{parser}, executor_{std::move(executor)} {
+      : shared_{shared},
+        parser_{parser},
+        executor_{std::move(executor)},
+        itemMap_{0, shared.comparator_} {
     startNewPartialVocabulary();
   }
 
@@ -171,19 +173,20 @@ class PartialVocabularyTaskChain {
   void start() noexcept { postNextStep(); }
 
  private:
-  // (Re-)initialize `itemMap_` for a fresh partial vocabulary and clear the
-  // triple buffer and the input-triple counter. The triple buffer keeps its
-  // capacity, so it only has to grow while the first partial vocabulary of
-  // this chain is built. The number of entries that are reserved for the item
-  // map is somewhat arbitrary: half the number of triples per partial
-  // vocabulary was empirically better than larger values.
-  // Note that `reserve` on a hash map has to assume the worst case (many
-  // collisions), so it allocates considerably more than the requested number
-  // of entries. The memory allocation overhead of the first pass should be
-  // systematically analyzed anyway.
+  // Reset `itemMap_`, the triple buffer and the input-triple counter for a
+  // fresh partial vocabulary. Both the item map and the triple buffer keep
+  // their memory, so they only have to grow while the first partial vocabulary
+  // of this chain is built, and the `reserve` is a no-op from the second one
+  // on. The number of entries that are reserved for the item map is somewhat
+  // arbitrary: half the number of triples per partial vocabulary was
+  // empirically better than larger values. Note that `reserve` on a hash map
+  // has to assume the worst case (many collisions), so it allocates
+  // considerably more than the requested number of entries. The memory
+  // allocation overhead of the first pass should be systematically analyzed
+  // anyway.
   void startNewPartialVocabulary() {
-    itemMap_.emplace(0, shared_.comparator_, shared_.itemAlloc_);
-    itemMap_->map_.map_.reserve(shared_.linesPerPartial_ / 2);
+    itemMap_.clear();
+    itemMap_.map_.map_.reserve(shared_.linesPerPartial_ / 2);
     localTriples_.clear();
     numInputTriples_ = 0;
   }
@@ -191,14 +194,15 @@ class PartialVocabularyTaskChain {
   // Claim the next free partial vocabulary index from the shared counter and
   // write the current (non-empty) partial vocabulary and its triples under
   // that index. Both files are exclusively owned by this chain, so no further
-  // synchronization is needed. The vector of triples stays with this chain,
-  // which reuses its memory for the next partial vocabulary (see
-  // `startNewPartialVocabulary`).
+  // synchronization is needed. The item map and the vector of triples stay with
+  // this chain, which reuses their memory for the next partial vocabulary (see
+  // `startNewPartialVocabulary`). The write is synchronous, so nothing refers
+  // to the item map's strings once it returns.
   void writeCurrentPartialVocabulary() {
     size_t partialVocabIdx = shared_.nextPartialVocabIdx_.fetch_add(1);
     shared_.numTriples_.fetch_add(localTriples_.size());
-    shared_.index_->writePartialVocabulary(
-        partialVocabIdx, std::move(*itemMap_).moveMap(), localTriples_);
+    shared_.index_->writePartialVocabulary(partialVocabIdx, itemMap_.map_,
+                                           localTriples_);
   }
 
   // Schedule the next step of this chain on `executor_`.
@@ -242,8 +246,8 @@ class PartialVocabularyTaskChain {
   // current partial vocabulary is full, write it and start a new one.
   void handleBatch(std::vector<TurtleTriple> batch) {
     for (auto& triple : batch) {
-      mapTripleToIds(std::move(triple), itemMap_.value(), shared_.index_,
-                     localTriples_, numHasWordTriples_);
+      mapTripleToIds(std::move(triple), itemMap_, shared_.index_, localTriples_,
+                     numHasWordTriples_);
     }
     numInputTriples_ += batch.size();
     shared_.progressBar_.add(batch.size());
