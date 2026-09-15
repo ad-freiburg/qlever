@@ -8,6 +8,11 @@
 #include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "AllocatorTestHelpers.h"
 #include "GTestHelpers.h"
 #include "backports/three_way_comparison.h"
@@ -91,6 +96,15 @@ struct TestIndexConfig {
   // (see `IndexImpl::setSecondaryVocabForTesting`), which is what this member
   // does.
   std::optional<std::vector<std::string>> secondaryVocabWords = std::nullopt;
+  // If set, the input is parsed in parallel (`true`) or serially (`false`), as
+  // if specified on the command line of `qlever-index`. If `nullopt`, a single
+  // input file is parsed in parallel for reasons of backward compatibility (see
+  // `IndexImpl::updateInputFileSpecificationsAndLog`).
+  std::optional<bool> parseInParallel = std::nullopt;
+  // Additional entries for the `.settings.json` file of the index build (see
+  // `IndexImpl::readIndexBuilderSettingsFromFile`) as pairs of a key and a
+  // value in JSON syntax (so a string value has to be quoted).
+  std::vector<std::pair<std::string, std::string>> additionalSettings;
 
   // A very typical use case is to only specify the turtle input, and leave all
   // the other members as the default. We therefore have a dedicated constructor
@@ -108,7 +122,8 @@ struct TestIndexConfig {
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
-        c.addHasWordTriples, c.secondaryVocabWords);
+        c.addHasWordTriples, c.secondaryVocabWords, c.parseInParallel,
+        c.additionalSettings);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
@@ -116,7 +131,8 @@ struct TestIndexConfig {
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
       scoringMetric, bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
-      addHasWordTriples, secondaryVocabWords)
+      addHasWordTriples, secondaryVocabWords, parseInParallel,
+      additionalSettings)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

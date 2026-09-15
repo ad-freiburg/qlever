@@ -116,7 +116,8 @@ class RdfAsyncMultifileParser : public AsyncRdfParserBase {
 
   const EncodedIriManager* encodedIriManager_;
   ad_utility::MemorySize bufferSize_;
-  bool useRelaxedParsing_;
+  // The settings for the parser of every file (see `RdfParserSettings`).
+  RdfParserSettings settings_;
 
   // Only ever locked exclusively, hence a plain `std::mutex`.
   ad_utility::Synchronized<FileState, std::mutex> fileState_;
@@ -131,16 +132,15 @@ class RdfAsyncMultifileParser : public AsyncRdfParserBase {
   // all of its work (including that of the per-file parsers) on `executor`.
   // The constructor does not block and starts no asynchronous operation;
   // files are opened lazily by `asyncGetBatch()` calls, see the class comment
-  // above. If `useRelaxedParsing` is `true`, the faster `TokenizerCtre` is
-  // used for all files instead of the standard-compliant `Tokenizer` (see the
-  // comment on `TurtleParser` in `RdfParser.h` for the limitations of the
-  // relaxed mode).
+  // above. The `settings` are applied to the parser of every file; in
+  // particular, `settings.useRelaxedParsing_` selects the tokenizer for all
+  // files.
   RdfAsyncMultifileParser(
       const ql::any_io_executor& executor,
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
-      bool useRelaxedParsing = false);
+      RdfParserSettings settings = {});
 
  protected:
   // Implement `AsyncRdfParserBase::asyncGetBatchImpl` by `co_spawn`ing
@@ -178,7 +178,7 @@ class RdfAsyncMultifileParser : public AsyncRdfParserBase {
 
   // Construct the per-file `AsyncRdfParserBase` for `spec`, choosing the
   // concrete parser type based on `spec.parseInParallel_` and
-  // `spec.filetype_`, and the tokenizer based on `useRelaxedParsing_`. This is
+  // `spec.filetype_`, and the tokenizer based on the settings. This is
   // cheap for both parser types (neither of them parses or even reads anything
   // in its constructor, see `AsyncSerialParserAdapter`), which is what allows
   // `pickFile` to call it while holding the lock.
@@ -200,10 +200,10 @@ class RdfMultifileParserViaAsync
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
-      bool useRelaxedParsing = false)
+      RdfParserSettings settings = {})
       : AsyncParserDriver<RdfAsyncMultifileParser>{
             encodedIriManager, std::move(files), encodedIriManager, bufferSize,
-            useRelaxedParsing} {}
+            settings} {}
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFASYNCMULTIFILEPARSER_H
