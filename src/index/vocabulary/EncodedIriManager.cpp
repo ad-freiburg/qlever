@@ -14,10 +14,13 @@
 #include <range/v3/view/enumerate.hpp>
 #include <stdexcept>
 
+#include "util/Algorithm.h"
+
 namespace {
 // The JSON keys, see `detail::patternsToJson`.
-constexpr const char* jsonKeyPrefixes = "prefixes-with-leading-angle-brackets";
-constexpr const char* jsonKeyPatterns = "patterns";
+constexpr std::string_view jsonKeyPrefixes =
+    "prefixes-with-leading-angle-brackets";
+constexpr std::string_view jsonKeyPatterns = "patterns";
 
 // Throw if the `prefix` (which the `origin` describes for the error message)
 // starts with a `<`, which the manager adds itself.
@@ -134,12 +137,8 @@ void detail::patternsToJson(nlohmann::json& j,
     return encodedIri::isPlainPrefixPattern(pattern, numBitsEncoding);
   };
   if (ql::ranges::all_of(patterns, isPlain)) {
-    std::vector<std::string> prefixes;
-    prefixes.reserve(patterns.size());
-    for (const auto& pattern : patterns) {
-      prefixes.push_back(pattern.prefix_);
-    }
-    j[jsonKeyPrefixes] = std::move(prefixes);
+    j[jsonKeyPrefixes] =
+        ad_utility::transform(patterns, &encodedIri::Pattern::prefix_);
   } else {
     j[jsonKeyPatterns] = patterns;
   }

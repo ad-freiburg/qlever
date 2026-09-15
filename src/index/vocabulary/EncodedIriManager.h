@@ -33,9 +33,9 @@ std::vector<std::string> sortAndCheckPrefixes(std::vector<std::string> prefixes,
 // `prefixes` (see `sortAndCheckPrefixes`, they become plain prefix patterns
 // with `numBitsEncoding` bits) followed by the general `patterns` in the given
 // order. The `prefix_` of each pattern has to be specified without the leading
-// `<`, which is added here. Throw if one of the patterns is invalid (see
-// `encodedIri::validatePattern`) or if there are more than `maxNumPatterns`
-// patterns in total.
+// `<`, which is added here. Throw if one of the patterns needs more than
+// `numBitsEncoding` bits (see `encodedIri::validatePattern`) or if there are
+// more than `maxNumPatterns` patterns in total.
 std::vector<encodedIri::Pattern> makePatterns(
     std::vector<std::string> prefixes,
     std::vector<encodedIri::Pattern> patterns, size_t numBitsEncoding,

@@ -21,19 +21,24 @@ namespace encodedIri {
 
 namespace {
 // The JSON keys of the members of the structs in this file.
-constexpr const char* beginKey = "begin";
-constexpr const char* endKey = "end";
-constexpr const char* valueKey = "value";
-constexpr const char* numBitsKey = "num-bits";
-constexpr const char* fixedBitRangesKey = "fixed-bit-ranges";
-constexpr const char* suffixKey = "suffix";
-constexpr const char* encodingKey = "encoding";
-constexpr const char* prefixKey = "prefix-with-leading-angle-bracket";
-constexpr const char* partsKey = "parts";
+constexpr std::string_view beginKey = "begin";
+constexpr std::string_view endKey = "end";
+constexpr std::string_view valueKey = "value";
+constexpr std::string_view numBitsKey = "num-bits";
+constexpr std::string_view fixedBitRangesKey = "fixed-bit-ranges";
+constexpr std::string_view suffixKey = "suffix";
+constexpr std::string_view encodingKey = "encoding";
+constexpr std::string_view prefixKey = "prefix-with-leading-angle-bracket";
+constexpr std::string_view partsKey = "parts";
 
 // The JSON representations of the `NumberEncoding` enum.
-constexpr const char* binaryEncodingName = "binary";
-constexpr const char* nibblesEncodingName = "nibbles";
+constexpr std::string_view binaryEncodingName = "binary";
+constexpr std::string_view nibblesEncodingName = "nibbles";
+
+// The string `[begin, end)` for the error messages about a bit range.
+std::string rangeToString(uint64_t begin, uint64_t end) {
+  return absl::StrCat("[", begin, ", ", end, ")");
+}
 
 // Throw a `std::runtime_error` that reports an invalid `pattern`.
 [[noreturn]] void throwInvalidPattern(const Pattern& pattern,
@@ -43,6 +48,91 @@ constexpr const char* nibblesEncodingName = "nibbles";
                    pattern.prefix_, "\" is invalid: ", message));
 }
 }  // namespace
+
+// _____________________________________________________________________________
+FixedBitRange::FixedBitRange(uint64_t begin, uint64_t end, uint64_t value)
+    : begin_{static_cast<uint8_t>(begin)},
+      end_{static_cast<uint8_t>(end)},
+      value_{value} {
+  auto throwInvalid = [begin, end](std::string_view message) {
+    throw std::runtime_error(absl::StrCat(
+        "The fixed bit range ", rangeToString(begin, end),
+        " of a number of a pattern for encoded IRIs is invalid: ", message));
+  };
+  if (begin >= end || end > 64) {
+    throwInvalid("it is empty or not contained in the 64 bits of a number");
+  }
+  if (value > ad_utility::bitMaskForLowerBits(end - begin)) {
+    throwInvalid(absl::StrCat("the value ", value, " doesn't fit into it"));
+  }
+}
+
+// _____________________________________________________________________________
+Part::Part(uint64_t numBits, std::vector<FixedBitRange> fixedBitRanges,
+           std::string suffix, NumberEncoding encoding)
+    : numBits_{static_cast<uint8_t>(numBits)},
+      fixedBitRanges_{std::move(fixedBitRanges)},
+      suffix_{std::move(suffix)},
+      encoding_{encoding} {
+  auto throwInvalid = [numBits, this](std::string_view message) {
+    throw std::runtime_error(absl::StrCat(
+        "The number with ", numBits, " bits and the suffix \"", suffix_,
+        "\" of a pattern for encoded IRIs is invalid: ", message));
+  };
+  if (numBits == 0 || numBits > 64) {
+    throwInvalid("only 1 to 64 bits are supported");
+  }
+  // The ranges themselves are valid (see the constructor of `FixedBitRange`),
+  // so only their relation to each other and to `numBits` has to be checked.
+  size_t lastEnd = 0;
+  for (const auto& range : fixedBitRanges_) {
+    if (range.end_ > numBits) {
+      throwInvalid(absl::StrCat(
+          "the fixed bit range ", rangeToString(range.begin_, range.end_),
+          " is not contained in the ", rangeToString(0, numBits), " bits"));
+    }
+    if (range.begin_ < lastEnd) {
+      throwInvalid(
+          "the fixed bit ranges have to be sorted and must not overlap");
+    }
+    lastEnd = range.end_;
+  }
+  if (encoding_ == NumberEncoding::Nibbles &&
+      (numBits % NibbleSize != 0 || !fixedBitRanges_.empty())) {
+    throwInvalid(
+        "the nibble encoding requires a multiple of four bits and no fixed bit "
+        "ranges");
+  }
+  if (suffix_.find_first_of("<>") != std::string::npos) {
+    throwInvalid("the suffix must not contain an angle bracket");
+  }
+  if (!suffix_.empty() &&
+      absl::ascii_isdigit(static_cast<unsigned char>(suffix_[0]))) {
+    throwInvalid(
+        "the suffix must not start with a digit, because the digits of the "
+        "number are matched greedily");
+  }
+}
+
+// _____________________________________________________________________________
+Pattern::Pattern(std::string prefix, std::vector<Part> parts)
+    : prefix_{std::move(prefix)}, parts_{std::move(parts)} {
+  if (prefix_.find('>') != std::string::npos) {
+    throwInvalidPattern(*this, "the prefix must not contain a `>`");
+  }
+  if (parts_.empty()) {
+    throwInvalidPattern(*this, "it must contain at least one number");
+  }
+  // All suffixes but the last one have to be non-empty, else two consecutive
+  // numbers could not be told apart.
+  for (size_t i = 0; i + 1 < parts_.size(); ++i) {
+    if (parts_.at(i).suffix_.empty()) {
+      throwInvalidPattern(*this,
+                          "only the last number of a pattern may be followed "
+                          "by an empty suffix");
+    }
+  }
+}
 
 // _____________________________________________________________________________
 Pattern plainPrefixPattern(std::string prefix, size_t numBits) {
@@ -66,68 +156,6 @@ void validatePattern(const Pattern& pattern, size_t numBitsAvailable) {
   // The payload is shifted by the number of bits of a pattern, which is
   // undefined behavior for a shift by 64 or more.
   AD_CONTRACT_CHECK(numBitsAvailable < 64);
-  if (pattern.prefix_.find('>') != std::string::npos) {
-    throwInvalidPattern(pattern, "the prefix must not contain a `>`");
-  }
-  if (pattern.parts_.empty()) {
-    throwInvalidPattern(pattern, "it must contain at least one number");
-  }
-  for (const auto& part : pattern.parts_) {
-    if (part.numBits_ == 0 || part.numBits_ > 64) {
-      throwInvalidPattern(
-          pattern, absl::StrCat("a number has ", part.numBits_,
-                                " bits, but only 1 to 64 bits are supported"));
-    }
-    size_t lastEnd = 0;
-    for (const auto& range : part.fixedBitRanges_) {
-      if (range.begin_ >= range.end_ || range.end_ > part.numBits_) {
-        throwInvalidPattern(
-            pattern, absl::StrCat("the fixed bit range [", range.begin_, ", ",
-                                  range.end_,
-                                  ") is empty or not contained in "
-                                  "the [0, ",
-                                  part.numBits_, ") bits of its number"));
-      }
-      if (range.begin_ < lastEnd) {
-        throwInvalidPattern(pattern,
-                            "the fixed bit ranges of a number have to be "
-                            "sorted and must not overlap");
-      }
-      if (range.value_ > ad_utility::bitMaskForLowerBits(range.numBits())) {
-        throwInvalidPattern(
-            pattern, absl::StrCat("the value ", range.value_,
-                                  " doesn't fit into the fixed bit range [",
-                                  range.begin_, ", ", range.end_, ")"));
-      }
-      lastEnd = range.end_;
-    }
-    if (part.encoding_ == NumberEncoding::Nibbles &&
-        (part.numBits_ % NibbleSize != 0 || !part.fixedBitRanges_.empty())) {
-      throwInvalidPattern(pattern,
-                          "a number that uses the nibble encoding must have a "
-                          "multiple of four bits and no fixed bit ranges");
-    }
-    if (part.suffix_.find_first_of("<>") != std::string::npos) {
-      throwInvalidPattern(pattern,
-                          "a suffix must not contain an angle bracket");
-    }
-    if (!part.suffix_.empty() &&
-        absl::ascii_isdigit(static_cast<unsigned char>(part.suffix_[0]))) {
-      throwInvalidPattern(pattern,
-                          "a suffix must not start with a digit, because "
-                          "the digits of the preceding number are matched "
-                          "greedily");
-    }
-  }
-  // All suffixes but the last one have to be non-empty, else two consecutive
-  // numbers could not be told apart.
-  for (size_t i = 0; i + 1 < pattern.parts_.size(); ++i) {
-    if (pattern.parts_.at(i).suffix_.empty()) {
-      throwInvalidPattern(pattern,
-                          "only the last number of a pattern may be followed "
-                          "by an empty suffix");
-    }
-  }
   if (pattern.numBitsStored() > numBitsAvailable) {
     throwInvalidPattern(pattern,
                         absl::StrCat("it requires ", pattern.numBitsStored(),
@@ -215,8 +243,11 @@ void decompressNumber(std::string& result, const Part& part,
 
 // _____________________________________________________________________________
 std::string_view leadingDigits(std::string_view input) {
-  size_t end = input.find_first_not_of("0123456789");
-  return input.substr(0, end);
+  auto isDigit = [](char c) {
+    return absl::ascii_isdigit(static_cast<unsigned char>(c));
+  };
+  auto end = ql::ranges::find_if_not(input, isDigit);
+  return input.substr(0, end - input.begin());
 }
 
 // _____________________________________________________________________________
@@ -298,22 +329,29 @@ std::string decodeToIri(const Pattern& pattern, uint64_t payload) {
   return result;
 }
 
+}  // namespace encodedIri
+
 // _____________________________________________________________________________
-void to_json(nlohmann::json& j, const FixedBitRange& range) {
-  j[beginKey] = range.begin_;
-  j[endKey] = range.end_;
-  j[valueKey] = range.value_;
+void nlohmann::adl_serializer<encodedIri::FixedBitRange>::to_json(
+    json& j, const encodedIri::FixedBitRange& range) {
+  j[encodedIri::beginKey] = range.begin_;
+  j[encodedIri::endKey] = range.end_;
+  j[encodedIri::valueKey] = range.value_;
 }
 
 // _____________________________________________________________________________
-void from_json(const nlohmann::json& j, FixedBitRange& range) {
-  range.begin_ = j.at(beginKey).get<size_t>();
-  range.end_ = j.at(endKey).get<size_t>();
-  range.value_ = j.at(valueKey).get<uint64_t>();
+encodedIri::FixedBitRange
+nlohmann::adl_serializer<encodedIri::FixedBitRange>::from_json(const json& j) {
+  using namespace encodedIri;
+  return FixedBitRange{j.at(beginKey).get<uint64_t>(),
+                       j.at(endKey).get<uint64_t>(),
+                       j.at(valueKey).get<uint64_t>()};
 }
 
 // _____________________________________________________________________________
-void to_json(nlohmann::json& j, const Part& part) {
+void nlohmann::adl_serializer<encodedIri::Part>::to_json(
+    json& j, const encodedIri::Part& part) {
+  using namespace encodedIri;
   j[numBitsKey] = part.numBits_;
   j[fixedBitRangesKey] = part.fixedBitRanges_;
   j[suffixKey] = part.suffix_;
@@ -323,34 +361,37 @@ void to_json(nlohmann::json& j, const Part& part) {
 }
 
 // _____________________________________________________________________________
-void from_json(const nlohmann::json& j, Part& part) {
-  part.numBits_ = j.at(numBitsKey).get<size_t>();
-  part.fixedBitRanges_ =
-      j.at(fixedBitRangesKey).get<std::vector<FixedBitRange>>();
-  part.suffix_ = j.at(suffixKey).get<std::string>();
-  auto encoding = j.at(encodingKey).get<std::string>();
-  if (encoding == nibblesEncodingName) {
-    part.encoding_ = NumberEncoding::Nibbles;
-  } else if (encoding == binaryEncodingName) {
-    part.encoding_ = NumberEncoding::Binary;
+encodedIri::Part nlohmann::adl_serializer<encodedIri::Part>::from_json(
+    const json& j) {
+  using namespace encodedIri;
+  auto encodingName = j.at(encodingKey).get<std::string>();
+  NumberEncoding encoding;
+  if (encodingName == nibblesEncodingName) {
+    encoding = NumberEncoding::Nibbles;
+  } else if (encodingName == binaryEncodingName) {
+    encoding = NumberEncoding::Binary;
   } else {
     throw std::runtime_error(absl::StrCat(
-        "Unknown encoding \"", encoding,
+        "Unknown encoding \"", encodingName,
         "\" for a number of an encoded IRI, expected \"", binaryEncodingName,
         "\" or \"", nibblesEncodingName, "\""));
   }
+  return Part{j.at(numBitsKey).get<uint64_t>(),
+              j.at(fixedBitRangesKey).get<std::vector<FixedBitRange>>(),
+              j.at(suffixKey).get<std::string>(), encoding};
 }
 
 // _____________________________________________________________________________
-void to_json(nlohmann::json& j, const Pattern& pattern) {
-  j[prefixKey] = pattern.prefix_;
-  j[partsKey] = pattern.parts_;
+void nlohmann::adl_serializer<encodedIri::Pattern>::to_json(
+    json& j, const encodedIri::Pattern& pattern) {
+  j[encodedIri::prefixKey] = pattern.prefix_;
+  j[encodedIri::partsKey] = pattern.parts_;
 }
 
 // _____________________________________________________________________________
-void from_json(const nlohmann::json& j, Pattern& pattern) {
-  pattern.prefix_ = j.at(prefixKey).get<std::string>();
-  pattern.parts_ = j.at(partsKey).get<std::vector<Part>>();
+encodedIri::Pattern nlohmann::adl_serializer<encodedIri::Pattern>::from_json(
+    const json& j) {
+  using namespace encodedIri;
+  return Pattern{j.at(prefixKey).get<std::string>(),
+                 j.at(partsKey).get<std::vector<Part>>()};
 }
-
-}  // namespace encodedIri

@@ -10,6 +10,8 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <limits>
+
 #include "../util/GTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "index/vocabulary/EncodedIriPattern.h"
@@ -93,12 +95,12 @@ void expectNotEncodable(
 
 // _____________________________________________________________________________
 TEST(EncodedIriPattern, numBitsStored) {
-  EXPECT_EQ(Part{}.numBitsStored(), 64);
+  EXPECT_EQ((Part{64, {}, ""}).numBitsStored(), 64);
   EXPECT_EQ((Part{16, {}, ""}).numBitsStored(), 16);
   EXPECT_EQ((Part{32, {{29, 32, 1}}, "_"}).numBitsStored(), 29);
   EXPECT_EQ((Part{64, {{17, 32, 0}, {61, 64, 1}}, "_"}).numBitsStored(), 46);
 
-  EXPECT_EQ(Pattern{}.numBitsStored(), 0);
+  EXPECT_EQ((Pattern{"<p", {Part{8, {}, ""}}}).numBitsStored(), 8);
   EXPECT_EQ(rangePattern().numBitsStored(), 29 + 8 + 8);
   EXPECT_EQ(refPattern("ref_").numBitsStored(), 46 + 4);
 }
@@ -129,15 +131,12 @@ TEST(EncodedIriPattern, plainPrefixPattern) {
   EXPECT_FALSE(isPlainPrefixPattern(plain, 16));
   EXPECT_FALSE(isPlainPrefixPattern(plain, 64));
   EXPECT_FALSE(isPlainPrefixPattern(rangePattern(), 32));
-  EXPECT_FALSE(isPlainPrefixPattern(Pattern{"<p", {}}, 32));
   EXPECT_FALSE(isPlainPrefixPattern(Pattern{"<p", {Part{32, {}, ""}}}, 32));
   EXPECT_FALSE(isPlainPrefixPattern(
       Pattern{"<p", {Part{32, {}, "_", NumberEncoding::Nibbles}}}, 32));
-  EXPECT_FALSE(isPlainPrefixPattern(
-      Pattern{"<p", {Part{32, {{0, 4, 0}}, "", NumberEncoding::Nibbles}}}, 32));
   EXPECT_FALSE(
       isPlainPrefixPattern(Pattern{"<p",
-                                   {Part{16, {}, "", NumberEncoding::Nibbles},
+                                   {Part{16, {}, "_", NumberEncoding::Nibbles},
                                     Part{16, {}, "", NumberEncoding::Nibbles}}},
                            32));
 }
@@ -327,6 +326,93 @@ TEST(EncodedIriPattern, DigitEncodingInsideAPattern) {
 }
 
 // _____________________________________________________________________________
+TEST(EncodedIriPattern, FixedBitRangeConstructor) {
+  EXPECT_NO_THROW((FixedBitRange{0, 64, 0}));
+  EXPECT_NO_THROW((FixedBitRange{0, 64, std::numeric_limits<uint64_t>::max()}));
+  EXPECT_NO_THROW((FixedBitRange{4, 8, 15}));
+
+  auto expectThrow = [](uint64_t begin, uint64_t end, uint64_t value,
+                        const std::string& message,
+                        ad_utility::source_location l =
+                            AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (FixedBitRange{begin, end, value}),
+        AllOf(HasSubstr(message),
+              HasSubstr(absl::StrCat("[", begin, ", ", end, ")"))));
+  };
+  expectThrow(4, 4, 0, "is empty or not contained");
+  expectThrow(5, 4, 0, "is empty or not contained");
+  expectThrow(0, 65, 0, "is empty or not contained");
+  // Values that don't fit into the `uint8_t` members are rejected and not
+  // silently truncated.
+  expectThrow(0, 256 + 8, 0, "is empty or not contained");
+  expectThrow(256 + 4, 256 + 8, 0, "is empty or not contained");
+  expectThrow(4, 8, 16, "the value 16 doesn't fit");
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriPattern, PartConstructor) {
+  EXPECT_NO_THROW((Part{1, {}, ""}));
+  EXPECT_NO_THROW((Part{64, {{0, 64, 0}}, "_"}));
+  EXPECT_NO_THROW((Part{16, {{4, 8, 0}, {8, 10, 3}}, "_"}));
+  EXPECT_NO_THROW((Part{64, {}, "", NumberEncoding::Nibbles}));
+
+  auto expectThrow =
+      [](uint64_t numBits, std::vector<FixedBitRange> fixedBitRanges,
+         const std::string& suffix, NumberEncoding encoding,
+         const std::string& message,
+         ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(l);
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            (Part{numBits, std::move(fixedBitRanges), suffix, encoding}),
+            AllOf(HasSubstr(message),
+                  HasSubstr(absl::StrCat("The number with ", numBits,
+                                         " bits and the suffix \"", suffix,
+                                         "\""))));
+      };
+  using enum NumberEncoding;
+  expectThrow(0, {}, "", Binary, "only 1 to 64 bits are supported");
+  expectThrow(65, {}, "", Binary, "only 1 to 64 bits are supported");
+  // Values that don't fit into the `uint8_t` member are rejected and not
+  // silently truncated.
+  expectThrow(256 + 8, {}, "", Binary, "only 1 to 64 bits are supported");
+  expectThrow(8, {{4, 12, 0}}, "", Binary, "not contained in the [0, 8) bits");
+  expectThrow(16, {{4, 8, 0}, {6, 10, 0}}, "", Binary,
+              "sorted and must not overlap");
+  expectThrow(16, {{8, 10, 0}, {4, 6, 0}}, "", Binary,
+              "sorted and must not overlap");
+  expectThrow(10, {}, "", Nibbles,
+              "multiple of four bits and no fixed bit ranges");
+  expectThrow(16, {{4, 8, 0}}, "", Nibbles,
+              "multiple of four bits and no fixed bit ranges");
+  expectThrow(8, {}, "a>b", Binary, "must not contain an angle bracket");
+  expectThrow(8, {}, "a<b", Binary, "must not contain an angle bracket");
+  expectThrow(8, {}, "1", Binary, "must not start with a digit");
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriPattern, PatternConstructor) {
+  EXPECT_NO_THROW(rangePattern());
+  EXPECT_NO_THROW(refPattern("laneRef_"));
+  EXPECT_NO_THROW((Pattern{"<http://example.org/", {Part{8, {}, ""}}}));
+
+  auto expectThrow = [](std::string prefix, std::vector<Part> parts,
+                        const std::string& message,
+                        ad_utility::source_location l =
+                            AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    AD_EXPECT_THROW_WITH_MESSAGE((Pattern{prefix, std::move(parts)}),
+                                 AllOf(HasSubstr(message), HasSubstr(prefix)));
+  };
+  expectThrow("<http://example.org/", {}, "at least one number");
+  expectThrow("<http://example.org/", {Part{8, {}, ""}, Part{8, {}, ""}},
+              "only the last number of a pattern may be followed");
+  expectThrow("<http://example.org/a>b", {Part{8, {}, ""}},
+              "prefix must not contain a `>`");
+}
+
+// _____________________________________________________________________________
 TEST(EncodedIriPattern, validatePattern) {
   EXPECT_NO_THROW(validatePattern(rangePattern(), numBitsAvailable));
   EXPECT_NO_THROW(validatePattern(valRangePattern(), numBitsAvailable));
@@ -334,49 +420,19 @@ TEST(EncodedIriPattern, validatePattern) {
   // A pattern may use exactly the available number of bits.
   EXPECT_NO_THROW(validatePattern(refPattern("laneRef_"), 50));
 
-  auto expectThrowForPattern = [](Pattern pattern, const std::string& message,
-                                  ad_utility::source_location l =
-                                      AD_CURRENT_SOURCE_LOC()) {
+  auto expectThrow = [](std::vector<Part> parts, const std::string& message,
+                        ad_utility::source_location l =
+                            AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
+    Pattern pattern{"<http://example.org/", std::move(parts)};
     AD_EXPECT_THROW_WITH_MESSAGE(
         validatePattern(pattern, numBitsAvailable),
         AllOf(HasSubstr(message), HasSubstr(pattern.prefix_)));
   };
-  // The same for a pattern with a prefix that is valid.
-  auto expectThrow = [&expectThrowForPattern](std::vector<Part> parts,
-                                              const std::string& message,
-                                              ad_utility::source_location l =
-                                                  AD_CURRENT_SOURCE_LOC()) {
-    expectThrowForPattern(Pattern{"<http://example.org/", std::move(parts)},
-                          message, l);
-  };
-  expectThrow({}, "at least one number");
-  expectThrow({Part{0, {}, ""}}, "only 1 to 64 bits are supported");
-  expectThrow({Part{65, {}, ""}}, "only 1 to 64 bits are supported");
-  expectThrow({Part{8, {{4, 12, 0}}, ""}}, "not contained in the [0, 8) bits");
-  expectThrow({Part{8, {{4, 4, 0}}, ""}}, "is empty or not contained");
-  expectThrow({Part{8, {{5, 4, 0}}, ""}}, "is empty or not contained");
-  expectThrow({Part{16, {{4, 8, 0}, {6, 10, 0}}, ""}},
-              "sorted and must not overlap");
-  expectThrow({Part{16, {{8, 10, 0}, {4, 6, 0}}, ""}},
-              "sorted and must not overlap");
-  expectThrow({Part{16, {{4, 8, 16}}, ""}},
-              "doesn't fit into the fixed bit range");
-  expectThrow({Part{10, {}, "", NumberEncoding::Nibbles}},
-              "multiple of four bits and no fixed bit ranges");
-  expectThrow({Part{16, {{4, 8, 0}}, "", NumberEncoding::Nibbles}},
-              "multiple of four bits and no fixed bit ranges");
-  expectThrow({Part{8, {}, "a>b"}}, "must not contain an angle bracket");
-  expectThrow({Part{8, {}, "a<b"}}, "must not contain an angle bracket");
-  expectThrow({Part{8, {}, "1"}}, "must not start with a digit");
-  expectThrow({Part{8, {}, ""}, Part{8, {}, ""}},
-              "only the last number of a pattern may be followed");
   expectThrow({Part{53, {}, ""}},
               "it requires 53 bits, but only 52 bits are available");
   expectThrow({Part{32, {}, "_"}, Part{21, {}, ""}},
               "it requires 53 bits, but only 52 bits are available");
-  expectThrowForPattern(Pattern{"<http://example.org/a>b", {Part{8, {}, ""}}},
-                        "prefix must not contain a `>`");
 
   // Shifting the payload by 64 or more bits would be undefined behavior, so
   // such a number of available bits is a violated precondition.
@@ -421,13 +477,27 @@ TEST(EncodedIriPattern, json) {
   Part part{64, {{17, 32, 0}, {61, 64, 1}}, "_"};
   EXPECT_EQ(nlohmann::json(part).get<Part>(), part);
 
-  // An unknown encoding is detected when reading a pattern. Note that the
-  // other constraints of a pattern are not checked by `from_json`, but by
-  // `validatePattern`, which the `EncodedIriManager` calls.
+  // An unknown encoding is detected when reading a pattern.
   nlohmann::json jInvalid = rangePattern();
   jInvalid["parts"][0]["encoding"] = "octal";
   AD_EXPECT_THROW_WITH_MESSAGE(jInvalid.get<Pattern>(),
                                HasSubstr("Unknown encoding \"octal\""));
+  // The other constraints are checked by the constructors, which `from_json`
+  // uses. In particular, numbers that don't fit into the `uint8_t` members are
+  // rejected instead of being silently truncated to a valid value.
+  jInvalid = rangePattern();
+  jInvalid["parts"][0]["num-bits"] = 256 + 32;
+  AD_EXPECT_THROW_WITH_MESSAGE(jInvalid.get<Pattern>(),
+                               HasSubstr("only 1 to 64 bits are supported"));
+  jInvalid = rangePattern();
+  jInvalid["parts"][0]["fixed-bit-ranges"][0]["end"] = 256 + 32;
+  AD_EXPECT_THROW_WITH_MESSAGE(jInvalid.get<Pattern>(),
+                               HasSubstr("is empty or not contained"));
+  jInvalid = rangePattern();
+  jInvalid["parts"][1]["suffix"] = "";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      jInvalid.get<Pattern>(),
+      HasSubstr("only the last number of a pattern may be followed"));
   // Missing keys are reported by the JSON library.
   nlohmann::json jMissing = rangePattern();
   jMissing["parts"][0].erase("suffix");

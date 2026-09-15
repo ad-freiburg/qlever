@@ -399,9 +399,8 @@ TEST(EncodedIriManager, illegalPatterns) {
   // manager adds itself.
   expectThrow(Pattern{"<http://example.org/", {Part{8, {}, ""}}},
               "enclosed in angle brackets");
-  // The general validation of the patterns (see `EncodedIriPatternTest.cpp`)
-  // is run by the constructor with the number of payload bits of the manager.
-  expectThrow(Pattern{"http://example.org/", {}}, "at least one number");
+  // The patterns are checked against the number of payload bits of the
+  // manager (see `validatePattern` in `EncodedIriPatternTest.cpp`).
   expectThrow(Pattern{"http://example.org/", {Part{53, {}, ""}}},
               "it requires 53 bits, but only 52 bits are available");
 }

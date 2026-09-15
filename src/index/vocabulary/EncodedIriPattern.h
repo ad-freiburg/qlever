@@ -11,6 +11,7 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIPATTERN_H
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <range/v3/numeric/accumulate.hpp>
 #include <string>
@@ -27,6 +28,12 @@
 // `EncodedIriManager.h`) stores directly in an `Id` instead of in the
 // vocabulary. It is stored in the index, such that an index can be loaded
 // without knowing how it was built.
+//
+// NOTE: The constructors of the structs below validate their arguments and
+// throw a `std::runtime_error` if they are invalid, so every object that
+// exists fulfills the documented constraints. This also holds for objects that
+// are read from JSON. The data members are public for the convenient read
+// access, they must not be modified in a way that violates the constraints.
 namespace encodedIri {
 
 // A range of bits `[begin_, end_)` of a number that is known to always have the
@@ -34,11 +41,19 @@ namespace encodedIri {
 // significant one and `value_` is the value of the range as a number, so
 // `FixedBitRange{29, 32, 1}` means that bit 29 is one and that the bits 30 and
 // 31 are zero. Such bits carry no information and are therefore not stored in
-// the `Id`.
+// the `Id`. The range is never empty, it ends at bit 64 at the latest, and
+// `value_` always fits into the range, that is, `value_ < 2 ^ (end_ - begin_)`.
 struct FixedBitRange {
-  size_t begin_ = 0;
-  size_t end_ = 0;
-  uint64_t value_ = 0;
+  uint8_t begin_;
+  uint8_t end_;
+  uint64_t value_;
+
+  // Throw a `std::runtime_error` if the range `[begin, end)` is empty, if it
+  // extends beyond 64 bits, or if the `value` doesn't fit into the range.
+  // NOTE: The arguments are deliberately wider than the members, such that
+  // values that are too large are rejected instead of being silently
+  // truncated, in particular when reading them from JSON.
+  FixedBitRange(uint64_t begin, uint64_t end, uint64_t value);
 
   // The number of bits in the range.
   size_t numBits() const { return end_ - begin_; }
@@ -69,24 +84,31 @@ enum class NumberEncoding {
 // One part of a `Pattern` (see below): a decimal number, followed by a fixed
 // string.
 struct Part {
-  // The number can only be encoded if it is smaller than `2 ^ numBits_`.
-  size_t numBits_ = 64;
+  // The number can only be encoded if it is smaller than `2 ^ numBits_`. It is
+  // always between 1 and 64.
+  uint8_t numBits_;
   // The bit ranges of the number that always have a fixed value and that are
-  // therefore not stored. They have to be sorted, non-overlapping, and
-  // contained in `[0, numBits_)`.
-  std::vector<FixedBitRange> fixedBitRanges_{};
+  // therefore not stored. They are sorted, non-overlapping, and contained in
+  // `[0, numBits_)`.
+  std::vector<FixedBitRange> fixedBitRanges_;
   // The fixed string that directly follows the number in the IRI. It may only
-  // be empty for the last part of a pattern, and it must not start with a
-  // digit, because the digits of the number are matched greedily.
-  std::string suffix_{};
-  NumberEncoding encoding_ = NumberEncoding::Binary;
+  // be empty for the last part of a pattern (see `Pattern`), it never contains
+  // an angle bracket, and it never starts with a digit, because the digits of
+  // the number are matched greedily.
+  std::string suffix_;
+  NumberEncoding encoding_;
+
+  // Throw a `std::runtime_error` if one of the constraints that are documented
+  // at the members is violated. NOTE: The `numBits` are deliberately wider than
+  // the member, see `FixedBitRange`.
+  Part(uint64_t numBits, std::vector<FixedBitRange> fixedBitRanges,
+       std::string suffix, NumberEncoding encoding = NumberEncoding::Binary);
 
   // The number of bits that are actually stored in the `Id` for this part.
   size_t numBitsStored() const {
     return numBits_ - ::ranges::accumulate(fixedBitRanges_, size_t{0},
-                                           [](size_t sum, const auto& range) {
-                                             return sum + range.numBits();
-                                           });
+                                           std::plus<>{},
+                                           &FixedBitRange::numBits);
   }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Part, numBits_, fixedBitRanges_,
@@ -110,18 +132,25 @@ struct Part {
 //           {Part{32, {{29, 32, 1}}, "_"}, Part{8, {}, "_"}, Part{8, {}, "P"}}}
 struct Pattern {
   // The prefix of the IRIs. In the public configuration it is specified
-  // without the leading `<`, which the `EncodedIriManager` then adds.
-  std::string prefix_{};
+  // without the leading `<`, which the `EncodedIriManager` then adds. It never
+  // contains a `>`.
+  std::string prefix_;
   // The numbers of the IRIs, together with the fixed strings that separate
-  // them. Must not be empty.
-  std::vector<Part> parts_{};
+  // them. Never empty, and only the `suffix_` of the last part may be empty,
+  // because two consecutive numbers could otherwise not be told apart.
+  std::vector<Part> parts_;
+
+  // Throw a `std::runtime_error` if one of the constraints that are documented
+  // at the members is violated. NOTE: Whether the `prefix` has a leading `<`
+  // is deliberately not checked here, because the `EncodedIriManager` is the
+  // one that adds it, and it also validates the prefixes that a user
+  // specifies.
+  Pattern(std::string prefix, std::vector<Part> parts);
 
   // The total number of bits that are stored in the `Id` for this pattern.
   size_t numBitsStored() const {
-    return ::ranges::accumulate(parts_, size_t{0},
-                                [](size_t sum, const auto& part) {
-                                  return sum + part.numBitsStored();
-                                });
+    return ::ranges::accumulate(parts_, size_t{0}, std::plus<>{},
+                                &Part::numBitsStored);
   }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Pattern, prefix_, parts_)
@@ -144,10 +173,10 @@ Pattern plainPrefixPattern(std::string prefix, size_t numBits);
 // `EncodedIriManager::to_json`).
 bool isPlainPrefixPattern(const Pattern& pattern, size_t numBits);
 
-// Throw a `std::runtime_error` if the `pattern` is not valid, or if it needs
-// more than `numBitsAvailable` bits. NOTE: Whether the `prefix_` has a leading
-// `<` is deliberately not checked here, because the `EncodedIriManager` is the
-// one that adds it, and it also validates the prefixes that a user specifies.
+// Throw a `std::runtime_error` if the `pattern` needs more than
+// `numBitsAvailable` bits. This is the only constraint of a pattern that
+// depends on the `EncodedIriManager` and that the constructors of the structs
+// above therefore cannot check.
 void validatePattern(const Pattern& pattern, size_t numBitsAvailable);
 
 // Remove the `fixedBitRanges_` of the `part` from the `value`, such that only
@@ -189,15 +218,30 @@ std::optional<uint64_t> encodePayload(const Pattern& pattern,
 // with the same `pattern`.
 std::string decodeToIri(const Pattern& pattern, uint64_t payload);
 
-// Conversion to and from JSON, which is how the patterns are stored in the
-// index.
-void to_json(nlohmann::json& j, const FixedBitRange& range);
-void from_json(const nlohmann::json& j, FixedBitRange& range);
-void to_json(nlohmann::json& j, const Part& part);
-void from_json(const nlohmann::json& j, Part& part);
-void to_json(nlohmann::json& j, const Pattern& pattern);
-void from_json(const nlohmann::json& j, Pattern& pattern);
-
 }  // namespace encodedIri
+
+// Conversion to and from JSON, which is how the patterns are stored in the
+// index. As the structs are not default-constructible (they validate their
+// arguments in the constructors), the `from_json` functions return the objects
+// by value.
+namespace nlohmann {
+template <>
+struct adl_serializer<encodedIri::FixedBitRange> {
+  static void to_json(json& j, const encodedIri::FixedBitRange& range);
+  static encodedIri::FixedBitRange from_json(const json& j);
+};
+
+template <>
+struct adl_serializer<encodedIri::Part> {
+  static void to_json(json& j, const encodedIri::Part& part);
+  static encodedIri::Part from_json(const json& j);
+};
+
+template <>
+struct adl_serializer<encodedIri::Pattern> {
+  static void to_json(json& j, const encodedIri::Pattern& pattern);
+  static encodedIri::Pattern from_json(const json& j);
+};
+}  // namespace nlohmann
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIPATTERN_H
