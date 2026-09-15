@@ -40,6 +40,18 @@ class ByteBufferWriteSerializerT : public NoCopy {
     data_.insert(data_.end(), bytePointer, bytePointer + numBytes);
   }
 
+  // Overwrite the `numBytes` bytes that start at `position` (which have to
+  // have been written before) by the `numBytes` bytes at `bytePointer`. This
+  // is needed to patch a field whose value is only known after the data that
+  // it describes has been written, for example the size of a block of data: it
+  // is first written as a placeholder, and patched with this function once the
+  // block is complete.
+  void overwriteBytes(size_t position, const char* bytePointer,
+                      size_t numBytes) {
+    AD_CONTRACT_CHECK(position + numBytes <= data_.size());
+    std::copy(bytePointer, bytePointer + numBytes, data_.begin() + position);
+  }
+
   void clear() { data_.clear(); }
 
   const Storage& data() const& noexcept { return data_; }
