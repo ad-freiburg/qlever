@@ -93,6 +93,25 @@ CPP_template(typename Serializer)(
                        ad_utility::dereference);
 }
 
+// Serialize the local vocabulary to the output stream, but without any of its
+// words: write exactly the format of `serializeLocalVocab` above, with the
+// number of words set to zero, such that `deserializeLocalVocab` reads it back
+// as a local vocab that holds only the blank node blocks (and returns an empty
+// mapping). Use this if the caller has stored the words elsewhere, as
+// `NamedCachedQueryBlobManager` does: it moves the words of the local vocab of
+// a named cache entry to the secondary vocabulary of the blob, and rewrites
+// the `Id`s of the entry accordingly, so that the words must not be written a
+// second time here.
+CPP_template(typename Serializer)(
+    requires serialization::WriteSerializer<
+        Serializer>) void serializeLocalVocabWithoutWords(Serializer&
+                                                              serializer,
+                                                          const LocalVocab&
+                                                              vocab) {
+  serializer << vocab.getOwnedLocalBlankNodeBlocks();
+  serializer << uint64_t{0};
+}
+
 // Deserialize the local vocabulary from the input stream.
 CPP_template(typename Serializer)(
     requires serialization::ReadSerializer<Serializer>) std::
