@@ -162,7 +162,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
     AD_CONTRACT_CHECK(!config.inputFiles_.empty());
-    index.createFromFiles(config.inputFiles_);
+    index.createFromFiles(config.inputFiles_, config.numThreads_);
   }
 
   if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
@@ -415,6 +415,11 @@ void IndexBuilderConfig::validate() const {
     if (geoCellGridLevel_ > std::numeric_limits<uint8_t>::max()) {
       throw std::invalid_argument("The geo cell grid level is too large");
     }
+  }
+  if (numThreads_ == 0) {
+    throw std::invalid_argument(
+        "The number of threads for the index build (`num-threads`) must be at "
+        "least 1");
   }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");
