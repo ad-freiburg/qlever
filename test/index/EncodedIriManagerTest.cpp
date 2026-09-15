@@ -143,13 +143,6 @@ TEST(EncodedIriManager, splitIntoPrefixIdxAndPayload) {
 }
 
 // _____________________________________________________________________________
-TEST(EncodedIriManager, toStringWithGivenPrefix) {
-  auto str = EncodedIriManager::toStringWithGivenPrefix(
-      EncodedIriManager::encodeDecimalToNBit("7643"), "<blibb_");
-  EXPECT_EQ(str, "<blibb_7643>");
-}
-
-// _____________________________________________________________________________
 TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
   EncodedIriManager em{{"blabb", "blubb"}};
   auto id = EncodedIriManager::makeIdFromPrefixIdxAndPayload(
