@@ -15,6 +15,7 @@
 #include <boost/asio/thread_pool.hpp>
 #include <future>
 #include <utility>
+#include <variant>
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
@@ -429,6 +430,9 @@ class CompressedExternalIdTableWriter {
   // of the number of stored blocks. Columns are decompressed sequentially
   // within a block; the single background thread already provides concurrency
   // with the consumer.
+  //
+  // TODO<joka921> This function is only used by the unused
+  // `CompressedExternalIdTable`. Remove it together with that class.
   template <size_t N = 0>
   InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
     file_.flush();
@@ -734,7 +738,7 @@ CPP_class_template(size_t NumStaticCols,
   // Delete the underlying file and reset the sorter. May only be called if no
   // active `getBlocks()` generator that has not been fully iterated over is
   // currently active, else an exception is thrown by the underlying
-  // `CompressedExternalIdTable`.
+  // `CompressedExternalIdTableWriter`.
   void clear() {
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
@@ -821,6 +825,9 @@ CPP_class_template(size_t NumStaticCols,
 // The interface is as follows: First there is one call to `push` for each row
 // of the `IdTable`, and then there is one single call to `getRows` which yields
 // a generator that yields the rows that have previously been pushed.
+//
+// TODO<joka921> This class is unused (outside of its own unit tests).
+// Remove it.
 template <size_t NumStaticCols>
 class CompressedExternalIdTable
     : public CompressedExternalIdTableBase<NumStaticCols> {
@@ -900,7 +907,7 @@ class CompressedExternalIdTableSorterTypeErased {
 // large to be stored in RAM. `NumStaticCols == 0` means that the IdTable is
 // stored dynamically (see `IdTable.h` and `CallFixedSize.h` for details). The
 // interface is as follows: First there is one call to `push` for each row of
-// the IdTable, and then there is one single call to `getRows` which yields a
+// the IdTable, and then there is one single call to `sortedView` which yields a
 // generator that yields the sorted rows one by one.
 
 // When using very small block sizes in unit tests, then sometimes there are
@@ -1165,30 +1172,38 @@ class CompressedExternalIdTableSorter
     auto merged =
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
             mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
-            this->comparator_, makeMergeOptions(parameters),
+            this->comparator_, makeBlockStorageFactory<N>(),
+            makeMergeOptions(parameters),
             // NOTE: The sorter has no cancellation handle of its own, and the
             // merge requires one that is not `nullptr`, so this is a fresh
             // handle that is never cancelled.
-            std::make_shared<ad_utility::CancellationHandle<>>(),
-            makeBlockStorageFactory<N>());
+            std::make_shared<ad_utility::CancellationHandle<>>());
     return ad_utility::InputRangeTypeErased{
         checkedMergeResult<N>(std::move(merged))};
   }
 
   // The factory for the intermediate storage of the output blocks of the merge
-  // phase, see `parallelBlockMerge::BlockStorageFactory`. The blocks are
+  // phase, see the `parallelBlockMerge::BlockStorageConcept`. The blocks are
   // spilled to a temporary file of their own, so that a chunk that has run far
   // ahead of the consumer can be merged to completion instead of suspending its
   // producer. A suspended producer would hold on to its slot among the chunks
   // that are in flight, which is the scarce resource of the merge phase (see
   // `computeMergePhaseParameters`). As long as the consumer keeps up, no block
   // is ever written, see `CompressedIdTableBlockStorage`.
+  //
+  // NOTE: That storage is only ever used by the coroutine-based sink and hence
+  // does not exist in the C++17 backports mode, where
+  // `parallelBlockMergeToRange` merges serially and ignores the factory
+  // altogether (see there). A placeholder therefore suffices in that mode.
   template <size_t N>
-  parallelBlockMerge::BlockStorageFactory<IdTableStatic<N>>
-  makeBlockStorageFactory() {
-    return CompressedIdTableBlockStorage<N>::makeStorageFactory(
+  auto makeBlockStorageFactory() {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+    return std::monostate{};
+#else
+    return makeCompressedIdTableStorageFactory<N>(
         mergeExecutor_, makeSpillFilename(), this->writer_.allocator(),
         MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK, mergeSpillCompression_);
+#endif
   }
 
   // The common prefix of the names of the files that a single merge phase
@@ -1223,11 +1238,6 @@ class CompressedExternalIdTableSorter
         parameters.outputBlockSize_);
     options.parallelismHint = mergeParallelism_;
     options.maxNumChunksInFlight = parameters.maxInFlightChunks_;
-    // The block storage of the merge phase spills to disk, so this is the
-    // number of output blocks that it keeps in memory and not a back-pressure
-    // limit, see `makeBlockStorageFactory`.
-    options.bufferedBlocksPerChunk =
-        MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK;
     // Warn (once per sorter) if the memory limit forces us to use less
     // parallelism than the merge executor offers.
     if (parameters.maxInFlightChunks_ < mergeParallelism_ &&

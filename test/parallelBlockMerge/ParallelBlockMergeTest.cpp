@@ -25,13 +25,14 @@
 #include <utility>
 #include <vector>
 
+#include "../util/AsyncTestHelpers.h"
+#include "../util/GTestHelpers.h"
+#include "../util/ParallelBlockMergeTestHelpers.h"
+#include "./InMemoryBlockStorage.h"
 #include "backports/algorithm.h"
 #include "backports/asio.h"
-#include "util/AsyncTestHelpers.h"
 #include "util/CancellationHandle.h"
-#include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/ParallelBlockMergeTestHelpers.h"
 #include "util/SourceLocation.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 
@@ -1124,13 +1125,15 @@ namespace {
 template <bool moveElements = false, typename Input, typename Comparator>
 std::vector<typename Input::value_type> mergeToRangeAndCollect(
     Input input, Comparator comparator, MergeOptions options = {},
-    size_t numThreads = 4) {
+    size_t numThreads = 4, size_t bufferedBlocksPerChunk = 2) {
   options.parallelismHint = numThreads;
   net::thread_pool pool{numThreads};
   std::vector<typename Input::value_type> result;
   {
     auto blocks = parallelBlockMergeToRange<moveElements>(
         pool.get_executor(), std::move(input), std::move(comparator),
+        makeInMemoryStorageFactory<typename Input::Block>(
+            bufferedBlocksPerChunk),
         std::move(options));
     for (auto& block : blocks) {
       EXPECT_FALSE(block.empty());
@@ -1178,11 +1181,11 @@ TEST(ParallelBlockMerge, rangeWithASingleInFlightChunk) {
   auto runs = makeRandomRuns(16, 200, 300);
   auto expected = sortedConcatenation(runs);
   MergeOptions options = rangeOptions(16);
-  options.bufferedBlocksPerChunk = 1;
   for (size_t maxNumChunksInFlight : {1, 2}) {
     options.maxNumChunksInFlight = maxNumChunksInFlight;
     EXPECT_THAT(mergeToRangeAndCollect(makeVectorInput(runs, 16), std::less<>{},
-                                       options, 4),
+                                       options, 4,
+                                       /*bufferedBlocksPerChunk=*/1),
                 ::testing::ElementsAreArray(expected));
   }
 }
@@ -1202,7 +1205,7 @@ TEST(ParallelBlockMerge, rangeTakesTheSerialFastPath) {
     SizeVec result;
     for (const auto& block : parallelBlockMergeToRange<false>(
              ql::any_io_executor{}, makeVectorInput(runs, 16), std::less<>{},
-             options)) {
+             makeInMemoryStorageFactory<SizeVec>(2), options)) {
       result.insert(result.end(), block.begin(), block.end());
     }
     EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
@@ -1220,7 +1223,8 @@ TEST(ParallelBlockMerge, consumerAbandonsRangeEarly) {
   // coroutine that refers to it is done.
   {
     auto blocks = parallelBlockMergeToRange<false>(
-        pool.get_executor(), makeVectorInput(runs, 64), std::less<>{}, options);
+        pool.get_executor(), makeVectorInput(runs, 64), std::less<>{},
+        makeInMemoryStorageFactory<SizeVec>(2), options);
     auto it = blocks.begin();
     ASSERT_NE(it, blocks.end());
     EXPECT_FALSE(it->empty());
@@ -1231,7 +1235,8 @@ TEST(ParallelBlockMerge, consumerAbandonsRangeEarly) {
   // Abandoning the range without consuming anything at all also works.
   {
     [[maybe_unused]] auto blocks = parallelBlockMergeToRange<false>(
-        pool.get_executor(), makeVectorInput(runs, 64), std::less<>{}, options);
+        pool.get_executor(), makeVectorInput(runs, 64), std::less<>{},
+        makeInMemoryStorageFactory<SizeVec>(2), options);
   }
   pool.join();
 }
@@ -1247,15 +1252,15 @@ ASYNC_TEST(ParallelBlockMerge, singleThreadedConsumer) {
   auto expected = sortedConcatenation(runs);
   MergeOptions options = rangeOptions(16);
   options.parallelismHint = 8;
-  options.bufferedBlocksPerChunk = 1;
-  using Sink = InOrderBlockSink<SizeVec>;
+  using Sink = InOrderBlockSink<SizeVec, InMemoryBlockStorage<SizeVec>>;
   auto executor = ioContext.get_executor();
   std::shared_ptr<Sink> sink;
   auto state = parallelBlockMergeToSink<false>(
       executor, makeVectorInput(runs, 16), std::less<>{},
-      [&sink, &executor, &options](size_t numChunks) {
-        sink = std::make_shared<Sink>(executor, numChunks,
-                                      options.bufferedBlocksPerChunk);
+      [&sink, &executor](size_t numChunks) {
+        sink = std::make_shared<Sink>(
+            executor, numChunks,
+            makeInMemoryStorageFactory<SizeVec>(/*bufferedBlocksPerChunk=*/1));
         return sink;
       },
       options);

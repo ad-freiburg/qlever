@@ -140,6 +140,12 @@ struct MergeOptions {
   // `0` means "as many as `parallelism()`".
   size_t maxNumChunksInFlight = 0;
 
+  // Merge serially in the calling thread if the input has at most that many
+  // elements in total. Only `parallelBlockMergeToRange` looks at this, see
+  // there.
+  size_t serialNumElementsThreshold =
+      DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD;
+
   // Return the number of threads that the merge assumes, that is the
   // `parallelismHint` with the value `0` resolved to its default.
   size_t parallelism() const {
@@ -166,18 +172,6 @@ struct MergeOptions {
     // of blocking a thread. A single in-flight chunk is legal as well.
     return std::min(requestedNumChunksInFlight, numChunks);
   }
-
-  // Merge serially in the calling thread if the input has at most that many
-  // elements in total. Only `parallelBlockMergeToRange` looks at this, see
-  // there.
-  size_t serialNumElementsThreshold =
-      DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD;
-
-  // Buffer at most that many finished output blocks per chunk. Only the
-  // `InOrderBlockSink` looks at this, and only if its blocks live in memory, in
-  // which case it is the back-pressure that bounds the memory consumption of
-  // the merge.
-  size_t bufferedBlocksPerChunk = 2;
 };
 
 }  // namespace ad_utility::parallelBlockMerge

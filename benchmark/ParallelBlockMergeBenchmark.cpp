@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
+#include "../test/parallelBlockMerge/InMemoryBlockStorage.h"
 #include "../test/util/AllocatorTestHelpers.h"
 #include "backports/algorithm.h"
 #include "backports/span.h"
@@ -263,6 +264,10 @@ size_t elementChecksum(const std::string& element) {
   return element.size() + static_cast<unsigned char>(element.front());
 }
 
+// The number of finished output blocks that the in-memory storage of the merge
+// buffers per chunk, which is the back-pressure that bounds its memory.
+constexpr size_t BUFFERED_BLOCKS_PER_CHUNK = 2;
+
 // Merge the `runs` with the given `comparator` on the `executor` with the given
 // `parallelism`, and return the accumulated checksum of all merged elements. A
 // `parallelism` of one takes the serial code path and never touches the
@@ -275,7 +280,10 @@ size_t mergeAndComputeChecksum(const Runs<T>& runs, Comparator comparator,
   options.parallelismHint = parallelism;
   auto blocks = parallelBlockMergeToRange</*moveElements=*/false>(
       std::move(executor), Input<T>{runs.spans_, VIRTUAL_BLOCK_SIZE},
-      std::move(comparator), std::move(options));
+      std::move(comparator),
+      makeInMemoryStorageFactory<typename Input<T>::Block>(
+          BUFFERED_BLOCKS_PER_CHUNK),
+      std::move(options));
   size_t checksum = 0;
   for (const auto& block : blocks) {
     for (const auto& element : block) {

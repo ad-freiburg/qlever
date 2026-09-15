@@ -40,13 +40,12 @@ namespace detail {
 // example by a `boost::asio::thread_pool`), because the thread that iterates
 // over this range is blocked while it waits for the next block and can
 // therefore not run any of the merge's coroutines itself.
-template <typename State>
+template <typename State, typename Sink>
 class ParallelMergeRange
     : public ad_utility::InputRangeFromGet<typename State::Block>,
       public ad_utility::NoCopyNoMove {
  public:
   using Block = typename State::Block;
-  using Sink = InOrderBlockSink<Block>;
 
  private:
   std::shared_ptr<State> state_;
