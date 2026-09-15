@@ -22,11 +22,13 @@ namespace net = boost::asio;
 
 // Internal implementation for `runFunctionOnExecutor`.
 namespace detail {
-// Call  `function()`. If this call doesn't throw, call `handler(nullptr,
-// resultOfTheCall)`, Else call `handler(current_exeption(), *nullptr)`. The
-// function is called directly, but the invocation of the handler is posted to
-// the associated executor of the `handler`, or to the `executor` if no such
-// associated executor exists.
+// Call `function()`. If this call doesn't throw, call the handler with
+// `std::exception_ptr{}` and, unless `Value` is `void`, the result of the call.
+// Else call it with `std::current_exception()` and, unless `Value` is `void`, a
+// default-constructed `Value` (see the NOTE at `runFunctionOnExecutor` below
+// for why that value has to be passed at all). The function is called directly,
+// but the invocation of the handler is posted to the associated executor of the
+// `handler`, or to the `executor` if no such associated executor exists.
 CPP_template(typename Executor, typename Function,
              typename Handler)(requires ql::concepts::invocable<
                                Function>) struct CallFunctionAndPassToHandler {
@@ -88,13 +90,19 @@ CPP_template(typename Executor, typename Function, typename Handler)(
 // Note: If no executor is associated with the `completionToken`, then the
 // handler will also be run on the `executor` that is passed to this function as
 // there is no other way of running it.
+//
+// NOTE: The return type of the `function` has to be default-constructible (or
+// `void`), see the constraint below. The reason is that Boost.Asio supports
+// only a single completion signature per operation in the version that we
+// currently require, so the handler has to be called with a `Value` even on the
+// error path, where there is no result to report.
 CPP_template(typename Executor, typename CompletionToken, typename Function)(
     requires ql::concepts::invocable<Function> CPP_and(
         std::is_default_constructible_v<std::invoke_result_t<Function>> ||
         std::is_void_v<std::invoke_result_t<
             Function>>)) auto runFunctionOnExecutor(Executor executor,
                                                     Function function,
-                                                    CompletionToken&
+                                                    CompletionToken&&
                                                         completionToken) {
   using Value = std::invoke_result_t<Function>;
   static constexpr bool isVoid = std::is_void_v<Value>;
