@@ -114,7 +114,7 @@ class MockIndex {
   }
 
   void writePartialVocabulary(size_t partialVocabIdx, ItemMapAndBuffer items,
-                              std::vector<IdRow> localIds) {
+                              std::vector<IdRow>& localIds) {
     if (throwOnWrite_) {
       throw std::runtime_error{"write error"};
     }

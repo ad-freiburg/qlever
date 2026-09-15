@@ -582,13 +582,20 @@ TEST(MergeVocabulary, mappedIdsFileRoundTrip) {
               ::testing::ElementsAre(vocabId(12), Id::makeFromInt(3),
                                      Id::makeUndefined(), vocabId(10)));
 
+  // The Ids are mapped in place, so `input` now holds the mapped triples.
+  EXPECT_THAT(input[0],
+              ::testing::ElementsAre(vocabId(10), vocabId(11), vocabId(12),
+                                     Id::makeFromInt(7)));
+
   // An empty batch yields an empty table.
-  writeMappedIdsToFile({}, map, filename);
+  std::vector<std::array<Id, NumColumnsIndexBuilding>> empty;
+  writeMappedIdsToFile(empty, map, filename);
   EXPECT_EQ(readMappedIdsFromFile(filename).numRows(), 0u);
 
   // A `VocabIndex` without a mapping is an error.
+  std::vector<std::array<Id, NumColumnsIndexBuilding>> unmapped{
+      {vocabId(5), vocabId(0), vocabId(0), vocabId(0)}};
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      writeMappedIdsToFile({{vocabId(5), vocabId(0), vocabId(0), vocabId(0)}},
-                           map, filename),
+      writeMappedIdsToFile(unmapped, map, filename),
       ::testing::HasSubstr("not found in mapping"), ad_utility::Exception);
 }

@@ -671,12 +671,14 @@ class IndexImpl {
 
   // Write the partial vocabulary with index `partialVocabIdx` given by `items`
   // to its `partialVocabularyWordsFilename` and the corresponding triples in
-  // `localIds` to its `unsortedTriplesFilename`. All data associated with the
+  // `localIds` to its `unsortedTriplesFilename`. The local Ids in `localIds`
+  // are mapped in place (see `writeMappedIdsToFile`), so the caller can only
+  // reuse the vector's memory, not its contents. All data associated with the
   // `partialVocabIdx` is exclusively owned by the calling task chain (see
   // `buildPartialVocabularies`), so no locking is required.
   void writePartialVocabulary(
       size_t partialVocabIdx, ItemMapAndBuffer items,
-      std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds) const;
+      std::vector<std::array<Id, NumColumnsIndexBuilding>>& localIds) const;
 
   // Return an asynchronous RDF parser (see `AsyncRdfParserBase`) that parses
   // the given `files` and schedules its work on `executor`. The parser will be
