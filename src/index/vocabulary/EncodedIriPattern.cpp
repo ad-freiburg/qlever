@@ -16,6 +16,7 @@
 #include <stdexcept>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/span.h"
 
 namespace encodedIri {
 
@@ -125,8 +126,8 @@ Pattern::Pattern(std::string prefix, std::vector<Part> parts)
   }
   // All suffixes but the last one have to be non-empty, else two consecutive
   // numbers could not be told apart.
-  for (size_t i = 0; i + 1 < parts_.size(); ++i) {
-    if (parts_.at(i).suffix_.empty()) {
+  for (const auto& part : ql::span{parts_}.first(parts_.size() - 1)) {
+    if (part.suffix_.empty()) {
       throwInvalidPattern(*this,
                           "only the last number of a pattern may be followed "
                           "by an empty suffix");
@@ -243,10 +244,7 @@ void decompressNumber(std::string& result, const Part& part,
 
 // _____________________________________________________________________________
 std::string_view leadingDigits(std::string_view input) {
-  auto isDigit = [](char c) {
-    return absl::ascii_isdigit(static_cast<unsigned char>(c));
-  };
-  auto end = ql::ranges::find_if_not(input, isDigit);
+  auto end = ql::ranges::find_if_not(input, absl::ascii_isdigit);
   return input.substr(0, end - input.begin());
 }
 
