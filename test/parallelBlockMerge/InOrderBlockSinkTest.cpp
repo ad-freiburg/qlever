@@ -22,7 +22,9 @@
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/use_future.hpp>
 #include <cstddef>
 #include <exception>
 #include <functional>
@@ -34,10 +36,12 @@
 #include <vector>
 
 #include "../util/AsyncTestHelpers.h"
+#include "../util/ParallelBlockMergeTestHelpers.h"
 #include "./InMemoryBlockStorage.h"
 #include "util/Exception.h"
 #include "util/parallelBlockMerge/BlockSinkPolicy.h"
 #include "util/parallelBlockMerge/InOrderBlockSink.h"
+#include "util/parallelBlockMerge/ParallelBlockMerge.h"
 
 using namespace ad_utility::parallelBlockMerge;
 
@@ -195,9 +199,11 @@ class ControlledBlockStorage {
         completionToken);
   }
 
-  // Complete the pending operations. NOTE: They are completed via `net::post`
-  // and not inline, exactly as the channels of the `InMemoryBlockStorage` do
-  // it, so that nothing is resumed while `cancelAll` still runs.
+  // Complete the pending operations.
+  //
+  // NOTE: They are completed via `net::post` and not inline, exactly as the
+  // channels of the `InMemoryBlockStorage` do it, so that nothing is resumed
+  // while `cancelAll` still runs.
   void cancelAll() noexcept {
     net::post(strand_, [control = control_] {
       if (control->hasPendingStore()) {
@@ -543,5 +549,72 @@ ASYNC_TEST(InOrderBlockSink, aBlockThatIsStoredAfterTheStopIsDropped) {
   co_await sink.asyncStop(net::use_awaitable);
   co_await waitForLatch(latch);
   EXPECT_FALSE(wasPushed.value());
+}
+
+namespace {
+using namespace parallelBlockMergeTestHelpers;
+// The sink of the two tests below, which use it as the output of an actual
+// parallel merge (see `parallelBlockMergeToSink`).
+using MergeSink = InOrderBlockSink<SizeVec, InMemoryBlockStorage<SizeVec>>;
+
+// Merge `runs` on the `executor` with an `InOrderBlockSink` that buffers at
+// most `maxBufferedBlocksPerChunk` blocks per chunk, and return the state of
+// the merge together with its sink.
+auto startMergeIntoSink(net::any_io_executor executor,
+                        const std::vector<SizeVec>& runs,
+                        size_t maxBufferedBlocksPerChunk) {
+  std::shared_ptr<MergeSink> sink;
+  auto makeSink = [&sink, executor,
+                   maxBufferedBlocksPerChunk](size_t numChunks) {
+    sink = std::make_shared<MergeSink>(
+        executor, numChunks,
+        makeInMemoryStorageFactory<SizeVec>(maxBufferedBlocksPerChunk));
+    return sink;
+  };
+  auto options = optionsWithBlockSize(7);
+  options.parallelismHint = 4;
+  auto state = parallelBlockMergeToSink<false>(
+      executor, makeVectorInput(runs, 16), std::less<>{}, makeSink, options);
+  AD_CORRECTNESS_CHECK(sink != nullptr);
+  return std::pair{std::move(state), std::move(sink)};
+}
+}  // namespace
+
+// Test that the sink works as the output of an actual parallel merge: a
+// blocking consumer on a thread that runs none of the executors (via
+// `net::use_future`) reads the complete merged output in sorted order, also
+// when the storage buffers a single block per chunk only.
+TEST(InOrderBlockSink, parallelMergeReadByBlockingConsumer) {
+  for (size_t maxBufferedBlocksPerChunk : {1, 4}) {
+    net::thread_pool pool{4};
+    auto runs = makeRandomRuns(6, 200, 400);
+    auto [state, sink] = startMergeIntoSink(pool.get_executor(), runs,
+                                            maxBufferedBlocksPerChunk);
+    SizeVec result;
+    while (auto block = sink->asyncGetNextBlock(net::use_future).get()) {
+      result.insert(result.end(), block->begin(), block->end());
+    }
+    EXPECT_EQ(result, sortedConcatenation(runs));
+    // Wait for the coroutines of the merge, which may still be finishing.
+    pool.join();
+  }
+}
+
+// Test that a consumer can abandon a parallel merge via the `stop()` of its
+// state: every producer finishes (otherwise the `join` below hangs), and the
+// sink yields nothing anymore.
+TEST(InOrderBlockSink, parallelMergeAbandonedByConsumer) {
+  net::thread_pool pool{4};
+  auto runs = makeRandomRuns(6, 200, 400);
+  auto [state, sink] = startMergeIntoSink(pool.get_executor(), runs, 1);
+  auto first = sink->asyncGetNextBlock(net::use_future).get();
+  ASSERT_TRUE(first.has_value());
+  // `stop()` only initiates the stop on the strand of the sink, so wait for
+  // the (idempotent) `asyncStop` to observe its effect.
+  state->stop();
+  sink->asyncStop(net::use_future).get();
+  EXPECT_TRUE(sink->stopRequested());
+  EXPECT_FALSE(sink->asyncGetNextBlock(net::use_future).get().has_value());
+  pool.join();
 }
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
