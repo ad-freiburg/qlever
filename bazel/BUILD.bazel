@@ -1,0 +1,152 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The build settings of QLever, i.e. the counterparts of the `option()` and
+# `set(... CACHE ...)` declarations in the top-level `CMakeLists.txt`. Each of
+# them can be set on the command line, for example
+#
+#     bazel build --//bazel:loglevel=INFO --//bazel:cheaper_compilation //...
+#
+# and `.bazelrc` defines shorthands for the common combinations, for example
+# `--config=cpp17`. The mapping from a setting to the preprocessor definitions
+# it implies lives in `qlever.bzl`, so that it is applied in exactly one place.
+
+load("@bazel_skylib//lib:selects.bzl", "selects")
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
+load(":qlever.bzl", "LOG_LEVELS", "QUERY_CANCELLATION_MODES")
+
+package(default_visibility = ["//visibility:public"])
+
+# The template that `//bazel:compilation_info.bzl` fills in.
+exports_files(["CompilationInfo.cpp.in"])
+
+###############################################################################
+# Boolean settings
+###############################################################################
+# The name of each setting is the name of the CMake `option()`, lowercased. The
+# defaults are the CMake defaults.
+
+_BOOLEAN_SETTINGS = [
+    # Use type erasure and the cheaper-to-compile backports in several places.
+    # Reduces compile time at the cost of performance, for local development.
+    "cheaper_compilation",
+    # Exclude features like `SERVICE`, `LOAD` and transitive property paths that
+    # have not been migrated to C++17 yet. This also unlinks the `http` library,
+    # which requires C++20; see `//src/engine:engine`.
+    "reduced_feature_set_for_cpp17",
+    # Use the C++17 backports inside `SparqlExpressionGenerators.h`. Implied by
+    # `reduced_feature_set_for_cpp17` and by `cheaper_compilation`, but can be
+    # set on its own to run the unit tests of those backports.
+    "expression_generator_backports_for_cpp17",
+    # Use `range-v3` instead of `std::ranges` and `std::enable_if_t` instead of
+    # concepts. Required for compilers without full C++20 support; combine with
+    # `--cxxopt=-std=c++17`, or just use `--config=cpp17`.
+    "use_cpp_17_backports",
+    # Build without a dependency on ICU. All string comparisons, sorting, case
+    # conversion and normalization then operate on plain ASCII bytes.
+    "no_unicode",
+    # Store QLever's vocabulary uncompressed and completely in RAM.
+    "vocab_uncompressed_in_memory",
+    # Include the computationally expensive unit tests.
+    "run_expensive_tests",
+    # Enable runtime checks that have a significant performance overhead.
+    "enable_expensive_checks",
+    # Disable the timing tests on platforms where `sleep` is unreliable.
+    "no_timing_tests",
+    # Use the tree-based cache implementation.
+    "use_tree_based_cache",
+    # Enable OpenMP-based parallel sorting.
+    "use_parallel",
+    # Allow shutting the server down via an HTTP request.
+    "allow_shutdown",
+    # Let the code detect that it is being compiled into shared libraries, see
+    # `AD_ALWAYS_INLINE` in `CompilerExtensions.h`. Set this together with
+    # `--dynamic_mode=fully`, or just use `--config=shared`.
+    "build_shared_libraries",
+]
+
+[
+    bool_flag(
+        name = setting,
+        build_setting_default = False,
+    )
+    for setting in _BOOLEAN_SETTINGS
+]
+
+[
+    config_setting(
+        name = "%s_enabled" % setting,
+        flag_values = {":%s" % setting: "true"},
+    )
+    for setting in _BOOLEAN_SETTINGS
+]
+
+###############################################################################
+# Multiple-choice settings
+###############################################################################
+
+# The maximum log level QLever is compiled with. Less verbose log levels can be
+# chosen at runtime via the `log-level` runtime parameter.
+string_flag(
+    name = "loglevel",
+    build_setting_default = "DEBUG",
+    values = LOG_LEVELS,
+)
+
+[
+    config_setting(
+        name = "loglevel_%s" % level,
+        flag_values = {":loglevel": level},
+    )
+    for level in LOG_LEVELS
+]
+
+# Allows disabling the cancellation checks partially or completely, to reduce
+# the overhead of that mechanism during query computation.
+string_flag(
+    name = "query_cancellation_mode",
+    build_setting_default = "ENABLED",
+    values = QUERY_CANCELLATION_MODES,
+)
+
+[
+    config_setting(
+        name = "query_cancellation_mode_%s" % mode,
+        flag_values = {":query_cancellation_mode": mode},
+    )
+    for mode in QUERY_CANCELLATION_MODES
+]
+
+###############################################################################
+# Derived settings
+###############################################################################
+
+# `QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17` is requested by three
+# different settings: by the option of the same name, and implicitly by
+# `cheaper_compilation` (the backports don't use coroutines, which have an
+# inherent compile time overhead) and by `reduced_feature_set_for_cpp17`.
+selects.config_setting_group(
+    name = "expression_generator_backports",
+    match_any = [
+        ":cheaper_compilation_enabled",
+        ":expression_generator_backports_for_cpp17_enabled",
+        ":reduced_feature_set_for_cpp17_enabled",
+    ],
+)
+
+###############################################################################
+# Compiler detection
+###############################################################################
+
+# The CMake build adds `-fcoroutines` for GCC and silences two GCC-only false
+# positives; see `QLEVER_COPTS` in `qlever.bzl`.
+config_setting(
+    name = "compiler_is_gcc",
+    flag_values = {"@bazel_tools//tools/cpp:compiler": "gcc"},
+)

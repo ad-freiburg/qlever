@@ -1,0 +1,97 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# `pbutil` (https://github.com/ad-freiburg/util), a git submodule of
+# `spatialjoin` at `src/util`. Its headers are included as `util/geo/Geo.h`
+# etc., i.e. with a `util/` prefix, which is what `include_prefix` produces here
+# (the CMake build gets the same effect by putting the *parent* of the submodule
+# directory on the include path).
+#
+# The targets mirror the ones in the upstream `CMakeLists.txt`; QLever needs
+# `pb_util`, `pb_util_geo` and `pb_util_json`, so `pb_util_graph`,
+# `pb_util_http` and `pb_util_xml` are not defined here.
+#
+# `PBUTIL_BZLIB_FOUND` and `PBUTIL_ZLIB_FOUND` are deliberately left undefined,
+# matching the `SPATIALJOIN_NO_BZIP2`/`SPATIALJOIN_NO_ZLIB` of QLever's
+# `CMakeLists.txt` ("disable bzip2 and zlib support in spatialjoin, we don't
+# need it").
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+licenses(["notice"])
+
+# `pbutil`'s `PriorityQueue.h` would collide with QLever's own
+# `src/util/PriorityQueue.h`: both are spelled `util/PriorityQueue.h`, so
+# whichever include directory the compiler happens to search first would win.
+# Within `pbutil` it is only used by `graph/EDijkstra.h`, which in turn is used
+# by nothing that QLever or `spatialjoin` reaches: of the `graph` headers, only
+# `graph/Graph.h` is needed, by `src/index/GraphFilter.cpp`. Excluding the two
+# therefore removes the ambiguity entirely instead of relying on include-path
+# order.
+_COLLIDING_WITH_QLEVER = [
+    "PriorityQueue.h",
+    "PriorityQueue.tpp",
+    "graph/EDijkstra.h",
+    "graph/EDijkstra.tpp",
+]
+
+# Headers are shared between the targets below, because `pbutil` does not
+# separate them per library either, and its `.tpp` template implementation files
+# are included from the headers rather than compiled on their own.
+cc_library(
+    name = "headers",
+    hdrs = glob(
+        [
+            "*.h",
+            "3rdparty/**/*.h",
+            "geo/**/*.h",
+            "graph/**/*.h",
+            "json/**/*.h",
+            "log/**/*.h",
+        ],
+        exclude = _COLLIDING_WITH_QLEVER,
+    ),
+    include_prefix = "util",
+    textual_hdrs = glob(
+        [
+            "*.tpp",
+            "geo/**/*.tpp",
+            "graph/**/*.tpp",
+        ],
+        exclude = _COLLIDING_WITH_QLEVER,
+    ),
+)
+
+cc_library(
+    name = "pb_util",
+    # The upstream `CMakeLists.txt` also globs `log/*.cpp`, but `log` currently
+    # only contains a header.
+    srcs = glob([
+        "*.cpp",
+        "3rdparty/*.cpp",
+    ]),
+    copts = ["-Wno-all"],
+    deps = [":headers"],
+)
+
+cc_library(
+    name = "pb_util_geo",
+    srcs = glob(["geo/**/*.cpp"]),
+    copts = ["-Wno-all"],
+    deps = [":headers"],
+)
+
+cc_library(
+    name = "pb_util_json",
+    srcs = glob(["json/**/*.cpp"]),
+    copts = ["-Wno-all"],
+    deps = [":headers"],
+)

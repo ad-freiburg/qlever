@@ -1,0 +1,1144 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `test/CMakeLists.txt`.
+#
+# There is no equivalent of `SINGLE_TEST_BINARY`, and none is needed: Bazel
+# caches and parallelizes per test target, so linking everything into one
+# binary would only take away the granularity it needs. There is also no
+# equivalent of `gtest_discover_tests`; a Bazel test target is always run as a
+# whole, which is what `QLEVER_ONE_TEST_CASE_PER_FILE=ON` does in the CMake
+# build. Use `--test_filter` to run individual test cases.
+#
+# The `_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS` option of `test/CMakeLists.txt`
+# has no counterpart here, because the Bazel build does not (yet) support
+# Emscripten. All tests are therefore always defined.
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_binary", "qlever_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of `test/`, i.e. the shared test helpers. `qlever_cc_test` adds
+# this to every test; the headers have to be declared even though most tests
+# include them relative to themselves (for example as `../util/GTestHelpers.h`),
+# because Bazel only makes declared files visible to a compile action.
+#
+# `includes` puts this directory on the include path, which some sources need
+# because they spell the helpers as `../test/util/IdTableHelpers.h`. With CMake
+# that resolves against `include_directories(src)`, since `src/../test/util/...`
+# normalizes back to `test/util/...`; here `test/../test/util/...` does the same.
+# Note that this is searched *after* QLever's own headers, because `includes`
+# produces `-isystem` while the header targets in `src/` produce `-I`, so a name
+# that exists under both `src/` and `test/` still resolves to the one in `src/`.
+cc_library(
+    name = "headers",
+    # `allow_empty` because not every test directory has helper headers.
+    hdrs = glob(
+        ["**/*.h"],
+        allow_empty = True,
+    ),
+    includes = ["."],
+    deps = [
+        "//test/backports:headers",
+        "//test/engine:headers",
+        "//test/engine/idTable:headers",
+        "//test/index:headers",
+        "//test/index/vocabulary:headers",
+        "//test/joinAlgorithms:headers",
+        "//test/libqlever:headers",
+        "//test/parser:headers",
+        "//test/parser/data:headers",
+        "//test/rdfTypes:headers",
+        "//test/util:headers",
+    ],
+)
+
+qlever_cc_test(
+    name = "BenchmarkMeasurementContainerTest",
+    serial = True,
+    deps = ["//benchmark"],
+)
+
+qlever_cc_test(
+    name = "ResultTableColumnOperationsTest",
+    deps = ["//benchmark"],
+)
+
+qlever_cc_test(
+    name = "ServerTest",
+    deps = [
+        "//src/engine",
+        "//src/engine:server",
+    ],
+)
+
+qlever_cc_test(
+    name = "SparqlProtocolTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "UrlParserTest",
+)
+
+qlever_cc_test(
+    name = "GraphStoreProtocolTest",
+    deps = [
+        "//src/engine",
+        "//src/engine:server",
+    ],
+)
+
+qlever_cc_test(
+    name = "ParsedRequestBuilderTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ExceptionHandlingTest",
+)
+
+qlever_cc_test(
+    name = "ValueIdComparatorsTest",
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "SparqlParserTest",
+    deps = [
+        "//src/engine",
+        "//src/engine/sparqlExpressions",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_test(
+    name = "VariableCounterTest",
+    deps = [
+        "//src/engine",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_test(
+    name = "StringUtilsTest",
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "ConstexprSmallStringTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "CryptographicHashUtilsTest",
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "CacheTest",
+)
+
+qlever_cc_test(
+    name = "ConcurrentCacheTest",
+    serial = True,
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "FileTest",
+)
+
+qlever_cc_test(
+    name = "Simple8bTest",
+)
+
+qlever_cc_test(
+    name = "WordsAndDocsFileParserTest",
+    deps = ["//src/parser"],
+)
+
+qlever_cc_test(
+    name = "IndexMetaDataTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "IndexTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "PermutationTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "LocatedTriplesTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "IdTripleTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "ZipMergeUniqueViewTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "SortedSequenceTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "DeltaTriplesTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "UpdateMetadataTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "IdTableUtilsTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "JoinTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "TextLimitOperationTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "QueryPlannerTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "QueryPlannerSpatialJoinTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "HashMapTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "StringPairHashMapTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "HashSetTest",
+)
+
+qlever_cc_test(
+    name = "GroupByTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "VocabularyGeneratorTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "HasPredicateScanTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ExternalOverflowStorageTest",
+)
+
+qlever_cc_test(
+    name = "UnionTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "RdfParserTest",
+    test_utils = False,
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "MultiColumnJoinTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "IdTableTest",
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "TransitivePathTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "TransitivePathGraphSearchTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "PathSearchTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "TupleHelpersTest",
+)
+
+qlever_cc_test(
+    name = "UriParserUriTest",
+)
+
+qlever_cc_test(
+    name = "ParsedUriTest",
+)
+
+qlever_cc_test(
+    name = "StringSortComparatorTest",
+    test_utils = False,
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "LocaleManagerTest",
+    test_utils = False,
+    deps = ["//src/util:stringUtils"],
+)
+
+qlever_cc_test(
+    name = "GenericCharTraitsTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "PriorityQueueTest",
+)
+
+qlever_cc_test(
+    name = "SynchronizedTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "AllocatorWithLimitTest",
+)
+
+qlever_cc_test(
+    name = "VectorWithMemoryLimitTest",
+)
+
+qlever_cc_test(
+    name = "AlignedAllocatorTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "MinusTest",
+    deps = ["//src/engine"],
+)
+
+# This test runs for quite some time and might have spurious failures.
+# `addAndLinkTest` in `test/CMakeLists.txt` therefore only compiles and
+# links it, without registering it. A `cc_binary` does the same: `bazel
+# build //test/...` builds it, `bazel test //test/...` ignores it.
+qlever_cc_binary(
+    name = "SortPerformanceEstimatorTest",
+    deps = [
+        "//src/engine:sortPerformanceEstimator",
+        "//src/parser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+qlever_cc_test(
+    name = "SerializerTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ParametersTest",
+    test_utils = False,
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "ConstructDeduplicationModeTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ZstdCompressionTest",
+    deps = ["@zstd"],
+)
+
+qlever_cc_test(
+    name = "TaskQueueTest",
+)
+
+qlever_cc_test(
+    name = "SetOfIntervalsTest",
+    deps = ["//src/engine/sparqlExpressions"],
+)
+
+qlever_cc_test(
+    name = "TypeTraitsTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "SparqlExpressionTest",
+    deps = [
+        "//src/engine",
+        "//src/engine/sparqlExpressions",
+        "//src/index",
+    ],
+)
+
+qlever_cc_test(
+    name = "SparqlExpressionMemberFunctionsTest",
+    deps = [
+        "//src/engine",
+        "//src/engine/sparqlExpressions",
+        "//src/index",
+    ],
+)
+
+qlever_cc_test(
+    name = "StreamableBodyTest",
+    deps = ["//src/util/http"],
+)
+
+qlever_cc_test(
+    name = "StreamableGeneratorTest",
+)
+
+qlever_cc_test(
+    name = "StringBatcherTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "AcceptHeaderTest",
+    deps = [
+        "//src/util/http:mediaTypes",
+        "//src/util/http/HttpParser:httpParser",
+    ],
+)
+
+qlever_cc_test(
+    name = "CompactStringVectorTest",
+    test_utils = False,
+    deps = ["//src/parser"],
+)
+
+qlever_cc_test(
+    name = "SparqlDataTypesTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ContentEncodingHelperTest",
+    deps = ["//src/util/http"],
+)
+
+qlever_cc_test(
+    name = "PrefixCompressorTest",
+)
+
+qlever_cc_test(
+    name = "VocabularyTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "IteratorTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ViewsTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "TakeUntilInclusiveViewTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ForwardTest",
+)
+
+qlever_cc_test(
+    name = "CompressorStreamTest",
+    test_utils = False,
+    deps = ["@boost.iostreams"],
+)
+
+qlever_cc_test(
+    name = "AsyncStreamTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "BitUtilsTest",
+)
+
+qlever_cc_test(
+    name = "NBitIntegerTest",
+)
+
+qlever_cc_test(
+    name = "GeoPointTest",
+    test_utils = False,
+    deps = ["//src/rdfTypes"],
+)
+
+qlever_cc_test(
+    name = "GeoSparqlHelpersTest",
+    deps = ["//src/rdfTypes"],
+)
+
+qlever_cc_test(
+    name = "GeoConvertersTest",
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "HttpUtilsTest",
+    deps = [
+        "//src/util:qlever_util",
+        "//src/util/http",
+    ],
+)
+
+qlever_cc_test(
+    name = "DateYearDurationTest",
+    deps = [
+        "//src/parser",
+        "//src/util:qlever_util",
+    ],
+)
+
+qlever_cc_test(
+    name = "DurationTest",
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "TripleComponentTest",
+)
+
+qlever_cc_test(
+    name = "ValueIdTest",
+    deps = [
+        "//src/util:qlever_util",
+        # `absl/hash/hash_testing.h` is `testonly`, so unlike the rest of Abseil
+        # it cannot live in `//src:qlever_hdrs` and has to be named here.
+        "@com_google_absl//absl/hash:hash_testing",
+    ],
+)
+
+qlever_cc_test(
+    name = "LambdaHelpersTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ParseExceptionTest",
+    deps = [
+        "//src/engine",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_test(
+    name = "TransparentFunctorsTest",
+)
+
+qlever_cc_test(
+    name = "SelectClauseTest",
+    deps = [
+        "//src/engine",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_test(
+    name = "RelationalExpressionTest",
+    deps = [
+        "//src/engine",
+        "//src/engine/sparqlExpressions",
+        "//src/index",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_test(
+    name = "CheckUsePatternTrickTest",
+    deps = [
+        "//src/engine",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_test(
+    name = "RegexExpressionTest",
+    deps = [
+        "//src/engine",
+        "//src/engine/sparqlExpressions",
+        "//src/index",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_test(
+    name = "LocalVocabTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "LocalVocabEntryTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "ValuesTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ServiceTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "LoadTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "HttpTest",
+    deps = [
+        "//src/util/http",
+        "@boost.iostreams",
+    ],
+)
+
+qlever_cc_test(
+    name = "CallFixedSizeTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ConstexprUtilsTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ResetWhenMovedTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "TimerTest",
+    serial = True,
+)
+
+qlever_cc_test(
+    name = "AlgorithmTest",
+)
+
+qlever_cc_test(
+    name = "CompressedRelationsTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "PrefilterExpressionIndexTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "GetPrefilterExpressionFromSparqlExpressionTest",
+    deps = [
+        "//src/engine/sparqlExpressions",
+        "//src/index",
+    ],
+)
+
+qlever_cc_test(
+    name = "ExceptionTest",
+)
+
+qlever_cc_test(
+    name = "RandomExpressionTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "NowDatetimeExpressionTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "LanguageExpressionsTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "SortTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "OrderByTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ValuesForTestingTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "ExportQueryExecutionTreesTest",
+    deps = [
+        "//src/engine",
+        "//src/index",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_test(
+    name = "AggregateExpressionTest",
+    deps = [
+        "//src/engine",
+        "//src/engine/sparqlExpressions",
+        "//src/index",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_test(
+    name = "OnDestructionDontThrowDuringStackUnwindingTest",
+)
+
+qlever_cc_test(
+    name = "SparqlExpressionTypesTest",
+    deps = [
+        "//src/engine/sparqlExpressions",
+        "//src/util:qlever_util",
+    ],
+)
+
+qlever_cc_test(
+    name = "LimitOffsetClauseTest",
+)
+
+qlever_cc_test(
+    name = "OperationTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "RuntimeInformationTest",
+    deps = [
+        "//src/engine",
+        "//src/index",
+    ],
+)
+
+qlever_cc_test(
+    name = "VariableToColumnMapTest",
+    deps = ["//src/parser"],
+)
+
+qlever_cc_test(
+    name = "CopyableUniquePtrTest",
+)
+
+qlever_cc_test(
+    name = "JsonCustomConverterForThirdPartyTest",
+)
+
+qlever_cc_test(
+    name = "ConfigManagerTest",
+    deps = ["//src/util/ConfigManager:configManager"],
+)
+
+qlever_cc_test(
+    name = "ConfigOptionTest",
+    deps = ["//src/util/ConfigManager:configManager"],
+)
+
+qlever_cc_test(
+    name = "ValidatorTest",
+    deps = ["//src/util/ConfigManager:configManager"],
+)
+
+qlever_cc_test(
+    name = "ConfigOptionProxyTest",
+    deps = ["//src/util/ConfigManager:configManager"],
+)
+
+qlever_cc_test(
+    name = "ConfigUtilTest",
+    deps = ["//src/util/ConfigManager:configManager"],
+)
+
+qlever_cc_test(
+    name = "RandomTest",
+)
+
+qlever_cc_test(
+    name = "FindUndefRangesTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "AddCombinedRowToTableTest",
+    deps = [
+        "//src/engine",
+        "//src/util:qlever_util",
+    ],
+)
+
+qlever_cc_test(
+    name = "CtreHelpersTest",
+)
+
+qlever_cc_test(
+    name = "ComparisonWithNanTest",
+)
+
+qlever_cc_test(
+    name = "ThreadSafeQueueTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "IdTableHelpersTest",
+)
+
+qlever_cc_test(
+    name = "GeneratorTest",
+)
+
+qlever_cc_test(
+    name = "MemorySizeTest",
+    deps = ["//src/util/MemorySize:memorySize"],
+)
+
+qlever_cc_test(
+    name = "JsonUtilTest",
+)
+
+qlever_cc_test(
+    name = "JoinAlgorithmsTest",
+)
+
+qlever_cc_test(
+    name = "AsioHelpersTest",
+)
+
+qlever_cc_test(
+    name = "UniqueCleanupTest",
+)
+
+qlever_cc_test(
+    name = "WebSocketSessionTest",
+    deps = ["//src/util/http"],
+)
+
+qlever_cc_test(
+    name = "QueryIdTest",
+)
+
+qlever_cc_test(
+    name = "QueryHubTest",
+    deps = ["//src/util/http"],
+)
+
+qlever_cc_test(
+    name = "QueryToSocketDistributorTest",
+    deps = ["//src/util/http"],
+)
+
+qlever_cc_test(
+    name = "UpdateFetcherTest",
+    deps = ["//src/util/http"],
+)
+
+qlever_cc_test(
+    name = "MessageSenderTest",
+    deps = ["//src/util/http"],
+)
+
+qlever_cc_test(
+    name = "CancellationHandleTest",
+    test_utils = False,
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "ProgressBarTest",
+    serial = True,
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "CachingMemoryResourceTest",
+)
+
+qlever_cc_test(
+    name = "ParallelMultiwayMergeTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ParseableDurationTest",
+)
+
+qlever_cc_test(
+    name = "ConstantsTest",
+)
+
+qlever_cc_test(
+    name = "RuntimeParametersTest",
+    deps = ["//src/global"],
+)
+
+qlever_cc_test(
+    name = "JThreadTest",
+)
+
+qlever_cc_test(
+    name = "ChunkedForLoopTest",
+)
+
+qlever_cc_test(
+    name = "FsstCompressorTest",
+    deps = ["@fsst"],
+)
+
+qlever_cc_test(
+    name = "CopyableSynchronizationTest",
+)
+
+qlever_cc_test(
+    name = "LazyJsonParserTest",
+)
+
+qlever_cc_test(
+    name = "GeneratorsTest",
+)
+
+qlever_cc_test(
+    name = "FilterTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ResultTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "BlankNodeManagerTest",
+)
+
+qlever_cc_test(
+    name = "SparqlExpressionGeneratorsTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ExecuteUpdateTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ValueGetterTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "LruCacheTest",
+)
+
+qlever_cc_test(
+    name = "LruCacheWithStatisticsTest",
+)
+
+qlever_cc_test(
+    name = "InputRangeUtilsTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "TripleSerializerTest",
+)
+
+qlever_cc_test(
+    name = "GeometryInfoTest",
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "QueryRewriteUtilTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "HttpErrorTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "TimeTracerTest",
+)
+
+qlever_cc_test(
+    name = "SourceLocationTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "UnitOfMeasurementTest",
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "MaterializedViewsTest",
+    deps = [
+        "//src/engine",
+        "//src/engine:server",
+        "//src/libqlever:qlever",
+    ],
+)
+
+qlever_cc_test(
+    name = "MaterializedViewsStarRewriteTest",
+    deps = [
+        "//src/engine",
+        "//src/engine:server",
+        "//src/libqlever:qlever",
+    ],
+)
+
+qlever_cc_test(
+    name = "ConstexprMapTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ParallelExecutorTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "IoUringManagerTest",
+    test_utils = False,
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "VariantRangeFilterTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ConstructTemplatePreprocessorTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ExternalValuesQueryTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ExternalValuesTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ConstructBatchEvaluatorTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ExportIdsTest",
+    deps = [
+        "//src/engine",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_test(
+    name = "EnumWithStringsTest",
+    test_utils = False,
+    deps = ["@boost.program_options"],
+)
+
+qlever_cc_test(
+    name = "ConstructTripleGeneratorTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ConstructDeduplicatorTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "FilesystemHelpersTest",
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "LogTest",
+)
+
+qlever_cc_test(
+    name = "QueryEventLogTest",
+    deps = ["//src/util:qlever_util"],
+)
+
+qlever_cc_test(
+    name = "MetricsTest",
+    deps = ["//src/util/metrics"],
+)
+
+qlever_cc_test(
+    name = "InstrumentedExecutorTest",
+    deps = ["//src/util/metrics"],
+)
+
+qlever_cc_test(
+    name = "ResourceMonitorTest",
+    deps = ["//src/util:qlever_util"],
+)
