@@ -67,7 +67,7 @@ std::vector<encodedIri::Pattern> patternsFromJson(const nlohmann::json& j,
 // that is followed by a sequence of decimal digits, for example
 // <http://example.org/12345> with the prefix `http://example.org/` and the
 // digit sequence `12345`. Arbitrary patterns of the form
-// `<prefix><number><separator><number>...>` can be configured via
+// `<prefix><number><suffix><number>...>` can be configured via
 // `encodedIri::Pattern` (see `EncodedIriPattern.h`). This is implemented as
 // follows:
 //

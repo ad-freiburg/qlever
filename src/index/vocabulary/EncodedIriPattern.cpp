@@ -12,7 +12,7 @@
 #include <absl/strings/ascii.h>
 #include <absl/strings/str_cat.h>
 
-#include <limits>
+#include <charconv>
 #include <stdexcept>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -26,7 +26,7 @@ constexpr const char* endKey = "end";
 constexpr const char* valueKey = "value";
 constexpr const char* numBitsKey = "num-bits";
 constexpr const char* fixedBitRangesKey = "fixed-bit-ranges";
-constexpr const char* separatorKey = "separator";
+constexpr const char* suffixKey = "suffix";
 constexpr const char* encodingKey = "encoding";
 constexpr const char* prefixKey = "prefix-with-leading-angle-bracket";
 constexpr const char* partsKey = "parts";
@@ -57,7 +57,7 @@ bool isPlainPrefixPattern(const Pattern& pattern, size_t numBits) {
   }
   const auto& part = pattern.parts_.at(0);
   return part.encoding_ == NumberEncoding::Nibbles &&
-         part.numBits_ == numBits && part.separator_.empty() &&
+         part.numBits_ == numBits && part.suffix_.empty() &&
          part.fixedBitRanges_.empty();
 }
 
@@ -107,25 +107,25 @@ void validatePattern(const Pattern& pattern, size_t numBitsAvailable) {
                           "a number that uses the nibble encoding must have a "
                           "multiple of four bits and no fixed bit ranges");
     }
-    if (part.separator_.find_first_of("<>") != std::string::npos) {
+    if (part.suffix_.find_first_of("<>") != std::string::npos) {
       throwInvalidPattern(pattern,
-                          "a separator must not contain an angle bracket");
+                          "a suffix must not contain an angle bracket");
     }
-    if (!part.separator_.empty() &&
-        absl::ascii_isdigit(static_cast<unsigned char>(part.separator_[0]))) {
+    if (!part.suffix_.empty() &&
+        absl::ascii_isdigit(static_cast<unsigned char>(part.suffix_[0]))) {
       throwInvalidPattern(pattern,
-                          "a separator must not start with a digit, because "
+                          "a suffix must not start with a digit, because "
                           "the digits of the preceding number are matched "
                           "greedily");
     }
   }
-  // All separators but the last one have to be non-empty, else two consecutive
+  // All suffixes but the last one have to be non-empty, else two consecutive
   // numbers could not be told apart.
   for (size_t i = 0; i + 1 < pattern.parts_.size(); ++i) {
-    if (pattern.parts_.at(i).separator_.empty()) {
+    if (pattern.parts_.at(i).suffix_.empty()) {
       throwInvalidPattern(pattern,
                           "only the last number of a pattern may be followed "
-                          "by an empty separator");
+                          "by an empty suffix");
     }
   }
   if (pattern.numBitsStored() > numBitsAvailable) {
@@ -225,30 +225,30 @@ std::optional<uint64_t> parseDecimal(std::string_view input) {
     return std::nullopt;
   }
   uint64_t value = 0;
-  for (char c : input) {
-    uint64_t digit = static_cast<uint64_t>(c - '0');
-    if (value > (std::numeric_limits<uint64_t>::max() - digit) / 10) {
-      return std::nullopt;
-    }
-    value = value * 10 + digit;
+  const char* end = input.data() + input.size();
+  auto [ptr, ec] = std::from_chars(input.data(), end, value);
+  // The `ec` is `result_out_of_range` if the number doesn't fit into a
+  // `uint64_t`; `ptr != end` means that the `input` contained a non-digit.
+  if (ec != std::errc{} || ptr != end) {
+    return std::nullopt;
   }
   return value;
 }
 
 // _____________________________________________________________________________
 std::optional<uint64_t> encodePayload(const Pattern& pattern,
-                                      std::string_view suffix) {
+                                      std::string_view rest) {
   uint64_t payload = 0;
   for (const auto& part : pattern.parts_) {
-    auto digits = leadingDigits(suffix);
+    auto digits = leadingDigits(rest);
     if (digits.empty()) {
       return std::nullopt;
     }
-    suffix.remove_prefix(digits.size());
-    if (!ql::starts_with(suffix, part.separator_)) {
+    rest.remove_prefix(digits.size());
+    if (!ql::starts_with(rest, part.suffix_)) {
       return std::nullopt;
     }
-    suffix.remove_prefix(part.separator_.size());
+    rest.remove_prefix(part.suffix_.size());
     std::optional<uint64_t> stored;
     if (part.encoding_ == NumberEncoding::Nibbles) {
       if (digits.size() * NibbleSize > part.numBits_) {
@@ -267,7 +267,7 @@ std::optional<uint64_t> encodePayload(const Pattern& pattern,
     }
     payload = (payload << part.numBitsStored()) | stored.value();
   }
-  if (suffix != ">") {
+  if (rest != ">") {
     return std::nullopt;
   }
   return payload;
@@ -276,7 +276,7 @@ std::optional<uint64_t> encodePayload(const Pattern& pattern,
 // _____________________________________________________________________________
 std::string decodeToIri(const Pattern& pattern, uint64_t payload) {
   std::string result;
-  // A decimal number needs at most 20 characters; the separators are
+  // A decimal number needs at most 20 characters; the suffixes are
   // typically short.
   result.reserve(pattern.prefix_.size() + pattern.parts_.size() * 24 + 1);
   result = pattern.prefix_;
@@ -292,7 +292,7 @@ std::string decodeToIri(const Pattern& pattern, uint64_t payload) {
     } else {
       decompressNumber(result, part, stored);
     }
-    result.append(part.separator_);
+    result.append(part.suffix_);
   }
   result.push_back('>');
   return result;
@@ -316,7 +316,7 @@ void from_json(const nlohmann::json& j, FixedBitRange& range) {
 void to_json(nlohmann::json& j, const Part& part) {
   j[numBitsKey] = part.numBits_;
   j[fixedBitRangesKey] = part.fixedBitRanges_;
-  j[separatorKey] = part.separator_;
+  j[suffixKey] = part.suffix_;
   j[encodingKey] = part.encoding_ == NumberEncoding::Nibbles
                        ? nibblesEncodingName
                        : binaryEncodingName;
@@ -327,7 +327,7 @@ void from_json(const nlohmann::json& j, Part& part) {
   part.numBits_ = j.at(numBitsKey).get<size_t>();
   part.fixedBitRanges_ =
       j.at(fixedBitRangesKey).get<std::vector<FixedBitRange>>();
-  part.separator_ = j.at(separatorKey).get<std::string>();
+  part.suffix_ = j.at(suffixKey).get<std::string>();
   auto encoding = j.at(encodingKey).get<std::string>();
   if (encoding == nibblesEncodingName) {
     part.encoding_ = NumberEncoding::Nibbles;

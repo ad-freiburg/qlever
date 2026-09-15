@@ -78,7 +78,7 @@ struct Part {
   // The fixed string that directly follows the number in the IRI. It may only
   // be empty for the last part of a pattern, and it must not start with a
   // digit, because the digits of the number are matched greedily.
-  std::string separator_{};
+  std::string suffix_{};
   NumberEncoding encoding_ = NumberEncoding::Binary;
 
   // The number of bits that are actually stored in the `Id` for this part.
@@ -90,12 +90,12 @@ struct Part {
   }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Part, numBits_, fixedBitRanges_,
-                                              separator_, encoding_)
+                                              suffix_, encoding_)
 
   template <typename H>
   friend H AbslHashValue(H h, const Part& part) {
     return H::combine(std::move(h), part.numBits_, part.fixedBitRanges_,
-                      part.separator_, part.encoding_);
+                      part.suffix_, part.encoding_);
   }
 };
 
@@ -174,17 +174,17 @@ std::string_view leadingDigits(std::string_view input);
 // has a leading zero (see `NumberEncoding::Binary`).
 std::optional<uint64_t> parseDecimal(std::string_view input);
 
-// Try to encode the `suffix` of an IRI (the part that follows the `prefix_` of
+// Try to encode the `rest` of an IRI (the part that follows the `prefix_` of
 // the `pattern`, including the closing `>`) into the `pattern.numBitsStored()`
 // payload bits. The first number of the pattern is stored in the most
 // significant bits of the payload, the last one in the least significant bits.
-// Return `std::nullopt` if the `suffix` doesn't match the `pattern`, or if one
+// Return `std::nullopt` if the `rest` doesn't match the `pattern`, or if one
 // of its numbers violates the constraints of the corresponding `Part`.
 std::optional<uint64_t> encodePayload(const Pattern& pattern,
-                                      std::string_view suffix);
+                                      std::string_view rest);
 
 // The inverse of `encodePayload`: Reconstruct the complete IRI (the `prefix_`
-// of the `pattern`, the numbers with their separators, and the closing `>`)
+// of the `pattern`, the numbers with their suffixes, and the closing `>`)
 // from the `payload`, which has to be the result of a call to `encodePayload`
 // with the same `pattern`.
 std::string decodeToIri(const Pattern& pattern, uint64_t payload);

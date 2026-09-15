@@ -4,6 +4,8 @@ addLinkAndDiscoverTest(PatternCreatorTest index)
 addLinkAndDiscoverTest(ScanSpecificationTest index)
 addLinkAndDiscoverTestNoLibs(KeyOrderTest)
 addLinkAndDiscoverTestNoLibs(EncodedIriManagerTest vocabulary)
+addLinkAndDiscoverTestNoLibs(EncodedIriPatternTest vocabulary)
+addLinkAndDiscoverTestNoLibs(NibbleEncodingTest vocabulary)
 addLinkAndDiscoverTest(GraphNameManagerTest index)
 addLinkAndDiscoverTest(IndexFormatConverterTest index engine)
 # When the `server` library is not built (Emscripten, see
