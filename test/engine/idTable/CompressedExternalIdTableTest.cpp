@@ -797,12 +797,12 @@ void deleteSpillFiles(const std::string& prefix) {
 // The merge phase spills its output blocks to a temporary file of its own, so
 // that a chunk that has run ahead of the consumer can be merged to completion
 // instead of suspending its producer, see
-// `CompressedExternalIdTableSorter::makeBlockStorageFactory`. Check that this
-// file is really written to and that it is deleted again afterwards.
+// `compressedExternalIdTable::makeMergePhaseBlockStorageFactory`. Check that
+// this file is really written to and that it is deleted again afterwards.
 TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
   std::string filename = gtestCurrentTestName() + ".dat";
   // The common prefix of the spill files of the first merge phase, see
-  // `CompressedExternalIdTableSorter::makeSpillFilename`.
+  // `compressedExternalIdTable::makeSpillFilename`.
   std::string spillPrefix = filename + ".merge-spill.0";
   absl::Cleanup cleanup = [&filename, &spillPrefix] {
     ad_utility::deleteFile(filename, false);
@@ -1019,7 +1019,7 @@ TEST(CompressedExternalIdTable, sorterMergeSpillCompression) {
   std::string filename = gtestCurrentTestName() + ".dat";
   // Each of the three sorters below is a fresh one, so each of them spills its
   // first (and only) merge phase to files with this prefix, see
-  // `CompressedExternalIdTableSorter::makeSpillFilename`.
+  // `compressedExternalIdTable::makeSpillFilename`.
   std::string spillPrefix = filename + ".merge-spill.0";
   absl::Cleanup cleanup = [&filename, &spillPrefix] {
     ad_utility::deleteFile(filename, false);
@@ -1065,8 +1065,9 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   };
   // The following values are chosen such that (with 4 columns) exactly two
   // presorted runs are created, and such that
-  // `computeMergePhaseParameters` ends up with a single chunk in flight without
-  // throwing: the input blocks of a single chunk cost
+  // `compressedExternalIdTable::computeMergePhaseParameters` ends up with a
+  // single chunk in flight without throwing: the input blocks of a single
+  // chunk cost
   // `2 * 4 * 250'000 = 2 MB`, so two concurrent chunks leave
   // `(6 - 4) MB / (4 + 3 * 2)` per output block, which is far below
   // `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`, whereas a single chunk still leaves

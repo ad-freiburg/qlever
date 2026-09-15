@@ -19,11 +19,17 @@
 #include "util/Exception.h"
 
 // Store a block of an `IdTable` in a `CompressedBlockFile` and read it back.
-// This is the shared layer between the two users of that representation: the
-// `CompressedExternalIdTableWriter` (see `CompressedExternalIdTable.h`), which
-// keeps whole presorted runs on disk, and the
-// `CompressedIdTableBlockStorage` (see `CompressedIdTableBlockStorage.h`),
-// which spills the output blocks of the parallel merge.
+// This is the codec of the `CompressedIdTableBlockStorage` (see
+// `CompressedIdTableBlockStorage.h`), which spills the output blocks of the
+// parallel merge to disk. It lives in a header of its own, because it is the
+// part of that storage that is purely about bytes and can hence be read and
+// tested without any of the asynchronous machinery.
+//
+// NOTE: The `CompressedExternalIdTableWriter` (see
+// `CompressedExternalIdTable.h`) stores its blocks in a very similar way, but
+// deliberately does not share this code: its metadata are organized per column
+// and not per block, because it writes whole presorted runs in one go, whereas
+// that storage writes single blocks of several chunks interleaved.
 namespace ad_utility::compressedIdTable {
 
 // The metadata of a single compressed block of an `IdTable`. An `IdTable` is
@@ -41,19 +47,6 @@ struct BlockMetadata {
   size_t numColumns() const { return columns_.size(); }
 };
 
-// Compress the rows `[beginRow, endRow)` of the column `columnIdx` of `table`
-// and append them to `file`.
-template <typename Table>
-CompressedBlockFile::BlockMetadata writeColumn(CompressedBlockFile& file,
-                                               const Table& table,
-                                               size_t columnIdx,
-                                               size_t beginRow, size_t endRow) {
-  AD_CONTRACT_CHECK(beginRow <= endRow && endRow <= table.numRows());
-  decltype(auto) column = table.getColumn(columnIdx);
-  return file.appendBlock(column.data() + beginRow,
-                          (endRow - beginRow) * sizeof(Id));
-}
-
 // Compress the rows `[beginRow, endRow)` of all the columns of `table` and
 // append them to `file`, one column after the other. Return the metadata of the
 // resulting block.
@@ -65,41 +58,15 @@ BlockMetadata writeBlock(CompressedBlockFile& file, const Table& table,
   metadata.numRows_ = endRow - beginRow;
   metadata.columns_.reserve(table.numColumns());
   for (size_t columnIdx : ql::views::iota(size_t{0}, table.numColumns())) {
-    metadata.columns_.push_back(
-        writeColumn(file, table, columnIdx, beginRow, endRow));
+    decltype(auto) column = table.getColumn(columnIdx);
+    metadata.columns_.push_back(file.appendBlock(
+        column.data() + beginRow, (endRow - beginRow) * sizeof(Id)));
   }
   return metadata;
 }
 
-// Allocate (via the `allocator`) and size a block that can hold the rows of
-// `metadata`. The contents of that block are unspecified; use
-// `readColumnIntoBlock` to fill them.
-template <size_t NumCols = 0>
-IdTableStatic<NumCols> makeBlock(const BlockMetadata& metadata,
-                                 const AllocatorWithLimit<Id>& allocator) {
-  IdTableStatic<NumCols> block{metadata.numColumns(), allocator};
-  block.resize(metadata.numRows_);
-  return block;
-}
-
-// Read and decompress the column `columnIdx` of the block that is described by
-// `metadata` from `file` into `block`, which has to have been obtained from
-// `makeBlock(metadata, ...)`.
-//
-// NOTE: This may be called concurrently for distinct values of `columnIdx` on
-// the same `block`, because the columns of an `IdTable` are disjoint and
-// `CompressedBlockFile::readBlock` is thread-safe.
-template <size_t NumCols = 0>
-void readColumnIntoBlock(const CompressedBlockFile& file,
-                         const BlockMetadata& metadata, size_t columnIdx,
-                         IdTableStatic<NumCols>& block) {
-  decltype(auto) column = block.getColumn(columnIdx);
-  AD_CORRECTNESS_CHECK(column.size() == metadata.numRows_);
-  file.readBlock(metadata.columns_.at(columnIdx), column.data());
-}
-
-// Read and decompress the whole block that is described by `metadata` from
-// `file`, one column after the other.
+// Read and decompress the block that is described by `metadata` from `file`,
+// one column after the other, into a block that is allocated via `allocator`.
 //
 // NOTE: The columns are deliberately read sequentially, so that this spawns no
 // threads of its own and can be called concurrently from many threads.
@@ -107,9 +74,12 @@ template <size_t NumCols = 0>
 IdTableStatic<NumCols> readBlock(const CompressedBlockFile& file,
                                  const BlockMetadata& metadata,
                                  const AllocatorWithLimit<Id>& allocator) {
-  auto block = makeBlock<NumCols>(metadata, allocator);
+  IdTableStatic<NumCols> block{metadata.numColumns(), allocator};
+  block.resize(metadata.numRows_);
   for (size_t columnIdx : ql::views::iota(size_t{0}, metadata.numColumns())) {
-    readColumnIntoBlock<NumCols>(file, metadata, columnIdx, block);
+    decltype(auto) column = block.getColumn(columnIdx);
+    AD_CORRECTNESS_CHECK(column.size() == metadata.numRows_);
+    file.readBlock(metadata.columns_.at(columnIdx), column.data());
   }
   return block;
 }

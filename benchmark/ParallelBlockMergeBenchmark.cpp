@@ -31,6 +31,7 @@
 #include "backports/algorithm.h"
 #include "backports/span.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
 #include "global/Id.h"
 #include "global/IndexTypes.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -446,7 +447,7 @@ AD_REGISTER_BENCHMARK(ParallelBlockMergeBenchmark);
 // synchronization in the sink and the input blocks at the chunk boundaries
 // (which are decompressed by both of the adjacent chunks) then start to
 // dominate. The sorter resolves that tradeoff in
-// `CompressedExternalIdTableSorter::computeMergePhaseParameters`, which the
+// `compressedExternalIdTable::computeMergePhaseParameters`, which the
 // logging of this benchmark mirrors, see `mergePhaseParametersFor`. The number
 // of rows per chunk is
 // `numRows / (numThreads * MergeOptions::targetChunksPerThread)`.
@@ -586,72 +587,37 @@ MemorySize blocksizeCompressionFor(const DataConfig& config) {
 // `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`.
 constexpr size_t NUM_BUFFERED_OUTPUT_BLOCKS = 4;
 
-// The two numbers that the sorter derives from its memory limit for the merge
-// phase, see `mergePhaseParametersFor` below.
-struct MergePhaseParameters {
-  // The number of rows of a single output block.
-  size_t outputBlockSize_;
-  // The number of chunks that are merged concurrently.
-  size_t maxInFlightChunks_;
-};
-
 // Return the parameters that the sorter derives for the merge phase of the
 // given configuration, if it may merge at most `mergeParallelism` chunks
-// concurrently. This mirrors
-// `CompressedExternalIdTableSorter::computeMergePhaseParameters`, so that the
-// benchmark can log the numbers that the measured merge really uses.
-MergePhaseParameters mergePhaseParametersFor(const DataConfig& config,
-                                             size_t numColumns,
-                                             const MergeConfig& mergeConfig,
-                                             size_t mergeParallelism) {
-  if (mergeConfig.ignoreMemoryLimit_) {
-    // The sorter then yields five rows at a time (unless the caller has pinned
-    // the size of the output blocks) and lets all the chunks that the
-    // parallelism offers be in flight.
-    return {mergeConfig.outputBlockSize_.value_or(5), mergeParallelism};
-  }
-  const MemorySize memory =
+// concurrently. This calls the very function that the sorter itself uses, so
+// that the benchmark logs the numbers that the measured merge really uses.
+//
+// NOTE: That function throws if the memory limit does not even suffice for a
+// single chunk. The benchmark then logs an output block size of zero, which
+// makes such a configuration visible instead of aborting the whole run.
+ad_utility::compressedExternalIdTable::MergePhaseParameters
+mergePhaseParametersFor(const DataConfig& config, size_t numColumns,
+                        const MergeConfig& mergeConfig,
+                        size_t mergeParallelism) {
+  ad_utility::compressedExternalIdTable::MergePhaseConfig phaseConfig;
+  phaseConfig.numRuns_ = config.numRuns_;
+  phaseConfig.numColumns_ = numColumns;
+  phaseConfig.memoryLimit_ =
       memoryFor(rowsPerRunFor(config.numRuns_), numColumns);
-  // One decompressed input block per run, for a single chunk.
-  const MemorySize inputMemoryPerChunk =
-      config.numRuns_ * numColumns * blocksizeCompressionFor(config);
-  // The largest output block that leaves room for `numInFlight` concurrent
-  // chunks, or `nullopt` if the input blocks of those chunks alone already
-  // exceed the memory limit.
-  auto largestOutputBlockSize =
-      [&](size_t numInFlight) -> std::optional<size_t> {
-    const MemorySize inputMemory = inputMemoryPerChunk * numInFlight;
-    if (inputMemory >= memory) {
-      return std::nullopt;
-    }
-    const size_t numOutputBlocks =
-        NUM_BUFFERED_OUTPUT_BLOCKS +
-        ad_utility::MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK * numInFlight;
-    // The sorter never uses more than 1 GB for a single output block, see
-    // `CompressedExternalIdTableSorter::maxOutputBlocksize_`.
-    const MemorySize perBlock = std::min(
-        (memory - inputMemory) / numOutputBlocks, MemorySize::gigabytes(1));
-    return perBlock.getBytes() / (sizeof(Id) * numColumns);
-  };
-  // The sorter uses as much parallelism as the memory limit allows, but never
-  // at the price of output blocks below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`
-  // rows. An output block size that the caller has pinned takes the place of
-  // that minimum, because only the number of chunks is then left to derive.
-  const size_t minOutputBlockSize = mergeConfig.outputBlockSize_.value_or(
-      ad_utility::MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE);
-  auto blockSize = [&mergeConfig](size_t derived) {
-    return mergeConfig.outputBlockSize_.value_or(derived);
-  };
-  for (size_t numInFlight = mergeParallelism; numInFlight > 1; --numInFlight) {
-    auto numRows = largestOutputBlockSize(numInFlight);
-    if (numRows.has_value() && numRows.value() >= minOutputBlockSize) {
-      return {blockSize(numRows.value()), numInFlight};
-    }
+  phaseConfig.inputBlockSize_ = blocksizeCompressionFor(config);
+  phaseConfig.numBufferedOutputBlocks_ = NUM_BUFFERED_OUTPUT_BLOCKS;
+  // The sorter never uses more than 1 GB for a single output block, see
+  // `CompressedExternalIdTableSorter::maxOutputBlocksize_`.
+  phaseConfig.maxOutputBlockSize_ = MemorySize::gigabytes(1);
+  phaseConfig.parallelism_ = mergeParallelism;
+  phaseConfig.outputBlockSizeOverride_ = mergeConfig.outputBlockSize_;
+  phaseConfig.ignoreMemoryLimit_ = mergeConfig.ignoreMemoryLimit_;
+  try {
+    return ad_utility::compressedExternalIdTable::computeMergePhaseParameters(
+        phaseConfig);
+  } catch (const std::exception&) {
+    return {mergeConfig.outputBlockSize_.value_or(0), 1};
   }
-  // A single chunk (which is exactly the serial merge) gets all the memory that
-  // is left. NOTE: If not even that fits, then the sorter throws, which the
-  // logged zero makes visible.
-  return {blockSize(largestOutputBlockSize(1).value_or(0)), 1};
 }
 
 // Return a unique name for a temporary file of this benchmark.
@@ -677,7 +643,7 @@ void logConfiguration(const std::string& name, size_t numColumns,
   // All the numbers below are logged for the largest thread count, which is the
   // one for which the merge has to scale.
   const size_t mergeParallelism = THREAD_COUNTS_ID_TABLE.back();
-  const MergePhaseParameters parameters = mergePhaseParametersFor(
+  const auto parameters = mergePhaseParametersFor(
       dataConfig, numColumns, mergeConfig, mergeParallelism);
   // The number of chunks is `numThreads * targetChunksPerThread`, so these are
   // the number of rows and the number of output blocks of a single chunk.
@@ -693,7 +659,7 @@ void logConfiguration(const std::string& name, size_t numColumns,
               << " rows each, memory limit " << memory.asString()
               << ", compressed blocksize " << blocksize.asString()
               << ", output blocksize " << parameters.outputBlockSize_
-              << " rows, at most " << parameters.maxInFlightChunks_
+              << " rows, at most " << parameters.numChunksInFlight_
               << " chunks in flight, " << rowsPerChunk << " rows and "
               << blocksPerChunk << " output block(s) per chunk at "
               << mergeParallelism << " threads" << std::endl;
