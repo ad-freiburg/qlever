@@ -221,17 +221,15 @@ auto parallelBlockMergeToSink(
 //
 // The `storageFactory` decides where the finished output blocks live between
 // the producer of a chunk and the consumer, see the `BlockStorageConcept`. A
-// storage that keeps them in memory (see
-// `test/parallelBlockMerge/InMemoryBlockStorage.h`) makes a producer whose
-// chunk is far ahead of the consumer suspend, whereas one that spills them to
-// disk lets it run ahead.
+// storage that keeps them in memory makes a producer whose chunk is far ahead
+// of the consumer suspend, whereas one that spills them to disk lets it run
+// ahead.
 //
 // The merge is performed serially in the calling thread (and the `executor` is
-// then never used at all) if the input is small (see
-// `MergeOptions::serialNumElementsThreshold`) or if `options.parallelism()` is
-// a single thread. On that path there is no sink at all, so the
-// `storageFactory` is ignored. Except on that path the `executor` must not be
-// empty, see `parallelBlockMergeToSink`.
+// then never used at all) if `options.shouldMergeSerially()` says so, that is
+// for a small input or a single thread. On that path there is no sink at all,
+// so the `storageFactory` is ignored. Except on that path the `executor` must
+// not be empty, see `parallelBlockMergeToSink`.
 //
 // IMPORTANT: Except on the serial path, the `executor` has to be run by *other*
 // threads (for example by a `boost::asio::thread_pool`), because the thread
@@ -254,43 +252,44 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
         StorageFactory storageFactory, MergeOptions options = {},
         ad_utility::SharedCancellationHandle cancellationHandle =
             std::make_shared<ad_utility::CancellationHandle<>>()) {
+  // The serial merge is the result on two distinct paths (see below), hence
+  // this lambda. It consumes the arguments, so it may be called at most once.
+  auto mergeSerially = [&]() {
+    return serialBlockMergeToRange<moveElements>(
+        std::move(input), std::move(comparator), std::move(options),
+        std::move(cancellationHandle));
+  };
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // There is no parallel path at all in this mode, so these two arguments are
   // unused, see the NOTE above.
   static_cast<void>(executor);
   static_cast<void>(storageFactory);
+  return mergeSerially();
 #else
+  if (options.shouldMergeSerially(detail::totalNumElements(input))) {
+    return mergeSerially();
+  }
   using Block = typename Input::Block;
   using Result = ad_utility::InputRangeTypeErased<Block>;
-  // A single thread cannot merge two chunks concurrently, and for small inputs
-  // the overhead of setting up the parallel merge dominates the actual merging,
-  // so merge directly in the calling thread in both cases.
-  if (options.parallelism() > 1 &&
-      detail::totalNumElements(input) > options.serialNumElementsThreshold) {
-    using Storage = std::invoke_result_t<StorageFactory&, const Strand&>;
-    using Sink = InOrderBlockSink<Block, Storage>;
-    // The sink is created inside `parallelBlockMergeToSink`, because only that
-    // function knows the number of chunks; this lambda is what lets us get hold
-    // of it afterwards, so that the returned range can read from it.
-    std::shared_ptr<Sink> sink;
-    auto makeSink = [&sink, &executor,
-                     &storageFactory](size_t numChunks) mutable {
-      sink = std::make_shared<Sink>(executor, numChunks,
-                                    std::move(storageFactory));
-      return sink;
-    };
-    auto state = parallelBlockMergeToSink<moveElements>(
-        executor, std::move(input), std::move(comparator), makeSink,
-        std::move(options), std::move(cancellationHandle));
-    using Range =
-        detail::ParallelMergeRange<typename decltype(state)::element_type,
-                                   Sink>;
-    return Result{std::make_unique<Range>(std::move(state), std::move(sink))};
-  }
+  using Storage = std::invoke_result_t<StorageFactory&, const Strand&>;
+  using Sink = InOrderBlockSink<Block, Storage>;
+  // The sink is created inside `parallelBlockMergeToSink`, because only that
+  // function knows the number of chunks; this lambda is what lets us get hold
+  // of it afterwards, so that the returned range can read from it.
+  std::shared_ptr<Sink> sink;
+  auto makeSink = [&sink, &executor,
+                   &storageFactory](size_t numChunks) mutable {
+    sink =
+        std::make_shared<Sink>(executor, numChunks, std::move(storageFactory));
+    return sink;
+  };
+  auto state = parallelBlockMergeToSink<moveElements>(
+      executor, std::move(input), std::move(comparator), makeSink,
+      std::move(options), std::move(cancellationHandle));
+  using Range =
+      detail::ParallelMergeRange<typename decltype(state)::element_type, Sink>;
+  return Result{std::make_unique<Range>(std::move(state), std::move(sink))};
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  return serialBlockMergeToRange<moveElements>(
-      std::move(input), std::move(comparator), std::move(options),
-      std::move(cancellationHandle));
 }
 
 }  // namespace ad_utility::parallelBlockMerge

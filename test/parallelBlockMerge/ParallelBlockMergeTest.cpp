@@ -1149,8 +1149,8 @@ std::vector<typename Input::value_type> mergeToRangeAndCollect(
 }
 
 // Return `MergeOptions` that force the parallel code path also for the small
-// inputs of these tests, see `MergeOptions::serialNumElementsThreshold`.
-MergeOptions rangeOptions(size_t outputBlockSize = 7) {
+// inputs of these tests, see `MergeOptions::shouldMergeSerially()`.
+MergeOptions alwaysParallelOptions(size_t outputBlockSize = 7) {
   MergeOptions options = parallelOptions(outputBlockSize);
   options.serialNumElementsThreshold = 0;
   return options;
@@ -1165,7 +1165,7 @@ TEST(ParallelBlockMerge, rangeYieldsTheGloballySortedResult) {
     auto expected = sortedConcatenation(runs);
     auto result =
         mergeToRangeAndCollect(makeVectorInput(runs, blockSize), std::less<>{},
-                               rangeOptions(blockSize), 8);
+                               alwaysParallelOptions(blockSize), 8);
     EXPECT_TRUE(ql::ranges::is_sorted(result));
     EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
   };
@@ -1180,7 +1180,7 @@ TEST(ParallelBlockMerge, rangeWithASingleInFlightChunk) {
   // a chunk whose storage is full suspends instead of blocking its thread.
   auto runs = makeRandomRuns(16, 200, 300);
   auto expected = sortedConcatenation(runs);
-  MergeOptions options = rangeOptions(16);
+  MergeOptions options = alwaysParallelOptions(16);
   for (size_t maxNumChunksInFlight : {1, 2}) {
     options.maxNumChunksInFlight = maxNumChunksInFlight;
     EXPECT_THAT(mergeToRangeAndCollect(makeVectorInput(runs, 16), std::less<>{},
@@ -1196,9 +1196,9 @@ TEST(ParallelBlockMerge, rangeTakesTheSerialFastPath) {
   auto expected = sortedConcatenation(runs);
   // Both conditions of the fast path merge in the calling thread, so an empty
   // executor (which the parallel path rejects) suffices.
-  MergeOptions singleThreaded = rangeOptions(16);
+  MergeOptions singleThreaded = alwaysParallelOptions(16);
   singleThreaded.parallelismHint = 1;
-  MergeOptions smallInput = rangeOptions(16);
+  MergeOptions smallInput = alwaysParallelOptions(16);
   smallInput.parallelismHint = 8;
   smallInput.serialNumElementsThreshold = std::numeric_limits<size_t>::max();
   for (const MergeOptions& options : {singleThreaded, smallInput}) {
@@ -1216,7 +1216,7 @@ TEST(ParallelBlockMerge, rangeTakesTheSerialFastPath) {
 TEST(ParallelBlockMerge, consumerAbandonsRangeEarly) {
   auto runs = makeRandomRuns(50, 2000, 2000);
   net::thread_pool pool{8};
-  MergeOptions options = rangeOptions(16);
+  MergeOptions options = alwaysParallelOptions(16);
   options.parallelismHint = 8;
   // This must neither hang, nor crash, nor leak. The destructor of the range
   // has to stop the merge, and the state has to stay alive until the last
@@ -1250,7 +1250,7 @@ ASYNC_TEST(ParallelBlockMerge, singleThreadedConsumer) {
   // executor to be run by other threads, see there.)
   auto runs = makeRandomRuns(8, 300, 400);
   auto expected = sortedConcatenation(runs);
-  MergeOptions options = rangeOptions(16);
+  MergeOptions options = alwaysParallelOptions(16);
   options.parallelismHint = 8;
   using Sink = InOrderBlockSink<SizeVec, InMemoryBlockStorage<SizeVec>>;
   auto executor = ioContext.get_executor();
