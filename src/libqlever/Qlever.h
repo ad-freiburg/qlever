@@ -52,9 +52,18 @@ struct CommonConfig {
   // building.
   std::string baseName_;
 
-  // The name of the index that will be built for a given dataset. This has no
-  // particular semantics, except that it will be returned when asked for.
-  std::string kbIndexName_ = "no index name specified";
+  // A description of the index (typically the dataset and its version). It
+  // has no semantics inside QLever, but it is returned by the API (`cmd=stats`,
+  // field `index-description`), which is used, for example, by the QLever UI.
+  // When building an index, it is stored in the index files. When loading an
+  // index, it replaces the stored description, if set. It can also be changed
+  // while the server is running, via the `index-description` API command.
+  std::optional<std::string> indexDescription_;
+
+  // The same for the text index (field and API command `text-description`).
+  // When building a text index without a description, the basename of the
+  // words file is used.
+  std::optional<std::string> textIndexDescription_;
 
   // An upper bound on the amount of memory that QLever will use during index
   // building and query processing. If more memory is required, an exception
@@ -163,9 +172,6 @@ struct IndexBuilderConfig : CommonConfig {
   // documentation and examples.
   std::string wordsfile_;
   std::string docsfile_;
-
-  // The name of the full-text index, analogously to `kbIndexName_` above.
-  std::string textIndexName_;
 
   // If set to true, add a text index to an already existing RDF index.
   bool onlyAddTextIndex_ = false;

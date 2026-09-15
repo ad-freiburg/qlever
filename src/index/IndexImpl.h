@@ -516,9 +516,9 @@ class IndexImpl {
     return textMeta_.getAverageNofEntityContexts();
   }
 
-  void setKbName(const std::string& name);
+  void setIndexDescription(const std::string& name);
 
-  void setTextName(const std::string& name);
+  void setTextIndexDescription(const std::string& name);
 
   bool& usePatterns();
 
@@ -578,8 +578,12 @@ class IndexImpl {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
 
-  const std::string& getTextName() const { return textMeta_.getName(); }
-  const std::string& getKbName() const { return PSO().getKbName(); }
+  const std::string& getTextIndexDescription() const {
+    return textMeta_.getName();
+  }
+  const std::string& getIndexDescription() const {
+    return PSO().getIndexDescription();
+  }
   const std::string& getOnDiskBase() const { return onDiskBase_; }
   const std::string& getIndexId() const { return indexId_; }
   const std::string& getGitShortHash() const { return gitShortHash_; }

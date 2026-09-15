@@ -227,9 +227,13 @@ int main(int argc, char** argv) {
       "using the N-Triples or N-Quads format, as well as for well-behaved "
       "Turtle files, where all the prefix declarations come in one block at "
       "the beginning and there are no multiline literals");
-  add("kg-index-name,K", po::value(&config.kbIndexName_),
-      "The name of the knowledge graph index (default: basename of "
-      "`kg-input-file`).");
+  add("index-description,K",
+      po::value<std::string>()->notifier(
+          [&config](const std::string& d) { config.indexDescription_ = d; }),
+      "A description of the index (typically the dataset and its version). "
+      "It is stored in the index and returned by the API (`cmd=stats`, field "
+      "`index-description`). It can be replaced when starting the server, "
+      "via the option of the same name.");
 
   // Options for the text index.
   add("text-docs-input-file,d", po::value(&config.docsfile_),
@@ -240,9 +244,12 @@ int main(int argc, char** argv) {
       po::bool_switch(&config.addWordsFromLiterals_),
       "Consider all literals from the internal vocabulary as text records. Can "
       "be combined with `text-docs-input-file` and `text-words-input-file`");
-  add("text-index-name,T", po::value(&config.textIndexName_),
-      "The name of the text index (default: basename of "
-      "text-words-input-file).");
+  add("text-description,T",
+      po::value<std::string>()->notifier([&config](const std::string& d) {
+        config.textIndexDescription_ = d;
+      }),
+      "A description of the text index, analogous to `--index-description` "
+      "(default: basename of `text-words-input-file`).");
   add("add-text-index,A", po::bool_switch(&config.onlyAddTextIndex_),
       "Only build the text index. Assumes that a knowledge graph index with "
       "the same `index-basename` already exists.");

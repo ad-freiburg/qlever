@@ -967,7 +967,7 @@ std::tuple<size_t, IndexMetaData, IndexMetaData> IndexImpl::createPermutations(
 // _____________________________________________________________________________
 void IndexImpl::writeMetaData(IndexMetaData& metaData,
                               const std::string& filename) const {
-  metaData.setName(getKbName());
+  metaData.setName(getIndexDescription());
   ad_utility::File f(filename, "r+");
   ad_utility::File metaFile(filename + META_FILE_SUFFIX, "w");
   metaData.appendToFile(f, metaFile);
@@ -1173,13 +1173,13 @@ bool IndexImpl::isLiteral(std::string_view object) const {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setKbName(const std::string& name) {
-  if (pos_) pos_->setKbName(name);
-  if (pso_) pso_->setKbName(name);
-  if (sop_) sop_->setKbName(name);
-  if (spo_) spo_->setKbName(name);
-  if (ops_) ops_->setKbName(name);
-  if (osp_) osp_->setKbName(name);
+void IndexImpl::setIndexDescription(const std::string& name) {
+  if (pos_) pos_->setIndexDescription(name);
+  if (pso_) pso_->setIndexDescription(name);
+  if (sop_) sop_->setIndexDescription(name);
+  if (spo_) spo_->setIndexDescription(name);
+  if (ops_) ops_->setIndexDescription(name);
+  if (osp_) osp_->setIndexDescription(name);
 }
 
 // ____________________________________________________________________________
@@ -1317,12 +1317,12 @@ void IndexImpl::readConfiguration() {
   // from the index files.
   //
   // NOTE: This is computed here rather than in `applyConfiguration`, because
-  // `getKbName` reads from the `PSO` permutation, which is only available on
-  // the on-disk load path (`applyConfiguration` is also used when loading from
-  // a blob, where no permutations are loaded).
-  indexId_ = absl::StrCat("#", getKbName(), ".", numTriples_.normal, ".",
-                          numSubjects_.normal, ".", numPredicates_.normal, ".",
-                          numObjects_.normal);
+  // `getIndexDescription` reads from the `PSO` permutation, which is only
+  // available on the on-disk load path (`applyConfiguration` is also used when
+  // loading from a blob, where no permutations are loaded).
+  indexId_ = absl::StrCat("#", getIndexDescription(), ".", numTriples_.normal,
+                          ".", numSubjects_.normal, ".", numPredicates_.normal,
+                          ".", numObjects_.normal);
 }
 
 // ___________________________________________________________________________
@@ -2127,7 +2127,7 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
   // Copy the relevant information from an existing index to rebuild the new
   // index and write a fresh configuration file for a new index.
   setOnDiskBase(newName);
-  setKbName(other.getKbName());
+  setIndexDescription(other.getIndexDescription());
   blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
   configurationJson_ = newStats;
   numTriples_ = static_cast<NumNormalAndInternal>(newStats.at("num-triples"));

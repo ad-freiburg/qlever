@@ -90,10 +90,10 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
     index.addTextFromOnDiskIndex();
   }
   if (config.indexDescription_.has_value()) {
-    index.setKbName(config.indexDescription_.value());
+    index.setIndexDescription(config.indexDescription_.value());
   }
-  if (config.textDescription_.has_value()) {
-    index.setTextName(config.textDescription_.value());
+  if (config.textIndexDescription_.has_value()) {
+    index.setTextIndexDescription(config.textIndexDescription_.value());
   }
 
   materializedViewsManager.setOnDiskBase(config.baseName_);
@@ -132,16 +132,16 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
     index.parserBufferSize() = config.parserBufferSize_.value();
   }
 
-  // If no text index name was specified, take the part of the wordsfile after
-  // the last slash.
-  if (config.textIndexName_.empty() && !config.wordsfile_.empty()) {
-    config.textIndexName_ =
+  // If no description of the text index was given, take the part of the
+  // wordsfile after the last slash.
+  if (!config.textIndexDescription_.has_value() && !config.wordsfile_.empty()) {
+    config.textIndexDescription_ =
         ad_utility::getLastPartOfString(config.wordsfile_, '/');
   }
 
   // Set all other configuration options.
-  index.setKbName(config.kbIndexName_);
-  index.setTextName(config.textIndexName_);
+  index.setIndexDescription(config.indexDescription_.value_or(""));
+  index.setTextIndexDescription(config.textIndexDescription_.value_or(""));
   index.usePatterns() = !config.noPatterns_;
   index.setOnDiskBase(config.baseName_);
   index.setKeepTempFiles(config.keepTemporaryFiles_);

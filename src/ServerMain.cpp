@@ -136,14 +136,16 @@ int main(int argc, char** argv) {
       po::value<std::string>()->notifier(
           [&config](const std::string& d) { config.indexDescription_ = d; }),
       "A description of the index (typically the dataset and its version). "
-      "It is returned by the API (`cmd=stats`, field `name-index`), which is "
+      "It is returned by the API (`cmd=stats`, field `index-description`), "
+      "which is "
       "used, for example, by the QLever UI. Can also be changed while the "
       "server is running, via the `index-description` API command.");
   add("text-description",
-      po::value<std::string>()->notifier(
-          [&config](const std::string& d) { config.textDescription_ = d; }),
+      po::value<std::string>()->notifier([&config](const std::string& d) {
+        config.textIndexDescription_ = d;
+      }),
       "A description of the text index, analogous to `--index-description` "
-      "(field `name-text-index`).");
+      "(field `text-description`).");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&config.onlyPsoAndPos_),
       "Only load the PSO and POS permutations. This disables queries with "
