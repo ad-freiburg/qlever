@@ -1,25 +1,41 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIMANAGER_H
 #define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIMANAGER_H
-
-#include <absl/numeric/bits.h>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "index/vocabulary/NibbleEncoding.h"
 #include "util/BitUtils.h"
 #include "util/Log.h"
 #include "util/json.h"
 
 namespace detail {
-// Match `repr` against the pattern `([0-9]+)>` and return the digit
-// substring as a `string_view` into `repr` on success, or `std::nullopt` if
-// the pattern does not match.
-std::optional<std::string_view> matchDigitsPrefix(std::string_view repr);
+// Find the first prefix in `prefixes` that `repr` starts with, and match the
+// remainder of `repr` against the pattern `([0-9]+)>` with at most
+// `maxNumDigits` digits. Return the index of the matching prefix together with
+// the digits (as a `string_view` into `repr`), or `std::nullopt` if there is no
+// such prefix or the remainder does not match.
+std::optional<std::pair<size_t, std::string_view>> matchPrefixAndDigits(
+    const std::vector<std::string>& prefixes, std::string_view repr,
+    size_t maxNumDigits);
+
+// Sort the `prefixes` (which have to be specified without the enclosing angle
+// brackets) and remove duplicates. Throw if they are invalid, that is, if there
+// are more than `maxNumPrefixes` of them, if one of them is a prefix of another
+// one, or if one of them starts with `<`. Return the prefixes, each of them
+// with a leading `<`.
+std::vector<std::string> sortAndCheckPrefixes(std::vector<std::string> prefixes,
+                                              size_t maxNumPrefixes);
 }  // namespace detail
 
 // This class allows the encoding of IRIs that start with a fixed prefix
@@ -34,12 +50,10 @@ std::optional<std::string_view> matchDigitsPrefix(std::string_view repr);
 // can be used. The remaining `NumBitsTotal - NumBitsTags` bits are used to
 // encode the digits that follow the prefix.
 //
-// The digits are encoded in the following non-standard way, which makes sure
+// The digits are encoded with the nibble encoding (see `NibbleEncoding.h` for
+// the details), which stores each decimal digit in four bits and makes sure
 // that the order of the encoded values corresponds to the lexical order of the
-// original IRIs. Each decimal digit is encoded as a 4-bit nibble, where digit
-// `i` is encoded as `i+1` and converted to a hexadecimal number. The nibbles
-// are stored left-aligned (not right-aligned) and filled on the right with
-// zeroes.
+// original IRIs.
 //
 // For example, here are a few example encodings, with `NumBitsTotal = 40` and
 // `NumBitsTags = 8`. The prefix is `http://example.org/` and encoded in 8
@@ -72,7 +86,7 @@ class EncodedIriManagerImpl {
   static constexpr size_t NumBitsEncoding = NumBitsTotal - NumBitsTags;
 
   // We use 4-bit nibbles per digit in the encoding.
-  static constexpr size_t NibbleSize = 4;
+  static constexpr size_t NibbleSize = encodedIri::NibbleSize;
   static constexpr size_t NumDigits = NumBitsEncoding / NibbleSize;
   static_assert(NumBitsEncoding % NibbleSize == 0);
 
@@ -108,49 +122,8 @@ class EncodedIriManagerImpl {
           !ad_utility::contains(prefixesWithoutAngleBrackets, prefix));
       prefixesWithoutAngleBrackets.emplace_back(prefix);
     }
-    if (prefixesWithoutAngleBrackets.empty()) {
-      return;
-    }
-    // Sort the prefixes lexicographically to make the ordering deterministic
-    // (provided that the prefixes do not end with digits).
-    ql::ranges::sort(prefixesWithoutAngleBrackets);
-
-    // Remove duplicates.
-    //
-    // NOTE: `ql::ranges::unique` does not work because of a discrepancy in the
-    // return types between `std::ranges` and `range-v3`.
-    prefixesWithoutAngleBrackets.erase(
-        ::ranges::unique(prefixesWithoutAngleBrackets),
-        prefixesWithoutAngleBrackets.end());
-
-    if (prefixesWithoutAngleBrackets.size() > maxNumPrefixes_) {
-      throw std::runtime_error(absl::StrCat(
-          "Number of prefixes specified with `--encode-as-id` is ",
-          prefixesWithoutAngleBrackets.size(), ", which is too many; ",
-          "the maximum is ", maxNumPrefixes_));
-    }
-
-    // TODO<C++23> use `std::views::adjacent`.
-    for (size_t i = 0; i < prefixesWithoutAngleBrackets.size() - 1; ++i) {
-      const auto& a = prefixesWithoutAngleBrackets.at(i);
-      const auto& b = prefixesWithoutAngleBrackets.at(i + 1);
-      if (ql::starts_with(b, a)) {
-        throw std::runtime_error(absl::StrCat(
-            "None of the prefixes specified with `--encode-as-id` "
-            "may be a prefix of another; here is a violating pair: \"",
-            a, "\" and \"", b, "\"."));
-      }
-    }
-    prefixes_.reserve(prefixesWithoutAngleBrackets.size());
-    for (const auto& prefix : prefixesWithoutAngleBrackets) {
-      if (ql::starts_with(prefix, '<')) {
-        throw std::runtime_error(absl::StrCat(
-            "The prefixes specified with `--encode-as-id` must not "
-            "be enclosed in angle brackets; here is a violating prefix: \"",
-            prefix, "\""));
-      }
-      prefixes_.push_back(absl::StrCat("<", prefix));
-    }
+    prefixes_ = detail::sortAndCheckPrefixes(
+        std::move(prefixesWithoutAngleBrackets), maxNumPrefixes_);
   }
 
   // Try to encode the given string as an `Id`. If the encoding fails, return
@@ -161,28 +134,11 @@ class EncodedIriManagerImpl {
   // 3. After the matching prefix, there are characters other than `[0-9]`
   // 4. There are more digits than fit into `NumBitsEncoding` (4 bits / digit)
   std::optional<Id> encode(std::string_view repr) const {
-    // Find the matching prefix.
-    auto it = ql::ranges::find_if(prefixes_, [&repr](std::string_view prefix) {
-      return ql::starts_with(repr, prefix);
-    });
-    if (it == prefixes_.end()) {
+    auto match = detail::matchPrefixAndDigits(prefixes_, repr, NumDigits);
+    if (!match.has_value()) {
       return std::nullopt;
     }
-
-    // Check that after the prefix, the string contains only digits and the
-    // trailing '>'.
-    repr.remove_prefix(it->size());
-    auto numStringOpt = detail::matchDigitsPrefix(repr);
-    if (!numStringOpt.has_value()) {
-      return std::nullopt;
-    }
-    std::string_view numString = numStringOpt.value();
-    if (numString.size() > NumDigits) {
-      return std::nullopt;
-    }
-
-    // Get the index of the used prefix, and run the actual encoding.
-    auto prefixIndex = static_cast<size_t>(it - prefixes_.begin());
+    const auto& [prefixIndex, numString] = match.value();
     return makeIdFromPrefixIdxAndPayload(prefixIndex,
                                          encodeDecimalToNBit(numString));
   }
@@ -287,59 +243,19 @@ class EncodedIriManagerImpl {
   // Encode the `numberStr` (which may only consist of digits) into a 64-bit
   // number.
   static constexpr uint64_t encodeDecimalToNBit(std::string_view numberStr) {
-    auto len = numberStr.size();
-    AD_CORRECTNESS_CHECK(len <= NumDigits);
-
-    uint64_t result = 0;
-
-    // Compute the starting shift (for the first digit).
-    uint64_t shift = NumBitsEncoding - NibbleSize;
-
-    for (const char digitChar : numberStr) {
-      // Deliberately encode [0, ..., 9] as [1, ..., A], so that the padding
-      // nibble `0`is smaller than any valid digit encoding.
-      uint8_t digit = (digitChar - '0') + 1;
-      result |= static_cast<uint64_t>(digit) << shift;
-      shift -= NibbleSize;
-    }
-    return result;
-  }
-
-  // Helper for decoding numbers. Calls `F` for every digit (from high to low)
-  // in the decoded representation of `encoded`.
-  template <typename F>
-  static void decodeDecimalFrom64BitHelper(F processDigit, uint64_t encoded) {
-    size_t shift = NumBitsEncoding - NibbleSize;
-    auto numTrailingZeros = absl::countr_zero(encoded);
-    size_t numTrailingZeroNibbles = numTrailingZeros / NibbleSize;
-    size_t len = NumDigits - numTrailingZeroNibbles;
-    for (size_t i = 0; i < len; ++i) {
-      processDigit(((encoded >> shift) & 0xF) - 1);
-      shift -= NibbleSize;
-    }
+    return encodedIri::encodeDigitsAsNibbles(numberStr, NumBitsEncoding);
   }
 
   // The inverse of `encodeDecimalToNBit`. The result is appended to the
   // `result` string.
   static void decodeDecimalFrom64Bit(std::string& result, uint64_t encoded) {
-    decodeDecimalFrom64BitHelper(
-        [&result](auto digit) {
-          result.push_back(static_cast<char>(digit + '0'));
-        },
-        encoded);
+    encodedIri::decodeNibblesToDigits(result, encoded, NumBitsEncoding);
   }
 
   // Overload of `decodeDecimalFrom64Bit` that returns the result as a
   // `uint64_t`.
   static uint64_t decodeDecimalFrom64Bit(uint64_t encoded) {
-    uint64_t result = 0;
-    decodeDecimalFrom64BitHelper(
-        [&result](auto digit) {
-          result *= 10;
-          result += digit;
-        },
-        encoded);
-    return result;
+    return encodedIri::decodeNibblesToNumber(encoded, NumBitsEncoding);
   }
 };
 
