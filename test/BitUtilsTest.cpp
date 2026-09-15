@@ -119,4 +119,20 @@ TEST(BitUtils, forEachSetBit) {
   EXPECT_THAT(stoppedEarly, ::testing::ElementsAre(0, 1));
 }
 
+// _____________________________________________________________________________
+TEST(BitUtils, alignUp) {
+  // An offset that already has the alignment is unchanged, everything in
+  // between is rounded up to the next multiple.
+  static_assert(alignUp(0, 8) == 0);
+  static_assert(alignUp(1, 8) == 8);
+  static_assert(alignUp(8, 8) == 8);
+  static_assert(alignUp(9, 8) == 16);
+  // An alignment of one never pads.
+  for (uint64_t offset : {uint64_t{0}, uint64_t{1}, uint64_t{12345}}) {
+    EXPECT_EQ(alignUp(offset, 1), offset);
+  }
+  // The alignment may also be large.
+  EXPECT_EQ(alignUp(1, uint64_t{1} << 40), uint64_t{1} << 40);
+}
+
 }  // namespace
