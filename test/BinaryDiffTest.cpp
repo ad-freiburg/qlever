@@ -23,6 +23,7 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 
 using ad_utility::BinaryDiff;
+using Align = BinaryDiff::Align;
 using Copy = BinaryDiff::Copy;
 using Insert = BinaryDiff::Insert;
 using Instruction = BinaryDiff::Instruction;
@@ -57,10 +58,12 @@ Instruction copyInstruction(uint64_t baseOffset, uint64_t length) {
 Instruction insertInstruction(std::string_view bytes) {
   return Insert{toBytes(bytes)};
 }
+Instruction alignInstruction(uint64_t alignment) { return Align{alignment}; }
 Statistics statistics(size_t numCopyInstructions, size_t numInsertInstructions,
-                      size_t numCopiedBytes, size_t numInsertedBytes) {
-  return {numCopyInstructions, numInsertInstructions, numCopiedBytes,
-          numInsertedBytes};
+                      size_t numAlignInstructions, size_t numCopiedBytes,
+                      size_t numInsertedBytes) {
+  return {numCopyInstructions, numInsertInstructions, numAlignInstructions,
+          numCopiedBytes, numInsertedBytes};
 }
 
 // The header of the serialization of a diff, so that the tests below can write
@@ -69,7 +72,6 @@ Statistics statistics(size_t numCopyInstructions, size_t numInsertInstructions,
 struct RawDiffHeader {
   std::array<char, 8> magicBytes_{'Q', 'L', 'V', 'R', 'D', 'I', 'F', 'F'};
   uint16_t formatVersion_ = 1;
-  uint64_t alignment_ = 1;
   uint64_t baseSize_ = 0;
   uint64_t baseChecksum_ = 0;
 };
@@ -83,7 +85,6 @@ std::vector<char> writeRawDiff(const RawDiffHeader& header,
   ByteBufferWriteSerializer writer;
   writer << header.magicBytes_;
   writer << header.formatVersion_;
-  writer << header.alignment_;
   writer << header.baseSize_;
   writer << header.baseChecksum_;
   writer << numInstructions;
@@ -97,6 +98,14 @@ auto writeRawCopy(uint64_t baseOffset, uint64_t length) {
     writer << static_cast<uint8_t>(0);
     writer << baseOffset;
     writer << length;
+  };
+}
+
+// Return a callable that writes a single align instruction, for `writeRawDiff`.
+auto writeRawAlign(uint64_t alignment) {
+  return [alignment](ByteBufferWriteSerializer& writer) {
+    writer << static_cast<uint8_t>(2);
+    writer << alignment;
   };
 }
 
@@ -120,16 +129,22 @@ BinaryDiff serializeAndDeserialize(const BinaryDiff& diff) {
 // _____________________________________________________________________________
 TEST(BinaryDiff, alignmentHasToBeAPowerOfTwo) {
   auto base = toBytes("0123456789");
+  BinaryDiff diff{base};
+  // The alignment only takes effect once the target is not empty, because an
+  // empty target trivially has every alignment.
+  diff.addInsert(toBytes("x"));
   for (uint64_t alignment : {uint64_t{0}, uint64_t{3}, uint64_t{6},
                              uint64_t{100}, (uint64_t{1} << 63) + 1}) {
     AD_EXPECT_THROW_WITH_MESSAGE(
-        (BinaryDiff{base, alignment}),
-        HasSubstr("alignment of a `BinaryDiff` has to be a power of two"));
+        diff.addAlign(alignment),
+        HasSubstr("alignment of an `Align` instruction has to be a power of "
+                  "two"));
   }
-  for (uint64_t alignment : {uint64_t{1}, uint64_t{2}, uint64_t{16},
-                             uint64_t{4096}, uint64_t{1} << 63}) {
-    BinaryDiff diff{base, alignment};
-    EXPECT_EQ(diff.alignment(), alignment);
+  for (uint64_t alignment : {uint64_t{1}, uint64_t{2}, uint64_t{16}}) {
+    BinaryDiff otherDiff{base};
+    otherDiff.addInsert(toBytes("x"));
+    otherDiff.addAlign(alignment);
+    EXPECT_EQ(otherDiff.targetSize(), alignment);
   }
 }
 
@@ -154,30 +169,31 @@ TEST(BinaryDiff, checksum) {
 // _____________________________________________________________________________
 TEST(BinaryDiff, emptyDiff) {
   auto base = toBytes("0123456789");
-  BinaryDiff diff{base, 1};
+  BinaryDiff diff{base};
   EXPECT_EQ(diff.baseSize(), base.size());
   EXPECT_EQ(diff.baseChecksum(), BinaryDiff::checksum(base));
   EXPECT_THAT(diff.instructions(), IsEmpty());
   EXPECT_EQ(diff.targetSize(), 0U);
-  EXPECT_EQ(diff.statistics(), statistics(0, 0, 0, 0));
+  EXPECT_EQ(diff.statistics(), statistics(0, 0, 0, 0, 0));
   EXPECT_THAT(diff.apply(base), IsEmpty());
 }
 
 // _____________________________________________________________________________
 TEST(BinaryDiff, roundTripWithoutAlignment) {
   auto base = toBytes("0123456789");
-  BinaryDiff diff{base, 1};
+  BinaryDiff diff{base};
   diff.addCopy(0, 3);
   diff.addInsert(toBytes("XY"));
   diff.addCopy(5, 2);
   diff.addInsert(toBytes("!"));
-  // With an alignment of one, no padding is inserted between the instructions.
+  // Without `Align` instructions, no padding is inserted between the
+  // instructions.
   EXPECT_THAT(diff.instructions(),
               ElementsAre(copyInstruction(0, 3), insertInstruction("XY"),
                           copyInstruction(5, 2), insertInstruction("!")));
   EXPECT_EQ(diff.targetSize(), 8U);
   EXPECT_EQ(toString(diff.apply(base)), "012XY56!");
-  EXPECT_EQ(diff.statistics(), statistics(2, 2, 5, 3));
+  EXPECT_EQ(diff.statistics(), statistics(2, 2, 0, 5, 3));
 }
 
 // _____________________________________________________________________________
@@ -187,23 +203,54 @@ TEST(BinaryDiff, roundTripWithAlignment) {
   std::string blockB(16, 'B');
   std::string blockC(16, 'C');
   auto base = toBytes(blockA + blockB + blockC);
-  BinaryDiff diff{base, 16};
+  BinaryDiff diff{base};
+  diff.addAlign(16);
   diff.addCopy(32, 16);
+  diff.addAlign(16);
   diff.addInsert(toBytes("xyz"));
+  diff.addAlign(16);
   diff.addCopy(0, 16);
+  // The leading alignment and the alignment after the copy of `blockC` are
+  // no-ops, because the target already has the required alignment.
+  EXPECT_THAT(diff.instructions(),
+              ElementsAre(copyInstruction(32, 16), insertInstruction("xyz"),
+                          alignInstruction(16), copyInstruction(0, 16)));
   // The insert of three bytes is padded with 13 zeros, so that the copy of
-  // `blockA` again lands at an offset that is a multiple of the alignment.
+  // `blockA` again lands at an offset that is a multiple of 16.
   std::string expected = blockC + "xyz" + std::string(13, '\0') + blockA;
   ASSERT_EQ(expected.size(), 48U);
   EXPECT_EQ(diff.targetSize(), 48U);
   EXPECT_EQ(toString(diff.apply(base)), expected);
-  EXPECT_EQ(diff.statistics(), statistics(2, 1, 32, 3));
+  EXPECT_EQ(diff.statistics(), statistics(2, 1, 1, 32, 3));
+}
+
+// _____________________________________________________________________________
+TEST(BinaryDiff, alignmentMayChangeWithinADiff) {
+  auto base = toBytes(std::string(32, 'x'));
+  BinaryDiff diff{base};
+  diff.addInsert(toBytes("ab"));
+  // Align to 8, then to 16, and finally to 1 (which never pads).
+  diff.addAlign(8);
+  diff.addInsert(toBytes("cde"));
+  diff.addAlign(16);
+  diff.addInsert(toBytes("f"));
+  diff.addAlign(1);
+  diff.addInsert(toBytes("g"));
+  EXPECT_THAT(diff.instructions(),
+              ElementsAre(insertInstruction("ab"), alignInstruction(8),
+                          insertInstruction("cde"), alignInstruction(16),
+                          insertInstruction("f"), insertInstruction("g")));
+  std::string expected =
+      "ab" + std::string(6, '\0') + "cde" + std::string(5, '\0') + "f" + "g";
+  ASSERT_EQ(expected.size(), 18U);
+  EXPECT_EQ(diff.targetSize(), 18U);
+  EXPECT_EQ(toString(diff.apply(base)), expected);
 }
 
 // _____________________________________________________________________________
 TEST(BinaryDiff, applyUsesTheGivenAllocator) {
   auto base = toBytes(std::string(64, 'x'));
-  BinaryDiff diff{base, 16};
+  BinaryDiff diff{base};
   diff.addCopy(0, 64);
   using Allocator =
       ad_utility::AlignedAllocator<char, std::allocator<char>, 64>;
@@ -217,15 +264,16 @@ TEST(BinaryDiff, mergeOfAdjacentCopies) {
   auto base = toBytes("0123456789");
   {
     // Two directly adjacent copies are merged.
-    BinaryDiff diff{base, 1};
+    BinaryDiff diff{base};
     diff.addCopy(0, 3);
     diff.addCopy(3, 4);
     EXPECT_THAT(diff.instructions(), ElementsAre(copyInstruction(0, 7)));
+    EXPECT_EQ(diff.targetSize(), 7U);
     EXPECT_EQ(toString(diff.apply(base)), "0123456");
   }
   {
     // A gap between the two copies prevents the merge.
-    BinaryDiff diff{base, 1};
+    BinaryDiff diff{base};
     diff.addCopy(0, 3);
     diff.addCopy(4, 2);
     EXPECT_THAT(diff.instructions(),
@@ -234,7 +282,7 @@ TEST(BinaryDiff, mergeOfAdjacentCopies) {
   }
   {
     // An insert between the two copies prevents the merge.
-    BinaryDiff diff{base, 1};
+    BinaryDiff diff{base};
     diff.addCopy(0, 3);
     diff.addInsert(toBytes("-"));
     diff.addCopy(3, 3);
@@ -243,47 +291,57 @@ TEST(BinaryDiff, mergeOfAdjacentCopies) {
                             copyInstruction(3, 3)));
     EXPECT_EQ(toString(diff.apply(base)), "012-345");
   }
+  {
+    // An alignment that actually pads also prevents the merge.
+    BinaryDiff diff{base};
+    diff.addCopy(0, 3);
+    diff.addAlign(4);
+    diff.addCopy(3, 3);
+    EXPECT_THAT(diff.instructions(),
+                ElementsAre(copyInstruction(0, 3), alignInstruction(4),
+                            copyInstruction(3, 3)));
+    EXPECT_EQ(toString(diff.apply(base)), "012" + std::string(1, '\0') + "345");
+  }
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, mergeOfCopiesThatAreAdjacentModuloPadding) {
-  // A base of two 16-byte blocks, each of which holds ten bytes of payload
-  // followed by six bytes of (zero) alignment padding.
-  std::string firstBlock = std::string(10, 'A') + std::string(6, '\0');
-  std::string secondBlock = std::string(10, 'B') + std::string(6, '\0');
+TEST(BinaryDiff, redundantAlignmentsAreNotStored) {
+  auto base = toBytes("0123456789");
   {
-    // The two copies are contiguous modulo the alignment padding, and are
-    // therefore merged into a single copy that also covers that padding.
-    auto base = toBytes(firstBlock + secondBlock);
-    BinaryDiff diff{base, 16};
-    diff.addCopy(0, 10);
-    diff.addCopy(16, 10);
-    EXPECT_THAT(diff.instructions(), ElementsAre(copyInstruction(0, 26)));
-    // The result is the same as it would be without the merge, because the
-    // padding in the base consists of zeros.
-    EXPECT_EQ(toString(diff.apply(base)), firstBlock + std::string(10, 'B'));
+    // An alignment at the very beginning of a diff is always a no-op, because
+    // the empty target has every alignment.
+    BinaryDiff diff{base};
+    diff.addAlign(16);
+    EXPECT_THAT(diff.instructions(), IsEmpty());
+    EXPECT_EQ(diff.targetSize(), 0U);
   }
   {
-    // A block that is skipped between the two copies prevents the merge.
-    std::string thirdBlock(16, 'C');
-    auto base = toBytes(firstBlock + secondBlock + thirdBlock);
-    BinaryDiff diff{base, 16};
-    diff.addCopy(0, 10);
-    diff.addCopy(32, 16);
+    // An alignment that the target already has is dropped, so that the copies
+    // around it are still merged.
+    BinaryDiff diff{base};
+    diff.addCopy(0, 8);
+    diff.addAlign(8);
+    diff.addCopy(8, 2);
+    EXPECT_THAT(diff.instructions(), ElementsAre(copyInstruction(0, 10)));
+    EXPECT_EQ(toString(diff.apply(base)), "0123456789");
+  }
+  {
+    // Consecutive alignments only pad once.
+    BinaryDiff diff{base};
+    diff.addCopy(0, 3);
+    diff.addAlign(8);
+    diff.addAlign(4);
+    diff.addAlign(8);
     EXPECT_THAT(diff.instructions(),
-                ElementsAre(copyInstruction(0, 10), copyInstruction(32, 16)));
-    EXPECT_EQ(toString(diff.apply(base)), firstBlock + thirdBlock);
+                ElementsAre(copyInstruction(0, 3), alignInstruction(8)));
+    EXPECT_EQ(diff.targetSize(), 8U);
   }
 }
 
 // _____________________________________________________________________________
 TEST(BinaryDiff, addCopyChecksItsArguments) {
   auto base = toBytes(std::string(32, 'x'));
-  BinaryDiff diff{base, 16};
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      diff.addCopy(8, 8),
-      HasSubstr("offset of a copied range has to be a multiple of the "
-                "alignment 16, but is 8"));
+  BinaryDiff diff{base};
   AD_EXPECT_THROW_WITH_MESSAGE(
       diff.addCopy(16, 32),
       HasSubstr("copied range [16, 48) does not lie within the base of size "
@@ -293,15 +351,16 @@ TEST(BinaryDiff, addCopyChecksItsArguments) {
       HasSubstr("copied range [48, 48) does not lie within the base of size "
                 "32"));
   EXPECT_THAT(diff.instructions(), IsEmpty());
-  // The complete base may be copied.
-  diff.addCopy(0, 32);
-  EXPECT_EQ(toString(diff.apply(base)), std::string(32, 'x'));
+  // An offset that is not aligned in any way is fine, because the alignment is
+  // the business of the `Align` instruction.
+  diff.addCopy(8, 8);
+  EXPECT_EQ(toString(diff.apply(base)), std::string(8, 'x'));
 }
 
 // _____________________________________________________________________________
 TEST(BinaryDiff, applyToTheWrongBase) {
   auto base = toBytes("0123456789");
-  BinaryDiff diff{base, 1};
+  BinaryDiff diff{base};
   diff.addCopy(0, 10);
   const std::string expectedMessage =
       "created against a different base (the size or the checksum of the base "
@@ -320,7 +379,6 @@ TEST(BinaryDiff, applyToTheWrongBase) {
 TEST(BinaryDiff, applyChecksTheInstructions) {
   auto base = toBytes(std::string(32, 'x'));
   RawDiffHeader header{};
-  header.alignment_ = 16;
   header.baseSize_ = base.size();
   header.baseChecksum_ = BinaryDiff::checksum(base);
   // A copy whose range does not lie within the base.
@@ -328,9 +386,8 @@ TEST(BinaryDiff, applyChecksTheInstructions) {
       deserializeDiff(writeRawDiff(header, 1, writeRawCopy(16, 32)))
           .apply(base),
       HasSubstr("contains an invalid instruction"));
-  // A copy whose offset is not a multiple of the alignment.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      deserializeDiff(writeRawDiff(header, 1, writeRawCopy(8, 8))).apply(base),
+      deserializeDiff(writeRawDiff(header, 1, writeRawCopy(48, 0))).apply(base),
       HasSubstr("contains an invalid instruction"));
   // A valid copy of the same, hand-written shape works.
   auto validDiff =
@@ -343,12 +400,12 @@ TEST(BinaryDiff, serializationRoundTrip) {
   std::string blockA(16, 'A');
   std::string blockB(16, 'B');
   auto base = toBytes(blockA + blockB);
-  BinaryDiff diff{base, 16};
+  BinaryDiff diff{base};
   diff.addCopy(16, 16);
   diff.addInsert(toBytes("insert"));
+  diff.addAlign(16);
   diff.addCopy(0, 16);
   auto deserialized = serializeAndDeserialize(diff);
-  EXPECT_EQ(deserialized.alignment(), diff.alignment());
   EXPECT_EQ(deserialized.baseSize(), diff.baseSize());
   EXPECT_EQ(deserialized.baseChecksum(), diff.baseChecksum());
   EXPECT_EQ(deserialized.instructions(), diff.instructions());
@@ -356,16 +413,15 @@ TEST(BinaryDiff, serializationRoundTrip) {
   EXPECT_EQ(toString(deserialized.apply(base)), toString(diff.apply(base)));
 
   // A diff without instructions also survives the round trip.
-  BinaryDiff emptyDiff{base, 16};
+  BinaryDiff emptyDiff{base};
   auto deserializedEmptyDiff = serializeAndDeserialize(emptyDiff);
   EXPECT_THAT(deserializedEmptyDiff.instructions(), IsEmpty());
-  EXPECT_EQ(deserializedEmptyDiff.alignment(), 16U);
+  EXPECT_EQ(deserializedEmptyDiff.targetSize(), 0U);
   EXPECT_EQ(deserializedEmptyDiff.baseChecksum(), emptyDiff.baseChecksum());
 
   // A default-constructed diff is the diff of an empty base into an empty
   // target.
   auto deserializedDefaultDiff = serializeAndDeserialize(BinaryDiff{});
-  EXPECT_EQ(deserializedDefaultDiff.alignment(), 1U);
   EXPECT_EQ(deserializedDefaultDiff.baseSize(), 0U);
   EXPECT_EQ(deserializedDefaultDiff.baseChecksum(), BinaryDiff::checksum({}));
   EXPECT_THAT(deserializedDefaultDiff.apply({}), IsEmpty());
@@ -376,16 +432,16 @@ TEST(BinaryDiff, serializationRoundTripWithAnAlignedSerializer) {
   // A diff can also be written to and read from a serializer that inserts
   // alignment padding for trivially serializable types.
   auto base = toBytes(std::string(32, 'A'));
-  BinaryDiff diff{base, 16};
+  BinaryDiff diff{base};
   diff.addCopy(16, 16);
   diff.addInsert(toBytes("insert"));
+  diff.addAlign(16);
   ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
   writer << diff;
   ad_utility::serialization::AlignedByteBufferReadSerializer reader{
       std::move(writer).data()};
   BinaryDiff deserialized;
   reader >> deserialized;
-  EXPECT_EQ(deserialized.alignment(), diff.alignment());
   EXPECT_EQ(deserialized.baseSize(), diff.baseSize());
   EXPECT_EQ(deserialized.baseChecksum(), diff.baseChecksum());
   EXPECT_EQ(deserialized.instructions(), diff.instructions());
@@ -395,7 +451,7 @@ TEST(BinaryDiff, serializationRoundTripWithAnAlignedSerializer) {
 // _____________________________________________________________________________
 TEST(BinaryDiff, deserializationChecksTheInput) {
   auto base = toBytes("0123456789");
-  BinaryDiff diff{base, 1};
+  BinaryDiff diff{base};
   diff.addCopy(0, 10);
   ByteBufferWriteSerializer writer;
   writer << diff;
@@ -435,11 +491,8 @@ TEST(BinaryDiff, deserializationChecksTheInput) {
   }
 
   // An alignment that is not a power of two.
-  RawDiffHeader invalidAlignmentHeader{};
-  invalidAlignmentHeader.alignment_ = 24;
   AD_EXPECT_THROW_WITH_MESSAGE(
-      deserializeDiff(
-          writeRawDiff(invalidAlignmentHeader, 0, writeNoInstructions)),
+      deserializeDiff(writeRawDiff(RawDiffHeader{}, 1, writeRawAlign(24))),
       HasSubstr("the alignment 24 is not a power of two"));
 
   // A diff that announces more instructions than it contains.

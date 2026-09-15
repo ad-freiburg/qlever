@@ -12,30 +12,36 @@
 namespace ad_utility {
 
 // _____________________________________________________________________________
-BinaryDiff::BinaryDiff(ql::span<const char> base, uint64_t alignment)
-    : alignment_{alignment},
-      baseSize_{base.size()},
-      baseChecksum_{checksum(base)} {
+BinaryDiff::BinaryDiff(ql::span<const char> base)
+    : baseSize_{base.size()}, baseChecksum_{checksum(base)} {}
+
+// _____________________________________________________________________________
+void BinaryDiff::addAlign(uint64_t alignment) {
   AD_CONTRACT_CHECK(isPowerOfTwo(alignment),
-                    "The alignment of a `BinaryDiff` has to be a power of two, "
-                    "but is ",
+                    "The alignment of an `Align` instruction has to be a power "
+                    "of two, but is ",
                     alignment);
+  size_t alignedSize = alignUp(targetSize_, alignment);
+  // An alignment that the target already has is a no-op, see `addAlign` in the
+  // header.
+  if (alignedSize == targetSize_) {
+    return;
+  }
+  instructions_.push_back(Align{alignment});
+  targetSize_ = alignedSize;
 }
 
 // _____________________________________________________________________________
 void BinaryDiff::addCopy(uint64_t baseOffset, uint64_t length) {
-  AD_CONTRACT_CHECK(baseOffset % alignment_ == 0,
-                    "The offset of a copied range has to be a multiple of the "
-                    "alignment ",
-                    alignment_, ", but is ", baseOffset);
   AD_CONTRACT_CHECK(baseOffset <= baseSize_ && length <= baseSize_ - baseOffset,
                     "The copied range [", baseOffset, ", ", baseOffset + length,
                     ") does not lie within the base of size ", baseSize_);
+  targetSize_ += length;
   if (!instructions_.empty()) {
     if (auto* previous = std::get_if<Copy>(&instructions_.back());
         previous != nullptr &&
-        alignUp(previous->baseOffset_ + previous->length_) == baseOffset) {
-      previous->length_ = baseOffset + length - previous->baseOffset_;
+        previous->baseOffset_ + previous->length_ == baseOffset) {
+      previous->length_ += length;
       return;
     }
   }
@@ -44,6 +50,7 @@ void BinaryDiff::addCopy(uint64_t baseOffset, uint64_t length) {
 
 // _____________________________________________________________________________
 void BinaryDiff::addInsert(std::vector<char> bytes) {
+  targetSize_ += bytes.size();
   instructions_.push_back(Insert{std::move(bytes)});
 }
 
@@ -53,30 +60,17 @@ void BinaryDiff::addInsert(ql::span<const char> bytes) {
 }
 
 // _____________________________________________________________________________
-size_t BinaryDiff::targetSize() const {
-  size_t size = 0;
-  for (const auto& instruction : instructions_) {
-    size = alignUp(size);
-    if (const auto* copy = std::get_if<Copy>(&instruction)) {
-      size += copy->length_;
-    } else {
-      size += std::get<Insert>(instruction).bytes_.size();
-    }
-  }
-  return size;
-}
-
-// _____________________________________________________________________________
 BinaryDiff::Statistics BinaryDiff::statistics() const {
   Statistics statistics;
   for (const auto& instruction : instructions_) {
     if (const auto* copy = std::get_if<Copy>(&instruction)) {
       ++statistics.numCopyInstructions_;
       statistics.numCopiedBytes_ += copy->length_;
-    } else {
+    } else if (const auto* insert = std::get_if<Insert>(&instruction)) {
       ++statistics.numInsertInstructions_;
-      statistics.numInsertedBytes_ +=
-          std::get<Insert>(instruction).bytes_.size();
+      statistics.numInsertedBytes_ += insert->bytes_.size();
+    } else {
+      ++statistics.numAlignInstructions_;
     }
   }
   return statistics;
@@ -98,8 +92,23 @@ bool BinaryDiff::isPowerOfTwo(uint64_t alignment) {
 }
 
 // _____________________________________________________________________________
-size_t BinaryDiff::alignUp(size_t offset) const {
-  return (offset + alignment_ - 1) & ~(alignment_ - 1);
+size_t BinaryDiff::alignUp(size_t offset, uint64_t alignment) {
+  return (offset + alignment - 1) & ~(alignment - 1);
+}
+
+// _____________________________________________________________________________
+void BinaryDiff::recomputeTargetSize() {
+  targetSize_ = 0;
+  for (const auto& instruction : instructions_) {
+    if (const auto* copy = std::get_if<Copy>(&instruction)) {
+      targetSize_ += copy->length_;
+    } else if (const auto* insert = std::get_if<Insert>(&instruction)) {
+      targetSize_ += insert->bytes_.size();
+    } else {
+      targetSize_ =
+          alignUp(targetSize_, std::get<Align>(instruction).alignment_);
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -112,15 +121,14 @@ void BinaryDiff::checkBase(ql::span<const char> base) const {
 // _____________________________________________________________________________
 void BinaryDiff::checkInstructions(ql::span<const char> base) const {
   // NOTE: The instructions of a diff that was created via `addCopy` always
-  // fulfill these checks; those of a diff that was deserialized from a
-  // corrupted input might not.
+  // fulfill this check; those of a diff that was deserialized from a corrupted
+  // input might not. The alignments are already checked when reading a diff,
+  // because they do not depend on the base.
   for (const auto& instruction : instructions_) {
     const auto* copy = std::get_if<Copy>(&instruction);
     if (copy == nullptr) {
       continue;
     }
-    AD_CONTRACT_CHECK(copy->baseOffset_ % alignment_ == 0,
-                      invalidInstructionMessage);
     AD_CONTRACT_CHECK(copy->baseOffset_ <= base.size() &&
                           copy->length_ <= base.size() - copy->baseOffset_,
                       invalidInstructionMessage);
