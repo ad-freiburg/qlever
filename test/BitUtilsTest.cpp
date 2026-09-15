@@ -51,7 +51,7 @@ TEST(BitUtils, bitMaskForHigherBits) {
     ASSERT_EQ(bitMaskForHigherBits(i), expected);
   }
 
-  // Note: `bitMaskForHigherBits` forwards `64 - i` to `bitMaskForLowerBits`,
+  // NOTE: `bitMaskForHigherBits` forwards `64 - i` to `bitMaskForLowerBits`,
   // so the error message reports that (underflowed) value.
   for (size_t i = 65; i < 2048; ++i) {
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
