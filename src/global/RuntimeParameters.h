@@ -142,6 +142,14 @@ struct RuntimeParameters {
   // This mode should only be activated when running the syntax tests of
   // the SPARQL conformance test suite.
   Bool syntaxTestMode_{false, "syntax-test-mode"};
+  // If set to `true`, then certain exceptions are silenced and an empty result
+  // is returned instead. Currently, this only affects the lookup of a named
+  // cached query (`SERVICE <ql:cached-result-with-name-...>`, see
+  // `NamedResultCache::getOperation`): if the named result cache contains no
+  // query with the requested name, then the result of that lookup is empty (no
+  // rows and no columns) instead of an exception being thrown.
+  Bool emptyResultInsteadOfExceptions_{false,
+                                       "empty-result-instead-of-exceptions"};
   // If set to `true`, then a division by zero in an expression will lead
   // to an
   // expression error, meaning that the result is undefined. If set to
