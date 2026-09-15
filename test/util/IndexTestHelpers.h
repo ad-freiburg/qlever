@@ -106,14 +106,15 @@ struct TestIndexConfig {
                       c.blocksizePermutations, c.createTextIndex,
                       c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
                       c.parserBufferSize, c.scoringMetric, c.bAndKParam,
-                      c.indexType, c.encodedPrefixesWithoutAngleBrackets,
+                      c.indexType, c.vocabularyType, c.geoCellGridLevel,
+                      c.encodedPrefixesWithoutAngleBrackets,
                       c.addHasWordTriples, c.secondaryVocabWords);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, blocksizePermutations, createTextIndex,
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
-      scoringMetric, bAndKParam, indexType, vocabularyType,
+      scoringMetric, bAndKParam, indexType, vocabularyType, geoCellGridLevel,
       encodedPrefixesWithoutAngleBrackets, addHasWordTriples,
       secondaryVocabWords)
 };
