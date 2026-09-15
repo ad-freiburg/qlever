@@ -147,10 +147,11 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   size_t nextChunkToRead_ = 0;
   std::exception_ptr exception_;
   // Set as soon as the merge is stopped, either because the consumer has
-  // abandoned it or because a producer has pushed an exception. NOTE: This is
-  // the only member that may be read off the strand (it is written on the
-  // strand only), such that a producer can cheaply poll it between two output
-  // blocks.
+  // abandoned it or because a producer has pushed an exception.
+  //
+  // NOTE: This is the only member that may be read off the strand (it is
+  // written on the strand only), such that a producer can cheaply poll it
+  // between two output blocks.
   std::atomic<bool> stopRequested_{false};
 
  public:
@@ -302,9 +303,10 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
     if (stopRequested_.load()) {
       // A block is silently dropped, and there is no consumer left that could
-      // care about a sentinel. NOTE: Returning here (instead of touching the
-      // storage) is what makes the teardown airtight, see the class comment
-      // above.
+      // care about a sentinel.
+      //
+      // NOTE: Returning here (instead of touching the storage) is what makes
+      // the teardown airtight, see the class comment above.
       co_return false;
     }
     bool wasStored = co_await storage_.storeBlock(
@@ -339,8 +341,10 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
       if (result.hasValue()) {
         co_return OptionalBlock{std::move(result).get()};
       }
-      // The end-of-chunk sentinel, so move on to the next chunk. NOTE: The
-      // storage drops that chunk on its own, see `BlockStorageConcept`.
+      // The end-of-chunk sentinel, so move on to the next chunk.
+      //
+      // NOTE: The storage drops that chunk on its own, see
+      // `BlockStorageConcept`.
       AD_CORRECTNESS_CHECK(result.isEndOfChunk());
       ++nextChunkToRead_;
     }

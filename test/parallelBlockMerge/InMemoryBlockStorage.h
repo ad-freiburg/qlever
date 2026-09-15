@@ -162,11 +162,12 @@ class InMemoryBlockStorage {
   void cancelAll() noexcept {
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
     wasCancelled_ = true;
-    // Wake up everybody who is currently suspended. NOTE: There is no need to
-    // run this sweep more than once, because no channel is ever created
-    // afterwards, so a later sweep would find nothing new (see the
-    // PRECONDITIONS of the `BlockStorageConcept` and the class comment of
-    // `InOrderBlockSink`).
+    // Wake up everybody who is currently suspended.
+    //
+    // NOTE: There is no need to run this sweep more than once, because no
+    // channel is ever created afterwards, so a later sweep would find nothing
+    // new (see the PRECONDITIONS of the `BlockStorageConcept` and the class
+    // comment of `InOrderBlockSink`).
     //
     // IMPORTANT: `cancel()` is also the *only* primitive that may be used here.
     // `close()` alone does not wake an operation that is already suspended, and
