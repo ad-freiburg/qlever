@@ -76,6 +76,14 @@ CPP_template(typename S1, typename S2)(
 // only works, if the input (as stored in the `context`) is sorted by the
 // Variable `variable`. If `valueIdUpper` is nullopt, we only have a single
 // `valueId`, otherwise we have a range, [`valueId`, `valueIdUpper`).
+//
+// NOTE: If the index has a secondary vocabulary (see
+// `index/vocabulary/SecondaryVocabulary.h`), then part of the result cannot be
+// found by binary search, because the `Id`s of such a vocabulary are sorted by
+// their index within that vocabulary and not by their string value. Those
+// matches are determined by a linear scan and reported separately, see
+// `valueIdComparators::IdRangesAndSecondaryMatches`; we simply add them to the
+// result below.
 template <Comparison Comp>
 ad_utility::SetOfIntervals evaluateWithBinarySearch(
     const Variable& variable, ValueId valueId,
@@ -101,21 +109,40 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
       Iterator{&context->_inputTable, context->_endIndex, getIdFromColumn};
 
   // Perform the actual evaluation.
+  const auto* localVocabContext = &context->getLocalVocabContext();
   const auto resultRanges = [&]() {
     if (valueIdUpper) {
       return valueIdComparators::getRangesForEqualIds(
-          begin, end, valueId, valueIdUpper.value(), Comp);
+          begin, end, valueId, valueIdUpper.value(), Comp, localVocabContext);
     } else {
-      return valueIdComparators::getRangesForId(begin, end, valueId, Comp);
+      return valueIdComparators::getRangesForId(begin, end, valueId, Comp,
+                                                localVocabContext);
     }
   }();
 
   // Convert pairs of iterators to pairs of indexes.
   ad_utility::SetOfIntervals s;
-  for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
+  for (const auto& [rangeBegin, rangeEnd] : resultRanges.ranges_) {
     s._intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
   }
-  return s;
+  if (resultRanges.secondaryVocabMatches_.empty()) {
+    return s;
+  }
+
+  // Add the individual matches from the secondary vocabulary, each of which
+  // becomes an interval of size one. Both `ranges_` and
+  // `secondaryVocabMatches_` are sorted and mutually disjoint (the former all
+  // lie before the beginning of the secondary vocabulary, the latter all after
+  // it), and `secondaryVocabMatches_` is strictly ascending, so the union is
+  // well-defined. We compute it via `SetOfIntervals::Union`, which sorts,
+  // checks the invariants, and merges adjacent intervals, instead of relying on
+  // the ordering argument above.
+  ad_utility::SetOfIntervals secondaryMatches;
+  for (const auto& it : resultRanges.secondaryVocabMatches_) {
+    secondaryMatches._intervals.emplace_back(it - begin, it - begin + 1);
+  }
+  return ad_utility::SetOfIntervals::Union{}(std::move(s),
+                                             std::move(secondaryMatches));
 }
 
 // The actual comparison function for the `SingleExpressionResult`'s which are

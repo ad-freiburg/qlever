@@ -500,8 +500,14 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     ValueIdSubrange inputRange{
         ValueIdIt{&evalBlocks, 0, accessValueIdOp},
         ValueIdIt{&evalBlocks, evalBlocks.size() * 2, accessValueIdOp}};
-    std::vector<ValueIdItPair> iteratorRanges = getRangesForId(
-        inputRange.begin(), inputRange.end(), referenceId, compOp);
+    // Use the `LocalVocabContext` of the index, which is what the prefilters
+    // themselves do. NOTE: This index has no secondary vocabulary, so
+    // `secondaryVocabMatches_` is always empty here.
+    auto rangesAndMatches =
+        getRangesForId(inputRange.begin(), inputRange.end(), referenceId,
+                       compOp, &indexImpl.getLocalVocabContext());
+    ASSERT_TRUE(rangesAndMatches.secondaryVocabMatches_.empty());
+    const std::vector<ValueIdItPair>& iteratorRanges = rangesAndMatches.ranges_;
     using namespace prefilterExpressions::detail::mapping;
     ASSERT_TRUE(assertEqRelevantBlockItRanges(
         convertFromSpanIdxToSpanBlockItRanges(evalBlocks.begin(),
