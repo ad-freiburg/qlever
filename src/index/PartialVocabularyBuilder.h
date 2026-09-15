@@ -70,8 +70,9 @@ struct FirstPassSharedState {
                                                  std::nullopt};
 
   // The number of `ql:has-word` triples that were created by all task chains
-  // (see `mapTripleToIds`). Stays zero unless the index is configured to
-  // create such triples. Only used for logging.
+  // (see `mapTripleToIds`). Each chain counts its own share locally and adds
+  // it here exactly once, when it ends. Stays zero unless the index is
+  // configured to create such triples. Only used for logging.
   std::atomic<size_t> numHasWordTriples_ = 0;
 
   // The shared counter for the indices of the partial vocabularies. Each task
@@ -147,6 +148,10 @@ class PartialVocabularyTaskChain {
   std::optional<ItemMapManager> itemMap_;
   std::vector<IdRow> localTriples_;
   size_t numInputTriples_ = 0;
+  // The number of `ql:has-word` triples that this chain has created (see
+  // `mapTripleToIds`). Counted locally and added to the shared counter in
+  // `finish`, so that the chains do not contend for a single atomic.
+  size_t numHasWordTriples_ = 0;
 
  public:
   PartialVocabularyTaskChain(FirstPassSharedState<Index>& shared,
@@ -231,7 +236,7 @@ class PartialVocabularyTaskChain {
   void handleBatch(std::vector<TurtleTriple> batch) {
     for (auto& triple : batch) {
       mapTripleToIds(std::move(triple), itemMap_.value(), shared_.index_,
-                     localTriples_, shared_.numHasWordTriples_);
+                     localTriples_, numHasWordTriples_);
     }
     numInputTriples_ += batch.size();
     shared_.progressBar_.add(batch.size());
@@ -245,11 +250,13 @@ class PartialVocabularyTaskChain {
   }
 
   // Handle the end of the input for this chain: write the current partial
-  // vocabulary, unless this chain never received a single triple for it.
+  // vocabulary, unless this chain never received a single triple for it, and
+  // add this chain's count of `ql:has-word` triples to the shared counter.
   void finish() {
     if (!localTriples_.empty()) {
       writeCurrentPartialVocabulary();
     }
+    shared_.numHasWordTriples_.fetch_add(numHasWordTriples_);
   }
 };
 

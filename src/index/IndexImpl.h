@@ -253,8 +253,8 @@ class IndexImpl {
       Permutation::Enum p) const;
 
   // Creates an index from a given set of input files. Will write vocabulary and
-  // on-disk index data. `numThreads` is the number of threads for the parallel
-  // stages of the index build (see `Index::createFromFiles`).
+  // on-disk index data. `numThreads` is the number of threads used during the
+  // index build (see `Index::createFromFiles`).
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
   void createFromFiles(std::vector<Index::InputFileSpecification> files,
@@ -646,7 +646,7 @@ class IndexImpl {
   // they can be used for creating the permutations. Member vocab_ will be empty
   // after this because it is not needed for index creation once the triples are
   // set up and it would be a waste of RAM. `numThreads` is the number of
-  // threads for the parallel stages (see `Index::createFromFiles`).
+  // threads used during the index build (see `Index::createFromFiles`).
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       size_t numThreads);

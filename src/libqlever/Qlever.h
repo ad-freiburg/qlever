@@ -125,10 +125,9 @@ struct IndexBuilderConfig : CommonConfig {
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;
 
-  // The number of threads for the parallel stages of the index build, in
-  // particular for parsing the input and building the partial vocabularies
-  // (see `Index::createFromFiles`). Must be at least 1. Defaults to the number
-  // of hardware threads of the machine (`std::thread::hardware_concurrency()`
+  // The number of threads used during the index build (see
+  // `Index::createFromFiles`). Must be at least 1. Defaults to the number of
+  // hardware threads of the machine (`std::thread::hardware_concurrency()`
   // returns `0` if that number cannot be determined, hence the `max`).
   size_t numThreads_ = std::max<size_t>(1, std::thread::hardware_concurrency());
 

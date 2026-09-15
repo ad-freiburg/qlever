@@ -94,7 +94,7 @@ struct TestIndexConfig {
   // (see `IndexImpl::setSecondaryVocabForTesting`), which is what this member
   // does.
   std::optional<std::vector<std::string>> secondaryVocabWords = std::nullopt;
-  // The number of threads for the parallel stages of the index build (see
+  // The number of threads used during the index build (see
   // `Index::createFromFiles`).
   size_t numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
   // If set, the input is parsed in parallel (`true`) or serially (`false`), as

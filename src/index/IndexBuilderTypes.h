@@ -290,8 +290,7 @@ using IdRow = std::array<Id, NumColumnsIndexBuilding>;
 template <typename IndexPtr>
 void mapTripleToIds(QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& triple,
                     ItemMapManager& map, IndexPtr* index,
-                    std::vector<IdRow>& result,
-                    std::atomic<size_t>& numHasWordTriples) {
+                    std::vector<IdRow>& result, size_t& numHasWordTriples) {
   // Process the given triple.
   ProcessedTriple lt = index->processTriple(AD_FWD(triple));
 
@@ -350,7 +349,7 @@ void mapTripleToIds(QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& triple,
                 Id::makeFromInt(static_cast<int64_t>(termFrequency))});
     }
     // Update the counter for the number of `ql:has-word` triples.
-    numHasWordTriples.fetch_add(lt.wordFrequencies_.size());
+    numHasWordTriples += lt.wordFrequencies_.size();
   }
 }
 
