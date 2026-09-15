@@ -204,13 +204,21 @@ class EncodedIriManagerImpl {
   std::string toString(Id id) const {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::EncodedVal);
     auto [tag, payload] = splitIntoPrefixIdxAndPayload(id);
-    return encodedIri::decodeToIri(patterns_.at(tag), payload);
+    const auto& pattern = patterns_.at(tag);
+    // Plain prefixes are by far the most common case, and every encoded IRI
+    // that is exported goes through here, so they take the fast path that
+    // avoids the general per-part loop of `decodeToIri`.
+    if (encodedIri::isPlainPrefixPattern(pattern, NumBitsEncoding)) {
+      return toStringWithGivenPrefix(payload, pattern.prefix_);
+    }
+    return encodedIri::decodeToIri(pattern, payload);
   }
 
   // Combine the integer encoding of the digits and the prefix string into a
   // result string that represents an IRI. This is the special case of
-  // `toString` for a plain prefix, for callers that have the prefix at hand
-  // but not the manager.
+  // `toString` for a plain prefix, which `toString` uses as its fast path, and
+  // which callers that have the prefix at hand but not the manager can use
+  // directly.
   // Note: This function expects, that the prefix starts with `<`.
   static std::string toStringWithGivenPrefix(uint64_t digitEncoding,
                                              std::string_view prefix) {

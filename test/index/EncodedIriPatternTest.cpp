@@ -441,6 +441,22 @@ TEST(EncodedIriPattern, validatePattern) {
 }
 
 // _____________________________________________________________________________
+TEST(EncodedIriPattern, patternsThatStore64BitsViolateThePrecondition) {
+  // Shifting the payload by 64 bits would be undefined behavior, so a pattern
+  // that stores 64 bits may not be passed to `encodePayload` or `decodeToIri`.
+  // The `EncodedIriManager` never does that (see `validatePattern`), but the
+  // pattern itself is valid.
+  Pattern pattern{"<http://example.org/", {Part{64, {}, ""}}};
+  EXPECT_EQ(pattern.numBitsStored(), 64);
+  AD_EXPECT_THROW_WITH_MESSAGE(encodePayload(pattern, "1>"),
+                               HasSubstr("numBitsStored() < 64"));
+  AD_EXPECT_THROW_WITH_MESSAGE(decodeToIri(pattern, 1), HasSubstr("< 64"));
+  // With one bit less, both work.
+  Pattern pattern63{"<http://example.org/", {Part{63, {}, ""}}};
+  expectRoundTrip(pattern63, "<http://example.org/9223372036854775807>");
+}
+
+// _____________________________________________________________________________
 TEST(EncodedIriPattern, json) {
   // The JSON format of the patterns is part of the index format, so the exact
   // keys are checked.

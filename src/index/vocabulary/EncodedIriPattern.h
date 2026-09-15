@@ -209,13 +209,17 @@ std::optional<uint64_t> parseDecimal(std::string_view input);
 // significant bits of the payload, the last one in the least significant bits.
 // Return `std::nullopt` if the `rest` doesn't match the `pattern`, or if one
 // of its numbers violates the constraints of the corresponding `Part`.
+//
+// NOTE: The `pattern` must store fewer than 64 bits (which `validatePattern`
+// guarantees for the patterns of an `EncodedIriManager`), because the payload
+// is shifted by that number of bits. This precondition is checked.
 std::optional<uint64_t> encodePayload(const Pattern& pattern,
                                       std::string_view rest);
 
 // The inverse of `encodePayload`: Reconstruct the complete IRI (the `prefix_`
 // of the `pattern`, the numbers with their suffixes, and the closing `>`)
 // from the `payload`, which has to be the result of a call to `encodePayload`
-// with the same `pattern`.
+// with the same `pattern`. The same precondition as for `encodePayload` holds.
 std::string decodeToIri(const Pattern& pattern, uint64_t payload);
 
 }  // namespace encodedIri

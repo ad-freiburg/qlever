@@ -267,6 +267,8 @@ std::optional<uint64_t> parseDecimal(std::string_view input) {
 // _____________________________________________________________________________
 std::optional<uint64_t> encodePayload(const Pattern& pattern,
                                       std::string_view rest) {
+  // The payload is shifted by the number of stored bits, see the header.
+  AD_CONTRACT_CHECK(pattern.numBitsStored() < 64);
   uint64_t payload = 0;
   for (const auto& part : pattern.parts_) {
     auto digits = leadingDigits(rest);
@@ -309,8 +311,10 @@ std::string decodeToIri(const Pattern& pattern, uint64_t payload) {
   // typically short.
   result.reserve(pattern.prefix_.size() + pattern.parts_.size() * 24 + 1);
   result = pattern.prefix_;
-  // The first part is stored in the most significant bits of the payload.
+  // The first part is stored in the most significant bits of the payload,
+  // which is shifted by the number of stored bits, see the header.
   size_t shift = pattern.numBitsStored();
+  AD_CONTRACT_CHECK(shift < 64);
   for (const auto& part : pattern.parts_) {
     size_t numBits = part.numBitsStored();
     shift -= numBits;
