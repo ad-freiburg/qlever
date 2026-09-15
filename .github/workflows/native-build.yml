@@ -137,9 +137,12 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake"
             -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}"
             -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
-            -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=${{matrix.expensive-tests}}
-            -DENABLE_EXPENSIVE_CHECKS=true ${{matrix.additional-cmake-options}}
-            -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON
+            -DUSE_PARALLEL=true
+            -DRUN_EXPENSIVE_TESTS=${{matrix.expensive-tests}}
+            -DENABLE_EXPENSIVE_CHECKS=true
+            ${{matrix.additional-cmake-options}}
+            -DBUILD_SHARED_LIBS=ON
+            -DQLEVER_ONE_TEST_CASE_PER_FILE=ON
             -DUSE_PRECOMPILED_HEADERS=${{matrix.compiler-version == 21 && 'ON' || 'OFF'}}
             -DCHEAPER_COMPILATION=${{matrix.compiler-version == 11 && 'ON' || 'OFF'}}
             -DQLEVER_ALLOCATOR_BACKEND=${{matrix.allocator-backend || 'limit'}}
