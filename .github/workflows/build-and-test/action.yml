@@ -1,0 +1,87 @@
+name: "Configure, build, and test QLever"
+description: "Run the CMake configuration, the build, the unit tests, the benchmark examples, and the end-to-end test. This sequence of steps is the same for almost all of our build workflows, which only differ in the CMake options they pass and in which of the steps they run."
+
+inputs:
+  build-dir:
+    description: "The build directory, relative to the workspace"
+    required: false
+    default: "build"
+  build-type:
+    description: "The value of `CMAKE_BUILD_TYPE`"
+    required: false
+    default: "Release"
+  cmake-args:
+    description: "All CMake options besides `CMAKE_BUILD_TYPE`, as a single string"
+    required: false
+    default: ""
+  target:
+    description: "The target to build. The default (empty) builds all targets"
+    required: false
+    default: ""
+  num-jobs:
+    description: "The number of parallel build and test jobs. The default (empty) uses one job per core"
+    required: false
+    default: ""
+  setup-command:
+    description: "A shell command that is run before each of the build, test, benchmark, and E2E steps, for example to source the `conanrun.sh` of a Conan build"
+    required: false
+    default: ":"
+  run-tests:
+    description: "Whether to run the unit tests via `ctest`"
+    required: false
+    default: "true"
+  ctest-args:
+    description: "Additional arguments for `ctest`"
+    required: false
+    default: ""
+  run-benchmark:
+    description: "Whether to run the benchmark examples"
+    required: false
+    default: "true"
+  run-e2e:
+    description: "Whether to run the end-to-end test"
+    required: false
+    default: "true"
+  e2e-args:
+    description: "Additional arguments for `e2e/e2e.sh`, for example `-t` to build the text index separately"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    # NOTE: A failing step fails the whole composite action, and all the
+    # following steps are then skipped. The steps below therefore need no
+    # explicit condition on the outcome of the previous ones.
+    - name: Configure CMake
+      shell: bash
+      run: cmake -B ${{inputs.build-dir}} -DCMAKE_BUILD_TYPE=${{inputs.build-type}} ${{inputs.cmake-args}}
+
+    - name: Build
+      shell: bash
+      run: |
+        ${{inputs.setup-command}}
+        cmake --build ${{inputs.build-dir}} --config ${{inputs.build-type}} ${{inputs.target && format('--target {0}', inputs.target) || ''}} -- -j ${{inputs.num-jobs || '$(nproc)'}}
+
+    - name: Test
+      if: inputs.run-tests == 'true'
+      shell: bash
+      working-directory: ${{inputs.build-dir}}/test
+      run: |
+        ${{inputs.setup-command}}
+        env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{inputs.build-type}} -j ${{inputs.num-jobs || '$(nproc)'}} ${{inputs.ctest-args}} .
+
+    - name: Run and print the benchmark examples
+      if: inputs.run-benchmark == 'true'
+      shell: bash
+      working-directory: ${{inputs.build-dir}}
+      run: |
+        ${{inputs.setup-command}}
+        benchmark/BenchmarkExamples -p
+
+    - name: End-to-end test
+      if: inputs.run-e2e == 'true'
+      shell: bash
+      run: |
+        ${{inputs.setup-command}}
+        e2e/e2e.sh ${{inputs.e2e-args}}
