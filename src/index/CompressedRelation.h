@@ -1060,10 +1060,11 @@ class CompressedRelationReader {
                                     useGraphPostProcessing_};
   }
 
-  ad_utility::HashSet<Id::T> computeUniqueGraphIds(
+  ad_utility::HashSetWithMemoryLimit<Id::T> computeUniqueGraphIds(
       const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const Allocator& allocator) const;
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.

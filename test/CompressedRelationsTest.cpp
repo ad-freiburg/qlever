@@ -39,10 +39,12 @@ auto I = &Id::makeFromInt;
 // mirroring the access pattern used by `DistinctGraphs::computeResult()`
 // (`src/engine/DistinctGraphs.cpp`), but starting from a plain `Index` instead
 // of an `Operation`.
-ad_utility::HashSet<Id::T> computeUniqueGraphIdsForIndex(
+ad_utility::HashSetWithMemoryLimit<Id::T> computeUniqueGraphIdsForIndex(
     const Index& index,
-    ad_utility::SharedCancellationHandle cancellationHandle = std::make_shared<
-        ad_utility::SharedCancellationHandle::element_type>()) {
+    ad_utility::SharedCancellationHandle cancellationHandle =
+        std::make_shared<ad_utility::SharedCancellationHandle::element_type>(),
+    const CompressedRelationReader::Allocator& allocator =
+        ad_utility::makeUnlimitedAllocator<Id>()) {
   const auto& permutation =
       index.getImpl().getPermutation(Permutation::Enum::SPO);
   auto snapshot =
@@ -50,8 +52,8 @@ ad_utility::HashSet<Id::T> computeUniqueGraphIdsForIndex(
   auto scanSpecAndBlocks = permutation.getScanSpecAndBlocks(
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt}, *snapshot);
   const auto& ltpb = permutation.getLocatedTriplesForPermutation(*snapshot);
-  return permutation.reader().computeUniqueGraphIds(scanSpecAndBlocks, ltpb,
-                                                    cancellationHandle);
+  return permutation.reader().computeUniqueGraphIds(
+      scanSpecAndBlocks, ltpb, cancellationHandle, allocator);
 }
 
 // Retrieve the corresponding `BlockMetadataRanges` value for the
@@ -1844,7 +1846,8 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsAcrossMultipleBlocks) {
 
 // _____________________________________________________________________________
 TEST(CompressedRelationReader, computeUniqueGraphIdsIncludesDefaultGraph) {
-  auto index = ad_utility::testing::makeTestIndex("<x> <p> <y> . <x> <p2> <z> .");
+  auto index =
+      ad_utility::testing::makeTestIndex("<x> <p> <y> . <x> <p2> <z> .");
   auto defaultGraphId = toValueId(
       TripleComponent{
           ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)},
