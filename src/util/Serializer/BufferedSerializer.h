@@ -67,8 +67,14 @@ CPP_template(typename UnderlyingSerializer,
   std::optional<UnderlyingSerializer> underlyingSerializer_;
   BlockProcessor blockProcessor_;
   size_t blocksize_;
-  // The buffer for the not-yet-forwarded data. It is allocated once with
-  // exactly `blocksize_` bytes and never reallocated.
+  // The buffer for the not-yet-forwarded data, allocated once with exactly
+  // `blocksize_` bytes and never reallocated.
+  //
+  // NOTE: Both a `std::vector<char, default_init_allocator<char>>` and a plain
+  // `std::vector<char>` are slower here: the custom allocator loses the
+  // `memcpy` fast path for bulk copies, which is only taken for exactly
+  // `std::allocator`, and `insert` also handles reallocation and insertion in
+  // the middle, neither of which can happen here.
   std::unique_ptr<char[]> buffer_;
   // The number of bytes currently in the `buffer_`. A `ResetWhenMoved`, so that
   // the defaulted move operations leave a moved-from serializer (whose
