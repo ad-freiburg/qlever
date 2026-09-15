@@ -6,8 +6,13 @@
 # the binaries run on any Mac with that version of macOS or newer. This is
 # the macOS counterpart of `build-portable-binaries.sh`.
 #
-# Prerequisites: Xcode command line tools (Apple clang), cmake >= 3.27,
-# conan 2.x, and jemalloc via Homebrew.
+# The binaries use the allocator of macOS, not jemalloc: conan has no working
+# recipe for it (see `conanfile.txt`), and the static archive from Homebrew
+# is built for the macOS of the build machine, which made the binaries crash
+# at startup when linked for the deployment target.
+#
+# Prerequisites: Xcode command line tools (Apple clang), cmake >= 3.27, and
+# conan 2.x.
 #
 # Usage: build-portable-binaries-macos.sh [<build-dir>]
 # (default: build-portable; a relative path is taken relative to the repo)
@@ -19,25 +24,12 @@ case "${1:-build-portable}" in
     /*) BUILD_DIR="$1" ;;
     *) BUILD_DIR="$REPO_DIR/${1:-build-portable}" ;;
 esac
-STATIC_LIBS="$BUILD_DIR/static-libs"
 DIST_DIR="$BUILD_DIR/dist"
 NUM_THREADS=$(sysctl -n hw.ncpu)
 
 # The oldest macOS the binaries run on. The native build with Apple clang
 # (see `.github/workflows/macos-appleclang-native.yml`) uses the same value.
 DEPLOYMENT_TARGET=11.0
-
-# jemalloc is not available via conan (see `conanfile.txt`), so it comes from
-# Homebrew, which also ships a static archive. A directory that contains ONLY
-# that archive is put first in the linker search path, so that the
-# `-ljemalloc` of QLever's CMake resolves to the `.a` instead of the `.dylib`.
-JEMALLOC_PREFIX="$(brew --prefix jemalloc)"
-if [ ! -f "$JEMALLOC_PREFIX/lib/libjemalloc.a" ]; then
-    echo "ERROR: static jemalloc not found at $JEMALLOC_PREFIX/lib/libjemalloc.a"
-    exit 1
-fi
-mkdir -p "$STATIC_LIBS"
-ln -sf "$JEMALLOC_PREFIX/lib/libjemalloc.a" "$STATIC_LIBS/libjemalloc.a"
 
 # Build the third-party libraries as static libraries via conan (all used
 # recipes default to static), for the deployment target (`os.version`), with
@@ -59,9 +51,7 @@ cmake -B "$BUILD_DIR" -S "$REPO_DIR" \
     -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
     -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE \
     -DUSE_PARALLEL=false \
-    -DRUN_EXPENSIVE_TESTS=false \
-    -DJEMALLOC_MANUALLY_INSTALLED=True \
-    -DCMAKE_EXE_LINKER_FLAGS="-L$STATIC_LIBS"
+    -DRUN_EXPENSIVE_TESTS=false
 
 cmake --build "$BUILD_DIR" --target qlever-index qlever-server -- -j "$NUM_THREADS"
 
@@ -81,11 +71,14 @@ for binary in qlever-index qlever-server; do
 done
 
 # The stripped binaries are the artifacts; keep the unstripped ones around
-# for debugging.
+# for debugging. Both must at least start (a crash of only the stripped one
+# would point at the stripping).
 mkdir -p "$DIST_DIR"
 for binary in qlever-index qlever-server; do
     cp "$BUILD_DIR/$binary" "$DIST_DIR/$binary"
     strip "$DIST_DIR/$binary"
+    "$BUILD_DIR/$binary" --help > /dev/null
+    "$DIST_DIR/$binary" --help > /dev/null
 done
 
 "$REPO_DIR/.github/scripts/smoke-test-portable-binaries.sh" "$DIST_DIR" "$BUILD_DIR/smoke-test"
