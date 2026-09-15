@@ -65,20 +65,6 @@ constexpr inline std::string_view UNSORTED_TRIPLES_INFIX = ".unsorted-triples.";
 // _________________________________________________________________
 constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 
-// _________________________________________________________________
-// The degree of parallelism that is used for the index building step, where the
-// unique elements of the vocabulary are identified via hash maps. Typically, 6
-// is a good value. On systems with very few CPUs, a lower value might be
-// beneficial.
-constexpr inline size_t NUM_PARALLEL_ITEM_MAPS = 10;
-
-// The maximal number of workers that convert the partial to the global IDs
-// (see `IndexImpl::convertPartialToGlobalIds`). Each worker holds the triples
-// of one partial vocabulary (that is, `num-triples-per-batch` triples) in RAM,
-// so the actual number of workers is additionally bounded by the memory limit
-// of the index build.
-constexpr inline size_t NUM_PARALLEL_ID_CONVERSION_WORKERS = 10;
-
 // The number of threads that are parsing in parallel, when the parallel Turtle
 // parser is used.
 constexpr inline size_t NUM_PARALLEL_PARSER_THREADS = 8;
