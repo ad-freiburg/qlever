@@ -340,14 +340,15 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   // Blocks over numeric values where a single block spans the boundary
   // between non-negative and negative values. Negative `Int`s are sorted
-  // after all non-negative `Int`s (2s-complement bit order), negative
-  // `Double`s after all non-negative `Double`s (and NaN). Thus `bNegInt3`
-  // contains all `Int`s > 62950 and all `Int`s < -10, `bNegDouble3` all
-  // `Double`s > 61.0 and all `Double`s < -1.0.
+  // after all non-negative `Int`s (2s-complement bit order, so ascending from
+  // the most negative value to -1), negative `Double`s after all non-negative
+  // `Double`s (and NaN), in the order of their bits, i.e. from -0.0 down to
+  // the most negative value. Thus `bNegInt3` contains all `Int`s > 62950 and
+  // all `Int`s <= -10, and `bNegDouble3` all `Double`s > 61.0 and all
+  // negative `Double`s >= -1.0.
   const CompressedBlockMetadata bNegInt1 = makeBlock(IntId(0), IntId(50));
   const CompressedBlockMetadata bNegInt2 = makeBlock(IntId(51), IntId(62900));
-  const CompressedBlockMetadata bNegInt3 =
-      makeBlock(IntId(62950), IntId(-10));
+  const CompressedBlockMetadata bNegInt3 = makeBlock(IntId(62950), IntId(-10));
   const CompressedBlockMetadata bNegInt4 = makeBlock(IntId(-10), IntId(-1));
   const std::vector<CompressedBlockMetadata> negIntBlocks = {
       bNegInt1, bNegInt2, bNegInt3, bNegInt4};
@@ -759,8 +760,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNegativeNumberBoundaryBlocks) {
   makeTestNegativeBoundary(ge(IntId(63000)), negIntBlocks, {bNegInt3});
   makeTestNegativeBoundary(gt(IntId(62800)), negIntBlocks,
                            {bNegInt2, bNegInt3});
-  makeTestNegativeBoundary(gt(IntId(50)), negIntBlocks,
-                           {bNegInt2, bNegInt3});
+  makeTestNegativeBoundary(gt(IntId(50)), negIntBlocks, {bNegInt2, bNegInt3});
   makeTestNegativeBoundary(gt(DoubleId(63000.5)), negIntBlocks, {bNegInt3});
   makeTestNegativeBoundary(lt(IntId(-20)), negIntBlocks, {bNegInt3});
   makeTestNegativeBoundary(le(IntId(-20)), negIntBlocks, {bNegInt3});
@@ -772,20 +772,16 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNegativeNumberBoundaryBlocks) {
   makeTestNegativeBoundary(neq(IntId(70000)), negIntBlocks,
                            {bNegInt1, bNegInt2, bNegInt3, bNegInt4});
 
-  makeTestNegativeBoundary(gt(DoubleId(70.0)), negDoubleBlocks,
-                           {bNegDouble3});
+  makeTestNegativeBoundary(gt(DoubleId(70.0)), negDoubleBlocks, {bNegDouble3});
   makeTestNegativeBoundary(ge(IntId(70)), negDoubleBlocks, {bNegDouble3});
-  makeTestNegativeBoundary(gt(DoubleId(60.5)), negDoubleBlocks,
-                           {bNegDouble3});
+  makeTestNegativeBoundary(gt(DoubleId(60.5)), negDoubleBlocks, {bNegDouble3});
   makeTestNegativeBoundary(gt(DoubleId(59.0)), negDoubleBlocks,
                            {bNegDouble2, bNegDouble3});
   makeTestNegativeBoundary(lt(DoubleId(-0.5)), negDoubleBlocks,
                            {bNegDouble3, bNegDouble4});
-  makeTestNegativeBoundary(lt(DoubleId(-2.0)), negDoubleBlocks,
-                           {bNegDouble4});
+  makeTestNegativeBoundary(lt(DoubleId(-2.0)), negDoubleBlocks, {bNegDouble4});
   makeTestNegativeBoundary(lt(DoubleId(-4.0)), negDoubleBlocks, {});
-  makeTestNegativeBoundary(eq(DoubleId(70.0)), negDoubleBlocks,
-                           {bNegDouble3});
+  makeTestNegativeBoundary(eq(DoubleId(70.0)), negDoubleBlocks, {bNegDouble3});
 }
 
 //______________________________________________________________________________
