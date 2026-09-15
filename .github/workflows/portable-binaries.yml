@@ -1,10 +1,13 @@
-name: Portable Linux binaries
+name: Portable binaries
 
 # Build portable binaries of `qlever-index` and `qlever-server` for Linux
-# x86_64 and arm64: statically linked except for glibc, so they run on any
-# distribution with a glibc at least as new as the build runner's (which is
-# why this uses the oldest supported Ubuntu LTS). See
-# `.github/scripts/build-portable-binaries.sh` for the details. After a
+# x86_64 and arm64 (statically linked except for glibc, so they run on any
+# distribution with a glibc at least as new as the build runner's, which is
+# why this uses the oldest supported Ubuntu LTS) and for macOS on Apple
+# Silicon (statically linked except for the libraries of macOS itself, built
+# for a deployment target that old Macs still meet). See
+# `.github/scripts/build-portable-binaries.sh` and
+# `build-portable-binaries-macos.sh` for the details. After a
 # successful build of `master`, the binaries also become the assets of the
 # rolling pre-release `latest-master` (see the `release` job below).
 
@@ -84,6 +87,44 @@ jobs:
           archive: false
           if-no-files-found: error
 
+  build-macos:
+    name: portable-binaries (macos-arm64)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+
+      - name: Install dependencies
+        run: brew install conan@2 jemalloc
+
+      - name: Print clang version
+        run: clang++ --version
+
+      - name: Cache conan packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.conan2
+          key: conan-portable-macos-arm64-${{ hashFiles('conanfile.txt', '.github/scripts/build-portable-binaries-macos.sh') }}
+
+      - name: Build, check, and smoke-test the binaries
+        run: .github/scripts/build-portable-binaries-macos.sh
+
+      - name: Pack binaries
+        if: github.event_name != 'pull_request'
+        run: |
+          tar czf qlever-binaries-macos-arm64.tar.gz \
+            -C build-portable/dist qlever-index qlever-server
+
+      - name: Upload binaries
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: qlever-binaries-macos-arm64
+          path: qlever-binaries-macos-arm64.tar.gz
+          archive: false
+          if-no-files-found: error
+
   # The artifacts above can only be downloaded with a GitHub token, so publish
   # the binaries of the latest successfully built `master` commit also as the
   # assets of the pre-release `latest-master`, from where anyone can download
@@ -95,7 +136,7 @@ jobs:
   release:
     name: Update the `latest-master` release
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
-    needs: build
+    needs: [build, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -121,8 +162,10 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: Latest master build
           body: >-
-            Portable Linux binaries (x86_64 and arm64, statically linked except
-            for glibc) of the latest successfully built commit on `master`:
+            Portable binaries for Linux (x86_64 and arm64, statically linked
+            except for glibc) and macOS (Apple Silicon, statically linked except
+            for the libraries of macOS itself) of the latest successfully built
+            commit on `master`:
             ${{ github.sha }} (${{ steps.commit.outputs.subject }}), published
             ${{ steps.commit.outputs.date }}. This pre-release is replaced by
             every successful build of `master`. For a stable download, use one
