@@ -554,15 +554,20 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
   LocalVocab localVocab{};
   auto referenceId =
       getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, localVocab);
-  // Use getRangesForId (from valueIdComparators) to extract the ranges
-  // containing the relevant ValueIds. Empty ranges must be kept (last
-  // argument `false`): an empty range that lies strictly between the
-  // `firstTriple_` and `lastTriple_` IDs of a block means that the block may
-  // contain matching values (`mapValueIdItPairToBlockRange` maps it to that
-  // block). This is not specific to `CompOp::EQ`. For example, if a block
-  // contains all `Int`s > 63000 followed by negative `Int`s (which are sorted
-  // after the positive ones), then the relevant range for `> 63000` is empty,
-  // but the block must still be returned.
+  // Compute the ranges of the block boundary IDs (`idRange` holds the first
+  // and the last ID of each block) that satisfy the comparison, and map them
+  // to blocks.
+  //
+  // NOTE: A range is empty if the reference value lies between two
+  // consecutive boundary IDs, neither of which satisfies the comparison. If
+  // these are the first and the last ID of the same block, that block can
+  // still contain matching values, so empty ranges must be kept (last
+  // argument `false`). Besides `=`, this happens for a block that spans the
+  // boundary between non-negative and negative numbers, which are sorted after
+  // the non-negative ones: for `> 63000`, a block with the first ID 62950 and
+  // the last ID -10 yields an empty range but may contain 70000.
+  // `mapValueIdItPairToBlockRange` maps an empty range at a block's last ID to
+  // that block, and one at a block's first ID to no block.
   auto relevantIdRanges = getRangesForId(idRange.begin(), idRange.end(),
                                          referenceId, Comparison, false);
   return getTotalComplement
