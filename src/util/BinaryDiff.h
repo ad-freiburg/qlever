@@ -22,6 +22,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/concepts.h"
 #include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "util/Exception.h"
@@ -56,12 +57,16 @@ class BinaryDiffSerializer;
 // block; a format without alignment requirements simply uses no `Align` at
 // all.
 //
-// BASE IDENTIFICATION: A diff stores the size and a checksum (see `checksum`)
-// of the base that it was created against, and `apply` verifies both. A diff
-// therefore has to be applied to exactly the base that it was created against;
-// applying it to any other buffer throws instead of silently producing garbage.
+// BASE IDENTIFICATION: A diff stores the size and the SHA-256 checksum (see
+// `checksum`) of the base that it was created against, and `apply` verifies
+// both. A diff therefore has to be applied to exactly the base that it was
+// created against; applying it to any other buffer throws instead of silently
+// producing garbage.
 class BinaryDiff {
  public:
+  // The checksum of a base, which is its SHA-256 digest, see `checksum`.
+  using Checksum = std::array<char, 32>;
+
   // An instruction that copies the bytes `[baseOffset_, baseOffset_ + length_)`
   // of the base.
   struct Copy {
@@ -69,6 +74,10 @@ class BinaryDiff {
     uint64_t length_ = 0;
 
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Copy, baseOffset_, length_)
+
+    // Enable the serialization of a `Copy` in the QLever serializer framework.
+    template <typename T>
+    friend std::true_type allowTrivialSerialization(Copy, T);
   };
 
   // An instruction that inserts the literal bytes `bytes_`, which are stored
@@ -77,6 +86,11 @@ class BinaryDiff {
     std::vector<char> bytes_;
 
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Insert, bytes_)
+
+    // An `Insert` owns its bytes and therefore is not trivially copyable, so
+    // its serialization has to be spelled out (in contrast to `Copy` and
+    // `Align`).
+    AD_SERIALIZE_FRIEND_FUNCTION(Insert) { serializer | arg.bytes_; }
   };
 
   // An instruction that pads the target with zeros until its size is a multiple
@@ -85,6 +99,11 @@ class BinaryDiff {
     uint64_t alignment_ = 1;
 
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Align, alignment_)
+
+    // Enable the serialization of an `Align` in the QLever serializer
+    // framework.
+    template <typename T>
+    friend std::true_type allowTrivialSerialization(Align, T);
   };
 
   using Instruction = std::variant<Copy, Insert, Align>;
@@ -104,12 +123,10 @@ class BinaryDiff {
   };
 
  private:
-  // The FNV-1a 64 offset basis, which is the checksum of an empty input, see
-  // `checksum`.
-  static constexpr uint64_t fnvOffsetBasis = 0xcbf29ce484222325ULL;
-
   uint64_t baseSize_ = 0;
-  uint64_t baseChecksum_ = fnvOffsetBasis;
+  // NOTE: The default is the checksum of the empty input, so that a
+  // default-constructed diff is the diff of an empty base.
+  Checksum baseChecksum_ = checksum({});
   std::vector<Instruction> instructions_;
   // The size of the target that `instructions_` currently produces. It is
   // maintained incrementally, so that `addAlign` can detect an alignment that
@@ -163,9 +180,13 @@ class BinaryDiff {
   // instruction of the diff is invalid for it, throw with a descriptive
   // message. The returned buffer uses the given `allocator`, which allows
   // callers to obtain an aligned or a `pmr`-allocated buffer.
-  template <typename Allocator = std::allocator<char>>
-  std::vector<char, Allocator> apply(ql::span<const char> base,
-                                     Allocator allocator = {}) const {
+  //
+  // NOTE: The `Allocator` is constrained such that this overload is never
+  // chosen for a call `apply(base, someBuffer)`, which is the overload below.
+  CPP_template(typename Allocator = std::allocator<char>)(
+      requires(!std::is_convertible<Allocator&, ql::span<char>>::value))
+      std::vector<char, Allocator> apply(ql::span<const char> base,
+                                         Allocator allocator = {}) const {
     // NOTE: Validate before the target is allocated, so that a `targetSize()`
     // that comes from a corrupted diff cannot lead to a bogus allocation.
     checkApplicable(base);
@@ -179,11 +200,7 @@ class BinaryDiff {
   // exactly `targetSize()` bytes, instead of allocating a buffer. Meant for
   // callers that already have a suitable buffer (for example a memory-mapped
   // one). The checks are the same as for `apply`.
-  //
-  // NOTE: This deliberately is not an overload of `apply`, because a call
-  // `apply(base, someBuffer)` would silently resolve to the `apply` above,
-  // with the buffer as the allocator.
-  void applyToTarget(ql::span<const char> base, ql::span<char> target) const;
+  void apply(ql::span<const char> base, ql::span<char> target) const;
 
   // The exact size of the buffer that `apply` returns.
   size_t targetSize() const { return targetSize_; }
@@ -194,24 +211,13 @@ class BinaryDiff {
   // Simple getters.
   const std::vector<Instruction>& instructions() const { return instructions_; }
   uint64_t baseSize() const { return baseSize_; }
-  uint64_t baseChecksum() const { return baseChecksum_; }
+  const Checksum& baseChecksum() const { return baseChecksum_; }
 
-  // Compute the FNV-1a 64 bit hash of `bytes`, which is used as the checksum
-  // that ties a diff to the exact base that it was created against. NOTE: This
-  // is not a cryptographic hash; it only guards against accidentally applying a
-  // diff to the wrong (or to a corrupted) base, not against deliberate
-  // tampering.
-  static uint64_t checksum(ql::span<const char> bytes);
+  // Compute the SHA-256 digest of `bytes`, which is used as the checksum that
+  // ties a diff to the exact base that it was created against.
+  static Checksum checksum(ql::span<const char> bytes);
 
  private:
-  // Return true if `alignment` is a power of two, which the alignment of an
-  // `Align` instruction always has to be.
-  static bool isPowerOfTwo(uint64_t alignment);
-
-  // Round `offset` up to the next multiple of `alignment`, which has to be a
-  // power of two.
-  static size_t alignUp(size_t offset, uint64_t alignment);
-
   // Recompute `targetSize_` from the instructions. Needed after
   // deserialization, where the instructions are not appended one by one.
   void recomputeTargetSize();
@@ -234,22 +240,13 @@ class BinaryDiff {
                             ql::span<char> target) const;
 };
 
-// Serialization of the individual instructions. Together with the generic
-// serialization of a `std::variant` (see `util/Serializer/SerializeVariant.h`)
-// and of a `std::vector`, this is all that is needed to serialize the
-// instructions of a diff.
-AD_SERIALIZE_FUNCTION(BinaryDiff::Copy) {
-  serializer | arg.baseOffset_;
-  serializer | arg.length_;
-}
-AD_SERIALIZE_FUNCTION(BinaryDiff::Insert) { serializer | arg.bytes_; }
-AD_SERIALIZE_FUNCTION(BinaryDiff::Align) { serializer | arg.alignment_; }
-
 // The serialization format of a `BinaryDiff`: a header of magic bytes, a format
 // version, and the identification of the base, followed by the instructions
-// (as an ordinary `std::vector` of `std::variant`s). When reading, verify the
-// magic bytes, the format version, and the alignments, and report a truncated
-// or otherwise unreadable input with a descriptive message.
+// (as an ordinary `std::vector` of `std::variant`s, which the serialization
+// framework can handle generically, see `util/Serializer/SerializeVariant.h`).
+// When reading, verify the magic bytes, the format version, and the
+// alignments, and report a truncated or otherwise unreadable input with a
+// descriptive message.
 //
 // This is a separate class so that `BinaryDiff` itself is concerned only with
 // the building and the application of a diff. It is used by the `serialize`
@@ -257,6 +254,7 @@ AD_SERIALIZE_FUNCTION(BinaryDiff::Align) { serializer | arg.alignment_; }
 class BinaryDiffSerializer {
  private:
   using Align = BinaryDiff::Align;
+  using Checksum = BinaryDiff::Checksum;
   using Instruction = BinaryDiff::Instruction;
 
   // The header that is written at the beginning of the serialization of a
@@ -297,7 +295,7 @@ class BinaryDiffSerializer {
         "(format version ",
         version, ", expected ", formatVersion, ")");
     diff.baseSize_ = readOrThrow<uint64_t>(serializer);
-    diff.baseChecksum_ = readOrThrow<uint64_t>(serializer);
+    diff.baseChecksum_ = readOrThrow<Checksum>(serializer);
     // NOTE: The number of instructions comes from a possibly corrupted input,
     // so the vector might try to allocate a bogus amount of memory. The
     // resulting exception is one of those that `readOrThrow` turns into the
@@ -327,17 +325,7 @@ class BinaryDiffSerializer {
   // power of two, which can only happen for a corrupted input. NOTE: The
   // `Copy` instructions cannot be checked here, as their validity depends on
   // the base (they are checked by `BinaryDiff::apply`).
-  static void checkAlignments(const BinaryDiff& diff) {
-    for (const auto& instruction : diff.instructions_) {
-      const auto* align = std::get_if<Align>(&instruction);
-      if (align == nullptr) {
-        continue;
-      }
-      AD_CONTRACT_CHECK(BinaryDiff::isPowerOfTwo(align->alignment_),
-                        notReadableMessage, ". Details: the alignment ",
-                        align->alignment_, " is not a power of two");
-    }
-  }
+  static void checkAlignments(const BinaryDiff& diff);
 };
 
 // Serialize and deserialize a `BinaryDiff`, see `BinaryDiffSerializer` for the

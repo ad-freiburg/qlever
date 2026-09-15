@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/escaping.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -49,6 +50,13 @@ std::vector<char> toBytes(std::string_view string) {
   return std::vector<char>{string.begin(), string.end()};
 }
 
+// Convert a checksum to its hexadecimal representation, so that a mismatch is
+// reported readably by GoogleTest.
+std::string toHex(const BinaryDiff::Checksum& checksum) {
+  return absl::BytesToHexString(
+      std::string_view{checksum.data(), checksum.size()});
+}
+
 // Shorthands for the expected instructions and statistics of a diff. They are
 // functions (and not braced initializers) because the commas of a braced
 // initializer would be parsed as argument separators of the surrounding test
@@ -74,7 +82,7 @@ struct RawDiffHeader {
   std::array<char, 8> magicBytes_{'Q', 'L', 'V', 'R', 'D', 'I', 'F', 'F'};
   uint16_t formatVersion_ = 1;
   uint64_t baseSize_ = 0;
-  uint64_t baseChecksum_ = 0;
+  BinaryDiff::Checksum baseChecksum_{};
 };
 
 // Write the serialization of a diff that consists of the given `header` and of
@@ -157,8 +165,11 @@ TEST(BinaryDiff, alignmentHasToBeAPowerOfTwo) {
 
 // _____________________________________________________________________________
 TEST(BinaryDiff, checksum) {
-  // The FNV-1a 64 offset basis, which is the checksum of the empty input.
-  EXPECT_EQ(BinaryDiff::checksum({}), 0xcbf29ce484222325ULL);
+  // The checksum is the SHA-256 digest, here for the empty input.
+  EXPECT_EQ(toHex(BinaryDiff::checksum({})),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  EXPECT_EQ(toHex(BinaryDiff::checksum(toBytes("abc"))),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   // The checksum is deterministic, and it differs for different inputs.
   auto hello = toBytes("hello");
   EXPECT_EQ(BinaryDiff::checksum(hello), BinaryDiff::checksum(hello));
@@ -267,7 +278,7 @@ TEST(BinaryDiff, applyUsesTheGivenAllocator) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, applyToTarget) {
+TEST(BinaryDiff, applyToAGivenTarget) {
   auto base = toBytes("0123456789");
   BinaryDiff diff{base};
   diff.addCopy(0, 3);
@@ -279,7 +290,7 @@ TEST(BinaryDiff, applyToTarget) {
   // `apply` returns, and its previous contents are completely overwritten
   // (also where the diff only pads with zeros).
   std::vector<char> target(diff.targetSize(), 'u');
-  diff.applyToTarget(base, target);
+  diff.apply(base, target);
   EXPECT_EQ(toString(target), expected);
   EXPECT_EQ(toString(diff.apply(base)), expected);
 
@@ -287,16 +298,15 @@ TEST(BinaryDiff, applyToTarget) {
   for (size_t size : {diff.targetSize() - 1, diff.targetSize() + 1}) {
     std::vector<char> targetOfWrongSize(size, 'u');
     AD_EXPECT_THROW_WITH_MESSAGE(
-        diff.applyToTarget(base, targetOfWrongSize),
+        diff.apply(base, targetOfWrongSize),
         HasSubstr(absl::StrCat("has to have exactly ", diff.targetSize(),
                                " bytes, but has ", size)));
   }
 
   // The base is checked, just as for the other overload of `apply`.
   std::vector<char> target2(diff.targetSize(), 'u');
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      diff.applyToTarget(toBytes("012345678X"), target2),
-      HasSubstr("created against a different base"));
+  AD_EXPECT_THROW_WITH_MESSAGE(diff.apply(toBytes("012345678X"), target2),
+                               HasSubstr("created against a different base"));
 }
 
 // _____________________________________________________________________________
