@@ -776,7 +776,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNegativeNumberBoundaryBlocks) {
   makeTestNegativeBoundary(lt(IntId(0)), negIntBlocks, {bNegInt3, bNegInt4});
   makeTestNegativeBoundary(lt(IntId(-5)), negIntBlocks, {bNegInt3, bNegInt4});
 
-  // Equality and inequality behave as before.
+  // Equality and inequality on the boundary block.
   makeTestNegativeBoundary(eq(IntId(70000)), negIntBlocks, {bNegInt3});
   makeTestNegativeBoundary(eq(IntId(-20)), negIntBlocks, {bNegInt3});
   makeTestNegativeBoundary(neq(IntId(70000)), negIntBlocks,
@@ -1654,10 +1654,10 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
           "PrefilterExpression on date-values: Undefined CompOp value: 10."));
 }
 
-// Test the fix on a real index. With three rows per block, the values of `<p>`
-// form the blocks [1, 2, 3], [4, 5, 6], [7, 8, -5], [-4, -3, -2]; the third
-// block spans the boundary between non-negative and negative numbers and is
-// neither the first nor the last block of the relation, so that only the
+// Test numeric `FILTER`s on an index. With three rows per block, the values
+// of `<p>` form the blocks [1, 2, 3], [4, 5, 6], [7, 8, -5], [-4, -3, -2]; the
+// third block spans the boundary between non-negative and negative numbers and
+// is neither the first nor the last block of the relation, so that only the
 // prefilter decides whether it is read (the same for `<q>` with `Double`s).
 TEST(PrefilterExpressionIndex, negativeNumberBoundaryEndToEnd) {
   std::string turtle;
@@ -1689,8 +1689,7 @@ TEST(PrefilterExpressionIndex, negativeNumberBoundaryEndToEnd) {
   };
 
   // Bounds between the two non-negative values of the boundary block: the
-  // relevant ID range is empty, and the block used to be dropped, so these
-  // queries returned nothing.
+  // relevant ID range is empty, but the block has to be read.
   EXPECT_EQ(query("p", "> 7"), "?s\n<s8>\n");
   EXPECT_EQ(query("p", ">= 8"), "?s\n<s8>\n");
   EXPECT_EQ(query("q", "> 7.5"), "?s\n<t8>\n");
