@@ -9,6 +9,7 @@
 
 #include "parser/RdfAsyncParallelParser.h"
 
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <string>
 #include <utility>
@@ -26,13 +27,19 @@ RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
     const qlever::InputFileSpecification& spec,
     ad_utility::MemorySize blocksize,
     const EncodedIriManager* encodedIriManager,
-    const TripleComponent& defaultGraphIri)
-    : executor_{executor},
-      state_{encodedIriManager, defaultGraphIri},
+    const TripleComponent& defaultGraphIri, RdfParserSettings settings)
+    : AsyncRdfParserBase{executor},
+      state_{encodedIriManager, defaultGraphIri, settings},
       blockSource_{executor, spec.makeAsyncBlockSource(executor, blocksize),
                    detail::findEndOfLastStatement,
                    std::string{detail::statementBoundaryDescription}},
       blockFetchPermit_{executor, 1} {}
+
+// _____________________________________________________________________________
+template <typename Parser>
+void RdfAsyncParallelParser<Parser>::asyncGetBatchImpl(Handler handler) {
+  boost::asio::co_spawn(executor(), getBatchCoroutine(), std::move(handler));
+}
 
 // ____________________________________________________________________________
 template <typename Parser>
