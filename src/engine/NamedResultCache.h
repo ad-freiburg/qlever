@@ -97,6 +97,13 @@ class NamedResultCache {
   std::shared_ptr<ExplicitIdTableOperation> getOperation(
       const Key& name, QueryExecutionContext* qec);
 
+  // Get all entries of the cache, sorted by their key. The order is
+  // deterministic (and not the arbitrary order of the underlying hash map), so
+  // that serializing the same contents twice yields the same bytes, which the
+  // diff mechanism of `NamedCachedQueryBlobManager` relies on.
+  std::vector<std::pair<Key, std::shared_ptr<const Value>>> getAllEntries()
+      const;
+
   // NOTE: The following two templated serialization functions are defined in
   // the `NamedResultCacheSerializer.h` header which has to be included by the
   // code that actually calls them to not get any undefined references.
