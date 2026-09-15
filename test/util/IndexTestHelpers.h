@@ -8,8 +8,10 @@
 #include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -96,6 +98,9 @@ struct TestIndexConfig {
   // (see `IndexImpl::setSecondaryVocabForTesting`), which is what this member
   // does.
   std::optional<std::vector<std::string>> secondaryVocabWords = std::nullopt;
+  // The number of threads used during the index build (see
+  // `Index::createFromFiles`).
+  size_t numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
   // If set, the input is parsed in parallel (`true`) or serially (`false`), as
   // if specified on the command line of `qlever-index`. If `nullopt`, a single
   // input file is parsed in parallel for reasons of backward compatibility (see
@@ -122,8 +127,8 @@ struct TestIndexConfig {
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
-        c.addHasWordTriples, c.secondaryVocabWords, c.parseInParallel,
-        c.additionalSettings);
+        c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
+        c.parseInParallel, c.additionalSettings);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
@@ -131,7 +136,7 @@ struct TestIndexConfig {
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
       scoringMetric, bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
-      addHasWordTriples, secondaryVocabWords, parseInParallel,
+      addHasWordTriples, secondaryVocabWords, numThreads, parseInParallel,
       additionalSettings)
 };
 
