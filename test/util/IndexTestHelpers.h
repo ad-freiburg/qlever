@@ -115,16 +115,17 @@ struct TestIndexConfig {
         c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
+        c.vocabularyType, c.geoCellGridLevel, c.geoCellGridScheme,
         c.encodedPrefixesWithoutAngleBrackets, c.addHasWordTriples,
-        c.secondaryVocabWords, c.geoCellGridLevel, c.geoCellGridScheme);
+        c.secondaryVocabWords);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, blocksizePermutations, createTextIndex,
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
-      scoringMetric, bAndKParam, indexType, vocabularyType,
-      encodedPrefixesWithoutAngleBrackets, addHasWordTriples,
-      secondaryVocabWords, geoCellGridLevel, geoCellGridScheme)
+      scoringMetric, bAndKParam, indexType, vocabularyType, geoCellGridLevel,
+      geoCellGridScheme, encodedPrefixesWithoutAngleBrackets, addHasWordTriples,
+      secondaryVocabWords)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.
