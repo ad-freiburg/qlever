@@ -6,6 +6,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/NibbleEncoding.h"
 #include "util/Random.h"
 #include "util/TransparentFunctors.h"
 
@@ -157,6 +158,15 @@ TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
   EXPECT_EQ(em.toString(id), "<blubb7643>");
 }
 
+// The encoding is usable in a constant expression. This is not only a nice
+// property, but also required: a `constexpr` function that can never yield a
+// constant expression is ill-formed, and several compilers reject it (see the
+// note in `NibbleEncoding.h`).
+// The digit `1` is stored as the nibble `2` in the leftmost nibble.
+static_assert(EncodedIriManager::encodeDecimalToNBit("1") ==
+              uint64_t{2} << (EncodedIriManager::NumBitsEncoding -
+                              EncodedIriManager::NibbleSize));
+
 // _____________________________________________________________________________
 TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
   auto testNumber = [](uint64_t number, ad_utility::source_location l =
@@ -257,6 +267,84 @@ TEST(EncodedIriManager, HardcodedPrefixesJson) {
   EXPECT_EQ(em2.toString(id.value()), "<http://example.org/always/42>");
   auto id2 = em2.encode("<http://other.org/1>");
   ASSERT_TRUE(id2.has_value());
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, noPrefixesAtAll) {
+  // The default `EncodedIriManager` always contains the `AlwaysOnPrefixes`, so
+  // an explicit instantiation with `NoHardcodedPrefixes` (the default for the
+  // third template parameter) is required to obtain a manager with a truly
+  // empty list of prefixes.
+  using Manager = EncodedIriManagerImpl<Id::numDataBits, 8>;
+
+  // Calls the default constructor.
+  Manager em;
+  EXPECT_TRUE(em.prefixes_.empty());
+  EXPECT_FALSE(em.encode("<http://example.org/42>").has_value());
+
+  // Calls the constructor with an explicitly empty list of prefixes.
+  Manager em2{std::vector<std::string>{}};
+  EXPECT_TRUE(em2.prefixes_.empty());
+  EXPECT_FALSE(em2.encode("<http://example.org/42>").has_value());
+}
+
+// _____________________________________________________________________________
+TEST(NibbleEncoding, tooManyDigits) {
+  using encodedIri::encodeDigitsAsNibbles;
+  // Eight bits hold exactly two nibbles, so two digits fit and three do not.
+  EXPECT_NO_THROW(encodeDigitsAsNibbles("12", 8));
+  EXPECT_THROW(encodeDigitsAsNibbles("123", 8), std::out_of_range);
+
+  // The same via the `EncodedIriManager`, which encodes at most `NumDigits`
+  // digits. Note that `encode` never triggers this, because it rejects too
+  // long digit sequences beforehand (see `EncodedIriManager::encode`).
+  using M = EncodedIriManager;
+  EXPECT_NO_THROW(M::encodeDecimalToNBit(std::string(M::NumDigits, '9')));
+  EXPECT_THROW(M::encodeDecimalToNBit(std::string(M::NumDigits + 1, '9')),
+               std::out_of_range);
+}
+
+// _____________________________________________________________________________
+TEST(NibbleEncoding, decodeEmptyDigitSequence) {
+  // The encoding of an empty sequence of digits consists of padding nibbles
+  // only, so it is `0`. Decoding it must yield no digits at all.
+  EXPECT_EQ(encodedIri::encodeDigitsAsNibbles("", 64), 0U);
+  std::string result = "prefix";
+  encodedIri::decodeNibblesToDigits(result, 0, 64);
+  EXPECT_EQ(result, "prefix");
+  EXPECT_EQ(encodedIri::decodeNibblesToNumber(0, 64), 0U);
+}
+
+// _____________________________________________________________________________
+TEST(NibbleEncoding, invalidNumBits) {
+  using namespace ::testing;
+  // `numBits` must be at least `NibbleSize` and at most 64. The two calls
+  // violate the left and the right operand of that condition, respectively.
+  // Both report the same (stringified) condition.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      encodedIri::decodeNibblesToNumber(0, 2),
+      HasSubstr("numBits >= NibbleSize && numBits <= 64"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      encodedIri::decodeNibblesToNumber(0, 68),
+      HasSubstr("numBits >= NibbleSize && numBits <= 64"));
+}
+
+// _____________________________________________________________________________
+TEST(NibbleEncoding, invalidNibbleValue) {
+  using namespace ::testing;
+  // Every non-padding nibble must lie in `[1, 10]`, because the digit `d` is
+  // stored as `d + 1`. The two calls violate the left and the right operand of
+  // that condition, respectively; both report the same (stringified)
+  // condition.
+  //
+  // The first value has a `0` nibble that is not padding (the trailing `1`
+  // makes it an interior nibble), the second one has a nibble of `15`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      encodedIri::decodeNibblesToNumber((uint64_t{2} << 60) | 1, 64),
+      HasSubstr("nibble >= 1 && nibble <= 10"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      encodedIri::decodeNibblesToNumber(uint64_t{0xF} << 60, 64),
+      HasSubstr("nibble >= 1 && nibble <= 10"));
 }
 
 }  // namespace
