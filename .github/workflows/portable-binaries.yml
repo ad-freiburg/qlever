@@ -145,7 +145,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          pattern: qlever-binaries-linux-*
+          pattern: qlever-binaries-*
           path: dist
           merge-multiple: true
 
@@ -172,7 +172,7 @@ jobs:
             of the versioned releases.
           prerelease: true
           make_latest: false
-          files: dist/qlever-binaries-linux-*.tar.gz
+          files: dist/qlever-binaries-*.tar.gz
           fail_on_unmatched_files: true
 
       - name: Move the tag to the built commit

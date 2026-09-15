@@ -69,7 +69,7 @@ cmake --build "$BUILD_DIR" --target qlever-index qlever-server -- -j "$NUM_THREA
 # and that the binaries are built for the deployment target.
 for binary in qlever-index qlever-server; do
     dependencies=$(otool -L "$BUILD_DIR/$binary" | tail -n +2)
-    if grep -vE '^\s+(/usr/lib/|/System/Library/)' <<< "$dependencies"; then
+    if grep -vE '^[[:space:]]+(/usr/lib/|/System/Library/)' <<< "$dependencies"; then
         echo "ERROR: $binary has dynamic dependencies beyond macOS (see above)"
         exit 1
     fi
