@@ -54,9 +54,8 @@ class DistinctGraphs : public Operation {
   // The result table has only 1 column.
   [[nodiscard]] size_t getResultWidth() const override { return 1; }
 
-  // In the worst case every block introduces a new graph ID, forcing
-  // decompression of all blocks. The cost is then proportional to the
-  // total number of triples in the index.
+  // The metadata of every block is inspected, but typically only very few
+  // blocks are decompressed, so the number of blocks is a reasonable estimate.
   size_t getCostEstimate() override;
 
   // All values are distinct by design. There are no duplicates.
@@ -108,8 +107,11 @@ class DistinctGraphs : public Operation {
   // If false, the default graph is removed from the result.
   bool includeDefaultGraph_;
 
-  // Last saved number of distinct graphs, default to
-  // `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`.
+  // Last computed number of distinct graphs, initially
+  // `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`. Deliberately shared by all
+  // instances, so that the size estimate of a query benefits from the result
+  // of a previous query (the result is the same for all instances on the same
+  // index anyway).
   inline static std::atomic<uint64_t> numOfDistinctGraphs_{
       MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA};
 };

@@ -1060,6 +1060,11 @@ class CompressedRelationReader {
                                     useGraphPostProcessing_};
   }
 
+  // Return the set of all graph IDs that occur in the blocks of
+  // `scanSpecAndBlocks`, including the `locatedTriplesPerBlock`. A block is
+  // only decompressed if its metadata says that it contains a graph that has
+  // not been seen before, or if the metadata contains no graph information
+  // at all (more than `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA` graphs).
   ad_utility::HashSetWithMemoryLimit<Id::T> computeUniqueGraphIds(
       const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,

@@ -53,7 +53,9 @@ size_t DistinctGraphs::getCostEstimate() {
   return getIndex()
       .getImpl()
       .getPermutation(Permutation::Enum::SPO)
-      .numTriples();
+      .metaData()
+      .blockData()
+      .size();
 }
 
 // Compute the distinct graph IDs of all blocks of the SPO permutation (see

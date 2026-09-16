@@ -88,11 +88,13 @@ TEST(DistinctGraphs, isDeterministic) {
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getCostEstimate) {
+  // The cost estimate is the number of blocks of the SPO permutation (two
+  // for this input with the block size of the test index).
   {
     auto dg = makeDistinctGraphs(
         TestIndexConfig{"<a> <p1> <b> . <a> <p2> <c> . <b> <p1> <c> ."});
 
-    EXPECT_EQ(dg.getCostEstimate(), 3u);
+    EXPECT_EQ(dg.getCostEstimate(), 2u);
   }
   {
     auto dg = makeDistinctGraphs(TestIndexConfig{""});
