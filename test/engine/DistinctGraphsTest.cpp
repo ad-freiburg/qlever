@@ -42,6 +42,18 @@ DistinctGraphs makeDistinctGraphsFromQuads(std::string nquads) {
   return makeDistinctGraphs(std::move(config));
 }
 
+using Graphs = qlever::index::GraphFilter<TripleComponent>;
+
+// Create a `GraphFilter` that only allows the graphs with the given IRIs.
+Graphs graphWhitelist(const std::vector<std::string_view>& iris) {
+  ad_utility::HashSet<TripleComponent> whitelist;
+  for (std::string_view iri : iris) {
+    whitelist.insert(
+        TripleComponent{ad_utility::triple_component::Iri::fromIriref(iri)});
+  }
+  return Graphs::Whitelist(std::move(whitelist));
+}
+
 }  // namespace
 
 // _____________________________________________________________________________
@@ -191,4 +203,47 @@ TEST(DistinctGraphs, computeResultIncludesDefaultGraphIfRequested) {
   auto column = result->idTableView().getColumn(0);
   EXPECT_THAT(std::vector<Id>(column.begin(), column.end()),
               ::testing::ElementsAre(defaultGraphId.value()));
+}
+
+// _____________________________________________________________________________
+TEST(DistinctGraphs, makeAllGraphsUsesDistinctGraphsIfGraphsAreUnrestricted) {
+  auto* qec = ad_utility::testing::getQec();
+  auto tree = DistinctGraphs::makeAllGraphs(qec, Variable{"?g"}, Graphs::All());
+
+  auto* distinctGraphs =
+      dynamic_cast<DistinctGraphs*>(tree->getRootOperation().get());
+  ASSERT_TRUE(distinctGraphs != nullptr);
+  // `All()` allows the default graph, so it is part of the result.
+  EXPECT_EQ(distinctGraphs->getCacheKey(),
+            "DistinctGraphs includeDefaultGraph=true");
+  EXPECT_THAT(tree->getVariableColumns(),
+              ::testing::ElementsAre(
+                  ::testing::Pair(Variable{"?g"}, makeAlwaysDefinedColumn(0))));
+}
+
+// _____________________________________________________________________________
+TEST(DistinctGraphs, makeAllGraphsExcludesTheBlacklistedDefaultGraph) {
+  auto* qec = ad_utility::testing::getQec();
+  auto tree = DistinctGraphs::makeAllGraphs(
+      qec, Variable{"?g"},
+      Graphs::Blacklist(TripleComponent{
+          ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)}));
+
+  auto* distinctGraphs =
+      dynamic_cast<DistinctGraphs*>(tree->getRootOperation().get());
+  ASSERT_TRUE(distinctGraphs != nullptr);
+  EXPECT_EQ(distinctGraphs->getCacheKey(),
+            "DistinctGraphs includeDefaultGraph=false");
+}
+
+// _____________________________________________________________________________
+TEST(DistinctGraphs, makeAllGraphsUsesValuesForAWhitelist) {
+  auto* qec = ad_utility::testing::getQec();
+  auto tree = DistinctGraphs::makeAllGraphs(qec, Variable{"?g"},
+                                            graphWhitelist({"<g2>", "<g1>"}));
+
+  // A whitelisted graph is part of the dataset even if it contains no triple,
+  // so the graphs are not looked up in the index. The order of the hash set is
+  // unspecified, so the values are sorted to keep the cache key deterministic.
+  EXPECT_EQ(tree->getCacheKey(), "VALUES (?g) { (<g1>) (<g2>) }");
 }
