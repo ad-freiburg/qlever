@@ -574,14 +574,20 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
 bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  if (variable != lhs_.value_ && variable != rhs_.value_) {
+    // The payload columns of the bound side are copied over verbatim, so they
+    // inherit the guarantee of that operation. The graph column ends up here
+    // too (unless it is one of the two sides), but `subtree_` always provides
+    // it and reports `false` for it, because in RDF only subjects and objects
+    // are nodes (see `IndexScan::columnOriginatesFromGraphOrUndef`), so the
+    // answer stays `false` for graphs as it has to.
+    return Operation::columnOriginatesFromGraphOrUndef(variable);
+  }
   // The empty path copies a hardcoded value over to the other side without
   // checking it against the knowledge graph (see the constructor), so in that
   // case the remaining variable may be bound to a value that is not part of the
   // knowledge graph.
-  if (minDist_ == 0 && (!lhs_.isVariable() || !rhs_.isVariable())) {
-    return false;
-  }
-  return variable == lhs_.value_ || variable == rhs_.value_;
+  return minDist_ != 0 || (lhs_.isVariable() && rhs_.isVariable());
 }
 
 // _____________________________________________________________________________

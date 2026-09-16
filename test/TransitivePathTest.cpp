@@ -10,6 +10,8 @@
 
 #include "./util/IdTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
+#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/TransitivePathBinSearch.h"
@@ -24,6 +26,7 @@ using ad_utility::testing::getQec;
 namespace {
 auto V = ad_utility::testing::VocabId;
 auto I = ad_utility::testing::IntId;
+auto iri = ad_utility::testing::iri;
 using Vars = std::vector<std::optional<Variable>>;
 using Graphs = qlever::index::GraphFilter<TripleComponent>;
 auto U = Id::makeUndefined();
@@ -1323,10 +1326,80 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
     TransitivePathSide left(std::nullopt, 0, 1, 0);
     TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
     auto T = makePathUnbound(
-        std::move(sub), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
+        sub.clone(), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
         right, 1, std::numeric_limits<size_t>::max());
 
     EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+  }
+
+  {
+    // Payload columns are copied over from the bound side verbatim, so they
+    // inherit its guarantee. Here they stem from an index scan.
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto [T, qec] = makePath(std::move(sub),
+                             {Variable{"?internal1"}, Variable{"?internal2"}},
+                             left, right, 1, std::numeric_limits<size_t>::max(),
+                             "<a> <b> <c> . <a> <b> <d> .");
+    auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+        qec, Permutation::Enum::PSO,
+        SparqlTripleSimple{Variable{"?start"}, iri("<b>"), Variable{"?other"}});
+    auto boundPath = T->bindLeftSide(
+        indexScan, indexScan->getVariableColumn(Variable{"?start"}));
+
+    EXPECT_TRUE(
+        boundPath->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
+    EXPECT_TRUE(
+        boundPath->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+    EXPECT_TRUE(
+        boundPath->columnOriginatesFromGraphOrUndef(Variable{"?other"}));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndefWithGraphVariable) {
+  auto sub = makeIdTableFromVector({{0, 2, 0}});
+  Vars vars{Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}};
+
+  {
+    // The graph column is not a node of the knowledge graph: a graph name that
+    // occurs neither as a subject nor as an object still has to be matched.
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathUnbound(sub.clone(), vars, left, right, 1,
+                             std::numeric_limits<size_t>::max(), std::nullopt,
+                             {Variable{"?g"}});
+
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+  }
+
+  {
+    // `SELECT * { GRAPH ?g { ?g a+ ?x } }`: here `?g` is the left side of the
+    // path, so it is not the graph column but the start node, which has an
+    // outgoing edge in the knowledge graph.
+    TransitivePathSide left(std::nullopt, 0, Variable{"?g"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?x"}, 1);
+    auto T = makePathUnbound(sub.clone(), vars, left, right, 1,
+                             std::numeric_limits<size_t>::max(), std::nullopt,
+                             {Variable{"?g"}});
+
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?x"}));
+  }
+
+  {
+    // `SELECT * { GRAPH ?g { <x> a* ?g } }`: the empty path copies the
+    // hardcoded value over to `?g` without checking it, so the guarantee is
+    // lost even though `?g` is one of the two sides.
+    TransitivePathSide left(std::nullopt, 0, 1337, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?g"}, 1);
+    auto T = makePathUnbound(std::move(sub), vars, left, right, 0,
+                             std::numeric_limits<size_t>::max(), std::nullopt,
+                             {Variable{"?g"}});
+
+    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?g"}));
   }
 }
 
