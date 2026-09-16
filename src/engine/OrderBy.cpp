@@ -67,20 +67,23 @@ std::string OrderBy::getDescriptor() const {
 size_t OrderBy::getCostEstimate() {
   size_t size = getSizeEstimateBeforeLimit();
   size_t subcost = subtree_->getCostEstimate();
-  // If the input is already sorted by the first sort column, the result can
+  // If the input is already sorted by the single sort column, the result can
   // often be computed in linear time, see `computeResultForSortedInput`.
-  if (isInputSortedOnFirstSortColumn()) {
+  if (hasSingleSortColumnWithSortedInput()) {
     return size + subcost;
   }
-  size_t logSize =
-      std::max(size_t(1), static_cast<size_t>(logb(static_cast<double>(size))));
+  // NOTE: `logb(0)` is `-inf`, which must not be cast to an integer.
+  size_t logSize = std::max(
+      size_t(1), static_cast<size_t>(
+                     logb(static_cast<double>(std::max(size, size_t(1))))));
   return size * logSize + subcost;
 }
 
 // _____________________________________________________________________________
-bool OrderBy::isInputSortedOnFirstSortColumn() const {
+bool OrderBy::hasSingleSortColumnWithSortedInput() const {
   const auto& sortedOn = subtree_->resultSortedOn();
-  return !sortedOn.empty() && sortedOn.front() == sortIndices_.front().first;
+  return sortIndices_.size() == 1 && !sortedOn.empty() &&
+         sortedOn.front() == sortIndices_.front().first;
 }
 
 namespace {
@@ -158,7 +161,7 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
 // _____________________________________________________________________________
 std::optional<IdTable> OrderBy::computeResultForSortedInput(
     const IdTableView<0>& input) const {
-  if (sortIndices_.size() != 1 || !isInputSortedOnFirstSortColumn()) {
+  if (!hasSingleSortColumnWithSortedInput()) {
     return std::nullopt;
   }
   auto [column, isDescending] = sortIndices_.front();
