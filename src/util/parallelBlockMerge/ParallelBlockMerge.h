@@ -238,7 +238,9 @@ auto parallelBlockMergeToSink(
 //
 // NOTE: The returned range keeps everything that the concurrently running
 // coroutines refer to alive, so it is safe (and cheap) to destroy it before it
-// is exhausted.
+// is exhausted. The converse does not hold: the context of the `executor` (for
+// example the `thread_pool`) has to outlive the range, because the destructor
+// of the range posts the stop of the merge onto the `executor`.
 //
 // NOTE: The parallel merge is implemented with coroutines and hence only
 // available in C++20 mode. When `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is set,
@@ -277,8 +279,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
   // function knows the number of chunks; this lambda is what lets us get hold
   // of it afterwards, so that the returned range can read from it.
   std::shared_ptr<Sink> sink;
-  auto makeSink = [&sink, &executor,
-                   &storageFactory](size_t numChunks) mutable {
+  auto makeSink = [&sink, &executor, &storageFactory](size_t numChunks) {
     sink =
         std::make_shared<Sink>(executor, numChunks, std::move(storageFactory));
     return sink;
