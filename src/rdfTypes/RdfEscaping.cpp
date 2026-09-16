@@ -278,6 +278,9 @@ std::string unescapePrefixedIri(std::string_view literal) {
   res.reserve(literal.size());
   while (pos != npos) {
     res.append(literal.begin(), literal.begin() + pos);
+    // The linear search is cheap enough, as it is only performed for IRIs that
+    // actually contain a backslash, which the vast majority of knowledge graphs
+    // never use.
     AD_CONTRACT_CHECK(pos + 1 < literal.size() &&
                           escapableCharacters.find(literal[pos + 1]) != npos,
                       "Could not unescape the prefixed iri ", origLiteral);
