@@ -489,7 +489,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
   }
 
   size_t getParsePosition() const override {
-    return tmpToParse_.size() - this->tok_.data().size();
+    return positionOffset_ + tmpToParse_.size() - this->tok_.data().size();
   }
 
   // Load a string object directly to the buffer allows easier testing without a
@@ -527,9 +527,19 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
   // Parse directive and return true if a directive was found.
   bool parseDirectiveManually() { return this->directive(); }
 
+  // Add `offset` to every parse position that this parser reports (see
+  // `getParsePosition`). It is the offset of the input of this parser within
+  // the file it was taken from, so that a parser that only sees a single block
+  // of a file still reports file-absolute positions in its error messages.
+  void setPositionOffset(size_t offset) { positionOffset_ = offset; }
+
  private:
   // The complete input to this parser.
   qlever::parser::ByteBlock tmpToParse_;
+
+  // The offset of `tmpToParse_` within the file it was taken from, see
+  // `setPositionOffset`.
+  size_t positionOffset_ = 0;
 
  public:
   // testing interface for reusing a parser
@@ -659,6 +669,9 @@ class RdfParallelParsingState {
   // on each of the worker parsers by `parseBatch`.
   RdfParserHeader header_;
 
+  // The number of bytes that the header occupies, counted by `parseHeaderStep`.
+  size_t numBytesInHeader_ = 0;
+
   // The blank node prefix that all the workers for this file share, such that
   // user-specified blank node labels get the same ID across batches.
   size_t fileBlankNodePrefix_ = Parser::nextBlankNodePrefix();
@@ -697,6 +710,11 @@ class RdfParallelParsingState {
   // worker calls `parseBatch`.
   bool parseHeaderStep(std::optional<qlever::parser::ByteBlock> block);
 
+  // The number of bytes of the input that the header occupies, and hence the
+  // offset of the block that `takeRemainderFromInitialization` hands out. Only
+  // valid once `parseHeaderStep` has reported the header to be complete.
+  size_t numBytesInHeader() const { return numBytesInHeader_; }
+
   // Hand out the block remainder that `parseHeaderStep` has left over. The
   // first caller becomes its sole owner, every subsequent call returns
   // `nullopt`, so that the block is parsed exactly once.
@@ -713,13 +731,16 @@ class RdfParallelParsingState {
   }
 
   // Parse a single `batch` of raw bytes into triples, using a fresh worker
-  // parser that is set up from the shared state. Throw on a parse error.
+  // parser that is set up from the shared state. `positionOffset` is the offset
+  // of `batch` within the input file and is only used to make the positions in
+  // error messages file-absolute. Throw on a parse error.
   //
   // This is thread-safe (and hence `const`): it only reads the shared state
   // and each call has its own worker parser, so arbitrarily many calls may run
   // concurrently. This requires that `parseHeaderStep`, which writes that
   // state, has already reported the header to be complete.
-  std::vector<TurtleTriple> parseBatch(qlever::parser::ByteBlock batch) const;
+  std::vector<TurtleTriple> parseBatch(qlever::parser::ByteBlock batch,
+                                       size_t positionOffset) const;
 };
 
 // Compute the default graph for `spec`: the explicit `spec.defaultGraph_` if

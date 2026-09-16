@@ -1626,6 +1626,46 @@ TEST(RdfParserTest, asyncSerialParserAdapterEofAfterExhaustion) {
   EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(), std::nullopt);
 }
 
+// Test that a parse error of a parallel parser reports a byte position that is
+// relative to the beginning of the input file, and not to the beginning of the
+// block in which the error occurred. The offset of a block is tracked by
+// `RdfAsyncParallelParser` and applied by
+// `RdfParallelParsingState::parseBatch`.
+// _____________________________________________________________________________
+TEST(RdfParserTest, parallelParserReportsFileAbsoluteErrorPosition) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  // A header, then enough valid triples for the input to be split into many
+  // blocks, and finally something that is not a triple at all.
+  std::string input = "@prefix ex: <http://example.org/> .\n";
+  for ([[maybe_unused]] auto i : ad_utility::integerRange(200u)) {
+    absl::StrAppend(&input, "ex:s <p> ex:o .\n");
+  }
+  // The blocks are cut directly after a `.` that is followed by a newline, so
+  // the block with the invalid input starts exactly here.
+  size_t expectedPosition = input.size();
+  absl::StrAppend(&input, "!!! not a triple\n");
+  ad_utility::makeOfstream(filename) << input;
+  absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
+  // Without the offset the reported position would be 0 (the error is at the
+  // very beginning of its block), so the test cannot pass by accident.
+  ASSERT_GT(expectedPosition, 3000u);
+
+  auto testWithParser = [&filename, expectedPosition](auto t) {
+    using Parser = typename decltype(t)::type;
+    Parser parser{qlever::InputFileSpecification{
+                      filename, qlever::Filetype::Turtle, std::nullopt},
+                  100_B, encodedIriManager()};
+    auto drain = [&parser]() {
+      while (parser.getBatch()) {
+      }
+    };
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        drain(), ::testing::HasSubstr(absl::StrCat(
+                     "Parse error at byte position ", expectedPosition, ":")));
+  };
+  forAllParallelParsers(testWithParser);
+}
+
 // Test that the parallel parsers report a parse position of 0, because they
 // parse several blocks at once and hence have no single meaningful position
 // (see `AsyncParserDriver::getParsePosition`).

@@ -110,6 +110,14 @@ class RdfAsyncParallelParser : public AsyncRdfParserBase {
   // synchronization.
   bool headerWasParsed_ = false;
 
+  // The offset of the next block within the input file. Each call claims the
+  // current value for the block it fetches and advances it by the size of that
+  // block, so that the worker parsers can report file-absolute positions in
+  // their error messages (see `RdfStringParser::setPositionOffset`). Like
+  // `headerWasParsed_` this is only accessed while the permit of
+  // `blockFetchPermit_` is held and hence needs no further synchronization.
+  size_t nextBlockOffset_ = 0;
+
   // Set to true by the first `asyncGetBatch()` call that encounters an error.
   // All subsequent calls complete with `nullopt` instead of propagating
   // further exceptions, so that the caller's pipeline stops cleanly.

@@ -1144,6 +1144,7 @@ bool RdfParallelParsingState<Parser>::parseHeaderStep(
   auto& declarationParser = declarationParser_.value();
   std::string_view remainder;
   if (block.has_value()) {
+    numBytesInHeader_ += block.value().size();
     declarationParser.setInputStream(std::move(block.value()));
     while (declarationParser.parseDirectiveManually()) {
       // Nothing to do, all the work happens inside `parseDirectiveManually`.
@@ -1159,6 +1160,9 @@ bool RdfParallelParsingState<Parser>::parseHeaderStep(
         << std::endl;
   }
   header_ = std::move(declarationParser.header());
+  // The `remainder` of the last block is not part of the header, all the bytes
+  // that were counted above are.
+  numBytesInHeader_ -= remainder.size();
   remainderFromInitialization_.reserve(remainder.size());
   ql::ranges::copy(remainder, std::back_inserter(remainderFromInitialization_));
   declarationParser_.reset();
@@ -1168,11 +1172,12 @@ bool RdfParallelParsingState<Parser>::parseHeaderStep(
 // ____________________________________________________________________________
 template <typename Parser>
 std::vector<TurtleTriple> RdfParallelParsingState<Parser>::parseBatch(
-    qlever::parser::ByteBlock batch) const {
+    qlever::parser::ByteBlock batch, size_t positionOffset) const {
   RdfStringParser<Parser> parser{encodedIriManager_, defaultGraphIri_,
                                  settings_};
   parser.header() = header_;
   parser.useSimplifiedGrammar();
+  parser.setPositionOffset(positionOffset);
   // Ensure that all sub-parsers use the same file-level blank node prefix
   // so that user-specified blank node labels (_:foo) have the same ID
   // across all batches of the same file.
