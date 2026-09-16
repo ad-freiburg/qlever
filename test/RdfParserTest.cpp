@@ -1116,8 +1116,15 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         (parseFromFile<Parser>(filename, bufferSize)),
         ::testing::AllOf(
-            ::testing::HasSubstr("No statement boundary"),
+            // The input has to be named, see issue #3288.
+            ::testing::HasSubstr(
+                absl::StrCat("Could not split the input \"", filename, "\"")),
+            // What a block may end at, and which part of that rule goes
+            // beyond what the Turtle grammar itself demands.
+            ::testing::HasSubstr("a dot that is followed by a newline"),
+            ::testing::HasSubstr("Turtle itself does not require that newline"),
             ::testing::HasSubstr("use `--parser-buffer-size`"),
+            // These parsers do parse in parallel, so disabling that is a fix.
             ::testing::HasSubstr("use `--parallel-parsing false`")));
     ad_utility::deleteFile(filename);
   };
@@ -1527,7 +1534,7 @@ TEST(RdfParserTest, asyncParallelParserHaltsOnHeaderError) {
     ASSERT_NE(error, nullptr);
     AD_EXPECT_THROW_WITH_MESSAGE(
         std::rethrow_exception(error),
-        ::testing::ContainsRegex("Parse error at byte position 12"));
+        ::testing::ContainsRegex("at byte position 12"));
   };
   forAllAsyncParallelParsers(testWithParser);
 }
@@ -1626,6 +1633,36 @@ TEST(RdfParserTest, asyncSerialParserAdapterEofAfterExhaustion) {
   EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(), std::nullopt);
 }
 
+// Test that the parse errors of all the parsers that read from a file name that
+// file. An index build parses many files at the same time, so without the name
+// an error cannot be attributed to any of them (see issue #3288).
+// _____________________________________________________________________________
+TEST(RdfParserTest, parseErrorNamesTheInputFile) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  ad_utility::makeOfstream(filename) << "<subject> <predicate> .\n";
+  absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
+
+  auto testWithParser = [&filename](auto t) {
+    using Parser = typename decltype(t)::type;
+    AD_EXPECT_THROW_WITH_MESSAGE((parseFromFile<Parser>(filename)),
+                                 ::testing::HasSubstr(absl::StrCat(
+                                     "Parse error in \"", filename, "\"")));
+  };
+  forAllParsers(testWithParser);
+}
+
+// Test that a parser that reads from an unnamed input (for example a term of a
+// SPARQL query) keeps the shorter error message without a file name.
+// _____________________________________________________________________________
+TEST(RdfParserTest, parseErrorOfStringParserHasNoInputName) {
+  Re2Parser parser{encodedIriManager()};
+  parser.setInputStream("<subject> <predicate> .");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parser.parseAndReturnAllTriples(),
+      ::testing::AllOf(::testing::HasSubstr("Parse error at byte position"),
+                       ::testing::Not(::testing::HasSubstr("Parse error in"))));
+}
+
 // Test that a parse error of a parallel parser reports a byte position that is
 // relative to the beginning of the input file, and not to the beginning of the
 // block in which the error occurred. The offset of a block is tracked by
@@ -1660,8 +1697,8 @@ TEST(RdfParserTest, parallelParserReportsFileAbsoluteErrorPosition) {
       }
     };
     AD_EXPECT_THROW_WITH_MESSAGE(
-        drain(), ::testing::HasSubstr(absl::StrCat(
-                     "Parse error at byte position ", expectedPosition, ":")));
+        drain(), ::testing::HasSubstr(
+                     absl::StrCat("at byte position ", expectedPosition, ":")));
   };
   forAllParallelParsers(testWithParser);
 }

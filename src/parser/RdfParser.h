@@ -80,9 +80,16 @@ std::optional<size_t> findEndOfLastNewline(std::string_view input);
 std::optional<size_t> findEndOfLastStatement(std::string_view input);
 
 // The human-readable description of what `findEndOfLastStatement` looks for,
-// used in the error messages of `AsyncStatementBoundaryBlockSource`.
-inline constexpr std::string_view statementBoundaryDescription =
-    "a dot followed by a newline";
+// used in the error messages of `AsyncStatementBoundaryBlockSource`. A Turtle
+// statement is ended by a dot (a `,` or a `;` only separates objects resp.
+// predicate-object pairs *within* a statement), which the grammar does not
+// require to be followed by a newline. QLever does require that newline, and
+// the description says so, because that is the part of the rule that a valid
+// Turtle file can actually violate.
+inline constexpr std::string_view blockBoundaryDescription =
+    "a dot that is followed by a newline (Turtle itself does not require that "
+    "newline, but QLever does, so that it can split the input into blocks "
+    "without parsing it)";
 }  // namespace detail
 
 struct TurtleTriple {
@@ -106,6 +113,12 @@ class RdfParserBase {
 
   const EncodedIriManager* encodedIriManager_;
 
+  // The name of the input that this parser reads (typically a filename, see
+  // `qlever::InputFileSpecification::filename`), used in error messages. It is
+  // empty for parsers that read from an unnamed input, for example the
+  // `RdfStringParser` that parses a single term of a SPARQL query.
+  std::string inputName_;
+
  public:
   virtual ~RdfParserBase() = default;
 
@@ -116,6 +129,14 @@ class RdfParserBase {
   // The settings of this parser, see `RdfParserSettings`.
   RdfParserSettings& settings() { return settings_; }
   const RdfParserSettings& settings() const { return settings_; }
+
+  // The name of the input that this parser reads, see `inputName_`. An index
+  // build parses many inputs at the same time, so naming the input is what
+  // makes an error message actionable.
+  void setInputName(std::string inputName) {
+    inputName_ = std::move(inputName);
+  }
+  const std::string& inputName() const { return inputName_; }
 
   // Get the offset (relative to the beginning of the file) of the first byte
   // that has not yet been dealt with by the parser.
@@ -690,13 +711,20 @@ class RdfParallelParsingState {
   // `parseBatch`.
   RdfParserSettings settings_;
 
+  // The name of the input file, which is set on every parser that is created
+  // here, so that its error messages name the file (see
+  // `RdfParserBase::setInputName`).
+  std::string inputName_;
+
  public:
   RdfParallelParsingState(const EncodedIriManager* encodedIriManager,
                           TripleComponent defaultGraphIri,
+                          std::string inputName,
                           RdfParserSettings settings = {})
       : encodedIriManager_{encodedIriManager},
         defaultGraphIri_{std::move(defaultGraphIri)},
-        settings_{settings} {}
+        settings_{settings},
+        inputName_{std::move(inputName)} {}
 
   // Parse the leading `@base`/`@prefix` declarations of the input. Feed the
   // blocks of the input one by one (`nullopt` meaning the end of the input);

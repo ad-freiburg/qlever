@@ -24,19 +24,29 @@ namespace qlever::parser {
 namespace net = boost::asio;
 
 namespace {
-// Build the exception that signals that no statement boundary (as described
-// by `description`) could be found in an input batch of `inputSize` bytes
-// that was not the last one.
-std::exception_ptr getNoStatementBoundaryError(std::string_view description,
-                                               size_t inputSize) {
+// Build the exception that signals that a block of `inputSize` bytes, which was
+// not the last one, contains none of the positions (as described by
+// `description`) at which a block may end. `inputName` names the affected
+// input, so that the error can be attributed to one of the possibly many inputs
+// of an index build. Suggest disabling parallel parsing only if the input is
+// actually parsed in parallel (`isParsedInParallel`), because that suggestion
+// is useless (and confusing) for an input that is already parsed serially.
+std::exception_ptr getNoBlockBoundaryError(std::string_view description,
+                                           size_t inputSize,
+                                           std::string_view inputName,
+                                           bool isParsedInParallel) {
   return std::make_exception_ptr(std::runtime_error{absl::StrCat(
-      "No statement boundary (", description,
-      ") was found in the current input batch (which was not the last one) "
-      "of size ",
+      "Could not split the input \"", inputName,
+      "\" into blocks: QLever ends a block at ", description,
+      ", but the current block (which is not the last one) of size ",
       ad_utility::insertThousandSeparator(std::to_string(inputSize), ','),
-      "; possible fixes are: "
-      "use `--parser-buffer-size` to increase the buffer size or use "
-      "`--parallel-parsing false` to disable parallel parsing")});
+      " bytes contains no such position. To fix this, use "
+      "`--parser-buffer-size` to increase the buffer size",
+      isParsedInParallel
+          ? ", or use `--parallel-parsing false` to disable parallel parsing, "
+            "which lets QLever end a block at any newline"
+          : "",
+      ".")});
 }
 }  // namespace
 
@@ -92,11 +102,14 @@ std::optional<ByteBlock> FileBlockSource::getNextBlockImpl() {
 // ____________________________________________________________________________
 AsyncStatementBoundaryBlockSource::AsyncStatementBoundaryBlockSource(
     const ql::any_io_executor& exec, std::unique_ptr<AsyncBlockSource> inner,
-    EndPositionFinder findEndPosition, std::string description)
+    EndPositionFinder findEndPosition, std::string description,
+    std::string inputName, bool isParsedInParallel)
     : AsyncBlockSource{exec, inner->getBlocksize()},
       inner_{std::move(inner)},
       findEndPosition_{std::move(findEndPosition)},
-      description_{std::move(description)} {}
+      description_{std::move(description)},
+      inputName_{std::move(inputName)},
+      isParsedInParallel_{isParsedInParallel} {}
 
 // ____________________________________________________________________________
 void AsyncStatementBoundaryBlockSource::assembleAndDeliver(Handler& handler,
@@ -141,10 +154,11 @@ void AsyncStatementBoundaryBlockSource::handleMissingBoundary(Handler handler,
               exhausted_ = true;
               return assembleAndDeliver(handler, rawInput, rawInput.size());
             }
-            // Inner source has more data: this is a real "statement too
-            // large" error.
+            // Inner source has more data, so the block really cannot be
+            // split.
             return handler(
-                getNoStatementBoundaryError(description_, rawInput.size()),
+                getNoBlockBoundaryError(description_, rawInput.size(),
+                                        inputName_, isParsedInParallel_),
                 std::nullopt);
           }));
 }

@@ -92,7 +92,15 @@ template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::raise(std::string_view error_message) const {
   auto d = tok_.view();
   std::stringstream errorMessage;
-  errorMessage << "Parse error at byte position " << getParsePosition() << ": "
+  errorMessage << "Parse error";
+  // An index build parses many inputs at the same time, so the byte position
+  // alone is useless unless the input is named. Parsers without a name (for
+  // example the `RdfStringParser` for a single term of a SPARQL query) keep the
+  // shorter message.
+  if (!inputName().empty()) {
+    errorMessage << " in \"" << inputName() << '"';
+  }
+  errorMessage << " at byte position " << getParsePosition() << ": "
                << error_message << '\n';
   if (!d.empty()) {
     size_t num_bytes = 500;
@@ -1031,6 +1039,7 @@ template <class T>
 void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
                                     ad_utility::MemorySize blocksize) {
   this->clear();
+  this->setInputName(spec.filename());
   // Make sure that a block of data ends with a newline. This is important for
   // two reasons:
   //
@@ -1140,6 +1149,7 @@ bool RdfParallelParsingState<Parser>::parseHeaderStep(
     std::optional<qlever::parser::ByteBlock> block) {
   if (!declarationParser_.has_value()) {
     declarationParser_.emplace(encodedIriManager_);
+    declarationParser_.value().setInputName(inputName_);
   }
   auto& declarationParser = declarationParser_.value();
   std::string_view remainder;
@@ -1178,6 +1188,7 @@ std::vector<TurtleTriple> RdfParallelParsingState<Parser>::parseBatch(
   parser.header() = header_;
   parser.useSimplifiedGrammar();
   parser.setPositionOffset(positionOffset);
+  parser.setInputName(inputName_);
   // Ensure that all sub-parsers use the same file-level blank node prefix
   // so that user-specified blank node labels (_:foo) have the same ID
   // across all batches of the same file.
