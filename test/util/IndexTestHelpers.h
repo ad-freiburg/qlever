@@ -8,8 +8,10 @@
 #include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -21,6 +23,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
 #include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriPattern.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
@@ -81,6 +84,9 @@ struct TestIndexConfig {
   std::optional<VocabularyType> vocabularyType = std::nullopt;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
+  // The general patterns for IRIs that are encoded directly in an `Id`, see
+  // `index/vocabulary/EncodedIriPattern.h`.
+  std::vector<encodedIri::Pattern> encodedIriPatterns{};
   // If true, add `ql:has-word` triples for each word in each literal during
   // index building.
   bool addHasWordTriples = false;
@@ -92,6 +98,9 @@ struct TestIndexConfig {
   // (see `IndexImpl::setSecondaryVocabForTesting`), which is what this member
   // does.
   std::optional<std::vector<std::string>> secondaryVocabWords = std::nullopt;
+  // The number of threads used during the index build (see
+  // `Index::createFromFiles`).
+  size_t numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
   // If set, the input is parsed in parallel (`true`) or serially (`false`), as
   // if specified on the command line of `qlever-index`. If `nullopt`, a single
   // input file is parsed in parallel for reasons of backward compatibility (see
@@ -117,16 +126,18 @@ struct TestIndexConfig {
         c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
-        c.encodedPrefixesWithoutAngleBrackets, c.addHasWordTriples,
-        c.secondaryVocabWords, c.parseInParallel, c.additionalSettings);
+        c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
+        c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
+        c.parseInParallel, c.additionalSettings);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, blocksizePermutations, createTextIndex,
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
       scoringMetric, bAndKParam, indexType, vocabularyType,
-      encodedPrefixesWithoutAngleBrackets, addHasWordTriples,
-      secondaryVocabWords, parseInParallel, additionalSettings)
+      encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
+      addHasWordTriples, secondaryVocabWords, numThreads, parseInParallel,
+      additionalSettings)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

@@ -242,11 +242,14 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         c.vocabularyType.has_value()
             ? c.vocabularyType.value()
             : VocabularyType::randomForIndexBuilding());
-    if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
+    if (c.encodedPrefixesWithoutAngleBrackets.has_value() ||
+        !c.encodedIriPatterns.empty()) {
       index.getImpl().setPrefixesForEncodedValues(
-          std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
+          std::move(c.encodedPrefixesWithoutAngleBrackets)
+              .value_or(std::vector<std::string>{}),
+          std::move(c.encodedIriPatterns));
     }
-    index.createFromFiles({spec});
+    index.createFromFiles({spec}, c.numThreads);
     if (c.createTextIndex) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
       throw std::runtime_error("The text index is not available in C++17 mode");
