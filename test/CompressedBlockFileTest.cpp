@@ -251,6 +251,23 @@ TEST(CompressedBlockFile, destructorDeletesTheFile) {
 }
 
 // _____________________________________________________________________________
+TEST(CompressedBlockFile, failedWriteThrows) {
+  // `/dev/full` accepts every write and then fails the flush with `ENOSPC`,
+  // exactly like a disk that ran full.
+  const std::string devFull = "/dev/full";
+  if (!ql::filesystem::exists(devFull)) {
+    GTEST_SKIP() << "no " << devFull << " on this platform";
+  }
+  CompressedBlockFile file{devFull, ad_utility::NO_BLOCK_COMPRESSION};
+  auto bytes = makeBytes(100, 7);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      file.appendBlock(bytes.data(), bytes.size()),
+      ::testing::AllOf(::testing::HasSubstr("Writing 100 bytes"),
+                       ::testing::HasSubstr(devFull),
+                       ::testing::HasSubstr("No space left on device")));
+}
+
+// _____________________________________________________________________________
 TEST(CompressedBlockFile, concurrentReads) {
   std::string filename = gtestCurrentTestName();
   CompressedBlockFile file{filename};

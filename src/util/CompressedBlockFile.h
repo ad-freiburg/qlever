@@ -10,16 +10,22 @@
 #ifndef QLEVER_SRC_UTIL_COMPRESSEDBLOCKFILE_H
 #define QLEVER_SRC_UTIL_COMPRESSEDBLOCKFILE_H
 
+#include <absl/strings/str_cat.h>
+
+#include <cerrno>
 #include <cstddef>
+#include <cstring>
 #include <optional>
 #include <shared_mutex>
+#include <stdexcept>
 #include <string>
 #include <utility>
-#include <vector>
 
+#include "backports/memory.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Exception.h"
 #include "util/File.h"
+#include "util/Log.h"
 #include "util/Synchronized.h"
 
 namespace ad_utility {
@@ -48,7 +54,7 @@ constexpr inline int ZSTD_DEFAULT_LEVEL = 3;
 // `pread`, which bypasses that buffer. Each append therefore flushes the file
 // before it releases the lock, so that every block is readable as soon as
 // `appendBlock` has returned. This is affordable because the blocks are large;
-// if that should ever change, the flush can be made explicit again.
+// if that should ever change, the flush can be made explicit.
 //
 // NOTE: The file is deleted in the destructor, so this class is only suitable
 // for temporary data.
@@ -88,10 +94,16 @@ class CompressedBlockFile {
       CompressionLevel compressionLevel = ZSTD_DEFAULT_LEVEL)
       : filename_{std::move(filename)}, compressionLevel_{compressionLevel} {}
 
-  // Close and delete the file.
+  // Close and delete the file. If the deletion fails, only warn, because a
+  // destructor must not throw.
   ~CompressedBlockFile() {
     file_.wlock()->close();
-    ad_utility::deleteFile(filename_);
+    try {
+      ad_utility::deleteFile(filename_);
+    } catch (const std::exception& e) {
+      AD_LOG_WARN << "Deleting the temporary file \"" << filename_
+                  << "\" failed: " << e.what() << std::endl;
+    }
   }
 
   // The name of the underlying file.
@@ -124,10 +136,13 @@ class CompressedBlockFile {
       readBytes(metadata, target);
       return;
     }
-    std::vector<char> compressed(metadata.compressedSize_);
-    readBytes(metadata, compressed.data());
+    // NOTE: The buffer is deliberately not zero-initialized, it is completely
+    // overwritten by `readBytes`.
+    auto compressed =
+        ql::make_unique_for_overwrite<char[]>(metadata.compressedSize_);
+    readBytes(metadata, compressed.get());
     auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
-        compressed.data(), compressed.size(), static_cast<char*>(target),
+        compressed.get(), metadata.compressedSize_, static_cast<char*>(target),
         metadata.uncompressedSize_);
     AD_CORRECTNESS_CHECK(numBytesDecompressed == metadata.uncompressedSize_);
   }
@@ -145,13 +160,21 @@ class CompressedBlockFile {
   // Append the `numBytes` bytes at `data` to the file and return the offset at
   // which they were written. This takes an exclusive lock, because it uses the
   // shared file offset. The file is flushed before the lock is released, see
-  // the note on the buffering at the top of this class.
+  // the note on the buffering at the top of this class. Throw a
+  // `std::runtime_error` if the write or the flush fails (for example because
+  // the disk is full), so that this is noticed at the append and not only when
+  // the block is read back.
   size_t appendBytes(const void* data, size_t numBytes) {
     size_t offset = 0;
-    file_.withWriteLock([&offset, data, numBytes](File& file) {
+    file_.withWriteLock([this, &offset, data, numBytes](File& file) {
       offset = static_cast<size_t>(file.tell());
-      file.write(data, numBytes);
-      file.flush();
+      size_t numBytesWritten = file.write(data, numBytes);
+      bool flushed = file.flush();
+      if (numBytesWritten != numBytes || !flushed) {
+        throw std::runtime_error{absl::StrCat(
+            "Writing ", numBytes, " bytes to the temporary file \"", filename_,
+            "\" failed (", std::strerror(errno), ")")};
+      }
     });
     return offset;
   }
@@ -170,7 +193,8 @@ class CompressedBlockFile {
 
 // Pass this as the compression level of a `CompressedBlockFile` to store its
 // blocks uncompressed, see `CompressedBlockFile::CompressionLevel`.
-constexpr inline std::optional<int> NO_BLOCK_COMPRESSION = std::nullopt;
+constexpr inline CompressedBlockFile::CompressionLevel NO_BLOCK_COMPRESSION =
+    std::nullopt;
 
 }  // namespace ad_utility
 
