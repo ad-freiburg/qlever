@@ -39,6 +39,12 @@ constexpr inline MemorySize DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY =
 // balancing if the individual chunks require different amounts of work.
 constexpr inline size_t DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD = 4;
 
+// The default number of input elements below which the merge is performed
+// serially. For small inputs the overhead of setting up the parallel merge
+// dominates the actual merging.
+constexpr inline size_t DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD =
+    100'000;
+
 // Return the parallelism that a merge assumes if its `MergeOptions` do not
 // specify one, which is one thread per hardware thread. NOTE: This is a pure
 // tuning default and says nothing about the executor that a merge actually
@@ -134,10 +140,25 @@ struct MergeOptions {
   // `0` means "as many as `parallelism()`".
   size_t maxNumChunksInFlight = 0;
 
+  // Merge serially in the calling thread if the input has at most that many
+  // elements in total, see `shouldMergeSerially()`.
+  size_t serialNumElementsThreshold =
+      DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD;
+
   // Return the number of threads that the merge assumes, that is the
   // `parallelismHint` with the value `0` resolved to its default.
   size_t parallelism() const {
     return parallelismHint == 0 ? defaultMergeParallelism() : parallelismHint;
+  }
+
+  // Return whether an input with `numElements` elements in total should be
+  // merged serially in the calling thread. This is the case if the merge has a
+  // single thread (which cannot merge two chunks concurrently anyway), or if
+  // the input is small enough for the overhead of setting up the parallel
+  // merge to dominate the actual merging, see `serialNumElementsThreshold`.
+  // Only `parallelBlockMergeToRange` looks at this, see there.
+  bool shouldMergeSerially(size_t numElements) const {
+    return parallelism() <= 1 || numElements <= serialNumElementsThreshold;
   }
 
   // Return the number of chunks that the merge should be split into, see

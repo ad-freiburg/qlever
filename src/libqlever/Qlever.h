@@ -9,10 +9,12 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <algorithm>
 #include <boost/optional.hpp>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -34,6 +36,7 @@
 #include "index/IndexRebuilderTypes.h"
 #include "index/IndexSwap.h"
 #include "index/InputFileSpecification.h"
+#include "index/vocabulary/EncodedIriPattern.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
 #include "util/Allocator.h"
@@ -123,6 +126,12 @@ struct IndexBuilderConfig : CommonConfig {
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;
 
+  // The number of threads used during the index build (see
+  // `Index::createFromFiles`). Must be at least 1. Defaults to the number of
+  // hardware threads of the machine (`std::thread::hardware_concurrency()`
+  // returns `0` if that number cannot be determined, hence the `max`).
+  size_t numThreads_ = std::max<size_t>(1, std::thread::hardware_concurrency());
+
   // A list of regexes for IRIs that should be treated as blank nodes. During
   // index building, an IRI that is fully matched by one of these regexes (via
   // `RE2::FullMatch`, applied to the full IRI text including the angle
@@ -149,6 +158,20 @@ struct IndexBuilderConfig : CommonConfig {
   // https://github.com/ad-freiburg/qlever/pull/2299 for the details and
   // limitations regarding the correctness of FILTER and ORDER BY.
   std::vector<std::string> prefixesForIdEncodedIris_;
+
+  // Patterns for IRIs that are more complex than a prefix followed by a single
+  // number, for example `<http://example.org/range_536870912_50_25P>`, where
+  // several numbers are separated by fixed strings, and where the individual
+  // numbers may have bits that are always known (see
+  // `encodedIri::Pattern` in `index/vocabulary/EncodedIriPattern.h`
+  // for the details and for an example). Such IRIs are also encoded directly in
+  // the internal ID, with the same benefits and limitations as the
+  // `prefixesForIdEncodedIris_` above. The patterns are stored in the index
+  // and restored from it, so they don't have to be specified again when the
+  // index is loaded. The order of the patterns determines the IDs of the
+  // encoded IRIs, so two index builds only produce the same IDs if the
+  // patterns are given in the same order.
+  std::vector<encodedIri::Pattern> patternsForIdEncodedIris_;
 
   // The remaining members of this class, are only relevant if a full-text
   // index is built in addition to the RDF index. By default, no fulltext index
