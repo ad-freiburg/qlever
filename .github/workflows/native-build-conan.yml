@@ -55,7 +55,8 @@ jobs:
           -DLOGLEVEL=DEBUG
           -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake"
           -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}}"
-          -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false
+          -DUSE_PARALLEL=true
+          -DRUN_EXPENSIVE_TESTS=false
           -DENABLE_EXPENSIVE_CHECKS=true
         # The libraries that Conan has built live outside the default search
         # paths, so everything that runs a binary has to source this script.

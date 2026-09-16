@@ -1,45 +1,90 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIMANAGER_H
 #define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIMANAGER_H
-
-#include <absl/numeric/bits.h>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "index/vocabulary/EncodedIriPattern.h"
+#include "index/vocabulary/NibbleEncoding.h"
 #include "util/BitUtils.h"
 #include "util/Log.h"
 #include "util/json.h"
 
 namespace detail {
-// Match `repr` against the pattern `([0-9]+)>` and return the digit
-// substring as a `string_view` into `repr` on success, or `std::nullopt` if
-// the pattern does not match.
-std::optional<std::string_view> matchDigitsPrefix(std::string_view repr);
+// Sort the `prefixes` (which have to be specified without the enclosing angle
+// brackets) and remove duplicates. Throw if they are invalid, that is, if there
+// are more than `maxNumPrefixes` of them, if one of them is a prefix of another
+// one, or if one of them starts with `<`. Return the prefixes, each of them
+// with a leading `<`.
+std::vector<std::string> sortAndCheckPrefixes(std::vector<std::string> prefixes,
+                                              size_t maxNumPrefixes);
+
+// Build the list of patterns of an `EncodedIriManagerImpl` from the plain
+// `prefixes` (see `sortAndCheckPrefixes`, they become plain prefix patterns
+// with `numBitsEncoding` bits) followed by the general `patterns` in the given
+// order. The `prefix_` of each pattern has to be specified without the leading
+// `<`, which is added here. Throw if one of the patterns needs more than
+// `numBitsEncoding` bits (see `encodedIri::validatePattern`) or if there are
+// more than `maxNumPatterns` patterns in total.
+std::vector<encodedIri::Pattern> makePatterns(
+    std::vector<std::string> prefixes,
+    std::vector<encodedIri::Pattern> patterns, size_t numBitsEncoding,
+    size_t maxNumPatterns);
+
+// Find the first of the `patterns` that `repr` matches (see
+// `encodedIri::encodePayload`). Return the index of that pattern together with
+// the encoded payload, or `std::nullopt` if there is no such pattern.
+std::optional<std::pair<size_t, uint64_t>> matchPatterns(
+    const std::vector<encodedIri::Pattern>& patterns, std::string_view repr);
+
+// Conversion of the `patterns` to and from JSON. As long as only plain prefixes
+// are used (which is the default), the legacy format (a simple list of the
+// prefixes with leading `<`) is written, such that the format of the index
+// metadata doesn't change. `patternsFromJson` reads both formats and validates
+// the patterns (see `makePatterns` for the arguments), because the index
+// metadata might have been manipulated.
+void patternsToJson(nlohmann::json& j,
+                    const std::vector<encodedIri::Pattern>& patterns,
+                    size_t numBitsEncoding);
+std::vector<encodedIri::Pattern> patternsFromJson(const nlohmann::json& j,
+                                                  size_t numBitsEncoding,
+                                                  size_t maxNumPatterns);
 }  // namespace detail
 
-// This class allows the encoding of IRIs that start with a fixed prefix
-// followed by a sequence of decimal digits directly into an `Id`. For
-// example, <http://example.org/12345> with digit sequence `12345` and
-// prefix `http://example.org/`. This is implemented as follows:
+// This class allows the encoding of IRIs that follow a fixed pattern directly
+// into an `Id`. In the simplest case (which is what the `--encode-as-id`
+// option of the index builder configures), such a pattern is a fixed prefix
+// that is followed by a sequence of decimal digits, for example
+// <http://example.org/12345> with the prefix `http://example.org/` and the
+// digit sequence `12345`. Arbitrary patterns of the form
+// `<prefix><number><suffix><number>...>` can be configured via
+// `encodedIri::Pattern` (see `EncodedIriPattern.h`). This is implemented as
+// follows:
 //
 // An `Id` has 64 bits, of which the `NumBitsTotal` rightmost bits are
 // used for the encoding. The `64 - NumBitsTotal` leftmost bits are ignored when
 // decoding and can be used for other purposes. The next `NumBitsTags` bits
-// encode the IRI prefix; that is, at most `2 ** NumBitsTags` different prefixes
-// can be used. The remaining `NumBitsTotal - NumBitsTags` bits are used to
-// encode the digits that follow the prefix.
+// encode the pattern of the IRI; that is, at most `2 ** NumBitsTags` different
+// patterns can be used. The remaining `NumBitsTotal - NumBitsTags` bits (the
+// payload) are used to encode the numbers of the IRI. The first number of a
+// pattern is stored in the most significant bits of the payload, the last one
+// in the least significant bits.
 //
-// The digits are encoded in the following non-standard way, which makes sure
-// that the order of the encoded values corresponds to the lexical order of the
-// original IRIs. Each decimal digit is encoded as a 4-bit nibble, where digit
-// `i` is encoded as `i+1` and converted to a hexadecimal number. The nibbles
-// are stored left-aligned (not right-aligned) and filled on the right with
-// zeroes.
+// A number can be encoded in one of two ways (see
+// `encodedIri::NumberEncoding`). A plain prefix uses the `Nibbles` encoding
+// (see `NibbleEncoding.h` for the details), which stores each decimal digit in
+// four bits and makes sure that the order of the encoded values corresponds to
+// the lexical order of the original IRIs.
 //
 // For example, here are a few example encodings, with `NumBitsTotal = 40` and
 // `NumBitsTags = 8`. The prefix is `http://example.org/` and encoded in 8
@@ -52,10 +97,19 @@ std::optional<std::string_view> matchDigitsPrefix(std::string_view repr);
 // <http://example.org/2>    ->  00 00 00 ff 30 00 00 00
 // <http://example.org/20>   ->  00 00 00 ff 31 00 00 00
 //
-// NOTE: Only IRIs that fulfill these constraints can be encoded. For example,
-// if 4 times the number of digits is larger than `NumBitsTotal - NumBitsTags`,
-// the IRI will not be encoded (but stored as a regular IRI). See the bottom of
-// the file for the default values of `NumBitsTotal` and `NumBitsTags`.
+// The other encoding, `Binary`, stores the value of a number and leaves out
+// the bits that are known in advance. It is the default for the numbers of a
+// general pattern, because it is much more compact, but it is only
+// order-preserving with respect to the numeric and not with respect to the
+// lexicographic order of the IRIs. This is not a correctness problem (`JOIN`,
+// `GROUP BY`, `DISTINCT` etc. only require a consistent order), but `ORDER BY`
+// and range filters on the affected IRIs follow the order of the encoding.
+//
+// NOTE: Only IRIs that fulfill the constraints of a pattern can be encoded. For
+// example, if 4 times the number of digits is larger than
+// `NumBitsTotal - NumBitsTags`, the IRI will not be encoded (but stored as a
+// regular IRI). See the bottom of the file for the default values of
+// `NumBitsTotal` and `NumBitsTags`.
 struct NoHardcodedPrefixes {
   // The fixed prefixes have to be wrapped into a struct because
   // `std::array<std::string_view>` cannot be passed as a template parameter
@@ -72,35 +126,44 @@ class EncodedIriManagerImpl {
   static constexpr size_t NumBitsEncoding = NumBitsTotal - NumBitsTags;
 
   // We use 4-bit nibbles per digit in the encoding.
-  static constexpr size_t NibbleSize = 4;
+  static constexpr size_t NibbleSize = encodedIri::NibbleSize;
   static constexpr size_t NumDigits = NumBitsEncoding / NibbleSize;
   static_assert(NumBitsEncoding % NibbleSize == 0);
 
   static_assert(NumBitsTotal <= 64);
   static_assert(NumBitsTags <= 64);
   static_assert(NumDigits > 0);
+  // The tag is stored by shifting it by `NumBitsEncoding`, which requires
+  // `NumBitsEncoding` to be smaller than 64.
+  static_assert(NumBitsEncoding < 64);
 
-  // The prefixes of the IRIs that will be encoded.
-  std::vector<std::string> prefixes_;
+  // The patterns of the IRIs that will be encoded. The index of a pattern in
+  // this vector is the tag that is stored in the `Id`. The `prefix_` of each of
+  // them starts with `<`.
+  std::vector<encodedIri::Pattern> patterns_;
 
   static constexpr auto maxNumPrefixes_ = 1ULL << NumBitsTags;
 
-  // By default, `prefixes_` is empty, so no IRI will be encoded.
+  // By default, `patterns_` is empty, so no IRI will be encoded.
   // NOTE: When loading an existing index, in particular one from an older
   // QLever version with different hardcoded prefixes, it is crucial to use the
   // deserialization from JSON to initialize the EncodedIriManager. See the
   // note in `from_json`.
   EncodedIriManagerImpl() : EncodedIriManagerImpl(std::vector<std::string>{}) {}
 
-  // Construct from the list of prefixes. The prefixes have to be specified
-  // without any brackets, so e.g. "http://example.org/" if IRIs of the form
-  // `<http://example.org/1234>` should be encoded.
+  // Construct from a list of plain prefixes and a list of general patterns. The
+  // prefixes and the `prefix_` of the patterns have to be specified without any
+  // brackets, so e.g. "http://example.org/" if IRIs of the form
+  // `<http://example.org/1234>` should be encoded. The prefixes are sorted, and
+  // the patterns are appended to them in the given order, so changing the order
+  // of the patterns changes the `Id`s of the encoded IRIs.
   // NOTE: When loading an existing index, in particular one from an older
   // QLever version with different hardcoded prefixes, it is crucial to use the
   // deserialization from JSON to initialize the EncodedIriManager. See the
   // note in `from_json`.
   explicit EncodedIriManagerImpl(
-      std::vector<std::string> prefixesWithoutAngleBrackets) {
+      std::vector<std::string> prefixesWithoutAngleBrackets,
+      std::vector<encodedIri::Pattern> patterns = {}) {
     // Add hardcoded prefixes.
     for (const auto& prefix : HardcodedPrefixes) {
       // Adding a hardcoded prefix a second time in the constructor is an error.
@@ -108,83 +171,25 @@ class EncodedIriManagerImpl {
           !ad_utility::contains(prefixesWithoutAngleBrackets, prefix));
       prefixesWithoutAngleBrackets.emplace_back(prefix);
     }
-    if (prefixesWithoutAngleBrackets.empty()) {
-      return;
-    }
-    // Sort the prefixes lexicographically to make the ordering deterministic
-    // (provided that the prefixes do not end with digits).
-    ql::ranges::sort(prefixesWithoutAngleBrackets);
-
-    // Remove duplicates.
-    //
-    // NOTE: `ql::ranges::unique` does not work because of a discrepancy in the
-    // return types between `std::ranges` and `range-v3`.
-    prefixesWithoutAngleBrackets.erase(
-        ::ranges::unique(prefixesWithoutAngleBrackets),
-        prefixesWithoutAngleBrackets.end());
-
-    if (prefixesWithoutAngleBrackets.size() > maxNumPrefixes_) {
-      throw std::runtime_error(absl::StrCat(
-          "Number of prefixes specified with `--encode-as-id` is ",
-          prefixesWithoutAngleBrackets.size(), ", which is too many; ",
-          "the maximum is ", maxNumPrefixes_));
-    }
-
-    // TODO<C++23> use `std::views::adjacent`.
-    for (size_t i = 0; i < prefixesWithoutAngleBrackets.size() - 1; ++i) {
-      const auto& a = prefixesWithoutAngleBrackets.at(i);
-      const auto& b = prefixesWithoutAngleBrackets.at(i + 1);
-      if (ql::starts_with(b, a)) {
-        throw std::runtime_error(absl::StrCat(
-            "None of the prefixes specified with `--encode-as-id` "
-            "may be a prefix of another; here is a violating pair: \"",
-            a, "\" and \"", b, "\"."));
-      }
-    }
-    prefixes_.reserve(prefixesWithoutAngleBrackets.size());
-    for (const auto& prefix : prefixesWithoutAngleBrackets) {
-      if (ql::starts_with(prefix, '<')) {
-        throw std::runtime_error(absl::StrCat(
-            "The prefixes specified with `--encode-as-id` must not "
-            "be enclosed in angle brackets; here is a violating prefix: \"",
-            prefix, "\""));
-      }
-      prefixes_.push_back(absl::StrCat("<", prefix));
-    }
+    patterns_ = detail::makePatterns(std::move(prefixesWithoutAngleBrackets),
+                                     std::move(patterns), NumBitsEncoding,
+                                     maxNumPrefixes_);
   }
 
   // Try to encode the given string as an `Id`. If the encoding fails, return
   // `std::nullopt`. This happens in one of the following cases:
   //
-  // 1. The string is not an `<iriref-in-angle-brackets>`
-  // 2. The string does not start with any of the `prefixes_`
-  // 3. After the matching prefix, there are characters other than `[0-9]`
-  // 4. There are more digits than fit into `NumBitsEncoding` (4 bits / digit)
+  // 1. The string is not an `<iriref-in-angle-brackets>`.
+  // 2. The string doesn't match any of the `patterns_`.
+  // 3. One of the numbers of the matching pattern violates its constraints,
+  //    for example because it has too many digits.
   std::optional<Id> encode(std::string_view repr) const {
-    // Find the matching prefix.
-    auto it = ql::ranges::find_if(prefixes_, [&repr](std::string_view prefix) {
-      return ql::starts_with(repr, prefix);
-    });
-    if (it == prefixes_.end()) {
+    auto match = detail::matchPatterns(patterns_, repr);
+    if (!match.has_value()) {
       return std::nullopt;
     }
-
-    // Check that after the prefix, the string contains only digits and the
-    // trailing '>'.
-    repr.remove_prefix(it->size());
-    auto numStringOpt = detail::matchDigitsPrefix(repr);
-    if (!numStringOpt.has_value()) {
-      return std::nullopt;
-    }
-    std::string_view numString = numStringOpt.value();
-    if (numString.size() > NumDigits) {
-      return std::nullopt;
-    }
-
-    // Get the index of the used prefix, and run the actual encoding.
-    auto prefixIndex = static_cast<size_t>(it - prefixes_.begin());
-    return makeIdFromPrefixIdxAndPayload(prefixIndex,
-                                         encodeDecimalToNBit(numString));
+    const auto& [tag, payload] = match.value();
+    return makeIdFromPrefixIdxAndPayload(tag, payload);
   }
 
   // combine the integer representation of the prefix and of the payload into a
@@ -198,28 +203,16 @@ class EncodedIriManagerImpl {
   // Throw an exception if the `Id` has a datatype different from `EncodedVal`.
   std::string toString(Id id) const {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::EncodedVal);
-    // Get only the rightmost bits that represent the digits.
-    auto [prefixIdx, digitEncoding] = splitIntoPrefixIdxAndPayload(id);
-    return toStringWithGivenPrefix(digitEncoding, prefixes_.at(prefixIdx));
-  }
-
-  // The second half of `toString` above: combine the integer encoding of the
-  // payload and the prefix string into a result string that represents an IRI.
-  // Note: This function expects, that the prefix starts with `<`.
-  static std::string toStringWithGivenPrefix(uint64_t digitEncoding,
-                                             std::string_view prefix) {
-    AD_EXPENSIVE_CHECK(ql::starts_with(prefix, '<'));
-    std::string result;
-    result.reserve(prefix.size() + NumDigits + 1);
-    result = prefix;
-    decodeDecimalFrom64Bit(result, digitEncoding);
-    result.push_back('>');
-    return result;
+    auto [tag, payload] = splitIntoPrefixIdxAndPayload(id);
+    return encodedIri::decodeToIri(patterns_.at(tag), payload);
   }
 
   // From the `Id` (which is expected to be of type `EncodedVal`, else an
   // `AD_CONTRACT_CHECK` fails), extract the integer encoding of the prefix and
   // of the payload.
+  // NOTE: The payload is only a single nibble-encoded number (which
+  // `decodeDecimalFrom64Bit` can decode) if the prefix is a plain prefix, so
+  // callers have to check the prefix index before decoding the payload.
   static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndPayload(Id id) {
     AD_CONTRACT_CHECK(
         id.getDatatype() == Datatype::EncodedVal,
@@ -232,114 +225,68 @@ class EncodedIriManagerImpl {
     return std::make_pair(prefixIdx, digitEncoding);
   }
 
-  // The same as `splitIntoPrefixIdxAndPayload` except that the payload is
-  // returned decoded.
-  static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndDecodedPayload(
-      Id id) {
-    auto [prefix, payload] = splitIntoPrefixIdxAndPayload(id);
-    return {prefix, decodeDecimalFrom64Bit(payload)};
-  }
-
   // The index of a prefix. This is the same prefix that is used for
   // `makeIdFromPrefixIdxAndPayload` and returned from
-  // `splitIntoPrefixIdxAndPayload`.
+  // `splitIntoPrefixIdxAndPayload`. If several patterns share the same prefix,
+  // then the index of the first of them is returned.
   std::optional<uint64_t> getIndexOfPrefix(
       std::string_view prefixWithoutAngleBrackets) const {
-    auto it = ql::ranges::find(prefixes_,
-                               absl::StrCat("<", prefixWithoutAngleBrackets));
-    if (it == prefixes_.end()) {
+    auto prefix = absl::StrCat("<", prefixWithoutAngleBrackets);
+    auto it =
+        ql::ranges::find(patterns_, prefix, &encodedIri::Pattern::prefix_);
+    if (it == patterns_.end()) {
       return std::nullopt;
     }
-    return static_cast<size_t>(it - prefixes_.begin());
+    return static_cast<size_t>(it - patterns_.begin());
   }
 
-  // Conversion to and from JSON.
-  static constexpr const char* jsonKey_ =
-      "prefixes-with-leading-angle-brackets";
+  // Conversion to and from JSON, see `detail::patternsToJson` and
+  // `detail::patternsFromJson`.
   friend void to_json(nlohmann::json& j,
                       const EncodedIriManagerImpl& encodedIriManager) {
-    j[jsonKey_] = encodedIriManager.prefixes_;
+    detail::patternsToJson(j, encodedIriManager.patterns_, NumBitsEncoding);
   }
   friend void from_json(const nlohmann::json& j,
                         EncodedIriManagerImpl& encodedIriManager) {
     // When loading an existing index, EncodedIriManagers must be de-serialized
     // from json through this method. This is required so that
-    // 1. the user specified prefixes set for the index build are loaded and
+    // 1. the user specified prefixes and patterns set for the index build are
+    // loaded and
     // 2. that exactly the hardcoded prefixes that the index was built with are
     // loaded.
     //
     // This keeps compatibility with already built indices. Newly built indices
     // go through the normal constructor and use the current hardcoded
     // prefixes.
-    encodedIriManager.prefixes_ =
-        static_cast<std::vector<std::string>>(j[jsonKey_]);
+    encodedIriManager.patterns_ =
+        detail::patternsFromJson(j, NumBitsEncoding, maxNumPrefixes_);
   }
 
   // Hash support for use in `TestIndexConfig`.
   template <typename H>
   friend H AbslHashValue(H h, const EncodedIriManagerImpl& manager) {
-    return H::combine(std::move(h), manager.prefixes_);
+    return H::combine(std::move(h), manager.patterns_);
   }
 
   // Equality operator for use in `TestIndexConfig`.
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(EncodedIriManagerImpl, prefixes_)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(EncodedIriManagerImpl, patterns_)
 
   // Encode the `numberStr` (which may only consist of digits) into a 64-bit
   // number.
   static constexpr uint64_t encodeDecimalToNBit(std::string_view numberStr) {
-    auto len = numberStr.size();
-    AD_CORRECTNESS_CHECK(len <= NumDigits);
-
-    uint64_t result = 0;
-
-    // Compute the starting shift (for the first digit).
-    uint64_t shift = NumBitsEncoding - NibbleSize;
-
-    for (const char digitChar : numberStr) {
-      // Deliberately encode [0, ..., 9] as [1, ..., A], so that the padding
-      // nibble `0`is smaller than any valid digit encoding.
-      uint8_t digit = (digitChar - '0') + 1;
-      result |= static_cast<uint64_t>(digit) << shift;
-      shift -= NibbleSize;
-    }
-    return result;
-  }
-
-  // Helper for decoding numbers. Calls `F` for every digit (from high to low)
-  // in the decoded representation of `encoded`.
-  template <typename F>
-  static void decodeDecimalFrom64BitHelper(F processDigit, uint64_t encoded) {
-    size_t shift = NumBitsEncoding - NibbleSize;
-    auto numTrailingZeros = absl::countr_zero(encoded);
-    size_t numTrailingZeroNibbles = numTrailingZeros / NibbleSize;
-    size_t len = NumDigits - numTrailingZeroNibbles;
-    for (size_t i = 0; i < len; ++i) {
-      processDigit(((encoded >> shift) & 0xF) - 1);
-      shift -= NibbleSize;
-    }
+    return encodedIri::encodeDigitsAsNibbles(numberStr, NumBitsEncoding);
   }
 
   // The inverse of `encodeDecimalToNBit`. The result is appended to the
   // `result` string.
   static void decodeDecimalFrom64Bit(std::string& result, uint64_t encoded) {
-    decodeDecimalFrom64BitHelper(
-        [&result](auto digit) {
-          result.push_back(static_cast<char>(digit + '0'));
-        },
-        encoded);
+    encodedIri::decodeNibblesToDigits(result, encoded, NumBitsEncoding);
   }
 
   // Overload of `decodeDecimalFrom64Bit` that returns the result as a
   // `uint64_t`.
   static uint64_t decodeDecimalFrom64Bit(uint64_t encoded) {
-    uint64_t result = 0;
-    decodeDecimalFrom64BitHelper(
-        [&result](auto digit) {
-          result *= 10;
-          result += digit;
-        },
-        encoded);
-    return result;
+    return encodedIri::decodeNibblesToNumber(encoded, NumBitsEncoding);
   }
 };
 
