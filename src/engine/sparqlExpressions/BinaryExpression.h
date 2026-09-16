@@ -99,13 +99,18 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                   supportsHomogeneousNumericFastPath<RightValueGetter> &&
                   supportsHomogeneousNumericOperand<Left>() &&
                   supportsHomogeneousNumericOperand<Right>()) {
-      const auto types = classifyNumericOperands(context, left, right);
+      const auto classifications =
+          classifyNumericOperandsWithPreferredType(context, left, right);
 
-      if (ql::ranges::all_of(types, [](HomogeneousNumericType type) {
+      const std::array<HomogeneousNumericType, 2> homogeneousTypes{
+          classifications[0].homogeneousType,
+          classifications[1].homogeneousType};
+
+      if (ql::ranges::all_of(homogeneousTypes, [](HomogeneousNumericType type) {
             return type != HomogeneousNumericType::Other;
           })) {
         return dispatchHomogeneousNumericTypes(
-            types,
+            homogeneousTypes,
             [&left, &right, context](auto leftType,
                                      auto rightType) -> ExpressionResult {
               using LeftNumericType = typename decltype(leftType)::type;
@@ -114,6 +119,25 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
               return evaluateHomogeneousNumericOperation<
                   Function, LeftNumericType, RightNumericType>(
                   std::tie(left, right), context);
+            });
+      }
+
+      const std::array<HomogeneousNumericType, 2> preferredTypes{
+          classifications[0].preferredType, classifications[1].preferredType};
+
+      if (ql::ranges::all_of(preferredTypes, [](HomogeneousNumericType type) {
+            return type != HomogeneousNumericType::Other;
+          })) {
+        return dispatchHomogeneousNumericTypes(
+            preferredTypes,
+            [&left, &right, context](auto leftType,
+                                     auto rightType) -> ExpressionResult {
+              using LeftNumericType = typename decltype(leftType)::type;
+              using RightNumericType = typename decltype(rightType)::type;
+
+              return evaluateSpeculativeNumericOperation<
+                  Function, LeftValueGetter, RightValueGetter, LeftNumericType,
+                  RightNumericType>(left, right, context);
             });
       }
     }

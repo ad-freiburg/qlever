@@ -228,6 +228,25 @@ VectorWithMemoryLimit<Id> makeVectorWithDoubleAt(ql::span<const ValueId> input,
   return result;
 }
 
+VectorWithMemoryLimit<Id> makeVectorWithDoubleEvery(
+    ql::span<const ValueId> input, size_t stride, EvaluationContext* context) {
+  AD_CORRECTNESS_CHECK(stride > 0);
+
+  VectorWithMemoryLimit<Id> result{context->_allocator};
+  result.reserve(input.size());
+
+  for (size_t i = 0; i < input.size(); ++i) {
+    if (i % stride == 0) {
+      result.push_back(
+          Id::makeFromDouble(static_cast<double>(input[i].getInt())));
+    } else {
+      result.push_back(input[i]);
+    }
+  }
+
+  return result;
+}
+
 VectorWithMemoryLimit<Id> makeDoubleVector(ql::span<const ValueId> input,
                                            EvaluationContext* context) {
   VectorWithMemoryLimit<Id> result{context->_allocator};
@@ -269,19 +288,28 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
                                         doubleRightStorage.size()};
     const ValueId constantTwo = Id::makeFromInt(2);
     const ValueId constantTwoDouble = Id::makeFromDouble(2.0);
-    auto mismatchEarlyStorage =
-        makeVectorWithDoubleAt(leftIds, 0, &benchmarkContext.context);
     auto mismatchMiddleStorage =
         makeVectorWithDoubleAt(leftIds, numRows / 2, &benchmarkContext.context);
-    auto mismatchLateStorage =
-        makeVectorWithDoubleAt(leftIds, numRows - 1, &benchmarkContext.context);
+    auto ninetyNineNinePercentIntStorage =
+        makeVectorWithDoubleEvery(leftIds, 1000, &benchmarkContext.context);
+    auto ninetyNinePercentIntStorage =
+        makeVectorWithDoubleEvery(leftIds, 100, &benchmarkContext.context);
+    auto ninetyPercentIntStorage =
+        makeVectorWithDoubleEvery(leftIds, 10, &benchmarkContext.context);
+    auto fiftyPercentIntStorage =
+        makeVectorWithDoubleEvery(leftIds, 2, &benchmarkContext.context);
 
-    ql::span<const ValueId> mismatchEarly{mismatchEarlyStorage.data(),
-                                          mismatchEarlyStorage.size()};
     ql::span<const ValueId> mismatchMiddle{mismatchMiddleStorage.data(),
                                            mismatchMiddleStorage.size()};
-    ql::span<const ValueId> mismatchLate{mismatchLateStorage.data(),
-                                         mismatchLateStorage.size()};
+    ql::span<const ValueId> ninetyNineNinePercentInt{
+        ninetyNineNinePercentIntStorage.data(),
+        ninetyNineNinePercentIntStorage.size()};
+    ql::span<const ValueId> ninetyNinePercentInt{
+        ninetyNinePercentIntStorage.data(), ninetyNinePercentIntStorage.size()};
+    ql::span<const ValueId> ninetyPercentInt{ninetyPercentIntStorage.data(),
+                                             ninetyPercentIntStorage.size()};
+    ql::span<const ValueId> fiftyPercentInt{fiftyPercentIntStorage.data(),
+                                            fiftyPercentIntStorage.size()};
 
     auto legacyVectorVector = makeLegacyVectorVectorExpression();
     auto newVectorVector = makeNewVectorVectorExpression();
@@ -314,16 +342,18 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     warmUpHomogeneousCase(doubleLeft, constantTwoDouble, NumericType::Double,
                           NumericType::Double);
 
-    // Warm up the generic fallback benchmark paths.
+    // Warm up the mixed numeric benchmark paths.
     auto warmUpMixedCase = [&](const auto& left, const auto& right) {
       evaluateGenericBinaryAddCoreRepeatedly(left, right,
                                              benchmarkContext.context, 1);
       evaluateBinaryAddCoreRepeatedly(left, right, benchmarkContext.context, 1);
     };
 
-    warmUpMixedCase(mismatchEarly, rightIds);
     warmUpMixedCase(mismatchMiddle, rightIds);
-    warmUpMixedCase(mismatchLate, rightIds);
+    warmUpMixedCase(ninetyNineNinePercentInt, rightIds);
+    warmUpMixedCase(ninetyNinePercentInt, rightIds);
+    warmUpMixedCase(ninetyPercentInt, rightIds);
+    warmUpMixedCase(fiftyPercentInt, rightIds);
 
     BenchmarkResults results{};
 
@@ -433,19 +463,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
                              NumericType::Double, NumericType::Double);
         });
 
-    // Mixed input and generic fallback.
-    results.addMeasurement(
-        "Generic mixed add: mismatch at 0, 100k rows x 50", [&]() {
-          evaluateGenericBinaryAddCoreRepeatedly(
-              mismatchEarly, rightIds, benchmarkContext.context, repetitions);
-        });
-
-    results.addMeasurement(
-        "BinaryExpression mixed add: mismatch at 0, 100k rows x 50", [&]() {
-          evaluateBinaryAddCoreRepeatedly(
-              mismatchEarly, rightIds, benchmarkContext.context, repetitions);
-        });
-
+    // Mixed numeric input.
     results.addMeasurement(
         "Generic mixed add: mismatch at 50000, 100k rows x 50", [&]() {
           evaluateGenericBinaryAddCoreRepeatedly(
@@ -458,16 +476,86 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
               mismatchMiddle, rightIds, benchmarkContext.context, repetitions);
         });
 
+    results.addMeasurement("Generic mixed add: 99.9% integer, 100k rows x 50",
+                           [&]() {
+                             evaluateGenericBinaryAddCoreRepeatedly(
+                                 ninetyNineNinePercentInt, rightIds,
+                                 benchmarkContext.context, repetitions);
+                           });
+
     results.addMeasurement(
-        "Generic mixed add: mismatch at 99999, 100k rows x 50", [&]() {
-          evaluateGenericBinaryAddCoreRepeatedly(
-              mismatchLate, rightIds, benchmarkContext.context, repetitions);
+        "BinaryExpression mixed add: 99.9% integer, 100k rows x 50", [&]() {
+          evaluateBinaryAddCoreRepeatedly(ninetyNineNinePercentInt, rightIds,
+                                          benchmarkContext.context,
+                                          repetitions);
         });
 
     results.addMeasurement(
-        "BinaryExpression mixed add: mismatch at 99999, 100k rows x 50", [&]() {
+        "Classification only: 99.9% integer, 100k rows x 50", [&]() {
+          classifyRepeatedly(ninetyNineNinePercentInt, rightIds,
+                             benchmarkContext.context, repetitions,
+                             NumericType::Other, NumericType::Int);
+        });
+
+    results.addMeasurement(
+        "Generic mixed add: 99% integer, 100k rows x 50", [&]() {
+          evaluateGenericBinaryAddCoreRepeatedly(ninetyNinePercentInt, rightIds,
+                                                 benchmarkContext.context,
+                                                 repetitions);
+        });
+
+    results.addMeasurement(
+        "BinaryExpression mixed add: 99% integer, 100k rows x 50", [&]() {
+          evaluateBinaryAddCoreRepeatedly(ninetyNinePercentInt, rightIds,
+                                          benchmarkContext.context,
+                                          repetitions);
+        });
+
+    results.addMeasurement(
+        "Classification only: 99% integer, 100k rows x 50", [&]() {
+          classifyRepeatedly(ninetyNinePercentInt, rightIds,
+                             benchmarkContext.context, repetitions,
+                             NumericType::Other, NumericType::Int);
+        });
+
+    results.addMeasurement(
+        "Generic mixed add: 90% integer, 100k rows x 50", [&]() {
+          evaluateGenericBinaryAddCoreRepeatedly(ninetyPercentInt, rightIds,
+                                                 benchmarkContext.context,
+                                                 repetitions);
+        });
+
+    results.addMeasurement(
+        "BinaryExpression mixed add: 90% integer, 100k rows x 50", [&]() {
+          evaluateBinaryAddCoreRepeatedly(ninetyPercentInt, rightIds,
+                                          benchmarkContext.context,
+                                          repetitions);
+        });
+
+    results.addMeasurement(
+        "Classification only: 90% integer, 100k rows x 50", [&]() {
+          classifyRepeatedly(ninetyPercentInt, rightIds,
+                             benchmarkContext.context, repetitions,
+                             NumericType::Other, NumericType::Int);
+        });
+
+    results.addMeasurement(
+        "Generic mixed add: 50% integer, 100k rows x 50", [&]() {
+          evaluateGenericBinaryAddCoreRepeatedly(
+              fiftyPercentInt, rightIds, benchmarkContext.context, repetitions);
+        });
+
+    results.addMeasurement(
+        "BinaryExpression mixed add: 50% integer, 100k rows x 50", [&]() {
           evaluateBinaryAddCoreRepeatedly(
-              mismatchLate, rightIds, benchmarkContext.context, repetitions);
+              fiftyPercentInt, rightIds, benchmarkContext.context, repetitions);
+        });
+
+    results.addMeasurement(
+        "Classification only: 50% integer, 100k rows x 50", [&]() {
+          classifyRepeatedly(fiftyPercentInt, rightIds,
+                             benchmarkContext.context, repetitions,
+                             NumericType::Other, NumericType::Int);
         });
 
     return results;

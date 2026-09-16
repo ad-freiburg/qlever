@@ -504,7 +504,7 @@ TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
   // Preserve `NanOrInfToUndef` in the homogeneous numeric fast path.
   testDivide(V<Id>{{U, U, U}, alloc}, ints, I(0));
 
-  // A mixed numeric vector must fall back to the generic path.
+  // Mixed numeric vectors must preserve the expected arithmetic semantics.
   V<Id> mixed{{I(1), D(2.0), I(3)}, alloc};
   testPlus(V<Id>{{I(2), D(3.0), I(4)}, alloc}, mixed, I(1));
 }

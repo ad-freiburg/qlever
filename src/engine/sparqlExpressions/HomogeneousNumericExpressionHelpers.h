@@ -22,19 +22,19 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/ChunkedForLoop.h"
+#include "util/CompilerExtensions.h"
 #include "util/TypeIdentity.h"
 
 namespace sparqlExpression::detail::homogeneousNumeric {
 
-// Helpers for evaluating binary numeric expressions whose operands are
-// homogeneous with respect to their numeric datatype.
+// Helpers for evaluating numeric expressions whose operands can be inspected
+// directly by their numeric datatype.
 //
 // The generic numeric value getters return variants and therefore require
-// variant dispatch for every result row. For operands that contain only
-// integers or only doubles, these helpers first classify the complete operand
-// and then evaluate the expression using the corresponding primitive C++
-// types. Mixed or non-numeric operands are handled by the generic
-// `BinaryExpression` path.
+// variant dispatch for every result row. These helpers classify numeric
+// operands and evaluate homogeneous inputs directly on primitive C++ types.
+// For mixed inputs, they can additionally determine a preferred numeric type
+// that is used by the speculative fast path.
 
 // The numeric type shared by all elements of an operand. `Other` represents
 // mixed numeric types as well as non-numeric values.
@@ -42,6 +42,15 @@ enum class HomogeneousNumericType {
   Int,
   Double,
   Other,
+};
+
+// Classification of a numeric operand. `homogeneousType` is `Int` or `Double`
+// only if every value has that datatype. For operands consisting only of
+// integers and doubles, `preferredType` is the more frequent datatype and is
+// used for speculative evaluation. Ties prefer `Int`.
+struct NumericOperandClassification {
+  HomogeneousNumericType homogeneousType = HomogeneousNumericType::Other;
+  HomogeneousNumericType preferredType = HomogeneousNumericType::Other;
 };
 
 // Map homogeneous numeric datatypes to their primitive C++ types.
@@ -74,51 +83,102 @@ constexpr bool supportsHomogeneousNumericOperand() {
   }
 }
 
-// Classify all values in a span as integer, double, or other.
-inline HomogeneousNumericType classifyNumericOperand(
+// Classify a span and determine its preferred numeric datatype when all values
+// are integers or doubles.
+inline NumericOperandClassification classifyNumericOperandWithPreferredType(
     ql::span<const ValueId> values, const EvaluationContext* context) {
-  // An empty vector has no meaningful homogeneous numeric type.
   if (values.empty()) {
-    return HomogeneousNumericType::Other;
+    return {};
   }
 
-  bool allInt = true;
-  bool allDouble = true;
+  size_t numInts = 0;
+  size_t numDoubles = 0;
 
-  // Deliberately scan the complete span without an early exit. Using the
-  // breakable `chunkedForLoop` for failed classifications was benchmarked and
-  // caused a significant regression for homogeneous inputs.
   ad_utility::chunkedForLoop<1000>(
       0, values.size(),
-      [&values, &allInt, &allDouble](size_t i) {
-        const auto type = values[i].getDatatype();
-
-        allInt &= type == Datatype::Int;
-        allDouble &= type == Datatype::Double;
+      [&values, &numInts, &numDoubles](size_t i) {
+        switch (values[i].getDatatype()) {
+          case Datatype::Int:
+            ++numInts;
+            break;
+          case Datatype::Double:
+            ++numDoubles;
+            break;
+          default:
+            break;
+        }
       },
       [context]() { context->cancellationHandle_->throwIfCancelled(); });
 
-  if (allInt) {
-    return HomogeneousNumericType::Int;
+  NumericOperandClassification result;
+
+  if (numInts == values.size()) {
+    result.homogeneousType = HomogeneousNumericType::Int;
+  } else if (numDoubles == values.size()) {
+    result.homogeneousType = HomogeneousNumericType::Double;
   }
 
-  if (allDouble) {
-    return HomogeneousNumericType::Double;
+  if (numInts + numDoubles == values.size()) {
+    result.preferredType = numInts >= numDoubles
+                               ? HomogeneousNumericType::Int
+                               : HomogeneousNumericType::Double;
   }
 
-  return HomogeneousNumericType::Other;
+  return result;
+}
+
+// Classify a single `ValueId` and use its numeric datatype as both the
+// homogeneous and preferred type.
+inline NumericOperandClassification classifyNumericOperandWithPreferredType(
+    ValueId value) {
+  switch (value.getDatatype()) {
+    case Datatype::Int:
+      return {HomogeneousNumericType::Int, HomogeneousNumericType::Int};
+    case Datatype::Double:
+      return {HomogeneousNumericType::Double, HomogeneousNumericType::Double};
+    default:
+      return {};
+  }
+}
+
+// Classify a supported operand representation. Constants are classified
+// directly, while vector-like operands are viewed as spans of `ValueId`.
+template <typename Operand>
+inline NumericOperandClassification classifyNumericOperandWithPreferredType(
+    const Operand& operand, const EvaluationContext* context) {
+  using OperandType = std::decay_t<Operand>;
+
+  static_assert(
+      supportsHomogeneousNumericOperand<Operand>(),
+      "Unsupported operand representation for numeric classification");
+
+  if constexpr (ad_utility::isSimilar<OperandType, ValueId>) {
+    return classifyNumericOperandWithPreferredType(operand);
+  } else {
+    return classifyNumericOperandWithPreferredType(
+        ql::span<const ValueId>{operand.data(), operand.size()}, context);
+  }
+}
+
+// Classify all operands and determine both their homogeneous and preferred
+// numeric datatypes.
+template <typename... Operands>
+inline auto classifyNumericOperandsWithPreferredType(
+    const EvaluationContext* context, const Operands&... operands) {
+  return std::array<NumericOperandClassification, sizeof...(Operands)>{
+      classifyNumericOperandWithPreferredType(operands, context)...};
+}
+
+// Classify all values in a span as integer, double, or other.
+inline HomogeneousNumericType classifyNumericOperand(
+    ql::span<const ValueId> values, const EvaluationContext* context) {
+  return classifyNumericOperandWithPreferredType(values, context)
+      .homogeneousType;
 }
 
 // Classify a single `ValueId` by its numeric datatype.
 inline HomogeneousNumericType classifyNumericOperand(ValueId value) {
-  switch (value.getDatatype()) {
-    case Datatype::Int:
-      return HomogeneousNumericType::Int;
-    case Datatype::Double:
-      return HomogeneousNumericType::Double;
-    default:
-      return HomogeneousNumericType::Other;
-  }
+  return classifyNumericOperandWithPreferredType(value).homogeneousType;
 }
 
 // Classify a supported operand representation. Constants are classified
@@ -126,18 +186,8 @@ inline HomogeneousNumericType classifyNumericOperand(ValueId value) {
 template <typename Operand>
 inline HomogeneousNumericType classifyNumericOperand(
     const Operand& operand, const EvaluationContext* context) {
-  using OperandType = std::decay_t<Operand>;
-
-  static_assert(supportsHomogeneousNumericOperand<Operand>(),
-                "Unsupported operand representation for homogeneous numeric "
-                "classification");
-
-  if constexpr (ad_utility::isSimilar<OperandType, ValueId>) {
-    return classifyNumericOperand(operand);
-  } else {
-    return classifyNumericOperand(
-        ql::span<const ValueId>{operand.data(), operand.size()}, context);
-  }
+  return classifyNumericOperandWithPreferredType(operand, context)
+      .homogeneousType;
 }
 
 // Classify all operands by their homogeneous numeric datatype.
@@ -299,6 +349,112 @@ ExpressionResult evaluateHomogeneousNumericOperation(
               result.push_back(function(getter(i)...));
             },
             getters);
+      },
+      [context]() { context->cancellationHandle_->throwIfCancelled(); });
+
+  return result;
+}
+
+// Return the `ValueId` at `index` for a supported numeric operand. For a
+// constant operand, the same value is returned for every index.
+template <typename Operand>
+ValueId getNumericOperandValueId(const Operand& operand, size_t index) {
+  using OperandType = std::decay_t<Operand>;
+
+  static_assert(supportsHomogeneousNumericOperand<Operand>(),
+                "Unsupported operand representation for numeric fast path");
+
+  if constexpr (isVectorResult<OperandType>) {
+    return operand[index];
+  } else {
+    return operand;
+  }
+}
+
+// Evaluate an uncommon pair of numeric operand types outside the hot
+// speculative evaluation loop. Integer and double combinations still use the
+// primitive fast function. Other datatypes fall back to the regular value
+// getters to preserve the generic expression semantics.
+template <typename Function, typename LeftValueGetter,
+          typename RightValueGetter>
+AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
+    ValueId leftValue, ValueId rightValue, EvaluationContext* context,
+    RawNumericFunctionT<Function>& fastFunction, Function& genericFunction) {
+  const auto leftType = leftValue.getDatatype();
+  const auto rightType = rightValue.getDatatype();
+
+  if (leftType == Datatype::Int && rightType == Datatype::Int) {
+    return fastFunction(leftValue.getInt(), rightValue.getInt());
+  }
+
+  if (leftType == Datatype::Int && rightType == Datatype::Double) {
+    return fastFunction(leftValue.getInt(), rightValue.getDouble());
+  }
+
+  if (leftType == Datatype::Double && rightType == Datatype::Int) {
+    return fastFunction(leftValue.getDouble(), rightValue.getInt());
+  }
+
+  if (leftType == Datatype::Double && rightType == Datatype::Double) {
+    return fastFunction(leftValue.getDouble(), rightValue.getDouble());
+  }
+
+  return genericFunction(LeftValueGetter{}(leftValue, context),
+                         RightValueGetter{}(rightValue, context));
+}
+
+// Return the `ValueId` datatype corresponding to a primitive numeric C++ type.
+template <typename NumericType>
+constexpr Datatype datatypeForNumericType() {
+  if constexpr (ql::concepts::same_as<NumericType, int64_t>) {
+    return Datatype::Int;
+  } else if constexpr (ql::concepts::same_as<NumericType, double>) {
+    return Datatype::Double;
+  } else {
+    static_assert(ad_utility::alwaysFalse<NumericType>,
+                  "Unsupported primitive numeric type");
+  }
+}
+
+// Evaluate a numeric binary operation using one expected numeric datatype for
+// each operand. Rows that match both expected datatypes stay on the small hot
+// path. All other rows are handled by the out-of-line slow path.
+template <typename Function, typename LeftValueGetter,
+          typename RightValueGetter, typename LeftNumericType,
+          typename RightNumericType, typename Left, typename Right>
+ExpressionResult evaluateSpeculativeNumericOperation(
+    const Left& left, const Right& right, EvaluationContext* context) {
+  checkHomogeneousNumericOperandSize(left, context);
+  checkHomogeneousNumericOperandSize(right, context);
+
+  using FastFunction = RawNumericFunctionT<Function>;
+  FastFunction fastFunction;
+  Function genericFunction;
+
+  constexpr auto expectedLeftType = datatypeForNumericType<LeftNumericType>();
+  constexpr auto expectedRightType = datatypeForNumericType<RightNumericType>();
+
+  VectorWithMemoryLimit<Id> result{context->_allocator};
+  result.resize(context->size());
+
+  ad_utility::chunkedForLoop<1000>(
+      0, context->size(),
+      [&](size_t i) {
+        const auto leftValue = getNumericOperandValueId(left, i);
+        const auto rightValue = getNumericOperandValueId(right, i);
+
+        if (leftValue.getDatatype() == expectedLeftType &&
+            rightValue.getDatatype() == expectedRightType) {
+          result[i] = fastFunction(
+              getHomogeneousNumericValue<LeftNumericType>(leftValue),
+              getHomogeneousNumericValue<RightNumericType>(rightValue));
+        } else {
+          result[i] =
+              evaluateSpeculativeNumericSlowPath<Function, LeftValueGetter,
+                                                 RightValueGetter>(
+                  leftValue, rightValue, context, fastFunction,
+                  genericFunction);
+        }
       },
       [context]() { context->cancellationHandle_->throwIfCancelled(); });
 
