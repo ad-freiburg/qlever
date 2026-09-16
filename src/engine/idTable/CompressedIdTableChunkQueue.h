@@ -20,7 +20,11 @@
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/experimental/channel.hpp>
+#include <boost/asio/experimental/channel_error.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/system/error_code.hpp>
 #include <cstddef>
@@ -35,6 +39,8 @@
 #include "util/AsioHelpers.h"
 #include "util/CompressedBlockFile.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
+#include "util/Forward.h"
 #include "util/NoCopyNoMove.h"
 #include "util/parallelBlockMerge/BlockStorage.h"
 
@@ -44,48 +50,37 @@ namespace ad_utility::compressedIdTable {
 // `CompressedIdTableBlockStorage`, which keeps only a bounded number of them in
 // memory and spills the rest to a file of its own, compressed. Almost all of
 // the logic of that storage lives here, because a chunk is the unit that
-// everything is bounded and accounted per: the blocks that stay in memory, the
-// file that is spilled to, and the single producer and single consumer that
-// meet in this queue.
+// everything is bounded and accounted per.
 //
-// The blocks of a chunk keep their order no matter whether they were spilled or
-// not, because a single FIFO holds the blocks that are still in memory *and*
-// the metadata of the ones that were spilled, see `Entry`. That FIFO is an
-// unbounded `net::experimental::channel`, which also provides the rendezvous
-// between the two parties: a consumer that finds the queue empty suspends on
-// the channel until the producer sends the next entry, and
-// `cancelWaitingConsumer` wakes it up again. The channel is deliberately
-// *unbounded*, because the number of blocks that this queue keeps in memory is
-// not the number of entries that the FIFO holds: a spilled entry is a handful
-// of bytes of metadata and hence not worth applying back-pressure for, so
-// `maxBufferedBlocks` is accounted for explicitly in `numBlocksInMemory_`.
+// The blocks keep their order no matter whether they were spilled, because a
+// single FIFO holds the blocks that are still in memory *and* the metadata of
+// the spilled ones, see `Entry`. That FIFO is a `net::experimental::channel`,
+// which also provides the rendezvous between the producer and the consumer: a
+// consumer that finds the queue empty suspends on the channel until the
+// producer sends the next entry. It is deliberately *unbounded*, because a
+// spilled entry is a handful of bytes of metadata and hence not worth applying
+// back-pressure for; the blocks that are kept in memory are counted separately
+// in `numBlocksInMemory_`.
 //
-// THREAD SAFETY: All the member functions of this class have to run on the
-// `strand` that it was constructed with, and none of them ever blocks that
-// strand. The compression, the decompression and the I/O all run on the
-// `ioExecutor`, from which the awaiting coroutine resumes back on the strand,
-// see `runFunctionOnExecutor`.
+// THREAD SAFETY: All the state of this queue is confined to a strand of its
+// own, onto which its operations schedule themselves, so they may be initiated
+// from anywhere. Nothing ever blocks that strand: the compression, the
+// decompression and the I/O all run on the `ioExecutor`, from which the
+// awaiting coroutine resumes back on the strand, see `runFunctionOnExecutor`.
 //
 // LIFETIME: This queue has to outlive every operation of it that is in flight,
-// because such an operation refers to it by plain pointer while its blocking
-// part runs on the `ioExecutor`. Its owner guarantees this by holding it in a
-// `shared_ptr` of which every operation keeps a copy, see
-// `CompressedIdTableBlockStorage`. The file is the exception: it is shared, so
-// that `close`ing this queue cannot delete a file out from under an operation
-// that is still writing to or reading from it.
+// which its owner guarantees by holding it in a `shared_ptr` of which every
+// operation keeps a copy, see `CompressedIdTableBlockStorage`. The spill file
+// is shared for the same reason, so that finishing a chunk cannot delete a file
+// out from under a write that is still in flight.
 template <size_t NumCols = 0>
-class ChunkQueue : public NoCopyNoMove {
+class ChunkQueue : public NoCopyNoMove,
+                   public std::enable_shared_from_this<ChunkQueue<NumCols>> {
  public:
   using Block = IdTableStatic<NumCols>;
   using OptionalBlock = parallelBlockMerge::OptionalBlock<Block>;
   using GetResult = parallelBlockMerge::GetResult<Block>;
   using Strand = parallelBlockMerge::Strand;
-
-  // The file that this queue spills to. It is shared, because an operation that
-  // runs on the `ioExecutor_` holds on to it while this queue may already have
-  // been closed, see the LIFETIME note above. The file is deleted as soon as
-  // the last of those references is gone.
-  using SharedSpillFile = std::shared_ptr<CompressedBlockFile>;
 
  private:
   // A single value in the FIFO: either a block that is still in memory (where
@@ -98,8 +93,13 @@ class ChunkQueue : public NoCopyNoMove {
   using EntryChannel =
       net::experimental::channel<void(boost::system::error_code, Entry)>;
 
-  Strand strand_;
+  // The file that this queue spills to. It is shared, because an operation that
+  // runs on the `ioExecutor_` holds on to it while this queue may already be
+  // done with it, see the LIFETIME note above.
+  using SharedSpillFile = std::shared_ptr<CompressedBlockFile>;
+
   net::any_io_executor ioExecutor_;
+  Strand strand_;
   AllocatorWithLimit<Id> allocator_;
   std::string filename_;
   CompressedBlockFile::Compression compression_;
@@ -117,25 +117,24 @@ class ChunkQueue : public NoCopyNoMove {
   // time (the channel itself would happily queue up several of them, and the
   // FIFO order would then be lost), see `BlockStorageConcept::getBlock`.
   bool hasWaitingConsumer_ = false;
-  // Set by `close`, so that a spill which completes afterwards knows that
+  // Set by `finish`, so that a spill which completes afterwards knows that
   // nobody is left who could care about its block.
-  bool wasClosed_ = false;
+  bool wasFinished_ = false;
 
  public:
-  // Construct from the `strand` that all the operations of this queue are
-  // confined to, the `ioExecutor` on which the compression, the decompression
-  // and the I/O are run, the `allocator` for the blocks that are read back, the
-  // name of the file to spill to (which is overwritten if it already exists and
-  // deleted again as soon as this queue is done with it, see `close`), the
-  // `compression` that the spilled blocks are stored with, and the number of
-  // blocks that are kept in memory before this queue starts spilling. That
-  // number may be zero, in which case every block is spilled.
-  ChunkQueue(Strand strand, net::any_io_executor ioExecutor,
-             AllocatorWithLimit<Id> allocator, std::string filename,
-             CompressedBlockFile::Compression compression,
+  // Construct from the `ioExecutor` on which the compression, the decompression
+  // and the I/O are run and from which the strand of this queue is derived, the
+  // `allocator` for the blocks that are read back, the name of the file to
+  // spill to (which is overwritten if it already exists and deleted again as
+  // soon as this queue is done with it), the `compression` that the spilled
+  // blocks are stored with, and the number of blocks that are kept in memory
+  // before this queue starts spilling. That number may be zero, in which case
+  // every block is spilled.
+  ChunkQueue(net::any_io_executor ioExecutor, AllocatorWithLimit<Id> allocator,
+             std::string filename, CompressedBlockFile::Compression compression,
              size_t maxBufferedBlocks)
-      : strand_{std::move(strand)},
-        ioExecutor_{std::move(ioExecutor)},
+      : ioExecutor_{std::move(ioExecutor)},
+        strand_{net::make_strand(ioExecutor_)},
         allocator_{std::move(allocator)},
         filename_{std::move(filename)},
         compression_{compression},
@@ -143,53 +142,27 @@ class ChunkQueue : public NoCopyNoMove {
         entries_{strand_, std::numeric_limits<size_t>::max()} {}
 
   // Append the `block` (or the end-of-chunk sentinel) to this queue, spilling
-  // it if this queue already buffers `maxBufferedBlocks` blocks. Return whether
-  // the block was stored at all, see `BlockStorageConcept::storeBlock`.
-  net::awaitable<bool> storeBlock(OptionalBlock block) {
-    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
-    // The end-of-chunk sentinel is never spilled, because it occupies no memory
-    // and the consumer needs it to make progress.
-    if (!block.has_value() || numBlocksInMemory_ < maxBufferedBlocks_) {
-      enqueueBlockWithoutSpilling(std::move(block));
-      co_return true;
-    }
-    co_return co_await spillBlock(std::move(block).value());
+  // it if this queue already buffers `maxBufferedBlocks` blocks. Complete with
+  // whether the block was stored at all, see
+  // `BlockStorageConcept::storeBlock`.
+  template <typename CompletionToken>
+  auto storeBlock(OptionalBlock block, CompletionToken&& completionToken) {
+    return net::co_spawn(strand_, storeBlockImpl(std::move(block)),
+                         AD_FWD(completionToken));
   }
 
   // Remove the front of this queue, reading it back from the file if it was
   // spilled, and suspend if this queue is currently empty, see
   // `BlockStorageConcept::getBlock`.
-  net::awaitable<GetResult> getBlock() {
-    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
-    AD_CORRECTNESS_CHECK(!hasWaitingConsumer_);
-    hasWaitingConsumer_ = true;
-    auto [errorCode, entry] =
-        co_await entries_.async_receive(net::as_tuple(net::use_awaitable));
-    hasWaitingConsumer_ = false;
-    if (errorCode) {
-      // The channel is never closed, so the only way a receive can fail is that
-      // it was cancelled, see `cancelWaitingConsumer`.
-      //
-      // IMPORTANT: The `entry` has to be ignored on this path, because a
-      // default-constructed one looks exactly like the end-of-chunk sentinel.
-      co_return GetResult{};
-    }
-    if (std::holds_alternative<BlockMetadata>(entry)) {
-      co_return co_await readSpilledBlock(
-          std::get<BlockMetadata>(std::move(entry)));
-    }
-    OptionalBlock block = std::get<OptionalBlock>(std::move(entry));
-    if (!block.has_value()) {
-      co_return GetResult::endOfChunk();
-    }
-    AD_CORRECTNESS_CHECK(numBlocksInMemory_ > 0);
-    --numBlocksInMemory_;
-    co_return GetResult::fromBlock(std::move(block).value());
+  template <typename CompletionToken>
+  auto getBlock(CompletionToken&& completionToken) {
+    return net::co_spawn(strand_, getBlockImpl(), AD_FWD(completionToken));
   }
 
   // Wake up the consumer that currently waits for the next entry of this queue,
   // if there is one, and complete it as cancelled, see
-  // `BlockStorageConcept::cancelAll`.
+  // `BlockStorageConcept::cancelAll`. Callable from anywhere, because the
+  // actual cancellation is scheduled onto `strand_`.
   //
   // NOTE: There is nothing to do for the producer: it never waits for the
   // consumer, only for its own I/O, and such a write is not cancelled but runs
@@ -200,25 +173,76 @@ class ChunkQueue : public NoCopyNoMove {
   // NOTE: This only cancels the operations that are currently suspended and
   // does not close the channel, so a spill that completes afterwards can still
   // append its metadata.
-  void cancelWaitingConsumer() { entries_.cancel(); }
-
-  // Remember that this queue is done and hand its file (if it has one) to the
-  // caller, who is thereby responsible for destroying it.
-  //
-  // NOTE: Destroying the file closes and unlinks it, which blocks, so this
-  // deliberately does not do it here: nothing may block the `strand_`, see
-  // `CompressedIdTableBlockStorage::eraseChunk`.
-  SharedSpillFile close() noexcept {
-    // NOTE: A queue is only closed once its end-of-chunk sentinel was handed
-    // out to the consumer, so that consumer cannot be waiting at the same time.
-    AD_CORRECTNESS_CHECK(!hasWaitingConsumer_);
-    wasClosed_ = true;
-    return std::move(spillFile_);
+  void cancelWaitingConsumer() noexcept {
+    ad_utility::terminateIfThrows(
+        [this] {
+          net::post(strand_, [self = this->shared_from_this()] {
+            self->entries_.cancel();
+          });
+        },
+        "Cancelling the consumer of a chunk failed.");
   }
 
  private:
-  // The body of `storeBlock` for a value that is kept in memory: append it to
-  // the FIFO, and account for it unless it is the end-of-chunk sentinel.
+  // The body of `storeBlock`.
+  //
+  // PRECONDITION: This runs on `strand_`.
+  net::awaitable<bool> storeBlockImpl(OptionalBlock block) {
+    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
+    // The end-of-chunk sentinel is never spilled, because it occupies no memory
+    // and the consumer needs it to make progress.
+    if (!block.has_value() || numBlocksInMemory_ < maxBufferedBlocks_) {
+      enqueueBlockWithoutSpilling(std::move(block));
+      co_return true;
+    }
+    // NOTE: The result is stored in a variable instead of being `co_return`ed
+    // directly, because GCC 11 miscompiles a `co_return co_await`.
+    bool wasStored = co_await spillBlock(std::move(block).value());
+    co_return wasStored;
+  }
+
+  // The body of `getBlock`.
+  //
+  // PRECONDITION: This runs on `strand_`.
+  net::awaitable<GetResult> getBlockImpl() {
+    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
+    AD_CORRECTNESS_CHECK(!hasWaitingConsumer_);
+    hasWaitingConsumer_ = true;
+    // NOTE: The result is bound to a single variable which is only then
+    // destructured, because GCC 15 and 16 miscompile a structured binding by
+    // value in a coroutine.
+    auto received =
+        co_await entries_.async_receive(net::as_tuple(net::use_awaitable));
+    auto& [errorCode, entry] = received;
+    hasWaitingConsumer_ = false;
+    if (errorCode) {
+      // The channel is never closed, so the only way a receive can fail is that
+      // it was cancelled, see `cancelWaitingConsumer`.
+      AD_CORRECTNESS_CHECK(errorCode ==
+                           net::experimental::error::channel_cancelled);
+      // IMPORTANT: The `entry` has to be ignored on this path, because a
+      // default-constructed one looks exactly like the end-of-chunk sentinel.
+      co_return GetResult{};
+    }
+    if (std::holds_alternative<BlockMetadata>(entry)) {
+      // See the NOTE at `storeBlockImpl` for why this is not `co_return
+      // co_await`.
+      GetResult result =
+          co_await readSpilledBlock(std::get<BlockMetadata>(std::move(entry)));
+      co_return result;
+    }
+    OptionalBlock block = std::get<OptionalBlock>(std::move(entry));
+    if (!block.has_value()) {
+      finish();
+      co_return GetResult::endOfChunk();
+    }
+    AD_CORRECTNESS_CHECK(numBlocksInMemory_ > 0);
+    --numBlocksInMemory_;
+    co_return GetResult::fromBlock(std::move(block).value());
+  }
+
+  // The body of `storeBlockImpl` for a value that is kept in memory: append it
+  // to the FIFO, and account for it unless it is the end-of-chunk sentinel.
   void enqueueBlockWithoutSpilling(OptionalBlock block) {
     bool isBlock = block.has_value();
     bool wasSent =
@@ -231,8 +255,8 @@ class ChunkQueue : public NoCopyNoMove {
     }
   }
 
-  // The body of `storeBlock` for a block that has to be spilled: compress the
-  // block and write it to the file of this queue on the `ioExecutor_`, then
+  // The body of `storeBlockImpl` for a block that has to be spilled: compress
+  // the block and write it to the file of this queue on the `ioExecutor_`, then
   // append its metadata to the FIFO back on the `strand_`. Create the file
   // first if this is the first block that this queue spills.
   net::awaitable<bool> spillBlock(Block block) {
@@ -248,9 +272,9 @@ class ChunkQueue : public NoCopyNoMove {
         },
         net::use_awaitable);
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
-    if (wasClosed_) {
-      // This queue was closed while the block was being written, so there is no
-      // consumer left that could care about that block.
+    if (wasFinished_) {
+      // This chunk was finished while the block was being written, so there is
+      // no consumer left that could care about that block.
       co_return false;
     }
     bool wasSent = entries_.try_send(boost::system::error_code{},
@@ -260,11 +284,11 @@ class ChunkQueue : public NoCopyNoMove {
     co_return true;
   }
 
-  // The body of `getBlock` for an entry that was spilled: read that block back
-  // from the file of this queue on the `ioExecutor_`.
+  // The body of `getBlockImpl` for an entry that was spilled: read that block
+  // back from the file of this queue on the `ioExecutor_`.
   net::awaitable<GetResult> readSpilledBlock(BlockMetadata metadata) {
     // NOTE: A spilled entry can only exist if this queue has a file, and that
-    // file is passed on as a `shared_ptr`, so closing this queue concurrently
+    // file is passed on as a `shared_ptr`, so finishing this queue concurrently
     // cannot delete it while it is being read.
     AD_CORRECTNESS_CHECK(spillFile_ != nullptr);
     OptionalBlock block = co_await runFunctionOnExecutor(
@@ -291,6 +315,33 @@ class ChunkQueue : public NoCopyNoMove {
           std::make_shared<CompressedBlockFile>(filename_, compression_);
     }
     return spillFile_;
+  }
+
+  // Remember that this queue is done and destroy its file. This is called
+  // exactly when the end-of-chunk sentinel is handed out, which is the point
+  // from which nothing will ever be read from this queue again, so no consumer
+  // can be waiting on it either.
+  //
+  // IMPORTANT: Closing and unlinking the file blocks, and the cost of the
+  // unlink grows with the number of page-cache pages that the file still holds
+  // (measured at roughly 78 microseconds per megabyte), so the last reference
+  // to it must not die on `strand_`, which nothing may block. For uniformly
+  // distributed `Id`s, whose blocks hardly compress, deleting the file on the
+  // strand instead of on the `ioExecutor_` costs 14 % of the whole merge.
+  //
+  // PRECONDITION: This runs on `strand_`.
+  void finish() {
+    wasFinished_ = true;
+    if (spillFile_ == nullptr) {
+      return;
+    }
+    net::post(ioExecutor_, [file = std::move(spillFile_)]() mutable {
+      // NOTE: A handler must not throw, and the destructor of a
+      // `CompressedBlockFile` may (it deletes the file).
+      ad_utility::terminateIfThrows([&file] { file.reset(); },
+                                    "Deleting the spill file of a chunk "
+                                    "failed.");
+    });
   }
 };
 

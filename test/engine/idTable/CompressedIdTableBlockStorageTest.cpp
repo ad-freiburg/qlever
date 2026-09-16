@@ -24,7 +24,6 @@
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
-#include <boost/asio/strand.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -44,11 +43,10 @@
 #include "util/parallelBlockMerge/InOrderBlockSink.h"
 
 namespace {
-// The storage under test, and the strand that all of its operations are
-// confined to.
+// The storage under test, whose operations may be initiated from anywhere,
+// because it brings a strand of its own.
 template <size_t NumCols>
 using Storage = ad_utility::CompressedIdTableBlockStorage<NumCols>;
-using Strand = Storage<0>::Strand;
 static_assert(ad_utility::parallelBlockMerge::BlockStorageConcept<
               Storage<0>, IdTableStatic<0>>);
 
@@ -173,17 +171,13 @@ MergePlan<NumCols> makePlan(size_t numChunks, size_t numBlocksPerChunk,
 // `maxBufferedBlocksPerChunk` blocks per chunk in memory, and that stores the
 // spilled blocks with the given `compression`.
 template <size_t NumCols>
-Storage<NumCols> makeStorage(const Strand& strand, net::io_context& ioContext,
-                             std::string filename,
+Storage<NumCols> makeStorage(net::io_context& ioContext, std::string filename,
                              size_t maxBufferedBlocksPerChunk,
                              ad_utility::CompressedBlockFile::Compression
                                  compression = ad_utility::ZSTD_DEFAULT_LEVEL) {
-  return Storage<NumCols>{strand,
-                          ioContext.get_executor(),
-                          std::move(filename),
+  return Storage<NumCols>{ioContext.get_executor(), std::move(filename),
                           ad_utility::testing::makeAllocator(),
-                          maxBufferedBlocksPerChunk,
-                          compression};
+                          maxBufferedBlocksPerChunk, compression};
 }
 
 // The compressions that the round trips below are run with: the default ZSTD
@@ -205,10 +199,10 @@ compressions() {
 // NOTE: In contrast to the harness of
 // `test/parallelBlockMerge/BlockStorageTest.cpp`, a single `poll()` does not
 // suffice here, because a single operation of this storage is a whole chain of
-// posted handlers that alternates between the strand and the `ioExecutor` (on
-// which the compression and the I/O run), and a test may deliberately use a
-// *separate* `io_context` for each of the two. `poll()` returns the number of
-// handlers that it ran, so the loop stops as soon as everything is quiescent.
+// posted handlers that alternates between the strand of the storage, the strand
+// of a chunk, and the blocking compression and I/O. `poll()` returns the number
+// of handlers that it ran, so the loop stops as soon as everything is
+// quiescent.
 //
 // NOTE: This deliberately uses `poll` and not `run`, because `run` would never
 // return while an operation of the storage is still suspended (a suspended
@@ -228,13 +222,45 @@ void pollUntilQuiescent(std::initializer_list<net::io_context*> contexts) {
   }
 }
 
-// Run the `function` on the `strand` and then run everything that becomes ready
-// because of it, see `pollUntilQuiescent`.
+// Run the handlers of `context` one at a time until the `predicate` holds, or
+// until nothing is left to run. This is how a test stops in the middle of an
+// operation, for example while a block is on its way to the file.
+template <typename Predicate>
+void pollUntil(net::io_context& context, const Predicate& predicate) {
+  while (!predicate()) {
+    if (context.stopped()) {
+      context.restart();
+    }
+    if (context.poll_one() == 0) {
+      return;
+    }
+  }
+}
+
+// Run the `function` and then everything that becomes ready because of it, see
+// `pollUntilQuiescent`. The operations of the storage may be initiated from
+// anywhere, so the function simply runs on the thread of the test.
 template <typename Function>
-void runOnStrand(std::initializer_list<net::io_context*> contexts,
-                 const Strand& strand, Function function) {
-  net::post(strand, std::move(function));
+void runAndPoll(std::initializer_list<net::io_context*> contexts,
+                Function function) {
+  function();
   pollUntilQuiescent(contexts);
+}
+
+// The number of chunks for which the `storage` currently holds a queue. That
+// number lives on the strand of the storage, so obtaining it is an
+// asynchronous operation, see `Storage::asyncNumLiveChunksForTesting`.
+template <size_t NumCols>
+size_t numLiveChunks(net::io_context& ioContext, Storage<NumCols>& storage) {
+  std::optional<size_t> result;
+  storage.asyncNumLiveChunksForTesting(
+      [&result](std::exception_ptr exception, size_t numChunks) {
+        EXPECT_EQ(exception, nullptr);
+        result = numChunks;
+      });
+  pollUntilQuiescent({&ioContext});
+  EXPECT_TRUE(result.has_value());
+  return result.value_or(0);
 }
 
 // The outcome of the `storeBlock` operations of a single producer, which is
@@ -331,14 +357,13 @@ class Producer {
 TEST(CompressedIdTableBlockStorage, directRoundTripWithoutAnyBuffering) {
   for (size_t i = 0; i < compressions().size(); ++i) {
     net::io_context ioContext;
-    Strand strand = net::make_strand(ioContext.get_executor());
     // Buffer nothing, such that every single block is spilled.
     Storage<0> storage = makeStorage<0>(
-        strand, ioContext, gtestCurrentTestName() + "." + std::to_string(i), 0,
+        ioContext, gtestCurrentTestName() + "." + std::to_string(i), 0,
         compressions().at(i));
     Producer<0> producer{storage, 0, makeValues<0>(2, {{0, 1}, {}, {2}}, true)};
     GetOutcomes gets;
-    runOnStrand({&ioContext}, strand, [&] {
+    runAndPoll({&ioContext}, [&] {
       producer.storeAll();
       get(storage, 0, gets, true);
     });
@@ -355,12 +380,10 @@ TEST(CompressedIdTableBlockStorage, directRoundTripWithoutAnyBuffering) {
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlockStorage, directRoundTripWithAStaticNumberOfColumns) {
   net::io_context ioContext;
-  Strand strand = net::make_strand(ioContext.get_executor());
-  Storage<3> storage =
-      makeStorage<3>(strand, ioContext, gtestCurrentTestName(), 1);
+  Storage<3> storage = makeStorage<3>(ioContext, gtestCurrentTestName(), 1);
   Producer<3> producer{storage, 0, makeValues<3>(3, {{0}, {1, 2}, {}}, true)};
   GetOutcomes gets;
-  runOnStrand({&ioContext}, strand, [&] {
+  runAndPoll({&ioContext}, [&] {
     producer.storeAll();
     get(storage, 0, gets, true);
   });
@@ -375,14 +398,12 @@ TEST(CompressedIdTableBlockStorage, directRoundTripWithAStaticNumberOfColumns) {
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlockStorage, directChunksAreIndependent) {
   net::io_context ioContext;
-  Strand strand = net::make_strand(ioContext.get_executor());
-  Storage<0> storage =
-      makeStorage<0>(strand, ioContext, gtestCurrentTestName(), 1);
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 1);
   Producer<0> firstProducer{storage, 0, makeValues<0>(1, {{0}, {1}}, true)};
   Producer<0> secondProducer{storage, 1, makeValues<0>(1, {{10}, {11}}, true)};
   GetOutcomes getsOfChunkOne;
   GetOutcomes getsOfChunkZero;
-  runOnStrand({&ioContext}, strand, [&] {
+  runAndPoll({&ioContext}, [&] {
     secondProducer.storeAll();
     firstProducer.storeAll();
     // The chunk with the higher index may be drained first.
@@ -400,17 +421,15 @@ TEST(CompressedIdTableBlockStorage, directChunksAreIndependent) {
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlockStorage, aConsumerWaitsForItsProducer) {
   net::io_context ioContext;
-  Strand strand = net::make_strand(ioContext.get_executor());
-  Storage<0> storage =
-      makeStorage<0>(strand, ioContext, gtestCurrentTestName(), 0);
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 0);
   GetOutcomes gets;
   // Ask for a block of a chunk that does not exist yet, which has to suspend.
-  runOnStrand({&ioContext}, strand, [&] { get(storage, 0, gets, false); });
+  runAndPoll({&ioContext}, [&] { get(storage, 0, gets, false); });
   EXPECT_THAT(gets.blocks_, ::testing::IsEmpty());
   Producer<0> producer{storage, 0, makeValues<0>(1, {{42}}, false)};
   // The waiting consumer is served as soon as the block has been spilled, which
-  // is the case once the `ioExecutor` and the strand are quiescent again.
-  runOnStrand({&ioContext}, strand, [&] { producer.storeAll(); });
+  // is the case once everything is quiescent again.
+  runAndPoll({&ioContext}, [&] { producer.storeAll(); });
   EXPECT_THAT(producer.outcomes_.wasStored_, ::testing::ElementsAre(true));
   EXPECT_THAT(gets.blocks_, ::testing::ElementsAre(makeRows(1, {42})));
 }
@@ -422,31 +441,29 @@ TEST(CompressedIdTableBlockStorage, laterBlocksMayLandInMemory) {
   // land in memory while an *earlier*, spilled one is still queued ahead of it.
   // The FIFO order has to survive that.
   net::io_context ioContext;
-  Strand strand = net::make_strand(ioContext.get_executor());
-  Storage<0> storage =
-      makeStorage<0>(strand, ioContext, gtestCurrentTestName(), 1);
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 1);
   // The first block stays in memory, the second one is spilled, because the
   // single in-memory slot of the chunk is taken.
   Producer<0> firstProducer{storage, 0, makeValues<0>(1, {{0}, {1}}, false)};
-  runOnStrand({&ioContext}, strand, [&] { firstProducer.storeAll(); });
+  runAndPoll({&ioContext}, [&] { firstProducer.storeAll(); });
   EXPECT_THAT(firstProducer.outcomes_.wasStored_,
               ::testing::ElementsAre(true, true));
   auto sizeAfterTheSpill = ql::filesystem::file_size(storage.spillFilename(0));
   EXPECT_GT(sizeAfterTheSpill, 0u);
   // Consuming the first block frees the single in-memory slot again.
   GetOutcomes gets;
-  runOnStrand({&ioContext}, strand, [&] { get(storage, 0, gets, false); });
+  runAndPoll({&ioContext}, [&] { get(storage, 0, gets, false); });
   EXPECT_THAT(gets.blocks_, ::testing::ElementsAre(makeRows(1, {0})));
   // So the third block lands in memory, which is why the file does not grow
   // anymore, even though the spilled second block is still queued ahead of it.
   Producer<0> secondProducer{storage, 0, makeValues<0>(1, {{2}}, true)};
-  runOnStrand({&ioContext}, strand, [&] { secondProducer.storeAll(); });
+  runAndPoll({&ioContext}, [&] { secondProducer.storeAll(); });
   EXPECT_THAT(secondProducer.outcomes_.wasStored_,
               ::testing::ElementsAre(true, true));
   EXPECT_EQ(ql::filesystem::file_size(storage.spillFilename(0)),
             sizeAfterTheSpill);
   // The order across that boundary is the one in which the blocks were stored.
-  runOnStrand({&ioContext}, strand, [&] { get(storage, 0, gets, true); });
+  runAndPoll({&ioContext}, [&] { get(storage, 0, gets, true); });
   EXPECT_THAT(gets.blocks_,
               ::testing::ElementsAre(makeRows(1, {0}), makeRows(1, {1}),
                                      makeRows(1, {2})));
@@ -461,9 +478,7 @@ TEST(CompressedIdTableBlockStorage, theProducerIsNotBlockedByALaggingConsumer) {
   // `test/parallelBlockMerge/BlockStorageTest.cpp` asserts the opposite.
   constexpr size_t numBlocks = 10;
   net::io_context ioContext;
-  Strand strand = net::make_strand(ioContext.get_executor());
-  Storage<0> storage =
-      makeStorage<0>(strand, ioContext, gtestCurrentTestName(), 2);
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 2);
   std::vector<std::vector<int64_t>> blocks;
   std::vector<int64_t> allValues;
   for (size_t blockIndex = 0; blockIndex < numBlocks; ++blockIndex) {
@@ -473,14 +488,14 @@ TEST(CompressedIdTableBlockStorage, theProducerIsNotBlockedByALaggingConsumer) {
   Producer<0> producer{storage, 0, makeValues<0>(2, blocks, true)};
   // Push everything before the consumer reads a single block. All the pushes
   // have to complete, otherwise the producer would be stuck.
-  runOnStrand({&ioContext}, strand, [&] { producer.storeAll(); });
+  runAndPoll({&ioContext}, [&] { producer.storeAll(); });
   EXPECT_THAT(
       producer.outcomes_.wasStored_,
       ::testing::ElementsAreArray(std::vector<bool>(numBlocks + 1, true)));
   // Only two of the blocks fit in memory, so the rest really was spilled.
   EXPECT_GT(ql::filesystem::file_size(storage.spillFilename(0)), 0u);
   GetOutcomes gets;
-  runOnStrand({&ioContext}, strand, [&] { get(storage, 0, gets, true); });
+  runAndPoll({&ioContext}, [&] { get(storage, 0, gets, true); });
   std::vector<std::vector<Row>> expected;
   for (int64_t value : allValues) {
     expected.push_back(makeRows(2, {value}));
@@ -492,12 +507,10 @@ TEST(CompressedIdTableBlockStorage, theProducerIsNotBlockedByALaggingConsumer) {
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlockStorage, theSentinelDropsTheChunk) {
   net::io_context ioContext;
-  Strand strand = net::make_strand(ioContext.get_executor());
-  Storage<0> storage =
-      makeStorage<0>(strand, ioContext, gtestCurrentTestName(), 0);
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 0);
   Producer<0> firstProducer{storage, 0, makeValues<0>(1, {{0}, {1}}, true)};
   GetOutcomes gets;
-  runOnStrand({&ioContext}, strand, [&] {
+  runAndPoll({&ioContext}, [&] {
     firstProducer.storeAll();
     get(storage, 0, gets, true);
   });
@@ -506,11 +519,11 @@ TEST(CompressedIdTableBlockStorage, theSentinelDropsTheChunk) {
   EXPECT_TRUE(gets.sawSentinel_);
   // Handing out the end-of-chunk sentinel dropped everything that belonged to
   // that chunk, see `BlockStorageConcept::getBlock`.
-  EXPECT_EQ(storage.numLiveChunksForTesting(), 0u);
+  EXPECT_EQ(numLiveChunks(ioContext, storage), 0u);
   // So a producer that reuses the index starts from an empty queue.
   Producer<0> secondProducer{storage, 0, makeValues<0>(1, {{2}}, true)};
   GetOutcomes getsAfterReuse;
-  runOnStrand({&ioContext}, strand, [&] {
+  runAndPoll({&ioContext}, [&] {
     secondProducer.storeAll();
     get(storage, 0, getsAfterReuse, true);
   });
@@ -518,57 +531,55 @@ TEST(CompressedIdTableBlockStorage, theSentinelDropsTheChunk) {
               ::testing::ElementsAre(true, true));
   EXPECT_THAT(getsAfterReuse.blocks_, ::testing::ElementsAre(makeRows(1, {2})));
   EXPECT_TRUE(getsAfterReuse.sawSentinel_);
-  EXPECT_EQ(storage.numLiveChunksForTesting(), 0u);
+  EXPECT_EQ(numLiveChunks(ioContext, storage), 0u);
 }
 
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlockStorage, aSpillThatOutlivesItsChunkIsDropped) {
-  // The two `io_context`s are deliberately kept apart, such that this test
-  // controls exactly when the spill of a block makes progress: `strandContext`
-  // runs the strand of the storage, whereas `ioExecutorContext` plays the role
-  // of the `ioExecutor` on which the compression and the I/O run.
-  net::io_context strandContext;
-  net::io_context ioExecutorContext;
-  Strand strand = net::make_strand(strandContext.get_executor());
-  Storage<0> storage =
-      makeStorage<0>(strand, ioExecutorContext, gtestCurrentTestName(), 0);
-  std::vector<std::optional<IdTableStatic<0>>> sentinelFirst;
-  sentinelFirst.push_back(std::nullopt);
-  sentinelFirst.push_back(makeBlock<0>(1, {0}));
-  Producer<0> producer{storage, 0, std::move(sentinelFirst)};
-  // Store the end-of-chunk sentinel first and the block after it, so that the
-  // consumer can finish (and thereby drop) the chunk while that block is still
-  // on its way to the file. The sentinel is never spilled, so storing it
-  // completes right away, whereas the block's spill needs the `ioExecutor`,
-  // which is deliberately not run yet.
+  // A block that is spilled once its chunk has been finished has nobody left
+  // who could care about it, so the storage reports that it was *not* stored,
+  // see `ChunkQueue::spillBlock`. In the parallel merge that happens when the
+  // consumer takes the end-of-chunk sentinel while the write of a block is
+  // still in flight on another thread; the single-threaded harness here reaches
+  // the very same check by storing the block after the sentinel was handed out.
   //
-  // NOTE: This order is not the one that the sink uses (it pushes the sentinel
-  // last), but the storage has to survive it, because it is what makes the
-  // "the chunk is gone by the time the write completes" path of `finishSpill`
-  // reachable at all.
-  runOnStrand({&strandContext}, strand, [&] { producer.storeAll(); });
-  EXPECT_THAT(producer.outcomes_.wasStored_, ::testing::ElementsAre(true));
-  // Hand out the sentinel, which drops the chunk, so that nobody is left who
-  // could care about that block once the write completes.
+  // NOTE: Neither order is the one that the sink uses (it pushes the sentinel
+  // last), but the storage has to survive them, because they are what makes
+  // that path reachable at all.
+  net::io_context ioContext;
+  // Buffer nothing, such that the block really is spilled.
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 0);
+  // Store the end-of-chunk sentinel, which is never spilled and hence completes
+  // right away.
+  Producer<0> sentinelProducer{storage, 0, makeValues<0>(1, {}, true)};
+  runAndPoll({&ioContext}, [&] { sentinelProducer.storeAll(); });
+  EXPECT_THAT(sentinelProducer.outcomes_.wasStored_,
+              ::testing::ElementsAre(true));
+  // Hand that sentinel out, which finishes the chunk, and store a block into
+  // the very same queue right after it.
+  Producer<0> blockProducer{storage, 0, makeValues<0>(1, {{0}}, false)};
   GetOutcomes gets;
-  runOnStrand({&strandContext}, strand, [&] { get(storage, 0, gets, false); });
+  runAndPoll({&ioContext}, [&] {
+    get(storage, 0, gets, false);
+    blockProducer.storeAll();
+  });
   EXPECT_TRUE(gets.sawSentinel_);
-  EXPECT_EQ(storage.numLiveChunksForTesting(), 0u);
-  pollUntilQuiescent({&strandContext, &ioExecutorContext});
-  EXPECT_THAT(producer.outcomes_.wasStored_,
-              ::testing::ElementsAre(true, false));
+  EXPECT_EQ(numLiveChunks(ioContext, storage), 0u);
+  EXPECT_THAT(blockProducer.outcomes_.wasStored_,
+              ::testing::ElementsAre(false));
+  // The file that the dropped block created on its way is deleted again with
+  // the queue that nobody holds anymore.
+  EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(0)));
 }
 
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlockStorage, cancelAllWakesUpAWaitingConsumer) {
   net::io_context ioContext;
-  Strand strand = net::make_strand(ioContext.get_executor());
-  Storage<0> storage =
-      makeStorage<0>(strand, ioContext, gtestCurrentTestName(), 1);
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 1);
   GetOutcomes gets;
-  runOnStrand({&ioContext}, strand, [&] { get(storage, 0, gets, false); });
+  runAndPoll({&ioContext}, [&] { get(storage, 0, gets, false); });
   EXPECT_FALSE(gets.wasCancelled_);
-  runOnStrand({&ioContext}, strand, [&] { storage.cancelAll(); });
+  runAndPoll({&ioContext}, [&] { storage.cancelAll(); });
   EXPECT_TRUE(gets.wasCancelled_);
   EXPECT_THAT(gets.blocks_, ::testing::IsEmpty());
 }
@@ -578,16 +589,20 @@ TEST(CompressedIdTableBlockStorage, cancelAllDoesNotAbortAnInFlightSpill) {
   // A producer of this storage never waits for the consumer, so the only thing
   // that `cancelAll` could interrupt is a spill that is currently in flight. It
   // deliberately does not do that, see the NOTE at `cancelAll`.
-  net::io_context strandContext;
-  net::io_context ioExecutorContext;
-  Strand strand = net::make_strand(strandContext.get_executor());
-  Storage<0> storage =
-      makeStorage<0>(strand, ioExecutorContext, gtestCurrentTestName(), 0);
+  net::io_context ioContext;
+  // Buffer nothing, such that the single block really is spilled.
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 0);
   Producer<0> producer{storage, 0, makeValues<0>(1, {{0}}, false)};
-  runOnStrand({&strandContext}, strand, [&] { producer.storeAll(); });
+  producer.storeAll();
+  // Stop as soon as the file of the chunk exists. It is created on the strand
+  // of that chunk immediately before the write of the block is handed to the
+  // `ioExecutor`, so the spill is in flight and nothing else is.
+  pollUntil(ioContext,
+            [&] { return ql::filesystem::exists(storage.spillFilename(0)); });
+  EXPECT_TRUE(ql::filesystem::exists(storage.spillFilename(0)));
   EXPECT_THAT(producer.outcomes_.wasStored_, ::testing::IsEmpty());
-  runOnStrand({&strandContext}, strand, [&] { storage.cancelAll(); });
-  pollUntilQuiescent({&strandContext, &ioExecutorContext});
+  storage.cancelAll();
+  pollUntilQuiescent({&ioContext});
   // NOTE: The storage reports that the block *was* stored, although it was
   // cancelled while that store was in flight, which deviates from the wording
   // of `BlockStorage::storeBlock`. That is benign, because the
@@ -601,23 +616,22 @@ TEST(CompressedIdTableBlockStorage, cancelAllDoesNotAbortAnInFlightSpill) {
 TEST(CompressedIdTableBlockStorage, theSpillFileIsCreatedAndDeleted) {
   std::string prefix = gtestCurrentTestName();
   net::io_context ioContext;
-  Strand strand = net::make_strand(ioContext.get_executor());
   {
     // NOTE: No `absl::Cleanup` that deletes the files is required here, because
     // deleting them is exactly the behavior of the storage that this test
     // checks.
-    Storage<0> storage = makeStorage<0>(strand, ioContext, prefix, 0);
+    Storage<0> storage = makeStorage<0>(ioContext, prefix, 0);
     EXPECT_EQ(storage.filenamePrefix(), prefix);
     std::string fileOfChunkZero = storage.spillFilename(0);
     EXPECT_THAT(fileOfChunkZero, ::testing::StartsWith(prefix));
     // The file is created with the first block that is spilled and not before.
     EXPECT_FALSE(ql::filesystem::exists(fileOfChunkZero));
     Producer<0> producer{storage, 0, makeValues<0>(1, {{0}, {1}}, true)};
-    runOnStrand({&ioContext}, strand, [&] { producer.storeAll(); });
+    runAndPoll({&ioContext}, [&] { producer.storeAll(); });
     EXPECT_GT(ql::filesystem::file_size(fileOfChunkZero), 0u);
     // A chunk that never spills never creates a file at all.
     Producer<0> emptyProducer{storage, 1, makeValues<0>(1, {}, true)};
-    runOnStrand({&ioContext}, strand, [&] { emptyProducer.storeAll(); });
+    runAndPoll({&ioContext}, [&] { emptyProducer.storeAll(); });
     EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(1)));
   }
   EXPECT_FALSE(ql::filesystem::exists(prefix + ".0"));
@@ -631,9 +645,8 @@ TEST(CompressedIdTableBlockStorage, theSpillFileIsCreatedAndDeleted) {
 TEST(CompressedIdTableBlockStorage, aFinishedChunkReclaimsItsSpillFile) {
   std::string prefix = gtestCurrentTestName();
   net::io_context ioContext;
-  Strand strand = net::make_strand(ioContext.get_executor());
   // Buffer nothing, such that every block of every chunk is spilled.
-  Storage<0> storage = makeStorage<0>(strand, ioContext, prefix, 0);
+  Storage<0> storage = makeStorage<0>(ioContext, prefix, 0);
   absl::Cleanup cleanup = [&storage] {
     for (size_t chunkIndex = 0; chunkIndex < 3; ++chunkIndex) {
       ad_utility::deleteFile(storage.spillFilename(chunkIndex), false);
@@ -643,20 +656,19 @@ TEST(CompressedIdTableBlockStorage, aFinishedChunkReclaimsItsSpillFile) {
   for (size_t chunkIndex = 0; chunkIndex < 3; ++chunkIndex) {
     Producer<0> producer{storage, chunkIndex,
                          makeValues<0>(1, {{0}, {1}}, true)};
-    runOnStrand({&ioContext}, strand, [&] { producer.storeAll(); });
+    runAndPoll({&ioContext}, [&] { producer.storeAll(); });
     EXPECT_GT(ql::filesystem::file_size(storage.spillFilename(chunkIndex)), 0u);
   }
   // Draining a chunk up to its sentinel deletes its file, and only its file.
   GetOutcomes getsOfChunkOne;
-  runOnStrand({&ioContext}, strand,
-              [&] { get(storage, 1, getsOfChunkOne, true); });
+  runAndPoll({&ioContext}, [&] { get(storage, 1, getsOfChunkOne, true); });
   EXPECT_TRUE(getsOfChunkOne.sawSentinel_);
   EXPECT_TRUE(ql::filesystem::exists(storage.spillFilename(0)));
   EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(1)));
   EXPECT_TRUE(ql::filesystem::exists(storage.spillFilename(2)));
   GetOutcomes getsOfChunkZero;
   GetOutcomes getsOfChunkTwo;
-  runOnStrand({&ioContext}, strand, [&] {
+  runAndPoll({&ioContext}, [&] {
     get(storage, 0, getsOfChunkZero, true);
     get(storage, 2, getsOfChunkTwo, true);
   });
@@ -664,7 +676,7 @@ TEST(CompressedIdTableBlockStorage, aFinishedChunkReclaimsItsSpillFile) {
   EXPECT_TRUE(getsOfChunkTwo.sawSentinel_);
   EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(0)));
   EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(2)));
-  EXPECT_EQ(storage.numLiveChunksForTesting(), 0u);
+  EXPECT_EQ(numLiveChunks(ioContext, storage), 0u);
 }
 
 // _____________________________________________________________________________
@@ -674,18 +686,17 @@ TEST(CompressedIdTableBlockStorage, aFinishedChunkReclaimsItsSpillFile) {
 TEST(CompressedIdTableBlockStorage, theUncompressedSpillFileHasTheExactSize) {
   std::string prefix = gtestCurrentTestName();
   net::io_context ioContext;
-  Strand strand = net::make_strand(ioContext.get_executor());
   static constexpr size_t numColumns = 2;
   // Buffer nothing, such that every single block is spilled.
-  Storage<0> storage = makeStorage<0>(strand, ioContext, prefix, 0,
-                                      ad_utility::NO_BLOCK_COMPRESSION);
+  Storage<0> storage =
+      makeStorage<0>(ioContext, prefix, 0, ad_utility::NO_BLOCK_COMPRESSION);
   std::string filename = storage.spillFilename(0);
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename, false);
   };
   Producer<0> producer{storage, 0,
                        makeValues<0>(numColumns, {{0, 1, 2}, {}, {3}}, true)};
-  runOnStrand({&ioContext}, strand, [&] { producer.storeAll(); });
+  runAndPoll({&ioContext}, [&] { producer.storeAll(); });
   // Four rows of two columns were spilled, and the empty block added nothing.
   //
   // NOTE: This has to be checked before the blocks are consumed, because
@@ -693,7 +704,7 @@ TEST(CompressedIdTableBlockStorage, theUncompressedSpillFileHasTheExactSize) {
   // `aFinishedChunkReclaimsItsSpillFile`.
   EXPECT_EQ(ql::filesystem::file_size(filename), 4 * numColumns * sizeof(Id));
   GetOutcomes gets;
-  runOnStrand({&ioContext}, strand, [&] { get(storage, 0, gets, true); });
+  runAndPoll({&ioContext}, [&] { get(storage, 0, gets, true); });
   EXPECT_THAT(gets.blocks_,
               ::testing::ElementsAre(makeRows(numColumns, {0, 1, 2}),
                                      makeRows(numColumns, {}),
