@@ -57,10 +57,14 @@ runs:
 
     - name: Ensure cmake version >= ${{ inputs.cmake-version }}
       if: steps.cmake.outputs.cmake-version < inputs.cmake-version
+      # The binary release is downloaded from Kitware's GitHub releases (the
+      # same tarball that `cmake.org/files` serves, but that server rejects
+      # the runners' downloads with `403 Forbidden` from time to time).
       run:  |
         sudo apt-get remove -y cmake
-        export CMAKE_FULL_VERSION="cmake-${{ inputs.cmake-version }}.${{ inputs.cmake-build-version }}-linux-x86_64"
-        wget "https://cmake.org/files/v${{ inputs.cmake-version }}/${CMAKE_FULL_VERSION}.tar.gz"
+        export CMAKE_VERSION="${{ inputs.cmake-version }}.${{ inputs.cmake-build-version }}"
+        export CMAKE_FULL_VERSION="cmake-${CMAKE_VERSION}-linux-x86_64"
+        wget "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/${CMAKE_FULL_VERSION}.tar.gz"
         tar -xzvf ${CMAKE_FULL_VERSION}.tar.gz
         sudo mv ${CMAKE_FULL_VERSION} /opt/cmake
         echo "/opt/cmake/bin" >> $GITHUB_PATH

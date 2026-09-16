@@ -15,8 +15,8 @@
 #include <utility>
 #include <vector>
 
+#include "../util/ParallelBlockMergeTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/ParallelBlockMergeTestHelpers.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
 using namespace ad_utility::parallelBlockMerge;

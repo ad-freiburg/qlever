@@ -149,14 +149,15 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
-  index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
+  index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
+                                              config.patternsForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(
       std::move(config.blankNodeIriRegexes_));
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
     AD_CONTRACT_CHECK(!config.inputFiles_.empty());
-    index.createFromFiles(config.inputFiles_);
+    index.createFromFiles(config.inputFiles_, config.numThreads_);
   }
 
   if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
@@ -398,6 +399,11 @@ void IndexBuilderConfig::validate() const {
         "The vocabulary type \"", vocabType_.toString(),
         "\" cannot be used for index building, the supported types are ",
         ad_utility::VocabularyType::getListOfValuesForIndexBuilding()));
+  }
+  if (numThreads_ == 0) {
+    throw std::invalid_argument(
+        "The number of threads for the index build (`num-threads`) must be at "
+        "least 1");
   }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");

@@ -24,12 +24,12 @@
 #include <utility>
 #include <vector>
 
+#include "../util/GTestHelpers.h"
+#include "../util/ParallelBlockMergeTestHelpers.h"
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "util/CancellationHandle.h"
-#include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/ParallelBlockMergeTestHelpers.h"
 #include "util/SourceLocation.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 

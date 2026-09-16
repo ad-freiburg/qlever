@@ -15,7 +15,7 @@
 #include <limits>
 #include <thread>
 
-#include "util/GTestHelpers.h"
+#include "../util/GTestHelpers.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 
 using namespace ad_utility::parallelBlockMerge;

@@ -165,6 +165,8 @@ std::string concatMessages(Args&&... messages) {
 // types) or a callable that produce a `std::string`. The latter case is useful
 // if the error message is expensive to construct because the callables are only
 // invoked if the assertion fails. For examples see `ExceptionTest.cpp`.
+// NOTE: This macro may be used inside `constexpr` functions, see the note on
+// `constexpr` below.
 #define AD_CONTRACT_CHECK(condition, ...)           \
   AD_CHECK_IMPL(condition, AD_STRINGIFY(condition), \
                 AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
@@ -177,11 +179,16 @@ std::string concatMessages(Args&&... messages) {
 // performed, even if it never fails.
 // For  details on the usage see the documentation of `AD_CONTRACT_CHECK` above
 // as well as the examples in `ExceptionTest.cpp`
+// NOTE: This macro may be used inside `constexpr` functions, see the note on
+// `constexpr` below.
 namespace ad_utility::detail {
+// NOTE: This function has to be `constexpr`, else `AD_CORRECTNESS_CHECK` could
+// not be used inside `constexpr` functions, see the note on `constexpr` below.
 template <typename... AdditionalMessages>
-inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
-                                   ad_utility::source_location location,
-                                   AdditionalMessages&&... additionalMessages) {
+constexpr void adCorrectnessCheckImpl(
+    bool condition, std::string_view message,
+    ad_utility::source_location location,
+    AdditionalMessages&&... additionalMessages) {
   AD_CHECK_IMPL(condition, message, location, additionalMessages...);
 }
 }  // namespace ad_utility::detail
@@ -208,5 +215,32 @@ static constexpr bool areExpensiveChecksEnabled = false;
 }
 #define AD_EXPENSIVE_CHECK(condition, ...) void(0)
 #endif
+
+// --------------------------------------------------------------------------
+// A note on `constexpr`.
+// --------------------------------------------------------------------------
+// All of the check macros above (`AD_CONTRACT_CHECK`, `AD_CORRECTNESS_CHECK`,
+// `AD_EXPENSIVE_CHECK`) as well as `AD_FAIL` may be used inside `constexpr`
+// functions. The throwing of the exception is not a constant expression, but
+// it only happens on a branch that is not taken as long as the condition holds.
+// Evaluating such a function at compile time therefore works, and a violated
+// check simply becomes a compile error (the diagnostic contains the string of
+// the violated condition).
+//
+// Two details make this work, and must be preserved:
+// 1. `adCorrectnessCheckImpl` (the additional indirection that
+//    `AD_CORRECTNESS_CHECK` needs for the code coverage tools, see above) is
+//    itself `constexpr`. Otherwise every `constexpr` function that contains an
+//    `AD_CORRECTNESS_CHECK` would unconditionally call a non-`constexpr`
+//    function, which GCC 11 and 12 reject outright, and which makes Clang
+//    reject the function as soon as it is actually evaluated at compile time.
+// 2. In C++17 mode the `source_location` of the call site is obtained via
+//    `ad_utility::source_location::currentImpl`, which is `constexpr` for the
+//    same reason (see `util/SourceLocation.h`).
+//
+// NOTE: `AD_FAIL` (and any check whose condition is statically known to be
+// violated) never yields a constant expression. A `constexpr` function that
+// contains such a call on a branch that is always taken is ill-formed, no
+// diagnostic required.
 
 #endif  // QLEVER_SRC_UTIL_EXCEPTION_H

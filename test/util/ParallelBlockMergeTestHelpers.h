@@ -331,14 +331,10 @@ class CollectingBlockSink : public ad_utility::NoCopyNoMove {
   // `ad_utility::runFunctionOnExecutor`. This is what makes every completion
   // handler of this sink run via a `net::post` and never inline, which the
   // `SinkConcept` requires.
-  //
-  // NOTE: The named `token` is needed because `runFunctionOnExecutor` takes its
-  // completion token by non-const lvalue reference.
   template <typename Function, typename CompletionToken>
   auto runOnExecutor(Function function, CompletionToken&& completionToken) {
-    std::decay_t<CompletionToken> token{AD_FWD(completionToken)};
     return ad_utility::runFunctionOnExecutor(executor_, std::move(function),
-                                             token);
+                                             AD_FWD(completionToken));
   }
 
   // Store the `block` as the next block of the chunk with the given
