@@ -1,1 +1,3 @@
 addLinkAndDiscoverTest(CompressedExternalIdTableTest engine index testUtil)
+
+addLinkAndDiscoverTest(CompressedIdTableBlockStorageTest engine index testUtil)
