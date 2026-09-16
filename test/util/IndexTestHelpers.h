@@ -8,6 +8,13 @@
 #include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <optional>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
 #include "AllocatorTestHelpers.h"
 #include "GTestHelpers.h"
 #include "backports/three_way_comparison.h"
@@ -16,6 +23,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
 #include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriPattern.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
@@ -76,9 +84,32 @@ struct TestIndexConfig {
   std::optional<VocabularyType> vocabularyType = std::nullopt;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
+  // The general patterns for IRIs that are encoded directly in an `Id`, see
+  // `index/vocabulary/EncodedIriPattern.h`.
+  std::vector<encodedIri::Pattern> encodedIriPatterns{};
   // If true, add `ql:has-word` triples for each word in each literal during
   // index building.
   bool addHasWordTriples = false;
+  // The words of the secondary vocabulary of the index (see
+  // `index/vocabulary/SecondaryVocabulary.h`). They have to be sorted and
+  // distinct, and must not be contained in `turtleInput`, because the
+  // secondary vocabulary is disjoint from the vocabulary of the main index.
+  // NOTE: A secondary vocabulary can currently only be created for testing
+  // (see `IndexImpl::setSecondaryVocabForTesting`), which is what this member
+  // does.
+  std::optional<std::vector<std::string>> secondaryVocabWords = std::nullopt;
+  // The number of threads used during the index build (see
+  // `Index::createFromFiles`).
+  size_t numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
+  // If set, the input is parsed in parallel (`true`) or serially (`false`), as
+  // if specified on the command line of `qlever-index`. If `nullopt`, a single
+  // input file is parsed in parallel for reasons of backward compatibility (see
+  // `IndexImpl::updateInputFileSpecificationsAndLog`).
+  std::optional<bool> parseInParallel = std::nullopt;
+  // Additional entries for the `.settings.json` file of the index build (see
+  // `IndexImpl::readIndexBuilderSettingsFromFile`) as pairs of a key and a
+  // value in JSON syntax (so a string value has to be quoted).
+  std::vector<std::pair<std::string, std::string>> additionalSettings;
 
   // A very typical use case is to only specify the turtle input, and leave all
   // the other members as the default. We therefore have a dedicated constructor
@@ -95,14 +126,18 @@ struct TestIndexConfig {
         c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
-        c.encodedPrefixesWithoutAngleBrackets, c.addHasWordTriples);
+        c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
+        c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
+        c.parseInParallel, c.additionalSettings);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, blocksizePermutations, createTextIndex,
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
       scoringMetric, bAndKParam, indexType, vocabularyType,
-      encodedPrefixesWithoutAngleBrackets, addHasWordTriples)
+      encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
+      addHasWordTriples, secondaryVocabWords, numThreads, parseInParallel,
+      additionalSettings)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

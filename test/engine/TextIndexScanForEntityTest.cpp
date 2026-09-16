@@ -183,6 +183,28 @@ TEST(TextIndexScanForEntity, KnownEmpty) {
   ASSERT_TRUE(!s3.knownEmptyResult());
 }
 
+// Regression test: With a `SplitVocabulary` the `VocabIndex`
+// of an entity from a non-default sub-vocabulary (like a WKT literal) has its
+// marker bit set. Writing such an entity to the text index previously
+// overflowed the signed 60-bit `Id::makeFromInt` used for its index.
+TEST(TextIndexScanForEntity, EntityFromSplitVocabulary) {
+  TestIndexConfig config{
+      "<s> <geometry> \"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))\"^^<http://www."
+      "opengis.net/ont/geosparql#wktLiteral> ."};
+  config.createTextIndex = true;
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  auto qec = getQec(std::move(config));
+
+  TextIndexScanForEntity s{qec, Variable{"?text"}, Variable{"?entity"},
+                           "polygon"};
+  auto result = s.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTableView().size(), 1);
+  EXPECT_EQ(
+      "\"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral>",
+      h::getEntityFromResultTable(qec, result, 0));
+}
+
 // _____________________________________________________________________________
 TEST(TextIndexScanForEntity, clone) {
   auto qec = getQec();

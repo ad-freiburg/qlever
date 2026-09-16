@@ -4,6 +4,8 @@
 
 #include "index/vocabulary/VocabularyInternalExternal.h"
 
+#include <absl/strings/str_cat.h>
+
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
   auto fromInternal = internalVocab_[i];
@@ -16,8 +18,8 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
 // _____________________________________________________________________________
 VocabularyInternalExternal::WordWriter::WordWriter(const std::string& filename,
                                                    size_t milestoneDistance)
-    : internalWriter_{filename + ".internal"},
-      externalWriter_{filename + ".external"},
+    : internalWriter_{absl::StrCat(filename, internalSuffix)},
+      externalWriter_{absl::StrCat(filename, externalSuffix)},
       milestoneDistance_{milestoneDistance} {}
 
 // _____________________________________________________________________________
@@ -51,8 +53,8 @@ VocabularyInternalExternal::WordWriter::~WordWriter() {
 void VocabularyInternalExternal::open(const std::string& filename) {
   AD_LOG_INFO << "Reading vocabulary from file " << filename << " ..."
               << std::endl;
-  internalVocab_.open(filename + ".internal");
-  externalVocab_.open(filename + ".external");
+  internalVocab_.open(absl::StrCat(filename, internalSuffix));
+  externalVocab_.open(absl::StrCat(filename, externalSuffix));
   AD_LOG_INFO << "Done, number of words: " << size() << std::endl;
   AD_LOG_INFO << "Number of words in internal vocabulary (these are also part "
                  "of the external vocabulary): "

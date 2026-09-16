@@ -49,11 +49,13 @@ class CountAvailablePredicates : public Operation {
 
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
     using R = std::vector<QueryExecutionTree*>;
     return subtree_ != nullptr ? R{subtree_.get()} : R{};
   }
 
+ public:
   bool knownEmptyResult() override {
     if (subtree_ != nullptr) {
       return subtree_->knownEmptyResult();
@@ -98,11 +100,12 @@ class CountAvailablePredicates : public Operation {
                                   size_t patternColumnIdx,
                                   RuntimeInformation& runtimeInfo);
 
-  // Special implementation for the full pattern trick.
-  // Perform a lazy scan over the full `ql:has-pattern` relation,
-  // and then count and expand the patterns.
+  // Special implementation for the full pattern trick. Count and expand the
+  // patterns in the `patternColumn` of the `subresult`, which is the (possibly
+  // lazy) result of a scan of the full `ql:has-pattern` relation.
   void computePatternTrickAllEntities(
-      IdTable* result, const CompactVectorOfStrings<Id>& patterns) const;
+      IdTable* result, const CompactVectorOfStrings<Id>& patterns,
+      const Result& subresult, ColumnIndex patternColumn) const;
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;

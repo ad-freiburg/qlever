@@ -554,17 +554,22 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
   LocalVocab localVocab{};
   auto referenceId =
       getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, localVocab);
-  // Use getRangesForId (from valueIdComparators) to extract the ranges
-  // containing the relevant ValueIds.
-  // For pre-filtering with CompOp::EQ, we have to consider empty ranges.
-  // Reason: The referenceId could be contained within the bounds formed by
-  // the IDs of firstTriple_ and lastTriple_ (set false flag to keep
-  // empty ranges).
-  auto relevantIdRanges = Comparison != CompOp::EQ
-                              ? getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison)
-                              : getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison, false);
+  // Compute the ranges of the block boundary IDs (`idRange` holds the first
+  // and the last ID of each block) that satisfy the comparison, and map them
+  // to blocks.
+  //
+  // NOTE: A range is empty if the reference value lies between two
+  // consecutive boundary IDs, neither of which satisfies the comparison. If
+  // these are the first and the last ID of the same block, that block can
+  // still contain matching values, so empty ranges must be kept (last
+  // argument `false`). Besides `=`, this happens for a block that spans the
+  // boundary between non-negative and negative numbers, which are sorted after
+  // the non-negative ones: for `> 63000`, a block with the first ID 62950 and
+  // the last ID -10 yields an empty range but may contain 70000.
+  // `mapValueIdItPairToBlockRange` maps an empty range at a block's last ID to
+  // that block, and one at a block's first ID to no block.
+  auto relevantIdRanges = getRangesForId(idRange.begin(), idRange.end(),
+                                         referenceId, Comparison, false);
   return getTotalComplement
              ? detail::mapping::mapValueIdItRangesToBlockItRangesComplemented(
                    relevantIdRanges, idRange, blockRange)
@@ -700,10 +705,21 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
     const IndexImpl& index, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
-  // IRIs are represented in one of two disjoint `ValueId` ranges: regular
-  // vocabulary IRIs (datatype `VocabIndex`/`LocalVocabIndex`) and encoded IRIs
-  // (datatype `EncodedVal`). We therefore have to keep the blocks for *both*
-  // representations.
+  // IRIs are represented in several disjoint `ValueId` ranges, two of which are
+  // handled here: regular vocabulary IRIs (datatype
+  // `VocabIndex`/`LocalVocabIndex`) and encoded IRIs (datatype `EncodedVal`).
+  // We therefore have to keep the blocks for *both* representations.
+  //
+  // TODO<joka921> There is a third range: the IRIs of a secondary vocabulary
+  // (datatype `SecondaryVocabIndex`, see
+  // `index/vocabulary/SecondaryVocabulary.h`). Those sort after all of the
+  // ranges below, so neither the `> <>` prefilter nor the datatype range of
+  // the encoded IRIs covers them, which means that blocks consisting entirely
+  // of such IRIs are incorrectly pruned. This is deliberate for now, because
+  // nothing but a unit test can currently create a secondary vocabulary, but
+  // it has to be fixed *before* anything else does, together with the semantic
+  // comparison of those `Id`s (see the detailed note at
+  // `valueIdComparators::detail::compareIdsImpl`).
   //
   // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
   // in order. The smallest possible IRI is represented by "<>", we use its
@@ -745,6 +761,10 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
   // For pre-filtering LITERAL related ValueIds we use the ValueId representing
   // the beginning of IRI values as an upper bound and add all the value types
   // that are literals inlined into a compact representation.
+  //
+  // TODO<joka921> Just as for `IsDatatype::IRI` above, the literals of a
+  // secondary vocabulary are not covered, because their `Id`s sort after the
+  // `< <>` bound that is used here. See the note there.
   std::array datatypes{Datatype::Int, Datatype::Double, Datatype::Date,
                        Datatype::Bool, Datatype::GeoPoint};
   auto inlinedRanges =

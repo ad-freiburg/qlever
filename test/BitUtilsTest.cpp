@@ -1,11 +1,18 @@
-//  Copyright 2022 - 2025, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//           Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2022 - 2026 The QLever Authors, in particular:
+//
+// 2022 - 2025 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#include <gtest/gtest.h>
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#include <absl/strings/str_cat.h>
+#include <gmock/gmock.h>
 
 #include "util/BitUtils.h"
+#include "util/GTestHelpers.h"
 
 namespace {
 using namespace ad_utility;
@@ -23,7 +30,11 @@ TEST(BitUtils, bitMaskForLowerBits) {
   ASSERT_EQ(bitMaskForLowerBits(64), std::numeric_limits<uint64_t>::max());
 
   for (size_t i = 65; i < 2048; ++i) {
-    ASSERT_THROW(bitMaskForLowerBits(i), std::out_of_range);
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        bitMaskForLowerBits(i),
+        ::testing::HasSubstr(
+            absl::StrCat("mask for more than 64 bits required, but was ", i)),
+        ad_utility::Exception);
   }
 }
 
@@ -40,8 +51,14 @@ TEST(BitUtils, bitMaskForHigherBits) {
     ASSERT_EQ(bitMaskForHigherBits(i), expected);
   }
 
+  // NOTE: `bitMaskForHigherBits` forwards `64 - i` to `bitMaskForLowerBits`,
+  // so the error message reports that (underflowed) value.
   for (size_t i = 65; i < 2048; ++i) {
-    ASSERT_THROW(bitMaskForHigherBits(i), std::out_of_range);
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        bitMaskForHigherBits(i),
+        ::testing::HasSubstr(absl::StrCat(
+            "mask for more than 64 bits required, but was ", uint64_t{64} - i)),
+        ad_utility::Exception);
   }
 }
 
@@ -76,6 +93,30 @@ TEST(BitUtils, bitMaskSize) {
   ASSERT_EQ(bitMaskSizeForValue(0), 0);
   ASSERT_EQ(bitMaskSizeForValue(1), 1);
   ASSERT_EQ(bitMaskSizeForValue(4), 3);
+}
+
+// _____________________________________________________________________________
+TEST(BitUtils, forEachSetBit) {
+  auto collect = [](uint64_t bits) {
+    std::vector<size_t> result;
+    forEachSetBit(bits, [&result](size_t idx) {
+      result.push_back(idx);
+      return true;
+    });
+    return result;
+  };
+
+  EXPECT_THAT(collect(0), ::testing::IsEmpty());
+  EXPECT_THAT(collect(0b1011), ::testing::ElementsAre(0, 1, 3));
+  EXPECT_THAT(collect(uint64_t{1} << 63), ::testing::ElementsAre(63));
+
+  // Stops early when `fn` returns `false`.
+  std::vector<size_t> stoppedEarly;
+  forEachSetBit(0b1111, [&stoppedEarly](size_t idx) {
+    stoppedEarly.push_back(idx);
+    return idx < 1;
+  });
+  EXPECT_THAT(stoppedEarly, ::testing::ElementsAre(0, 1));
 }
 
 }  // namespace

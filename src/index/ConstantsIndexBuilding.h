@@ -27,7 +27,7 @@ constexpr inline int NUM_TRIPLES_PER_PARTIAL_VOCAB = 10'000'000;
 constexpr inline size_t PARSER_BATCH_SIZE = 1'000'000;
 
 // That many triples does the turtle parser have to buffer before the call to
-// getline returns (unless our input reaches EOF). This makes parsing from
+// `getBatch` returns (unless our input reaches EOF). This makes parsing from
 // streams faster.
 constexpr inline size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 
@@ -55,15 +55,15 @@ constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
 
-// _________________________________________________________________
-constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
+// The infix of the (compressed) files that hold the parsed triples with their
+// partial IDs, before they are sorted into the permutations. There is one such
+// file per partial vocabulary, holding exactly the triples that were mapped
+// using it (see `unsortedTriplesFilename` in
+// `index/PartialVocabularyFilenames.h`).
+constexpr inline std::string_view UNSORTED_TRIPLES_INFIX = ".unsorted-triples.";
 
 // _________________________________________________________________
-// The degree of parallelism that is used for the index building step, where the
-// unique elements of the vocabulary are identified via hash maps. Typically, 6
-// is a good value. On systems with very few CPUs, a lower value might be
-// beneficial.
-constexpr inline size_t NUM_PARALLEL_ITEM_MAPS = 10;
+constexpr inline std::string_view QLEVER_INTERNAL_INDEX_INFIX = ".internal";
 
 // The number of threads that are parsing in parallel, when the parallel Turtle
 // parser is used.
@@ -84,13 +84,28 @@ constexpr inline size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 // performance negatively.
 constexpr inline size_t BLOCKSIZE_VOCABULARY_MERGING = 100;
 
-// A buffer size used during the second pass of the Index build.
-// It is not const, so we can set it to a much lower value for unit tests to
-// increase the test coverage.
-inline std::atomic<size_t>& BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() {
-  static std::atomic<size_t> value = 10'000;
-  return value;
-}
+// The number of index mappings (which is the same as the number of merged
+// words) that are collected in a single batch of the vocabulary merging (see
+// `index/vocabulary_merger/WordBatch.h`). A single buffer of merged words
+// (see `BLOCKSIZE_VOCABULARY_MERGING`) only contains a rather small number of
+// words, which would be much too fine-grained for a task queue.
+constexpr inline size_t VOCAB_MERGER_WORD_BATCH_SIZE = 100'000;
+
+// The maximal total size of the words in a single batch of the vocabulary
+// merging. A batch is handed on as soon as one of this limit and
+// `VOCAB_MERGER_WORD_BATCH_SIZE` is reached, such that a batch of very few but
+// very long words doesn't become too large.
+constexpr inline ad_utility::MemorySize VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE =
+    ad_utility::MemorySize::megabytes(10);
+
+// The maximal number of batches that may be waiting in each of the queues of
+// the merging pipeline of the vocabulary merger (see the comment above
+// `mergeVocabulary` in `index/VocabularyMerger.h`). NOTE: A batch keeps all
+// the merged words alive that it was created from (at most
+// `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`, see there), and all of the queues can
+// be full at the same time, so the additional memory footprint of the merging
+// is a multiple of this number of batches.
+constexpr inline size_t VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE = 3;
 
 // The uncompressed size in bytes of a block of a single column of the
 // permutations. If chosen too large, then we lose performance for very small

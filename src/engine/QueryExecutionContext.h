@@ -20,6 +20,7 @@
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "util/AllocateShared.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 
@@ -158,6 +159,11 @@ class QueryExecutionContext
   const ad_utility::AllocatorWithLimit<Id>& getAllocator() const {
     return _allocator;
   }
+
+  // define a `makeShared` member function that has the same interface as
+  // `std::make_shared`, but allocates via the `getAllocator()` (see
+  // `util/AllocateShared.h`).
+  DEFINE_MAKE_SHARED_MEMBER(getAllocator())
 
   // Serialize the given `runtimeInformation` to a JSON string and send it
   // using `updateCallback_`. If `sendPriority` is set to `IfDue`, this only

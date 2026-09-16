@@ -11,13 +11,19 @@
 #ifndef QLEVER_SRC_UTIL_SERIALIZER_BUFFEREDSERIALIZER_H
 #define QLEVER_SRC_UTIL_SERIALIZER_BUFFEREDSERIALIZER_H
 
+#include <cstdint>
+#include <cstring>
+#include <memory>
 #include <optional>
+#include <type_traits>
 #include <vector>
 
+#include "backports/memory.h"
 #include "backports/span.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/ResetWhenMoved.h"
 #include "util/Serializer/Serializer.h"
 #include "util/UninitializedAllocator.h"
 
@@ -61,9 +67,19 @@ CPP_template(typename UnderlyingSerializer,
   std::optional<UnderlyingSerializer> underlyingSerializer_;
   BlockProcessor blockProcessor_;
   size_t blocksize_;
-  // The buffer for the not-yet-forwarded data. Its capacity is never exceeded,
-  // so it is never reallocated after the initial `reserve`.
-  UninitializedBuffer buffer_;
+  // The buffer for the not-yet-forwarded data, allocated once with exactly
+  // `blocksize_` bytes and never reallocated.
+  //
+  // NOTE: Both a `std::vector<char, default_init_allocator<char>>` and a plain
+  // `std::vector<char>` are slower here: the custom allocator loses the
+  // `memcpy` fast path for bulk copies, which is only taken for exactly
+  // `std::allocator`, and `insert` also handles reallocation and insertion in
+  // the middle, neither of which can happen here.
+  std::unique_ptr<char[]> buffer_;
+  // The number of bytes currently in the `buffer_`. A `ResetWhenMoved`, so that
+  // the defaulted move operations leave a moved-from serializer (whose
+  // `buffer_` is then null) with an empty buffer.
+  ResetWhenMoved<size_t, 0> bufferSize_;
 
  public:
   // Create from the underlying serializer and the `blocksize` (the amount of
@@ -77,8 +93,12 @@ CPP_template(typename UnderlyingSerializer,
                           BlockProcessor blockProcessor = {})
       : underlyingSerializer_{std::move(underlyingSerializer)},
         blockProcessor_{std::move(blockProcessor)},
-        blocksize_{blocksize.getBytes()} {
-    buffer_.reserve(blocksize_);
+        blocksize_{blocksize.getBytes()},
+        // NOTE: `make_unique_for_overwrite` (as opposed to `make_unique`)
+        // doesn't zero-initialize the buffer.
+        buffer_{ql::make_unique_for_overwrite<char[]>(blocksize.getBytes())} {
+    // A blocksize of zero would make `serializeBytes` below loop forever.
+    AD_CONTRACT_CHECK(blocksize_ > 0);
   }
 
   // This is a move-only class.
@@ -96,9 +116,10 @@ CPP_template(typename UnderlyingSerializer,
   // Main serialization function.
   void serializeBytes(const char* bytePointer, size_t numBytes) {
     while (numBytes > 0) {
-      size_t capacity = buffer_.capacity() - buffer_.size();
+      size_t capacity = blocksize_ - bufferSize_;
       size_t bytesToCopy = std::min(capacity, numBytes);
-      buffer_.insert(buffer_.end(), bytePointer, bytePointer + bytesToCopy);
+      std::memcpy(buffer_.get() + bufferSize_, bytePointer, bytesToCopy);
+      bufferSize_ += bytesToCopy;
       if (bytesToCopy < capacity) {
         return;
       }
@@ -126,16 +147,58 @@ CPP_template(typename UnderlyingSerializer,
     return serializer;
   }
 
+  // Return the position at which the next serialized byte will end up in the
+  // underlying serializer. This includes the bytes that are still sitting in
+  // the buffer.
+  //
+  // NOTE: This is only meaningful if the blocks arrive at the underlying
+  // serializer unchanged, which is the case for the
+  // `PassthroughBlockProcessor`, but for example not for the
+  // `CompressingBlockProcessor` (see `CompressedSerializer.h`), where a
+  // position in the buffered stream bears no relation to a position in the
+  // underlying serializer.
+  [[nodiscard]] uint64_t getSerializationPosition() const {
+    static_assert(
+        std::is_same_v<BlockProcessor, PassthroughBlockProcessor>,
+        "`getSerializationPosition` is only supported by a "
+        "`BufferedWriteSerializer` that forwards its blocks unchanged");
+    AD_CORRECTNESS_CHECK(underlyingSerializer_.has_value());
+    return underlyingSerializer_.value().getSerializationPosition() +
+           bufferSize_;
+  }
+
+  // Overload of `serializeAtPosition` (see `Serializer.h`) for a
+  // `BufferedWriteSerializer`. First flush the buffer, such that the
+  // positions can then be handled entirely by the underlying serializer.
+  //
+  // NOTE: This is a hidden friend (and hence only found via ADL) because it
+  // needs access to the buffer and to the underlying serializer, neither of
+  // which is part of the public interface of this class. The same restriction
+  // as for `getSerializationPosition` above applies.
+  template <typename T>
+  friend void serializeAtPosition(BufferedWriteSerializer& serializer,
+                                  uint64_t position, const T& element) {
+    static_assert(
+        std::is_same_v<BlockProcessor, PassthroughBlockProcessor>,
+        "`serializeAtPosition` is only supported by a "
+        "`BufferedWriteSerializer` that forwards its blocks unchanged");
+    serializer.flushBlock();
+    AD_CORRECTNESS_CHECK(serializer.underlyingSerializer_.has_value());
+    serializeAtPosition(serializer.underlyingSerializer_.value(), position,
+                        element);
+  }
+
  private:
   // Forward the contents of the `buffer_` to the `blockProcessor_` (which
   // writes them to the underlying serializer) and clear it.
   void flushBlock() {
-    if (buffer_.empty()) {
+    if (bufferSize_ == 0) {
       return;
     }
-    std::invoke(blockProcessor_, ql::span<const char>{buffer_},
+    std::invoke(blockProcessor_,
+                ql::span<const char>{buffer_.get(), bufferSize_},
                 underlyingSerializer_.value());
-    buffer_.clear();
+    bufferSize_ = 0;
   }
 };
 

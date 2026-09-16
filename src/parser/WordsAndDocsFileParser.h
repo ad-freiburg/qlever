@@ -158,6 +158,17 @@ inline auto tokenizeAndNormalizeText(std::string_view text,
                                 return localeManager.getLowercaseUtf8(str);
                               });
 }
+
+// Strip the surrounding quotes (and, for a literal with a datatype like a
+// WKT literal, the trailing datatype IRI) from a vocabulary literal, so that
+// it can be passed to `tokenizeAndNormalizeText`. Used both when building the
+// text vocabulary from literals and when computing their scores, which must
+// tokenize literals identically.
+inline std::string_view stripQuotesAndDatatype(std::string_view literal) {
+  std::string_view textView = literal.substr(0, literal.rfind('"'));
+  textView.remove_prefix(1);
+  return textView;
+}
 /**
  * @brief This class is the parent class of WordsFileParser and DocsFileParser
  *

@@ -83,9 +83,13 @@ class Service : public Operation {
   // We know nothing about the result at query planning time.
   bool knownEmptyResult() override { return false; }
 
+ private:
   // A SERVICE clause has no children.
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {};
+  }
 
+ public:
   // Convert the given binding to TripleComponent.
   TripleComponent bindingToTripleComponent(
       const nlohmann::json& binding,
@@ -101,6 +105,8 @@ class Service : public Operation {
   // operation, this method tries to precompute the result of one if the other
   // one (its sibling) is a `Service` operation. If `rightOnly` is true (used by
   // `OptionalJoin` and `Minus`), only the right operation can be a `Service`.
+  // `Sort` and `StripColumns` operations on top of the children are looked
+  // through.
   static void precomputeSiblingResult(std::shared_ptr<Operation> left,
                                       std::shared_ptr<Operation> right,
                                       bool rightOnly, bool requestLaziness);
@@ -175,6 +181,7 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching);
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
+  FRIEND_TEST(ServiceTest, precomputeSiblingResultWithStripColumns);
   FRIEND_TEST(ServiceTest, pushDownValuesPlacesValuesAtEnd);
 };
 #else

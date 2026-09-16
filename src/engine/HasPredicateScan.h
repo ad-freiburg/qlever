@@ -37,15 +37,18 @@ class HasPredicateScan : public Operation {
   ScanType type_;
   std::optional<SubtreeAndColumnIndex> subtree_;
 
-  QueryExecutionTree& subtree() {
+  // Return a non-owning pointer to the subtree. Note that this is `const` but
+  // hands out a non-const pointer, for the same reason as
+  // `Operation::getChildrenImpl`.
+  QueryExecutionTree* subtreePtr() const {
     auto* ptr = subtree_.value().subtree_.get();
     AD_CORRECTNESS_CHECK(ptr != nullptr);
-    return *ptr;
+    return ptr;
   }
 
-  const QueryExecutionTree& subtree() const {
-    return const_cast<HasPredicateScan&>(*this).subtree();
-  }
+  QueryExecutionTree& subtree() { return *subtreePtr(); }
+
+  const QueryExecutionTree& subtree() const { return *subtreePtr(); }
 
   size_t subtreeColIdx() const { return subtree_.value().subtreeJoinColumn_; }
 
@@ -87,14 +90,16 @@ class HasPredicateScan : public Operation {
 
   [[nodiscard]] const TripleComponent& getObject() const;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
     if (subtree_) {
-      return {std::addressof(subtree())};
+      return {subtreePtr()};
     } else {
       return {};
     }
   }
 
+ public:
   // These are made static and public mainly for easier testing
   template <typename HasPattern>
   void computeFreeS(IdTable* resultTable, Id objectId, HasPattern& hasPattern,

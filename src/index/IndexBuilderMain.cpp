@@ -273,7 +273,7 @@ int main(int argc, char** argv) {
       "keyword search in literals via `?literal ql:has-word \"word\"`.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
-      ad_utility::VocabularyType::getListOfSupportedValues());
+      ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
 
   add("encode-as-id",
@@ -315,8 +315,9 @@ int main(int argc, char** argv) {
       "mapping view names to SELECT queries for writing the view, for example: "
       R"({"view1": "SELECT ...", "view2": "SELECT ..."})");
   add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
-      "Disable the resource-usage log. By default a TSV log of the RSS and "
-      "CPU usage of the index build is written next to the index files "
+      "Disable the resource-usage log. By default a TSV log of the RSS, CPU "
+      "and disk I/O of the index build, plus the system-wide I/O stall (Linux "
+      "only), is written next to the index files "
       "(`<index-basename>.index.resource-usage-log.tsv`).");
   add("resource-usage-interval-s",
       po::value(&resourceUsageIntervalS)->default_value(1),
@@ -324,12 +325,21 @@ int main(int argc, char** argv) {
   auto logLevelDescription = absl::StrCat(
       "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
       "Default is INFO. The compile-time level (",
-      LogLevel{LOGLEVEL}.toString(),
+      LogLevel{ad_utility::compileTimeLogLevel}.toString(),
       ") applies as an upper bound — messages above it are never emitted "
       "regardless of this setting.");
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
       logLevelDescription.c_str());
+  add("num-threads,j", po::value(&config.numThreads_),
+      "The number of threads used during the index build. Must be at least 1. "
+      "Default: the number of hardware threads of the machine. NOTE: Currently "
+      "only the first pass (parsing the input and creating the partial "
+      "vocabularies) and the conversion to global IDs use this number; the "
+      "other phases use their own parallelism (making all phases respect this "
+      "option is work in progress). The memory of the first pass grows "
+      "linearly with this number, since each thread holds one batch of "
+      "`num-triples-per-batch` triples with its partial vocabulary in RAM.");
 
   // Process command line arguments.
   po::variables_map optionsMap;
