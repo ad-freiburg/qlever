@@ -149,8 +149,8 @@ class SparqlAutomaticParser : public antlr4::Parser {
     STDEV = 138,
     SAMPLE = 139,
     SEPARATOR = 140,
-    TRUE = 141,
-    FALSE = 142,
+    BOOL_TRUE = 141,
+    BOOL_FALSE = 142,
     IRI_REF = 143,
     PNAME_NS = 144,
     PNAME_LN = 145,
@@ -2853,8 +2853,8 @@ class SparqlAutomaticParser : public antlr4::Parser {
     BooleanLiteralContext(antlr4::ParserRuleContext* parent,
                           size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    antlr4::tree::TerminalNode* TRUE();
-    antlr4::tree::TerminalNode* FALSE();
+    antlr4::tree::TerminalNode* BOOL_TRUE();
+    antlr4::tree::TerminalNode* BOOL_FALSE();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
