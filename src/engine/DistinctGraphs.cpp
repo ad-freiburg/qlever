@@ -9,12 +9,13 @@
 
 #include "engine/DistinctGraphs.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <algorithm>
 #include <optional>
 
 #include "engine/Result.h"
 #include "global/Constants.h"
-#include "global/RuntimeParameters.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
@@ -25,12 +26,21 @@
 
 // ____________________________________________________________________________
 DistinctGraphs::DistinctGraphs(QueryExecutionContext* qec,
-                               Variable graphVariable)
-    : Operation{qec}, graphVariable_{std::move(graphVariable)} {}
+                               Variable graphVariable, bool includeDefaultGraph)
+    : Operation{qec},
+      graphVariable_{std::move(graphVariable)},
+      includeDefaultGraph_{includeDefaultGraph} {}
 
 // ____________________________________________________________________________
 std::unique_ptr<Operation> DistinctGraphs::cloneImpl() const {
-  return std::make_unique<DistinctGraphs>(_executionContext, graphVariable_);
+  return std::make_unique<DistinctGraphs>(_executionContext, graphVariable_,
+                                          includeDefaultGraph_);
+}
+
+// ____________________________________________________________________________
+std::string DistinctGraphs::getCacheKeyImpl() const {
+  return absl::StrCat("DistinctGraphs includeDefaultGraph=",
+                      includeDefaultGraph_ ? "true" : "false");
 }
 
 // ____________________________________________________________________________
@@ -46,21 +56,9 @@ size_t DistinctGraphs::getCostEstimate() {
       .numTriples();
 }
 
-// Implements support for SPARQL queries of the form `GRAPH ?g { ... }` where
-// `?g` is not bound by the inner pattern.
-// The `DistinctGraphs` operation efficiently reads all distinct named graph IDs
-// directly from the block metadata of the index, without a full table scan
-// where possible.
-// If distinct graph count <= `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`:
-// - Traverse through the `graphInfo_`;
-// - If a new graph Id is seen, decompress and read it to prove its existence.
-// Else:
-// - Decompress, read, and add all graph ids to the result.
-//
-// Filter out the default graph IRI from the result when the
-// `treatDefaultGraphAsNamedGraph` runtime parameter is off.
-//
-// A result object containing a unique set of all matching named graph Ids.
+// Compute the distinct graph IDs of all blocks of the SPO permutation (see
+// `CompressedRelationReader::computeUniqueGraphIds` for the details of the
+// block metadata shortcut) and remove the default graph if requested.
 // ____________________________________________________________________________
 Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   const auto& permutation =
@@ -74,9 +72,7 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
       permutation.reader().computeUniqueGraphIds(
           scanSpecAndBlocks, ltpb, cancellationHandle_, allocator());
 
-  auto treatDefaultGraphAsNamedGraph =
-      getRuntimeParameter<&RuntimeParameters::treatDefaultGraphAsNamedGraph_>();
-  if (!treatDefaultGraphAsNamedGraph) {
+  if (!includeDefaultGraph_) {
     auto defaultGraph = toValueId(
         TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)},

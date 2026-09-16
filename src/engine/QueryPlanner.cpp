@@ -3114,11 +3114,16 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
 
 // ____________________________________________________________
 void QueryPlanner::GraphPatternPlanner::bindGraphVariableIfUnbound(
-    const Variable& graphVar, std::vector<SubtreePlan>& candidates) {
+    const Variable& graphVar,
+    p::GroupGraphPattern::GraphVariableBehaviour behaviour,
+    std::vector<SubtreePlan>& candidates) {
   const auto& namedGraphs = planner_.activeDatasetClauses_.namedGraphs();
-  auto graphsCand = [&namedGraphs, &graphVar, this]() {
+  auto graphsCand = [&namedGraphs, &graphVar, behaviour, this]() {
     if (!namedGraphs.has_value()) {
-      return makeSubtreePlan<DistinctGraphs>(qec_, graphVar);
+      bool includeDefaultGraph =
+          behaviour == p::GroupGraphPattern::GraphVariableBehaviour::ALL;
+      return makeSubtreePlan<DistinctGraphs>(qec_, graphVar,
+                                             includeDefaultGraph);
     }
     p::SparqlValues values;
     values._variables.push_back(graphVar);
@@ -3186,7 +3191,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       if (const auto* graphPair = std::get_if<std::pair<
               Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
               &arg.graphSpec_)) {
-        bindGraphVariableIfUnbound(graphPair->first, candidates);
+        bindGraphVariableIfUnbound(graphPair->first, graphPair->second,
+                                   candidates);
       }
     }
 

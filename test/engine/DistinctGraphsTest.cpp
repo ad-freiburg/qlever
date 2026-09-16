@@ -13,12 +13,9 @@
 
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "../util/RuntimeParametersTestHelpers.h"
 #include "engine/DistinctGraphs.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
-#include "global/RuntimeParameters.h"
-#include "gmock/gmock.h"
 #include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"
 
@@ -28,11 +25,13 @@ using ad_utility::testing::TestIndexConfig;
 
 // Create a `DistinctGraphs` operation for the graph variable `?g` on a test
 // index built from `config`. Without an argument, the default test index is
-// used. The `QueryExecutionContext` and the `Index` of the operation remain
-// accessible via `getExecutionContext()` and `getIndex()`.
-DistinctGraphs makeDistinctGraphs(TestIndexConfig config = TestIndexConfig{}) {
+// used and the default graph is not part of the result. The
+// `QueryExecutionContext` and the `Index` of the operation remain accessible
+// via `getExecutionContext()` and `getIndex()`.
+DistinctGraphs makeDistinctGraphs(TestIndexConfig config = TestIndexConfig{},
+                                  bool includeDefaultGraph = false) {
   return DistinctGraphs{ad_utility::testing::getQec(std::move(config)),
-                        Variable{"?g"}};
+                        Variable{"?g"}, includeDefaultGraph};
 }
 
 // Same as `makeDistinctGraphs`, but the index is built from NQuad input, which
@@ -113,9 +112,10 @@ TEST(DistinctGraphs, getSizeEstimateComputed) {
 
 // _____________________________________________________________________________
 TEST(DistinctGraphs, getCacheKey) {
-  auto dg = makeDistinctGraphs();
-
-  EXPECT_EQ(dg.getCacheKey(), "DistinctGraphs");
+  EXPECT_EQ(makeDistinctGraphs().getCacheKey(),
+            "DistinctGraphs includeDefaultGraph=false");
+  EXPECT_EQ(makeDistinctGraphs(TestIndexConfig{}, true).getCacheKey(),
+            "DistinctGraphs includeDefaultGraph=true");
 }
 
 // _____________________________________________________________________________
@@ -155,8 +155,6 @@ TEST(DistinctGraphs, computeVariableToColumnMap) {
 TEST(DistinctGraphs, computeResultExcludesDefaultGraphByDefault) {
   auto dg =
       makeDistinctGraphs(TestIndexConfig{"<a> <p1> <b> . <a> <p2> <c> ."});
-  auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::treatDefaultGraphAsNamedGraph_>(false);
 
   auto result = dg.getResult();
   ASSERT_TRUE(result->isFullyMaterialized());
@@ -178,11 +176,8 @@ TEST(DistinctGraphs, computeResultReturnsDistinctGraphIds) {
 }
 
 // _____________________________________________________________________________
-TEST(DistinctGraphs,
-     computeResultIncludesDefaultGraphWhenRuntimeParameterIsSet) {
-  auto dg = makeDistinctGraphs(TestIndexConfig{"<x> <p> <y> ."});
-  auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::treatDefaultGraphAsNamedGraph_>(true);
+TEST(DistinctGraphs, computeResultIncludesDefaultGraphIfRequested) {
+  auto dg = makeDistinctGraphs(TestIndexConfig{"<x> <p> <y> ."}, true);
 
   auto result = dg.getResult();
   ASSERT_TRUE(result->isFullyMaterialized());

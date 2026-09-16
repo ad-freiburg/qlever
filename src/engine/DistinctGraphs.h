@@ -19,28 +19,33 @@
 #include "util/Algorithm.h"
 
 // Operation that produces a single-column result containing all distinct
-// named graph IRIs present in the index. It is used to evaluate SPARQL
-// patterns of the form `GRAPH ?g { }` where ?g is a variable that isn't
-// guaranteed to be an actual graph in the index.
+// graph IRIs present in the index. It is used to evaluate SPARQL patterns of
+// the form `GRAPH ?g { ... }` where `?g` is not bound by the inner pattern.
+// The default graph is only part of the result if `includeDefaultGraph` is
+// set, which the query planner derives from the runtime parameter
+// `treat-default-graph-as-named-graph`.
 //
 // The implementation reads graph IDs directly from the block metadata of the
 // SPO permutation, falling back to a full block decompression only when a
 // block may contain a previously unseen graph ID. For most datasets this
-// avoids a full table scan
-// Example SPARQL query that uses this class:
+// avoids a full table scan.
+//
+// Example SPARQL queries that use this class:
 //
 //  SELECT ?g WHERE { GRAPH ?g { } } -> gives all distinct graphs in the dataset
 //  SELECT ?g WHERE { GRAPH ?g { VALUES ?x { <something> } } } -> cartesian
 //  product of all distinct graphs with all values of ?x
-//  TODO: SELECT ?g WHERE { GRAPH ?g { VALUES ?g { <something> } } } -> Not
-//  covered yet
+//
+// TODO<metetolga> `SELECT ?g WHERE { GRAPH ?g { VALUES ?g { <something> } } }`
+// is not covered yet.
 //
 // The query planner injects a `DistinctGraphs` operation whenever it detects
 // a `GRAPH ?g { <inner> }` pattern where `?g` is not already bound by
 // `<inner>`.
 class DistinctGraphs : public Operation {
  public:
-  explicit DistinctGraphs(QueryExecutionContext* qec, Variable graphVariable);
+  DistinctGraphs(QueryExecutionContext* qec, Variable graphVariable,
+                 bool includeDefaultGraph);
 
   [[nodiscard]] std::string getDescriptor() const override {
     return "Distinct Graphs";
@@ -79,9 +84,11 @@ class DistinctGraphs : public Operation {
     return {};
   }
 
-  [[nodiscard]] std::string getCacheKeyImpl() const override {
-    return "DistinctGraphs";
-  }
+  // The variable name is not part of the cache key, the result is the same
+  // for every variable. Whether the default graph is included has to be part
+  // of it, because the runtime parameter that decides this can change
+  // between two queries.
+  [[nodiscard]] std::string getCacheKeyImpl() const override;
 
   // Return the last saved number of distinct graphs.
   uint64_t getSizeEstimateBeforeLimit() override {
@@ -97,6 +104,9 @@ class DistinctGraphs : public Operation {
 
   // The graph variable of queries of the form: `SELECT * { GRAPH ?g { ... }}`.
   Variable graphVariable_;
+
+  // If false, the default graph is removed from the result.
+  bool includeDefaultGraph_;
 
   // Last saved number of distinct graphs, default to
   // `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`.
