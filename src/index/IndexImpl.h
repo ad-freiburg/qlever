@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/asio.h"
 #include "backports/filesystem.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -39,8 +40,10 @@
 #include "index/TextScoring.h"
 #include "index/VocabularyMerger.h"
 #include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriPattern.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
+#include "parser/AsyncRdfParserBase.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/File.h"
@@ -51,6 +54,12 @@
 #include "util/RegexSet.h"
 #include "util/TransparentFunctors.h"
 #include "util/json.h"
+
+// Forward declaration, see `PartialVocabularyBuilder.h`.
+namespace qlever::partialVocabularyBuilder {
+template <typename Index>
+class PartialVocabularyTaskChain;
+}
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
 using ExternalSorter =
@@ -245,13 +254,16 @@ class IndexImpl {
       Permutation::Enum p) const;
 
   // Creates an index from a given set of input files. Will write vocabulary and
-  // on-disk index data.
+  // on-disk index data. `numThreads` is the number of threads used during the
+  // index build (see `Index::createFromFiles`).
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  void createFromFiles(std::vector<Index::InputFileSpecification> files);
+  void createFromFiles(std::vector<Index::InputFileSpecification> files,
+                       size_t numThreads);
 
   void createFromFiles(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t numThreads);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -357,10 +369,11 @@ class IndexImpl {
     return localVocabContext_;
   }
 
-  // Set the prefixes of the IRIs that will be encoded directly into
-  // the `Id`; see `EncodedIriManager` for details.
+  // Set the prefixes and the general patterns of the IRIs that will be encoded
+  // directly into the `Id`; see `EncodedIriManager` for details.
   void setPrefixesForEncodedValues(
-      std::vector<std::string> prefixesWithoutAngleBrackets);
+      std::vector<std::string> prefixesWithoutAngleBrackets,
+      std::vector<encodedIri::Pattern> patterns = {});
 
   // Set the regexes for IRIs that should be treated as blank nodes during index
   // building. Each entry is an `RE2` regex; an IRI that is fully matched by any
@@ -634,61 +647,59 @@ class IndexImpl {
   // converted to id space to disk, sorted into the first permutation, so that
   // they can be used for creating the permutations. Member vocab_ will be empty
   // after this because it is not needed for index creation once the triples are
-  // set up and it would be a waste of RAM.
+  // set up and it would be a waste of RAM. `numThreads` is the number of
+  // threads used during the index build (see `Index::createFromFiles`).
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
-      std::shared_ptr<RdfParserBase> parser);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t numThreads);
 
-  // Parse all triples from `parser` using `NUM_PARALLEL_ITEM_MAPS` worker
-  // threads that work completely independently of each other. Each of them
-  // processes batches of `linesPerPartial` triples, and for each batch writes
-  // one partial vocabulary file and serializes the corresponding ID triples to
-  // a file of their own (see `unsortedTriplesFilename`). The memory used by the
-  // item allocator is freed when this function returns.
+  // Parse all triples from `files` and build the partial vocabularies, one per
+  // batch of (approximately) `linesPerPartial` triples, together with the
+  // corresponding ID triples (see `writePartialVocabulary`). This is the first
+  // pass of the index building. It runs as a fully asynchronous pipeline on a
+  // thread pool with `numThreads` threads for efficient CPU utilization (see
+  // `PartialVocabularyBuilder.h` for the details). If parsing or writing
+  // fails, the first error is rethrown after the pipeline has stopped.
   BuildPartialVocabulariesResult buildPartialVocabularies(
-      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
-
-  // The work of a single worker thread spawned by `buildPartialVocabularies`:
-  // repeatedly get a batch of triples from `parser` (the parsers used for
-  // index building support concurrent calls to `getBatch`) and convert the
-  // strings in those triples to IDs using a hash map that is private to this
-  // worker. After `linesPerPartial` triples, atomically claim the next free
-  // index from `nextPartialVocabIdx` and write the resulting partial
-  // vocabulary and the corresponding triples under that index. Return the
-  // number of triples written (only used for logging).
-  size_t runPartialVocabularyWorker(
-      size_t linesPerPartial, RdfParserBase& parser, ItemAlloc itemAlloc,
-      std::atomic<size_t>* numHasWordTriples,
-      ad_utility::ConcurrentProgressBar& progressBar,
-      std::atomic<size_t>& nextPartialVocabIdx);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t linesPerPartial, size_t numThreads);
 
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(
-      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t linesPerPartial, size_t numThreads);
 
   // Write the partial vocabulary with index `partialVocabIdx` given by `items`
   // to its `partialVocabularyWordsFilename` and the corresponding triples in
   // `localIds` to its `unsortedTriplesFilename`. All data associated with the
-  // `partialVocabIdx` is exclusively owned by the calling worker thread, so no
-  // locking is required.
+  // `partialVocabIdx` is exclusively owned by the calling task chain (see
+  // `buildPartialVocabularies`), so no locking is required.
   void writePartialVocabulary(
       size_t partialVocabIdx, ItemMapAndBuffer items,
       std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds) const;
 
-  // Return a Turtle parser that parses the given files. The parser will be
+  // Return an asynchronous RDF parser (see `AsyncRdfParserBase`) that parses
+  // the given `files` and schedules its work on `executor`. The parser will be
   // configured to either parse in parallel or not (per input file), and to
   // either use the CTRE-based relaxed parser or not (via the
-  // `ascii-prefixes-only` setting, see `onlyAsciiTurtlePrefixes_`).
-  std::unique_ptr<RdfParserBase> makeRdfParser(
+  // `ascii-prefixes-only` setting, see `onlyAsciiTurtlePrefixes_`). In the
+  // `REDUCED_FEATURE_SET_FOR_CPP17` build, which has no coroutines, this
+  // always returns a synchronous `RdfMultifileParser` wrapped in an
+  // `AsyncSerialParserAdapter`, and parallel parsing is not available.
+  std::unique_ptr<AsyncRdfParserBase> makeRdfParser(
+      const ql::any_io_executor& executor,
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
       const;
 
   // Read the unsorted ID triples (written by `buildPartialVocabularies`, one
   // file per partial vocabulary) back from disk, convert their partial to
   // global IDs using the corresponding partial-vocabulary mappings, and feed
-  // them into the sorter for the first permutation.
+  // them into the sorter for the first permutation. Use at most `numThreads`
+  // workers for the conversion.
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
-      const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple);
+      const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple,
+      size_t numThreads);
 
   // Helper function to get the filename for a given permutation.
   std::string getFilenameForPermutation(const Permutation& permutation,
@@ -839,6 +850,11 @@ class IndexImpl {
       TextScanMode textScanMode) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
+
+  // The task chains of the first pass of the index building call the private
+  // `writePartialVocabulary`, see `PartialVocabularyBuilder.h`.
+  template <typename Index>
+  friend class qlever::partialVocabularyBuilder::PartialVocabularyTaskChain;
 
   // FRIEND TESTS
   friend class IndexTest_createFromTsvTest_Test;

@@ -14,8 +14,6 @@
 #ifndef QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 #define QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 
-#include <absl/container/inlined_vector.h>
-
 #include <atomic>
 #include <memory>
 #include <string>
@@ -36,7 +34,6 @@
 #include "util/RegexSet.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
-#include "util/Views.h"
 
 // Return true if `word` is a blank node. A word is a blank node if it starts
 // with `_:`, or, when `blankNodeIriRegexes` is given, if it is an IRI that is
@@ -280,45 +277,29 @@ struct ProcessedTriple {
 // The Ids of a triple, once its string components have been mapped via an
 // `ItemMapManager`. NOTE: Deliberately not named `IdTriple`, which is a class
 // with a similar purpose defined in `global/IdTriple.h`.
-using MappedTriple = std::array<Id, NumColumnsIndexBuilding>;
-// The `MappedTriple`s that a single input triple gives rise to: one for the
-// triple itself, plus the extra internal triples (for the language filter
-// implementation and for the text index) that it gives rise to.
-using MappedTriples = absl::InlinedVector<MappedTriple, 3>;
+using IdRow = std::array<Id, NumColumnsIndexBuilding>;
 
 // Perform the String -> Id step of the Index building pipeline for a single
 // triple.
 //
-// Returns the `MappedTriples` for `triple`, that is the Ids for the triple
+// Append the `IdRow`s for `triple` to `result`, that is the Ids for the triple
 // itself plus the Ids of the extra internal triples (for the language filter
 // implementation and for the text index) that it gives rise to. All Ids are
-// assigned according to `map`.
-//
-// `map` is used for assigning the ids.
+// assigned according to `map`. Increase `numHasWordTriples` by the number of
+// `ql:has-word` triples that were added.
 template <typename IndexPtr>
-MappedTriples mapTripleToIds(
-    QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& triple,
-    ItemMapManager& map, IndexPtr* index,
-    std::atomic<size_t>* numHasWordTriples = nullptr) {
+void mapTripleToIds(QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& triple,
+                    ItemMapManager& map, IndexPtr* index,
+                    std::vector<IdRow>& result, size_t& numHasWordTriples) {
   // Process the given triple.
   ProcessedTriple lt = index->processTriple(AD_FWD(triple));
 
-  // Reserve the exact number of triples we will produce. For ≤3 triples
-  // (original + language tag), this stays inline. For more (has-word
-  // triples), this allocates on the heap once.
-  MappedTriples result;
-  result.reserve(1 + (lt.langtag_.empty() ? 0 : 2) +
-                 lt.wordFrequencies_.size());
-
   // First, process the original triple.
-  result.push_back(map.getId(lt.triple_));
+  IdRow spoIds = map.getId(lt.triple_);
+  result.push_back(spoIds);
   static_assert(NumColumnsIndexBuilding == 4,
                 " The following lines probably have to be changed when "
                 "the number of payload columns changes");
-  // Convenience reference to the IDs of the original triple. This is safe
-  // because the `reserve` above ensures that no subsequent `push_back` will
-  // reallocate `result`.
-  auto& spoIds = result[0];
   auto tripleGraphId = spoIds[ADDITIONAL_COLUMN_GRAPH_ID];
 
   // Second, if there is a language tag, add the corresponding two internal
@@ -339,9 +320,9 @@ MappedTriples mapTripleToIds(
         ad_utility::convertToLanguageTaggedPredicate(iri, lt.langtag_)});
     // Add the internal triple `<subject> @language@<predicate> <object>`.
     result.push_back(
-        MappedTriple{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
+        IdRow{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
     // Add the internal triple `<object> ql:langtag <@language>`.
-    result.push_back(MappedTriple{
+    result.push_back(IdRow{
         spoIds[2],
         map.getId(TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}),
@@ -364,19 +345,12 @@ MappedTriples mapTripleToIds(
       auto wordId = map.getId(TripleComponent{
           ad_utility::triple_component::Literal::literalWithoutQuotes(word)});
       result.push_back(
-          MappedTriple{spoIds[2], hasWordPredId, wordId,
-                       Id::makeFromInt(static_cast<int64_t>(termFrequency))});
+          IdRow{spoIds[2], hasWordPredId, wordId,
+                Id::makeFromInt(static_cast<int64_t>(termFrequency))});
     }
-    // Update the counter for the number of `ql:has-word` triples. Relaxed
-    // ordering is fine because this counter is only read after all threads
-    // have finished (for a log message).
-    if (numHasWordTriples != nullptr) {
-      numHasWordTriples->fetch_add(lt.wordFrequencies_.size(),
-                                   std::memory_order_relaxed);
-    }
+    // Update the counter for the number of `ql:has-word` triples.
+    numHasWordTriples += lt.wordFrequencies_.size();
   }
-
-  return result;
 }
 
 // Return type of `IndexImpl::buildPartialVocabularies`.
