@@ -188,8 +188,8 @@ Storage<NumCols> makeStorage(const Strand& strand, net::io_context& ioContext,
 
 // The compressions that the round trips below are run with: the default ZSTD
 // level, and no compression at all. A spilled block has to arrive unchanged
-// either way, see `MERGE_PHASE_SPILL_COMPRESSION` for which of the two the
-// merge phase uses.
+// either way, and which of the two is faster is a decision of the caller, see
+// `CompressedBlockFile::Compression`.
 const std::vector<ad_utility::CompressedBlockFile::Compression>&
 compressions() {
   static const std::vector<ad_utility::CompressedBlockFile::Compression> result{
@@ -670,8 +670,7 @@ TEST(CompressedIdTableBlockStorage, aFinishedChunkReclaimsItsSpillFile) {
 // _____________________________________________________________________________
 // A storage that was created with `NO_BLOCK_COMPRESSION` writes the spilled
 // blocks exactly as they are, so its file holds precisely the bytes of the
-// `Id`s of those blocks. That is also the price of not compressing, see
-// `MERGE_PHASE_SPILL_COMPRESSION`.
+// `Id`s of those blocks. That is also the price of not compressing.
 TEST(CompressedIdTableBlockStorage, theUncompressedSpillFileHasTheExactSize) {
   std::string prefix = gtestCurrentTestName();
   net::io_context ioContext;
