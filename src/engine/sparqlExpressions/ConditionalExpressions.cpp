@@ -113,7 +113,9 @@ class CoalesceEvaluation {
   EvaluationContext* ctx_;
   VectorWithMemoryLimit<IdOrLocalVocabEntry> result_;
   // The indices that are unbound before the current child is applied, and those
-  // that remain unbound after applying it.
+  // that remain unbound after applying it. Invariant: `nextUnboundIndices_` is
+  // empty while a child is being applied; the child fills it and
+  // `advanceToNextChild` then makes it the current one.
   std::vector<uint64_t> unboundIndices_;
   std::vector<uint64_t> nextUnboundIndices_;
 
@@ -138,9 +140,12 @@ class CoalesceEvaluation {
     return unboundIndices_.size() == ctx_->size();
   }
 
-  // True iff every result is bound, so that the remaining children of the
-  // `COALESCE` don't have to be evaluated at all.
-  bool allResultsBound() const {
+  // True iff no remaining child can change the result, so that the rest of the
+  // children don't have to be evaluated. An empty `unboundIndices_` alone does
+  // not suffice: for an empty evaluation context there is no row to bind, so it
+  // is empty from the start, and the result there is all or nothing, determined
+  // only by a child with a bound constant result.
+  bool resultIsFinal() const {
     return unboundIndices_.empty() && !nothingBoundYet();
   }
 
@@ -150,10 +155,11 @@ class CoalesceEvaluation {
   std::optional<IdOrLocalVocabEntry> applyConstantResult(T&& childResult) {
     using U = decltype(childResult);
     static_assert(SingleExpressionResult<U> && isConstantResult<U>);
+    AD_CORRECTNESS_CHECK(nextUnboundIndices_.empty());
     IdOrLocalVocabEntry constantResult{AD_FWD(childResult)};
     if (isUnbound(constantResult)) {
       // This child binds nothing, so all the unbound indices stay unbound.
-      nextUnboundIndices_ = std::move(unboundIndices_);
+      unboundIndices_.swap(nextUnboundIndices_);
       return std::nullopt;
     }
     // If nothing was bound before, then this constant binds *all* the results,
@@ -182,11 +188,11 @@ class CoalesceEvaluation {
   template <typename T>
   void applyVectorResult(T&& childResult) {
     using U = decltype(childResult);
-    static_assert(!(isConstantResult<U> && SingleExpressionResult<U> &&
-                    std::is_rvalue_reference_v<U>));
+    static_assert(SingleExpressionResult<U> && !isConstantResult<U>);
+    AD_CORRECTNESS_CHECK(nextUnboundIndices_.empty());
     if (unboundIndices_.empty()) {
       // There is nothing left to bind. For a nonempty evaluation context we
-      // would have stopped evaluating children already (see `allResultsBound`),
+      // would have stopped evaluating children already (see `resultIsFinal`),
       // so this can only happen for an empty context, for which this child
       // simply contributes no value at all.
       AD_CORRECTNESS_CHECK(nothingBoundYet());
@@ -222,7 +228,7 @@ class CoalesceEvaluation {
 
   // Move on to the next child.
   void advanceToNextChild() {
-    unboundIndices_ = std::move(nextUnboundIndices_);
+    unboundIndices_.swap(nextUnboundIndices_);
     nextUnboundIndices_.clear();
     checkCancellation();
   }
@@ -300,7 +306,7 @@ class CoalesceExpression : public VariadicExpression {
         return std::move(constantValue).value();
       }
       evaluation.advanceToNextChild();
-      if (evaluation.allResultsBound()) {
+      if (evaluation.resultIsFinal()) {
         break;
       }
     }
