@@ -15,9 +15,11 @@
 #include <chrono>
 #include <cstddef>
 #include <functional>
+#include <future>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -35,6 +37,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/SourceLocation.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
+#include "util/parallelBlockMerge/ParallelMergeRange.h"
 
 // The tests of the helpers from `MergeHelpers.h` (in particular of
 // `computeChunkBoundaries`) live in `MergeHelpersTest.cpp`.
@@ -1269,6 +1272,36 @@ ASYNC_TEST(ParallelBlockMerge, singleThreadedConsumer) {
     result.insert(result.end(), block->begin(), block->end());
   }
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+
+namespace {
+// The minimal state and sink that a `detail::ParallelMergeRange` can be
+// instantiated with, for the test of its contract checks below. Neither of
+// them is ever used, because that range is never constructed successfully.
+struct DummyMergeState {
+  using Block = SizeVec;
+  void stop() {}
+};
+struct DummySink {
+  template <typename Token>
+  std::future<std::optional<SizeVec>> asyncGetNextBlock(
+      [[maybe_unused]] Token token) {
+    return {};
+  }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, rangeRequiresAStateAndASink) {
+  // The range always holds the merge that it reads from alive, so a missing
+  // state or sink is a contract violation, see `detail::ParallelMergeRange`.
+  using Range = detail::ParallelMergeRange<DummyMergeState, DummySink>;
+  auto state = std::make_shared<DummyMergeState>();
+  auto sink = std::make_shared<DummySink>();
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(nullptr, sink),
+                               ::testing::HasSubstr("state_ != nullptr"));
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(state, nullptr),
+                               ::testing::HasSubstr("sink_ != nullptr"));
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
