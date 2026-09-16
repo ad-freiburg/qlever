@@ -83,11 +83,11 @@ std::vector<Row> tableRows(const Table& table) {
   return rows;
 }
 
-// The compressions that the round trips below are run with: the default ZSTD
-// level, and no compression at all. A block has to arrive unchanged either
-// way, see `CompressedBlockFile::Compression`.
-const std::vector<CompressedBlockFile::Compression>& compressions() {
-  static const std::vector<CompressedBlockFile::Compression> result{
+// The compression levels that the round trips below are run with: the default
+// ZSTD level, and no compression at all. A block has to arrive unchanged either
+// way, see `CompressedBlockFile::CompressionLevel`.
+const std::vector<CompressedBlockFile::CompressionLevel>& compressionLevels() {
+  static const std::vector<CompressedBlockFile::CompressionLevel> result{
       ad_utility::ZSTD_DEFAULT_LEVEL, ad_utility::NO_BLOCK_COMPRESSION};
   return result;
 }
@@ -100,7 +100,6 @@ std::pair<BlockMetadata, std::vector<Row>> roundTrip(CompressedBlockFile& file,
                                                      size_t beginRow,
                                                      size_t endRow) {
   BlockMetadata metadata = writeBlock(file, table, beginRow, endRow);
-  file.flush();
   IdTableStatic<NumCols> block =
       readBlock<NumCols>(file, metadata, ad_utility::testing::makeAllocator());
   return {std::move(metadata), tableRows(block)};
@@ -121,7 +120,7 @@ std::vector<int64_t> manyValues() {
 
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlocks, roundTripWithDynamicNumberOfColumns) {
-  for (const auto& compression : compressions()) {
+  for (const auto& compression : compressionLevels()) {
     SCOPED_TRACE(compression.has_value() ? "compressed" : "uncompressed");
     // The number of columns deliberately includes the degenerate case of a
     // single column.
@@ -140,7 +139,7 @@ TEST(CompressedIdTableBlocks, roundTripWithDynamicNumberOfColumns) {
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlocks, roundTripWithStaticNumberOfColumns) {
   static constexpr size_t numColumns = 3;
-  for (const auto& compression : compressions()) {
+  for (const auto& compression : compressionLevels()) {
     SCOPED_TRACE(compression.has_value() ? "compressed" : "uncompressed");
     CompressedBlockFile file{gtestCurrentTestName(), compression};
     auto table = makeTable<numColumns>(numColumns, manyValues());
@@ -189,7 +188,6 @@ TEST(CompressedIdTableBlocks, blocksOfSeveralTablesAreIndependent) {
   metadata.push_back(writeBlock(file, first, 0, 2));
   metadata.push_back(writeBlock(file, second, 0, 2));
   metadata.push_back(writeBlock(file, first, 2, 4));
-  file.flush();
 
   // Read the blocks back in reverse order, to make sure that reading doesn't
   // depend on the order in which the blocks were written.
@@ -219,12 +217,11 @@ TEST(CompressedIdTableBlocks, aBlockWithoutColumnsKeepsItsNumberOfRows) {
 
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlocks, theMetadataDescribesTheBlock) {
-  for (const auto& compression : compressions()) {
+  for (const auto& compression : compressionLevels()) {
     SCOPED_TRACE(compression.has_value() ? "compressed" : "uncompressed");
     CompressedBlockFile file{gtestCurrentTestName(), compression};
     auto table = makeTable(3, manyValues());
     BlockMetadata metadata = writeBlock(file, table, 0, table.numRows());
-    file.flush();
 
     // There is exactly one byte range per column, and each of them holds the
     // `Id`s of one column of the block.
