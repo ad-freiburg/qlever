@@ -17,6 +17,7 @@
 #include <functional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -40,6 +41,14 @@ inline auto BN = ad_utility::testing::BlankNodeId;
 
 // A `WordComparator` that simply compares the words lexicographically.
 constexpr std::less<> lessThan{};
+
+// The order of merged words given as (geo sort key, word) pairs, as the
+// `WordBatchBuilder` expects it (see `KeyedWordComparator`): by key first,
+// then lexicographically.
+constexpr auto keyedLessThan = [](uint64_t key1, std::string_view word1,
+                                  uint64_t key2, std::string_view word2) {
+  return std::tie(key1, word1) < std::tie(key2, word2);
+};
 
 // Create the `QueueWord` for the occurrence of `word` with the given
 // `localIndex` in the partial vocabulary `partialFileId`.

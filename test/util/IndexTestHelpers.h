@@ -81,6 +81,9 @@ struct TestIndexConfig {
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
   qlever::Filetype indexType = qlever::Filetype::Turtle;
   std::optional<VocabularyType> vocabularyType = std::nullopt;
+  // The level of the geo cell grid for WKT literals, 0 means no grid (see
+  // `GeoCellGrid`). Requires the `OnDiskCompressedGeoSplit` vocabulary type.
+  uint8_t geoCellGridLevel = 0;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
   // If true, add `ql:has-word` triples for each word in each literal during
@@ -122,7 +125,8 @@ struct TestIndexConfig {
                       c.blocksizePermutations, c.createTextIndex,
                       c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
                       c.parserBufferSize, c.scoringMetric, c.bAndKParam,
-                      c.indexType, c.encodedPrefixesWithoutAngleBrackets,
+                      c.indexType, c.vocabularyType, c.geoCellGridLevel,
+                      c.encodedPrefixesWithoutAngleBrackets,
                       c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
                       c.parseInParallel, c.additionalSettings);
   }
@@ -130,7 +134,7 @@ struct TestIndexConfig {
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, blocksizePermutations, createTextIndex,
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
-      scoringMetric, bAndKParam, indexType, vocabularyType,
+      scoringMetric, bAndKParam, indexType, vocabularyType, geoCellGridLevel,
       encodedPrefixesWithoutAngleBrackets, addHasWordTriples,
       secondaryVocabWords, numThreads, parseInParallel, additionalSettings)
 };
