@@ -7,10 +7,9 @@ target_sources(engine PRIVATE
 
 # Since GCC 15, the inline storage of the `absl::InlinedVector` inside the
 # priority queue of `S2ClosestPointQueryBase` is wrongly reported as definitely
-# used uninitialized. The warning is emitted by the middle end and is therefore
-# not suppressed by abseil and S2 being included via `-isystem` (the same
-# suppression is needed for the `s2` target itself, see the top-level
-# `CMakeLists.txt`).
+# used uninitialized. For why this cannot be suppressed at the include, see
+# `src/util/CompilerWarnings.h`; the same suppression is needed for the `s2`
+# target itself, see the top-level `CMakeLists.txt`.
 #
 # NOTE: `TARGET_DIRECTORY` is required, because source file properties are
 # scoped to a directory, but the `engine` target is defined in the parent

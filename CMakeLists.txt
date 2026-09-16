@@ -721,8 +721,8 @@ endif ()
 # NOTE: `-Wno-uninitialized` is needed in addition to `-Wno-maybe-uninitialized`
 # (which it does not imply): since GCC 15, the inline storage of the
 # `absl::InlinedVector` inside the priority queue of `S2ClosestEdgeQueryBase` is
-# wrongly reported as definitely used uninitialized. Being a middle-end warning,
-# it is not suppressed by abseil being included via `-isystem`.
+# wrongly reported as definitely used uninitialized. For why this has to be
+# disabled for the whole target, see `src/util/CompilerWarnings.h`.
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

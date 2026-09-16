@@ -29,10 +29,8 @@
 // `Row<ValueId, 4>` and `Row<ValueId, 5>` in the same translation unit (and
 // inlined into `std::__insertion_sort` or `std::__adjust_heap`), GCC folds the
 // two instantiations and then believes that the `Row<5>` graph-column access
-// happens on a `Row<4>`. `-Warray-bounds` is a middle-end warning, but GCC
-// walks the inlining chain when deciding whether it is suppressed, so
-// disabling it around the definition covers every translation unit that
-// instantiates the comparator.
+// happens on a `Row<4>`. For why the suppression has to wrap the definition,
+// see `util/CompilerWarnings.h`.
 DISABLE_ARRAY_BOUNDS_WARNINGS
 template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {

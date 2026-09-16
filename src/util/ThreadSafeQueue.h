@@ -276,9 +276,8 @@ CPP_template(typename Queue, typename Producer)(
 // that have been pushed to the queue.
 // NOTE: GCC (since version 16) produces a false-positive `-Warray-bounds`
 // warning for the local `QueueGenerator` below, which it believes lies partly
-// outside the allocated storage. `-Warray-bounds` is a middle-end warning, but
-// GCC walks the inlining chain when deciding whether it is suppressed, so
-// disabling it around the definition covers every caller.
+// outside the allocated storage. For why the suppression has to wrap the
+// definition, see `util/CompilerWarnings.h`.
 DISABLE_ARRAY_BOUNDS_WARNINGS
 template <typename Queue, typename Producer>
 ad_utility::InputRangeTypeErased<typename Queue::value_type> queueManager(
