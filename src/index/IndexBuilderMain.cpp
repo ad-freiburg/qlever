@@ -331,6 +331,15 @@ int main(int argc, char** argv) {
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
       logLevelDescription.c_str());
+  add("num-threads,j", po::value(&config.numThreads_),
+      "The number of threads used during the index build. Must be at least 1. "
+      "Default: the number of hardware threads of the machine. NOTE: Currently "
+      "only the first pass (parsing the input and creating the partial "
+      "vocabularies) and the conversion to global IDs use this number; the "
+      "other phases use their own parallelism (making all phases respect this "
+      "option is work in progress). The memory of the first pass grows "
+      "linearly with this number, since each thread holds one batch of "
+      "`num-triples-per-batch` triples with its partial vocabulary in RAM.");
 
   // Process command line arguments.
   po::variables_map optionsMap;
