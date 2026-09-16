@@ -20,6 +20,7 @@
 #include "index/GraphComputation.h"
 #include "index/IdTableUtils.h"
 #include "index/LocatedTriples.h"
+#include "util/Algorithm.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
@@ -1526,7 +1527,7 @@ CompressedRelationReader::computeUniqueGraphIds(
     bool shouldScan =
         !metadata.graphInfo_.has_value() ||
         ql::ranges::any_of(metadata.graphInfo_.value(), [&graphIds](Id id) {
-          return !graphIds.contains(id.getBits());
+          return !ad_utility::contains(graphIds, id.getBits());
         });
     if (shouldScan) {
       auto block = readAndDecompressBlock(metadata, scanConfig);
