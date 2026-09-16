@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "./util/AsyncParserDriver.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
@@ -933,6 +934,14 @@ CPP_concept isMultifileParser =
     ad_utility::SimilarToAny<Parser, RdfMultifileParser,
                              RdfMultifileParserViaAsync>;
 
+// True iff `Parser` accepts input files with `parseInParallel_ == true`. Only
+// `RdfAsyncMultifileParser` has a parallel parser for a single file;
+// `RdfMultifileParser` requires the flag to be false and throws otherwise (see
+// the comment on that class, and `multifileParserRejectsParallelFiles` below).
+template <typename Parser>
+constexpr bool supportsParallelFiles =
+    !ad_utility::isSimilar<Parser, RdfMultifileParser>;
+
 // Parse the file at `filename` using a parser of type `Parser` and return the
 // sorted result. The default size for the parse buffer in the following tests
 // is 1 kB (which is much less than the default value
@@ -959,7 +968,6 @@ std::vector<TurtleTriple> parseFromFile(
   std::vector<TurtleTriple> result;
   while (auto batch = parser.getBatch()) {
     result.insert(result.end(), batch.value().begin(), batch.value().end());
-    parser.printAndResetQueueStatistics();
   }
   return result;
 }
@@ -967,11 +975,11 @@ std::vector<TurtleTriple> parseFromFile(
 // Run a function that takes a type identity of the parser as the first argument
 // and possible additional args, and run this function for all the different
 // parsers that can read from a file (stream and parallel parser, with all the
-// combinations of the different tokenizers).
+// combinations of the different tokenizers). The parallel parsers are the
+// `RdfAsyncParallelParser` instantiations behind the synchronous
+// `RdfParallelParserViaAsync` interface.
 template <typename Function, typename... Args>
 auto forAllParallelParsers(const Function& function, const Args&... args) {
-  function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, args...);
-  function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, args...);
   function(ti<RdfParallelParserViaAsync<TurtleParser<Tokenizer>>>, args...);
   function(ti<RdfParallelParserViaAsync<TurtleParser<TokenizerCtre>>>, args...);
 }
@@ -1293,11 +1301,7 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
         } else {
           return Parser{qlever::InputFileSpecification{
                             filename, qlever::Filetype::Turtle, std::nullopt},
-                        ad_utility::MemorySize::bytes(40),
-                        encodedIriManager(),
-                        qlever::specialIds().at(DEFAULT_GRAPH_IRI),
-                        RdfParserSettings{},
-                        10ms};
+                        ad_utility::MemorySize::bytes(40), encodedIriManager()};
         }
       }();
       timer.cont();
@@ -1739,11 +1743,12 @@ TEST(RdfParserTest, multifileParser) {
       ad_utility::deleteFile(file1);
       ad_utility::deleteFile(file2);
     };
+    bool parseInParallel = useParallelParser && supportsParallelFiles<Parser>;
     std::vector<qlever::InputFileSpecification> specs;
     specs.emplace_back(file1, qlever::Filetype::Turtle, "defaultGraphTTL",
-                       useParallelParser);
+                       parseInParallel);
     specs.emplace_back(file2, qlever::Filetype::NQuad, "defaultGraphNQ",
-                       useParallelParser);
+                       parseInParallel);
     Parser p{ad_utility::InputRangeTypeErased{std::move(specs)},
              encodedIriManager()};
     std::vector<TurtleTriple> result;
@@ -1753,6 +1758,43 @@ TEST(RdfParserTest, multifileParser) {
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
   };
   forAllMultifileParsers(impl, true);
+}
+
+// Test that `RdfMultifileParser` enforces its precondition that no input file
+// is to be parsed in parallel (see `makeStreamParserForSingleFile` in
+// `RdfParser.cpp`). The check runs on the thread that parses the offending
+// file, so the exception surfaces from `getBatch`, exactly like a parse error.
+// _____________________________________________________________________________
+TEST(RdfParserTest, multifileParserRejectsParallelFiles) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  ad_utility::makeOfstream(filename) << "<x> <y> <z> .\n";
+  absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
+
+  auto makeParser = [&filename](bool parseInParallel) {
+    std::vector<qlever::InputFileSpecification> specs;
+    specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt,
+                       parseInParallel);
+    return RdfMultifileParser{
+        ad_utility::InputRangeTypeErased{std::move(specs)},
+        encodedIriManager()};
+  };
+
+  // A file that requests parallel parsing violates the contract.
+  {
+    auto parser = makeParser(true);
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        parser.getBatch(),
+        ::testing::HasSubstr("cannot parse a single file in parallel"),
+        ad_utility::Exception);
+  }
+  // The very same input is parsed without complaints when the flag is not set.
+  {
+    auto parser = makeParser(false);
+    EXPECT_THAT(parser.getBatch(),
+                ::testing::Optional(::testing::ElementsAre(
+                    TurtleTriple{iri("<x>"), iri("<y>"), iri("<z>"),
+                                 qlever::specialIds().at(DEFAULT_GRAPH_IRI)})));
+  }
 }
 
 // _____________________________________________________________________________
@@ -1845,8 +1887,9 @@ TEST(RdfParserTest, asyncMultifileParserBasic) {
 
 // Test that the `RdfParserSettings` that are passed to the multifile parsers
 // (`RdfMultifileParser` and `RdfAsyncMultifileParser`) reach the parsers of
-// the individual files, for a file that is parsed in parallel as well as for
-// one that is parsed serially. With the default settings, the overflowing
+// the individual files. Both settings of `parseInParallel_` are exercised for
+// `RdfAsyncMultifileParser`; `RdfMultifileParser` only accepts serial files
+// (see `supportsParallelFiles`). With the default settings, the overflowing
 // integer and the invalid literal in the input are errors.
 // _____________________________________________________________________________
 TEST(RdfParserTest, multifileParsersHonorParserSettings) {
@@ -1876,13 +1919,21 @@ TEST(RdfParserTest, multifileParsersHonorParserSettings) {
     return result;
   };
 
+  // `RdfMultifileParser` only accepts serial files (see
+  // `supportsParallelFiles`), so it is only run with `parseInParallel_` unset.
+  {
+    RdfMultifileParser parser{makeFiles(false), encodedIriManager(),
+                              DEFAULT_PARSER_BUFFER_SIZE, settings};
+    EXPECT_THAT(drainSyncParser(parser),
+                ::testing::UnorderedElementsAreArray(expected));
+  }
+  // With the default settings, the input is rejected.
+  {
+    RdfMultifileParser parser{makeFiles(false), encodedIriManager()};
+    EXPECT_ANY_THROW(drainSyncParser(parser));
+  }
+
   for (bool parseInParallel : {true, false}) {
-    {
-      RdfMultifileParser parser{makeFiles(parseInParallel), encodedIriManager(),
-                                DEFAULT_PARSER_BUFFER_SIZE, settings};
-      EXPECT_THAT(drainSyncParser(parser),
-                  ::testing::UnorderedElementsAreArray(expected));
-    }
     {
       boost::asio::thread_pool pool{defaultConcurrency};
       RdfAsyncMultifileParser parser{
@@ -1893,11 +1944,6 @@ TEST(RdfParserTest, multifileParsersHonorParserSettings) {
                   ::testing::UnorderedElementsAreArray(expected));
     }
     // With the default settings, the input is rejected.
-    {
-      RdfMultifileParser parser{makeFiles(parseInParallel),
-                                encodedIriManager()};
-      EXPECT_ANY_THROW(drainSyncParser(parser));
-    }
     {
       boost::asio::thread_pool pool{defaultConcurrency};
       RdfAsyncMultifileParser parser{

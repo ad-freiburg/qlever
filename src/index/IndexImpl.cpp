@@ -117,9 +117,10 @@ std::unique_ptr<AsyncRdfParserBase> IndexImpl::makeRdfParser(
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // The reduced feature set has no coroutines (and only Boost 1.71), so the
   // asynchronous multifile parser is not available. Fall back to the
-  // synchronous `RdfMultifileParser` behind an `AsyncSerialParserAdapter`, and
-  // ignore the request for parallel parsing, so that every file is parsed by
-  // the simple stream parser. The files are still produced lazily.
+  // synchronous `RdfMultifileParser` behind an `AsyncSerialParserAdapter`. That
+  // parser requires `parseInParallel_` to be false for every file (it has no
+  // parallel parser for a single file, see the comment on that class), so clear
+  // the flag here. The files are still produced lazily.
   auto serialFiles =
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{
           ql::views::transform(std::move(files),
@@ -1621,14 +1622,6 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
         << "You specified \"num-triples-per-batch = " << numTriplesPerBatch_
         << "\", choose a lower value if the index builder runs out of memory"
         << std::endl;
-  }
-
-  if (j.count("parser-batch-size")) {
-    parserBatchSize_ = size_t{j["parser-batch-size"]};
-    AD_LOG_INFO << "Overriding setting parser-batch-size to "
-                << parserBatchSize_
-                << " This might influence performance during index build."
-                << std::endl;
   }
 
   std::string overflowingIntegersThrow = "overflowing-integers-throw";
