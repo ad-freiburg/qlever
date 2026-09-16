@@ -3447,11 +3447,14 @@ TEST(GroupBy, CoalesceWithAggregateOnEmptyImplicitGroup) {
   // Build `SELECT (COALESCE(makeChildren()...) AS ?c) WHERE { ... }` without a
   // `GROUP BY` over an input with zero rows.
   auto makeGroupBy = [qec, &o](const auto& makeChildren, bool inputIsLazy) {
-    std::vector<IdTable> idTables;
-    idTables.push_back(IdTable{1, qec->getAllocator()});
     auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(idTables), std::vector<std::optional<Variable>>{o},
-        inputIsLazy);
+        qec, IdTable{1, qec->getAllocator()},
+        std::vector<std::optional<Variable>>{o});
+    // The `GroupBy` always requests a lazy input (all the aggregates below
+    // support that), so the input has to be forced to be materialized for the
+    // materialized code path to be taken.
+    dynamic_cast<ValuesForTesting&>(*subtree->getRootOperation())
+        .forceFullyMaterialized() = !inputIsLazy;
     return GroupByImpl{
         qec,
         {},
@@ -3461,8 +3464,8 @@ TEST(GroupBy, CoalesceWithAggregateOnEmptyImplicitGroup) {
         std::move(subtree)};
   };
 
-  // Check the value of that `COALESCE` for both the fully materialized and the
-  // lazy code path (the latter goes through `processEmptyImplicitGroup`).
+  // Check the value of that `COALESCE` for both the fully materialized code
+  // path (`doGroupBy`) and the lazy code path (`processEmptyImplicitGroup`).
   auto expectCoalesce = [qec, &makeGroupBy](const auto& makeChildren,
                                             Id expected,
                                             ad_utility::source_location l =
