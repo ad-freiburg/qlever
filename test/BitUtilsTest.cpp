@@ -8,9 +8,11 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include "util/BitUtils.h"
+#include "util/GTestHelpers.h"
 
 namespace {
 using namespace ad_utility;
@@ -28,7 +30,11 @@ TEST(BitUtils, bitMaskForLowerBits) {
   ASSERT_EQ(bitMaskForLowerBits(64), std::numeric_limits<uint64_t>::max());
 
   for (size_t i = 65; i < 2048; ++i) {
-    ASSERT_THROW(bitMaskForLowerBits(i), std::out_of_range);
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        bitMaskForLowerBits(i),
+        ::testing::HasSubstr(
+            absl::StrCat("mask for more than 64 bits required, but was ", i)),
+        ad_utility::Exception);
   }
 }
 
@@ -45,8 +51,14 @@ TEST(BitUtils, bitMaskForHigherBits) {
     ASSERT_EQ(bitMaskForHigherBits(i), expected);
   }
 
+  // NOTE: `bitMaskForHigherBits` forwards `64 - i` to `bitMaskForLowerBits`,
+  // so the error message reports that (underflowed) value.
   for (size_t i = 65; i < 2048; ++i) {
-    ASSERT_THROW(bitMaskForHigherBits(i), std::out_of_range);
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        bitMaskForHigherBits(i),
+        ::testing::HasSubstr(absl::StrCat(
+            "mask for more than 64 bits required, but was ", uint64_t{64} - i)),
+        ad_utility::Exception);
   }
 }
 

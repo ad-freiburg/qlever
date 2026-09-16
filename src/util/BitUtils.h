@@ -15,7 +15,6 @@
 
 #include <cmath>
 #include <cstddef>
-#include <exception>
 #include <functional>
 
 #include "util/Exception.h"
@@ -26,9 +25,8 @@ namespace ad_utility {
 // The return value has 1s for the lowest `numBits` bits, and 0 in all the
 // higher bits.
 constexpr inline uint64_t bitMaskForLowerBits(uint64_t numBits) {
-  if (numBits > 64) {
-    throw std::out_of_range{"mask for more than 64 bits required"};
-  }
+  AD_CONTRACT_CHECK(numBits <= 64,
+                    "mask for more than 64 bits required, but was ", numBits);
   if (numBits == 64) {
     return std::numeric_limits<uint64_t>::max();
   }

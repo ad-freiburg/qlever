@@ -11,11 +11,12 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
-#include "engine/idTable/CompressedExternalIdTable.h"
+#include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/IndexBuilderTypes.h"
+#include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary_merger/Concepts.h"
 #include "index/vocabulary_merger/IdMap.h"
@@ -26,11 +27,7 @@
 #include "index/vocabulary_merger/WordBatchBuilder.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/Serializer/FileSerializer.h"
 #include "util/TypeTraits.h"
-
-using TripleVec =
-    ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
 
 // This header is the public interface of the vocabulary merger. The parts of
 // it that are understandable (and testable) on their own live in
@@ -41,10 +38,10 @@ using TripleVec =
 namespace ad_utility::vocabulary_merger {
 
 // _______________________________________________________________
-// Merge the partial vocabularies in the  binary files
-// `basename + PARTIAL_VOCAB_WORDS_INFIX + suffix` for each `suffix` in
-// `partialVocabularySuffixes`. The mapping from the partial to the global IDs
-// is written to `basename + PARTIAL_VOCAB_IDMAP_INFIX + suffix`.
+// Merge the partial vocabularies in the binary files
+// `partialVocabularyWordsFilename(basename, idx)` for each `idx` in
+// `[0, numPartialVocabularies)`. The mapping from the partial to the global
+// IDs is written to `partialVocabularyIdMapFilename(basename, idx)`.
 // Return the number of total Words merged and the lower and upper bound of
 // language tagged predicates. Argument `comparator` gives the way to order
 // strings (case-sensitive or not). Argument `wordCallback`
@@ -75,8 +72,7 @@ namespace ad_utility::vocabulary_merger {
 // The last three of those stages are owned by the
 // `detail::VocabularyMergePipeline`.
 template <typename W, typename C>
-auto mergeVocabulary(const std::string& basename,
-                     const std::vector<std::string>& partialVocabularySuffixes,
+auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      W comparator, C& wordCallback,
                      ad_utility::MemorySize memoryToUse,
                      const ad_utility::RegexSet& blankNodeIriRegexes = {})
@@ -103,13 +99,22 @@ ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
  */
 ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
 
-/**
- * @brief for each of the IdTriples in <input>: map the three Ids using the
- * <map> and write the resulting Id triple to <*writePtr>
- */
-void writeMappedIdsToExtVec(
-    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
-    const HashMap<Id, Id>& map, TripleVec& vec);
+// The triples that were mapped using a single partial vocabulary are stored in
+// a file of their own (see `unsortedTriplesFilename`). The following two
+// functions are the only writer and the only reader of that file format, so
+// they always have to be changed together.
+
+// For each of the IdTriples in `input`: map its Ids using the `map` and
+// serialize the resulting batch of Id triples to the file `filename`, which is
+// created and closed by this function. Counterpart of `readMappedIdsFromFile`.
+void writeMappedIdsToFile(
+    std::vector<std::array<Id, NumColumnsIndexBuilding>> input,
+    const HashMap<uint64_t, uint64_t>& map, const std::string& filename);
+
+// Read back the Id triples that `writeMappedIdsToFile` has written to the file
+// `filename`.
+IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
+    const std::string& filename);
 
 /**
  * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file

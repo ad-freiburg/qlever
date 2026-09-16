@@ -450,6 +450,9 @@ TEST(ServerTest, metricsEndpoint) {
       "qlever_sparql_operation_errors_total";
   std::string_view qleverIndexRebuildInProgress =
       "qlever_index_rebuild_in_progress";
+  std::string_view qleverIndexNumTriples = "qlever_index_num_triples";
+  Label inserted{"type", "inserted"};
+  Label deleted{"type", "deleted"};
   ExpectMetricsChange(
       testing::AllOf(IsZero(qleverDeltaTriples),
                      IsZero(qleverSparqlOperationStartedTotal, update),
@@ -462,6 +465,19 @@ TEST(ServerTest, metricsEndpoint) {
                      IsZero(qleverSparqlOperationStartedTotal, query),
                      IsZero(qleverSparqlOperationRunning, update),
                      IsZero(qleverSparqlOperationRunning, query)));
+  // The delta triples are also reported per type (inserted or deleted), and
+  // the number of triples in the index does not change with updates.
+  ExpectMetricsChange(
+      testing::AllOf(IsZero(qleverDeltaTriples),
+                     IsZero(qleverDeltaTriples, inserted),
+                     IsZero(qleverDeltaTriples, deleted),
+                     MetricIs(qleverIndexNumTriples, "1")),
+      UpdateRequest(
+          "INSERT DATA { <d> <e> <f> } ; DELETE DATA { <a> <b> <c> }"),
+      testing::AllOf(MetricIs(qleverDeltaTriples, "2"),
+                     MetricIs(qleverDeltaTriples, "1", inserted),
+                     MetricIs(qleverDeltaTriples, "1", deleted),
+                     MetricIs(qleverIndexNumTriples, "1")));
   ExpectMetricsChange(
       testing::AllOf(IsZero(qleverDeltaTriples),
                      IsZero(qleverSparqlOperationStartedTotal, update),

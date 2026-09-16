@@ -120,13 +120,15 @@ class RdfAsyncParallelParser : public AsyncRdfParserBase {
  public:
   // Construct a parser that reads from `spec` and schedules all of its work
   // on `executor`. The constructor does not block and starts no asynchronous
-  // operation, see the class comment above.
+  // operation, see the class comment above. The `settings` are applied to
+  // every worker parser (see `RdfParserSettings`).
   RdfAsyncParallelParser(const ql::any_io_executor& executor,
                          const qlever::InputFileSpecification& spec,
                          ad_utility::MemorySize blocksize,
                          const EncodedIriManager* encodedIriManager,
                          const TripleComponent& defaultGraphIri =
-                             qlever::specialIds().at(DEFAULT_GRAPH_IRI));
+                             qlever::specialIds().at(DEFAULT_GRAPH_IRI),
+                         RdfParserSettings settings = {});
 
  protected:
   // Implement `AsyncRdfParserBase::asyncGetBatchImpl` by simply `co_spawn`ing
@@ -169,9 +171,10 @@ class RdfParallelParserViaAsync
                             ad_utility::MemorySize blocksize,
                             const EncodedIriManager* ev,
                             const TripleComponent& defaultGraphIri =
-                                qlever::specialIds().at(DEFAULT_GRAPH_IRI))
+                                qlever::specialIds().at(DEFAULT_GRAPH_IRI),
+                            RdfParserSettings settings = {})
       : AsyncParserDriver<RdfAsyncParallelParser<Parser>>{
-            ev, spec, blocksize, ev, defaultGraphIri} {}
+            ev, spec, blocksize, ev, defaultGraphIri, settings} {}
 
   // Overload that accepts and ignores a `sleepTimeForTesting` parameter so that
   // tests can instantiate this class and `RdfParallelParser` with the same
@@ -179,9 +182,10 @@ class RdfParallelParserViaAsync
   RdfParallelParserViaAsync(
       const qlever::InputFileSpecification& spec,
       ad_utility::MemorySize blocksize, const EncodedIriManager* ev,
-      const TripleComponent& defaultGraphIri,
+      const TripleComponent& defaultGraphIri, RdfParserSettings settings,
       [[maybe_unused]] std::chrono::milliseconds sleepTimeForTesting)
-      : RdfParallelParserViaAsync{spec, blocksize, ev, defaultGraphIri} {}
+      : RdfParallelParserViaAsync{spec, blocksize, ev, defaultGraphIri,
+                                  settings} {}
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFASYNCPARALLELPARSER_H

@@ -291,7 +291,9 @@ class ValueId {
   // on the underlying bits, which allows much better code generation (e.g.
   // vectorization). In particular, this method should for example be used
   // during index building.
-  auto compareWithoutLocalVocab(const ValueId& other) const {
+  // NOTE: This is only `constexpr` in C++20 mode, for the same reason as
+  // `compareThreeWay` above.
+  QL_CONSTEXPR auto compareWithoutLocalVocab(const ValueId& other) const {
     // NOTE: If this static assertion is violated at some point, make sure to
     // check all callers of this function if they are still correct.
     static_assert(isOnlyLocalVocabNotBitwiseComparable);
@@ -320,33 +322,40 @@ class ValueId {
   // unnecessary because `getDatatype() == Undefined` already identifies the
   // single undefined value correctly, but it is very useful for generic code
   // like the `visit` member function.
-  [[nodiscard]] UndefinedType getUndefined() const noexcept { return {}; }
-  bool isUndefined() const noexcept { return *this == makeUndefined(); }
+  [[nodiscard]] constexpr UndefinedType getUndefined() const noexcept {
+    return {};
+  }
+  QL_CONSTEXPR bool isUndefined() const noexcept {
+    return *this == makeUndefined();
+  }
 
   // Create a `ValueId` for a double value. The conversion will reduce the
   // precision of the mantissa of an IEEE double precision floating point
   // number from 53 to 49 significant bits.
-  static ValueId makeFromDouble(double d) {
+  // NOTE: This function and `getDouble` below are only `constexpr` in C++20
+  // mode, where `absl::bit_cast` is `std::bit_cast`. In C++17 mode it falls
+  // back to a `memcpy`, see also the note on `minPositiveDouble` above.
+  static QL_CONSTEXPR ValueId makeFromDouble(double d) {
     auto shifted = absl::bit_cast<T>(d) >> numDatatypeBits;
     return addDatatypeBits(shifted, Datatype::Double);
   }
   // Obtain the `double` that this `ValueId` encodes. If `getDatatype() !=
   // Double` then the result is unspecified.
-  [[nodiscard]] double getDouble() const noexcept {
+  [[nodiscard]] QL_CONSTEXPR double getDouble() const noexcept {
     return absl::bit_cast<double>(_bits << numDatatypeBits);
   }
 
   // Create a `ValueId` for a signed integer value. Integers in the range
   // [-2^59, 2^59-1] can be represented. Integers outside of this range will
   // overflow according to the semantics of `NBitInteger<60>`.
-  static ValueId makeFromInt(int64_t i) noexcept {
+  static constexpr ValueId makeFromInt(int64_t i) {
     auto nbit = IntegerType::toNBit(i);
     return addDatatypeBits(nbit, Datatype::Int);
   }
 
   // Obtain the signed integer that this `ValueId` encodes. If `getDatatype()
   // != Int` then the result is unspecified.
-  [[nodiscard]] int64_t getInt() const noexcept {
+  [[nodiscard]] constexpr int64_t getInt() const noexcept {
     return IntegerType::fromNBit(_bits);
   }
 
@@ -365,14 +374,14 @@ class ValueId {
   }
 
   // Obtain the boolean value.
-  [[nodiscard]] bool getBool() const noexcept {
+  [[nodiscard]] constexpr bool getBool() const noexcept {
     return static_cast<bool>(removeDatatypeBits(_bits) & 1);
   }
 
   // Obtain the boolean value as a string view. In particular, return either
   // `true`, `false`, `0` , or `1`, depending on whether the value was created
   // via `makeFromBool` or `makeBoolFromZeroOrOne` (see above).
-  std::string_view getBoolLiteral() const noexcept {
+  constexpr std::string_view getBoolLiteral() const noexcept {
     bool value = getBool();
     if (_bits & 0b10) {
       return value ? "1" : "0";
@@ -384,15 +393,15 @@ class ValueId {
   // `global/IndexTypes.h`). These types can
   // represent values in the range [0, 2^60]. When `index` is outside of this
   // range, and `IndexTooLargeException` is thrown.
-  static ValueId makeFromVocabIndex(VocabIndex index) {
+  static constexpr ValueId makeFromVocabIndex(VocabIndex index) {
     return makeFromIndex(index.get(), Datatype::VocabIndex);
   }
 
-  static ValueId makeFromEncodedVal(uint64_t idx) {
+  static constexpr ValueId makeFromEncodedVal(uint64_t idx) {
     return makeFromIndex(idx, Datatype::EncodedVal);
   }
 
-  static ValueId makeFromTextRecordIndex(TextRecordIndex index) {
+  static constexpr ValueId makeFromTextRecordIndex(TextRecordIndex index) {
     return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
   static ValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
@@ -402,13 +411,14 @@ class ValueId {
     return makeFromIndex(reinterpret_cast<T>(index) >> numDatatypeBits,
                          Datatype::LocalVocabIndex);
   }
-  static ValueId makeFromWordVocabIndex(WordVocabIndex index) {
+  static constexpr ValueId makeFromWordVocabIndex(WordVocabIndex index) {
     return makeFromIndex(index.get(), Datatype::WordVocabIndex);
   }
-  static ValueId makeFromBlankNodeIndex(BlankNodeIndex index) {
+  static constexpr ValueId makeFromBlankNodeIndex(BlankNodeIndex index) {
     return makeFromIndex(index.get(), Datatype::BlankNodeIndex);
   }
-  static ValueId makeFromSecondaryVocabIndex(SecondaryVocabIndex index) {
+  static constexpr ValueId makeFromSecondaryVocabIndex(
+      SecondaryVocabIndex index) {
     return makeFromIndex(index.get(), Datatype::SecondaryVocabIndex);
   }
 
@@ -443,6 +453,8 @@ class ValueId {
   }
 
   // Store or load a `Date` object.
+  // NOTE: These functions cannot be `constexpr`, because
+  // `DateYearOrDuration` is not a literal type.
   static ValueId makeFromDate(DateYearOrDuration d) noexcept {
     return addDatatypeBits(absl::bit_cast<uint64_t>(d), Datatype::Date);
   }

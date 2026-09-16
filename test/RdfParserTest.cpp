@@ -631,7 +631,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
       Parser parser{encodedIriManager()};
       parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
-      parser.integerOverflowBehavior() =
+      parser.settings().integerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
       for (const auto& input : nonWorkingInputs) {
         assertParsingFails(parser, input);
@@ -651,7 +651,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
       Parser parser{encodedIriManager()};
       parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
-      parser.integerOverflowBehavior() =
+      parser.settings().integerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::AllToDouble;
       for (const auto& input : nonWorkingInputs) {
         assertParsingFails(parser, input);
@@ -684,7 +684,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       std::vector<TurtleTriple> expected{{iri("<a>"), iri("<b>"), 123},
                                          {iri("<e>"), iri("<f>"), 234}};
       Parser parser{encodedIriManager()};
-      parser.invalidLiteralsAreSkipped() = true;
+      parser.settings().invalidLiteralsAreSkipped_ = true;
       auto result = parseAllTriples(parser, input);
       ASSERT_EQ(result, expected);
     }
@@ -699,8 +699,8 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           {iri("<e>"), iri("<f>"), 234}};
       Parser parser{encodedIriManager()};
       parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
-      parser.invalidLiteralsAreSkipped() = true;
-      parser.integerOverflowBehavior() =
+      parser.settings().invalidLiteralsAreSkipped_ = true;
+      parser.settings().integerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
       auto result = parseAllTriples(parser, input);
       ASSERT_EQ(result, expected);
@@ -1293,8 +1293,11 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
         } else {
           return Parser{qlever::InputFileSpecification{
                             filename, qlever::Filetype::Turtle, std::nullopt},
-                        ad_utility::MemorySize::bytes(40), encodedIriManager(),
-                        qlever::specialIds().at(DEFAULT_GRAPH_IRI), 10ms};
+                        ad_utility::MemorySize::bytes(40),
+                        encodedIriManager(),
+                        qlever::specialIds().at(DEFAULT_GRAPH_IRI),
+                        RdfParserSettings{},
+                        10ms};
         }
       }();
       timer.cont();
@@ -1770,9 +1773,11 @@ TEST(RdfParserTest, multifileParserSelectsTokenizer) {
   auto parse = [&filename](bool useRelaxedParsing) {
     std::vector<qlever::InputFileSpecification> specs;
     specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt, false);
+    RdfParserSettings settings;
+    settings.useRelaxedParsing_ = useRelaxedParsing;
     RdfMultifileParser parser{
         ad_utility::InputRangeTypeErased{std::move(specs)}, encodedIriManager(),
-        DEFAULT_PARSER_BUFFER_SIZE, useRelaxedParsing};
+        DEFAULT_PARSER_BUFFER_SIZE, settings};
     std::vector<TurtleTriple> result;
     while (auto batch = parser.getBatch()) {
       ql::ranges::copy(batch.value(), std::back_inserter(result));
@@ -1836,6 +1841,71 @@ TEST(RdfParserTest, asyncMultifileParserBasic) {
   impl(false, false);
   impl(true, false);
   impl(false, true);
+}
+
+// Test that the `RdfParserSettings` that are passed to the multifile parsers
+// (`RdfMultifileParser` and `RdfAsyncMultifileParser`) reach the parsers of
+// the individual files, for a file that is parsed in parallel as well as for
+// one that is parsed serially. With the default settings, the overflowing
+// integer and the invalid literal in the input are errors.
+// _____________________________________________________________________________
+TEST(RdfParserTest, multifileParsersHonorParserSettings) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  ad_utility::makeOfstream(filename)
+      << "<a> <b> 99999999999999999999999 .\n<c> <d> "
+         "\"invalid\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+         "<e> <f> 234 .\n";
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  std::vector<TurtleTriple> expected{
+      {iri("<a>"), iri("<b>"), 99999999999999999999999.0},
+      {iri("<e>"), iri("<f>"), 234}};
+  RdfParserSettings settings{
+      TurtleParserIntegerOverflowBehavior::OverflowingToDouble, true};
+
+  auto makeFiles = [&filename](bool parseInParallel) {
+    std::vector<qlever::InputFileSpecification> specs;
+    specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt,
+                       parseInParallel);
+    return ad_utility::InputRangeTypeErased{std::move(specs)};
+  };
+  auto drainSyncParser = [](RdfParserBase& parser) {
+    std::vector<TurtleTriple> result;
+    while (auto batch = parser.getBatch()) {
+      ql::ranges::copy(batch.value(), std::back_inserter(result));
+    }
+    return result;
+  };
+
+  for (bool parseInParallel : {true, false}) {
+    {
+      RdfMultifileParser parser{makeFiles(parseInParallel), encodedIriManager(),
+                                DEFAULT_PARSER_BUFFER_SIZE, settings};
+      EXPECT_THAT(drainSyncParser(parser),
+                  ::testing::UnorderedElementsAreArray(expected));
+    }
+    {
+      boost::asio::thread_pool pool{defaultConcurrency};
+      RdfAsyncMultifileParser parser{
+          pool.get_executor(), makeFiles(parseInParallel), encodedIriManager(),
+          DEFAULT_PARSER_BUFFER_SIZE, settings};
+      absl::Cleanup joinPool = [&pool] { pool.join(); };
+      EXPECT_THAT(drainAsyncParser(parser, defaultConcurrency),
+                  ::testing::UnorderedElementsAreArray(expected));
+    }
+    // With the default settings, the input is rejected.
+    {
+      RdfMultifileParser parser{makeFiles(parseInParallel),
+                                encodedIriManager()};
+      EXPECT_ANY_THROW(drainSyncParser(parser));
+    }
+    {
+      boost::asio::thread_pool pool{defaultConcurrency};
+      RdfAsyncMultifileParser parser{
+          pool.get_executor(), makeFiles(parseInParallel), encodedIriManager()};
+      absl::Cleanup joinPool = [&pool] { pool.join(); };
+      EXPECT_ANY_THROW(drainAsyncParser(parser, defaultConcurrency));
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -1990,9 +2060,9 @@ TEST(RdfParserTest, asyncMultifileParserConcurrentErrors) {
 }
 
 // The `RdfAsyncMultifileParser` counterpart of
-// `multifileParserSelectsTokenizer` above: the `useRelaxedParsing` constructor
-// argument selects the tokenizer for all files, exactly like the
-// `ascii-prefixes-only` setting of `RdfMultifileParser`.
+// `multifileParserSelectsTokenizer` above: the `useRelaxedParsing_` setting
+// selects the tokenizer for all files, exactly like the `ascii-prefixes-only`
+// setting of `RdfMultifileParser`.
 // _____________________________________________________________________________
 TEST(RdfParserTest, asyncMultifileParserSelectsTokenizer) {
   std::string filename = gtestCurrentTestName() + ".ttl";
@@ -2004,9 +2074,11 @@ TEST(RdfParserTest, asyncMultifileParserSelectsTokenizer) {
     std::vector<qlever::InputFileSpecification> specs;
     specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt, false);
     boost::asio::thread_pool pool{2};
+    RdfParserSettings settings;
+    settings.useRelaxedParsing_ = useRelaxedParsing;
     RdfAsyncMultifileParser parser{
         pool.get_executor(), ad_utility::InputRangeTypeErased{std::move(specs)},
-        encodedIriManager(), DEFAULT_PARSER_BUFFER_SIZE, useRelaxedParsing};
+        encodedIriManager(), DEFAULT_PARSER_BUFFER_SIZE, settings};
     absl::Cleanup joinPool = [&pool] { pool.join(); };
     return drainAsyncParser(parser, 1);
   };
