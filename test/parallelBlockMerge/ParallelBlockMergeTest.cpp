@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -1125,26 +1126,27 @@ namespace {
 template <bool moveElements = false, typename Input, typename Comparator>
 std::vector<typename Input::value_type> mergeToRangeAndCollect(
     Input input, Comparator comparator, MergeOptions options = {},
-    size_t numThreads = 4, size_t bufferedBlocksPerChunk = 2) {
+    size_t numThreads = 4, size_t bufferedBlocksPerChunk = 2,
+    ad_utility::SharedCancellationHandle cancellationHandle =
+        detail::freshCancellationHandle()) {
   options.parallelismHint = numThreads;
   net::thread_pool pool{numThreads};
+  // All the coroutines that are still in flight have to finish before the pool
+  // is destroyed, otherwise this hangs. This also has to happen if the consumer
+  // below exits via an exception, and only after the range is destroyed (which
+  // stops the merge), hence the cleanup that is declared before the range.
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
   std::vector<typename Input::value_type> result;
-  {
-    auto blocks = parallelBlockMergeToRange<moveElements>(
-        pool.get_executor(), std::move(input), std::move(comparator),
-        makeInMemoryStorageFactory<typename Input::Block>(
-            bufferedBlocksPerChunk),
-        std::move(options));
-    for (auto& block : blocks) {
-      EXPECT_FALSE(block.empty());
-      for (auto& element : block) {
-        result.push_back(std::move(element));
-      }
+  auto blocks = parallelBlockMergeToRange<moveElements>(
+      pool.get_executor(), std::move(input), std::move(comparator),
+      makeInMemoryStorageFactory<typename Input::Block>(bufferedBlocksPerChunk),
+      std::move(options), std::move(cancellationHandle));
+  for (auto& block : blocks) {
+    EXPECT_FALSE(block.empty());
+    for (auto& element : block) {
+      result.push_back(std::move(element));
     }
   }
-  // All the coroutines that are still in flight have to finish, otherwise this
-  // hangs.
-  pool.join();
   return result;
 }
 
@@ -1239,6 +1241,28 @@ TEST(ParallelBlockMerge, consumerAbandonsRangeEarly) {
         makeInMemoryStorageFactory<SizeVec>(2), options);
   }
   pool.join();
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, exceptionFromChunkPropagatesThroughRange) {
+  // The exception of a chunk has to arrive at the thread that iterates over
+  // the range, which waits on a `future`, see `ParallelMergeRange::get`. Some
+  // of the chunks succeed and others fail, see `expectExceptionPropagates`, and
+  // abandoning the range afterwards must neither hang nor crash.
+  expectExceptionPropagates([](InstrumentedInput input) {
+    return mergeToRangeAndCollect(std::move(input), std::less<>{},
+                                  alwaysParallelOptions(16), 4);
+  });
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, cancellationThroughRange) {
+  expectCancellationThrows(
+      [](SizeInput input, ad_utility::SharedCancellationHandle handle) {
+        return mergeToRangeAndCollect(std::move(input), std::less<>{},
+                                      alwaysParallelOptions(16), 4, 2,
+                                      std::move(handle));
+      });
 }
 
 // _____________________________________________________________________________
