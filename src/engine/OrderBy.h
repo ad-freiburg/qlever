@@ -6,6 +6,7 @@
 #ifndef QLEVER_SRC_ENGINE_ORDERBY_H
 #define QLEVER_SRC_ENGINE_ORDERBY_H
 
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -61,15 +62,9 @@ class OrderBy : public Operation {
     return subtree_->getMultiplicity(col);
   }
 
-  size_t getCostEstimate() override {
-    size_t size = getSizeEstimateBeforeLimit();
-    size_t logSize = std::max(
-        size_t(1), static_cast<size_t>(logb(
-                       static_cast<double>(getSizeEstimateBeforeLimit()))));
-    size_t nlogn = size * logSize;
-    size_t subcost = subtree_->getCostEstimate();
-    return nlogn + subcost;
-  }
+  // The cost is `n log n` for the sort, or linear if the input is already
+  // sorted by the first sort column (see `computeResultForSortedInput`).
+  size_t getCostEstimate() override;
 
   bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
@@ -86,6 +81,21 @@ class OrderBy : public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
+
+  // Return true iff the subtree's result is sorted (in the internal order of
+  // the `Id`s) by the first of the `sortIndices_`.
+  bool isInputSortedOnFirstSortColumn() const;
+
+  // Fast path for a single sort column, where the `input` is already sorted by
+  // that column in the internal order and the column contains only integers or
+  // only doubles (possibly preceded by `Undefined` values). The internal order
+  // then differs from the order required by `ORDER BY` only in the placement of
+  // a few contiguous ranges (e.g. the negative numbers), so the result is
+  // obtained by copying these ranges in the right order, in linear time and
+  // without any comparisons. Return `std::nullopt` if the fast path does not
+  // apply.
+  std::optional<IdTable> computeResultForSortedInput(
+      const IdTableView<0>& input) const;
 
   VariableToColumnMap computeVariableToColumnMap() const override {
     return subtree_->getVariableColumns();

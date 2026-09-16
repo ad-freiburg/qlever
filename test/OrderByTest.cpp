@@ -10,6 +10,7 @@
 #include "engine/OrderBy.h"
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
+#include "index/IdTableUtils.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
@@ -196,6 +197,177 @@ TEST(OrderBy, mixedDatatypes) {
   ql::ranges::reverse(expected);
   testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
               {true});
+}
+
+namespace {
+// Create an `OrderBy` on column 0 (descending iff `isDescending`) whose input
+// is sorted by the columns `sortedColumns` in the internal order and reports
+// this via `resultSortedOn`. The `input` is sorted accordingly by this
+// function.
+OrderBy makeOrderByOnSortedInput(IdTable input, bool isDescending,
+                                 std::vector<ColumnIndex> sortedColumns = {0},
+                                 OrderBy::SortIndices sortIndices = {
+                                     {0, false}}) {
+  auto qec = ad_utility::testing::getQec();
+  IdTableUtils::sort(input, sortedColumns);
+  std::vector<std::optional<Variable>> vars;
+  for (size_t i = 0; i < input.numColumns(); ++i) {
+    vars.emplace_back("?"s + std::to_string(i));
+  }
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input), vars, false, std::move(sortedColumns));
+  sortIndices.front().second = isDescending;
+  return OrderBy{qec, std::move(subtree), std::move(sortIndices)};
+}
+
+// Test that the `OrderBy` on the sorted `input` yields the `expected` result
+// and takes the fast path for sorted numeric input iff `expectFastPath`. If
+// `expected` is not given, the result of a regular (unsorted) `OrderBy` on the
+// same input is expected.
+void testOrderByOnSortedInput(const IdTable& input, bool isDescending,
+                              bool expectFastPath,
+                              std::optional<IdTable> expected = std::nullopt,
+                              source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  if (!expected.has_value()) {
+    expected = makeOrderBy(input.clone(), {{0, isDescending}})
+                   .getResult()
+                   ->idTableView()
+                   .clone();
+  }
+  OrderBy orderBy = makeOrderByOnSortedInput(input.clone(), isDescending);
+  EXPECT_EQ(orderBy.getResult()->idTableView(), expected.value());
+  EXPECT_EQ(orderBy.runtimeInfo().details_.contains("sorted-numeric-input"),
+            expectFastPath);
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(OrderBy, sortedIntInput) {
+  auto I = ad_utility::testing::IntId;
+  auto U = Id::makeUndefined();
+  auto min = Id::IntegerType::min();
+  auto max = Id::IntegerType::max();
+  // The second column checks that complete rows are moved.
+  VectorTable input{{I(0), I(1)},   {I(3), I(2)},   {I(-1), I(3)},
+                    {I(max), I(4)}, {I(-17), I(5)}, {U, I(6)},
+                    {I(min), I(7)}, {U, I(8)},      {I(123), I(9)}};
+  VectorTable expected{{U, I(6)},      {U, I(8)},      {I(min), I(7)},
+                       {I(-17), I(5)}, {I(-1), I(3)},  {I(0), I(1)},
+                       {I(3), I(2)},   {I(123), I(9)}, {I(max), I(4)}};
+  auto inputTable = makeIdTableFromVector(input);
+  testOrderByOnSortedInput(inputTable, false, true,
+                           makeIdTableFromVector(expected));
+  ql::ranges::reverse(expected);
+  testOrderByOnSortedInput(inputTable, true, true,
+                           makeIdTableFromVector(expected));
+
+  // Without the `Undefined` values.
+  input.erase(input.begin() + 5);
+  input.erase(input.begin() + 6);
+  testOrderByOnSortedInput(makeIdTableFromVector(input), false, true);
+  testOrderByOnSortedInput(makeIdTableFromVector(input), true, true);
+}
+
+// _____________________________________________________________________________
+TEST(OrderBy, sortedDoubleInput) {
+  auto D = ad_utility::testing::DoubleId;
+  auto U = Id::makeUndefined();
+  auto inf = std::numeric_limits<double>::infinity();
+  auto nan = std::numeric_limits<double>::quiet_NaN();
+  // `NaN`s with a set sign bit (e.g. the result of `0.0 / 0.0` on x86) are
+  // sorted differently in the internal order than `NaN`s with an unset one.
+  auto negNan = std::copysign(nan, -1.0);
+  ASSERT_TRUE(std::signbit(D(negNan).getDouble()));
+  VectorTable input{{D(0.0), D(1)},   {D(2.25), D(2)},   {D(-inf), D(3)},
+                    {D(nan), D(4)},   {D(-0.0), D(5)},   {D(-3.5), D(6)},
+                    {U, D(7)},        {D(negNan), D(8)}, {D(inf), D(9)},
+                    {D(-1e-4), D(10)}};
+  // All `NaN`s are greater than all other values. The order among the ties
+  // (`-0.0` and `0.0`, the two `NaN`s) is the one produced by the fast path.
+  VectorTable expectedAscending{
+      {U, D(7)},       {D(-inf), D(3)},  {D(-3.5), D(6)}, {D(-1e-4), D(10)},
+      {D(-0.0), D(5)}, {D(0.0), D(1)},   {D(2.25), D(2)}, {D(inf), D(9)},
+      {D(nan), D(4)},  {D(negNan), D(8)}};
+  VectorTable expectedDescending{
+      {D(negNan), D(8)}, {D(nan), D(4)},  {D(inf), D(9)},    {D(2.25), D(2)},
+      {D(0.0), D(1)},    {D(-0.0), D(5)}, {D(-1e-4), D(10)}, {D(-3.5), D(6)},
+      {D(-inf), D(3)},   {U, D(7)}};
+  auto inputTable = makeIdTableFromVector(input);
+  testOrderByOnSortedInput(inputTable, false, true,
+                           makeIdTableFromVector(expectedAscending));
+  testOrderByOnSortedInput(inputTable, true, true,
+                           makeIdTableFromVector(expectedDescending));
+
+  // Only `NaN`s and undefined values.
+  VectorTable onlyNans{{D(nan), D(1)}, {U, D(2)}, {D(negNan), D(3)}};
+  VectorTable onlyNansExpected{{U, D(2)}, {D(nan), D(1)}, {D(negNan), D(3)}};
+  testOrderByOnSortedInput(makeIdTableFromVector(onlyNans), false, true,
+                           makeIdTableFromVector(onlyNansExpected));
+}
+
+// _____________________________________________________________________________
+TEST(OrderBy, sortedInputWithoutFastPath) {
+  auto I = ad_utility::testing::IntId;
+  auto D = ad_utility::testing::DoubleId;
+  auto V = ad_utility::testing::VocabId;
+  auto U = Id::makeUndefined();
+  auto B = Id::makeFromBool;
+
+  // Mixed datatypes in the sort column, the regular sort has to be used.
+  for (const VectorTable& input :
+       {VectorTable{{I(3)}, {D(-2.5)}, {I(-4)}, {D(7.0)}},
+        VectorTable{{I(3)}, {V(1)}, {I(-4)}, {V(0)}},
+        VectorTable{{U}, {B(true)}, {I(-4)}, {I(2)}},
+        VectorTable{{U}, {V(4)}, {V(2)}}, VectorTable{{U}, {U}}}) {
+    auto inputTable = makeIdTableFromVector(input);
+    testOrderByOnSortedInput(inputTable, false, false);
+    testOrderByOnSortedInput(inputTable, true, false);
+  }
+  // Empty input.
+  auto qec = ad_utility::testing::getQec();
+  IdTable emptyTable{1, qec->getAllocator()};
+  testOrderByOnSortedInput(emptyTable, false, false);
+  testOrderByOnSortedInput(emptyTable, true, false);
+
+  // The fast path is only used if the input is sorted by the sort column, and
+  // if there is only a single sort column.
+  VectorTable input{{I(3), I(1)}, {I(-2), I(0)}, {I(-4), I(2)}};
+  VectorTable expected{{I(-4), I(2)}, {I(-2), I(0)}, {I(3), I(1)}};
+  auto expectedTable = makeIdTableFromVector(expected);
+  {
+    OrderBy orderBy =
+        makeOrderByOnSortedInput(makeIdTableFromVector(input), false, {1});
+    EXPECT_EQ(orderBy.getResult()->idTableView(), expectedTable);
+    EXPECT_FALSE(
+        orderBy.runtimeInfo().details_.contains("sorted-numeric-input"));
+  }
+  {
+    OrderBy orderBy = makeOrderByOnSortedInput(
+        makeIdTableFromVector(input), false, {0}, {{0, false}, {1, false}});
+    EXPECT_EQ(orderBy.getResult()->idTableView(), expectedTable);
+    EXPECT_FALSE(
+        orderBy.runtimeInfo().details_.contains("sorted-numeric-input"));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(OrderBy, costEstimateForSortedInput) {
+  VectorTable input;
+  for (int64_t i = 0; i < 1000; ++i) {
+    input.push_back({i, 0});
+  }
+  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+  // The cost of `ValuesForTesting` is the number of rows, the `OrderBy` on an
+  // unsorted input adds `n log n`.
+  OrderBy unsorted = makeOrderBy(inputTable.clone(), {{0, false}});
+  EXPECT_EQ(unsorted.getCostEstimate(), 1000 + 1000 * 9);
+  OrderBy sorted = makeOrderByOnSortedInput(inputTable.clone(), false);
+  EXPECT_EQ(sorted.getCostEstimate(), 1000 + 1000);
+  // Sorted on the wrong column.
+  OrderBy sortedOnOther =
+      makeOrderByOnSortedInput(inputTable.clone(), false, {1});
+  EXPECT_EQ(sortedOnOther.getCostEstimate(), 1000 + 1000 * 9);
 }
 
 // _____________________________________________________________________________
