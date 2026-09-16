@@ -1193,19 +1193,13 @@ TripleComponent defaultGraphFromSpec(
 
 // Create an `RdfStreamParser` for a single file of an
 // `InputFileSpecification`, i.e. a parser that parses that file serially. Only
-// the inner parser depends on the filetype (Turtle or N-Quads).
-//
-// The `input` must not request parallel parsing: parsing a single file in
-// parallel is only available in `RdfAsyncMultifileParser` (see the comment on
-// `RdfMultifileParser`, the only caller of this function).
+// the inner parser depends on the filetype (Turtle or N-Quads);
+// `input.parseInParallel_` is ignored, see the comment on
+// `RdfMultifileParser`, the only caller of this function.
 template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeStreamParserForSingleFile(
     const qlever::InputFileSpecification& input, const EncodedIriManager* ev,
     ad_utility::MemorySize bufferSize, RdfParserSettings settings) {
-  AD_CONTRACT_CHECK(
-      !input.parseInParallel_,
-      "`RdfMultifileParser` cannot parse a single file in parallel, use "
-      "`RdfAsyncMultifileParser` for that");
   auto makeRdfParserImpl = ad_utility::ApplyAsValueIdentity{
       [&input, &bufferSize, ev,
        &settings](auto isTurtleInput) -> std::unique_ptr<RdfParserBase> {
@@ -1255,6 +1249,15 @@ RdfMultifileParser::RdfMultifileParser(
   // Feed all the input files to the `parsingQueue_`.
   auto makeParsers = [files = std::move(files), bufferSize, this]() mutable {
     for (auto& file : files) {
+      // This parser has no parallel parser for a single file, see the class
+      // comment.
+      if (file.parseInParallel_) {
+        AD_LOG_WARN << "Parallel parsing was requested for the input file \""
+                    << file.filename()
+                    << "\", but this parser parses each file serially; "
+                       "ignoring the request"
+                    << std::endl;
+      }
       bool active = parsingQueue_.push(
           absl::bind_front(&RdfMultifileParser::parseFileAndPushBatches, this,
                            std::move(file), bufferSize));

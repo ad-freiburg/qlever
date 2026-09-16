@@ -732,10 +732,9 @@ TripleComponent defaultGraphFromSpec(
 // This class is an RDF parser that parses multiple files in parallel. Each
 // file is specified by an  `InputFileSpecification`. A single file is always
 // parsed serially (by an `RdfStreamParser`); parsing a single file in parallel
-// is only available in the asynchronous `RdfAsyncMultifileParser`. It is
-// therefore a precondition that none of the `files` has `parseInParallel_`
-// set; a violation throws (from the thread that parses that file, so the
-// exception surfaces from `getBatch`).
+// is only available in the asynchronous `RdfAsyncMultifileParser`. A file that
+// has `parseInParallel_` set is therefore parsed serially anyway, and the
+// parser logs a warning that names that file.
 class RdfMultifileParser : public RdfParserBase {
  public:
   // Construct the parser from a type-erased input range of file specifications

@@ -118,27 +118,18 @@ std::unique_ptr<AsyncRdfParserBase> IndexImpl::makeRdfParser(
   // The reduced feature set has no coroutines (and only Boost 1.71), so the
   // asynchronous multifile parser is not available. Fall back to the
   // synchronous `RdfMultifileParser` behind an `AsyncSerialParserAdapter`. That
-  // parser requires `parseInParallel_` to be false for every file (it has no
-  // parallel parser for a single file, see the comment on that class), so clear
-  // the flag here. The files are still produced lazily.
-  auto serialFiles =
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{
-          ql::views::transform(std::move(files),
-                               [](qlever::InputFileSpecification file) {
-                                 file.parseInParallel_ = false;
-                                 return file;
-                               })};
+  // parser has no parallel parser for a single file and therefore ignores
+  // `parseInParallel_` (with a warning, see the comment on that class). The
+  // files are still produced lazily.
   // NOTE: The adapter creates the parser lazily on the first `asyncGetBatch()`
   // call, see the constructor of `AsyncSerialParserAdapter`.
   return std::make_unique<AsyncSerialParserAdapter>(
       executor,
-      [serialFiles = std::move(serialFiles),
-       encodedIriManager = &encodedIriManager(),
+      [files = std::move(files), encodedIriManager = &encodedIriManager(),
        bufferSize = parserBufferSize(),
        parserSettings]() mutable -> std::unique_ptr<RdfParserBase> {
-        return std::make_unique<RdfMultifileParser>(std::move(serialFiles),
-                                                    encodedIriManager,
-                                                    bufferSize, parserSettings);
+        return std::make_unique<RdfMultifileParser>(
+            std::move(files), encodedIriManager, bufferSize, parserSettings);
       });
 #else
   return std::make_unique<RdfAsyncMultifileParser>(
