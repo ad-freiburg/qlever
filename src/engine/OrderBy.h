@@ -66,6 +66,14 @@ class OrderBy : public Operation {
   // sorted by the first sort column (see `computeResultForSortedInput`).
   size_t getCostEstimate() override;
 
+  // `ORDER BY` handles `LIMIT` and `OFFSET` itself if the input is sorted by
+  // the single sort column: `computeResultForSortedInput` then copies only the
+  // requested rows, and `onLimitOffsetChanged` restricts an `IndexScan` below
+  // to the blocks that can contain them. Otherwise the limit is applied
+  // externally on the completely sorted result, which the cache can then
+  // reuse for other limits.
+  [[nodiscard]] LimitOffsetHandling handlesLimitOffset() const override;
+
   bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
   size_t getResultWidth() const override;
@@ -96,6 +104,17 @@ class OrderBy : public Operation {
   // apply.
   std::optional<IdTable> computeResultForSortedInput(
       const IdTableView<0>& input) const;
+
+  // If the input is an `IndexScan` and the fast path above applies according
+  // to the block metadata of the scan, replace the scan by a copy that only
+  // reads the blocks which can contain the rows selected by the
+  // `LIMIT`/`OFFSET` (see `selectBlocksForSortedNumericLimit` in the `.cpp`).
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
+
+  // If the `LIMIT`/`OFFSET` was pushed into an `IndexScan`, the number of
+  // blocks that the scan reads now, and its total number of blocks. Only used
+  // for the runtime information.
+  std::optional<std::pair<size_t, size_t>> numBlocksAfterAndBeforeLimit_;
 
   VariableToColumnMap computeVariableToColumnMap() const override {
     return subtree_->getVariableColumns();

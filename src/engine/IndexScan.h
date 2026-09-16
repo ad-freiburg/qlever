@@ -5,7 +5,10 @@
 #ifndef QLEVER_SRC_ENGINE_INDEXSCAN_H
 #define QLEVER_SRC_ENGINE_INDEXSCAN_H
 
+#include <functional>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "engine/Operation.h"
 #include "index/DeltaTriples.h"
@@ -96,6 +99,43 @@ class IndexScan final : public Operation {
   size_t getResultWidth() const override;
 
   std::vector<ColumnIndex> resultSortedOn() const override;
+
+  // The metadata of the blocks of this scan, as passed to the block selector
+  // of `makeCopyWithSelectedBlocks` below. For each block: the first and the
+  // last value of the first sorted variable in the block, the number of rows
+  // of the block that are guaranteed to be in the result of the scan (a lower
+  // bound), and whether the block is completely inside the scanned relation.
+  // A block at the border of the relation also holds triples of other
+  // relations, so its `first_` or `last_` may belong to another relation and
+  // its rows only partially to this scan. `firstIdOfScan_` and `lastIdOfScan_`
+  // are the values of the sorted variable in the first and the last row of the
+  // scan result.
+  struct BlockOfSortedVariable {
+    Id first_;
+    Id last_;
+    size_t numRowsLowerBound_;
+    bool completelyInsideScan_;
+  };
+  struct BlocksOfSortedVariable {
+    Id firstIdOfScan_;
+    Id lastIdOfScan_;
+    std::vector<BlockOfSortedVariable> blocks_;
+  };
+  // Given the metadata of all blocks of this scan in scan order, return the
+  // indices of the blocks to keep (sorted, unique), or `std::nullopt` to keep
+  // all blocks.
+  using BlockSelector = std::function<std::optional<std::vector<size_t>>(
+      const BlocksOfSortedVariable&)>;
+
+  // Return a copy of this scan that only reads the blocks chosen by
+  // `selectBlocks`, or `std::nullopt` if no restriction was made. No
+  // restriction is possible if the scan has no variable, or has a
+  // `LIMIT`/`OFFSET` of its own (which is applied while scanning and does not
+  // combine with a block restriction), or if the scan result is empty. The
+  // caller is responsible for the correctness of the selection, i.e. that the
+  // rows it needs are contained in the kept blocks.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeCopyWithSelectedBlocks(
+      const BlockSelector& selectBlocks) const;
 
   // Return a new `QueryExecutionTree` with prefiltered `scanSpecAndBlocks`. If
   // none of the prefilters in `prefilterVariablePairs` applies, return
