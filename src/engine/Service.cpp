@@ -591,6 +591,11 @@ namespace {
 // not need all of its variables, e.g. for a `GROUP BY`). Return `false` if one
 // of them is constrained by a `LIMIT` or `OFFSET`, then the sibling
 // optimization must not be applied.
+//
+// NOTE: Handling `StripColumns` here should not be necessary in the long run.
+// That operation is expected to become redundant (each operation stripping its
+// unused columns itself), and the `StripColumns` case can then be removed here
+// again.
 bool skipSortAndStripColumns(std::shared_ptr<Operation>& op) {
   while (std::dynamic_pointer_cast<Sort>(op) ||
          std::dynamic_pointer_cast<StripColumns>(op)) {
