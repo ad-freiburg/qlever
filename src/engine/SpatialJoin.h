@@ -262,6 +262,14 @@ class SpatialJoin : public Operation {
   SpatialJoinConfiguration config_;
 
   bool substitutesFilterOp_ = false;
+
+  // Set iff `cloneWithGeoBlockPrefilter` restricted the geometry side to the
+  // rectangle of the other side: the estimated fraction of the remaining
+  // candidates that lie in the rectangle (see `fractionOfCoveringCells`). The
+  // size estimate then scales the candidates by this fraction instead of
+  // applying the generic selectivity constant, which the prefilter has
+  // already accounted for.
+  std::optional<double> geometrySidePrefilterSelectivity_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H

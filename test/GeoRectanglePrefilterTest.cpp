@@ -116,6 +116,25 @@ TEST(GeoRectanglePrefilter, padGeoRectangle) {
             90.0);
 }
 
+TEST(GeoRectanglePrefilter, fractionOfCoveringCells) {
+  // Level 2: 4 x 4 cells of 90 x 45 degrees.
+  GeoCellGrid grid{2, ad_utility::GeoCellGridScheme::Flat};
+  // A rectangle inside one cell: its share of that cell.
+  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{10, 10, 55, 20}, grid),
+              (45.0 * 10.0) / (90.0 * 45.0), 1e-9);
+  // A rectangle exactly covering a cell.
+  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{0, 0, 90, 45}, grid), 1.0,
+              1e-9);
+  // Spanning two cells in longitude.
+  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{80, 0, 100, 45}, grid),
+              (20.0 * 45.0) / (180.0 * 45.0), 1e-9);
+  // A point still touches one cell, the fraction is 0.
+  EXPECT_EQ(fractionOfCoveringCells(GeoRectangle{10, 10, 10, 10}, grid), 0.0);
+  // The whole world.
+  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{-180, -90, 180, 90}, grid),
+              1.0, 1e-9);
+}
+
 TEST(GeoRectanglePrefilter, geoRectangleOfConstantGeometry) {
   using sparqlExpression::geoRectangleOfConstantGeometry;
   // A GeoPoint Id yields a point rectangle.
@@ -363,6 +382,94 @@ TEST_P(GeoRectanglePrefilterSchemeTest, spatialJoinPushesBlockPrefilter) {
   EXPECT_EQ(result.idTableView().numRows(), 3u);
   auto resultPso = sjPso->computeResultOnlyForTesting();
   EXPECT_EQ(resultPso.idTableView().numRows(), 3u);
+}
+
+// The size estimate of a spatial join whose geometry side was prefiltered at
+// planning time counts every remaining candidate: the block prefilter already
+// applied the spatial selectivity to the scan's estimate. Without the
+// prefilter, the generic selectivity constant applies.
+TEST_P(GeoRectanglePrefilterSchemeTest, prefilteredSpatialJoinSizeEstimate) {
+  auto* qec = geoQec(2, GetParam(), 300);
+  Variable pointVar{"?point"};
+  Variable wktVar{"?wkt"};
+  auto valuesTree = makeValuesForSingleValue(
+      qec, pointVar,
+      TripleComponent{Id::makeFromGeoPoint(GeoPoint{10.0, 10.5})});
+  SparqlTripleSimple triple{
+      TripleComponent{Variable{"?s"}},
+      TripleComponent{TripleComponent::Iri::fromIriref("<hasGeom>")},
+      TripleComponent{wktVar}};
+  SpatialJoinConfiguration config{
+      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 200'000.0,
+                           std::nullopt},
+      pointVar,
+      wktVar,
+      std::nullopt,
+      PayloadVariables::all(),
+      SpatialJoinAlgorithm::LIBSPATIALJOIN,
+      std::nullopt};
+  auto makeJoin = [&](Permutation::Enum permutation) {
+    auto sj = std::make_shared<SpatialJoin>(qec, config, std::nullopt,
+                                            std::nullopt, true);
+    sj = sj->addChild(valuesTree, pointVar);
+    sj = sj->addChild(
+        ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple),
+        wktVar);
+    return sj;
+  };
+
+  // POS scan (sorted by `?wkt`): prefiltered, the estimate is the number of
+  // remaining candidates (less than the full scan) times the share of their
+  // cells that the padded query rectangle covers. The 200 km around a point
+  // cover a tiny part of a 90 x 45 degree cell, so the estimate is the
+  // minimum of 1.
+  auto sjPos = makeJoin(Permutation::POS);
+  auto fullScanSize =
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple)
+          ->getSizeEstimate();
+  auto candidates = sjPos->getChildren().at(1)->getSizeEstimate();
+  EXPECT_LT(candidates, fullScanSize);
+  EXPECT_GT(candidates, 1u);
+  EXPECT_EQ(sjPos->getSizeEstimate(), 1u);
+
+  // PSO scan (sorted by `?s`): no prefilter, generic estimate.
+  auto sjPso = makeJoin(Permutation::PSO);
+  EXPECT_EQ(sjPso->getSizeEstimate(),
+            fullScanSize / SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE);
+
+  // The clone keeps the estimate.
+  EXPECT_EQ(sjPos->clone()->getSizeEstimate(), 1u);
+
+  // A polygon covering most of the cell (0..90, 0..45): the estimate is the
+  // corresponding share of the candidates.
+  Variable polygonVar{"?polygon"};
+  auto polygonTree = makeValuesForSingleValue(
+      qec, polygonVar,
+      TripleComponent{
+          ad_utility::triple_component::Literal::fromStringRepresentation(
+              absl::StrCat("\"POLYGON((2 2, 88 2, 88 43, 2 43, 2 2))\"",
+                           wktDatatype))});
+  SpatialJoinConfiguration intersectsConfig{
+      LibSpatialJoinConfig{SpatialJoinType::INTERSECTS, std::nullopt,
+                           std::nullopt},
+      polygonVar,
+      wktVar,
+      std::nullopt,
+      PayloadVariables::all(),
+      SpatialJoinAlgorithm::LIBSPATIALJOIN,
+      std::nullopt};
+  auto sjPolygon = std::make_shared<SpatialJoin>(
+      qec, intersectsConfig, std::nullopt, std::nullopt, true);
+  sjPolygon = sjPolygon->addChild(polygonTree, polygonVar);
+  sjPolygon = sjPolygon->addChild(
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple),
+      wktVar);
+  auto polygonCandidates = sjPolygon->getChildren().at(1)->getSizeEstimate();
+  EXPECT_LT(polygonCandidates, fullScanSize);
+  double share = (86.0 * 41.0) / (90.0 * 45.0);
+  EXPECT_EQ(
+      sjPolygon->getSizeEstimate(),
+      std::max<uint64_t>(1, static_cast<uint64_t>(polygonCandidates * share)));
 }
 
 // The geo rectangle prefilter on an `IndexScan` prunes whole blocks and then

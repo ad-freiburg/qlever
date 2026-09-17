@@ -9,6 +9,7 @@
 
 #include "rdfTypes/GeoCellGrid.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "backports/algorithm.h"
@@ -43,6 +44,31 @@ GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
     }
   }
   return {minLng, minLat, maxLng, maxLat};
+}
+
+// ____________________________________________________________________________
+double fractionOfCoveringCells(const GeoRectangle& rectangle,
+                               const GeoCellGrid& grid) {
+  auto numCells = static_cast<double>(grid.numCellsPerDimension());
+  double cellWidth = 360.0 / numCells;
+  double cellHeight = 180.0 / numCells;
+  // Snap the rectangle outwards to the cell borders. A rectangle that is
+  // degenerate in a dimension (a point or a line on a cell border) still
+  // touches at least one cell.
+  auto snap = [](double min, double max, double cellSize) {
+    double snappedMin = std::floor(min / cellSize) * cellSize;
+    double snappedMax = std::ceil(max / cellSize) * cellSize;
+    if (snappedMax <= snappedMin) {
+      snappedMax = snappedMin + cellSize;
+    }
+    return snappedMax - snappedMin;
+  };
+  double coveringWidth = snap(rectangle.minLng_, rectangle.maxLng_, cellWidth);
+  double coveringHeight =
+      snap(rectangle.minLat_, rectangle.maxLat_, cellHeight);
+  double area = (rectangle.maxLng_ - rectangle.minLng_) *
+                (rectangle.maxLat_ - rectangle.minLat_);
+  return std::clamp(area / (coveringWidth * coveringHeight), 0.0, 1.0);
 }
 
 // ____________________________________________________________________________
