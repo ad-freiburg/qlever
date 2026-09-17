@@ -583,6 +583,87 @@ TEST_P(GeoRectanglePrefilterSchemeTest, planTimePrefilterKeepsResultsCorrect) {
   EXPECT_EQ(rowsWithPlanTimePrefilter, rowsWithoutPlanTimePrefilter);
 }
 
+// A `Join` that the prefilter rebuilds (because the geometry scan is below
+// it) must keep the column layout of the original join: the operations above
+// it (a `Sort`, another `Join`) refer to its columns by index. The `Join`
+// constructor orders its children by cache key, and the prefiltered child has
+// a new cache key, so the rebuilt join must not reorder them. Both child
+// orders are tested, one of them differs from the constructor's order.
+TEST_P(GeoRectanglePrefilterSchemeTest, rebuiltJoinKeepsColumnLayout) {
+  auto* qec = geoQec(2, GetParam());
+  Variable pointVar{"?point"};
+  Variable wktVar{"?wkt"};
+  Variable sVar{"?s"};
+  auto valuesTree = makeValuesForSingleValue(
+      qec, pointVar,
+      TripleComponent{Id::makeFromGeoPoint(GeoPoint{10.0, 10.5})});
+  auto iri = [](std::string_view s) {
+    return TripleComponent{TripleComponent::Iri::fromIriref(s)};
+  };
+  // The geometry scan is sorted by `?wkt`, the type scan by `?t`, so the join
+  // on `?s` sorts both of them.
+  auto geomScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::POS,
+      SparqlTripleSimple{TripleComponent{sVar}, iri("<hasGeom>"),
+                         TripleComponent{wktVar}});
+  auto typeScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::POS,
+      SparqlTripleSimple{TripleComponent{sVar}, iri("<hasType>"),
+                         TripleComponent{Variable{"?t"}}});
+  auto restrictionScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::POS,
+      SparqlTripleSimple{TripleComponent{sVar}, iri("<hasType>"), iri("<T>")});
+
+  SpatialJoinConfiguration config{
+      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 200'000.0,
+                           std::nullopt},
+      pointVar,
+      wktVar,
+      std::nullopt,
+      PayloadVariables::all(),
+      SpatialJoinAlgorithm::LIBSPATIALJOIN,
+      std::nullopt};
+
+  auto layout = [](const QueryExecutionTree& tree) {
+    std::vector<std::pair<std::string, ColumnIndex>> result;
+    for (const auto& [var, info] : tree.getVariableColumns()) {
+      result.emplace_back(var.name(), info.columnIndex_);
+    }
+    ql::ranges::sort(result);
+    return result;
+  };
+
+  for (bool geometryScanFirst : {true, false}) {
+    const auto& first = geometryScanFirst ? geomScan : typeScan;
+    const auto& second = geometryScanFirst ? typeScan : geomScan;
+    // Fix the order of the children, so that both orders are tested.
+    auto innerJoin = ad_utility::makeExecutionTree<Join>(
+        qec, first, second, first->getVariableColumn(sVar),
+        second->getVariableColumn(sVar), true, false);
+    auto outerJoin = ad_utility::makeExecutionTree<Join>(
+        qec, innerJoin, restrictionScan, innerJoin->getVariableColumn(sVar),
+        restrictionScan->getVariableColumn(sVar));
+
+    auto sj = std::make_shared<SpatialJoin>(qec, config, std::nullopt,
+                                            std::nullopt, true);
+    sj = sj->addChild(valuesTree, pointVar);
+    sj = sj->addChild(outerJoin, wktVar);
+
+    // The prefilter was pushed down (the side was rebuilt), and the rebuilt
+    // side has the same column layout as the original.
+    const auto& rebuiltSide = sj->getChildren().at(1);
+    ASSERT_NE(rebuiltSide->getCacheKey(), outerJoin->getCacheKey())
+        << "geometryScanFirst = " << geometryScanFirst;
+    EXPECT_EQ(layout(*rebuiltSide), layout(*outerJoin))
+        << "geometryScanFirst = " << geometryScanFirst;
+
+    // The two linestrings of type `<T>` within 200 km of the query point.
+    auto result = sj->computeResultOnlyForTesting();
+    EXPECT_EQ(result.idTableView().numRows(), 2u)
+        << "geometryScanFirst = " << geometryScanFirst;
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
     GeoRectanglePrefilter, GeoRectanglePrefilterSchemeTest,
     // NOTE: The other grid schemes are added by a follow-up change.
