@@ -14,6 +14,7 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
 
+#include <array>
 #include <atomic>
 #include <future>
 #include <locale>
@@ -85,6 +86,28 @@ std::optional<size_t> findEndOfLastStatement(std::string_view input);
 // used in the error messages of `AsyncStatementBoundaryBlockSource`.
 inline constexpr std::string_view statementBoundaryDescription =
     "a dot followed by a newline";
+
+// A lookup table that stores for each of the 256 possible byte values whether
+// it is contained in a given set of characters, see `makeDelimiterTable`.
+using DelimiterTable = std::array<bool, 256>;
+
+// Create a `DelimiterTable` in which exactly the entries for the characters in
+// `chars` are `true`.
+constexpr DelimiterTable makeDelimiterTable(std::string_view chars) {
+  DelimiterTable table{};
+  for (char c : chars) {
+    table[static_cast<unsigned char>(c)] = true;
+  }
+  return table;
+}
+
+// Same as `view.find_first_of(chars, pos)` with
+// `table == makeDelimiterTable(chars)`, but faster: `find_first_of` rescans
+// `chars` for each character of `view` (in libstdc++ with a call to `memchr`
+// each time), whereas the table needs a single lookup per character. `pos` must
+// not be greater than `view.size()`.
+size_t findFirstOf(std::string_view view, const DelimiterTable& table,
+                   size_t pos = 0);
 }  // namespace detail
 
 struct TurtleTriple {

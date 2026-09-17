@@ -175,6 +175,11 @@ TEST(RdfParserTest, prefixedName) {
   {
     CtreParser p{encodedIriManager()};
     runCommonTests(p);
+    // Input that contains none of the delimiters that `pnameLnRelaxed` looks
+    // for, so neither `pnameLnRelaxed` nor `pnameNS` finds a `:`.
+    p.setInputStream("noDelimiterAtAll");
+    ASSERT_FALSE(p.prefixedName());
+    ASSERT_EQ(p.getPosition(), 0u);
     // These unit tests document the current (fast, but suboptimal) behavior of
     // the CTRE parser. TODO: Try to improve the parser without sacrificing
     // speed. If that succeeds, adapt this unit test.
@@ -2602,4 +2607,63 @@ TEST(RdfParserTest, findEndOfLastStatement) {
   // The last statement end is found.
   EXPECT_THAT(findEndOfLastStatement("a.\nbc.\ndef"), Optional(Eq(7u)));
   EXPECT_THAT(findEndOfLastStatement("a.\n# comment\n"), Optional(Eq(3u)));
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, makeDelimiterTableAndFindFirstOf) {
+  using detail::findFirstOf;
+  constexpr std::string_view delimiters = " \t\r\n,;[]():";
+  constexpr detail::DelimiterTable table =
+      detail::makeDelimiterTable(delimiters);
+  constexpr size_t npos = std::string_view::npos;
+
+  // `makeDelimiterTable` sets exactly the entries of the delimiters. Note that
+  // this also covers the bytes >= 128, which must not be interpreted as
+  // negative indices.
+  for (size_t i = 0; i < table.size(); ++i) {
+    bool isDelimiter = delimiters.find(static_cast<char>(i)) != npos;
+    EXPECT_EQ(table[i], isDelimiter) << "for the byte " << i;
+  }
+  static_assert(table[static_cast<unsigned char>(':')]);
+  static_assert(!table[static_cast<unsigned char>('x')]);
+  // The empty set of delimiters matches nothing.
+  EXPECT_EQ(findFirstOf(delimiters, detail::makeDelimiterTable("")), npos);
+
+  // Each single delimiter is found at the correct position.
+  for (char c : delimiters) {
+    std::string input = std::string{"ab"} + c + "cd";
+    EXPECT_EQ(findFirstOf(input, table), 2u)
+        << "for the delimiter " << static_cast<int>(c);
+  }
+
+  // Input without any delimiter, including non-ASCII input (the UTF-8 encoding
+  // of "ä" consists of the bytes 0xC3 and 0xA4).
+  EXPECT_EQ(findFirstOf("", table), npos);
+  EXPECT_EQ(findFirstOf("abc", table), npos);
+  EXPECT_EQ(findFirstOf("äöü", table), npos);
+
+  // The `pos` argument skips a prefix of the input; `pos == view.size()` is
+  // allowed and yields `npos`.
+  EXPECT_EQ(findFirstOf("a:b:c", table), 1u);
+  EXPECT_EQ(findFirstOf("a:b:c", table, 1), 1u);
+  EXPECT_EQ(findFirstOf("a:b:c", table, 2), 3u);
+  EXPECT_EQ(findFirstOf("a:b:c", table, 4), npos);
+  EXPECT_EQ(findFirstOf("a:b:c", table, 5), npos);
+  EXPECT_EQ(findFirstOf("", table, 0), npos);
+
+  // For all positions, the result is the same as that of the
+  // `std::string_view::find_first_of` that `findFirstOf` replaces.
+  auto expectSameAsFindFirstOf = [&table, &delimiters](std::string_view view) {
+    for (size_t pos = 0; pos <= view.size(); ++pos) {
+      EXPECT_EQ(findFirstOf(view, table, pos),
+                view.find_first_of(delimiters, pos))
+          << "for the input \"" << view << "\" and the position " << pos;
+    }
+  };
+  expectSameAsFindFirstOf("");
+  expectSameAsFindFirstOf(":");
+  expectSameAsFindFirstOf("wd:Q430 someotherContent");
+  expectSameAsFindFirstOf("noDelimiterAtAll");
+  expectSameAsFindFirstOf("[](),;:\t\r\n ");
+  expectSameAsFindFirstOf("<http://example.org/äöü> ;");
 }

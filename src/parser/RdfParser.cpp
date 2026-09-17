@@ -13,6 +13,7 @@
 #include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
+#include <array>
 #include <cstring>
 #include <ctre-unicode.hpp>
 #include <exception>
@@ -20,6 +21,7 @@
 #include <utility>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
 #include "index/InputFileSpecification.h"
@@ -57,6 +59,17 @@ namespace detail {
 // _____________________________________________________________________________
 std::optional<size_t> findEndOfLastNewline(std::string_view input) {
   return findEndOfLastMatch(ctre::search<newlineRegex>, input);
+}
+
+// _____________________________________________________________________________
+size_t findFirstOf(std::string_view view, const DelimiterTable& table,
+                   size_t pos) {
+  AD_EXPENSIVE_CHECK(pos <= view.size());
+  auto rest = view.substr(pos);
+  auto it = ql::ranges::find_if(
+      rest, [&table](char c) { return table[static_cast<unsigned char>(c)]; });
+  return it == rest.end() ? std::string_view::npos
+                          : pos + static_cast<size_t>(it - rest.begin());
 }
 
 // _____________________________________________________________________________
@@ -911,13 +924,17 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   constexpr std::string_view prefixDelimiters = " \t\r\n,;[]():";
   constexpr std::string_view localNameDelimiters =
       prefixDelimiters.substr(0, prefixDelimiters.size() - 1);
+  static constexpr detail::DelimiterTable prefixDelimiterTable =
+      detail::makeDelimiterTable(prefixDelimiters);
+  static constexpr detail::DelimiterTable localNameDelimiterTable =
+      detail::makeDelimiterTable(localNameDelimiters);
   // If anything but a `:` comes first, this is not a prefixed name, but for
   // example the `[` of a blank node property list.
-  auto pos = view.find_first_of(prefixDelimiters);
+  auto pos = detail::findFirstOf(view, prefixDelimiterTable);
   if (pos == std::string::npos || view[pos] != ':') {
     return false;
   }
-  auto posEnd = view.find_first_of(localNameDelimiters, pos + 1);
+  auto posEnd = detail::findFirstOf(view, localNameDelimiterTable, pos + 1);
   if (posEnd == std::string::npos) {
     // make tests work
     posEnd = view.size();
@@ -942,7 +959,9 @@ bool TurtleParser<T>::iriref() {
   if (!ql::starts_with(view, '<')) {
     return false;
   }
-  auto endPos = view.find_first_of("<>\"\n", 1);
+  static constexpr detail::DelimiterTable irirefDelimiterTable =
+      detail::makeDelimiterTable("<>\"\n");
+  auto endPos = detail::findFirstOf(view, irirefDelimiterTable, 1);
   if (endPos == std::string::npos || view[endPos] != '>') {
     raise(
         "Unterminated IRI reference (found '<' but no '>' before "
