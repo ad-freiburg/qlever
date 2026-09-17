@@ -176,17 +176,9 @@ class PartialVocabularyTaskChain {
   // Reset `itemMap_`, the triple buffer and the input-triple counter for a
   // fresh partial vocabulary. Both the item map and the triple buffer keep
   // their memory, so they only have to grow while the first partial vocabulary
-  // of this chain is built, and the `reserve` is a no-op from the second one
-  // on. The number of entries that are reserved for the item map is somewhat
-  // arbitrary: half the number of triples per partial vocabulary was
-  // empirically better than larger values. Note that `reserve` on a hash map
-  // has to assume the worst case (many collisions), so it allocates
-  // considerably more than the requested number of entries. The memory
-  // allocation overhead of the first pass should be systematically analyzed
-  // anyway.
+  // of this chain is built.
   void startNewPartialVocabulary() {
     itemMap_.clear();
-    itemMap_.map_.map_.reserve(shared_.linesPerPartial_ / 2);
     localTriples_.clear();
     numInputTriples_ = 0;
   }
