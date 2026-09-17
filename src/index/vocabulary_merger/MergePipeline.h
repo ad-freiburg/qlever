@@ -34,7 +34,7 @@
 namespace ad_utility::vocabulary_merger::detail {
 
 // The stages of the merging pipeline that run asynchronously to the merging
-// thread (stages 2 to 4 in the comment above `mergeVocabulary`). Use the
+// thread (stages 2 and 3 in the comment above `mergeVocabulary`). Use the
 // `VocabularyMergePipeline` alias below; the type of the third stage is a
 // template parameter only so that the tests can inject a writer that fails
 // (the real `IdMapBatchWriter` cannot, see `runAndCatchException`).
@@ -50,10 +50,8 @@ class VocabularyMergePipelineImpl {
   // destructor of a queue blocks until all its pending tasks have been run. The
   // rule is that a queue has to be declared after every member that its tasks
   // use, and after every queue that its tasks push to: the tasks of the
-  // `wordWriterQueue_` use the `vocabularyWriter_` and push to both of the
-  // other queues, and the tasks of the `idMapWriterQueue_` use the
-  // `idMapBatchWriter_`. The relative order of the `idMapWriterQueue_` and the
-  // `mergedWordsDestructionQueue_` is therefore arbitrary.
+  // `wordWriterQueue_` use the `vocabularyWriter_` and push to the
+  // `idMapWriterQueue_`, whose tasks use the `idMapBatchWriter_`.
   IdMapBatchWriterT idMapBatchWriter_;
   VocabularyWriter vocabularyWriter_;
   // The first exception that one of the stages threw, if any, and a flag that
@@ -70,8 +68,6 @@ class VocabularyMergePipelineImpl {
   std::mutex exceptionMutex_;
   ad_utility::TaskQueue<false> idMapWriterQueue_{
       VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Writing the ID maps"};
-  ad_utility::TaskQueue<false> mergedWordsDestructionQueue_{
-      VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Destroying the merged words"};
   ad_utility::TaskQueue<false> wordWriterQueue_{
       VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Writing the merged vocabulary"};
 
@@ -85,8 +81,8 @@ class VocabularyMergePipelineImpl {
 
   // Asynchronously process a single `batch` of merged words: write its
   // distinct words to the vocabulary (via the `wordCallback` and the
-  // `blankNodeIriRegexes`), then write its index mappings and destroy the
-  // merged words that it was created from. Block if the pipeline is busy.
+  // `blankNodeIriRegexes`), destroy the merged words that it was created from,
+  // and write its index mappings. Block if the pipeline is busy.
   //
   // NOTE: The `wordCallback` and the `blankNodeIriRegexes` are captured *by
   // reference* into the asynchronous task, so both of them have to stay alive
@@ -103,15 +99,10 @@ class VocabularyMergePipelineImpl {
             batch.uniqueWords_, std::move(batch.localIdxMappings_),
             wordCallback, blankNodeIriRegexes);
 
-        // The merged words are no longer needed. Their destruction (which
-        // involves freeing one string per word) is expensive enough to be done
-        // by yet another thread. NOTE: The `clear()` is the actual work of this
-        // task; it happens on the queue's thread, as does the destruction of
-        // the (then empty) buffers.
-        mergedWordsDestructionQueue_.push(
-            [buffers = std::move(batch.mergedWordBuffers_)]() mutable {
-              buffers.clear();
-            });
+        // The merged words are no longer needed, so free them (which involves
+        // freeing one string per word) before the ID maps are pushed, because
+        // that push blocks while the pipeline is busy.
+        batch.mergedWordBuffers_.clear();
 
         idMapWriterQueue_.push([this, idMapBatch = std::move(idMapBatch)]() {
           runAndCatchException([this, &idMapBatch]() {
@@ -133,7 +124,6 @@ class VocabularyMergePipelineImpl {
   VocabularyMetaData finish() {
     // NOTE: The order is important, see the declaration of the members.
     wordWriterQueue_.finish();
-    mergedWordsDestructionQueue_.finish();
     idMapWriterQueue_.finish();
     // Propagate an exception from one of the stages to the caller. NOTE: All
     // the queues have been joined, so reading `exception_` here is safe. The ID
