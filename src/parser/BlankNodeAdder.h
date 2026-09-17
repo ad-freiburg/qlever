@@ -2,7 +2,7 @@
 //
 // 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
-// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
