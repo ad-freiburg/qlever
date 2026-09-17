@@ -263,13 +263,19 @@ class SpatialJoin : public Operation {
 
   bool substitutesFilterOp_ = false;
 
-  // Set iff `cloneWithGeoBlockPrefilter` restricted the geometry side to the
-  // rectangle of the other side: the estimated fraction of the remaining
-  // candidates that lie in the rectangle (see `fractionOfCoveringCells`). The
-  // size estimate then scales the candidates by this fraction instead of
-  // applying the generic selectivity constant, which the prefilter has
-  // already accounted for.
-  std::optional<double> geometrySidePrefilterSelectivity_;
+  // Set iff the rectangle of one side was known at planning time (see
+  // `cloneWithGeoBlockPrefilter`): the estimated fraction of the other side's
+  // rows that lie in the rectangle. The size estimate then uses it instead of
+  // the generic selectivity constant.
+  std::optional<double> geometrySideSelectivity_;
+
+  // The estimated share of the rows of `tree` inside `rectangle`, from the
+  // block metadata of the scan that binds `variable` (as object with a fixed
+  // predicate), in the permutation sorted by `variable`. `std::nullopt` if
+  // there is no such scan. Used by `cloneWithGeoBlockPrefilter`.
+  std::optional<double> blockShareOfRectangle(
+      const QueryExecutionTree& tree, const Variable& variable,
+      const ad_utility::GeoRectangle& rectangle) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H
