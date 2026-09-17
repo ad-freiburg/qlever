@@ -381,6 +381,21 @@ uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
       return childLeft_->getSizeEstimate() * maxResults.value();
     }
 
+    // If the geometry side was restricted to the rectangle of the other side
+    // at planning time, its size estimate already reflects the spatial
+    // selectivity at the granularity of the grid cells (the block prefilter
+    // is part of the scan's estimate). The remaining candidates are scaled by
+    // the share of their cells that the rectangle covers. This is what makes
+    // the planner restrict first when the rectangle is large and join
+    // spatially first when it is small.
+    if (geometrySidePrefilterSelectivity_.has_value()) {
+      auto candidates = static_cast<double>(childLeft_->getSizeEstimate()) *
+                        static_cast<double>(childRight_->getSizeEstimate());
+      return std::max<uint64_t>(
+          1, static_cast<uint64_t>(candidates *
+                                   geometrySidePrefilterSelectivity_.value()));
+    }
+
     // If we don't limit the number of results, we cannot draw conclusions about
     // the size, other than the worst case `|childLeft| * |childRight|`. However
     // to improve query planning for the average case, we apply a constant
@@ -837,11 +852,13 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
-  return std::make_unique<SpatialJoin>(
+  auto result = std::make_unique<SpatialJoin>(
       _executionContext, config_,
       childLeft_ ? std::optional{childLeft_->clone()} : std::nullopt,
       childRight_ ? std::optional{childRight_->clone()} : std::nullopt,
       substitutesFilterOp_);
+  result->geometrySidePrefilterSelectivity_ = geometrySidePrefilterSelectivity_;
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -1050,10 +1067,12 @@ SpatialJoin::cloneWithGeoBlockPrefilter() const {
   const Variable& geometryVariable =
       smallSideIsLeft ? config_.right_ : config_.left_;
 
+  auto paddedRectangle =
+      ad_utility::padGeoRectangle(rectangle.value(), padding);
   std::vector<PrefilterVariablePair> prefilterPairs;
   prefilterPairs.emplace_back(
       std::make_unique<prefilterExpressions::GeoRectangleExpression>(
-          ad_utility::padGeoRectangle(rectangle.value(), padding)),
+          paddedRectangle),
       geometryVariable);
   auto newGeometrySide =
       geometrySide->getUpdatedQueryExecutionTreeWithPrefilterApplied(
@@ -1061,9 +1080,18 @@ SpatialJoin::cloneWithGeoBlockPrefilter() const {
   if (!newGeometrySide.has_value()) {
     return std::nullopt;
   }
-  return std::make_shared<SpatialJoin>(
+  auto result = std::make_shared<SpatialJoin>(
       getExecutionContext(), config_,
       smallSideIsLeft ? childLeft_ : newGeometrySide.value(),
       smallSideIsLeft ? newGeometrySide.value() : childRight_,
       substitutesFilterOp_);
+  // Without a grid the prefilter prunes by latitude only; then the candidates
+  // are counted in full.
+  const auto& grid =
+      getExecutionContext()->getIndex().getVocab().getGeoCellGrid();
+  result->geometrySidePrefilterSelectivity_ =
+      grid.has_value()
+          ? ad_utility::fractionOfCoveringCells(paddedRectangle, grid.value())
+          : 1.0;
+  return result;
 }

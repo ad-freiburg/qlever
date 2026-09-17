@@ -45,6 +45,15 @@ struct GeoRectangle {
 GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
                              double distanceMeters);
 
+class GeoCellGrid;
+// The share of the area of the cells of `grid` that `rectangle` touches which
+// is covered by `rectangle` itself, in [0, 1]. A prefilter with `rectangle`
+// keeps all geometries of these cells. Assuming that the geometries are spread
+// uniformly within a cell, this is the fraction of them that actually lie in
+// `rectangle`, which makes it a size estimate for the prefiltered candidates.
+double fractionOfCoveringCells(const GeoRectangle& rectangle,
+                               const GeoCellGrid& grid);
+
 namespace detail {
 // The available schemes for the `GeoCellGrid` class below. All schemes use
 // square-ish base grids of `2^level x 2^level` cells:
