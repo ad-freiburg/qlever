@@ -23,8 +23,8 @@ get a response.
 
 Reports found with the help of automated tools or AI are welcome if you have
 verified them and can provide a reproducer. However, please make sure that
-reports are succinct and not in the typical verbose AI-style. We do not run a
-bug bounty program.
+reports are succinct and not in the typical verbose AI-style; otherwise they
+risk being closed without further action. We do not run a bug bounty program.
 
 ## What to expect
 
