@@ -164,6 +164,13 @@ class Iri : public BasicIri<true> {
   static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
                                     const qlever::util::ParsedUri& baseUri);
 
+  // Like `fromIrirefConsiderBase`, but for an `Iri` that is already in QLever's
+  // internal representation (see the class comment). Its escape sequences have
+  // already been resolved, so they must not be resolved a second time; a
+  // backslash in this `Iri` is therefore an ordinary character and not the
+  // start of an escape sequence.
+  Iri resolveAgainstBase(const qlever::util::ParsedUri& baseUri) const;
+
   // Create an `Iri` object given from the given `ParsedUri` object.
   static Iri fromUri(const qlever::util::ParsedUri& uri);
 };

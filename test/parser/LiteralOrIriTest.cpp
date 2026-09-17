@@ -96,6 +96,78 @@ TEST(IriTest, fromIrirefConsiderBase) {
   EXPECT_EQ(fromIrirefConsiderBase("</a>"), "<http://example.com/a>");
   EXPECT_EQ(fromIrirefConsiderBase("<a>"), "<http://example.com/a>");
   EXPECT_EQ(fromIrirefConsiderBase("<>"), "<http://example.com/uniprot>");
+
+  // Numeric escapes are part of the lexical form of an IRI reference, so they
+  // are resolved before the IRI is resolved against the base IRI. Note that
+  // `\u0061` is `a`, so the results below are the same as for the unescaped
+  // inputs above.
+  EXPECT_EQ(fromIrirefConsiderBase(R"(<\u0061>)"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase(R"(</\u0061>)"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase(R"(<http://example.org/\u0061>)"),
+            "<http://example.org/a>");
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, resolveAgainstBase) {
+  qlever::util::ParsedUri baseUri{"http://example.com/uniprot"};
+  auto resolve = [&baseUri](const Iri& iri) {
+    return iri.resolveAgainstBase(baseUri).toStringRepresentation();
+  };
+  auto resolveIriref = [&baseUri](std::string_view iriref) {
+    return Iri::fromIrirefConsiderBase(iriref, baseUri)
+        .toStringRepresentation();
+  };
+
+  // For IRIs without escape sequences the result is the same as for
+  // `fromIrirefConsiderBase`.
+  EXPECT_EQ(resolve(Iri::fromIriref("<a>")), "<http://example.com/a>");
+  EXPECT_EQ(resolve(Iri::fromIriref("</a>")), "<http://example.com/a>");
+  EXPECT_EQ(resolve(Iri::fromIriref("<http://example.org/a>")),
+            "<http://example.org/a>");
+  EXPECT_EQ(resolve(Iri::fromIriref("<>")), "<http://example.com/uniprot>");
+
+  // The input is already in the internal representation, so a backslash in it
+  // is an ordinary character and not the start of an escape sequence. Such an
+  // IRI can be built at runtime by the SPARQL `IRI()` function, which does not
+  // unescape its argument.
+  //
+  // A backslash is not a valid character in a URI (RFC 3986), so such an IRI
+  // cannot be resolved against a base IRI at all and is rejected. The point of
+  // `resolveAgainstBase` is that it is rejected rather than silently rewritten:
+  // `fromIrirefConsiderBase` reads the same bytes as the escape sequence
+  // `\u0062` and turns `a\u0062c` into `abc`.
+  auto looksLikeAnEscape = Iri::fromIrirefWithoutBrackets(R"(a\u0062c)");
+  EXPECT_EQ(looksLikeAnEscape.toStringRepresentation(), R"(<a\u0062c>)");
+  EXPECT_ANY_THROW(resolve(looksLikeAnEscape));
+  EXPECT_EQ(resolveIriref(looksLikeAnEscape.toStringRepresentation()),
+            "<http://example.com/abc>");
+
+  // A percent-encoded backslash is a valid URI character and is preserved.
+  EXPECT_EQ(resolve(Iri::fromIrirefWithoutBrackets(R"(a%5Cb)")),
+            "<http://example.com/a%5Cb>");
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, fromLangtagAndIriref) {
+  // The language tag is prepended in QLever's internal `@langtag@<iri>` format.
+  EXPECT_EQ(Iri::fromLangtagAndIriref(
+                "en", "<http://www.w3.org/2000/01/rdf-schema#label>")
+                .toStringRepresentation(),
+            "@en@<http://www.w3.org/2000/01/rdf-schema#label>");
+
+  // The IRI is unescaped exactly as in `fromIriref`, the language tag is taken
+  // verbatim.
+  EXPECT_EQ(Iri::fromLangtagAndIriref("en", R"(<http://example.org/\u0061>)")
+                .toStringRepresentation(),
+            "@en@<http://example.org/a>");
+  EXPECT_EQ(Iri::fromLangtagAndIriref("en", "<http://example.org/a>"),
+            Iri::fromLangtagAndIriref("en", R"(<http://example.org/\u0061>)"));
+
+  // The result is not a valid IRI reference, so it must not be fed back into
+  // `fromIriref`.
+  EXPECT_ANY_THROW(
+      Iri::fromIriref(Iri::fromLangtagAndIriref("en", "<http://example.org/a>")
+                          .toStringRepresentation()));
 }
 
 // _____________________________________________________________________________

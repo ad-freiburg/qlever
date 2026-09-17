@@ -104,22 +104,33 @@ Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
 }
 
 // ____________________________________________________________________________
+// Resolve `iriSv`, an IRI reference in QLever's internal representation
+// (including the angle brackets), against `baseUri`.
+static Iri resolveNormalizedIri(std::string_view iriSv,
+                                const qlever::util::ParsedUri& baseUri) {
+  AD_CORRECTNESS_CHECK(iriSv.size() >= 2);
+  AD_CORRECTNESS_CHECK(iriSv[0] == '<' && iriSv[iriSv.size() - 1] == '>');
+  iriSv.remove_prefix(1);
+  iriSv.remove_suffix(1);
+  return Iri::fromUri(baseUri.resolveUri(iriSv));
+}
+
+// ____________________________________________________________________________
 Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
                                 const qlever::util::ParsedUri& baseUri) {
   // The numeric escapes of an IRI reference are part of its lexical form, so
   // they have to be resolved before the IRI is resolved against the base IRI
   // (this is the same normalization that `fromIriref` applies).
-  std::string unescaped;
-  auto iriSv = iriStringWithBrackets;
-  if (iriSv.find('\\') != std::string_view::npos) {
-    unescaped = RdfEscaping::unescapeIriref(iriSv);
-    iriSv = unescaped;
+  if (iriStringWithBrackets.find('\\') != std::string_view::npos) {
+    return resolveNormalizedIri(
+        RdfEscaping::unescapeIriref(iriStringWithBrackets), baseUri);
   }
-  AD_CORRECTNESS_CHECK(iriSv.size() >= 2);
-  AD_CORRECTNESS_CHECK(iriSv[0] == '<' && iriSv[iriSv.size() - 1] == '>');
-  iriSv.remove_prefix(1);
-  iriSv.remove_suffix(1);
-  return fromUri(baseUri.resolveUri(iriSv));
+  return resolveNormalizedIri(iriStringWithBrackets, baseUri);
+}
+
+// ____________________________________________________________________________
+Iri Iri::resolveAgainstBase(const qlever::util::ParsedUri& baseUri) const {
+  return resolveNormalizedIri(toStringRepresentation(), baseUri);
 }
 
 // ____________________________________________________________________________
