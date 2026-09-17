@@ -341,10 +341,16 @@ size_t SpatialJoin::getCostEstimate() {
       // most 10'000, so for all practical purposes we can consider `log M` to
       // be a constant of 4.
       //
-      // The actual cost of comparing the candidate cannot be meaningfully
-      // estimated here, as we know nothing about the invidiual geometries.
+      // The candidate pairs found by the sweep are then tested exactly, which
+      // is much more expensive per pair than the sweep is per object (see
+      // `SPATIAL_JOIN_COST_PER_CANDIDATE`). The number of pairs is taken to
+      // be the size estimate, which for a prefiltered geometry side counts the
+      // candidates directly. Without this term, a spatial join over millions
+      // of candidates looked as cheap as sorting them, and the planner ran it
+      // before selective joins.
       auto numObjects = n + m;
-      return numObjects * 4;
+      return numObjects * 4 +
+             SPATIAL_JOIN_COST_PER_CANDIDATE * getSizeEstimateBeforeLimit();
     } else {
       AD_CORRECTNESS_CHECK(
           ad_utility::contains(
