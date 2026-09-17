@@ -243,7 +243,7 @@ struct alignas(256) ItemMapManager {
     }
     auto& map = map_.map_;
     auto& buffer = map_.buffer_;
-    auto repr = toRdfLiteral(key.tripleComponent_);
+    auto repr = toRdfLiteralView(key.tripleComponent_).value();
     auto it = map.find(repr);
     if (it == map.end()) {
       uint64_t res = map.size() + minId_;
