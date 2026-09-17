@@ -62,13 +62,15 @@ Iri Iri::fromStringRepresentation(std::string s) {
 
 // ____________________________________________________________________________
 Iri Iri::fromIriref(std::string_view stringWithBrackets) {
-  auto first = stringWithBrackets.find('<');
-  AD_CORRECTNESS_CHECK(first != std::string_view::npos);
-  return Iri{
-      absl::StrCat(stringWithBrackets.substr(0, first + 1),
-                   asStringViewUnsafe(RdfEscaping::normalizeIriWithBrackets(
-                       stringWithBrackets.substr(first))),
-                   ">")};
+  return Iri{RdfEscaping::unescapeIriref(stringWithBrackets)};
+}
+
+// ____________________________________________________________________________
+Iri Iri::fromLangtagAndIriref(std::string_view langtag,
+                              std::string_view stringWithBrackets) {
+  AD_CORRECTNESS_CHECK(!langtag.empty() && !ql::starts_with(langtag, '@'));
+  return Iri{absl::StrCat("@", langtag, "@",
+                          RdfEscaping::unescapeIriref(stringWithBrackets))};
 }
 
 // ____________________________________________________________________________
@@ -90,16 +92,29 @@ Iri Iri::fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets) {
 
 // ____________________________________________________________________________
 Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
+  auto prefixContent = asStringViewUnsafe(prefix.getContent());
+  // Fast path: if the suffix contains no escape sequences (by far the most
+  // common case), it can be concatenated directly, without materializing the
+  // unescaped suffix in a separate string first.
+  if (suffix.find('\\') == std::string_view::npos) {
+    return Iri{absl::StrCat("<", prefixContent, suffix, ">")};
+  }
   auto suffixNormalized = RdfEscaping::unescapePrefixedIri(suffix);
-  return Iri{absl::StrCat(
-      "<", asStringViewUnsafe(prefix.getContent()),
-      asStringViewUnsafe(asNormalizedStringViewUnsafe(suffixNormalized)), ">")};
+  return Iri{absl::StrCat("<", prefixContent, suffixNormalized, ">")};
 }
 
 // ____________________________________________________________________________
 Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
                                 const qlever::util::ParsedUri& baseUri) {
+  // The numeric escapes of an IRI reference are part of its lexical form, so
+  // they have to be resolved before the IRI is resolved against the base IRI
+  // (this is the same normalization that `fromIriref` applies).
+  std::string unescaped;
   auto iriSv = iriStringWithBrackets;
+  if (iriSv.find('\\') != std::string_view::npos) {
+    unescaped = RdfEscaping::unescapeIriref(iriSv);
+    iriSv = unescaped;
+  }
   AD_CORRECTNESS_CHECK(iriSv.size() >= 2);
   AD_CORRECTNESS_CHECK(iriSv[0] == '<' && iriSv[iriSv.size() - 1] == '>');
   iriSv.remove_prefix(1);

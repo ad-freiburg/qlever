@@ -126,8 +126,18 @@ class Iri : public BasicIri<true> {
 
   static Iri fromStringRepresentation(std::string s);
 
-  // Create a new `Iri` given an IRI string with brackets.
+  // Create a new `Iri` given an IRI string with brackets, resolving all
+  // `\u`/`\U` escape sequences (see the class comment). The input must start
+  // with `<` and end with `>`.
   static Iri fromIriref(std::string_view stringWithBrackets);
+
+  // Create a new `Iri` for QLever's internal representation of a
+  // language-tagged predicate, which prefixes the IRI with the language tag,
+  // e.g. `@en@<http://www.w3.org/2000/01/rdf-schema#label>`. The `langtag` must
+  // be non-empty and must not include the leading `@`; `stringWithBrackets` is
+  // handled exactly as in `fromIriref`.
+  static Iri fromLangtagAndIriref(std::string_view langtag,
+                                  std::string_view stringWithBrackets);
 
   // Like `fromIriref`, but first validate that `stringWithBrackets` is a
   // syntactically valid `IRIREF` and `throw` an `ad_utility::Exception`

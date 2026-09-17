@@ -18,6 +18,7 @@
 #include "./util/IndexTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
@@ -32,7 +33,7 @@ using namespace deltaTriplesTestHelpers;
 using ad_utility::testing::encodedIriManager;
 
 constexpr auto iri = [](std::string_view s) -> TripleComponent {
-  return TripleComponent{TripleComponent::Iri::fromIriref(s)};
+  return TripleComponent{ad_utility::testing::iri(s)};
 };
 
 constexpr auto lit = [](std::string s) -> TripleComponent {

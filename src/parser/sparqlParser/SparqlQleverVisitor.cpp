@@ -1502,11 +1502,16 @@ RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
 
 // ____________________________________________________________________________________
 TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
-  std::string langtag =
-      ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
-  return TripleComponent::Iri::fromIriref(
-      langtag +
-      visitAlternative<std::string>(ctx->iriref(), ctx->prefixedName()));
+  auto iri = visitAlternative<std::string>(ctx->iriref(), ctx->prefixedName());
+  if (!ctx->PREFIX_LANGTAG()) {
+    return TripleComponent::Iri::fromIriref(iri);
+  }
+  // The text of a `PREFIX_LANGTAG` is the language tag enclosed in `@`, e.g.
+  // `@en@`; strip those to obtain the bare language tag.
+  std::string prefixLangtag = ctx->PREFIX_LANGTAG()->getText();
+  AD_CORRECTNESS_CHECK(prefixLangtag.size() > 2);
+  return TripleComponent::Iri::fromLangtagAndIriref(
+      std::string_view{prefixLangtag}.substr(1, prefixLangtag.size() - 2), iri);
 }
 
 // ____________________________________________________________________________________

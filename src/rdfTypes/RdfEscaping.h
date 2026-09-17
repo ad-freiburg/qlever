@@ -159,18 +159,6 @@ NormalizedString normalizeLiteralWithQuotes(std::string_view input);
 // their unescaped format, e.g. "Hello \' World" -> "Hello' World".
 NormalizedString normalizeLiteralWithoutQuotes(std::string_view input);
 
-// Created the content for an Iri based on a string that contains
-// the surrounding angled brackets. The angled brackets are removed
-NormalizedString normalizeIriWithBrackets(std::string_view input);
-
-// Created the content for an Iri based on a string that does not contain
-// the surrounding angled brackets.
-NormalizedString normalizeIriWithoutBrackets(std::string_view input);
-
-// Created a normalized representation of the language tag.
-// If it starts with an @, the leading @ character will be removed.
-NormalizedString normalizeLanguageTag(std::string_view input);
-
 }  // namespace RdfEscaping
 
 #endif  // QLEVER_RDFESCAPING_H

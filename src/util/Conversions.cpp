@@ -4,10 +4,7 @@
 
 #include "util/Conversions.h"
 
-#include <absl/strings/str_cat.h>
-
 #include "global/Constants.h"
-#include "parser/NormalizedString.h"
 
 namespace ad_utility {
 
@@ -19,8 +16,8 @@ triple_component::Iri convertLangtagToEntityUri(std::string_view tag) {
 // _________________________________________________________
 triple_component::Iri convertToLanguageTaggedPredicate(
     const triple_component::Iri& pred, std::string_view langtag) {
-  return triple_component::Iri::fromIriref(absl::StrCat(
-      "@", langtag, "@<", asStringViewUnsafe(pred.getContent()), ">"));
+  return triple_component::Iri::fromLangtagAndIriref(
+      langtag, pred.toStringRepresentation());
 }
 
 }  // namespace ad_utility

@@ -255,7 +255,19 @@ static void unescapeIriWithBrackets(std::string_view input, std::string& res) {
  * actual value
  */
 std::string unescapeIriref(std::string_view iriref) {
-  std::string result = "<";
+  AD_CONTRACT_CHECK(ql::starts_with(iriref, "<") && ql::ends_with(iriref, ">"));
+  // Fast path: an IRI that contains no backslash at all has no escape
+  // sequences, so it can simply be copied. This is by far the most common case
+  // when parsing RDF input.
+  if (iriref.find('\\') == std::string_view::npos) {
+    return std::string{iriref};
+  }
+  std::string result;
+  // Unescaping never makes the IRI longer (the shortest numeric escape,
+  // `\uXXXX`, is six characters long and expands to at most three bytes), so a
+  // single allocation suffices.
+  result.reserve(iriref.size());
+  result.push_back('<');
   unescapeIriWithBrackets(iriref, result);
   result.push_back('>');
   return result;
@@ -361,28 +373,6 @@ NormalizedString normalizeLiteralWithoutQuotes(std::string_view input) {
   std::string returnValue;
   literalUnescape(input, returnValue);
   return toNormalizedString(returnValue);
-}
-
-// __________________________________________________________________________
-NormalizedString normalizeIriWithBrackets(std::string_view input) {
-  std::string result;
-  unescapeIriWithBrackets(input, result);
-  return toNormalizedString(result);
-}
-
-// __________________________________________________________________________
-NormalizedString normalizeIriWithoutBrackets(std::string_view input) {
-  std::string result;
-  unescapeIriWithoutBrackets(input, result);
-  return toNormalizedString(result);
-}
-
-// __________________________________________________________________________
-NormalizedString normalizeLanguageTag(std::string_view input) {
-  if (ql::starts_with(input, '@')) {
-    input.remove_prefix(1);
-  }
-  return toNormalizedString(input);
 }
 
 }  // namespace RdfEscaping

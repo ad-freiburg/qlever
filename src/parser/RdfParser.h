@@ -387,7 +387,10 @@ class TurtleParser : public RdfParserBase {
 
   // map a turtle prefix to its expanded form. Throws if the prefix was not
   // properly registered before
-  TripleComponent::Iri expandPrefix(const std::string& prefix);
+  // Look up the IRI that the given `prefix` was bound to by a `PREFIX` or
+  // `@prefix` declaration. Raises if the prefix was not declared. The result is
+  // a reference into the prefix map, which stays valid until the map changes.
+  const TripleComponent::Iri& expandPrefix(const std::string& prefix);
 
   // create a new, unused, unique blank node string
   std::string createAnonNode();

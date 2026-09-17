@@ -830,15 +830,15 @@ bool TurtleParser<Tokenizer_T>::check(bool result) const {
 
 // _____________________________________________________________________________
 template <class Tokenizer_T>
-TripleComponent::Iri TurtleParser<Tokenizer_T>::expandPrefix(
+const TripleComponent::Iri& TurtleParser<Tokenizer_T>::expandPrefix(
     const std::string& prefix) {
-  if (!prefixMap().count(prefix)) {
+  auto it = prefixMap().find(prefix);
+  if (it == prefixMap().end()) {
     raise("Prefix " + prefix +
           " was not previously defined using a PREFIX or @prefix "
           "declaration");
-  } else {
-    return prefixMap()[prefix];
   }
+  return it->second;
 }
 
 // _____________________________________________________________________________

@@ -90,26 +90,6 @@ TEST(RdfEscapingTest, normalizeLiteralWithoutQuotesToNormalizedString) {
 }
 
 // ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeIriWithBracketsToNormalizedString) {
-  ASSERT_EQ("https://example.org/books/book1",
-            asStringViewUnsafe(
-                normalizeIriWithBrackets("<https://example.org/books/book1>")));
-}
-
-// ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeIriWithoutBracketsToNormalizedString) {
-  ASSERT_EQ("https://example.org/books/book1",
-            asStringViewUnsafe(normalizeIriWithoutBrackets(
-                "https://example.org/books/book1")));
-}
-
-// ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeLanguageTagToNormalizedString) {
-  ASSERT_EQ("se", asStringViewUnsafe(normalizeLanguageTag("@se")));
-  ASSERT_EQ("se", asStringViewUnsafe(normalizeLanguageTag("se")));
-}
-
-// ___________________________________________________________________________
 TEST(RdfEscapingTest, unescapePrefixedIri) {
   // Inputs without any escape sequence are returned unchanged.
   ASSERT_EQ(unescapePrefixedIri(""), "");
