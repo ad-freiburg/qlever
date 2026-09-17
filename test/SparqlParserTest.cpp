@@ -1198,8 +1198,7 @@ TEST(ParserTest, Group) {
 // _____________________________________________________________________________
 TEST(ParserTest, LanguageFilterPostProcessing) {
   auto makeTaggedPath = [](std::string_view iriString, std::string langTag) {
-    return PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-        iri(iriString), std::move(langTag)));
+    return PropertyPath::fromIri(iri(iriString).withLanguageTag(langTag));
   };
   {
     ParsedQuery q = parseQuery(

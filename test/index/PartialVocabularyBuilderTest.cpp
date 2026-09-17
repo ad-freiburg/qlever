@@ -330,8 +330,7 @@ TEST(PartialVocabularyBuilder, languageTaggedLiteralAddsInternalTriples) {
   auto langTag =
       str(TripleComponent{ad_utility::convertLangtagToEntityUri("en")});
   auto langTaggedPredicate =
-      str(TripleComponent{ad_utility::convertToLanguageTaggedPredicate(
-          triple.predicate_.getIri(), "en")});
+      str(TripleComponent{triple.predicate_.getIri().withLanguageTag("en")});
   auto langPredicate = str(TripleComponent{iri(LANGUAGE_PREDICATE)});
   StringTriple expectedOriginal{str(triple.subject_), str(triple.predicate_),
                                 str(triple.object_), graph};

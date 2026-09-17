@@ -134,6 +134,12 @@ Iri Iri::resolveAgainstBase(const qlever::util::ParsedUri& baseUri) const {
 }
 
 // ____________________________________________________________________________
+Iri Iri::withLanguageTag(std::string_view langtag) const {
+  AD_CORRECTNESS_CHECK(!langtag.empty() && !ql::starts_with(langtag, '@'));
+  return Iri{absl::StrCat("@", langtag, "@", toStringRepresentation())};
+}
+
+// ____________________________________________________________________________
 Iri Iri::fromUri(const qlever::util::ParsedUri& uri) {
   return fromStringRepresentation(uri.toIriString());
 }

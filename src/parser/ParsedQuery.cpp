@@ -319,8 +319,7 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
     std::vector<PropertyPath> predicates;
     for (const std::string& langTag : langTags) {
       predicates.push_back(
-          PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-              predicate.getIri(), langTag)));
+          PropertyPath::fromIri(predicate.getIri().withLanguageTag(langTag)));
     }
     predicate = predicates.size() == 1
                     ? std::move(predicates[0])

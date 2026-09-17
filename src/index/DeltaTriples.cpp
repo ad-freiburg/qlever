@@ -262,8 +262,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
         });
     auto langtag =
         asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag());
-    auto specialPredicate =
-        ad_utility::convertToLanguageTaggedPredicate(predicate, langtag);
+    auto specialPredicate = predicate.withLanguageTag(langtag);
     Id specialId = toValueId(TripleComponent{std::move(specialPredicate)},
                              index_, localVocab_);
     // Extra triple `<subject> @language@<predicate> "object"@language`.

@@ -171,6 +171,12 @@ class Iri : public BasicIri<true> {
   // start of an escape sequence.
   Iri resolveAgainstBase(const qlever::util::ParsedUri& baseUri) const;
 
+  // Like `fromLangtagAndIriref`, but for an `Iri` that is already in QLever's
+  // internal representation (see the class comment), so that its escape
+  // sequences are not resolved a second time. The `langtag` must be non-empty
+  // and must not include the leading `@`.
+  Iri withLanguageTag(std::string_view langtag) const;
+
   // Create an `Iri` object given from the given `ParsedUri` object.
   static Iri fromUri(const qlever::util::ParsedUri& uri);
 };

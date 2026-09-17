@@ -171,6 +171,28 @@ TEST(IriTest, fromLangtagAndIriref) {
 }
 
 // _____________________________________________________________________________
+TEST(IriTest, withLanguageTag) {
+  auto label = Iri::fromIriref("<http://www.w3.org/2000/01/rdf-schema#label>");
+  EXPECT_EQ(label.withLanguageTag("en").toStringRepresentation(),
+            "@en@<http://www.w3.org/2000/01/rdf-schema#label>");
+  EXPECT_EQ(label.withLanguageTag("en"),
+            Iri::fromLangtagAndIriref(
+                "en", "<http://www.w3.org/2000/01/rdf-schema#label>"));
+
+  // The `Iri` is already in the internal representation, so a backslash in it
+  // is an ordinary character. In contrast to `fromLangtagAndIriref`, it is not
+  // read as an escape sequence a second time.
+  auto looksLikeAnEscape =
+      Iri::fromIrirefWithoutBrackets(R"(http://x/a\u0062c)");
+  EXPECT_EQ(looksLikeAnEscape.withLanguageTag("en").toStringRepresentation(),
+            R"(@en@<http://x/a\u0062c>)");
+  EXPECT_EQ(Iri::fromLangtagAndIriref(
+                "en", looksLikeAnEscape.toStringRepresentation())
+                .toStringRepresentation(),
+            "@en@<http://x/abc>");
+}
+
+// _____________________________________________________________________________
 TEST(LiteralTest, LiteralTest) {
   Literal literal = Literal::literalWithoutQuotes("Hello World");
 

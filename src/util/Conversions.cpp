@@ -13,11 +13,4 @@ triple_component::Iri convertLangtagToEntityUri(std::string_view tag) {
   return triple_component::Iri::fromIriref(makeQleverInternalIri("@", tag));
 }
 
-// _________________________________________________________
-triple_component::Iri convertToLanguageTaggedPredicate(
-    const triple_component::Iri& pred, std::string_view langtag) {
-  return triple_component::Iri::fromLangtagAndIriref(
-      langtag, pred.toStringRepresentation());
-}
-
 }  // namespace ad_utility
