@@ -422,7 +422,10 @@ class TurtleParser : public RdfParserBase {
   // `RdfParserBase::getBatch`). `buffer` has to be empty, and so has the
   // current buffer of this parser.
   void setTripleBuffer(std::vector<TurtleTriple> buffer) {
-    AD_CORRECTNESS_CHECK(triples_.empty() && buffer.empty());
+    // NOTE: Two separate checks, because the short-circuiting `&&` of a
+    // single check would always be reported as partially covered.
+    AD_CORRECTNESS_CHECK(triples_.empty());
+    AD_CORRECTNESS_CHECK(buffer.empty());
     triples_ = std::move(buffer);
   }
 
