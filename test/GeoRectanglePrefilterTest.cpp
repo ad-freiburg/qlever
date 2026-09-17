@@ -432,10 +432,11 @@ TEST_P(GeoRectanglePrefilterSchemeTest, prefilteredSpatialJoinSizeEstimate) {
   EXPECT_GT(candidates, 1u);
   EXPECT_EQ(sjPos->getSizeEstimate(), 1u);
 
-  // PSO scan (sorted by `?s`): no prefilter, generic estimate.
+  // PSO scan (sorted by `?s`): no prefilter, but the same estimate. The size
+  // of the join does not depend on the permutation of its scan.
   auto sjPso = makeJoin(Permutation::PSO);
-  EXPECT_EQ(sjPso->getSizeEstimate(),
-            fullScanSize / SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE);
+  EXPECT_EQ(sjPso->getChildren().at(1)->getSizeEstimate(), fullScanSize);
+  EXPECT_EQ(sjPso->getSizeEstimate(), sjPos->getSizeEstimate());
 
   // The clone keeps the estimate.
   EXPECT_EQ(sjPos->clone()->getSizeEstimate(), 1u);
@@ -470,6 +471,18 @@ TEST_P(GeoRectanglePrefilterSchemeTest, prefilteredSpatialJoinSizeEstimate) {
   EXPECT_EQ(
       sjPolygon->getSizeEstimate(),
       std::max<uint64_t>(1, static_cast<uint64_t>(polygonCandidates * share)));
+
+  // The same polygon over the PSO scan: the estimate is the same, up to the
+  // rounding of the two products.
+  auto sjPolygonPso = std::make_shared<SpatialJoin>(
+      qec, intersectsConfig, std::nullopt, std::nullopt, true);
+  sjPolygonPso = sjPolygonPso->addChild(polygonTree, polygonVar);
+  sjPolygonPso = sjPolygonPso->addChild(
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple),
+      wktVar);
+  EXPECT_EQ(sjPolygonPso->getChildren().at(1)->getSizeEstimate(), fullScanSize);
+  EXPECT_NEAR(static_cast<double>(sjPolygonPso->getSizeEstimate()),
+              static_cast<double>(sjPolygon->getSizeEstimate()), 1.0);
 }
 
 // The geo rectangle prefilter on an `IndexScan` prunes whole blocks and then
