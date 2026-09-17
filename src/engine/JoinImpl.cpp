@@ -116,10 +116,15 @@ JoinImpl::getUpdatedQueryExecutionTreeWithPrefilterApplied(
   if (!updatedLeft.has_value() && !updatedRight.has_value()) {
     return std::nullopt;
   }
+  // Keep the order of the children (the constructor would otherwise order
+  // them by cache key, and the prefiltered child has a new one): the column
+  // layout of the result is the layout of the left child followed by the
+  // remaining columns of the right child, and the operations above this join
+  // refer to the columns of the result by index.
   return ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), updatedLeft.value_or(left_),
       updatedRight.value_or(right_), leftJoinCol_, rightJoinCol_,
-      keepJoinColumn_);
+      keepJoinColumn_, false);
 }
 
 // _____________________________________________________________________________
