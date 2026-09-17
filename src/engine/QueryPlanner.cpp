@@ -1457,8 +1457,14 @@ void QueryPlanner::applyFiltersIfPossible(
         // If we need to enforce substitution, replace `plan` with our first
         // candidate. This is not done in all cases, because an incomplete
         // `SpatialJoin` would not get a join partner if `plan` would be
-        // removed.
-        if (!substPlans.empty() && filterAndSubst.forceSubstitution_) {
+        // removed. In the dynamic programming mode (`KeepUnfiltered`) the
+        // plan without the substitute is kept as well: an enforced substitute
+        // is complete as soon as it is attached, so it can also be attached
+        // higher up, after joins that restrict its input, and the cost
+        // estimates decide. The final row enforces it for plans that still
+        // lack it (see `runDynamicProgrammingOnConnectedComponent`).
+        if (!substPlans.empty() && filterAndSubst.forceSubstitution_ &&
+            mode != FilterMode::KeepUnfiltered) {
           plan = std::move(substPlans.front());
           substPlans.erase(substPlans.begin());
         }
