@@ -179,8 +179,9 @@ class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
 
  private:
   // Whether a call to `pop` can currently return without waiting. `mutex_` has
-  // to be held while this is called.
-  bool canPop() const { return !queue_.empty() || finish_ || pushedException_; }
+  // to be held while this is called. A pushed exception needs no separate
+  // check, because `pushException` also sets `finish_`.
+  bool canPop() const { return !queue_.empty() || finish_; }
 
   // The common part of the two `pop` functions above: rethrow a pushed
   // exception, report the end of the queue, or return its front element.

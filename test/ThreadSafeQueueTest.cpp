@@ -10,7 +10,7 @@
 #include <atomic>
 #include <chrono>
 #include <ranges>
-#include <thread>
+#include <semaphore>
 
 #include "./util/GTestHelpers.h"
 #include "util/ThreadSafeQueue.h"
@@ -481,21 +481,25 @@ TEST(ThreadSafeQueue, tryPushAfterException) {
 TEST(ThreadSafeQueue, popWithInterruptibleWait) {
   using namespace std::chrono_literals;
   ThreadSafeQueue<size_t> queue{2};
-  size_t numCalls = 0;
-  auto count = [&numCalls]() { ++numCalls; };
+  // One permit is released per call to the callback, so that the producer below
+  // can wait for the consumer to actually be waiting.
+  std::counting_semaphore<> numCalls{0};
+  auto count = [&numCalls]() { numCalls.release(); };
 
   // Nothing has to be waited for, so the callback is not called at all.
   queue.push(42);
   EXPECT_EQ(queue.pop(1ms, count), 42);
-  EXPECT_EQ(numCalls, 0u);
+  EXPECT_FALSE(numCalls.try_acquire());
 
-  // While waiting, the callback is called repeatedly.
-  ad_utility::JThread producer{[&queue]() {
-    std::this_thread::sleep_for(50ms);
+  // While waiting, the callback is called repeatedly: the producer only pushes
+  // after the callback has been called twice, so the consumer provably went
+  // through at least one full interval.
+  ad_utility::JThread producer{[&queue, &numCalls]() {
+    numCalls.acquire();
+    numCalls.acquire();
     queue.push(1);
   }};
   EXPECT_EQ(queue.pop(1ms, count), 1);
-  EXPECT_GT(numCalls, 1u);
   producer.join();
 
   queue.finish();
@@ -512,4 +516,23 @@ TEST(ThreadSafeQueue, popIsInterruptedByAThrowingCallback) {
   // The queue is unaffected by the interruption and can still be used.
   EXPECT_EQ(queue.tryPush(1), TryPushResult::Pushed);
   EXPECT_EQ(queue.pop(1ms, interrupt), 1);
+}
+
+// ________________________________________________________________
+// A consumer that is already blocked in `pop` is woken up by a pushed
+// exception. This pins down the invariant that `pushException` also sets
+// `finish`, on which the wait condition of both `pop` overloads relies.
+TEST(ThreadSafeQueue, popWithInterruptibleWaitIsWokenByAPushedException) {
+  using namespace std::chrono_literals;
+  ThreadSafeQueue<size_t> queue{2};
+  // The first call to the callback means that the consumer is now waiting.
+  std::counting_semaphore<> isWaiting{0};
+  auto signalWaiting = [&isWaiting]() { isWaiting.release(); };
+  ad_utility::JThread producer{[&queue, &isWaiting]() {
+    isWaiting.acquire();
+    queue.pushException(std::make_exception_ptr(std::runtime_error{"late"}));
+  }};
+  AD_EXPECT_THROW_WITH_MESSAGE(queue.pop(1ms, signalWaiting),
+                               ::testing::StrEq("late"));
+  producer.join();
 }
