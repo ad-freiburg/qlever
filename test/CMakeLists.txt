@@ -151,7 +151,9 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
 
     addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
-    addLinkAndDiscoverTest(ServerTest engine server)
+    # The in-memory span exporter is only used by tests, so it is linked here
+    # rather than on the `metrics` library.
+    addLinkAndDiscoverTest(ServerTest engine server opentelemetry-cpp::in_memory_span_exporter)
 
     addLinkAndDiscoverTest(HttpApiHelpersTest server)
 

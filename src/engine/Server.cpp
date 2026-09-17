@@ -12,6 +12,8 @@
 #include <absl/functional/bind_front.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
+#include <opentelemetry/semconv/db_attributes.h>
+#include <opentelemetry/semconv/http_attributes.h>
 
 #include <array>
 #include <string>
@@ -56,7 +58,43 @@ template <typename T>
 using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
-// _____________________________________________________________________________
+namespace {
+namespace semconv = opentelemetry::semconv;
+
+// The form of a SPARQL query, for the `db.operation.name` attribute below.
+// `DESCRIBE` does not appear because the parser rewrites it into a `CONSTRUCT`.
+std::string_view queryOperationName(const ParsedQuery& query) {
+  if (query.hasSelectClause()) {
+    return "SELECT";
+  }
+  if (query.hasAskClause()) {
+    return "ASK";
+  }
+  AD_CORRECTNESS_CHECK(query.hasConstructClause());
+  return "CONSTRUCT";
+}
+
+// Record the attributes describing the SPARQL operation.
+// `operationName` should be low-cardinality, so it is the form of the operation
+// (`SELECT`, `UPDATE`, ...).
+void setOperationAttributes(opentelemetry::trace::Span& span,
+                            std::string_view operationName,
+                            std::string_view operationString,
+                            size_t batchSize) {
+  // Note: these attributes are specified for clients but we just use them
+  // anyways.
+  span.SetAttribute(semconv::db::kDbSystemName, "qlever");
+  span.SetAttribute(semconv::db::kDbOperationName, operationName);
+  span.SetAttribute(semconv::db::kDbQueryText,
+                    ad_utility::truncateOperationString(operationString));
+  if (batchSize > 1) {
+    span.SetAttribute(semconv::db::kDbOperationBatchSize,
+                      static_cast<int64_t>(batchSize));
+  }
+}
+}  // namespace
+
+// __________________________________________________________________________
 Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
@@ -150,12 +188,22 @@ CPP_template_def(typename RequestT, typename SendT)(
     Awaitable<void> Server::handleHttpRequest(RequestT request, SendT& send) {
   using namespace ad_utility::httpUtils;
 
+  // The root span of the trace for this request. Clients can pass in a parent
+  // trace to continue via the W3C Trace Context standard. The name is only
+  // the HTTP method for now.
+  ad_utility::tracing::SpanGuard rootSpan{
+      std::string_view{request.method_string()},
+      ad_utility::tracing::extractParentFromRequest(request)};
+  ad_utility::tracing::setRequestAttributes(rootSpan.span(), request);
+
   auto sendWithAccessControlHeaders =
-      [&send](auto response) -> boost::asio::awaitable<void> {
+      [&send, &rootSpan](auto response) -> boost::asio::awaitable<void> {
     response.set(http::field::access_control_allow_origin, "*");
     response.set(http::field::access_control_allow_headers, "*");
     response.set(http::field::access_control_allow_methods,
                  "GET, POST, OPTIONS");
+    rootSpan.span().SetAttribute(semconv::http::kHttpResponseStatusCode,
+                                 static_cast<int64_t>(response.result_int()));
     co_return co_await send(std::move(response));
   };
 
@@ -163,6 +211,7 @@ CPP_template_def(typename RequestT, typename SendT)(
     AD_LOG_INFO << std::endl;
     AD_LOG_INFO << "Request received via " << request.method()
                 << ", allowing everything" << std::endl;
+    rootSpan.setOk();
     co_return co_await sendWithAccessControlHeaders(
         createOkResponse("", request, MediaType::textPlain));
   }
@@ -173,7 +222,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   // block.
   std::optional<ResponseT> errorResponse;
   try {
-    co_await process(request, sendWithAccessControlHeaders);
+    co_await process(request, sendWithAccessControlHeaders, rootSpan);
   } catch (const HttpError& e) {
     errorResponse =
         reportHttpError(e.what(), e.status(), request, HttpErrorType::http);
@@ -769,7 +818,8 @@ CPP_template_def(typename RequestT, typename SendT)(
         SparqlOperation operation, const ParamValueMap& parameters,
         bool accessTokenOk, const ad_utility::Timer& requestTimer,
         SharedIndexAndView indexAndViews, RequestT& request, SendT&& send,
-        std::optional<ResponseT> response) {
+        std::optional<ResponseT> response,
+        ad_utility::tracing::SpanGuard& rootSpan) {
   using namespace ad_utility::httpUtils;
   auto& index = indexAndViews->index_;
   auto checkParameter = serverProcessHelpers::makeCheckParameter(parameters);
@@ -782,7 +832,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   std::optional<PlannedQuery> plannedQuery;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, &plannedQuery, &indexAndViews,
+       &requestTimer, &plannedQuery, &indexAndViews, &rootSpan,
        this](std::vector<ParsedQuery> operations, std::string operationName,
              const std::string operationString,
              SharedTimeTracer tracer = nullptr) -> Awaitable<void> {
@@ -816,23 +866,28 @@ CPP_template_def(typename RequestT, typename SendT)(
     try {
       if (isUpdateOperation) {
         metrics_->startedSparqlOperations_->Add(1, {OperationType::update});
+        setOperationAttributes(rootSpan.span(), "UPDATE", operationString,
+                               operations.size());
         AD_CORRECTNESS_CHECK(tracer != nullptr);
         co_await processUpdate(std::move(makeQec), std::move(operations),
                                requestTimer, tracer, cancellationHandle,
                                std::move(request), send, timeLimit,
-                               plannedQuery);
+                               plannedQuery, rootSpan.context());
       } else {
         AD_CORRECTNESS_CHECK(operations.size() == 1);
         ParsedQuery query = std::move(operations[0]);
         AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
                              query.hasConstructClause());
         metrics_->startedSparqlOperations_->Add(1, {OperationType::query});
+        setOperationAttributes(rootSpan.span(), queryOperationName(query),
+                               operationString, 1);
         // Queries run against a consistent snapshot taken at the start of the
         // request, so build the execution context from that snapshot here.
         auto qecPtr = makeQec(indexAndViews);
         co_await processQuery(parameters, std::move(query), requestTimer,
                               cancellationHandle, *qecPtr, std::move(request),
-                              send, timeLimit, plannedQuery);
+                              send, timeLimit, plannedQuery,
+                              rootSpan.context());
       }
       queryStatus->store(OK);
       co_return;
@@ -843,11 +898,17 @@ CPP_template_def(typename RequestT, typename SendT)(
       throw;
     }
   };
-  auto visitQuery = [&index, &visitOperation](Query query) -> Awaitable<void> {
+  auto visitQuery = [&index, &visitOperation,
+                     &rootSpan](Query query) -> Awaitable<void> {
     // We need to copy the query string because `visitOperation` below also
     // needs it.
-    auto parsedQuery = SparqlParser::parseQuery(
-        &index.encodedIriManager(), query.query_, query.datasetClauses_);
+    auto parsedQuery = [&] {
+      ad_utility::tracing::SpanGuard parseSpan{"parsing", rootSpan.context()};
+      auto result = SparqlParser::parseQuery(
+          &index.encodedIriManager(), query.query_, query.datasetClauses_);
+      parseSpan.setOk();
+      return result;
+    }();
     if (parsedQuery.hasUpdateClause()) {
       throw std::runtime_error(absl::StrCat(
           "SPARQL QUERY was requested via the HTTP request, but the "
@@ -857,16 +918,21 @@ CPP_template_def(typename RequestT, typename SendT)(
     return visitOperation({std::move(parsedQuery)}, "SPARQL query",
                           std::move(query.query_));
   };
-  auto visitUpdate = [&index, &visitOperation, &requireValidAccessToken](
-                         Update update) -> Awaitable<void> {
+  auto visitUpdate = [&index, &visitOperation, &requireValidAccessToken,
+                      &rootSpan](Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
     // needs it.
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
-    auto parsedUpdates = SparqlParser::parseUpdate(
-        index.getBlankNodeManager(), &index.encodedIriManager(), update.update_,
-        update.datasetClauses_);
+    auto parsedUpdates = [&] {
+      ad_utility::tracing::SpanGuard parseSpan{"parsing", rootSpan.context()};
+      auto result = SparqlParser::parseUpdate(
+          index.getBlankNodeManager(), &index.encodedIriManager(),
+          update.update_, update.datasetClauses_);
+      parseSpan.setOk();
+      return result;
+    }();
     tracer->endTrace("parsing");
     if (!ql::ranges::all_of(parsedUpdates, &ParsedQuery::hasUpdateClause)) {
       throw std::runtime_error(absl::StrCat(
@@ -878,13 +944,17 @@ CPP_template_def(typename RequestT, typename SendT)(
                           std::move(update.update_), tracer);
   };
   auto visitGraphStore =
-      [&request, &visitOperation, &requireValidAccessToken,
-       &index](GraphStoreOperation operation) -> Awaitable<void> {
+      [&request, &visitOperation, &requireValidAccessToken, &index,
+       &rootSpan](GraphStoreOperation operation) -> Awaitable<void> {
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
-    std::vector<ParsedQuery> parsedOperations =
-        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
-                                                        request, index);
+    std::vector<ParsedQuery> parsedOperations = [&] {
+      ad_utility::tracing::SpanGuard parseSpan{"parsing", rootSpan.context()};
+      auto result = GraphStoreProtocol::transformGraphStoreProtocol(
+          std::move(operation), request, index);
+      parseSpan.setOk();
+      return result;
+    }();
     tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
@@ -923,13 +993,14 @@ CPP_template_def(typename RequestT, typename SendT)(
       std::move(operation),
       ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
                                        visitNone},
-      requestTimer, request, send, plannedQuery);
+      requestTimer, request, send, plannedQuery, rootSpan);
 }
 
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::process(RequestT& request, SendT&& send) {
+    Awaitable<void> Server::process(RequestT& request, SendT&& send,
+                                    ad_utility::tracing::SpanGuard& rootSpan) {
   using namespace ad_utility::httpUtils;
   using namespace responseJson;
   using namespace serverProcessHelpers;
@@ -959,6 +1030,15 @@ CPP_template_def(typename RequestT, typename SendT)(
   // standard, see method `getUrlPathAndParameters`.
   auto parsedHttpRequest = SparqlProtocol::parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
+
+  // QLever has no routing table, it serves SPARQL on every path that is not one
+  // of the few special ones, so the path is the closest thing to a route that
+  // exists here. The root span can only be named now, because the route is not
+  // known before the request is parsed.
+  rootSpan.span().UpdateName(absl::StrCat(
+      std::string_view{request.method_string()}, " ", parsedHttpRequest.path_));
+  rootSpan.span().SetAttribute(semconv::http::kHttpRoute,
+                               parsedHttpRequest.path_);
 
   auto checkParameter = makeCheckParameter(parameters);
 
@@ -1031,7 +1111,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   co_return co_await processSparqlOperation(
       std::move(parsedHttpRequest.operation_), parameters, accessTokenOk,
       requestTimer, std::move(indexAndViews), request, send,
-      std::move(response));
+      std::move(response), rootSpan);
 }
 
 // Explicit instantiation so that friend test code (`ServerForTesting`, the
@@ -1040,7 +1120,7 @@ CPP_template_def(typename RequestT, typename SendT)(
 // response instead of sending it.
 template Server::Awaitable<void>
 Server::process<Server::StringBodyRequest, Server::MockSend&>(
-    StringBodyRequest&, MockSend&);
+    StringBodyRequest&, MockSend&, ad_utility::tracing::SpanGuard&);
 
 // ____________________________________________________________________________
 Server::PlannedQuery Server::planQuery(
@@ -1189,7 +1269,8 @@ CPP_template_def(typename RequestT, typename SendT)(
         const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, SendT&& send,
-        TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
+        TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery,
+        const opentelemetry::trace::SpanContext& parentSpan) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
   ad_utility::metrics::ActiveCounterGuard queryGuard{
       *metrics_->runningSparqlOperations_, "query"};
@@ -1212,15 +1293,21 @@ CPP_template_def(typename RequestT, typename SendT)(
   // probably related to issues in GCC's coroutine implementation.
   // For the same reason (crashes in the conanbuild) we store the coroutine in
   // an explicit variable instead of directly `co_await`-ing it.
-  auto coroutine = computeInNewThread(
-      queryThreadPool_,
-      [this, &query, &requestTimer, &timeLimit, &qec,
-       &cancellationHandle]() -> std::optional<PlannedQuery> {
-        return this->planQuery(std::move(query), qec, cancellationHandle,
-                               timeLimit, requestTimer);
-      },
-      cancellationHandle);
-  plannedQuery = co_await std::move(coroutine);
+  {
+    ad_utility::tracing::SpanGuard planSpan{"planning", parentSpan};
+    auto coroutine = [&] {
+      return computeInNewThread(
+          queryThreadPool_,
+          [this, &query, &requestTimer, &timeLimit, &qec,
+           &cancellationHandle]() -> std::optional<PlannedQuery> {
+            return this->planQuery(std::move(query), qec, cancellationHandle,
+                                   timeLimit, requestTimer);
+          },
+          cancellationHandle);
+    }();
+    plannedQuery = co_await std::move(coroutine);
+    planSpan.setOk();
+  }
   auto qet = plannedQuery.value().queryExecutionTree();
 
   MediaType mediaType = chooseBestFittingMediaType(
@@ -1241,10 +1328,17 @@ CPP_template_def(typename RequestT, typename SendT)(
       qlever::http_api_helpers::determineSendLimit(params, mediaType));
 
   // This actually processes the query and sends the result in the
-  // requested format.
-  co_await sendStreamableResponse(request, AD_FWD(send), mediaType,
-                                  plannedQuery.value(), requestTimer,
-                                  cancellationHandle);
+  // requested format. The result is computed lazily *while* it is
+  // being serialized, so this span covers the execution as well.
+  {
+    ad_utility::tracing::SpanGuard exportSpan{"export", parentSpan};
+    exportSpan.span().SetAttribute("qlever.result.media_type",
+                                   ad_utility::toString(mediaType));
+    co_await sendStreamableResponse(request, AD_FWD(send), mediaType,
+                                    plannedQuery.value(), requestTimer,
+                                    cancellationHandle);
+    exportSpan.setOk();
+  }
   // Print the runtime info. This needs to be done after the query
   // was computed.
   AD_LOG_INFO << "Done processing query and sending result"
@@ -1331,7 +1425,8 @@ CPP_template_def(typename RequestT, typename SendT)(
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         const RequestT& request, SendT&& send, TimeLimit timeLimit,
-        std::optional<PlannedQuery>& plannedUpdate) {
+        std::optional<PlannedQuery>& plannedUpdate,
+        const opentelemetry::trace::SpanContext& parentSpan) {
   outerTracer->beginTrace("waitingForUpdateThread");
   ad_utility::metrics::ActiveCounterGuard updateGuard{
       *metrics_->runningSparqlOperations_, "update"};
@@ -1354,7 +1449,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &makeQec, &requestTimer, &cancellationHandle, &updates, &timeLimit,
-       &plannedUpdate, outerTracer, &metadatas]() {
+       &plannedUpdate, outerTracer, &metadatas, &parentSpan]() {
         outerTracer->endTrace("waitingForUpdateThread");
         // Snapshot and build the context on the update thread (see
         // `clear-delta-triples`), so the update sees and modifies the currently
@@ -1366,11 +1461,17 @@ CPP_template_def(typename RequestT, typename SendT)(
         auto& qec = *qecPtr;
         return index.deltaTriplesManager().modify<json>(
             [this, &cancellationHandle, &plannedUpdate, &updates, &requestTimer,
-             &timeLimit, &qec, &metadatas](DeltaTriples& deltaTriples) {
+             &timeLimit, &qec, &metadatas,
+             &parentSpan](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
                   deltaTriples.getLocatedTriplesSharedStateReference());
               json results = json::array();
               for (auto&& [i, update] : ranges::views::enumerate(updates)) {
+                // A request can contain multiple chained updates. Group each
+                // update with a span.
+                ad_utility::tracing::SpanGuard updateSpan{"update", parentSpan};
+                updateSpan.span().SetAttribute("qlever.update.index",
+                                               static_cast<int64_t>(i));
                 auto tracer = ad_utility::timer::TimeTracer("update");
                 // The augmented metadata is invalidated by any update. It is
                 // only updated automatically at the end of modify. Updates with
@@ -1397,6 +1498,7 @@ CPP_template_def(typename RequestT, typename SendT)(
                 tracer.endTrace("execution");
 
                 tracer.endTrace("update");
+                updateSpan.setOk();
                 results.push_back(createResponseMetadataForUpdate(
                     *deltaTriples.getLocatedTriplesSharedStateReference(),
                     *plannedUpdate, updateMetadata, tracer));
@@ -1453,7 +1555,8 @@ CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
     Awaitable<void> Server::processOperation(
         SparqlOperation operation, VisitorT visitor,
         const ad_utility::Timer& requestTimer, const RequestT& request,
-        SendT& send, const std::optional<PlannedQuery>& plannedQuery) {
+        SendT& send, const std::optional<PlannedQuery>& plannedQuery,
+        ad_utility::tracing::SpanGuard& rootSpan) {
   // Copy the operation string for the error case before processing the
   // operation, because processing moves it.
   const std::string operationString = [&operation] {
@@ -1483,31 +1586,38 @@ CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
   std::optional<std::string> exceptionErrorMsg;
   std::optional<ExceptionMetadata> metadata;
   try {
-    co_return co_await std::visit(visitor, std::move(operation));
+    co_await std::visit(visitor, std::move(operation));
+    rootSpan.setOk();
+    co_return;
   } catch (const HttpError& e) {
     responseStatus = e.status();
     exceptionErrorMsg = e.what();
     metrics_->sparqlErrors_->Add(1, {SparqlErrorType::protocol});
+    rootSpan.recordException(e, SparqlErrorType::protocol.second);
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
     metrics_->sparqlErrors_->Add(1, {SparqlErrorType::syntax});
+    rootSpan.recordException(e, SparqlErrorType::syntax.second);
   } catch (const QueryAlreadyInUseError& e) {
     // No `OwningQueryId` exists for this request (creation was rejected).
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
     metrics_->sparqlErrors_->Add(1, {SparqlErrorType::inUse});
+    rootSpan.recordException(e, SparqlErrorType::inUse.second);
   } catch (const ad_utility::CancellationException& e) {
     // Send 429 status code to indicate that the time limit was reached
     // or the query was cancelled because of some other reason.
     responseStatus = http::status::too_many_requests;
     exceptionErrorMsg = e.what();
     metrics_->sparqlErrors_->Add(1, {SparqlErrorType::timeout});
+    rootSpan.recordException(e, SparqlErrorType::timeout.second);
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
     metrics_->sparqlErrors_->Add(1, {SparqlErrorType::internal});
+    rootSpan.recordException(e, SparqlErrorType::internal.second);
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
   //  optional<errorMsg> and optional<metadata> and does this logic
