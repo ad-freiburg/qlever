@@ -2628,6 +2628,11 @@ TEST(RdfParserTest, makeDelimiterTableAndFindFirstOf) {
   static_assert(!table[static_cast<unsigned char>('x')]);
   // The empty set of delimiters matches nothing.
   EXPECT_EQ(findFirstOf(delimiters, detail::makeDelimiterTable("")), npos);
+  // All the calls to `makeDelimiterTable` above are evaluated at compile time
+  // (or have an empty argument); check that the result is also correct when it
+  // is called at runtime with a nonempty argument.
+  std::string delimitersAtRuntime{delimiters};
+  EXPECT_EQ(detail::makeDelimiterTable(delimitersAtRuntime), table);
 
   // Each single delimiter is found at the correct position.
   for (char c : delimiters) {
