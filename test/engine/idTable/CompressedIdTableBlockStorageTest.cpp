@@ -176,7 +176,7 @@ template <size_t NumCols>
 Storage<NumCols> makeStorage(const Strand& strand, net::io_context& ioContext,
                              std::string filename,
                              size_t maxBufferedBlocksPerChunk,
-                             ad_utility::CompressedBlockFile::Compression
+                             ad_utility::CompressedBlockFile::CompressionLevel
                                  compression = ad_utility::ZSTD_DEFAULT_LEVEL) {
   return Storage<NumCols>{strand,
                           ioContext.get_executor(),
@@ -190,10 +190,10 @@ Storage<NumCols> makeStorage(const Strand& strand, net::io_context& ioContext,
 // level, and no compression at all. A spilled block has to arrive unchanged
 // either way, see `MERGE_PHASE_SPILL_COMPRESSION` for which of the two the
 // merge phase uses.
-const std::vector<ad_utility::CompressedBlockFile::Compression>&
+const std::vector<ad_utility::CompressedBlockFile::CompressionLevel>&
 compressions() {
-  static const std::vector<ad_utility::CompressedBlockFile::Compression> result{
-      ad_utility::ZSTD_DEFAULT_LEVEL, ad_utility::NO_BLOCK_COMPRESSION};
+  static const std::vector<ad_utility::CompressedBlockFile::CompressionLevel>
+      result{ad_utility::ZSTD_DEFAULT_LEVEL, ad_utility::NO_BLOCK_COMPRESSION};
   return result;
 }
 
@@ -720,7 +720,7 @@ using Latch =
 template <size_t NumCols>
 Sink<NumCols> makeSink(net::io_context& ioContext, size_t numChunks,
                        std::string filename, size_t maxBufferedBlocksPerChunk,
-                       ad_utility::CompressedBlockFile::Compression
+                       ad_utility::CompressedBlockFile::CompressionLevel
                            compression = ad_utility::ZSTD_DEFAULT_LEVEL) {
   return Sink<NumCols>{ioContext.get_executor(), numChunks,
                        ad_utility::makeCompressedIdTableStorageFactory<NumCols>(
@@ -793,7 +793,7 @@ net::awaitable<void> checkRoundTrip(
     net::io_context& ioContext, size_t numColumns, size_t numChunks,
     size_t numBlocksPerChunk, size_t maxBufferedBlocksPerChunk,
     std::string filename,
-    ad_utility::CompressedBlockFile::Compression compression =
+    ad_utility::CompressedBlockFile::CompressionLevel compression =
         ad_utility::ZSTD_DEFAULT_LEVEL) {
   MergePlan<NumCols> plan =
       makePlan<NumCols>(numChunks, numBlocksPerChunk, numColumns);

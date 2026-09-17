@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -15,9 +16,11 @@
 #include <chrono>
 #include <cstddef>
 #include <functional>
+#include <future>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -35,6 +38,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/SourceLocation.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
+#include "util/parallelBlockMerge/ParallelMergeRange.h"
 
 // The tests of the helpers from `MergeHelpers.h` (in particular of
 // `computeChunkBoundaries`) live in `MergeHelpersTest.cpp`.
@@ -1125,32 +1129,33 @@ namespace {
 template <bool moveElements = false, typename Input, typename Comparator>
 std::vector<typename Input::value_type> mergeToRangeAndCollect(
     Input input, Comparator comparator, MergeOptions options = {},
-    size_t numThreads = 4, size_t bufferedBlocksPerChunk = 2) {
+    size_t numThreads = 4, size_t bufferedBlocksPerChunk = 2,
+    ad_utility::SharedCancellationHandle cancellationHandle =
+        detail::freshCancellationHandle()) {
   options.parallelismHint = numThreads;
   net::thread_pool pool{numThreads};
+  // All the coroutines that are still in flight have to finish before the pool
+  // is destroyed, otherwise this hangs. This also has to happen if the consumer
+  // below exits via an exception, and only after the range is destroyed (which
+  // stops the merge), hence the cleanup that is declared before the range.
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
   std::vector<typename Input::value_type> result;
-  {
-    auto blocks = parallelBlockMergeToRange<moveElements>(
-        pool.get_executor(), std::move(input), std::move(comparator),
-        makeInMemoryStorageFactory<typename Input::Block>(
-            bufferedBlocksPerChunk),
-        std::move(options));
-    for (auto& block : blocks) {
-      EXPECT_FALSE(block.empty());
-      for (auto& element : block) {
-        result.push_back(std::move(element));
-      }
+  auto blocks = parallelBlockMergeToRange<moveElements>(
+      pool.get_executor(), std::move(input), std::move(comparator),
+      makeInMemoryStorageFactory<typename Input::Block>(bufferedBlocksPerChunk),
+      std::move(options), std::move(cancellationHandle));
+  for (auto& block : blocks) {
+    EXPECT_FALSE(block.empty());
+    for (auto& element : block) {
+      result.push_back(std::move(element));
     }
   }
-  // All the coroutines that are still in flight have to finish, otherwise this
-  // hangs.
-  pool.join();
   return result;
 }
 
 // Return `MergeOptions` that force the parallel code path also for the small
-// inputs of these tests, see `MergeOptions::serialNumElementsThreshold`.
-MergeOptions rangeOptions(size_t outputBlockSize = 7) {
+// inputs of these tests, see `MergeOptions::shouldMergeSerially()`.
+MergeOptions alwaysParallelOptions(size_t outputBlockSize = 7) {
   MergeOptions options = parallelOptions(outputBlockSize);
   options.serialNumElementsThreshold = 0;
   return options;
@@ -1165,7 +1170,7 @@ TEST(ParallelBlockMerge, rangeYieldsTheGloballySortedResult) {
     auto expected = sortedConcatenation(runs);
     auto result =
         mergeToRangeAndCollect(makeVectorInput(runs, blockSize), std::less<>{},
-                               rangeOptions(blockSize), 8);
+                               alwaysParallelOptions(blockSize), 8);
     EXPECT_TRUE(ql::ranges::is_sorted(result));
     EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
   };
@@ -1180,7 +1185,7 @@ TEST(ParallelBlockMerge, rangeWithASingleInFlightChunk) {
   // a chunk whose storage is full suspends instead of blocking its thread.
   auto runs = makeRandomRuns(16, 200, 300);
   auto expected = sortedConcatenation(runs);
-  MergeOptions options = rangeOptions(16);
+  MergeOptions options = alwaysParallelOptions(16);
   for (size_t maxNumChunksInFlight : {1, 2}) {
     options.maxNumChunksInFlight = maxNumChunksInFlight;
     EXPECT_THAT(mergeToRangeAndCollect(makeVectorInput(runs, 16), std::less<>{},
@@ -1196,9 +1201,9 @@ TEST(ParallelBlockMerge, rangeTakesTheSerialFastPath) {
   auto expected = sortedConcatenation(runs);
   // Both conditions of the fast path merge in the calling thread, so an empty
   // executor (which the parallel path rejects) suffices.
-  MergeOptions singleThreaded = rangeOptions(16);
+  MergeOptions singleThreaded = alwaysParallelOptions(16);
   singleThreaded.parallelismHint = 1;
-  MergeOptions smallInput = rangeOptions(16);
+  MergeOptions smallInput = alwaysParallelOptions(16);
   smallInput.parallelismHint = 8;
   smallInput.serialNumElementsThreshold = std::numeric_limits<size_t>::max();
   for (const MergeOptions& options : {singleThreaded, smallInput}) {
@@ -1216,7 +1221,7 @@ TEST(ParallelBlockMerge, rangeTakesTheSerialFastPath) {
 TEST(ParallelBlockMerge, consumerAbandonsRangeEarly) {
   auto runs = makeRandomRuns(50, 2000, 2000);
   net::thread_pool pool{8};
-  MergeOptions options = rangeOptions(16);
+  MergeOptions options = alwaysParallelOptions(16);
   options.parallelismHint = 8;
   // This must neither hang, nor crash, nor leak. The destructor of the range
   // has to stop the merge, and the state has to stay alive until the last
@@ -1242,6 +1247,28 @@ TEST(ParallelBlockMerge, consumerAbandonsRangeEarly) {
 }
 
 // _____________________________________________________________________________
+TEST(ParallelBlockMerge, exceptionFromChunkPropagatesThroughRange) {
+  // The exception of a chunk has to arrive at the thread that iterates over
+  // the range, which waits on a `future`, see `ParallelMergeRange::get`. Some
+  // of the chunks succeed and others fail, see `expectExceptionPropagates`, and
+  // abandoning the range afterwards must neither hang nor crash.
+  expectExceptionPropagates([](InstrumentedInput input) {
+    return mergeToRangeAndCollect(std::move(input), std::less<>{},
+                                  alwaysParallelOptions(16), 4);
+  });
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, cancellationThroughRange) {
+  expectCancellationThrows(
+      [](SizeInput input, ad_utility::SharedCancellationHandle handle) {
+        return mergeToRangeAndCollect(std::move(input), std::less<>{},
+                                      alwaysParallelOptions(16), 4, 2,
+                                      std::move(handle));
+      });
+}
+
+// _____________________________________________________________________________
 ASYNC_TEST(ParallelBlockMerge, singleThreadedConsumer) {
   // A single thread suffices for an asynchronous consumer that reads the sink
   // directly, even if many more chunks than that are in flight, because a chunk
@@ -1250,7 +1277,7 @@ ASYNC_TEST(ParallelBlockMerge, singleThreadedConsumer) {
   // executor to be run by other threads, see there.)
   auto runs = makeRandomRuns(8, 300, 400);
   auto expected = sortedConcatenation(runs);
-  MergeOptions options = rangeOptions(16);
+  MergeOptions options = alwaysParallelOptions(16);
   options.parallelismHint = 8;
   using Sink = InOrderBlockSink<SizeVec, InMemoryBlockStorage<SizeVec>>;
   auto executor = ioContext.get_executor();
@@ -1269,6 +1296,36 @@ ASYNC_TEST(ParallelBlockMerge, singleThreadedConsumer) {
     result.insert(result.end(), block->begin(), block->end());
   }
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+
+namespace {
+// The minimal state and sink that a `detail::ParallelMergeRange` can be
+// instantiated with, for the test of its contract checks below. Neither of
+// them is ever used, because that range is never constructed successfully.
+struct DummyMergeState {
+  using Block = SizeVec;
+  void stop() {}
+};
+struct DummySink {
+  template <typename Token>
+  std::future<std::optional<SizeVec>> asyncGetNextBlock(
+      [[maybe_unused]] Token token) {
+    return {};
+  }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, rangeRequiresAStateAndASink) {
+  // The range always holds the merge that it reads from alive, so a missing
+  // state or sink is a contract violation, see `detail::ParallelMergeRange`.
+  using Range = detail::ParallelMergeRange<DummyMergeState, DummySink>;
+  auto state = std::make_shared<DummyMergeState>();
+  auto sink = std::make_shared<DummySink>();
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(nullptr, sink),
+                               ::testing::HasSubstr("state_ != nullptr"));
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(state, nullptr),
+                               ::testing::HasSubstr("sink_ != nullptr"));
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

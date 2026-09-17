@@ -364,8 +364,8 @@ void sparqlautomaticParserInitialize() {
                                "STDEV",
                                "SAMPLE",
                                "SEPARATOR",
-                               "TRUE",
-                               "FALSE",
+                               "BOOL_TRUE",
+                               "BOOL_FALSE",
                                "IRI_REF",
                                "PNAME_NS",
                                "PNAME_LN",
@@ -6821,8 +6821,8 @@ SparqlAutomaticParser::groupGraphPattern() {
       case SparqlAutomaticParser::BIND:
       case SparqlAutomaticParser::MINUS:
       case SparqlAutomaticParser::FILTER:
-      case SparqlAutomaticParser::TRUE:
-      case SparqlAutomaticParser::FALSE:
+      case SparqlAutomaticParser::BOOL_TRUE:
+      case SparqlAutomaticParser::BOOL_FALSE:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -8184,8 +8184,8 @@ SparqlAutomaticParser::dataBlockValue() {
         break;
       }
 
-      case SparqlAutomaticParser::TRUE:
-      case SparqlAutomaticParser::FALSE: {
+      case SparqlAutomaticParser::BOOL_TRUE:
+      case SparqlAutomaticParser::BOOL_FALSE: {
         enterOuterAlt(_localctx, 4);
         setState(893);
         booleanLiteral();
@@ -9055,8 +9055,8 @@ SparqlAutomaticParser::triplesSameSubject() {
     setState(969);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
-      case SparqlAutomaticParser::TRUE:
-      case SparqlAutomaticParser::FALSE:
+      case SparqlAutomaticParser::BOOL_TRUE:
+      case SparqlAutomaticParser::BOOL_FALSE:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -9538,8 +9538,8 @@ SparqlAutomaticParser::triplesSameSubjectPath() {
     setState(1007);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
-      case SparqlAutomaticParser::TRUE:
-      case SparqlAutomaticParser::FALSE:
+      case SparqlAutomaticParser::BOOL_TRUE:
+      case SparqlAutomaticParser::BOOL_FALSE:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -11825,8 +11825,8 @@ SparqlAutomaticParser::GraphNodeContext* SparqlAutomaticParser::graphNode() {
     setState(1170);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
-      case SparqlAutomaticParser::TRUE:
-      case SparqlAutomaticParser::FALSE:
+      case SparqlAutomaticParser::BOOL_TRUE:
+      case SparqlAutomaticParser::BOOL_FALSE:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -11926,8 +11926,8 @@ SparqlAutomaticParser::graphNodePath() {
     setState(1174);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
-      case SparqlAutomaticParser::TRUE:
-      case SparqlAutomaticParser::FALSE:
+      case SparqlAutomaticParser::BOOL_TRUE:
+      case SparqlAutomaticParser::BOOL_FALSE:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -12034,8 +12034,8 @@ SparqlAutomaticParser::VarOrTermContext* SparqlAutomaticParser::varOrTerm() {
         break;
       }
 
-      case SparqlAutomaticParser::TRUE:
-      case SparqlAutomaticParser::FALSE:
+      case SparqlAutomaticParser::BOOL_TRUE:
+      case SparqlAutomaticParser::BOOL_FALSE:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -12323,8 +12323,8 @@ SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
         break;
       }
 
-      case SparqlAutomaticParser::TRUE:
-      case SparqlAutomaticParser::FALSE: {
+      case SparqlAutomaticParser::BOOL_TRUE:
+      case SparqlAutomaticParser::BOOL_FALSE: {
         enterOuterAlt(_localctx, 4);
         setState(1189);
         booleanLiteral();
@@ -13694,8 +13694,8 @@ SparqlAutomaticParser::unaryExpression() {
       case SparqlAutomaticParser::AVG:
       case SparqlAutomaticParser::STDEV:
       case SparqlAutomaticParser::SAMPLE:
-      case SparqlAutomaticParser::TRUE:
-      case SparqlAutomaticParser::FALSE:
+      case SparqlAutomaticParser::BOOL_TRUE:
+      case SparqlAutomaticParser::BOOL_FALSE:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -13919,8 +13919,8 @@ SparqlAutomaticParser::primaryExpression() {
         break;
       }
 
-      case SparqlAutomaticParser::TRUE:
-      case SparqlAutomaticParser::FALSE: {
+      case SparqlAutomaticParser::BOOL_TRUE:
+      case SparqlAutomaticParser::BOOL_FALSE: {
         enterOuterAlt(_localctx, 6);
         setState(1295);
         booleanLiteral();
@@ -15664,8 +15664,8 @@ SparqlAutomaticParser::AggregateContext* SparqlAutomaticParser::aggregate() {
           case SparqlAutomaticParser::AVG:
           case SparqlAutomaticParser::STDEV:
           case SparqlAutomaticParser::SAMPLE:
-          case SparqlAutomaticParser::TRUE:
-          case SparqlAutomaticParser::FALSE:
+          case SparqlAutomaticParser::BOOL_TRUE:
+          case SparqlAutomaticParser::BOOL_FALSE:
           case SparqlAutomaticParser::IRI_REF:
           case SparqlAutomaticParser::PNAME_NS:
           case SparqlAutomaticParser::PNAME_LN:
@@ -16048,8 +16048,8 @@ SparqlAutomaticParser::RdfLiteralContext* SparqlAutomaticParser::rdfLiteral() {
       case SparqlAutomaticParser::FILTER:
       case SparqlAutomaticParser::NOT:
       case SparqlAutomaticParser::IN:
-      case SparqlAutomaticParser::TRUE:
-      case SparqlAutomaticParser::FALSE:
+      case SparqlAutomaticParser::BOOL_TRUE:
+      case SparqlAutomaticParser::BOOL_FALSE:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -16424,12 +16424,12 @@ SparqlAutomaticParser::BooleanLiteralContext::BooleanLiteralContext(
     ParserRuleContext* parent, size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
-tree::TerminalNode* SparqlAutomaticParser::BooleanLiteralContext::TRUE() {
-  return getToken(SparqlAutomaticParser::TRUE, 0);
+tree::TerminalNode* SparqlAutomaticParser::BooleanLiteralContext::BOOL_TRUE() {
+  return getToken(SparqlAutomaticParser::BOOL_TRUE, 0);
 }
 
-tree::TerminalNode* SparqlAutomaticParser::BooleanLiteralContext::FALSE() {
-  return getToken(SparqlAutomaticParser::FALSE, 0);
+tree::TerminalNode* SparqlAutomaticParser::BooleanLiteralContext::BOOL_FALSE() {
+  return getToken(SparqlAutomaticParser::BOOL_FALSE, 0);
 }
 
 size_t SparqlAutomaticParser::BooleanLiteralContext::getRuleIndex() const {
@@ -16466,9 +16466,9 @@ SparqlAutomaticParser::booleanLiteral() {
     enterOuterAlt(_localctx, 1);
     setState(1701);
     _la = _input->LA(1);
-    if (!(_la == SparqlAutomaticParser::TRUE
+    if (!(_la == SparqlAutomaticParser::BOOL_TRUE
 
-          || _la == SparqlAutomaticParser::FALSE)) {
+          || _la == SparqlAutomaticParser::BOOL_FALSE)) {
       _errHandler->recoverInline(this);
     } else {
       _errHandler->reportMatch(this);

@@ -115,7 +115,7 @@ struct Config {
   size_t uniformRangeBits_;
   MemorySize blocksizeCompression_;
   std::optional<size_t> outputBlockSize_;
-  ad_utility::CompressedBlockFile::Compression mergeSpillCompression_;
+  ad_utility::CompressedBlockFile::CompressionLevel mergeSpillCompression_;
   std::optional<MemorySize> allocatorLimit_;
   bool staticColumns_;
   bool ignoreMemoryLimit_;

@@ -11,6 +11,7 @@
 #define QLEVER_SRC_ENGINE_IDTABLE_COMPRESSEDIDTABLEBLOCKS_H
 
 #include <cstddef>
+#include <range/v3/view/zip.hpp>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -19,11 +20,10 @@
 #include "util/Exception.h"
 
 // Store a block of an `IdTable` in a `CompressedBlockFile` and read it back.
-// This is the codec of the `CompressedIdTableBlockStorage` (see
-// `CompressedIdTableBlockStorage.h`), which spills the output blocks of the
-// parallel merge to disk. It lives in a header of its own, because it is the
-// part of that storage that is purely about bytes and can hence be read and
-// tested without any of the asynchronous machinery.
+// This is the codec of the block storage that a follow-up PR will use to spill
+// the output blocks of the parallel merge to disk. It lives in a header of its
+// own, because it is the part of that storage that is purely about bytes and
+// can hence be read and tested without any of the asynchronous machinery.
 //
 // NOTE: The `CompressedExternalIdTableWriter` (see
 // `CompressedExternalIdTable.h`) stores its blocks in a very similar way, but
@@ -57,8 +57,7 @@ BlockMetadata writeBlock(CompressedBlockFile& file, const Table& table,
   BlockMetadata metadata;
   metadata.numRows_ = endRow - beginRow;
   metadata.columns_.reserve(table.numColumns());
-  for (size_t columnIdx : ql::views::iota(size_t{0}, table.numColumns())) {
-    decltype(auto) column = table.getColumn(columnIdx);
+  for (const auto& column : table.getColumns()) {
     metadata.columns_.push_back(file.appendBlock(
         column.data() + beginRow, (endRow - beginRow) * sizeof(Id)));
   }
@@ -76,10 +75,11 @@ IdTableStatic<NumCols> readBlock(const CompressedBlockFile& file,
                                  const AllocatorWithLimit<Id>& allocator) {
   IdTableStatic<NumCols> block{metadata.numColumns(), allocator};
   block.resize(metadata.numRows_);
-  for (size_t columnIdx : ql::views::iota(size_t{0}, metadata.numColumns())) {
-    decltype(auto) column = block.getColumn(columnIdx);
+  AD_CORRECTNESS_CHECK(block.numColumns() == metadata.numColumns());
+  for (auto [columnMetadata, column] :
+       ::ranges::views::zip(metadata.columns_, block.getColumns())) {
     AD_CORRECTNESS_CHECK(column.size() == metadata.numRows_);
-    file.readBlock(metadata.columns_.at(columnIdx), column.data());
+    file.readBlock(columnMetadata, column.data());
   }
   return block;
 }

@@ -872,7 +872,7 @@ struct SortResultWithSpillFileSize {
 // `CompressedExternalIdTableSorter::setMergeSpillCompression`.
 SortResultWithSpillFileSize sortWithSpillCompression(
     const IdTable& input,
-    ad_utility::CompressedBlockFile::Compression compression,
+    ad_utility::CompressedBlockFile::CompressionLevel compression,
     const std::string& filename, const std::string& spillPrefix) {
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   net::io_context ioContext;

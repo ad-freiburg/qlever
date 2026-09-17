@@ -143,7 +143,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   AllocatorWithLimit<Id> allocator_;
   size_t maxBufferedBlocksPerChunk_;
   std::string filenamePrefix_;
-  CompressedBlockFile::Compression compression_;
+  CompressedBlockFile::CompressionLevel compression_;
   HashMap<size_t, Chunk> chunks_;
   // Set by `cancelAll`, only to check the precondition that no operation is
   // initiated afterwards, see the PRECONDITIONS of the
@@ -158,9 +158,9 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   // for the blocks that are read back, and the number of blocks that are kept
   // in memory per chunk before that chunk starts spilling. That number may be
   // zero, in which case every block is spilled. The `compression` decides how
-  // the spilled blocks are stored, see `CompressedBlockFile::Compression`; a
-  // spill file is short-lived and read back almost immediately, so a low level
-  // (or `NO_BLOCK_COMPRESSION`) is often faster than the default.
+  // the spilled blocks are stored, see `CompressedBlockFile::CompressionLevel`;
+  // a spill file is short-lived and read back almost immediately, so a low
+  // level (or `NO_BLOCK_COMPRESSION`) is often faster than the default.
   //
   // NOTE: The `filenamePrefix` is not a filename but the prefix of one per
   // chunk, see `spillFilename`. It has to be unique among all the storages that
@@ -170,7 +170,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
       Strand strand, net::any_io_executor ioExecutor,
       std::string filenamePrefix, AllocatorWithLimit<Id> allocator,
       size_t maxBufferedBlocksPerChunk,
-      CompressedBlockFile::Compression compression = ZSTD_DEFAULT_LEVEL)
+      CompressedBlockFile::CompressionLevel compression = ZSTD_DEFAULT_LEVEL)
       : strand_{std::move(strand)},
         ioExecutor_{std::move(ioExecutor)},
         allocator_{std::move(allocator)},
@@ -426,11 +426,11 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
       std::exception_ptr exception;
       compressedIdTable::BlockMetadata metadata;
       try {
+        // NOTE: The block becomes readable immediately, because
+        // `CompressedBlockFile::appendBlock` flushes the file; its chunk may be
+        // consumed while further blocks are still being written.
         metadata =
             compressedIdTable::writeBlock(*file, block, 0, block.numRows());
-        // The block has to become readable immediately, because its chunk may
-        // be consumed while further blocks are still being written.
-        file->flush();
       } catch (...) {
         exception = std::current_exception();
       }
@@ -537,7 +537,7 @@ template <size_t NumCols>
 auto makeCompressedIdTableStorageFactory(
     net::any_io_executor ioExecutor, std::string filenamePrefix,
     AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
-    CompressedBlockFile::Compression compression = ZSTD_DEFAULT_LEVEL) {
+    CompressedBlockFile::CompressionLevel compression = ZSTD_DEFAULT_LEVEL) {
   return [ioExecutor = std::move(ioExecutor),
           filenamePrefix = std::move(filenamePrefix),
           allocator = std::move(allocator), maxBufferedBlocksPerChunk,

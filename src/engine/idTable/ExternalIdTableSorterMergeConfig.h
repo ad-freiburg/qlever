@@ -103,7 +103,7 @@ constexpr inline size_t MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK =
 // uniformly random `Id`s, where the compression buys almost nothing,
 // `NO_BLOCK_COMPRESSION` is in fact about 8 % faster (0.55 s against 0.59 s),
 // which is a trade this default deliberately declines.
-constexpr inline CompressedBlockFile::Compression
+constexpr inline CompressedBlockFile::CompressionLevel
     MERGE_PHASE_SPILL_COMPRESSION = -5;
 
 // The smallest number of rows that an output block of the merge phase may have.
@@ -385,7 +385,7 @@ auto makeMergePhaseBlockStorageFactory(
     [[maybe_unused]] boost::asio::any_io_executor ioExecutor,
     [[maybe_unused]] std::string spillFilenamePrefix,
     [[maybe_unused]] AllocatorWithLimit<Id> allocator,
-    [[maybe_unused]] CompressedBlockFile::Compression compression =
+    [[maybe_unused]] CompressedBlockFile::CompressionLevel compression =
         MERGE_PHASE_SPILL_COMPRESSION) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   return std::monostate{};

@@ -935,7 +935,7 @@ class CompressedExternalIdTableSorter
   std::atomic<size_t> numMergePhases_ = 0;
 
   // See `setMergeSpillCompression`.
-  CompressedBlockFile::Compression mergeSpillCompression_ =
+  CompressedBlockFile::CompressionLevel mergeSpillCompression_ =
       compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION;
 
  public:
@@ -989,7 +989,8 @@ class CompressedExternalIdTableSorter
   // CPU that the compression costs against the bytes that the spill file
   // occupies, see `compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION`
   // for the default and the reasoning.
-  void setMergeSpillCompression(CompressedBlockFile::Compression compression) {
+  void setMergeSpillCompression(
+      CompressedBlockFile::CompressionLevel compression) {
     mergeSpillCompression_ = compression;
   }
 
