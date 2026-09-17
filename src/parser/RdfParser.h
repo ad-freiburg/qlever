@@ -124,11 +124,22 @@ class RdfParserBase {
   // Main access method to the parser. Return the next batch of triples, or
   // `nullopt` if the parser is exhausted.
   //
+  // `buffer` (which has to be empty) becomes the storage of the returned
+  // batch, so that a caller can pass back a batch it has consumed and thus
+  // reuse its capacity instead of having a fresh buffer grown for every batch.
+  // It is only an optimization: passing an empty buffer (see the overload
+  // below) is always correct, and a parser may ignore it (see
+  // `RdfMultifileParser`). On `nullopt` the buffer is not returned.
+  //
   // NOTE: The parsers that are used for the index building (currently only the
   // `RdfMultifileParser`) have to support concurrent calls to this function,
   // because the index builder pulls the batches from several threads (see
   // `IndexImpl::buildPartialVocabularies`).
-  virtual std::optional<std::vector<TurtleTriple>> getBatch() = 0;
+  virtual std::optional<std::vector<TurtleTriple>> getBatch(
+      std::vector<TurtleTriple> buffer) = 0;
+
+  // The same for callers that have no buffer to reuse.
+  std::optional<std::vector<TurtleTriple>> getBatch() { return getBatch({}); }
 
  protected:
   const auto& encodedIriManager() const { return *encodedIriManager_; }
@@ -406,6 +417,15 @@ class TurtleParser : public RdfParserBase {
   // all sub-parsers of the same file.
   void setFileBlankNodePrefix(size_t id) { fileBlankNodePrefix_ = id; }
 
+  // Use `buffer` as the storage for the triples that are parsed next, so that
+  // its capacity is reused instead of growing a fresh buffer (see
+  // `RdfParserBase::getBatch`). `buffer` has to be empty, and so has the
+  // current buffer of this parser.
+  void setTripleBuffer(std::vector<TurtleTriple> buffer) {
+    AD_CORRECTNESS_CHECK(triples_.empty() && buffer.empty());
+    triples_ = std::move(buffer);
+  }
+
   // Draw the next blank node prefix. Every parser instance implicitly draws one
   // of these, the parallel parser additionally draws the prefix that it shares
   // with all of its sub-parsers (see `setFileBlankNodePrefix`).
@@ -482,7 +502,9 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
                            TripleComponent defaultGraph,
                            RdfParserSettings settings = {})
       : Parser{encodedIriManager, std::move(defaultGraph), settings} {}
-  std::optional<std::vector<TurtleTriple>> getBatch() override {
+  using Parser::getBatch;
+  std::optional<std::vector<TurtleTriple>> getBatch(
+      [[maybe_unused]] std::vector<TurtleTriple> buffer) override {
     throw std::runtime_error(
         "RdfStringParser doesn't support calls to getBatch. Only use "
         "parseUtf8String() for unit tests\n");
@@ -614,9 +636,12 @@ class RdfStreamParser : public Parser {
     initialize(spec, blocksize);
   }
 
+  using Parser::getBatch;
   // Return the triples that were parsed since the last call, at most
-  // `PARSER_MIN_TRIPLES_AT_ONCE` of them.
-  std::optional<std::vector<TurtleTriple>> getBatch() override;
+  // `PARSER_MIN_TRIPLES_AT_ONCE` of them. `buffer` becomes the storage of the
+  // returned batch, see `RdfParserBase::getBatch`.
+  std::optional<std::vector<TurtleTriple>> getBatch(
+      std::vector<TurtleTriple> buffer) override;
 
   void initialize(const qlever::InputFileSpecification& spec,
                   ad_utility::MemorySize blocksize);
@@ -733,14 +758,16 @@ class RdfParallelParsingState {
   // Parse a single `batch` of raw bytes into triples, using a fresh worker
   // parser that is set up from the shared state. `positionOffset` is the offset
   // of `batch` within the input file and is only used to make the positions in
-  // error messages file-absolute. Throw on a parse error.
+  // error messages file-absolute. `buffer` becomes the storage of the returned
+  // triples, see `RdfParserBase::getBatch`. Throw on a parse error.
   //
   // This is thread-safe (and hence `const`): it only reads the shared state
   // and each call has its own worker parser, so arbitrarily many calls may run
   // concurrently. This requires that `parseHeaderStep`, which writes that
   // state, has already reported the header to be complete.
   std::vector<TurtleTriple> parseBatch(qlever::parser::ByteBlock batch,
-                                       size_t positionOffset) const;
+                                       size_t positionOffset,
+                                       std::vector<TurtleTriple> buffer) const;
 };
 
 // Compute the default graph for `spec`: the explicit `spec.defaultGraph_` if
@@ -774,7 +801,12 @@ class RdfMultifileParser : public RdfParserBase {
   // batches. There is no guarantee about the order in which batches from
   // different input files are returned, but each batch belongs to a distinct
   // input file.
-  std::optional<std::vector<TurtleTriple>> getBatch() override;
+  //
+  // NOTE: `buffer` is ignored, because the batches are parsed on other threads
+  // (see the class comment), which this call cannot reach.
+  std::optional<std::vector<TurtleTriple>> getBatch(
+      std::vector<TurtleTriple> buffer) override;
+  using RdfParserBase::getBatch;
 
   size_t getParsePosition() const override {
     // TODO: This function is used for better error messages, but we currently
