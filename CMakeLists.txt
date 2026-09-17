@@ -665,7 +665,21 @@ set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 ################################
 # OpenTelemetry C++ SDK
 ################################
-set(WITH_OTLP_HTTP OFF CACHE BOOL "" FORCE)
+# Needed for the OTLP/HTTP span exporter, which is how traces reach a collector
+# (see `src/util/metrics/Tracing.h`).
+#
+# This requires protobuf (including `protoc`) and libcurl as build dependencies.
+# On Debian and Ubuntu, install them with
+#
+#     apt install libprotobuf-dev protobuf-compiler libcurl4-openssl-dev
+#
+# If they are not found, OTEL's `cmake/protobuf.cmake` and `cmake/curl.cmake`
+# fall back to `FetchContent` and build protobuf, `protoc`, `opentelemetry-proto`
+# and curl from source. That works without any installed packages, but makes the
+# first configure and build considerably slower. Check which of the two happened
+# in OTEL's configure summary, which reports either
+# `Protobuf: <version> (find_package ...)` or `(fetch_repository ...)`.
+set(WITH_OTLP_HTTP ON CACHE BOOL "" FORCE)
 set(WITH_OTLP_GRPC OFF CACHE BOOL "" FORCE)
 set(WITH_PROMETHEUS ON CACHE BOOL "" FORCE)
 # Disable gzip compression of the builtin `/metrics` which we don't use.
@@ -704,7 +718,17 @@ if (EMSCRIPTEN)
     # and profiled with source information in the browser dev tools.
     add_link_options("$<$<CONFIG:Debug,RelWithDebInfo>:-g>")
 endif ()
-FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
+# `nlohmann-json` is made available before all others, because
+# `opentelemetry-cpp` needs it for the OTLP/HTTP exporter and would otherwise
+# provide it itself: it looks for the package with `find_package` and falls back
+# to its own git submodule, which then tries to define a second `nlohmann_json`
+# target and fails with a name clash. Pointing `find_package` at the config file
+# that `nlohmann-json` writes into its own build directory avoids that. That
+# file only defines targets if they don't exist yet, so `opentelemetry-cpp` ends
+# up using exactly the target created here.
+FetchContent_MakeAvailable(nlohmann-json)
+set(nlohmann_json_DIR "${nlohmann-json_BINARY_DIR}" CACHE PATH "Directory of the `nlohmann_json` package configuration" FORCE)
+FetchContent_MakeAvailable(googletest ctre abseil fsst antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
 
 # Depending on `BUILD_SHARED_LIBS`, the `antlr4` build creates either a shared or
 # a static library target. Define the alias `antlr4_umbrella` such that the rest
