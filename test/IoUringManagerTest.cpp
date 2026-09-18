@@ -579,6 +579,192 @@ TEST(MakeBatchManager, syncBackendWhenIoUringNotPreferred) {
   expectManagerWorks(*manager);
 }
 
+// The ratio controller is a pure value type: no io_uring setup is needed to
+// test the flush/defer decision, so these tests run in every build.
+TEST(AdaptiveBatchController, flushesWhenNothingRemains) {
+  ad_utility::AdaptiveBatchController controller;
+  // Nothing left to batch: flush whatever is prepared, even with a full
+  // device.
+  EXPECT_TRUE(controller.shouldFlush(256, 0));
+  EXPECT_TRUE(controller.shouldFlush(0, 0));
+}
+
+TEST(AdaptiveBatchController, flushesWhenDeviceIsIdle) {
+  ad_utility::AdaptiveBatchController controller;
+  // Nothing in flight: flush early to keep the device busy, no matter how
+  // much work remains.
+  EXPECT_TRUE(controller.shouldFlush(0, 200));
+  EXPECT_TRUE(controller.shouldFlush(0, 1));
+}
+
+TEST(AdaptiveBatchController, flushesSmallTail) {
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 16;
+  // A nearly finished batch always flushes instead of waiting for work that
+  // will never arrive.
+  EXPECT_TRUE(controller.shouldFlush(256, 16));
+  EXPECT_TRUE(controller.shouldFlush(256, 1));
+  EXPECT_FALSE(controller.shouldFlush(256, 17));
+}
+
+TEST(AdaptiveBatchController, defersWhenManyIosInFlight) {
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 1;
+  // Default ratio 1/1: defer once the outstanding I/Os reach the
+  // still-pending reads, to increase amortization.
+  EXPECT_FALSE(controller.shouldFlush(100, 100));
+  EXPECT_FALSE(controller.shouldFlush(200, 100));
+  // Fewer outstanding than pending: flush early to keep the device busy.
+  EXPECT_TRUE(controller.shouldFlush(99, 100));
+  EXPECT_TRUE(controller.shouldFlush(1, 100));
+}
+
+TEST(AdaptiveBatchController, customDeferRatio) {
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 1;
+  controller.deferNumerator_ = 2;
+  controller.deferDenominator_ = 1;
+  // Defer only once outstanding / pending >= 2.
+  EXPECT_FALSE(controller.shouldFlush(200, 100));
+  EXPECT_TRUE(controller.shouldFlush(199, 100));
+}
+
+#ifdef QLEVER_HAS_IO_URING
+// Constructing an `IoUringPolicy` needs a working `io_uring_setup`, so the
+// controller plumbing tests below skip when io_uring is blocked at runtime
+// (e.g. by seccomp inside Docker), like the typed suite does.
+TEST(AdaptiveBatchControllerPolicy, disabledByDefault) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  ad_utility::IoUringPolicy policy(32);
+  EXPECT_FALSE(policy.adaptiveBatchController().has_value());
+}
+
+TEST(AdaptiveBatchControllerPolicy, normalizesBounds) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  ad_utility::IoUringPolicy policy(32);
+  // A minimum of zero is clamped to one: a nearly finished batch must
+  // always flush.
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 0;
+  controller.maxBatchSize_ = 32;
+  policy.setAdaptiveBatchController(controller);
+  ASSERT_TRUE(policy.adaptiveBatchController().has_value());
+  EXPECT_EQ(policy.adaptiveBatchController()->minBatchSize_, 1);
+  // A maximum above the ring size is clamped to the ring: a deferred group
+  // never exceeds the ring.
+  controller.minBatchSize_ = 4;
+  controller.maxBatchSize_ = 10'000;
+  policy.setAdaptiveBatchController(controller);
+  EXPECT_EQ(policy.adaptiveBatchController()->maxBatchSize_, 32);
+  // A maximum below the minimum is raised to the minimum.
+  controller.minBatchSize_ = 16;
+  controller.maxBatchSize_ = 4;
+  policy.setAdaptiveBatchController(controller);
+  EXPECT_EQ(policy.adaptiveBatchController()->maxBatchSize_, 16);
+}
+
+// A controller with min == max == ring size can never fire before the
+// ring-full safety bound (reaching that many prepared reads implies a full
+// ring, which is handled first), so the submission sequence is the
+// fixed-window sequence by construction. The results must therefore be
+// identical to the uncontrolled manager.
+TEST(AdaptiveBatchControllerPolicy, fullWindowControllerMatchesFixedWindow) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  constexpr size_t N = 100;
+  constexpr size_t CHUNKSIZE = 4;
+  SequentialReadScenarioForTesting scenarioPlain;
+  SequentialReadScenarioForTesting scenarioAdaptive;
+  for (size_t i = 0; i < N; ++i) {
+    std::string chunk(CHUNKSIZE, static_cast<char>('A' + (i % 26)));
+    scenarioPlain.addRead(chunk);
+    scenarioAdaptive.addRead(chunk);
+  }
+  auto [tmp, fd] = makeTempFile(scenarioPlain.content());
+
+  using Manager = ad_utility::BatchManager<ad_utility::IoUringPolicy>;
+  Manager plain(16);
+  Manager adaptive(16);
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 16;
+  controller.maxBatchSize_ = 16;
+  adaptive.setAdaptiveBatchController(controller);
+
+  plain.wait(scenarioPlain.submitTo(plain, fd));
+  adaptive.wait(scenarioAdaptive.submitTo(adaptive, fd));
+
+  EXPECT_THAT(scenarioAdaptive.results(),
+              ::testing::ElementsAreArray(scenarioPlain.results()));
+  EXPECT_THAT(scenarioAdaptive.results(),
+              ::testing::ElementsAreArray(scenarioAdaptive.expected()));
+}
+
+// An enabled controller with small bounds exercises early flushes, deferred
+// groups, and the maximum clamp within one batch larger than the ring. Every
+// read must still land in its own buffer.
+TEST(AdaptiveBatchControllerPolicy, enabledControllerReadsCorrectly) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  constexpr size_t N = 100;
+  constexpr size_t CHUNKSIZE = 4;
+  SequentialReadScenarioForTesting scenario;
+  for (size_t i = 0; i < N; ++i) {
+    scenario.addRead(std::string(CHUNKSIZE, static_cast<char>('A' + (i % 26))));
+  }
+  auto [tmp, fd] = makeTempFile(scenario.content());
+
+  using Manager = ad_utility::BatchManager<ad_utility::IoUringPolicy>;
+  Manager manager(16);
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 2;
+  controller.maxBatchSize_ = 64;  // Clamped to the ring size of 16.
+  manager.setAdaptiveBatchController(controller);
+  ASSERT_TRUE(manager.adaptiveBatchController().has_value());
+
+  manager.wait(scenario.submitTo(manager, fd));
+  EXPECT_THAT(scenario.results(),
+              ::testing::ElementsAreArray(scenario.expected()));
+}
+
+// `makeBatchManager` forwards a passed controller to the io_uring backend,
+// and the resulting manager performs correct reads.
+TEST(MakeBatchManager, forwardsAdaptiveControllerToIoUringBackend) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  bool preferIoUring = true;
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 4;
+  auto manager = ad_utility::makeBatchManager(preferIoUring, 64, controller);
+  ASSERT_NE(manager, nullptr);
+  ASSERT_TRUE(preferIoUring);
+  auto* ioManager =
+      dynamic_cast<ad_utility::BatchManager<ad_utility::IoUringPolicy>*>(
+          manager.get());
+  ASSERT_NE(ioManager, nullptr);
+  ASSERT_TRUE(ioManager->adaptiveBatchController().has_value());
+  EXPECT_EQ(ioManager->adaptiveBatchController()->minBatchSize_, 4);
+  expectManagerWorks(*manager);
+}
+#endif
+
+// The synchronous policy performs blocking reads, which have nothing to
+// pace, so enabling the controller on it must throw instead of silently
+// doing nothing.
+TEST(AdaptiveBatchControllerPolicy, syncPolicyRejectsController) {
+  using Manager = ad_utility::BatchManager<ad_utility::SyncIoPolicy>;
+  Manager manager(64);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.setAdaptiveBatchController(ad_utility::AdaptiveBatchController{}),
+      HasSubstr("not supported by this read policy"));
+}
+
 // With `preferIoUring == true`, the backend depends on the runtime
 // environment: if io_uring is compiled in and its setup succeeds, an
 // `IoUringPolicy`-backed manager is returned and the flag stays `true`.
