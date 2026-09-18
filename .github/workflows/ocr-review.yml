@@ -27,7 +27,7 @@ jobs:
        (startsWith(github.event.comment.body, '/open-code-review') ||
         startsWith(github.event.comment.body, '@open-code-review')))
     runs-on: [self-hosted, linux, x64, ocr-local]
-    timeout-minutes: 45
+    timeout-minutes: 120
     env:
       PATH: /home/userNoPriv/.local/bin:/home/userNoPriv/.local/share/npm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
