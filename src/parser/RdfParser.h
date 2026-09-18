@@ -71,19 +71,22 @@ struct RdfParserSettings {
 namespace detail {
 // Find the end of the last match of the regex `[\r\n]+` in `input`, or
 // `std::nullopt` if there is no match. Used by the serial `RdfStreamParser`,
-// which sees the blocks in order and backs up to the last complete statement if
-// one crosses a block boundary (see `resetStateAndRead`). A block therefore
-// only must not end inside a comment or a `PN_LOCAL`, see
-// `RdfStreamParser::initialize`.
+// which backs up if a statement crosses a block boundary (see
+// `resetStateAndRead`), so it only needs a position at which the meaning of the
+// input doesn't depend on the previous block. The end of a newline is such a
+// position: a comment ends at the newline, and a `PN_LOCAL` can't contain one
+// (its only escapes are `%XX` and `\` plus one of `_~.-!$&'()*+,;=/?#@%`).
+// Ending directly after the dot would not do, because such a dot may also be
+// part of a `PN_LOCAL` like `ex:foo.bar`. See `RdfStreamParser::initialize`.
 std::optional<size_t> findEndOfLastNewline(std::string_view input);
 
-// Find the end of the last match of the regex `\.[\t ]*[\r\n]+` in `input`, or
-// `std::nullopt` if there is no match. Used by the parallel
-// `RdfAsyncParallelParser`, whose independent sub-parsers cannot back up into
-// the previous block and hence need a full statement boundary. The search is
-// purely textual, which is why the parallel parser rejects multiline literals
-// (see `TurtleParser::stringParseImpl`); it can still be fooled by a comment
-// that ends in a dot, see `WARNING_PARALLEL_PARSING`.
+// Find the end of the last match of the regex `\.[\t ]*[\r\n]+` in `input`
+// that is not commented out, or `std::nullopt` if there is none. Used by the
+// parallel `RdfAsyncParallelParser`, whose sub-parsers can't back up into the
+// previous block. To detect a comment, only the line of the dot is inspected,
+// so a comment that already started in the previous block can still fool the
+// search, as can a dot inside a multiline literal (which the parallel parser
+// rejects for that reason, see `TurtleParser::stringParseImpl`).
 std::optional<size_t> findEndOfLastStatement(std::string_view input);
 
 // The human-readable description of what `findEndOfLastStatement` looks for,
@@ -91,9 +94,9 @@ std::optional<size_t> findEndOfLastStatement(std::string_view input);
 // mentions the newline explicitly, because that (and not the dot) is the part
 // of the rule that a valid Turtle file can violate.
 inline constexpr std::string_view blockBoundaryDescription =
-    "a dot that is followed by a newline (Turtle itself does not require that "
-    "newline, but QLever does, so that it can split the input into blocks "
-    "without parsing it)";
+    "a dot that is followed by a newline and is not commented out (Turtle "
+    "itself does not require that newline, but QLever does, so that it can "
+    "split the input into blocks without parsing it)";
 }  // namespace detail
 
 struct TurtleTriple {

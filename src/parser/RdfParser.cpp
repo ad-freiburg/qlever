@@ -38,28 +38,92 @@ namespace {
 constexpr ctll::fixed_string newlineRegex = R"([\r\n]+)";
 constexpr ctll::fixed_string statementEndRegex = R"([\r\n]+[\t ]*\.)";
 
-// Run `search` against the reversed `sv`, and return the number of bytes up to
-// and including the rightmost match, or `std::nullopt` if there is no match.
+// The position of a match in the original (that is, not reversed) input.
+struct MatchPositions {
+  size_t begin_;
+  size_t end_;
+};
+
+// Run `search` against the reversed `sv`, and return the positions of the
+// rightmost match, or `std::nullopt` if there is no match.
 template <typename Search>
-std::optional<size_t> findEndOfLastMatch(const Search& search,
-                                         std::string_view sv) {
+std::optional<MatchPositions> findLastMatch(const Search& search,
+                                            std::string_view sv) {
   auto match = search(sv.rbegin(), sv.rend());
   if (!match) {
     return std::nullopt;
   }
-  return match.begin().base() - sv.begin();
+  // The match is reversed, so its end is its beginning in `sv` and vice versa.
+  return MatchPositions{static_cast<size_t>(match.end().base() - sv.begin()),
+                        static_cast<size_t>(match.begin().base() - sv.begin())};
+}
+
+// Check whether the dot that directly follows `lineUpToDot` (the part of its
+// line that precedes it) is commented out. The line is scanned from its
+// beginning, because a `#` inside an IRI (like `<http://example.org#thing>`) or
+// inside a literal doesn't start a comment.
+bool dotIsCommentedOut(std::string_view lineUpToDot) {
+  for (size_t i = 0; i < lineUpToDot.size(); ++i) {
+    char c = lineUpToDot[i];
+    if (c == '#') {
+      // The rest of the line, including the dot, is a comment.
+      return true;
+    } else if (c == '\\') {
+      // An escape sequence, for example the `\#` in `ex:foo\#bar`.
+      ++i;
+    } else if (c == '<') {
+      // An IRI may contain a `#`, but neither a `>` nor a line break.
+      size_t end = lineUpToDot.find('>', i + 1);
+      if (end == std::string_view::npos) {
+        // Broken input, which is left to the parser (see below).
+        return false;
+      }
+      i = end;
+    } else if (c == '"' || c == '\'') {
+      // A literal may contain a `#` and a `<`.
+      ++i;
+      while (i < lineUpToDot.size() && lineUpToDot[i] != c) {
+        // A `\"` or `\\` doesn't close the literal.
+        i += lineUpToDot[i] == '\\' ? 2 : 1;
+      }
+      if (i >= lineUpToDot.size()) {
+        // The literal isn't closed before the dot, which means that the input
+        // is broken or contains a multiline literal. Both are left to the
+        // parser, which reports them much better than this function could.
+        return false;
+      }
+    }
+  }
+  return false;
 }
 }  // namespace
 
 namespace detail {
 // _____________________________________________________________________________
 std::optional<size_t> findEndOfLastNewline(std::string_view input) {
-  return findEndOfLastMatch(ctre::search<newlineRegex>, input);
+  auto match = findLastMatch(ctre::search<newlineRegex>, input);
+  return match.has_value() ? std::optional{match.value().end_} : std::nullopt;
 }
 
 // _____________________________________________________________________________
 std::optional<size_t> findEndOfLastStatement(std::string_view input) {
-  return findEndOfLastMatch(ctre::search<statementEndRegex>, input);
+  std::string_view remaining = input;
+  while (auto match =
+             findLastMatch(ctre::search<statementEndRegex>, remaining)) {
+    // The beginning of the line that contains the dot. The beginning of the
+    // input counts as the beginning of a line, see the header.
+    size_t lineStart = remaining.find_last_of("\r\n", match.value().begin_);
+    lineStart = lineStart == std::string_view::npos ? 0 : lineStart + 1;
+    if (!dotIsCommentedOut(
+            remaining.substr(lineStart, match.value().begin_ - lineStart))) {
+      return match.value().end_;
+    }
+    // The dot is commented out, so continue the search before that line. There
+    // can be at most one match per line, because a match ends with a line
+    // break.
+    remaining = remaining.substr(0, lineStart);
+  }
+  return std::nullopt;
 }
 }  // namespace detail
 
