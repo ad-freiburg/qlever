@@ -733,7 +733,7 @@ class QueryPlanner {
     // `GRAPH ?graphVar {...}` clause, make sure that `graphVar` is bound in
     // every candidate: if a candidate does not already contain a column for
     // `graphVar`, cross-join it with all graphs that could possibly match (see
-    // `makeAllGraphs`).
+    // `DistinctGraphs::makeAllGraphs`).
     void bindGraphVariableIfUnbound(const Variable& graphVar,
                                     std::vector<SubtreePlan>& candidates);
 
