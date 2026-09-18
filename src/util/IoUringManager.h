@@ -213,6 +213,11 @@ class IoUringPolicy {
   // (`drainOneCqe`) and non-blocking (`tryReapOneCqe`) reap paths.
   void attributeCompletion(io_uring_cqe* cqe);
 
+  // Drain completions until the ring has a free submission slot. Called from
+  // a fiber body this cooperates via `FiberIoScheduler` instead of parking
+  // the thread; called from a plain thread it blocks in `drainOneCqe`.
+  void drainUntilSlotFree();
+
  public:
   IoUringPolicy(const IoUringPolicy&) = delete;
   IoUringPolicy& operator=(const IoUringPolicy&) = delete;

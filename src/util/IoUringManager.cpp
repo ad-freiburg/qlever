@@ -15,6 +15,7 @@
 #include <stdexcept>
 
 #include "util/Exception.h"
+#include "util/FiberIoScheduler.h"
 #include "util/Log.h"
 
 namespace ad_utility {
@@ -116,9 +117,7 @@ void IoUringPolicy::addBatch(int fd,
       // Flush the SQEs prepared so far to the kernel so the kernel can start
       // servicing them. Their completions will free up submission slots.
       io_uring_submit(&ring_);
-      while (isRingFull()) {
-        drainOneCqe();
-      }
+      drainUntilSlotFree();
     }
 
     // Claim the next free SQE. The check above guarantees a slot is available,
@@ -156,7 +155,29 @@ bool IoUringPolicy::isBatchComplete(BatchHandle handle) const {
 }
 
 //______________________________________________________________________________
+void IoUringPolicy::drainUntilSlotFree() {
+#ifdef QLEVER_HAS_FIBER_IO
+  if (FiberIoScheduler::isInsideFiber()) {
+    FiberIoScheduler::local().waitForFreeSlot(*this);
+    return;
+  }
+#endif
+  while (isRingFull()) {
+    drainOneCqe();
+  }
+}
+
+//______________________________________________________________________________
 void IoUringPolicy::wait(BatchHandle handle) {
+#ifdef QLEVER_HAS_FIBER_IO
+  // Inside a scheduler fiber, cooperate (reap and yield) instead of parking
+  // the thread. Outside fibers, keep the blocking behavior, so existing
+  // callers such as `VocabularyOnDisk::lookupBatch` are unaffected.
+  if (FiberIoScheduler::isInsideFiber()) {
+    FiberIoScheduler::local().waitForBatch(*this, handle);
+    return;
+  }
+#endif
   // Drain completions until this batch is gone.
   while (!isBatchComplete(handle)) {
     drainOneCqe();

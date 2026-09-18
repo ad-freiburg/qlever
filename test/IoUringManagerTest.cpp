@@ -17,6 +17,7 @@
 #include <initializer_list>
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -25,6 +26,7 @@
 
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/FiberIoScheduler.h"
 #include "util/File.h"
 #include "util/GTestHelpers.h"
 #include "util/IoUringManager.h"
@@ -107,15 +109,15 @@ class ReadBatchForTesting {
   // handle.
   template <typename Manager>
   typename Manager::BatchHandle submitTo(Manager& manager, int fd) {
-    // Build the buffer pointers here, after all buffers have been added, so the
-    // addresses are stable (no further `add` will reallocate `targetBuffers_`).
-    // `addBatch` copies each address into its read request, so this temporary
-    // vector need not outlive the call.
-    std::vector<char*> pointers = ::ranges::to_vector(
-        targetBuffers_ | ql::views::transform([](std::string& buffer) {
-          return buffer.data();
-        }));
-    return manager.addBatch(fd, numBytes_, offsets_, pointers);
+    return manager.addBatch(fd, numBytes_, offsets_, bufferPointers());
+  }
+
+  // Submit all accumulated reads to a raw policy (e.g. `IoUringPolicy`) for
+  // file `fd` under the explicit `handle`.
+  template <typename Policy>
+  void submitToWithHandle(Policy& policy, int fd,
+                          typename Policy::BatchHandle handle) {
+    policy.addBatch(fd, numBytes_, offsets_, bufferPointers(), handle);
   }
 
   // The bytes read by each read, in request order (valid once the batch has
@@ -126,6 +128,17 @@ class ReadBatchForTesting {
   std::vector<size_t> numBytes_;
   std::vector<uint64_t> offsets_;
   std::vector<std::string> targetBuffers_;
+
+  // Build the buffer pointers here, after all buffers have been added, so the
+  // addresses are stable (no further `add` will reallocate `targetBuffers_`).
+  // `addBatch` copies each address into its read request, so this temporary
+  // vector need not outlive the call.
+  std::vector<char*> bufferPointers() {
+    return ::ranges::to_vector(targetBuffers_ |
+                               ql::views::transform([](std::string& buffer) {
+                                 return buffer.data();
+                               }));
+  }
 };
 
 // Test helper that builds the file content and the matching batch of reads
@@ -634,9 +647,9 @@ TEST(NonBlockingReap, idlePolicyReapsNothing) {
   }
   ad_utility::IoUringPolicy policy(64);
   EXPECT_FALSE(policy.tryReapOneCqe());
-  EXPECT_EQ(policy.reapAvailableCompletions(), 0u);
+  EXPECT_EQ(policy.reapAvailableCompletions(), size_t{0});
   EXPECT_TRUE(policy.isBatchComplete(999));
-  EXPECT_EQ(policy.numOutstandingReads(), 0u);
+  EXPECT_EQ(policy.numOutstandingReads(), size_t{0});
   EXPECT_FALSE(policy.isRingFull());
 }
 
@@ -652,14 +665,15 @@ TEST(NonBlockingReap, drainsSubmittedBatchWithoutBlocking) {
   ad_utility::IoUringPolicy policy(64);
   ReadBatchForTesting batch;
   batch.add({{8, 4}, {0, 4}, {12, 4}});
-  auto handle = batch.submitTo(policy, fd);
+  constexpr auto handle = 0;
+  batch.submitToWithHandle(policy, fd, handle);
   EXPECT_FALSE(policy.isBatchComplete(handle));
-  EXPECT_EQ(policy.numOutstandingReads(), 3u);
+  EXPECT_EQ(policy.numOutstandingReads(), size_t{3});
 
   reapUntilComplete(policy, handle);
 
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
-  EXPECT_EQ(policy.numOutstandingReads(), 0u);
+  EXPECT_EQ(policy.numOutstandingReads(), size_t{0});
   EXPECT_FALSE(policy.tryReapOneCqe());
 }
 
@@ -676,14 +690,168 @@ TEST(NonBlockingReap, reapAttributesToCorrectBatch) {
   batchA.add(0, 4);
   ReadBatchForTesting batchB;
   batchB.add(4, 4);
-  auto handleA = batchA.submitTo(policy, fd);
-  auto handleB = batchB.submitTo(policy, fd);
+  constexpr auto handleA = 0;
+  constexpr auto handleB = 1;
+  batchA.submitToWithHandle(policy, fd, handleA);
+  batchB.submitToWithHandle(policy, fd, handleB);
 
   reapUntilComplete(policy, handleA);
   reapUntilComplete(policy, handleB);
 
   EXPECT_THAT(batchA.result(), ::testing::ElementsAre("AAAA"));
   EXPECT_THAT(batchB.result(), ::testing::ElementsAre("BBBB"));
+}
+#endif
+
+#ifdef QLEVER_HAS_IO_URING
+// `IoUringPolicy::wait` called on a plain thread (outside any fiber) keeps
+// the blocking behavior: this is the path existing callers such as
+// `VocabularyOnDisk::lookupBatch` use, with or without fiber support.
+TEST(FiberWait, plainThreadWaitKeepsBlockingBehavior) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  EXPECT_FALSE(ad_utility::FiberIoScheduler::isInsideFiber());
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+
+  ad_utility::IoUringPolicy policy(64);
+  ReadBatchForTesting batch;
+  batch.add({{8, 4}, {0, 4}, {12, 4}});
+  constexpr auto handle = 0;
+  batch.submitToWithHandle(policy, fd, handle);
+  policy.wait(handle);
+
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
+}
+#endif
+
+#if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
+// Four fibers wait on four batches concurrently on one thread and one ring.
+// Completions may arrive in any order, but each must be attributed to its
+// own batch, and every fiber must resume exactly once with correct data.
+// A lost wakeup between the last reap and the yield would hang this test.
+TEST(FiberWait, concurrentFiberWaitsAttributeCorrectly) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHH");
+
+  ad_utility::IoUringPolicy policy(64);
+  constexpr size_t kNumFibers = 4;
+  std::vector<ReadBatchForTesting> batches(kNumFibers);
+  std::vector<std::string> resumed;
+  resumed.reserve(kNumFibers);
+  std::vector<std::function<void()>> bodies;
+  bodies.reserve(kNumFibers);
+  for (size_t i = 0; i < kNumFibers; ++i) {
+    batches[i].add(i * 4, 4);
+    bodies.emplace_back([&, i]() {
+      EXPECT_TRUE(ad_utility::FiberIoScheduler::isInsideFiber());
+      const auto handle = i;
+      batches[i].submitToWithHandle(policy, fd, handle);
+      policy.wait(handle);
+      // Reached only after this fiber's own batch completed: the wait
+      // returns solely once `isBatchComplete` holds for its handle.
+      EXPECT_TRUE(policy.isBatchComplete(handle));
+      resumed.push_back("fiber-" + std::to_string(i));
+    });
+  }
+
+  ad_utility::FiberIoScheduler::runAsFibers(std::move(bodies));
+
+  EXPECT_THAT(resumed, ::testing::UnorderedElementsAre("fiber-0", "fiber-1",
+                                                       "fiber-2", "fiber-3"));
+  EXPECT_THAT(batches[0].result(), ::testing::ElementsAre("AAAA"));
+  EXPECT_THAT(batches[1].result(), ::testing::ElementsAre("BBBB"));
+  EXPECT_THAT(batches[2].result(), ::testing::ElementsAre("CCCC"));
+  EXPECT_THAT(batches[3].result(), ::testing::ElementsAre("DDDD"));
+}
+
+// A lone fiber has no sibling to yield to, so its wait takes the last-resort
+// park path. It must still complete with correct data.
+TEST(FiberWait, singleFiberWaitCompletesViaPark) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  auto [tmp, fd] = makeTempFile("AAAABBBB");
+
+  ad_utility::IoUringPolicy policy(64);
+  ReadBatchForTesting batch;
+  batch.add({{0, 4}, {4, 4}});
+  bool resumed = false;
+  ad_utility::FiberIoScheduler::runAsFibers({[&]() {
+    EXPECT_EQ(ad_utility::FiberIoScheduler::local().numActiveFibers(),
+              size_t{1});
+    constexpr auto handle = 0;
+    batch.submitToWithHandle(policy, fd, handle);
+    policy.wait(handle);
+    resumed = true;
+  }});
+
+  EXPECT_TRUE(resumed);
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("AAAA", "BBBB"));
+}
+
+// Stress the yield/resume interleaving: 8 fibers submit and wait 3 batches
+// each. Every completion must reach its own batch; any lost wakeup hangs.
+TEST(FiberWait, stressManyFiberBatches) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  constexpr size_t kNumFibers = 8;
+  constexpr size_t kBatchesPerFiber = 3;
+  std::string fileContent;
+  std::vector<std::vector<std::string>> expected(kNumFibers);
+  for (size_t i = 0; i < kNumFibers; ++i) {
+    for (size_t b = 0; b < kBatchesPerFiber; ++b) {
+      std::string chunk(4, static_cast<char>('A' + i));
+      expected[i].push_back(chunk);
+      fileContent.append(chunk);
+    }
+  }
+  auto [tmp, fd] = makeTempFile(fileContent);
+
+  ad_utility::IoUringPolicy policy(64);
+  std::vector<std::vector<ReadBatchForTesting>> batches(kNumFibers);
+  std::vector<std::function<void()>> bodies;
+  bodies.reserve(kNumFibers);
+  for (size_t i = 0; i < kNumFibers; ++i) {
+    batches[i].resize(kBatchesPerFiber);
+    bodies.emplace_back([&, i]() {
+      for (size_t b = 0; b < kBatchesPerFiber; ++b) {
+        size_t chunkIndex = i * kBatchesPerFiber + b;
+        batches[i][b].add(chunkIndex * 4, 4);
+        const auto handle = chunkIndex;
+        batches[i][b].submitToWithHandle(policy, fd, handle);
+        policy.wait(handle);
+      }
+    });
+  }
+
+  ad_utility::FiberIoScheduler::runAsFibers(std::move(bodies));
+
+  for (size_t i = 0; i < kNumFibers; ++i) {
+    for (size_t b = 0; b < kBatchesPerFiber; ++b) {
+      EXPECT_THAT(batches[i][b].result(),
+                  ::testing::ElementsAre(expected[i][b]))
+          << "mismatch at fiber " << i << " batch " << b;
+    }
+  }
+}
+#endif
+
+#ifdef QLEVER_HAS_FIBER_IO
+// An exception in one body must not strand the other fibers (a joinable
+// fiber's destructor would terminate): all bodies still run to completion,
+// and the first exception propagates to the caller.
+TEST(FiberScheduler, exceptionInBodyPropagatesAfterJoin) {
+  bool siblingRan = false;
+  EXPECT_THROW(
+      ad_utility::FiberIoScheduler::runAsFibers(
+          {[&]() { siblingRan = true; },
+           []() -> void { throw std::runtime_error("fiber body failure"); }}),
+      std::runtime_error);
+  EXPECT_TRUE(siblingRan);
 }
 #endif
 }  // namespace

@@ -392,6 +392,24 @@ else ()
     MESSAGE(STATUS "USE_IO_URING is OFF, building without io_uring support")
 endif ()
 
+### Cooperative fiber scheduling over io_uring (optional, requires
+### Boost.Fiber and Boost.Context from the conan Boost package). Without it,
+### `FiberIoScheduler` degrades gracefully: batch bodies run sequentially and
+### `IoUringPolicy::wait` keeps its blocking behavior.
+option(USE_FIBER_IO "Enable cooperative fiber scheduling for io_uring batch waits (requires Boost.Fiber and Boost.Context)" ON)
+if (USE_FIBER_IO)
+    find_package(Boost QUIET COMPONENTS fiber context CONFIG)
+    if (TARGET Boost::fiber AND TARGET Boost::context)
+        MESSAGE(STATUS "Found Boost.Fiber and Boost.Context, enabling fiber cooperative scheduling")
+        add_compile_definitions(QLEVER_HAS_FIBER_IO)
+        link_libraries(Boost::fiber Boost::context)
+    else ()
+        MESSAGE(STATUS "USE_FIBER_IO is ON but Boost.Fiber/Context were not found, building without fiber scheduling support")
+    endif ()
+else ()
+    MESSAGE(STATUS "USE_FIBER_IO is OFF, building without fiber scheduling support")
+endif ()
+
 ### ZSTD
 find_package(ZSTD QUIET)
 if (TARGET zstd::libzstd_static)
