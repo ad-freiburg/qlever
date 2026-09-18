@@ -403,10 +403,16 @@ if (USE_FIBER_IO)
     # takes precedence via hints; env BOOST_FIBER_PREFIX overrides the
     # conventional Ural path below.
     set(_fiber_hints $ENV{BOOST_FIBER_PREFIX} /local/data-ssd/stoetzem/boost-1.83.0)
-    # Static link: avoids any runtime loader path for the prefix libraries.
+    # Static link: avoids any runtime loader path for the prefix libraries
+    # (the dispatcher only provides liburing on LD_LIBRARY_PATH).
     set(_saved_Boost_USE_STATIC_LIBS ${Boost_USE_STATIC_LIBS})
     set(Boost_USE_STATIC_LIBS ON)
-    find_package(Boost QUIET COMPONENTS fiber context CONFIG HINTS ${_fiber_hints})
+    # Per-package lookups (not another find_package(Boost ...)): the main
+    # Boost_DIR cache entry would pin a repeated Boost lookup to the system
+    # config and ignore HINTS, while the per-package DIR entries are
+    # re-searched while cached as NOTFOUND.
+    find_package(boost_fiber QUIET CONFIG HINTS ${_fiber_hints})
+    find_package(boost_context QUIET CONFIG HINTS ${_fiber_hints})
     set(Boost_USE_STATIC_LIBS ${_saved_Boost_USE_STATIC_LIBS})
     unset(_fiber_hints)
     unset(_saved_Boost_USE_STATIC_LIBS)
