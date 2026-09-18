@@ -93,7 +93,7 @@ void resolveColumnMisses(const Index& index, const LocalVocab& localVocab,
   if (work.missIds_.empty()) {
     return;
   }
-  work.missResolved =
+  work.missResolved_ =
       ql::exportIds::idsToStringAndType(index, work.missIds_, localVocab);
 }
 
