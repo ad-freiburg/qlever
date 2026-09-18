@@ -398,7 +398,18 @@ endif ()
 ### `IoUringPolicy::wait` keeps its blocking behavior.
 option(USE_FIBER_IO "Enable cooperative fiber scheduling for io_uring batch waits (requires Boost.Fiber and Boost.Context)" ON)
 if (USE_FIBER_IO)
-    find_package(Boost QUIET COMPONENTS fiber context CONFIG)
+    # The system Boost on some machines (e.g. the Ural benchmark host) ships
+    # headers but no compiled fiber/context libraries. A self-built prefix
+    # takes precedence via hints; env BOOST_FIBER_PREFIX overrides the
+    # conventional Ural path below.
+    set(_fiber_hints $ENV{BOOST_FIBER_PREFIX} /local/data-ssd/stoetzem/boost-1.83.0)
+    # Static link: avoids any runtime loader path for the prefix libraries.
+    set(_saved_Boost_USE_STATIC_LIBS ${Boost_USE_STATIC_LIBS})
+    set(Boost_USE_STATIC_LIBS ON)
+    find_package(Boost QUIET COMPONENTS fiber context CONFIG HINTS ${_fiber_hints})
+    set(Boost_USE_STATIC_LIBS ${_saved_Boost_USE_STATIC_LIBS})
+    unset(_fiber_hints)
+    unset(_saved_Boost_USE_STATIC_LIBS)
     if (TARGET Boost::fiber AND TARGET Boost::context)
         MESSAGE(STATUS "Found Boost.Fiber and Boost.Context, enabling fiber cooperative scheduling")
         add_compile_definitions(QLEVER_HAS_FIBER_IO)
