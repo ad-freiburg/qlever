@@ -82,12 +82,24 @@ RdfAsyncParallelParser<Parser>::getBatchCoroutine() {
     // parsing of a batch below.
     if (!std::exchange(headerWasParsed_, true)) {
       co_await parseHeader();
+      // The block that is parsed below starts right after the header, which
+      // the call to `parseHeader` has just measured.
+      nextBlockOffset_ = state_.numBytesInHeader();
     }
     // The first caller gets to parse the remainder that was left over by the
     // parsing of the header, all others fetch a fresh block.
     auto block = state_.takeRemainderFromInitialization();
     if (!block.has_value()) {
       block = co_await blockSource_.asyncGetNextBlock(net::use_awaitable);
+    }
+    // Claim the offset of this block and advance the counter for the next
+    // call, while the permit still serializes the access. The blocks of a file
+    // partition its bytes exactly (see `AsyncStatementBoundaryBlockSource`),
+    // so the offsets are exact, no matter in which order the blocks are then
+    // parsed.
+    size_t positionOffset = nextBlockOffset_;
+    if (block.has_value()) {
+      nextBlockOffset_ += block.value().size();
     }
     // Let the next waiting call fetch its block while this call parses the
     // block it just got. This is safe: `blockSource_` has already updated all
@@ -96,7 +108,7 @@ RdfAsyncParallelParser<Parser>::getBatchCoroutine() {
     if (!block.has_value()) {
       co_return std::nullopt;
     }
-    co_return state_.parseBatch(std::move(block).value());
+    co_return state_.parseBatch(std::move(block).value(), positionOffset);
   } catch (...) {
     // Only the first error is propagated to its caller, all subsequent calls
     // get a clean end of the input instead, see the class comment. The permit
