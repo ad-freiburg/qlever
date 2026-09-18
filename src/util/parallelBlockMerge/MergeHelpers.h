@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEHELPERS_H
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEHELPERS_H
 
+#include <algorithm>
 #include <cstddef>
 #include <optional>
 #include <utility>
@@ -221,6 +222,50 @@ CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
         return detail::targetsFromChunkSizes(totalNumElements,
                                              chunkSizes.firstChunkSizes_,
                                              chunkSizes.remainingChunkSize_);
+      });
+}
+
+// The same as the `numChunks` overload above, but with additional explicit
+// sizes for the leading chunks, which reduces the latency at the start of the
+// merge (the consumer has to drain the chunks in the order of their index, so
+// it reaches the output blocks that the later chunks have already buffered
+// sooner). The `i`-th chunk gets the size `firstChunkSizes[i]`, and all the
+// remaining chunks get the size that `numChunks` implies for the given input.
+//
+// A leading size that is not smaller than the size of a uniform chunk is
+// ignored, together with all the sizes after it. The ramp-up can therefore
+// never *reduce* the number of chunks and hence never cost parallelism: an
+// input that is so small that even a uniform chunk is smaller than the leading
+// sizes is split uniformly, exactly as it would be without them.
+//
+// NOTE: An empty `firstChunkSizes` is exactly the overload above.
+CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
+    std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
+        const Input& input, const Comparator& comparator, size_t numChunks,
+        const std::vector<size_t>& firstChunkSizes) {
+  using Element = typename Input::Element;
+  AD_CONTRACT_CHECK(ql::ranges::all_of(firstChunkSizes,
+                                       [](size_t size) { return size > 0; }));
+  if (firstChunkSizes.empty()) {
+    return computeChunkBoundaries(input, comparator, numChunks);
+  }
+  if (numChunks <= 1) {
+    return singleChunk<Element>();
+  }
+  return detail::chunkBoundariesImpl(
+      input, comparator,
+      [numChunks, &firstChunkSizes](size_t totalNumElements) {
+        const size_t uniformChunkSize =
+            std::max<size_t>(1, totalNumElements / numChunks);
+        auto isSmallerThanUniform = [uniformChunkSize](size_t size) {
+          return size < uniformChunkSize;
+        };
+        auto leadingSizes =
+            ql::ranges::find_if_not(firstChunkSizes, isSmallerThanUniform);
+        return detail::targetsFromChunkSizes(
+            totalNumElements,
+            std::vector<size_t>(firstChunkSizes.begin(), leadingSizes),
+            uniformChunkSize);
       });
 }
 

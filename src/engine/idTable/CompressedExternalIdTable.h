@@ -12,7 +12,12 @@
 
 #include <atomic>
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/thread_pool.hpp>
+#include <exception>
 #include <future>
+#include <mutex>
+#include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "backports/algorithm.h"
@@ -24,14 +29,22 @@
 #include "util/CompressedBlockFile.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/File.h"
+#include "util/GlobalExecutor.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
+#include "util/PostAndGetFuture.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
+
+#ifdef QLEVER_USE_HPX
+// NOTE: This header also gives us `hpx::sort` and `hpx::execution::par`, see
+// the comment about the macros in `util/HpxAsioExecutor.h`.
+#include "util/HpxAsioExecutor.h"
+#endif
 
 namespace ad_utility {
 
@@ -150,47 +163,134 @@ class CompressedExternalIdTableWriter {
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
     size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
     AD_CONTRACT_CHECK(blockSize > 0);
-    startOfSingleIdTables_.push_back(blocksPerColumn_.at(0).size());
+    size_t firstBlockIdx = blocksPerColumn_.at(0).size();
+    startOfSingleIdTables_.push_back(firstBlockIdx);
     // Store the first and the last row of each of the new blocks. This has to
-    // happen here and not inside the per-column tasks below, because each of
+    // happen here and not inside the per-block tasks below, because each of
     // those tasks only sees a single column.
     for (size_t lower = 0; lower < table.numRows(); lower += blockSize) {
       size_t upper = std::min(lower + blockSize, table.numRows());
       firstAndLastRowPerBlock_.emplace_back(table[lower]);
       firstAndLastRowPerBlock_.emplace_back(table[upper - 1]);
     }
-    // The columns are compressed and stored in parallel.
-    // TODO<joka921> Use parallelism per block instead of per column (more
-    // fine-grained) but only once we have a reasonable abstraction for
-    // parallelism.
-    std::vector<std::future<void>> compressColumFutures;
-    for (auto i : ql::views::iota(0u, numColumns())) {
-      compressColumFutures.push_back(
-          std::async(std::launch::async, [this, i, blockSize, &table]() {
-            auto& blockMetadata = blocksPerColumn_.at(i);
-            decltype(auto) column = table.getColumn(i);
-            // TODO<C++23> Use `ql::views::chunkd`
-            for (size_t lower = 0; lower < column.size(); lower += blockSize) {
-              size_t upper = std::min<size_t>(lower + blockSize, column.size());
-              auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
-              auto compressed = ZstdWrapper::compress(
-                  column.data() + lower, thisBlockSizeUncompressed);
-              size_t offset = 0;
-              file_.withWriteLock(
-                  [&offset, &compressed](ad_utility::File& file) {
-                    offset = file.tell();
-                    file.write(compressed.data(), compressed.size());
-                  });
-              blockMetadata.push_back(
-                  {compressed.size(), thisBlockSizeUncompressed, offset});
-            }
-          }));
+    size_t numBlocks = (table.numRows() + blockSize - 1) / blockSize;
+    // Make room for the metadata of the new blocks. The tasks below then only
+    // *assign* to those elements (each task to an element of its own), so that
+    // no synchronization is needed for the metadata.
+    for (auto& blockMetadata : blocksPerColumn_) {
+      blockMetadata.resize(firstBlockIdx + numBlocks);
     }
-    for (auto& fut : compressColumFutures) {
-      fut.get();
+    compressAndWriteBlocks(table, firstBlockIdx, numBlocks, blockSize);
+  }
+
+ private:
+  // Compress the part of the `columnIdx`-th column of the `table` that belongs
+  // to the block with index `blockIdx` (counted relative to the `table`), write
+  // it to the file, and store the resulting metadata. The `firstBlockIdx` is
+  // the index that the first block of the `table` has in the `blocksPerColumn_`
+  // (see `writeIdTable`).
+  //
+  // This function may be called concurrently for arbitrary combinations of
+  // `blockIdx` and `columnIdx`: the file is written under an exclusive lock
+  // (which is not a bottleneck, because it is only held for the `write` itself
+  // and not for the compression), and the metadata of each block is stored in
+  // an element of its own, which `writeIdTable` has allocated beforehand.
+  void compressAndWriteBlockOfColumn(const IdTable& table, size_t blockIdx,
+                                     size_t columnIdx, size_t firstBlockIdx,
+                                     size_t blockSize) {
+    decltype(auto) column = table.getColumn(columnIdx);
+    size_t lower = blockIdx * blockSize;
+    size_t upper = std::min(lower + blockSize, column.size());
+    AD_CORRECTNESS_CHECK(lower < upper);
+    auto uncompressedSize = (upper - lower) * sizeof(Id);
+    auto compressed =
+        ZstdWrapper::compress(column.data() + lower, uncompressedSize);
+    size_t offset = 0;
+    file_.withWriteLock([&offset, &compressed](ad_utility::File& file) {
+      offset = file.tell();
+      file.write(compressed.data(), compressed.size());
+    });
+    blocksPerColumn_.at(columnIdx).at(firstBlockIdx + blockIdx) =
+        CompressedBlockMetadata{compressed.size(), uncompressedSize, offset};
+  }
+
+  // Compress all the blocks of all the columns of the `table` and write them to
+  // the file (see `compressAndWriteBlockOfColumn`), using the global thread
+  // pool (see `util/GlobalExecutor.h`). Return only when all the blocks have
+  // been written, rethrowing the first exception that any of them has thrown.
+  //
+  // NOTE: The parallelism is per block and column (and not per column, as it
+  // used to be), because the columns of a single table are typically few, while
+  // its blocks are many. The tasks are therefore small enough to keep all the
+  // threads of the pool busy until the very end of the table. They are also
+  // claimed in the order of the blocks (and within a block, in the order of the
+  // columns), such that the parts that are later read together (see
+  // `readBlockSequential`) tend to end up close to each other in the file.
+  //
+  // NOTE: The calling thread doesn't only wait for the pool, but also works on
+  // the blocks itself. That way this function makes progress even if all the
+  // threads of the pool are currently busy, so that it can safely be called
+  // from a thread that one of those threads is (indirectly) waiting for. This
+  // is exactly the case for the dedicated thread on which the
+  // `CompressedExternalIdTableBase` writes its blocks, see
+  // `CompressedExternalIdTableBase::transformAndWriteBlock`.
+  void compressAndWriteBlocks(const IdTable& table, size_t firstBlockIdx,
+                              size_t numBlocks, size_t blockSize) {
+    size_t numTasks = numBlocks * numColumns();
+    if (numTasks == 0) {
+      return;
+    }
+    // The index of the next task that has not been claimed by a worker yet.
+    std::atomic<size_t> nextTaskIdx = 0;
+    std::mutex exceptionMutex;
+    std::exception_ptr firstException;
+
+    // Claim and run tasks until there are none left. Each task compresses and
+    // writes a single block of a single column.
+    auto worker = [&]() {
+      try {
+        while (true) {
+          size_t taskIdx = nextTaskIdx.fetch_add(1);
+          if (taskIdx >= numTasks) {
+            return;
+          }
+          compressAndWriteBlockOfColumn(table, taskIdx / numColumns(),
+                                        taskIdx % numColumns(), firstBlockIdx,
+                                        blockSize);
+        }
+      } catch (...) {
+        // Stop handing out tasks; the exception is rethrown by the caller as
+        // soon as all the workers have finished.
+        nextTaskIdx.store(numTasks);
+        std::lock_guard lock{exceptionMutex};
+        if (!firstException) {
+          firstException = std::current_exception();
+        }
+      }
+    };
+
+    // Run the workers, one of them in the calling thread (see the NOTE above).
+    size_t numWorkers =
+        std::min(numTasks, ad_utility::globalExecutorNumThreads());
+    std::vector<std::future<void>> workerFutures;
+    workerFutures.reserve(numWorkers - 1);
+    for ([[maybe_unused]] size_t i : ql::views::iota(size_t{1}, numWorkers)) {
+      workerFutures.push_back(
+          ad_utility::postAndGetFuture(ad_utility::globalExecutor(), worker));
+    }
+    worker();
+    // NOTE: The `worker` never throws, so none of the `get()` calls does. We
+    // therefore always wait for *all* the workers, which we have to, because
+    // they use references to local variables of this function.
+    for (auto& future : workerFutures) {
+      future.get();
+    }
+    if (firstException) {
+      std::rethrow_exception(firstException);
     }
   }
 
+ public:
   // Return a vector of generators where the `i-th` generator generates the
   // `i-th` IdTable that was stored. The IdTables are yielded in (smaller)
   // blocks which are `IdTables` themselves.
@@ -453,6 +553,19 @@ inline MemorySize memoryForBlocksize(size_t blocksize, size_t numColumns) {
   return MemorySize::bytes(blocksize * blockMemoryPerRow(numColumns));
 }
 
+// Whether the transformation of a single block (for the
+// `CompressedExternalIdTableSorter` this is the sort of that block) may use
+// more than one thread, see `CompressedExternalIdTableBase::transformBlock`.
+enum struct Parallelism { Allowed, Disallowed };
+
+// The number of rows below which the last (and typically incomplete) block of
+// the input phase is transformed in the calling thread and with a single
+// thread, instead of being handed to the dedicated background thread, see
+// `CompressedExternalIdTableBase::transformAndPushLastBlock`. For a block that
+// small, the thread hop and the setup of a parallel sort cost more than they
+// buy, especially as the caller immediately waits for the result anyway.
+constexpr inline size_t MAX_ROWS_FOR_SEQUENTIAL_LAST_BLOCK = 100'000;
+
 }  // namespace compressedExternalIdTable
 
 // An input policy for `ad_utility::parallelBlockMerge` that reads the blocks of
@@ -589,22 +702,58 @@ CPP_class_template(size_t NumStaticCols,
   size_t blocksize_{
       compressedExternalIdTable::blocksizeForMemory(memory_, numColumns_)};
   CompressedExternalIdTableWriter writer_;
-  std::future<void> compressAndWriteFuture_;
+
+  // The dedicated thread on which the blocks are transformed (for the
+  // `CompressedExternalIdTableSorter` this means: sorted), compressed, and
+  // written to the `writer_` in the background, see `transformAndWriteBlock`.
+  // A single thread suffices, because there is always at most one such task in
+  // flight: `transformAndWriteBlock` waits for the previous one before it posts
+  // the next one.
+  //
+  // NOTE: The pool is declared before the `compressAndWriteFuture_`, such that
+  // it is destroyed (and its thread joined) only after that future is gone.
+  // The destructor additionally waits for the task explicitly, see there.
+  boost::asio::thread_pool blockWritePool_{1};
+
+  // NOTE: The background task hands the block buffer that it is done with back
+  // via this future, so that the next block can reuse its memory instead of
+  // allocating (and faulting in) a buffer of its own, see
+  // `transformAndWriteBlock`.
+  std::future<IdTableStatic<NumStaticCols>> compressAndWriteFuture_;
 
   // If the `compressAndWriteFuture_` is currently active, wait for its
-  // computation to be completed, else do nothing.
-  void waitForFuture() {
+  // computation to be completed and return the block buffer that the background
+  // task has given back (empty, but with its memory still allocated). Else do
+  // nothing and return `std::nullopt`.
+  std::optional<IdTableStatic<NumStaticCols>> waitForFuture() {
     if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
+      return compressAndWriteFuture_.get();
     }
+    return std::nullopt;
   }
 
   // Store the `future` inside the `compressAndWriteFuture_`. This trivial
   // wrapper can be used to inject more detailed logging when analyzing the
   // control flow of this class or when fixing bugs.
-  void setFuture(std::future<void> future) {
+  void setFuture(std::future<IdTableStatic<NumStaticCols>> future) {
     AD_CORRECTNESS_CHECK(!compressAndWriteFuture_.valid());
     compressAndWriteFuture_ = std::move(future);
+  }
+
+  // Run the `function` on the `blockWritePool_` and wait for its completion,
+  // rethrowing the exception that it has thrown (if any). Use this for work
+  // that logically belongs to the background task of `transformAndWriteBlock`,
+  // but has to be finished before the calling function returns. Running it on
+  // the dedicated thread instead of simply calling it here guarantees that
+  // *all* parallel invocations of the `blockTransformation_` (for the
+  // `CompressedExternalIdTableSorter` this is the parallel sort of a block) are
+  // made from one and the same thread. The strictly sequential invocations of
+  // `transformAndPushLastBlock` are exempt from that, see there.
+  template <typename Function>
+  void runOnBlockWriteThreadAndWait(Function function) {
+    ad_utility::postAndGetFuture(blockWritePool_.get_executor(),
+                                 std::move(function))
+        .get();
   }
 
   // Flag that is `true` if this is the first iteration over the table, and
@@ -645,8 +794,7 @@ CPP_class_template(size_t NumStaticCols,
     ++numElementsPushed_;
     currentBlock_.push_back(row);
     if (currentBlock_.size() >= blocksize_) {
-      transformAndWriteBlock(std::move(currentBlock_));
-      resetCurrentBlock(true);
+      writeCurrentBlockAndRecycleBuffer();
     }
   }
 
@@ -675,8 +823,7 @@ CPP_class_template(size_t NumStaticCols,
       currentBlock_.insertAtEnd(table, numPushed, numPushed + numToPush);
       numPushed += numToPush;
       if (currentBlock_.numRows() >= blocksize_) {
-        transformAndWriteBlock(std::move(currentBlock_));
-        resetCurrentBlock(true);
+        writeCurrentBlockAndRecycleBuffer();
       }
     }
   }
@@ -721,28 +868,82 @@ CPP_class_template(size_t NumStaticCols,
     }
   }
 
+  // Apply the `blockTransformation_` to the `block`. A transformation that can
+  // make use of several threads (for the `CompressedExternalIdTableSorter` this
+  // is the sort of the block) does so only if the `parallelism` is `Allowed`.
+  void transformBlock(IdTableStatic<NumStaticCols>& block,
+                      compressedExternalIdTable::Parallelism parallelism) {
+    if constexpr (std::is_invocable_v<BlockTransformation&,
+                                      IdTableStatic<NumStaticCols>&,
+                                      compressedExternalIdTable::Parallelism>) {
+      blockTransformation_(block, parallelism);
+    } else {
+      blockTransformation_(block);
+    }
+  }
+
   // Asynchronously compress the `block` and write it to the underlying
   // `writer_`. Before compressing, apply the transformation that is specified
   // by the `Impl` via the `transformBlock` function.
-  template <typename Transformation = ql::identity>
-  void transformAndWriteBlock(IdTableStatic<NumStaticCols> block) {
-    waitForFuture();
+  //
+  // Return the block buffer of the *previous* such task (empty, but with its
+  // memory still allocated), or `std::nullopt` if there was no previous task.
+  // Reusing that buffer for the next block is what keeps the number of block
+  // buffers that are ever allocated at two, see
+  // `writeCurrentBlockAndRecycleBuffer`.
+  std::optional<IdTableStatic<NumStaticCols>> transformAndWriteBlock(
+      IdTableStatic<NumStaticCols> block) {
+    auto recycledBlock = waitForFuture();
     if (block.empty()) {
       if (numBlocksPushed_ > 0) {
         // NOTE: In `transformAndPushLastBlock` we assert that if at least one
         // block has been pushed, then `compressAndWriteFuture_` is valid.
         // Therefore, we have to set a valid future here, even if it does
         // nothing.
-        setFuture(std::async(std::launch::deferred, []() {}));
+        setFuture(ad_utility::makeReadyFuture(std::move(block)));
       }
-      return;
+      return recycledBlock;
     }
     ++numBlocksPushed_;
-    setFuture(std::async(
-        std::launch::async, [block = std::move(block), this]() mutable {
-          blockTransformation_(block);
-          this->writer_.writeIdTable(std::move(block).toDynamic());
+    setFuture(ad_utility::postAndGetFuture(
+        blockWritePool_.get_executor(),
+        [block = std::move(block),
+         this]() mutable -> IdTableStatic<NumStaticCols> {
+          transformBlock(block,
+                         compressedExternalIdTable::Parallelism::Allowed);
+          // NOTE: The round trip via the dynamic table moves the columns and
+          // therefore keeps their memory, and so does the `clear()`. The buffer
+          // that we give back hence already has the capacity that the next
+          // block needs.
+          IdTable dynamicBlock = std::move(block).toDynamic();
+          this->writer_.writeIdTable(dynamicBlock);
+          dynamicBlock.clear();
+          return std::move(dynamicBlock)
+              .template toStatic<static_cast<int>(NumStaticCols)>();
         }));
+    return recycledBlock;
+  }
+
+  // Hand the `currentBlock_` to the background thread (see
+  // `transformAndWriteBlock`) and make the buffer that the *previous*
+  // background task has given back the new `currentBlock_`. Only the very first
+  // block has no such buffer to reuse and therefore has to allocate one, so
+  // that in total exactly two block buffers are allocated: the one that the
+  // background thread is working on, and the one that `push` fills.
+  void writeCurrentBlockAndRecycleBuffer() {
+    auto recycledBlock = transformAndWriteBlock(std::move(currentBlock_));
+    if (recycledBlock.has_value()) {
+      currentBlock_ = std::move(recycledBlock).value();
+    }
+    resetCurrentBlock(true);
+  }
+
+  // Return `true` if the last block of the input phase is small enough to be
+  // transformed sequentially in the calling thread, see
+  // `compressedExternalIdTable::MAX_ROWS_FOR_SEQUENTIAL_LAST_BLOCK`.
+  bool lastBlockIsTransformedSequentially() const {
+    return currentBlock_.numRows() <
+           compressedExternalIdTable::MAX_ROWS_FOR_SEQUENTIAL_LAST_BLOCK;
   }
 
   // If there is less than one complete block (meaning that the number of calls
@@ -771,13 +972,51 @@ CPP_class_template(size_t NumStaticCols,
     if (numBlocksPushed_ == 0) {
       AD_CORRECTNESS_CHECK(this->numElementsPushed_ ==
                            this->currentBlock_.size());
-      blockTransformation_(this->currentBlock_);
+      if (lastBlockIsTransformedSequentially()) {
+        transformBlock(this->currentBlock_,
+                       compressedExternalIdTable::Parallelism::Disallowed);
+      } else {
+        runOnBlockWriteThreadAndWait([this]() {
+          transformBlock(this->currentBlock_,
+                         compressedExternalIdTable::Parallelism::Allowed);
+        });
+      }
       return false;
+    }
+    // The last block is the remainder of the input and therefore typically much
+    // smaller than the previous ones. If it is small enough, then transforming
+    // it sequentially in the calling thread is cheaper than handing it to the
+    // background thread, because we have to wait for the result right away.
+    if (lastBlockIsTransformedSequentially()) {
+      waitForFuture();
+      transformAndWriteLastBlockInCallingThread();
+      return true;
     }
     transformAndWriteBlock(std::move(this->currentBlock_));
     resetCurrentBlock(false);
     waitForFuture();
     return true;
+  }
+
+  // Transform the `currentBlock_` sequentially and write it to the `writer_`,
+  // both in the calling thread. May only be called when the background task is
+  // not running, see `transformAndPushLastBlock`, which is the only caller.
+  //
+  // NOTE: In contrast to `transformAndWriteBlock`, this leaves the
+  // `compressAndWriteFuture_` invalid although it may increase the
+  // `numBlocksPushed_`. That is fine, because the invariant that ties the two
+  // together is checked only once, at the beginning of
+  // `transformAndPushLastBlock`, and therefore before this function runs.
+  void transformAndWriteLastBlockInCallingThread() {
+    AD_CORRECTNESS_CHECK(!compressAndWriteFuture_.valid());
+    if (currentBlock_.empty()) {
+      return;
+    }
+    ++numBlocksPushed_;
+    transformBlock(currentBlock_,
+                   compressedExternalIdTable::Parallelism::Disallowed);
+    writer_.writeIdTable(std::move(currentBlock_).toDynamic());
+    resetCurrentBlock(false);
   }
 };
 
@@ -878,17 +1117,40 @@ class CompressedExternalIdTableSorterTypeErased {
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
-// The implementation of sorting a single block
+// The implementation of sorting a single block. The `parallelism` argument
+// specifies whether the sort may use several threads, see
+// `CompressedExternalIdTableBase::transformBlock`.
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
   template <typename T>
-  void operator()(T& block) {
-#ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
-#else
-    ql::ranges::sort(block, comparator_);
+  void operator()(
+      T& block,
+      [[maybe_unused]] compressedExternalIdTable::Parallelism parallelism =
+          compressedExternalIdTable::Parallelism::Allowed) {
+#if defined(QLEVER_USE_HPX)
+    // Sort on the global thread pool, such that the block sort uses the same
+    // threads (and hence obeys the same parallelism setting) as the other
+    // phases of the index build, see `util/HpxAsioExecutor.h`.
+    //
+    // NOTE: This blocks the calling thread until the sort is complete, so it
+    // must not be called from a thread of the global thread pool itself. It
+    // isn't: the parallel invocations of this function all come from the
+    // dedicated thread of the `blockWritePool_` of the sorter, see
+    // `CompressedExternalIdTableBase::runOnBlockWriteThreadAndWait`.
+    if (parallelism == compressedExternalIdTable::Parallelism::Allowed) {
+      hpx::sort(hpx::execution::par.on(ad_utility::globalHpxExecutor()),
+                std::begin(block), std::end(block), comparator_);
+      return;
+    }
+#elif defined(_PARALLEL_SORT)
+    if (parallelism == compressedExternalIdTable::Parallelism::Allowed) {
+      ad_utility::parallel_sort(std::begin(block), std::end(block),
+                                comparator_);
+      return;
+    }
 #endif
+    ql::ranges::sort(block, comparator_);
   }
 };
 // Deduction guide for the implicit aggregate initialization (its "constructor")
@@ -912,17 +1174,30 @@ class CompressedExternalIdTableSorter
   // The maximal blocksize in the output phase.
   MemorySize maxOutputBlocksize_ = 1_GB;
   // The number of merged blocks that are buffered during the
-  //  output phase.
-  int numBufferedOutputBlocks_ = 4;
+  //  output phase. It is the number of output blocks that the memory
+  //  accounting of the merge phase reserves memory for (see
+  //  `compressedExternalIdTable::computeMergePhaseParameters`), and it is split
+  //  as follows: the merge reads `numBufferedOutputBlocks_ - 2` blocks ahead
+  //  (see `parallelBlockMerge::MergeOptions::numPrefetchedOutputBlocks` and
+  //  `compressedExternalIdTable::makeMergeOptions`), and the remaining two are
+  //  the block that the consumer currently holds and the one that the merge is
+  //  just finishing.
+  int numBufferedOutputBlocks_ = 12;
 
   // See the `moveResultOnMerge()` getter function for documentation.
   bool moveResultOnMerge_ = true;
 
   // The executor on which the merge phase runs, together with the number of
   // threads that run it.
+  //
+  // NOTE: The default executor is the process-wide shared thread pool (see
+  // `ad_utility::globalExecutor`), so the assumed parallelism has to be the
+  // size of exactly that pool and not the number of hardware threads. The two
+  // differ as soon as the pool was sized explicitly, for example via the
+  // `--num-threads` option of the index builder.
   boost::asio::any_io_executor mergeExecutor_ =
       compressedExternalIdTable::defaultSorterMergeExecutor();
-  size_t mergeParallelism_ = parallelBlockMerge::defaultMergeParallelism();
+  size_t mergeParallelism_ = ad_utility::globalExecutorNumThreads();
 
   // Set as soon as the warning about a reduced parallelism (see
   // `warnIfParallelismIsReduced`) was logged, such that it is logged at most
@@ -1023,16 +1298,13 @@ class CompressedExternalIdTableSorter
     AD_CONTRACT_CHECK(!mergeIsActive_.load());
     mergeIsActive_.store(true);
 
-    // Explanation for the second argument of `runStreamAsync`: One block is
-    // buffered by this generator, one block is buffered inside the
-    // `sortedBlocks` generator, so `numBufferedOutputBlocks_ - 2` blocks may be
-    // buffered by the async stream.
+    // NOTE: The blocks are read ahead by the merge itself (see
+    // `numBufferedOutputBlocks_` and
+    // `parallelBlockMerge::MergeOptions::numPrefetchedOutputBlocks`), so no
+    // asynchronous stream is needed on top of it.
     using namespace ad_utility;
     return InputRangeTypeErased{
-        CallbackOnEndView{ad_utility::streams::runStreamAsync(
-                              sortedBlocks<N>(blocksize),
-                              std::max(1, numBufferedOutputBlocks_ - 2)),
-                          [&, this]() noexcept {
+        CallbackOnEndView{sortedBlocks<N>(blocksize), [&, this]() noexcept {
                             this->isFirstIteration_ = false;
                             mergeIsActive_.store(false);
                           }}};

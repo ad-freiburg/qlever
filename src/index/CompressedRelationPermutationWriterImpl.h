@@ -8,9 +8,13 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 
+#include <boost/asio/strand.hpp>
+
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/CompressedRelation.h"
 #include "index/CompressedRelationHelpersImpl.h"
+#include "util/AsyncTaskQueue.h"
+#include "util/GlobalExecutor.h"
 #include "util/ProgressBar.h"
 
 // Set up the handling of small relations for the twin permutation.
@@ -43,8 +47,15 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
     auto firstCol0 = blockOfSmallRelations.at(0, 0);
     auto lastCol0 =
         blockOfSmallRelations.at(blockOfSmallRelations.numRows() - 1, 0);
-    writer_.compressAndWriteBlock(firstCol0, lastCol0,
-                                  std::move(blockOfSmallRelations), false);
+    // NOTE: This function is called from within a task of the block write
+    // queue of the other writer, which runs on the global thread pool. We
+    // therefore must not `push` to the (bounded) block write queue of
+    // `writer_`, because that push might block and thus occupy a thread of
+    // that pool, which could deadlock the pool. Doing the work directly
+    // instead is cheap, because we already are on a thread of the pool, and it
+    // even saves the hop to another thread.
+    writer_.compressAndWriteBlockInCallingThread(
+        firstCol0, lastCol0, std::move(blockOfSmallRelations), false);
   }
 };
 
@@ -53,11 +64,17 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
 struct BlockCallbackManager {
   const CompressedRelationWriter::PerBlockCallbacks perBlockCallbacks_;
 
-  // A queue for the callbacks that have to be applied for each triple.
-  // The second argument is the number of threads. It is crucial that this
-  // queue is single threaded.
-  ad_utility::TaskQueue<false> blockCallbackQueue_{
-      3, 1, "Additional callbacks during permutation building"};
+  // A queue for the callbacks that have to be applied for each triple. It is
+  // crucial that the callbacks are invoked one after the other and in the
+  // order in which the blocks were pushed. The queue therefore runs on a
+  // strand (and not directly on the global thread pool), which serializes the
+  // tasks and runs them in the order in which they were posted. Note that the
+  // latter guarantee requires that all the tasks are posted by a single
+  // thread, which is the case here, because `passToBlockCallbacks` is only
+  // called by the single thread that drives the `PermutationWriter`.
+  ad_utility::AsyncTaskQueue blockCallbackQueue_{
+      boost::asio::make_strand(ad_utility::globalExecutor()), 3,
+      "Additional callbacks during permutation building"};
   ad_utility::Timer blockCallbackTimer_{ad_utility::Timer::Stopped};
 
   // Enqueue a call to each of the `perBlockCallbacks` for the current block.

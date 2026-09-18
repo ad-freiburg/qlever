@@ -1997,40 +1997,34 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
   }
 }
 
-namespace ad_utility {
-std::pair<size_t, size_t> getThreadCountAndTaskSize(
-    const TaskQueue<false>& taskQueue) {
-  return {taskQueue.threads_.size(), taskQueue.queuedTasks_.maxSize()};
-}
-}  // namespace ad_utility
-
 // _____________________________________________________________________________
-TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
+TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfTasksInFlight) {
   auto threads = std::thread::hardware_concurrency();
   if (threads == 1) {
     GTEST_SKIP_("This test assumes that there are at least 2 threads.");
   }
+  // The blocks are compressed and written on the global thread pool, so the
+  // only thing that the writer controls is the number of blocks that it keeps
+  // in flight, see `CompressedRelationWriter::makeBlockWriteQueue`.
+  auto maxNumTasksInFlight = [](const CompressedRelationWriter& writer) {
+    return writer.blockWriteQueue_.maxNumTasksInFlight();
+  };
   {
-    // Check if it is limited to actual threads.
+    // Check that the number of concurrent blocks is limited to the number of
+    // hardware threads.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(1337);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
-    // Check if it is expanded to actual threads.
+    // Check that a value of 0 means "as many as there are hardware threads".
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(0);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
     // Check if minimum of 4 tasks is honored.
@@ -2038,8 +2032,7 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
         &RuntimeParameters::permutationWriterNumThreads_>(1);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
+    EXPECT_EQ(maxNumTasksInFlight(writer), 4);
   }
   {
     // An explicit override (used by the runtime index rebuild via
@@ -2050,8 +2043,7 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
                                     1};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
+    EXPECT_EQ(maxNumTasksInFlight(writer), 4);
   }
   {
     // An override is capped at the number of hardware threads, just like the
@@ -2059,10 +2051,7 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
                                     1337};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
 }
 

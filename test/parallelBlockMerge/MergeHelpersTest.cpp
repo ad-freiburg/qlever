@@ -430,6 +430,46 @@ TEST(MergeHelpers, chunkBoundariesFromExplicitChunkSizes) {
 }
 
 // _____________________________________________________________________________
+TEST(MergeHelpers, chunkBoundariesWithRampedUpLeadingChunks) {
+  // A single run with the elements `0 ... 99`, one element per block, so that
+  // the split points can be predicted exactly. For the off-by-one convention of
+  // the split points see `chunkBoundariesFromExplicitChunkSizes` above.
+  SizeVec run(100);
+  ql::ranges::generate(run, [i = size_t{0}]() mutable { return i++; });
+  std::vector<SizeVec> runs{run};
+  auto input = makeVectorInput(runs, 1);
+  auto splitPointsFor = [&input](size_t numChunks,
+                                 const SizeVec& firstChunkSizes) {
+    return chunkSplitPoints(computeChunkBoundaries(input, std::less<>{},
+                                                   numChunks, firstChunkSizes));
+  };
+
+  // No leading sizes at all is exactly the uniform overload: four chunks of 25
+  // elements each.
+  EXPECT_THAT(splitPointsFor(4, {}), ::testing::ElementsAre(24u, 49u, 74u));
+  // Two small leading chunks, then uniform chunks of `100 / 4 == 25` elements,
+  // so the chunks start after `5`, `15`, `40`, `65` and `90` elements.
+  EXPECT_THAT(splitPointsFor(4, {5, 10}),
+              ::testing::ElementsAre(4u, 14u, 39u, 64u, 89u));
+  // A leading size that is not smaller than a uniform chunk is ignored,
+  // together with all the sizes after it. Here only the `5` is a ramp-up, the
+  // `25` is not, so the result is the same as above.
+  EXPECT_THAT(splitPointsFor(4, {5, 25, 10}),
+              ::testing::ElementsAre(4u, 29u, 54u, 79u));
+  // The uniform chunks are already smaller than every leading size, so the
+  // ramp-up is skipped completely and the parallelism is unaffected.
+  EXPECT_THAT(splitPointsFor(4, {40, 50}),
+              ::testing::ElementsAre(24u, 49u, 74u));
+  // A single chunk needs no split points at all.
+  EXPECT_THAT(splitPointsFor(1, {5, 10}), ::testing::IsEmpty());
+  // A leading size of zero is illegal, because it would describe an empty
+  // chunk.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      computeChunkBoundaries(input, std::less<>{}, 4, SizeVec{5, 0}),
+      ::testing::HasSubstr("size > 0"));
+}
+
+// _____________________________________________________________________________
 TEST(MergeHelpers, chunkBoundariesFromChunkSizesEdgeCases) {
   auto runs = makeRandomRuns(4, 50, 50);
   auto input = makeVectorInput(runs, 7);

@@ -6,11 +6,19 @@
 #define QLEVER_SRC_GLOBAL_ID_H
 
 #include <cstdint>
+#include <type_traits>
 
 #include "global/ValueId.h"
 
 using Id = ValueId;
 using Score = float;
+
+// `Id`s are copied around a lot, in particular in bulk (see the `IdTable`
+// class). Make sure that such copies can be performed as plain byte copies
+// (e.g. via `std::memcpy`), and that this property is not accidentally lost by
+// adding a user-provided copy constructor, copy assignment operator, or
+// destructor to `ValueId`.
+static_assert(std::is_trivially_copyable_v<Id>);
 
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;

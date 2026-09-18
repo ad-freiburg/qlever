@@ -178,6 +178,34 @@ TEST(ExternalIdTableSorterMergeConfig, mergeOptions) {
   EXPECT_EQ(options.parallelism(), config.parallelism_);
   EXPECT_EQ(options.maxNumChunksInFlight, parameters.numChunksInFlight_);
   EXPECT_EQ(options.numChunksInFlight(100), parameters.numChunksInFlight_);
+  EXPECT_EQ(options.firstChunkSizes, mergePhaseFirstChunkSizes());
+  // All the buffered output blocks but two are read ahead, see
+  // `MergePhaseConfig::numBufferedOutputBlocks_`.
+  EXPECT_EQ(options.numPrefetchedOutputBlocks,
+            config.numBufferedOutputBlocks_ - 2);
+}
+
+// _____________________________________________________________________________
+// The read-ahead is never zero, no matter how small the number of buffered
+// output blocks is, because a merge without any read-ahead at all would never
+// make progress, see `MergeOptions::numPrefetchedOutputBlocks`.
+TEST(ExternalIdTableSorterMergeConfig, mergeOptionsWithFewBufferedBlocks) {
+  auto config = baseConfig();
+  for (size_t numBufferedOutputBlocks : {size_t{1}, size_t{2}, size_t{3}}) {
+    config.numBufferedOutputBlocks_ = numBufferedOutputBlocks;
+    auto options =
+        makeMergeOptions(config, computeMergePhaseParameters(config));
+    EXPECT_EQ(options.numPrefetchedOutputBlocks, 1u);
+  }
+}
+
+// _____________________________________________________________________________
+// The leading chunks of the merge phase start at 1M elements and double from
+// there, so that the first sorted rows become available early.
+TEST(ExternalIdTableSorterMergeConfig, firstChunkSizes) {
+  EXPECT_THAT(mergePhaseFirstChunkSizes(),
+              ::testing::ElementsAre(1'000'000u, 2'000'000u, 4'000'000u,
+                                     8'000'000u, 16'000'000u));
 }
 
 // _____________________________________________________________________________

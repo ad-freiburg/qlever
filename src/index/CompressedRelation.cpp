@@ -22,6 +22,7 @@
 #include "index/LocatedTriples.h"
 #include "util/Algorithm.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/GlobalExecutor.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/ThreadSafeQueue.h"
@@ -1343,30 +1344,37 @@ void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
   auto timer = blockWriteQueueTimer_.startMeasurement();
   blockWriteQueue_.push([this, block = std::move(block), firstCol0Id,
                          lastCol0Id, invokeCallback]() mutable {
-    std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
-    for (const auto& column : block.getColumns()) {
-      offsets.push_back(compressAndWriteColumn(column));
-    }
-    AD_CORRECTNESS_CHECK(!offsets.empty());
-    auto numRows = block.numRows();
-    const auto& first = block[0];
-    const auto& last = block[numRows - 1];
-    AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
-    AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
-
-    auto [hasDuplicates, graphInfo] = getGraphInfo(block);
-    blockBuffer_.wlock()->emplace_back(CompressedBlockMetadataNoBlockIndex{
-        std::move(offsets),
-        numRows,
-        {first[0], first[1], first[2], first[3]},
-        {last[0], last[1], last[2], last[3]},
-        std::move(graphInfo),
-        hasDuplicates});
-    if (invokeCallback && smallBlocksCallback_) {
-      std::invoke(smallBlocksCallback_, std::move(block));
-    }
+    compressAndWriteBlockInCallingThread(firstCol0Id, lastCol0Id,
+                                         std::move(block), invokeCallback);
   });
   timer.stop();
+}
+
+// _____________________________________________________________________________
+void CompressedRelationWriter::compressAndWriteBlockInCallingThread(
+    Id firstCol0Id, Id lastCol0Id, IdTable block, bool invokeCallback) {
+  std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
+  for (const auto& column : block.getColumns()) {
+    offsets.push_back(compressAndWriteColumn(column));
+  }
+  AD_CORRECTNESS_CHECK(!offsets.empty());
+  auto numRows = block.numRows();
+  const auto& first = block[0];
+  const auto& last = block[numRows - 1];
+  AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
+  AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
+
+  auto [hasDuplicates, graphInfo] = getGraphInfo(block);
+  blockBuffer_.wlock()->emplace_back(CompressedBlockMetadataNoBlockIndex{
+      std::move(offsets),
+      numRows,
+      {first[0], first[1], first[2], first[3]},
+      {last[0], last[1], last[2], last[3]},
+      std::move(graphInfo),
+      hasDuplicates});
+  if (invokeCallback && smallBlocksCallback_) {
+    std::invoke(smallBlocksCallback_, std::move(block));
+  }
 }
 
 // _____________________________________________________________________________
@@ -1607,23 +1615,25 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue(
-    std::optional<size_t> numThreadsOverride) {
-  size_t requestedThreads = numThreadsOverride.value_or(
+ad_utility::AsyncTaskQueue CompressedRelationWriter::makeBlockWriteQueue(
+    std::optional<size_t> numTasksInFlightOverride) {
+  size_t requestedTasks = numTasksInFlightOverride.value_or(
       getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
   // `hardware_concurrency` may return 0 when it cannot determine the number
-  // of hardware threads; fall back to 1, so that the queue always has a
-  // worker (with 0 workers, the tasks would never run).
+  // of hardware threads; fall back to 1, so that the requested number of
+  // concurrently compressed blocks is always positive.
   uint32_t hardwareThreads = std::max(1u, std::thread::hardware_concurrency());
   // Clamp in `size_t` BEFORE casting, so that a huge requested value cannot
-  // truncate to a small (or zero) thread count.
-  uint32_t threadCount = requestedThreads == 0
-                             ? hardwareThreads
-                             : static_cast<uint32_t>(std::min<size_t>(
-                                   requestedThreads, hardwareThreads));
-  // Allow at least up to 4 tasks in the queue.
-  uint32_t queueSize = std::max<uint32_t>(4, threadCount * 2);
-  return ad_utility::TaskQueue<false>{queueSize, threadCount};
+  // truncate to a small (or zero) number.
+  uint32_t numConcurrentBlocks = requestedTasks == 0
+                                     ? hardwareThreads
+                                     : static_cast<uint32_t>(std::min<size_t>(
+                                           requestedTasks, hardwareThreads));
+  // Allow at least 4 blocks to be in flight.
+  uint32_t maxNumTasksInFlight = std::max<uint32_t>(4, numConcurrentBlocks * 2);
+  return ad_utility::AsyncTaskQueue{ad_utility::globalExecutor(),
+                                    maxNumTasksInFlight,
+                                    "Compressing and writing blocks"};
 }
 
 // _____________________________________________________________________________

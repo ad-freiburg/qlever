@@ -687,6 +687,93 @@ TEST(CompressedExternalIdTable, sorterWithSerialMerge) {
 }
 
 // _____________________________________________________________________________
+// Regression test: a sorter may be `clear()`ed as soon as the range with its
+// sorted output has been destroyed, which is exactly what the writers of the
+// permutation pairs do for every large relation (see
+// `CompressedRelationPermutationWriterImpl.h`) and what `IndexImpl` does with
+// its `firstSorter`. This only holds because the destruction of that range
+// waits for the parallel merge to have released the sorter's file, see
+// `parallelBlockMerge::detail::ParallelMergeRange`. Without that wait, the
+// merge still held the file open on one of the executor's threads and the
+// `clear()` below threw "... is currently being iterated over".
+TEST(CompressedExternalIdTable, clearDirectlyAfterParallelMerge) {
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  static constexpr size_t numThreads = 8;
+  net::thread_pool pool{numThreads};
+  IdTable input =
+      createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS);
+
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+      filename, NUM_COLS, 1_MB, ad_utility::testing::makeAllocator(), 5_kB};
+  sorter.setMergeExecutor(pool.get_executor(), numThreads);
+
+  // Several rounds, because the race that this used to expose is
+  // timing-dependent. NOTE: This is deliberately a cheap smoke test of the
+  // whole composition (sorter, output stream, merge, `clear`); the contract
+  // that it relies on is pinned down deterministically by
+  // `ParallelBlockMerge.rangeDestructorWaitsForTheMergeToReleaseItsInput`.
+  for (size_t i = 0; i < 3; ++i) {
+    sorter.pushBlock(input);
+    size_t numRows = 0;
+    {
+      auto blocks = sorter.getSortedBlocks<0>(BLOCKSIZE_OUTPUT_PARALLEL_MERGE);
+      for (const auto& block : blocks) {
+        numRows += block.numRows();
+      }
+    }
+    EXPECT_EQ(numRows, input.numRows());
+    // The sorted output is gone, so clearing the sorter (which deletes and
+    // recreates its file) must not throw.
+    sorter.clear();
+  }
+}
+
+// _____________________________________________________________________________
+// Regression test: a sorter may also be `clear()`ed while the range with its
+// sorted output is *still alive*, as long as that range was consumed to its
+// end. `IndexImpl::buildOspWithPatterns` does exactly that: it exhausts the
+// range in a background thread, joins that thread, and then clears the sorter,
+// while the range itself is still a local of the enclosing function. This holds
+// because reaching the end of the range releases the merge (and hence the
+// reader that it registered with the `CompressedExternalIdTableWriter`), see
+// `parallelBlockMerge::detail::ParallelMergeRange::releaseEverything`.
+TEST(CompressedExternalIdTable, clearWhileTheExhaustedOutputRangeIsStillAlive) {
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  static constexpr size_t numThreads = 8;
+  net::thread_pool pool{numThreads};
+  IdTable input =
+      createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS);
+
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+      filename, NUM_COLS, 1_MB, ad_utility::testing::makeAllocator(), 5_kB};
+
+  // A parallelism of one takes the serial merge, which has to release its
+  // input on exhaustion just like the parallel one.
+  for (size_t mergeParallelism : {numThreads, size_t{1}}) {
+    SCOPED_TRACE(absl::StrCat("merge parallelism: ", mergeParallelism));
+    sorter.setMergeExecutor(pool.get_executor(), mergeParallelism);
+    sorter.pushBlock(input);
+    auto blocks = sorter.getSortedBlocks<0>(BLOCKSIZE_OUTPUT_PARALLEL_MERGE);
+    size_t numRows = 0;
+    for (const auto& block : blocks) {
+      numRows += block.numRows();
+    }
+    EXPECT_EQ(numRows, input.numRows());
+    // NOTE: `blocks` is deliberately still alive here, which is the whole point
+    // of this test.
+    EXPECT_NO_THROW(sorter.clear());
+  }
+}
+
+// _____________________________________________________________________________
 // The parallel merge has to produce exactly the same output as the serial one.
 // This holds exactly (and not only up to the order of equal elements), because
 // `SortByOSP` compares all four columns and is therefore a total order.
@@ -1069,15 +1156,17 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // single chunk in flight without throwing: the input blocks of a single
   // chunk cost
   // `2 * 4 * 250'000 = 2 MB`, so two concurrent chunks leave
-  // `(6 - 4) MB / (4 + 3 * 2)` per output block, which is far below
-  // `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`, whereas a single chunk still leaves
-  // `(6 - 2) MB / (4 + 3) = 571 kB`, which is above the hard floor of
-  // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows.
-  const auto memory = ad_utility::MemorySize::bytes(6'000'000);
+  // `(8 - 4) MB / (12 + 3 * 2) = 222 kB` (that is `6944` rows) per output
+  // block, which is far below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`, whereas a
+  // single chunk still leaves `(8 - 2) MB / (12 + 3) = 400 kB` (that is
+  // `12'500` rows), which is above the hard floor of
+  // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `12` are the default
+  // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`.
+  const auto memory = ad_utility::MemorySize::bytes(8'000'000);
   const auto blocksizeCompression = ad_utility::MemorySize::bytes(250'000);
-  // One run holds `6'000'000 / (4 * 8 * 2) = 93'750` rows, so the following
+  // One run holds `8'000'000 / (4 * 8 * 2) = 125'000` rows, so the following
   // number of rows yields two runs.
-  constexpr size_t numRows = 125'000;
+  constexpr size_t numRows = 170'000;
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
