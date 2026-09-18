@@ -331,18 +331,17 @@ class CompressedRelationWriter {
   ad_utility::Synchronized<std::vector<IdTable>> recycledBlocks_;
   bool recycleBlocks_ = false;
 
-  // The maximal number of buffers that are kept in the `recycledBlocks_`. Two
-  // buffers suffice for the only user (the `PermutationWriter`, which
-  // alternates between the buffer it currently fills and the buffer of the
-  // block that is currently written in the background).
-  static constexpr size_t maxNumRecycledBlocks_ = 2;
+  // The maximal number of buffers that are kept in the `recycledBlocks_`. It is
+  // set by `enableBlockRecycling`, because it depends on how many buffers the
+  // user has in flight at the same time.
+  size_t maxNumRecycledBlocks_ = 0;
 
  public:
   /// Create using a filename, to which the relation data will be written.
   /// If `numWriterThreads` is set, it determines how many blocks this writer
-  /// compresses and writes concurrently; otherwise the runtime parameter
-  /// `permutation-writer-num-threads` is used (see `makeBlockWriteQueue`,
-  /// which also explains why this is no longer a number of threads).
+  /// compresses and writes concurrently; otherwise the number of threads of
+  /// the global thread pool is used (see `makeBlockWriteQueue`, which also
+  /// explains why this is no longer a number of threads).
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f,
       ad_utility::MemorySize uncompressedBlocksizePerColumn,
@@ -678,10 +677,18 @@ class CompressedRelationWriter {
   // same `col0Id`.
   void addBlockForLargeRelation(Id col0Id, BlockToWrite relation);
 
-  // Enable the recycling of block buffers, see `recycledBlocks_` above. Only
-  // call this if the blocks that are added to this writer are obtained from
+  // Enable the recycling of block buffers, see `recycledBlocks_` above, with a
+  // pool that holds at most `maxNumRecycledBlocks` buffers. That number should
+  // be the number of buffers that the caller has in flight at the same time,
+  // because a buffer that is given back when the pool is already full is
+  // destroyed and has to be allocated again later. Only call this if the
+  // blocks that are added to this writer are obtained from
   // `takeRecycledBlock`.
-  void enableBlockRecycling() { recycleBlocks_ = true; }
+  void enableBlockRecycling(size_t maxNumRecycledBlocks) {
+    AD_CONTRACT_CHECK(maxNumRecycledBlocks > 0);
+    recycleBlocks_ = true;
+    maxNumRecycledBlocks_ = maxNumRecycledBlocks;
+  }
 
   // Return a block buffer with `numColumns` columns and zero rows, which is
   // taken from the `recycledBlocks_` if possible (then its memory is already
@@ -727,14 +734,14 @@ class CompressedRelationWriter {
   // number of blocks that this writer keeps in flight (queued or currently
   // being compressed and written).
   //
-  // That number is `numTasksInFlightOverride` if set, and otherwise determined
-  // by the runtime parameter "permutation-writer-num-threads" (the name of
-  // that parameter is kept for backwards compatibility). In both cases, a
-  // value of 0 means "as many as the hardware has threads", and larger values
-  // are capped at that number. At least 4 blocks are always allowed to be in
-  // flight, and the blocks are allowed to pile up to twice the requested
-  // number, such that the writer can also make progress while all the
-  // requested blocks are being compressed.
+  // That number is `numTasksInFlightOverride` if set, and otherwise the number
+  // of threads of the global thread pool, which the `--num-threads / -j`
+  // option of the index builder configures. In both cases, a value of 0 means
+  // "as many as the pool has threads", and larger values are capped at that
+  // number. At least 4 blocks are always allowed to be in flight, and the
+  // blocks are allowed to pile up to twice the requested number, such that the
+  // writer can also make progress while all the requested blocks are being
+  // compressed.
   static ad_utility::AsyncTaskQueue makeBlockWriteQueue(
       std::optional<size_t> numTasksInFlightOverride);
   FRIEND_TEST(CompressedRelationWriter,

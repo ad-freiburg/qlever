@@ -1653,20 +1653,18 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 // _____________________________________________________________________________
 ad_utility::AsyncTaskQueue CompressedRelationWriter::makeBlockWriteQueue(
     std::optional<size_t> numTasksInFlightOverride) {
-  size_t requestedTasks = numTasksInFlightOverride.value_or(
-      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
-  // `hardware_concurrency` may return 0 when it cannot determine the number
-  // of hardware threads; fall back to 1, so that the requested number of
-  // concurrently compressed blocks is always positive.
-  uint32_t hardwareThreads = std::max(1u, std::thread::hardware_concurrency());
-  // Clamp in `size_t` BEFORE casting, so that a huge requested value cannot
-  // truncate to a small (or zero) number.
-  uint32_t numConcurrentBlocks = requestedTasks == 0
-                                     ? hardwareThreads
-                                     : static_cast<uint32_t>(std::min<size_t>(
-                                           requestedTasks, hardwareThreads));
+  // The blocks are compressed and written on the global thread pool, so the
+  // number of threads that is available for them is the size of that pool,
+  // which the `--num-threads / -j` option of the index builder configures (see
+  // `ad_utility::setGlobalExecutorNumThreads`).
+  size_t numThreads = ad_utility::globalExecutorNumThreads();
+  size_t requestedTasks = numTasksInFlightOverride.value_or(numThreads);
+  // A value of 0 means "as many as the pool has threads", larger values are
+  // capped at that number.
+  size_t numConcurrentBlocks =
+      requestedTasks == 0 ? numThreads : std::min(requestedTasks, numThreads);
   // Allow at least 4 blocks to be in flight.
-  uint32_t maxNumTasksInFlight = std::max<uint32_t>(4, numConcurrentBlocks * 2);
+  size_t maxNumTasksInFlight = std::max<size_t>(4, numConcurrentBlocks * 2);
   return ad_utility::AsyncTaskQueue{ad_utility::globalExecutor(),
                                     maxNumTasksInFlight,
                                     "Compressing and writing blocks"};

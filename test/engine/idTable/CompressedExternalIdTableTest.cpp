@@ -18,6 +18,7 @@
 #include "../../util/IdTableHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
 #include "util/ConstexprUtils.h"
@@ -209,6 +210,104 @@ TEST(CompressedExternalIdTable, sorterRandomInputs) {
   testExternalSorter<0>(NUM_COLS, 10'000, 10_kB);
   testExternalSorter<0>(NUM_COLS, 1000, 1_MB);
   testExternalSorter<0>(NUM_COLS, 0, 1_MB);
+}
+
+// Run the same battery of tests as `sorterRandomInputs` above, but with the
+// external sorters in the row-major mode, see `ad_utility::SortBlockBuffer`.
+// This covers all the phases of the sorter in that mode: the transposition of
+// the input, the sorting of a single block, the writing and reading of the
+// presorted runs, the merge (including the case where its output blocks are
+// spilled to disk), and the transposition of the output.
+TEST(CompressedExternalIdTable, sorterRandomInputsRowMajor) {
+  using namespace ad_utility::memory_literals;
+  const bool previousMode =
+      getRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>();
+  setRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>(true);
+  absl::Cleanup cleanup = [previousMode] {
+    setRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>(
+        previousMode);
+  };
+  testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB);
+  testExternalSorter<NUM_COLS>(NUM_COLS, 1000, 1_MB);
+  testExternalSorter<NUM_COLS>(NUM_COLS, 0, 1_MB);
+
+  testExternalSorter<0>(NUM_COLS, 10'000, 10_kB);
+  testExternalSorter<0>(NUM_COLS, 1000, 1_MB);
+  testExternalSorter<0>(NUM_COLS, 0, 1_MB);
+}
+
+// _____________________________________________________________________________
+// The blocks of a *column-major* buffer are sorted by
+// `ad_utility::blockSort::blockIndirectSort` through the proxy row references
+// of an `IdTable`, see `sortBlockRange`. The blocks of the sorter tests above
+// are far too small for the parallel paths of that sort, so this test sorts
+// ranges that are big enough for them: one that takes the parallel quicksort
+// (fewer than `minNumThreadsForBlocks` threads) and one that takes the full
+// block indirect algorithm, including the merging and the moving of the
+// blocks.
+TEST(CompressedExternalIdTable, blockIndirectSortOfColumnMajorRows) {
+  // Order by all columns, so that the result of the (unstable) sort is unique
+  // and can be compared to a reference.
+  auto lessThanByAllColumns = [](const auto& a, const auto& b) {
+    for (size_t col = 0; col < NUM_COLS; ++col) {
+      if (a[col] != b[col]) {
+        return a[col] < b[col];
+      }
+    }
+    return false;
+  };
+  // Enough rows for `detail::minNumThreadsForBlocks` threads, each of which
+  // needs a whole group of blocks, see `detail::runSort`.
+  constexpr size_t numRows = 400'000;
+  net::thread_pool pool{8};
+  auto runTest = [&](uint32_t numThreads) {
+    SCOPED_TRACE(absl::StrCat("numThreads=", numThreads));
+    CopyableIdTable<NUM_COLS> table =
+        createRandomlyFilledIdTable(numRows, NUM_COLS).toStatic<NUM_COLS>();
+    CopyableIdTable<NUM_COLS> expected = table;
+    ql::ranges::sort(expected, lessThanByAllColumns);
+
+    ad_utility::blockSort::blockIndirectSort(
+        ql::ranges::subrange{table.begin(), table.end()}, lessThanByAllColumns,
+        numThreads, pool.get_executor());
+    EXPECT_EQ(table, expected);
+  };
+  // Below `detail::minNumThreadsForBlocks`, so this is the parallel quicksort.
+  runTest(2);
+  // The full block indirect sort.
+  runTest(8);
+  pool.join();
+}
+
+// _____________________________________________________________________________
+// The runtime parameter `external-sorter-compression-level` (see
+// `RuntimeParameters::externalSorterCompressionLevel_`) sets the compression
+// of the blocks of the presorted runs as well as of the blocks that the merge
+// phase spills. Whatever it is set to, the sorted output has to be the same,
+// and an invalid value has to be rejected.
+TEST(CompressedExternalIdTable, externalSorterCompressionLevel) {
+  using namespace ad_utility::memory_literals;
+  const std::string previousValue = getRuntimeParameter<
+      &RuntimeParameters::externalSorterCompressionLevel_>();
+  absl::Cleanup cleanup = [&previousValue] {
+    setRuntimeParameter<&RuntimeParameters::externalSorterCompressionLevel_>(
+        previousValue);
+  };
+
+  for (const std::string& value : {"default", "none", "1", "-5"}) {
+    SCOPED_TRACE(absl::StrCat("external-sorter-compression-level=", value));
+    setRuntimeParameter<&RuntimeParameters::externalSorterCompressionLevel_>(
+        value);
+    // The blocks are deliberately small, so that both the presorted runs and
+    // the merge phase consist of many of them.
+    testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB);
+  }
+
+  setRuntimeParameter<&RuntimeParameters::externalSorterCompressionLevel_>(
+      "not a level");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::compressedExternalIdTable::sorterCompressionLevels(),
+      ::testing::HasSubstr("neither `default`, nor `none`, nor an integer"));
 }
 
 // Test that destroying the sorter while an async block-sorting task is still
@@ -1408,4 +1507,93 @@ TEST(CompressedExternalIdTable, pushBlockCreatesSameBlocksAsRowWisePush) {
   runTestForBlocksize(1, 20);
   runTestForBlocksize(10, 100);
   runTestForBlocksize(10, 101);
+}
+
+// _____________________________________________________________________________
+// Push the `tables` into a sorter with the given `blocksize`, using one thread
+// per table and `pushBlockConcurrently`, and check that the sorted output
+// consists of exactly the rows of all the tables. The `numAdditionalRowWise`
+// last rows of the last table are afterwards pushed one by one via `push`, to
+// check that the concurrent pushing can be mixed with the sequential one.
+void testPushBlockConcurrently(const std::vector<IdTable>& tables,
+                               size_t blocksize,
+                               size_t numAdditionalRowWise = 0,
+                               source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  SCOPED_TRACE(absl::StrCat("blocksize = ", blocksize));
+  auto alloc = ad_utility::testing::makeAllocator();
+  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> sorter{
+      filename, NUM_COLS, memoryForBlocksize(blocksize, NUM_COLS), alloc};
+
+  // All the rows that are pushed, which is what the sorted output has to
+  // consist of.
+  IdTable expected{NUM_COLS, alloc};
+  for (const auto& table : tables) {
+    expected.insertAtEnd(table);
+  }
+
+  {
+    std::vector<ad_utility::JThread> threads;
+    for (const auto& table : tables) {
+      threads.emplace_back(
+          [&sorter, &table]() { sorter.pushBlockConcurrently(table); });
+    }
+  }
+  EXPECT_EQ(sorter.size(), expected.numRows());
+
+  const auto& lastTable = tables.back();
+  AD_CONTRACT_CHECK(numAdditionalRowWise <= lastTable.numRows());
+  for (size_t i = lastTable.numRows() - numAdditionalRowWise;
+       i < lastTable.numRows(); ++i) {
+    sorter.push(lastTable[i]);
+    expected.push_back(lastTable[i]);
+  }
+  EXPECT_EQ(sorter.size(), expected.numRows());
+
+  ql::ranges::sort(expected, SortByOSP{});
+  auto result = sortedOutput(sorter);
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+// `pushBlockConcurrently` may be called from several threads at the same time,
+// and the result is the same as if the rows had been pushed sequentially (the
+// order of the rows within a block is arbitrary, but the sorter sorts them
+// anyway).
+TEST(CompressedExternalIdTable, pushBlockConcurrently) {
+  auto runForBothLayouts = [](auto testCase) {
+    for (bool rowMajor : {false, true}) {
+      setRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>(
+          rowMajor);
+      absl::Cleanup restore = []() {
+        setRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>(false);
+      };
+      SCOPED_TRACE(absl::StrCat("rowMajor = ", rowMajor));
+      testCase();
+    }
+  };
+
+  std::vector<IdTable> tables;
+  for (size_t i = 0; i < 8; ++i) {
+    tables.push_back(createRandomlyFilledIdTable(500 + 37 * i, NUM_COLS));
+  }
+  runForBothLayouts([&tables]() {
+    // A blocksize that is much larger than a single table, one that is much
+    // smaller, and the degenerate case of a single row per block.
+    testPushBlockConcurrently(tables, 10'000);
+    testPushBlockConcurrently(tables, 64);
+    testPushBlockConcurrently(tables, 1);
+    // The pushes are so few that they never fill a single block, so the sorter
+    // takes its "everything fits into a single block" shortcut.
+    testPushBlockConcurrently(tables, 100'000);
+    // Mixing the concurrent pushes with sequential ones.
+    testPushBlockConcurrently(tables, 64, 20);
+    testPushBlockConcurrently(tables, 100'000, 20);
+  });
 }

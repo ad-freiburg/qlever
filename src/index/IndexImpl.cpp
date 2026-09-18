@@ -937,8 +937,8 @@ std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
   // This function is only used by the runtime index rebuild (see
   // `IndexRebuilder`), which by default throttles the compress/write threads
   // of its permutation writers so that a rebuild on a live server leaves most
-  // of the CPU to concurrent queries. A value of 0 means "fall back to
-  // `permutation-writer-num-threads`".
+  // of the CPU to concurrent queries. A value of 0 means "fall back to the
+  // number of threads of the global thread pool".
   auto numWriterThreads = getRuntimeParameterAsOptional<
       &RuntimeParameters::rebuildPermutationWriterNumThreads_>();
   auto metaData = createPermutationImpl(

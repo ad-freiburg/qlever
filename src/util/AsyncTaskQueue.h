@@ -151,6 +151,20 @@ class AsyncTaskQueue {
     cv_.notify_all();
   }
 
+  // Block until all tasks that have been pushed so far have been completed. In
+  // contrast to `finish()`, further tasks may be pushed afterwards, so this
+  // function may be called several times to wait for consecutive batches of
+  // tasks. It may only be called by the thread that pushes the tasks, because
+  // a task that another thread pushes concurrently is not necessarily waited
+  // for.
+  //
+  // NOTE: Just like `finish()`, this function must not be called from a thread
+  // that runs the executor, see the class comment above.
+  void waitUntilAllTasksAreDone() {
+    std::unique_lock lock{mutex_};
+    cv_.wait(lock, [this]() { return numTasksInFlight_ == 0; });
+  }
+
   // Block the current thread until a call to `finish()` on this queue has been
   // completed. In contrast to `finish()`, this function doesn't itself initiate
   // the finishing.

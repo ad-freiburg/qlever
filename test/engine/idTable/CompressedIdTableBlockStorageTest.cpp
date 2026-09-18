@@ -41,6 +41,7 @@
 #include "../../util/GTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedIdTableBlockStorage.h"
+#include "engine/idTable/RowMajorMergeBlock.h"
 #include "util/parallelBlockMerge/InOrderBlockSink.h"
 
 namespace {
@@ -1077,6 +1078,87 @@ ASYNC_TEST_N(CompressedIdTableBlockStorage, abortWhileProducersRun, 4) {
   std::optional<IdTableStatic<0>> block =
       co_await sink.asyncGetNextBlock(net::use_awaitable);
   EXPECT_FALSE(block.has_value());
+}
+
+// _____________________________________________________________________________
+// A block type whose `BlockCodec` says that it needs a finalization is brought
+// into the layout of the consumer by the storage itself, on the `ioExecutor`,
+// see the FINALIZATION note at `CompressedIdTableBlockStorage`. This is the
+// case for the row-major block of the merge phase, which arrives at the
+// consumer column-major no matter whether it was spilled or not.
+TEST(CompressedIdTableBlockStorage, aBlockInMemoryIsFinalized) {
+  constexpr size_t numCols = 3;
+  using Block = ad_utility::RowMajorMergeBlock<numCols>;
+  using RowMajorStorage =
+      ad_utility::CompressedIdTableBlockStorage<numCols, Block>;
+  static_assert(
+      ad_utility::parallelBlockMerge::BlockStorageConcept<RowMajorStorage,
+                                                          Block>);
+
+  // Two blocks, of which the first one stays in memory (and is therefore
+  // finalized) and the second one is spilled (and therefore comes back
+  // column-major from the file).
+  auto makeRowMajorBlock = [](const std::vector<int64_t>& values) {
+    Block block{ad_utility::testing::makeAllocator()};
+    for (int64_t value : values) {
+      Row row = makeRow(value, numCols);
+      ad_utility::rowMajorIdTable::Row<numCols> rowMajorRow{};
+      for (size_t columnIdx = 0; columnIdx < numCols; ++columnIdx) {
+        rowMajorRow[columnIdx] = Id::makeFromInt(row[columnIdx]);
+      }
+      block.push_back(rowMajorRow);
+    }
+    return block;
+  };
+
+  net::io_context ioContext;
+  Strand strand = net::make_strand(ioContext.get_executor());
+  std::string prefix = gtestCurrentTestName();
+  RowMajorStorage storage{strand, ioContext.get_executor(), prefix,
+                          ad_utility::testing::makeAllocator(),
+                          /*maxBufferedBlocksPerChunk=*/1};
+
+  std::vector<std::vector<Row>> received;
+  std::vector<bool> wasRowMajor;
+  net::post(strand, [&] {
+    storage.storeBlock(0, makeRowMajorBlock({0, 1}),
+                       [&](std::exception_ptr exception, bool wasStored) {
+                         ASSERT_EQ(exception, nullptr);
+                         ASSERT_TRUE(wasStored);
+                         storage.storeBlock(
+                             0, makeRowMajorBlock({2, 3, 4}),
+                             [](std::exception_ptr exception, bool wasStored) {
+                               ASSERT_EQ(exception, nullptr);
+                               ASSERT_TRUE(wasStored);
+                             });
+                       });
+  });
+  ioContext.run();
+  ioContext.restart();
+
+  auto getOne = [&](auto&& self) -> void {
+    storage.getBlock(0, [&, self](std::exception_ptr exception,
+                                  typename RowMajorStorage::GetResult result) {
+      ASSERT_EQ(exception, nullptr);
+      ASSERT_FALSE(result.wasCancelled());
+      ASSERT_FALSE(result.isEndOfChunk());
+      Block block = std::move(result).get();
+      wasRowMajor.push_back(block.isRowMajor());
+      received.push_back(blockRows<numCols>(std::move(block).toColumnMajor(
+          ad_utility::testing::makeAllocator())));
+      if (received.size() < 2) {
+        self(self);
+      }
+    });
+  };
+  net::post(strand, [&] { getOne(getOne); });
+  ioContext.run();
+
+  // Neither of the two blocks reaches the consumer row-major: the first one was
+  // finalized in memory, the second one came back from the file.
+  EXPECT_THAT(wasRowMajor, ::testing::ElementsAre(false, false));
+  EXPECT_THAT(received, ::testing::ElementsAre(makeRows(numCols, {0, 1}),
+                                               makeRows(numCols, {2, 3, 4})));
 }
 
 // _____________________________________________________________________________

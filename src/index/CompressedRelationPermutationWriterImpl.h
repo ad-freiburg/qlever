@@ -10,8 +10,11 @@
 
 #include <algorithm>
 #include <boost/asio/strand.hpp>
+#include <boost/asio/thread_pool.hpp>
+#include <deque>
 #include <future>
 #include <memory>
+#include <mutex>
 #include <optional>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -154,54 +157,68 @@ struct CompressedRelationWriter::PermutationWriter {
 
   BlockCallbackManager blockCallbackManager_;
 
-  // The number of distinct `col1` IDs of the large relation that is currently
-  // written. It is accumulated from the counts that the background tasks
-  // compute for the individual blocks (see `writeBlockOfLargeRelation`), so
-  // that the thread which drives this `PermutationWriter` never has to look at
-  // the `col1` IDs itself. For small relations it stays zero, because no
-  // metadata (and thus no such count) is needed for them.
-  size_t numDistinctCol1_ = 0;
-  // The last `col1` ID of the block of the current relation that was counted
-  // last. An ID that ends one block and starts the next one must not be counted
-  // twice, see `addDistinctCol1CountOfBlock`.
-  std::optional<Id> lastCol1OfPreviousBlock_;
+  // The number of threads that write the blocks of large relations, see
+  // `largeRelationBlockPool_` below.
+  static constexpr size_t numThreadsForBlocksOfLargeRelations = 10;
 
-  // Whether the writing of the blocks of large relations is offloaded to a
-  // background thread, see `addBlockForLargeRelation` below. This requires the
-  // global thread pool to have more than one thread, because such a background
-  // task may block while it waits for a free slot in the (bounded) block write
-  // queue of `writer1_`, so that at least one other thread of the pool has to
-  // remain available to drain that queue.
-  const bool offloadLargeRelationBlocks_ =
-      ad_utility::globalExecutorNumThreads() > 1;
+  // The number of distinct `col1` IDs of each block of the large relation that
+  // is currently written, in the order in which the blocks were scheduled (see
+  // `scheduleBlockOfLargeRelation`). The counting is done by the background
+  // tasks, so that the thread which drives this `PermutationWriter` never has
+  // to look at the `col1` IDs itself. The counts are only folded into the
+  // single number that the metadata needs once the relation is complete, see
+  // `getAndResetNumDistinctCol1`. For small relations this stays empty,
+  // because no metadata (and thus no such count) is needed for them.
+  //
+  // NOTE: This is a `std::deque` and not a `std::vector`, because the
+  // background tasks write into its elements while the driving thread appends
+  // further elements, and appending to a `deque` (unlike to a `vector`) leaves
+  // the elements that are already there exactly where they are.
+  std::deque<compressedRelationHelpers::DistinctIdCountOfBlock>
+      distinctCol1Counts_;
 
-  // The result of `writeBlockOfLargeRelation` below.
-  struct WrittenBlock {
-    // An empty block buffer whose memory is already allocated, so that it can
-    // be reused for one of the next blocks without a further allocation. It is
-    // only set if the block that was written owned its rows, because only then
-    // a buffer was consumed that has to be replaced.
-    std::optional<IdTable> buffer_;
-    // The number of distinct `col1` IDs in the block that was written.
-    compressedRelationHelpers::DistinctIdCountOfBlock distinctCol1Count_;
-  };
-
-  // The result of the background task that currently writes a block of a large
-  // relation, if there is one, see `addBlockForLargeRelation`.
-  std::optional<std::future<WrittenBlock>> pendingBlockOfLargeRelation_;
+  // The total time that this writer has spent waiting for the background tasks
+  // that write the blocks of large relations, see
+  // `waitForBlocksOfLargeRelation`. It is reported at the end of
+  // `writePermutation`.
   ad_utility::Timer largeRelationBlockTimer_{ad_utility::Timer::Stopped};
 
+  // The pool of threads on which the blocks of large relations are written,
+  // see `scheduleBlockOfLargeRelation` below.
+  //
+  // This is deliberately a pool of its own and not the global thread pool.
+  // Writing those blocks is one of the more expensive parts of the permutation
+  // phase, and threads that do nothing else make that cost directly visible in
+  // a profile. It also removes the reason to ever write the blocks in the
+  // calling thread instead: a task of this pool may block while it waits for a
+  // free slot in the (bounded) block write queue of `writer1_`, and blocking
+  // these threads never keeps the global thread pool from draining that queue.
+  boost::asio::thread_pool largeRelationBlockPool_{
+      numThreadsForBlocksOfLargeRelations};
+
+  // The tasks of the `largeRelationBlockQueue_` run concurrently, but
+  // `writer1_` is not thread-safe, so the calls to its
+  // `addBlockForLargeRelation` are serialized by this mutex. That is cheap,
+  // because that function only does some bookkeeping and then hands the block
+  // to the (asynchronous) block write queue of `writer1_`; all the expensive
+  // work of a task (counting the distinct `col1` IDs and copying the block
+  // into the `twinRelationSorter_`) happens outside of the mutex.
+  std::mutex writer1Mutex_;
+
   // The queue via which the writing of the blocks of large relations is
-  // offloaded to the global thread pool. At most one of its tasks is in flight
-  // at any time, because the caller always waits for the previous task before
-  // it submits the next one. The tasks are therefore automatically serialized,
-  // which is required, as they use `writer1_` and the `twinRelationSorter_`.
+  // offloaded to the `largeRelationBlockPool_`. Its tasks may run concurrently
+  // and in an arbitrary order, which is fine: the blocks of a relation may be
+  // written in any order (the block metadata is sorted at the end, see
+  // `getFinishedBlocks`), and the twin relation is re-sorted anyway.
   //
   // NOTE: This member is deliberately declared after all the members that its
-  // tasks use, so that its destructor (which waits for a pending task) runs
-  // before those members are destroyed.
+  // tasks use (the `largeRelationBlockPool_` included), so that its destructor
+  // (which waits for the pending tasks) runs before those members are
+  // destroyed.
   ad_utility::AsyncTaskQueue largeRelationBlockQueue_{
-      ad_utility::globalExecutor(), 2, "Writing blocks of large relations"};
+      largeRelationBlockPool_.get_executor(),
+      2 * numThreadsForBlocksOfLargeRelations,
+      "Writing blocks of large relations"};
 
   size_t numTriplesProcessed_ = 0;
   ad_utility::ProgressBar progressBar_{numTriplesProcessed_,
@@ -239,8 +256,10 @@ struct CompressedRelationWriter::PermutationWriter {
     writer1_->smallBlocksCallback_ =
         AddBlockOfSmallRelationsToSwitched{*writer2_};
     // The buffers of the blocks of large relations are reused, see
-    // `addBlockForLargeRelation`.
-    writer1_->enableBlockRecycling();
+    // `makeRecyclingOwner`. One buffer is needed per block that is in flight,
+    // plus the one that is currently filled.
+    writer1_->enableBlockRecycling(
+        largeRelationBlockQueue_.maxNumTasksInFlight() + 1);
   }
 
   // Constructor for a `PermutationWriter` which writes a single permutation.
@@ -264,124 +283,130 @@ struct CompressedRelationWriter::PermutationWriter {
     AD_CORRECTNESS_CHECK(permutation_.keys().at(3) == 3);
     AD_CORRECTNESS_CHECK(blocksize_ > 0);
     // The buffers of the blocks of large relations are reused, see
-    // `addBlockForLargeRelation`.
-    writer1_->enableBlockRecycling();
+    // `makeRecyclingOwner`. One buffer is needed per block that is in flight,
+    // plus the one that is currently filled.
+    writer1_->enableBlockRecycling(
+        largeRelationBlockQueue_.maxNumTasksInFlight() + 1);
   }
 
-  // The actual work of `addBlockForLargeRelation` below: Count the distinct
-  // `col1` IDs of the `relation`, push it into the twin sorter for `writer2`
-  // (only if a pair of permutations is written), and add it as a block of the
-  // large relation with the given `col0Id` to `writer1`.
+  // Schedule the writing of a single block of the large relation with the given
+  // `col0Id`. The `block` is a view of the rows of the block, and the `owner`
+  // keeps those rows alive for as long as any of the scheduled tasks (or
+  // `writer1_`) still looks at them.
   //
-  // NOTE: This function is typically run on a background thread (see
-  // `addBlockForLargeRelation`). It is the only user of `writer1_` and of the
-  // `twinRelationSorter_` while it runs, because the caller waits for it
-  // before it touches either of them again.
-  WrittenBlock writeBlockOfLargeRelation(Id col0Id, BlockToWrite relation) {
-    using namespace compressedRelationHelpers;
-    const bool ownsRows = relation.ownsRows();
-    auto view = relation.view();
+  // Two tasks are scheduled for each block, which run concurrently to each
+  // other and to the tasks of the other blocks (that is the whole point of
+  // them): One counts the distinct `col1` IDs of the block, the other copies
+  // the block into the `twinRelationSorter_` (only if a pair of permutations
+  // is written) and hands it to `writer1_`. Both of them scan the complete
+  // block, which is why they are deliberately not merged into a single task.
+  void scheduleBlockOfLargeRelation(IdTableView<0> block,
+                                    BlockToWrite::Owner owner) {
+    AD_CORRECTNESS_CHECK(!block.empty());
+    Id col0Id = col0IdCurrentRelation_.value();
+    ++numBlocksCurrentRel_;
+    // Note: The counting task writes into this element, which is why it is
+    // appended (and not assigned) here, before that task is scheduled.
+    distinctCol1Counts_.emplace_back();
+    auto* distinctCol1Count = &distinctCol1Counts_.back();
     // Note: This scan of the `col1` column is the reason why counting the
     // distinct `col1` IDs is done here and not by the thread that fills the
     // buffers (which is the bottleneck of the permutation writing).
-    auto distinctCol1Count = countDistinctIds(view.getColumn(c1Idx));
-    if constexpr (WritePair) {
-      auto twinRelation = view;
-      twinRelation.swapColumns(c1Idx, c2Idx);
-      // Note: `pushBlock` inserts the columns of the `twinRelation`
-      // contiguously, which is much faster than pushing the rows one by one.
-      twinRelationSorter_.pushBlock(twinRelation);
-    }
-    writer1_->addBlockForLargeRelation(col0Id, std::move(relation));
-    std::optional<IdTable> buffer;
-    if (ownsRows) {
-      buffer = writer1_->takeRecycledBlock(numColumns_, alloc_);
-    }
-    return {std::move(buffer), distinctCol1Count};
+    largeRelationBlockQueue_.push([block, owner, distinctCol1Count]() {
+      *distinctCol1Count = compressedRelationHelpers::countDistinctIds(
+          block.getColumn(compressedRelationHelpers::c1Idx));
+    });
+    largeRelationBlockQueue_.push(
+        [this, block, owner = std::move(owner), col0Id]() mutable {
+          using namespace compressedRelationHelpers;
+          if constexpr (WritePair) {
+            auto twinRelation = block;
+            twinRelation.swapColumns(c1Idx, c2Idx);
+            // Note: `pushBlockConcurrently` inserts the columns of the
+            // `twinRelation` contiguously, which is much faster than pushing
+            // the rows one by one, and it does so concurrently to the pushes
+            // of the other blocks. The order in which the blocks end up in the
+            // sorter doesn't matter, because they are sorted anyway.
+            twinRelationSorter_.pushBlockConcurrently(twinRelation);
+          }
+          std::lock_guard lock{writer1Mutex_};
+          writer1_->addBlockForLargeRelation(
+              col0Id, BlockToWrite{block, std::move(owner)});
+        });
   }
 
-  // Add the distinct `col1` count of a single block of the current relation to
-  // the `numDistinctCol1_`. An ID that ends the previous block and starts this
-  // one is only counted once.
-  void addDistinctCol1CountOfBlock(
-      const compressedRelationHelpers::DistinctIdCountOfBlock& count) {
-    using compressedRelationHelpers::bitsOfIdWithoutLocalVocab;
-    numDistinctCol1_ += count.count_;
-    if (lastCol1OfPreviousBlock_.has_value() &&
-        bitsOfIdWithoutLocalVocab(lastCol1OfPreviousBlock_.value()) ==
-            bitsOfIdWithoutLocalVocab(count.first_)) {
-      --numDistinctCol1_;
-    }
-    lastCol1OfPreviousBlock_ = count.last_;
+  // Wrap a filled block buffer in a `shared_ptr`, which keeps the rows of the
+  // block alive for as long as any of the background tasks (or `writer1_`)
+  // still looks at them. Once the last of them is done with it, the buffer is
+  // given back to the pool of `writer1_`, from where it is taken again for one
+  // of the next blocks (see `takeRecycledBlock`), so that the same few buffers
+  // are used over and over again and almost no allocations are needed.
+  std::shared_ptr<IdTable> makeRecyclingOwner(IdTable buffer) {
+    auto recycle = [writer = writer1_.get()](IdTable* table) {
+      writer->recycleBlock(std::move(*table));
+      delete table;
+    };
+    return std::shared_ptr<IdTable>{new IdTable{std::move(buffer)},
+                                    std::move(recycle)};
   }
 
-  // Forget the distinct `col1` count that was accumulated so far, so that the
-  // counting starts from scratch for the next relation.
-  void resetNumDistinctCol1() {
-    numDistinctCol1_ = 0;
-    lastCol1OfPreviousBlock_.reset();
+  // Wait for all the background tasks that write blocks of the current large
+  // relation. This has to be called before `writer1_` or the
+  // `twinRelationSorter_` are used by this thread, because those tasks use
+  // both of them, see `scheduleBlockOfLargeRelation` above. It also has to be
+  // called before the counts in the `distinctCol1Counts_` are read.
+  void waitForBlocksOfLargeRelation() {
+    largeRelationBlockTimer_.cont();
+    largeRelationBlockQueue_.waitUntilAllTasksAreDone();
+    largeRelationBlockTimer_.stop();
   }
+
+  // Forget the distinct `col1` counts that were collected so far, so that the
+  // counting starts from scratch for the next relation. May only be called
+  // when no background task writes into them anymore, see
+  // `waitForBlocksOfLargeRelation` above.
+  void resetNumDistinctCol1() { distinctCol1Counts_.clear(); }
 
   // Return the number of distinct `col1` IDs of the relation that was just
-  // completed, and reset the counting for the next relation.
+  // completed, and reset the counting for the next relation. An ID that ends
+  // one block and starts the next one is only counted once, which is why the
+  // counts of the single blocks have to be folded in the order of the blocks.
+  // May only be called when no background task writes into the counts anymore,
+  // see `waitForBlocksOfLargeRelation` above.
   size_t getAndResetNumDistinctCol1() {
-    size_t result = numDistinctCol1_;
+    using compressedRelationHelpers::bitsOfIdWithoutLocalVocab;
+    size_t result = 0;
+    std::optional<Id> lastCol1OfPreviousBlock;
+    for (const auto& count : distinctCol1Counts_) {
+      result += count.count_;
+      if (lastCol1OfPreviousBlock.has_value() &&
+          bitsOfIdWithoutLocalVocab(lastCol1OfPreviousBlock.value()) ==
+              bitsOfIdWithoutLocalVocab(count.first_)) {
+        --result;
+      }
+      lastCol1OfPreviousBlock = count.last_;
+    }
     resetNumDistinctCol1();
     return result;
   }
 
-  // Wait for the background task that writes the previous block of a large
-  // relation, if there is such a task. This has to be called before `writer1_`
-  // or the `twinRelationSorter_` are used again, because the background task
-  // uses both of them, see `writeBlockOfLargeRelation` above. If the task
-  // yields a block buffer, then that buffer is handed back to `writer1_`, from
-  // where it is taken again for one of the next blocks.
-  void flushPendingBlockOfLargeRelation() {
-    if (!pendingBlockOfLargeRelation_.has_value()) {
-      return;
-    }
-    largeRelationBlockTimer_.cont();
-    // Note: `get()` rethrows an exception that the background task has thrown.
-    WrittenBlock written = pendingBlockOfLargeRelation_.value().get();
-    pendingBlockOfLargeRelation_.reset();
-    largeRelationBlockTimer_.stop();
-    addDistinctCol1CountOfBlock(written.distinctCol1Count_);
-    if (written.buffer_.has_value()) {
-      writer1_->recycleBlock(std::move(written.buffer_).value());
-    }
-  }
-
-  // Write a block of a large relation with `writer1` and also push the block
-  // into the twin sorter for `writer2`. The actual work is performed on a
-  // background thread (see `writeBlockOfLargeRelation` above), so that the
-  // calling thread can already fill the buffer for the next block in the
-  // meantime. The `relation_` buffer is passed to that background thread,
-  // which in return yields the buffer of the previous block, so that the same
-  // two buffers are alternately used and no further allocations are needed.
-  // The background thread also counts the distinct `col1` IDs of the block,
-  // see `writeBlockOfLargeRelation` above.
+  // Write the buffered rows of the current (large) relation as its next block.
+  // The actual work is performed in the background (see
+  // `scheduleBlockOfLargeRelation` above), so that the calling thread can
+  // immediately go on filling the buffer for the next block. That buffer is
+  // taken from the pool of recycled buffers of `writer1_`, to which the buffer
+  // of this block is given back once it is no longer needed, so that the same
+  // few buffers are used over and over again.
   void addBlockForLargeRelation() {
     if (relation_.empty()) {
       return;
     }
-    Id col0Id = col0IdCurrentRelation_.value();
-    if (offloadLargeRelationBlocks_) {
-      // Wait for the previously offloaded block, whose buffer we fill next.
-      flushPendingBlockOfLargeRelation();
-      pendingBlockOfLargeRelation_ = largeRelationBlockQueue_.submit(
-          [this, col0Id, relation = std::move(relation_)]() mutable {
-            return writeBlockOfLargeRelation(col0Id, std::move(relation));
-          });
-      relation_ = writer1_->takeRecycledBlock(numColumns_, alloc_);
-    } else {
-      WrittenBlock written =
-          writeBlockOfLargeRelation(col0Id, std::move(relation_));
-      addDistinctCol1CountOfBlock(written.distinctCol1Count_);
-      relation_ = std::move(written.buffer_).value();
-    }
+    auto owner = makeRecyclingOwner(std::move(relation_));
+    auto block = owner->template asStaticView<0>();
+    relation_ = writer1_->takeRecycledBlock(numColumns_, alloc_);
     relation_.clear();
     relation_.reserve(blocksize_);
-    ++numBlocksCurrentRel_;
+    scheduleBlockOfLargeRelation(block, std::move(owner));
   }
 
   // Write the given rows of the current input block as the next block of the
@@ -389,27 +414,11 @@ struct CompressedRelationWriter::PermutationWriter {
   // first. The `block` has to be a view of the rows of `inputBlock_`, which is
   // kept alive until the block has been written. Apart from that, this behaves
   // exactly like `addBlockForLargeRelation` above; in particular the actual
-  // work is also performed on a background thread. The `relation_` buffer has
-  // to be empty, so that the blocks of the relation are still written in the
-  // correct order.
+  // work is also performed in the background. The `relation_` buffer has to be
+  // empty, because its rows precede the rows of this block.
   void addBlockOfLargeRelationWithoutCopying(IdTableView<0> block) {
     AD_CORRECTNESS_CHECK(relation_.empty() && !block.empty());
-    Id col0Id = col0IdCurrentRelation_.value();
-    BlockToWrite blockToWrite{std::move(block), inputBlock_};
-    if (offloadLargeRelationBlocks_) {
-      // Wait for the previously offloaded block, because the blocks of a
-      // relation have to be written in order.
-      flushPendingBlockOfLargeRelation();
-      pendingBlockOfLargeRelation_ = largeRelationBlockQueue_.submit(
-          [this, col0Id, blockToWrite = std::move(blockToWrite)]() mutable {
-            return writeBlockOfLargeRelation(col0Id, std::move(blockToWrite));
-          });
-    } else {
-      WrittenBlock written =
-          writeBlockOfLargeRelation(col0Id, std::move(blockToWrite));
-      addDistinctCol1CountOfBlock(written.distinctCol1Count_);
-    }
-    ++numBlocksCurrentRel_;
+    scheduleBlockOfLargeRelation(block, inputBlock_);
   }
 
   // We have encountered the last occurrence of the current relation (value for
@@ -429,9 +438,9 @@ struct CompressedRelationWriter::PermutationWriter {
       // The relation is large;
       addBlockForLargeRelation();
       // All the remaining work of this function uses `writer1_`, `writer2_`,
-      // and the `twinRelationSorter_`, so the block that was just offloaded
-      // has to be completely written first.
-      flushPendingBlockOfLargeRelation();
+      // and the `twinRelationSorter_`, so the blocks that are still being
+      // written in the background have to be completely written first.
+      waitForBlocksOfLargeRelation();
       auto md1 = writer1_->finishLargeRelation(getAndResetNumDistinctCol1());
       if constexpr (WritePair) {
         largeTwinRelationTimer_.cont();
@@ -478,10 +487,6 @@ struct CompressedRelationWriter::PermutationWriter {
                            largeTwinRelationTimer_.msecs())
                     << "s" << std::endl;
     }
-    AD_LOG_TIMING << "Time spent waiting for the blocks of large relations "
-                  << ad_utility::Timer::toSeconds(
-                         largeRelationBlockTimer_.msecs())
-                  << "s" << std::endl;
     AD_LOG_TIMING
         << "Time spent waiting for triple callbacks (e.g. the next sorter) "
         << ad_utility::Timer::toSeconds(
@@ -717,11 +722,12 @@ struct CompressedRelationWriter::PermutationWriter {
     }
 
     numDistinctCol0_ += numRelations;
-    // The batch is written with `writer1_`, so a block of a large relation that
-    // is still being written in the background has to be finished first. Note
-    // that there never is such a block here, because `finishRelation` waits for
-    // it, but the check is cheap and makes the invariant explicit.
-    flushPendingBlockOfLargeRelation();
+    // The batch is written with `writer1_`, so the blocks of a large relation
+    // that are still being written in the background have to be finished
+    // first. Note that there never are such blocks here, because
+    // `finishRelation` waits for them, but the check is cheap and makes the
+    // invariant explicit.
+    waitForBlocksOfLargeRelation();
     // Note: The distinct `col1` IDs are deliberately not counted here, because
     // no metadata is stored for small relations (see `addSmallRelations`). The
     // count is zero for these relations anyway, but reset it, so that a future
@@ -827,7 +833,18 @@ struct CompressedRelationWriter::PermutationWriter {
     if (!relation_.empty() || numBlocksCurrentRel_ > 0) {
       finishRelation();
     }
-    flushPendingBlockOfLargeRelation();
+    waitForBlocksOfLargeRelation();
+    // Note: This is logged only now (and not directly after the final progress
+    // string above), because the last blocks of the last relation are written
+    // by the two calls above, so only now is the measurement complete.
+    // Note: The `value()` (in microseconds) is used instead of the `msecs()`
+    // of the other timers, because this wait is expected to be short and would
+    // otherwise be truncated to zero.
+    AD_LOG_INFO << "Time spent waiting for the background tasks that write the "
+                   "blocks of large relations: "
+                << ad_utility::Timer::toSeconds(
+                       largeRelationBlockTimer_.value())
+                << "s" << std::endl;
 
     writer1_->finish();
     if constexpr (WritePair) {

@@ -13,17 +13,22 @@
 #include <atomic>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <condition_variable>
 #include <exception>
 #include <future>
 #include <mutex>
 #include <optional>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/RowMajorIdTable.h"
+#include "engine/idTable/RowMajorMergeBlock.h"
+#include "global/RuntimeParameters.h"
 #include "util/AsyncStream.h"
 #include "util/CancellationHandle.h"
 #include "util/CompressedBlockFile.h"
@@ -38,13 +43,8 @@
 #include "util/PostAndGetFuture.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
+#include "util/blockSort/BlockIndirectSort.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
-
-#ifdef QLEVER_USE_HPX
-// NOTE: This header also gives us `hpx::sort` and `hpx::execution::par`, see
-// the comment about the macros in `util/HpxAsioExecutor.h`.
-#include "util/HpxAsioExecutor.h"
-#endif
 
 namespace ad_utility {
 
@@ -115,6 +115,12 @@ class CompressedExternalIdTableWriter {
   ad_utility::MemorySize blockSizeUncompressed_ =
       DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE;
 
+  // How the blocks of the columns are compressed, see `compressAndWriteColumn`
+  // and `decompressColumnInto`. `NO_BLOCK_COMPRESSION` stores them
+  // uncompressed. This is a property of the whole file (and not of a single
+  // block), so the reading side simply knows it and it is never stored.
+  CompressedBlockFile::CompressionLevel compressionLevel_ = ZSTD_DEFAULT_LEVEL;
+
   // Keep track of the number of active output generators to detect whether we
   // are currently reading from the file and it is thus unsafe to add to the
   // contents.
@@ -130,11 +136,14 @@ class CompressedExternalIdTableWriter {
       std::string filename, size_t numCols,
       ad_utility::AllocatorWithLimit<Id> allocator,
       ad_utility::MemorySize blockSizeUncompressed =
-          DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
+          DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+      CompressedBlockFile::CompressionLevel compressionLevel =
+          ZSTD_DEFAULT_LEVEL)
       : filename_{std::move(filename)},
         blocksPerColumn_(numCols),
         allocator_{std::move(allocator)},
-        blockSizeUncompressed_(blockSizeUncompressed) {}
+        blockSizeUncompressed_(blockSizeUncompressed),
+        compressionLevel_{compressionLevel} {}
 
   // Destructor. Deletes the stored file.
   ~CompressedExternalIdTableWriter() {
@@ -154,36 +163,83 @@ class CompressedExternalIdTableWriter {
 
   // Store an `idTable`.
   void writeIdTable(const IdTable& table) {
+    AD_CONTRACT_CHECK(table.numColumns() == numColumns());
+    const BlockLayout layout = prepareWrite(
+        table.numRows(),
+        [&table](size_t row) { return IdTable::row_type{table[row]}; });
+    // NOTE: The unit of parallelism is a single column of a single block, see
+    // `compressAndWriteBlockOfColumn`.
+    runTasksInParallel(layout.numBlocks_ * numColumns(), [this, &table, layout](
+                                                             size_t taskIdx) {
+      compressAndWriteBlockOfColumn(table, taskIdx / numColumns(),
+                                    taskIdx % numColumns(), layout);
+    });
+  }
+
+  // Store a row-major `table` (see `RowMajorIdTable.h`). The resulting blocks,
+  // and hence the whole file, are exactly the same as for the column-major
+  // `writeIdTable` above: each block is transposed into a scratch buffer right
+  // before it is compressed, see `transposeCompressAndWriteBlock`.
+  template <size_t NumCols>
+  void writeRowMajorIdTable(const RowMajorIdTable<NumCols>& table) {
+    AD_CONTRACT_CHECK(NumCols == numColumns());
+    const BlockLayout layout =
+        prepareWrite(table.numRows(), [&table](size_t row) {
+          return rowMajorIdTable::toDynamicRow<NumCols>(table[row]);
+        });
+    // NOTE: In contrast to the column-major case, the unit of parallelism is a
+    // whole block, because the transposition of a block has to happen for all
+    // of its columns at once, see `transposeCompressAndWriteBlock`.
+    runTasksInParallel(
+        layout.numBlocks_, [this, &table, layout](size_t blockIdx) {
+          transposeCompressAndWriteBlock(table, blockIdx, layout);
+        });
+  }
+
+ private:
+  // Where the blocks of the table that is currently being written live in the
+  // `blocksPerColumn_`, how many of them there are, and how many rows each of
+  // them has (the last one may have fewer).
+  struct BlockLayout {
+    size_t firstBlockIdx_;
+    size_t numBlocks_;
+    size_t blockSize_;
+  };
+
+  // Make room for the blocks of a new table with `numRows` rows and store the
+  // first and the last row of each of them, which `getRow(rowIdx)` returns.
+  // This is everything that the two `write...IdTable` functions above share;
+  // the layout of the table itself only matters for the compression.
+  //
+  // NOTE: The first and the last row of a block have to be stored here and not
+  // inside the per-column tasks of `writeIdTable`, because each of those tasks
+  // only sees a single column.
+  template <typename GetRow>
+  BlockLayout prepareWrite(size_t numRows, const GetRow& getRow) {
     if (numActiveGenerators_ != 0) {
       AD_THROW(
           "Trying to call `writeIdTable` on an "
           "`CompressedExternalIdTableWriter` that is currently being iterated "
           "over");
     }
-    AD_CONTRACT_CHECK(table.numColumns() == numColumns());
     size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
     AD_CONTRACT_CHECK(blockSize > 0);
     size_t firstBlockIdx = blocksPerColumn_.at(0).size();
     startOfSingleIdTables_.push_back(firstBlockIdx);
-    // Store the first and the last row of each of the new blocks. This has to
-    // happen here and not inside the per-block tasks below, because each of
-    // those tasks only sees a single column.
-    for (size_t lower = 0; lower < table.numRows(); lower += blockSize) {
-      size_t upper = std::min(lower + blockSize, table.numRows());
-      firstAndLastRowPerBlock_.emplace_back(table[lower]);
-      firstAndLastRowPerBlock_.emplace_back(table[upper - 1]);
+    for (size_t lower = 0; lower < numRows; lower += blockSize) {
+      size_t upper = std::min(lower + blockSize, numRows);
+      firstAndLastRowPerBlock_.push_back(getRow(lower));
+      firstAndLastRowPerBlock_.push_back(getRow(upper - 1));
     }
-    size_t numBlocks = (table.numRows() + blockSize - 1) / blockSize;
-    // Make room for the metadata of the new blocks. The tasks below then only
-    // *assign* to those elements (each task to an element of its own), so that
-    // no synchronization is needed for the metadata.
+    size_t numBlocks = (numRows + blockSize - 1) / blockSize;
+    // Make room for the metadata of the new blocks. The tasks of the callers
+    // then only *assign* to those elements (each task to an element of its
+    // own), so that no synchronization is needed for the metadata.
     for (auto& blockMetadata : blocksPerColumn_) {
       blockMetadata.resize(firstBlockIdx + numBlocks);
     }
-    compressAndWriteBlocks(table, firstBlockIdx, numBlocks, blockSize);
+    return {firstBlockIdx, numBlocks, blockSize};
   }
-
- private:
   // Compress the part of the `columnIdx`-th column of the `table` that belongs
   // to the block with index `blockIdx` (counted relative to the `table`), write
   // it to the file, and store the resulting metadata. The `firstBlockIdx` is
@@ -196,36 +252,84 @@ class CompressedExternalIdTableWriter {
   // and not for the compression), and the metadata of each block is stored in
   // an element of its own, which `writeIdTable` has allocated beforehand.
   void compressAndWriteBlockOfColumn(const IdTable& table, size_t blockIdx,
-                                     size_t columnIdx, size_t firstBlockIdx,
-                                     size_t blockSize) {
+                                     size_t columnIdx,
+                                     const BlockLayout& layout) {
     decltype(auto) column = table.getColumn(columnIdx);
-    size_t lower = blockIdx * blockSize;
-    size_t upper = std::min(lower + blockSize, column.size());
+    size_t lower = blockIdx * layout.blockSize_;
+    size_t upper = std::min(lower + layout.blockSize_, column.size());
     AD_CORRECTNESS_CHECK(lower < upper);
-    auto uncompressedSize = (upper - lower) * sizeof(Id);
-    auto compressed =
-        ZstdWrapper::compress(column.data() + lower, uncompressedSize);
-    size_t offset = 0;
-    file_.withWriteLock([&offset, &compressed](ad_utility::File& file) {
-      offset = file.tell();
-      file.write(compressed.data(), compressed.size());
-    });
-    blocksPerColumn_.at(columnIdx).at(firstBlockIdx + blockIdx) =
-        CompressedBlockMetadata{compressed.size(), uncompressedSize, offset};
+    compressAndWriteColumn(column.data() + lower, upper - lower,
+                           layout.firstBlockIdx_ + blockIdx, columnIdx);
   }
 
-  // Compress all the blocks of all the columns of the `table` and write them to
-  // the file (see `compressAndWriteBlockOfColumn`), using the global thread
-  // pool (see `util/GlobalExecutor.h`). Return only when all the blocks have
-  // been written, rethrowing the first exception that any of them has thrown.
+  // Transpose the block with the (table-relative) index `blockIdx` of the
+  // row-major `table` into a scratch buffer and compress and write each of its
+  // columns from there, see `compressAndWriteColumn`. The scratch buffer holds
+  // a single block (`blockSize_` rows of `NumCols` columns), so at most one of
+  // them per thread of the pool is alive at any time.
+  template <size_t NumCols>
+  void transposeCompressAndWriteBlock(const RowMajorIdTable<NumCols>& table,
+                                      size_t blockIdx,
+                                      const BlockLayout& layout) {
+    size_t lower = blockIdx * layout.blockSize_;
+    size_t upper = std::min(lower + layout.blockSize_, table.numRows());
+    AD_CORRECTNESS_CHECK(lower < upper);
+    size_t numRows = upper - lower;
+    // The columns of the block, stored one after the other.
+    ad_utility::UninitializedVector<Id> scratch(NumCols * numRows);
+    rowMajorIdTable::ColumnPointers<NumCols> columns{};
+    for (size_t columnIdx = 0; columnIdx < NumCols; ++columnIdx) {
+      columns[columnIdx] = scratch.data() + columnIdx * numRows;
+    }
+    rowMajorIdTable::transposeToColumnMajor<NumCols>(table.data() + lower,
+                                                     numRows, columns);
+    for (size_t columnIdx = 0; columnIdx < NumCols; ++columnIdx) {
+      compressAndWriteColumn(columns[columnIdx], numRows,
+                             layout.firstBlockIdx_ + blockIdx, columnIdx);
+    }
+  }
+
+  // Compress `numRows` contiguous `Id`s of the column `columnIdx` of the block
+  // with the given global index, write them to the file, and store the
+  // resulting metadata.
+  void compressAndWriteColumn(const Id* column, size_t numRows,
+                              size_t globalBlockIdx, size_t columnIdx) {
+    auto uncompressedSize = numRows * sizeof(Id);
+    auto writeBytes = [this](const void* data, size_t numBytes) {
+      size_t offset = 0;
+      file_.withWriteLock([&offset, data, numBytes](ad_utility::File& file) {
+        offset = file.tell();
+        file.write(data, numBytes);
+      });
+      return offset;
+    };
+    if (!compressionLevel_.has_value()) {
+      blocksPerColumn_.at(columnIdx).at(globalBlockIdx) =
+          CompressedBlockMetadata{uncompressedSize, uncompressedSize,
+                                  writeBytes(column, uncompressedSize)};
+      return;
+    }
+    auto compressed = ZstdWrapper::compress(column, uncompressedSize,
+                                            compressionLevel_.value());
+    blocksPerColumn_.at(columnIdx).at(globalBlockIdx) = CompressedBlockMetadata{
+        compressed.size(), uncompressedSize,
+        writeBytes(compressed.data(), compressed.size())};
+  }
+
+  // Run the `numTasks` tasks that compress the blocks of a single table and
+  // write them to the file (`runTask(taskIdx)` runs a single one of them) on
+  // the global thread pool (see `util/GlobalExecutor.h`). Return only when all
+  // of them are done, rethrowing the first exception that any of them has
+  // thrown.
   //
-  // NOTE: The parallelism is per block and column (and not per column, as it
-  // used to be), because the columns of a single table are typically few, while
-  // its blocks are many. The tasks are therefore small enough to keep all the
-  // threads of the pool busy until the very end of the table. They are also
-  // claimed in the order of the blocks (and within a block, in the order of the
-  // columns), such that the parts that are later read together (see
-  // `readBlockSequential`) tend to end up close to each other in the file.
+  // NOTE: For the column-major case the tasks are per block *and* column (and
+  // not per column, as they used to be), because the columns of a single table
+  // are typically few, while its blocks are many. The tasks are therefore small
+  // enough to keep all the threads of the pool busy until the very end of the
+  // table. They are also claimed in the order of the blocks (and within a
+  // block, in the order of the columns), such that the parts that are later
+  // read together (see `readBlockSequential`) tend to end up close to each
+  // other in the file.
   //
   // NOTE: The calling thread doesn't only wait for the pool, but also works on
   // the blocks itself. That way this function makes progress even if all the
@@ -234,9 +338,8 @@ class CompressedExternalIdTableWriter {
   // is exactly the case for the dedicated thread on which the
   // `CompressedExternalIdTableBase` writes its blocks, see
   // `CompressedExternalIdTableBase::transformAndWriteBlock`.
-  void compressAndWriteBlocks(const IdTable& table, size_t firstBlockIdx,
-                              size_t numBlocks, size_t blockSize) {
-    size_t numTasks = numBlocks * numColumns();
+  template <typename RunTask>
+  void runTasksInParallel(size_t numTasks, const RunTask& runTask) {
     if (numTasks == 0) {
       return;
     }
@@ -254,9 +357,7 @@ class CompressedExternalIdTableWriter {
           if (taskIdx >= numTasks) {
             return;
           }
-          compressAndWriteBlockOfColumn(table, taskIdx / numColumns(),
-                                        taskIdx % numColumns(), firstBlockIdx,
-                                        blockSize);
+          runTask(taskIdx);
         }
       } catch (...) {
         // Stop handing out tasks; the exception is rethrown by the caller as
@@ -340,6 +441,32 @@ class CompressedExternalIdTableWriter {
   IdTableStatic<N> readBlockOfIdTable(size_t idTableIdx,
                                       size_t blockIdx) const {
     return readBlockSequential<N>(globalBlockIdx(idTableIdx, blockIdx));
+  }
+
+  // Like `readBlockOfIdTable`, but return the block row-major (see
+  // `RowMajorIdTable.h`). The block is stored column-major, so its columns are
+  // decompressed into a scratch buffer, from which the block is then transposed
+  // in one cache-friendly pass. Thread-safe for the same reason as
+  // `readBlockOfIdTable`.
+  template <size_t NumCols>
+  RowMajorIdTable<NumCols> readBlockOfIdTableRowMajor(size_t idTableIdx,
+                                                      size_t blockIdx) const {
+    AD_CONTRACT_CHECK(NumCols == numColumns());
+    size_t globalIdx = globalBlockIdx(idTableIdx, blockIdx);
+    size_t numRows = numRowsInBlock(globalIdx);
+    // The columns of the block, stored one after the other.
+    ad_utility::UninitializedVector<Id> scratch(NumCols * numRows);
+    rowMajorIdTable::ConstColumnPointers<NumCols> columns{};
+    for (size_t columnIdx = 0; columnIdx < NumCols; ++columnIdx) {
+      Id* column = scratch.data() + columnIdx * numRows;
+      decompressColumnInto(globalIdx, columnIdx, column);
+      columns[columnIdx] = column;
+    }
+    RowMajorIdTable<NumCols> block{allocator_};
+    block.resize(numRows);
+    rowMajorIdTable::transposeToRowMajor<NumCols>(columns, numRows,
+                                                  block.data());
+    return block;
   }
 
   // Register a reader that accesses the blocks directly (via
@@ -433,16 +560,36 @@ class CompressedExternalIdTableWriter {
   void decompressColumnIntoBlock(size_t blockIdx, size_t columnIdx,
                                  IdTableStatic<NumCols>& block) const {
     decltype(auto) col = block.getColumn(columnIdx);
+    decompressColumnInto(blockIdx, columnIdx, col.data());
+  }
+
+  // Read and decompress column `columnIdx` of the block at `blockIdx` into
+  // `target`, which has to have room for the whole column of that block (see
+  // `numRowsInBlock`). This is the kernel that all the reading functions of
+  // this class share; see `decompressColumnIntoBlock` for the thread safety.
+  void decompressColumnInto(size_t blockIdx, size_t columnIdx,
+                            Id* target) const {
     const auto& metaData = blocksPerColumn_.at(columnIdx).at(blockIdx);
+    auto readBytes = [this, &metaData](void* buffer) {
+      auto numBytesRead = file_.rlock()->read(buffer, metaData.compressedSize_,
+                                              metaData.offsetInFile_);
+      AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
+                           static_cast<size_t>(numBytesRead) ==
+                               metaData.compressedSize_);
+    };
+    if (!compressionLevel_.has_value()) {
+      // NOTE: An uncompressed column is read straight into the `target`, so
+      // this path needs neither an intermediate buffer nor a copy.
+      AD_CORRECTNESS_CHECK(metaData.compressedSize_ ==
+                           metaData.uncompressedSize_);
+      readBytes(target);
+      return;
+    }
     std::vector<char> compressed(metaData.compressedSize_);
-    auto numBytesRead = file_.rlock()->read(
-        compressed.data(), metaData.compressedSize_, metaData.offsetInFile_);
-    AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
-                         static_cast<size_t>(numBytesRead) ==
-                             metaData.compressedSize_);
+    readBytes(compressed.data());
     auto numBytesDecompressed =
         ZstdWrapper::decompressToBuffer(compressed.data(), compressed.size(),
-                                        col.data(), metaData.uncompressedSize_);
+                                        target, metaData.uncompressedSize_);
     AD_CORRECTNESS_CHECK(numBytesDecompressed == metaData.uncompressedSize_);
   }
 
@@ -566,7 +713,326 @@ enum struct Parallelism { Allowed, Disallowed };
 // buy, especially as the caller immediately waits for the result anyway.
 constexpr inline size_t MAX_ROWS_FOR_SEQUENTIAL_LAST_BLOCK = 100'000;
 
+// The largest number of columns for which the row-major mode (see
+// `SortBlockBuffer` below) is available if the number of columns is only known
+// at runtime. It is the maximum of the `callFixedSize` mechanism (see
+// `CallFixedSize.h`), which is what turns such a runtime number into the
+// compile-time number of columns of a `RowMajorIdTable`.
+constexpr inline int MAX_NUM_COLUMNS_ROW_MAJOR =
+    DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE;
+
+// Whether the external sorters store the rows of a block row-major, see
+// `SortBlockBuffer` below. Every sorter reads this once, when it is
+// constructed, so changing the underlying runtime parameter only affects the
+// sorters that are created afterwards.
+inline bool rowMajorModeIsEnabled() {
+  return getRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>();
+}
+
+// Whether the row-major mode is available for a table with `NumStaticCols`
+// statically known and `numColumns` actual columns. A number of columns that is
+// only known at runtime has to be within the reach of `callFixedSize`, see
+// `MAX_NUM_COLUMNS_ROW_MAJOR`.
+template <size_t NumStaticCols>
+bool rowMajorModeIsSupported(size_t numColumns) {
+  if (NumStaticCols > 0) {
+    return numColumns == NumStaticCols;
+  }
+  return numColumns > 0 &&
+         numColumns <= static_cast<size_t>(MAX_NUM_COLUMNS_ROW_MAJOR);
+}
+
+namespace detail {
+
+// The `std::variant` of the `RowMajorIdTable`s that a sorter with
+// `NumStaticCols` statically known columns may use: exactly one alternative if
+// that number is known at compile time, and one per supported number of columns
+// otherwise, see `MAX_NUM_COLUMNS_ROW_MAJOR`.
+template <typename Sequence>
+struct RowMajorTableVariantFromSequence;
+
+// ___________________________________________________________________________
+template <size_t... Is>
+struct RowMajorTableVariantFromSequence<std::index_sequence<Is...>> {
+  using type = std::variant<RowMajorIdTable<Is + 1>...>;
+};
+
+// ___________________________________________________________________________
+template <size_t NumStaticCols>
+struct RowMajorTableVariant {
+  using type = std::variant<RowMajorIdTable<NumStaticCols>>;
+};
+
+// ___________________________________________________________________________
+template <>
+struct RowMajorTableVariant<0> {
+  using type = typename RowMajorTableVariantFromSequence<
+      std::make_index_sequence<MAX_NUM_COLUMNS_ROW_MAJOR>>::type;
+};
+
+// ___________________________________________________________________________
+template <size_t NumStaticCols>
+using RowMajorTableVariantT =
+    typename RowMajorTableVariant<NumStaticCols>::type;
+
+// Create the alternative of the variant that matches the `numColumns`, which
+// `rowMajorModeIsSupported` has to have accepted.
+template <size_t NumStaticCols>
+RowMajorTableVariantT<NumStaticCols> makeRowMajorTable(
+    size_t numColumns, const AllocatorWithLimit<Id>& allocator) {
+  using Variant = RowMajorTableVariantT<NumStaticCols>;
+  AD_CONTRACT_CHECK(rowMajorModeIsSupported<NumStaticCols>(numColumns));
+  if constexpr (NumStaticCols > 0) {
+    return Variant{RowMajorIdTable<NumStaticCols>{allocator}};
+  } else {
+    return ad_utility::callFixedSizeVi<MAX_NUM_COLUMNS_ROW_MAJOR>(
+        static_cast<int>(numColumns),
+        [&allocator](auto numColumnsVi) -> Variant {
+          constexpr size_t N =
+              static_cast<size_t>(decltype(numColumnsVi)::value);
+          if constexpr (N == 0) {
+            // `callFixedSize` maps a number of columns that is out of its reach
+            // to zero, which the check above has already excluded.
+            AD_FAIL();
+          } else {
+            return Variant{RowMajorIdTable<N>{allocator}};
+          }
+        });
+  }
+}
+
+// Convert a table with `I` statically known columns to a table with `N`
+// statically known columns, where `N` is either `I` itself or `0` (meaning that
+// the number of columns is only known at runtime). This is a no-op in the
+// former and a cheap move of the columns in the latter case.
+template <size_t N, int I>
+IdTableStatic<N> toOutputTable(IdTableStatic<I> table) {
+  if constexpr (static_cast<int>(N) == I) {
+    return table;
+  } else {
+    static_assert(N == 0);
+    return std::move(table).toDynamic();
+  }
+}
+
+}  // namespace detail
+
 }  // namespace compressedExternalIdTable
+
+// The in-memory buffer in which a `CompressedExternalIdTableBase` (see below)
+// collects the rows of a single block, sorts them, and hands them to its
+// `CompressedExternalIdTableWriter`.
+//
+// It stores those rows in one of two layouts, which is decided once, when the
+// buffer is created:
+// * Column-major (in an `IdTableStatic`), which is the layout of both the input
+//   and the file, so that neither `pushBlock` nor the writing of a block has to
+//   touch the data at all.
+// * Row-major (in a `RowMajorIdTable`), which makes the *sorting* of a block
+//   much cheaper, because a row is then a single dense `std::array` instead of
+//   one `Id` in each of `numColumns` far apart columns. The price is one
+//   transposition when the rows come in (in `push` and `insertAtEnd`) and one
+//   when they are written (per compressed block, see
+//   `CompressedExternalIdTableWriter::writeRowMajorIdTable`), so that the file
+//   is exactly the same in both layouts.
+//
+// Which of the two is used is a runtime decision (see `rowMajorModeIsEnabled`),
+// so both alternatives are members of this class and exactly one of them is
+// engaged. The row-major one additionally is a `std::variant`, because the
+// number of columns of a `RowMajorIdTable` is a compile-time constant, which
+// for a table with a dynamic number of columns is obtained via `callFixedSize`,
+// see `compressedExternalIdTable::detail::makeRowMajorTable`.
+template <size_t NumStaticCols>
+class SortBlockBuffer {
+ public:
+  using ColumnMajor = IdTableStatic<NumStaticCols>;
+
+ private:
+  using RowMajorVariant =
+      compressedExternalIdTable::detail::RowMajorTableVariantT<NumStaticCols>;
+
+  AllocatorWithLimit<Id> allocator_;
+  size_t numColumns_;
+  // Exactly one of the two is engaged, see the class comment above.
+  std::optional<ColumnMajor> columnMajor_;
+  std::optional<RowMajorVariant> rowMajor_;
+
+ public:
+  // Construct an empty buffer. If `rowMajor` is true (which requires
+  // `compressedExternalIdTable::rowMajorModeIsSupported`), then the rows are
+  // stored row-major.
+  SortBlockBuffer(size_t numColumns, AllocatorWithLimit<Id> allocator,
+                  bool rowMajor)
+      : allocator_{std::move(allocator)}, numColumns_{numColumns} {
+    if (rowMajor) {
+      rowMajor_ =
+          compressedExternalIdTable::detail::makeRowMajorTable<NumStaticCols>(
+              numColumns_, allocator_);
+    } else {
+      columnMajor_.emplace(numColumns_, allocator_);
+    }
+  }
+
+  // Simple getters.
+  bool isRowMajor() const { return rowMajor_.has_value(); }
+  size_t numColumns() const { return numColumns_; }
+  const AllocatorWithLimit<Id>& allocator() const { return allocator_; }
+
+  // Call the `function` with the underlying table, which is either the
+  // column-major `IdTableStatic` or one of the `RowMajorIdTable` alternatives.
+  // This is how the transformation of a block (for the sorter: the sort)
+  // reaches the rows, see `BlockSorter`.
+  template <typename F>
+  decltype(auto) visit(F&& function) {
+    if (columnMajor_.has_value()) {
+      return function(columnMajor_.value());
+    }
+    return std::visit(AD_FWD(function), rowMajor_.value());
+  }
+
+  // The number of rows.
+  size_t numRows() const {
+    if (columnMajor_.has_value()) {
+      return columnMajor_.value().numRows();
+    }
+    return std::visit([](const auto& table) { return table.numRows(); },
+                      rowMajor_.value());
+  }
+  size_t size() const { return numRows(); }
+  bool empty() const { return numRows() == 0; }
+
+  // Remove all the rows, but keep the memory that is already allocated.
+  void clear() {
+    visit([](auto& table) { table.clear(); });
+  }
+
+  // Make room for `numRows` rows.
+  void reserve(size_t numRows) {
+    visit([numRows](auto& table) { table.reserve(numRows); });
+  }
+
+  // Make this buffer hold exactly `numRows` rows. Rows that are added by this
+  // are not initialized (the underlying storage uses a
+  // `default_init_allocator`), and rows that are removed by it keep their
+  // memory, so that growing to the same size again is free. This is what makes
+  // the concurrent filling of a buffer possible, see
+  // `CompressedExternalIdTableBase::pushBlockConcurrently`.
+  void resize(size_t numRows) {
+    visit([numRows](auto& table) { table.resize(numRows); });
+  }
+
+  // Copy the rows `[beginRow, endRow)` of the column-major `table` into the
+  // already existing rows of this buffer that start at `targetRow`,
+  // transposing them if this buffer is row-major. In contrast to `insertAtEnd`
+  // below this doesn't change the size of this buffer, so several such copies
+  // into disjoint target ranges may run concurrently, see
+  // `CompressedExternalIdTableBase::pushBlockConcurrently`.
+  CPP_template(typename Table)(requires IdTableLike<Table>) void insertAt(
+      const Table& table, size_t beginRow, size_t endRow, size_t targetRow) {
+    AD_CONTRACT_CHECK(beginRow <= endRow && endRow <= table.numRows());
+    const size_t numNewRows = endRow - beginRow;
+    AD_CONTRACT_CHECK(targetRow + numNewRows <= numRows());
+    if (columnMajor_.has_value()) {
+      auto& target = columnMajor_.value();
+      for (size_t col = 0; col < numColumns_; ++col) {
+        auto source = table.getColumn(col).subspan(beginRow, numNewRows);
+        auto destination = target.getColumn(col).subspan(targetRow, numNewRows);
+        ql::ranges::copy(source, destination.begin());
+      }
+      return;
+    }
+    std::visit(
+        [&table, beginRow, endRow, targetRow](auto& rows) {
+          rows.writeTransposedAt(table, beginRow, endRow, targetRow);
+        },
+        rowMajor_.value());
+  }
+
+  // Append a single row, which may be anything that can be `push_back`ed to an
+  // `IdTable` (in particular a row reference of one).
+  template <typename R>
+  void push_back(const R& row) {
+    visit([&row](auto& table) { table.push_back(row); });
+  }
+
+  // Append the rows `[beginRow, endRow)` of the column-major `table`,
+  // transposing them if this buffer is row-major.
+  CPP_template(typename Table)(requires IdTableLike<Table>) void insertAtEnd(
+      const Table& table, size_t beginRow, size_t endRow) {
+    if (columnMajor_.has_value()) {
+      columnMajor_.value().insertAtEnd(table, beginRow, endRow);
+      return;
+    }
+    std::visit(
+        [&table, beginRow, endRow](auto& rows) {
+          rows.appendTransposed(table, beginRow, endRow);
+        },
+        rowMajor_.value());
+  }
+
+  // Write the contents of this buffer to the `writer` and clear it afterwards,
+  // keeping its memory for the next block. The file is column-major in both
+  // cases, see `CompressedExternalIdTableWriter::writeRowMajorIdTable`.
+  void writeToAndClear(CompressedExternalIdTableWriter& writer) {
+    if (columnMajor_.has_value()) {
+      // NOTE: The round trip via the dynamic table moves the columns and
+      // therefore keeps their memory, and so does the `clear()`, so that the
+      // buffer still has the capacity that the next block needs.
+      IdTable dynamicBlock = std::move(columnMajor_).value().toDynamic();
+      writer.writeIdTable(dynamicBlock);
+      dynamicBlock.clear();
+      columnMajor_.emplace(
+          std::move(dynamicBlock)
+              .template toStatic<static_cast<int>(NumStaticCols)>());
+      return;
+    }
+    std::visit(
+        [&writer](auto& rows) {
+          writer.writeRowMajorIdTable(rows);
+          rows.clear();
+        },
+        rowMajor_.value());
+  }
+
+  // Return the contents of this buffer as a column-major table, transposing
+  // them if this buffer is row-major. This is only needed for the inputs that
+  // are so small that they never reach the file at all, see
+  // `CompressedExternalIdTableSorter::sortedBlocks`.
+  ColumnMajor extractColumnMajor() && {
+    if (columnMajor_.has_value()) {
+      return std::move(columnMajor_).value();
+    }
+    return copyToColumnMajor();
+  }
+
+  // Like `extractColumnMajor`, but leave this buffer untouched.
+  ColumnMajor copyToColumnMajor() const {
+    if (columnMajor_.has_value()) {
+      return columnMajor_.value().clone();
+    }
+    const auto& allocator = allocator_;
+    return std::visit(
+        [&allocator](const auto& rows) -> ColumnMajor {
+          return compressedExternalIdTable::detail::toOutputTable<
+              NumStaticCols>(rows.toColumnMajor(allocator));
+        },
+        rowMajor_.value());
+  }
+
+  // Append the rows `[beginRow, endRow)` of this buffer to the column-major
+  // `target`.
+  void appendRowsTo(ColumnMajor& target, size_t beginRow, size_t endRow) const {
+    if (columnMajor_.has_value()) {
+      target.insertAtEnd(columnMajor_.value(), beginRow, endRow);
+      return;
+    }
+    std::visit(
+        [&target, beginRow, endRow](const auto& rows) {
+          rows.appendToColumnMajor(target, beginRow, endRow);
+        },
+        rowMajor_.value());
+  }
+};
 
 // An input policy for `ad_utility::parallelBlockMerge` that reads the blocks of
 // the `IdTable`s (= presorted runs) stored in a
@@ -575,15 +1041,27 @@ constexpr inline size_t MAX_ROWS_FOR_SEQUENTIAL_LAST_BLOCK = 100'000;
 // `IdTableStatic<NumStaticCols>` because all comparators used in QLever are
 // templated on both of their argument types.
 //
+// The `BlockType` decides in which layout the merge sees the blocks. It is
+// either the column-major `IdTableStatic` (the default) or the
+// `RowMajorMergeBlock`, which the merge reads *and* writes row-major, so that
+// every row that is merged touches a single cache line instead of one per
+// column. The runs themselves are stored column-major in both cases, so in the
+// row-major case a block is transposed when it is read, see
+// `CompressedExternalIdTableWriter::readBlockOfIdTableRowMajor`.
+//
 // The class registers itself as an active reader of the `writer` for its whole
 // lifetime (see `CompressedExternalIdTableWriter::registerActiveReader`), such
 // that writing to the `writer` while a merge is running correctly throws.
-template <size_t NumStaticCols>
+template <size_t NumStaticCols,
+          typename BlockType = IdTableStatic<NumStaticCols>>
 class CompressedIdTableRunsInput : public ad_utility::NoCopy {
  public:
-  using Block = IdTableStatic<NumStaticCols>;
+  using Block = BlockType;
   using Element = IdTable::row_type;
-  using value_type = typename Block::row_type;
+  using value_type = typename Block::value_type;
+  // Whether the blocks of the merge are row-major, see the class comment above.
+  static constexpr bool isRowMajor =
+      !std::is_same_v<Block, IdTableStatic<NumStaticCols>>;
 
  private:
   // The `writer` that stores the runs. It is `nullptr` if and only if this
@@ -645,12 +1123,21 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   // I/O; it is thread-safe, because it only takes a shared lock on the
   // underlying file.
   Block getBlock(size_t run, size_t block) const {
-    return writer_->template readBlockOfIdTable<NumStaticCols>(run, block);
+    if constexpr (isRowMajor) {
+      return Block{writer_->template readBlockOfIdTableRowMajor<NumStaticCols>(
+          run, block)};
+    } else {
+      return writer_->template readBlockOfIdTable<NumStaticCols>(run, block);
+    }
   }
 
   // ________________________________________________________________________
   Block makeEmptyBlock() const {
-    return Block{writer_->numColumns(), writer_->allocator()};
+    if constexpr (isRowMajor) {
+      return Block{writer_->allocator()};
+    } else {
+      return Block{writer_->numColumns(), writer_->allocator()};
+    }
   }
 
   // ________________________________________________________________________
@@ -669,6 +1156,8 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
 // Make a mismatch with the `InputConcept` a clear compile error.
 static_assert(parallelBlockMerge::InputConcept<CompressedIdTableRunsInput<0>>);
 static_assert(parallelBlockMerge::InputConcept<CompressedIdTableRunsInput<3>>);
+static_assert(parallelBlockMerge::InputConcept<
+              CompressedIdTableRunsInput<3, RowMajorMergeBlock<3>>>);
 
 // The common base implementation of `CompressedExternalIdTable` and
 // `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
@@ -677,17 +1166,21 @@ CPP_class_template(size_t NumStaticCols,
                    typename BlockTransformation = ad_utility::Noop)(requires(
     ql::concepts::invocable<
         BlockTransformation,
-        IdTableStatic<NumStaticCols>&>)) class CompressedExternalIdTableBase {
+        SortBlockBuffer<NumStaticCols>&>)) class CompressedExternalIdTableBase {
  public:
   using value_type = typename IdTableStatic<NumStaticCols>::row_type;
   using reference = typename IdTableStatic<NumStaticCols>::row_reference;
   using const_reference =
       typename IdTableStatic<NumStaticCols>::const_row_reference;
   using MemorySize = ad_utility::MemorySize;
+  // The buffer in which the rows of the next block are aggregated, and which
+  // also decides whether they are stored column-major or row-major, see
+  // `SortBlockBuffer`.
+  using Buffer = SortBlockBuffer<NumStaticCols>;
 
  protected:
   // Used to aggregate rows for the next block.
-  IdTableStatic<NumStaticCols> currentBlock_;
+  Buffer currentBlock_;
   // For statistical reasons
   size_t numElementsPushed_ = 0;
   size_t numBlocksPushed_ = 0;
@@ -719,13 +1212,13 @@ CPP_class_template(size_t NumStaticCols,
   // via this future, so that the next block can reuse its memory instead of
   // allocating (and faulting in) a buffer of its own, see
   // `transformAndWriteBlock`.
-  std::future<IdTableStatic<NumStaticCols>> compressAndWriteFuture_;
+  std::future<Buffer> compressAndWriteFuture_;
 
   // If the `compressAndWriteFuture_` is currently active, wait for its
   // computation to be completed and return the block buffer that the background
   // task has given back (empty, but with its memory still allocated). Else do
   // nothing and return `std::nullopt`.
-  std::optional<IdTableStatic<NumStaticCols>> waitForFuture() {
+  std::optional<Buffer> waitForFuture() {
     if (compressAndWriteFuture_.valid()) {
       return compressAndWriteFuture_.get();
     }
@@ -735,7 +1228,7 @@ CPP_class_template(size_t NumStaticCols,
   // Store the `future` inside the `compressAndWriteFuture_`. This trivial
   // wrapper can be used to inject more detailed logging when analyzing the
   // control flow of this class or when fixing bugs.
-  void setFuture(std::future<IdTableStatic<NumStaticCols>> future) {
+  void setFuture(std::future<Buffer> future) {
     AD_CORRECTNESS_CHECK(!compressAndWriteFuture_.valid());
     compressAndWriteFuture_ = std::move(future);
   }
@@ -755,6 +1248,23 @@ CPP_class_template(size_t NumStaticCols,
                                  std::move(function))
         .get();
   }
+
+  // The state of the concurrent pushing of blocks, see
+  // `pushBlockConcurrently`. While that mode is active, the `currentBlock_` is
+  // resized to a complete block up front, and `numRowsReserved_` (and not the
+  // size of the buffer) is the number of rows that have actually been pushed.
+  // All three members are protected by the `concurrentPushMutex_`, and the
+  // condition variable is notified whenever one of them changes.
+  std::mutex concurrentPushMutex_;
+  std::condition_variable concurrentPushCv_;
+  bool blockIsResizedForConcurrentPush_ = false;
+  // The number of rows of the `currentBlock_` that have been handed out to
+  // pushers, which is also the position at which the next pusher may copy.
+  size_t numRowsReserved_ = 0;
+  // The number of pushers that currently copy their rows into the
+  // `currentBlock_`. The block may only be written (and the mode may only be
+  // left) once this has dropped to zero.
+  size_t numOutstandingCopies_ = 0;
 
   // Flag that is `true` if this is the first iteration over the table, and
   // `false` if there has already been a previous iteration.
@@ -778,10 +1288,15 @@ CPP_class_template(size_t NumStaticCols,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
       BlockTransformation blockTransformation = {})
-      : currentBlock_{numCols, allocator},
+      : currentBlock_{numCols, allocator,
+                      compressedExternalIdTable::rowMajorModeIsEnabled() &&
+                          compressedExternalIdTable::rowMajorModeIsSupported<
+                              NumStaticCols>(numCols)},
         numColumns_{numCols},
         memory_{memory},
-        writer_{std::move(filename), numCols, allocator, blocksizeCompression},
+        writer_{std::move(filename), numCols, allocator, blocksizeCompression,
+                compressedExternalIdTable::sorterCompressionLevels()
+                    .presortedRuns_},
         blockTransformation_{blockTransformation} {
     this->currentBlock_.reserve(blocksize_);
     AD_CONTRACT_CHECK(NumStaticCols == 0 || NumStaticCols == numCols);
@@ -791,6 +1306,7 @@ CPP_class_template(size_t NumStaticCols,
   CPP_template(typename R)(
       requires compressedExternalIdTable::detail::HasPushBack<
           decltype(currentBlock_), R>) void push(const R& row) {
+    finishConcurrentPushes();
     ++numElementsPushed_;
     currentBlock_.push_back(row);
     if (currentBlock_.size() >= blocksize_) {
@@ -808,6 +1324,7 @@ CPP_class_template(size_t NumStaticCols,
   // been called for each row individually.
   CPP_template(typename Table)(requires IdTableLike<Table>) void pushBlock(
       const Table& table) {
+    finishConcurrentPushes();
     AD_CONTRACT_CHECK(table.numColumns() == numColumns_);
     const size_t numRows = table.numRows();
     numElementsPushed_ += numRows;
@@ -826,6 +1343,77 @@ CPP_class_template(size_t NumStaticCols,
         writeCurrentBlockAndRecycleBuffer();
       }
     }
+  }
+
+  // A variant of `pushBlock` above that may be called concurrently from
+  // several threads. Its purpose is that the copying of the rows (which for
+  // large blocks is by far the most expensive part of a push) happens in
+  // parallel instead of being serialized by a lock.
+  //
+  // This works as follows: The `currentBlock_` is resized to a complete block
+  // up front, so that a pusher only has to *reserve* the range of rows into
+  // which it then copies. The reserving is what the lock is held for; it is a
+  // handful of integer operations, so the next pusher can start its copy
+  // almost immediately. The only point at which the pushers have to be
+  // synchronized is when a block is full and has to be handed to the sorting
+  // machinery: the pusher that fills the block up waits for all the copies
+  // that are still outstanding before it writes it.
+  //
+  // NOTE: The rows of a single `table` are not necessarily contiguous in the
+  // resulting blocks, and the blocks contain the rows of the concurrent pushes
+  // in an arbitrary order. Only use this for inputs that are sorted (or
+  // otherwise reordered) afterwards anyway, which for the
+  // `CompressedExternalIdTableSorter` is always the case.
+  CPP_template(typename Table)(
+      requires IdTableLike<Table>) void pushBlockConcurrently(const Table&
+                                                                  table) {
+    AD_CONTRACT_CHECK(table.numColumns() == numColumns_);
+    const size_t numRows = table.numRows();
+    size_t numPushed = 0;
+    while (numPushed < numRows) {
+      size_t targetRow = 0;
+      size_t numToPush = 0;
+      {
+        std::unique_lock lock{concurrentPushMutex_};
+        prepareBlockForConcurrentPush(lock);
+        targetRow = numRowsReserved_;
+        numToPush = std::min(concurrentPushBlocksize() - targetRow,
+                             numRows - numPushed);
+        numRowsReserved_ += numToPush;
+        numElementsPushed_ += numToPush;
+        ++numOutstandingCopies_;
+      }
+      // NOTE: This is the expensive part, and it deliberately runs without the
+      // lock being held, so that it runs concurrently with the copies of the
+      // other pushers.
+      currentBlock_.insertAt(table, numPushed, numPushed + numToPush,
+                             targetRow);
+      numPushed += numToPush;
+      {
+        std::lock_guard lock{concurrentPushMutex_};
+        AD_CORRECTNESS_CHECK(numOutstandingCopies_ > 0);
+        --numOutstandingCopies_;
+      }
+      concurrentPushCv_.notify_all();
+    }
+  }
+
+  // Leave the mode of `pushBlockConcurrently` above, if it is currently
+  // active: Wait for all outstanding copies and shrink the `currentBlock_`
+  // back to the rows that were actually pushed, so that all the other
+  // functions of this class see the buffer in its normal state again. This is
+  // called by all those functions, so that `pushBlockConcurrently` may be
+  // freely mixed with them.
+  void finishConcurrentPushes() {
+    std::unique_lock lock{concurrentPushMutex_};
+    if (!blockIsResizedForConcurrentPush_) {
+      return;
+    }
+    concurrentPushCv_.wait(lock,
+                           [this]() { return numOutstandingCopies_ == 0; });
+    currentBlock_.resize(numRowsReserved_);
+    blockIsResizedForConcurrentPush_ = false;
+    numRowsReserved_ = 0;
   }
 
   // ___________________________________________________________________
@@ -849,6 +1437,7 @@ CPP_class_template(size_t NumStaticCols,
   // currently active, else an exception is thrown by the underlying
   // `CompressedExternalIdTableWriter`.
   void clear() {
+    finishConcurrentPushes();
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
     waitForFuture();
@@ -859,6 +1448,42 @@ CPP_class_template(size_t NumStaticCols,
   }
 
  protected:
+  // The number of rows of a complete block in the mode of
+  // `pushBlockConcurrently`. It is the `blocksize_`, except that a
+  // `blocksize_` of zero (which only happens for the very small memory limits
+  // of some unit tests) is rounded up to one, so that every push makes
+  // progress.
+  size_t concurrentPushBlocksize() const {
+    return std::max<size_t>(blocksize_, 1);
+  }
+
+  // Make sure that the `currentBlock_` is resized to a complete block and has
+  // room for at least one more row, writing it out if it is already full. The
+  // `lock` (which has to be held on the `concurrentPushMutex_`) is temporarily
+  // released while waiting for the outstanding copies of the other pushers.
+  // See `pushBlockConcurrently` above.
+  void prepareBlockForConcurrentPush(std::unique_lock<std::mutex>& lock) {
+    if (!blockIsResizedForConcurrentPush_) {
+      numRowsReserved_ = currentBlock_.numRows();
+      currentBlock_.resize(concurrentPushBlocksize());
+      blockIsResizedForConcurrentPush_ = true;
+    }
+    while (numRowsReserved_ >= concurrentPushBlocksize()) {
+      if (numOutstandingCopies_ > 0) {
+        // Note: The predicate of the enclosing loop is rechecked after the
+        // wait, because another pusher may have written the block in the
+        // meantime, in which case there is nothing left to do here.
+        concurrentPushCv_.wait(lock);
+        continue;
+      }
+      // The block is exactly full and nobody is copying into it anymore, so it
+      // can be written. The next block is then again resized up front.
+      writeCurrentBlockAndRecycleBuffer();
+      currentBlock_.resize(concurrentPushBlocksize());
+      numRowsReserved_ = 0;
+    }
+  }
+
   // Clear the current block. If `reserve` is `true`, we subsequently also
   // reserve the `blocksize_`.
   void resetCurrentBlock(bool reserve) {
@@ -871,10 +1496,9 @@ CPP_class_template(size_t NumStaticCols,
   // Apply the `blockTransformation_` to the `block`. A transformation that can
   // make use of several threads (for the `CompressedExternalIdTableSorter` this
   // is the sort of the block) does so only if the `parallelism` is `Allowed`.
-  void transformBlock(IdTableStatic<NumStaticCols>& block,
+  void transformBlock(Buffer& block,
                       compressedExternalIdTable::Parallelism parallelism) {
-    if constexpr (std::is_invocable_v<BlockTransformation&,
-                                      IdTableStatic<NumStaticCols>&,
+    if constexpr (std::is_invocable_v<BlockTransformation&, Buffer&,
                                       compressedExternalIdTable::Parallelism>) {
       blockTransformation_(block, parallelism);
     } else {
@@ -891,8 +1515,7 @@ CPP_class_template(size_t NumStaticCols,
   // Reusing that buffer for the next block is what keeps the number of block
   // buffers that are ever allocated at two, see
   // `writeCurrentBlockAndRecycleBuffer`.
-  std::optional<IdTableStatic<NumStaticCols>> transformAndWriteBlock(
-      IdTableStatic<NumStaticCols> block) {
+  std::optional<Buffer> transformAndWriteBlock(Buffer block) {
     auto recycledBlock = waitForFuture();
     if (block.empty()) {
       if (numBlocksPushed_ > 0) {
@@ -907,19 +1530,14 @@ CPP_class_template(size_t NumStaticCols,
     ++numBlocksPushed_;
     setFuture(ad_utility::postAndGetFuture(
         blockWritePool_.get_executor(),
-        [block = std::move(block),
-         this]() mutable -> IdTableStatic<NumStaticCols> {
+        [block = std::move(block), this]() mutable -> Buffer {
           transformBlock(block,
                          compressedExternalIdTable::Parallelism::Allowed);
-          // NOTE: The round trip via the dynamic table moves the columns and
-          // therefore keeps their memory, and so does the `clear()`. The buffer
-          // that we give back hence already has the capacity that the next
-          // block needs.
-          IdTable dynamicBlock = std::move(block).toDynamic();
-          this->writer_.writeIdTable(dynamicBlock);
-          dynamicBlock.clear();
-          return std::move(dynamicBlock)
-              .template toStatic<static_cast<int>(NumStaticCols)>();
+          // NOTE: Writing the block also clears it, but keeps its memory, so
+          // the buffer that we give back already has the capacity that the next
+          // block needs, see `SortBlockBuffer::writeToAndClear`.
+          block.writeToAndClear(this->writer_);
+          return std::move(block);
         }));
     return recycledBlock;
   }
@@ -953,6 +1571,7 @@ CPP_class_template(size_t NumStaticCols,
   // and return `true`. Using this function allows for an efficient usage of
   // this class for very small inputs.
   bool transformAndPushLastBlock() {
+    finishConcurrentPushes();
     if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
@@ -1015,8 +1634,7 @@ CPP_class_template(size_t NumStaticCols,
     ++numBlocksPushed_;
     transformBlock(currentBlock_,
                    compressedExternalIdTable::Parallelism::Disallowed);
-    writer_.writeIdTable(std::move(currentBlock_).toDynamic());
-    resetCurrentBlock(false);
+    currentBlock_.writeToAndClear(writer_);
   }
 };
 
@@ -1069,8 +1687,10 @@ class CompressedExternalIdTable
     };
     if (!this->transformAndPushLastBlock()) {
       // Single block: wrap currentBlock_ as a one-element block stream.
-      return joinBlocks(InputRangeTypeErased<Block>{lazySingleValueRange(
-          [this]() { return std::move(this->currentBlock_); })});
+      return joinBlocks(
+          InputRangeTypeErased<Block>{lazySingleValueRange([this]() {
+            return std::move(this->currentBlock_).extractColumnMajor();
+          })});
     }
     this->transformAndWriteBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
@@ -1117,40 +1737,46 @@ class CompressedExternalIdTableSorterTypeErased {
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
-// The implementation of sorting a single block. The `parallelism` argument
-// specifies whether the sort may use several threads, see
-// `CompressedExternalIdTableBase::transformBlock`.
+// Sort the rows of a single block, given as the `range` of those rows (which is
+// either the column-major `IdTableStatic` or the `RowMajorIdTable` of a
+// `SortBlockBuffer`). The `parallelism` argument specifies whether the sort may
+// use several threads, see `CompressedExternalIdTableBase::transformBlock`.
+//
+// The parallel case sorts on the global thread pool, such that the block sort
+// uses the same threads (and hence obeys the same parallelism setting) as the
+// other phases of the index build, see `util/GlobalExecutor.h`.
+//
+// NOTE: The parallel sort blocks the calling thread until it is complete, so it
+// must not be called from a thread of the global thread pool itself. It isn't:
+// the parallel invocations of this function all come from the dedicated thread
+// of the `blockWritePool_` of the sorter, see
+// `CompressedExternalIdTableBase::runOnBlockWriteThreadAndWait`.
+template <typename Range, typename Comparator>
+void sortBlockRange(Range& block, const Comparator& comparator,
+                    compressedExternalIdTable::Parallelism parallelism) {
+  if (parallelism == compressedExternalIdTable::Parallelism::Allowed) {
+    ad_utility::blockSort::blockIndirectSort(
+        ql::ranges::subrange{std::begin(block), std::end(block)}, comparator,
+        static_cast<uint32_t>(ad_utility::globalExecutorNumThreads()),
+        ad_utility::globalExecutor());
+    return;
+  }
+  ql::ranges::sort(std::begin(block), std::end(block), comparator);
+}
+
+// The implementation of sorting a single block of a `SortBlockBuffer`, no
+// matter in which of its two layouts that block currently is, see
+// `sortBlockRange` above.
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
   template <typename T>
-  void operator()(
-      T& block,
-      [[maybe_unused]] compressedExternalIdTable::Parallelism parallelism =
-          compressedExternalIdTable::Parallelism::Allowed) {
-#if defined(QLEVER_USE_HPX)
-    // Sort on the global thread pool, such that the block sort uses the same
-    // threads (and hence obeys the same parallelism setting) as the other
-    // phases of the index build, see `util/HpxAsioExecutor.h`.
-    //
-    // NOTE: This blocks the calling thread until the sort is complete, so it
-    // must not be called from a thread of the global thread pool itself. It
-    // isn't: the parallel invocations of this function all come from the
-    // dedicated thread of the `blockWritePool_` of the sorter, see
-    // `CompressedExternalIdTableBase::runOnBlockWriteThreadAndWait`.
-    if (parallelism == compressedExternalIdTable::Parallelism::Allowed) {
-      hpx::sort(hpx::execution::par.on(ad_utility::globalHpxExecutor()),
-                std::begin(block), std::end(block), comparator_);
-      return;
-    }
-#elif defined(_PARALLEL_SORT)
-    if (parallelism == compressedExternalIdTable::Parallelism::Allowed) {
-      ad_utility::parallel_sort(std::begin(block), std::end(block),
-                                comparator_);
-      return;
-    }
-#endif
-    ql::ranges::sort(block, comparator_);
+  void operator()(T& block,
+                  compressedExternalIdTable::Parallelism parallelism =
+                      compressedExternalIdTable::Parallelism::Allowed) {
+    block.visit([this, parallelism](auto& rows) {
+      sortBlockRange(rows, comparator_, parallelism);
+    });
   }
 };
 // Deduction guide for the implicit aggregate initialization (its "constructor")
@@ -1207,9 +1833,11 @@ class CompressedExternalIdTableSorter
   // `compressedExternalIdTable::makeSpillFilename`.
   std::atomic<size_t> numMergePhases_ = 0;
 
-  // See `setMergeSpillCompression`.
+  // See `setMergeSpillCompression`. The default comes from the runtime
+  // parameter `external-sorter-compression-level` and is read once, when this
+  // sorter is constructed.
   CompressedBlockFile::CompressionLevel mergeSpillCompression_ =
-      compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION;
+      compressedExternalIdTable::sorterCompressionLevels().mergePhaseSpill_;
 
  public:
   // Constructor.
@@ -1261,7 +1889,9 @@ class CompressedExternalIdTableSorter
   // `NO_BLOCK_COMPRESSION` to store them uncompressed. Use this to trade the
   // CPU that the compression costs against the bytes that the spill file
   // occupies, see `compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION`
-  // for the default and the reasoning.
+  // for the reasoning behind the built-in default. The default of this sorter
+  // comes from the runtime parameter `external-sorter-compression-level`, so
+  // this setter is only needed to override that per sorter.
   void setMergeSpillCompression(
       CompressedBlockFile::CompressionLevel compression) {
     mergeSpillCompression_ = compression;
@@ -1371,16 +2001,18 @@ class CompressedExternalIdTableSorter
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
         using namespace ad_utility;
+        namespace detail = compressedExternalIdTable::detail;
         return block.empty()
                    ? InputRangeTypeErased{ql::views::empty<IdTableStatic<N>>}
                    : InputRangeTypeErased{
                          lazySingleValueRange([this]() -> IdTableStatic<N> {
                            if (this->moveResultOnMerge_) {
-                             return std::move(this->currentBlock_)
-                                 .template toStatic<N>();
+                             return detail::toOutputTable<N>(
+                                 std::move(this->currentBlock_)
+                                     .extractColumnMajor());
                            } else {
-                             return this->currentBlock_.clone()
-                                 .template toStatic<N>();
+                             return detail::toOutputTable<N>(
+                                 this->currentBlock_.copyToColumnMajor());
                            }
                          })};
       }
@@ -1392,8 +2024,9 @@ class CompressedExternalIdTableSorter
             auto chunkSize = ::ranges::size(chunk);
             auto curBlock = IdTableStatic<NumStaticCols>(
                 this->numColumns_, this->writer_.allocator());
-            curBlock.insertAtEnd(block, chunkStart, chunkStart + chunkSize);
-            return IdTableStatic<N>(std::move(curBlock).template toStatic<N>());
+            block.appendRowsTo(curBlock, chunkStart, chunkStart + chunkSize);
+            return compressedExternalIdTable::detail::toOutputTable<N>(
+                std::move(curBlock));
           });
       return ad_utility::InputRangeTypeErased(std::move(chunked));
     }
@@ -1404,17 +2037,99 @@ class CompressedExternalIdTableSorter
     const auto parameters =
         compressedExternalIdTable::computeMergePhaseParameters(config);
     warnIfParallelismIsReduced(parameters);
+    if (this->currentBlock_.isRowMajor()) {
+      return mergeRowMajor<N>(config, parameters);
+    }
+    return mergeRuns<N, IdTableStatic<N>, N>(config, parameters);
+  }
+
+  // Merge the presorted runs with the blocks in the row-major layout, see
+  // `RowMajorMergeBlock`. The number of columns of such a block is a
+  // compile-time constant, which for a sorter with a dynamic number of columns
+  // is obtained via `callFixedSize`; the runs of such a sorter are therefore
+  // merged as blocks of `I` columns and only the resulting blocks are converted
+  // back to the dynamic output type, see `detail::toOutputTable`.
+  CPP_template(size_t N)(requires(N == NumStaticCols || N == 0))
+      ad_utility::InputRangeTypeErased<IdTableStatic<N>> mergeRowMajor(
+          const compressedExternalIdTable::MergePhaseConfig& config,
+          const compressedExternalIdTable::MergePhaseParameters& parameters) {
+    if constexpr (NumStaticCols > 0) {
+      return mergeRuns<N, RowMajorMergeBlock<NumStaticCols>, NumStaticCols>(
+          config, parameters);
+    } else {
+      using Result = ad_utility::InputRangeTypeErased<IdTableStatic<N>>;
+      return ad_utility::callFixedSizeVi<
+          compressedExternalIdTable::MAX_NUM_COLUMNS_ROW_MAJOR>(
+          static_cast<int>(this->numColumns_),
+          [this, &config, &parameters](auto numColumnsVi) -> Result {
+            constexpr size_t I =
+                static_cast<size_t>(decltype(numColumnsVi)::value);
+            if constexpr (I == 0) {
+              // Excluded by `rowMajorModeIsSupported`, which the buffer of the
+              // input phase has already checked.
+              AD_FAIL();
+            } else {
+              return mergeRuns<N, RowMajorMergeBlock<I>, I>(config, parameters);
+            }
+          });
+    }
+  }
+
+  // Merge the presorted runs as blocks of type `Block` with `I` columns and
+  // yield the result as blocks with `N` statically known columns. The two
+  // layouts of a block differ only in the `Block` type, see
+  // `CompressedIdTableRunsInput`.
+  template <size_t N, typename Block, size_t I>
+  ad_utility::InputRangeTypeErased<IdTableStatic<N>> mergeRuns(
+      const compressedExternalIdTable::MergePhaseConfig& config,
+      const compressedExternalIdTable::MergePhaseParameters& parameters) {
+    // The block storage spells the default, column-major block type as `void`,
+    // see `CompressedIdTableBlockStorage`.
+    using StorageBlock =
+        std::conditional_t<std::is_same_v<Block, IdTableStatic<I>>, void,
+                           Block>;
     auto merged =
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
-            mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
-            this->comparator_, makeBlockStorageFactory<N>(parameters),
+            mergeExecutor_, CompressedIdTableRunsInput<I, Block>{this->writer_},
+            this->comparator_,
+            makeBlockStorageFactory<I, StorageBlock>(parameters),
             compressedExternalIdTable::makeMergeOptions(config, parameters),
             // NOTE: The sorter has no cancellation handle of its own, and the
             // merge requires one that is not `nullptr`, so this is a fresh
             // handle that is never cancelled.
             std::make_shared<ad_utility::CancellationHandle<>>());
     return ad_utility::InputRangeTypeErased{
-        checkedMergeResult<N>(std::move(merged))};
+        checkedMergeResult<N>(toOutputBlocks<N, Block, I>(std::move(merged)))};
+  }
+
+  // Turn the blocks of the merge into the output blocks of this sorter. For the
+  // column-major layout this is a no-op, and for the row-major one it is a
+  // cheap move: such a block is already column-major when it arrives here,
+  // because it was either spilled to disk (and read back column-major) or
+  // transposed on a worker thread of the merge while it waited in the block
+  // storage, see the FINALIZATION note at `CompressedIdTableBlockStorage`. The
+  // transposition is only ever done here for a block storage that does not
+  // finalize its blocks, which the merge phase of this sorter does not use.
+  template <size_t N, typename Block, size_t I>
+  ad_utility::InputRangeTypeErased<IdTableStatic<N>> toOutputBlocks(
+      ad_utility::InputRangeTypeErased<Block> merged) const {
+    namespace detail = compressedExternalIdTable::detail;
+    if constexpr (std::is_same_v<Block, IdTableStatic<N>>) {
+      return merged;
+    } else {
+      using LoopControl = ad_utility::LoopControl<IdTableStatic<N>>;
+      return ad_utility::InputRangeTypeErased<IdTableStatic<N>>{
+          ad_utility::InputRangeFromLoopControlGet{
+              [blocks = std::move(merged),
+               allocator = this->writer_.allocator()]() mutable {
+                auto block = blocks.get();
+                if (!block.has_value()) {
+                  return LoopControl::makeBreak();
+                }
+                return LoopControl::yieldValue(detail::toOutputTable<N>(
+                    std::move(block).value().toColumnMajor(allocator)));
+              }}};
+    }
   }
 
   // The factory for the intermediate storage of the output blocks of the merge
@@ -1422,10 +2137,11 @@ class CompressedExternalIdTableSorter
   // How many of those blocks a chunk may buffer before it starts spilling is
   // part of the `parameters` that the memory limit was split into, see
   // `compressedExternalIdTable::numBufferedOutputBlocksPerChunk`.
-  template <size_t N>
+  template <size_t N, typename Block = void>
   auto makeBlockStorageFactory(
       const compressedExternalIdTable::MergePhaseParameters& parameters) {
-    return compressedExternalIdTable::makeMergePhaseBlockStorageFactory<N>(
+    return compressedExternalIdTable::makeMergePhaseBlockStorageFactory<N,
+                                                                        Block>(
         mergeExecutor_,
         compressedExternalIdTable::makeSpillFilename(
             this->writer_.filename(), numMergePhases_.fetch_add(1)),
@@ -1468,20 +2184,6 @@ class CompressedExternalIdTableSorter
                 << this->memory_.asString()
                 << ". Increasing the memory limit will speed up the merge."
                 << std::endl;
-  }
-
-  // _____________________________________________________________
-  void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
-#ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(block.begin(), block.end(), comparator_);
-#else
-    ql::ranges::sort(block, comparator_);
-#endif
-  }
-
-  // A function with this name is needed by the mixin base class.
-  void transformBlock(IdTableStatic<NumStaticCols>& block) const {
-    sortBlockInPlace(block);
   }
 };
 }  // namespace ad_utility
