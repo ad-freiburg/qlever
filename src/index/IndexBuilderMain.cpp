@@ -20,6 +20,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
+#include "util/GlobalExecutor.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
@@ -308,6 +309,26 @@ int main(int argc, char** argv) {
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
+  add("external-sorter-row-major",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::externalSorterRowMajor_>()
+          ->implicit_value(true, "true"),
+      "Let the external sorters store the rows of a block row-major while they "
+      "collect, sort and merge them, instead of column-major as an `IdTable` "
+      "does. Sorting a block and merging the presorted runs then touch a "
+      "single cache line per row instead of one per column, at the price of "
+      "transposing the data once on the way in and once on the way out. The "
+      "data that is written to disk stays column-major either way, so this "
+      "does not change the format of the index.");
+  add("external-sorter-compression-level",
+      optionFactory.getProgramOption<
+          &RuntimeParameters::externalSorterCompressionLevel_>(),
+      "How the external sorters compress the blocks that they write to disk: "
+      "the blocks of the presorted runs as well as the output blocks that the "
+      "merge phase spills. Either `default` (each of the two uses its own "
+      "built-in default), `none` (both are stored uncompressed), or a ZSTD "
+      "compression level for both (negative levels are the `zstd --fast` "
+      "modes).");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),
@@ -334,10 +355,12 @@ int main(int argc, char** argv) {
   add("num-threads,j", po::value(&config.numThreads_),
       "The number of threads used during the index build. Must be at least 1. "
       "Default: the number of hardware threads of the machine. NOTE: Currently "
-      "only the first pass (parsing the input and creating the partial "
-      "vocabularies) and the conversion to global IDs use this number; the "
-      "other phases use their own parallelism (making all phases respect this "
-      "option is work in progress). The memory of the first pass grows "
+      "the first pass (parsing the input and creating the partial "
+      "vocabularies), the conversion to global IDs, and the shared thread pool "
+      "that the merge phase of the external sorters and the permutation writer "
+      "run on use this number; the other phases use their own parallelism "
+      "(making all phases respect this option is work in progress). The memory "
+      "of the first pass grows "
       "linearly with this number, since each thread holds one batch of "
       "`num-triples-per-batch` triples with its partial vocabulary in RAM.");
 
@@ -380,10 +403,12 @@ int main(int argc, char** argv) {
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
     config.validate();
-    // For index building, use more threads for writing permutations than the
-    // default (which is optimized for `rebuild-index`, where six permutations
-    // are written simultaneously).
-    setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(5);
+    // Make all the phases that run on the global thread pool (the merge phase
+    // of the external sorters and the permutation writer) respect the
+    // `--num-threads / -j` option. This has to happen before the index build
+    // starts, because the pool is created on its first use and its size cannot
+    // be changed afterwards.
+    ad_utility::setGlobalExecutorNumThreads(config.numThreads_);
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "

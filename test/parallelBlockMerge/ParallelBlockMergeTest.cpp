@@ -1195,6 +1195,149 @@ TEST(ParallelBlockMerge, rangeWithASingleInFlightChunk) {
   }
 }
 
+namespace {
+// A `VectorInput` that reports its own destruction. It deliberately sleeps
+// before it does so, such that a destruction that happens too late is observed
+// reliably instead of flakily, see the test below.
+struct DestructionReportingInput : public VectorInput<size_t> {
+  // `nullptr` if and only if this object was moved from.
+  std::atomic<bool>* wasDestroyed_;
+
+  DestructionReportingInput(VectorInput<size_t> input,
+                            std::atomic<bool>* wasDestroyed)
+      : VectorInput<size_t>{std::move(input)}, wasDestroyed_{wasDestroyed} {}
+  DestructionReportingInput(DestructionReportingInput&& other) noexcept
+      : VectorInput<size_t>{std::move(other)},
+        wasDestroyed_{std::exchange(other.wasDestroyed_, nullptr)} {}
+  ~DestructionReportingInput() {
+    if (wasDestroyed_ == nullptr) {
+      return;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    *wasDestroyed_ = true;
+  }
+};
+static_assert(
+    ad_utility::parallelBlockMerge::InputConcept<DestructionReportingInput>);
+
+// Merge with a `DestructionReportingInput`, consume `numBlocksToConsume` blocks
+// of the result (or all of them if that is `nullopt`), destroy the range, and
+// return whether the input was already destroyed at that point.
+bool inputIsDestroyedWithTheRange(std::optional<size_t> numBlocksToConsume) {
+  auto runs = makeRandomRuns(8, 100, 200);
+  std::atomic<bool> inputWasDestroyed = false;
+  net::thread_pool pool{4};
+  // See the note in `mergeToRangeAndCollect` above for why the pool is joined
+  // only after the range is destroyed.
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  {
+    auto blocks = parallelBlockMergeToRange<false>(
+        pool.get_executor(),
+        DestructionReportingInput{makeVectorInput(runs, 8), &inputWasDestroyed},
+        std::less<>{}, makeInMemoryStorageFactory<SizeVec>(2),
+        alwaysParallelOptions(7), detail::freshCancellationHandle());
+    size_t numConsumed = 0;
+    for ([[maybe_unused]] auto& block : blocks) {
+      ++numConsumed;
+      if (numBlocksToConsume.has_value() &&
+          numConsumed >= numBlocksToConsume.value()) {
+        break;
+      }
+    }
+  }
+  return inputWasDestroyed;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Regression test: when the range is destroyed, the merge has to have released
+// its input, see the destructor of `detail::ParallelMergeRange`. Consumers rely
+// on this, because the input typically owns a resource (a file, a registration)
+// that they dispose of right afterwards. Before the destructor waited, the
+// input was released by whichever coroutine happened to finish last, on one of
+// the executor's threads and hence after the consumer had already moved on.
+TEST(ParallelBlockMerge, rangeDestructorWaitsForTheMergeToReleaseItsInput) {
+  // The merge ran to completion.
+  EXPECT_TRUE(inputIsDestroyedWithTheRange(std::nullopt));
+  // The consumer abandoned the merge, so several chunks were still in flight.
+  EXPECT_TRUE(inputIsDestroyedWithTheRange(1));
+}
+
+// _____________________________________________________________________________
+// Regression test: a range that was consumed to its end has to release the
+// merge (and hence its input) right away, also while the range object itself
+// stays alive. Consumers rely on this: they exhaust the range, keep it in a
+// local variable, and dispose of the input afterwards, see
+// `detail::ParallelMergeRange::releaseEverything`.
+TEST(ParallelBlockMerge, exhaustedRangeReleasesTheInputWhileItStaysAlive) {
+  auto runs = makeRandomRuns(8, 100, 200);
+  auto expected = sortedConcatenation(runs);
+  std::atomic<bool> inputWasDestroyed = false;
+  net::thread_pool pool{4};
+  // See the note in `mergeToRangeAndCollect` above for why the pool is joined
+  // only after the range is destroyed.
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  auto blocks = parallelBlockMergeToRange<false>(
+      pool.get_executor(),
+      DestructionReportingInput{makeVectorInput(runs, 8), &inputWasDestroyed},
+      std::less<>{}, makeInMemoryStorageFactory<SizeVec>(2),
+      alwaysParallelOptions(7), detail::freshCancellationHandle());
+  SizeVec result;
+  for (const auto& block : blocks) {
+    result.insert(result.end(), block.begin(), block.end());
+  }
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  // The range is still alive, but everything that the merge owned is gone.
+  EXPECT_TRUE(inputWasDestroyed);
+  // The range stays a valid object that simply has nothing left to yield, and
+  // destroying it afterwards must not wait for (or touch) anything.
+  EXPECT_FALSE(blocks.get().has_value());
+  EXPECT_FALSE(blocks.get().has_value());
+}
+
+// _____________________________________________________________________________
+// The very same holds for the serial merge, which has no coroutines to wait for
+// but owns its input just as much, see `detail::RangeThatReleasesOnEnd`.
+TEST(ParallelBlockMerge,
+     exhaustedSerialRangeReleasesTheInputWhileItStaysAlive) {
+  auto runs = makeRandomRuns(4, 50, 100);
+  auto expected = sortedConcatenation(runs);
+  std::atomic<bool> inputWasDestroyed = false;
+  auto blocks = serialBlockMergeToRange<false>(
+      DestructionReportingInput{makeVectorInput(runs, 8), &inputWasDestroyed},
+      std::less<>{}, optionsWithBlockSize(7));
+  SizeVec result;
+  for (const auto& block : blocks) {
+    result.insert(result.end(), block.begin(), block.end());
+  }
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  EXPECT_TRUE(inputWasDestroyed);
+  EXPECT_FALSE(blocks.get().has_value());
+}
+
+// _____________________________________________________________________________
+// The same holds for a range that has propagated an exception: its consumer
+// may keep it alive for a long time, so the merge has to be released as soon as
+// the exception reaches that consumer.
+TEST(ParallelBlockMerge, rangeThatThrewReleasesTheInputWhileItStaysAlive) {
+  auto runs = makeRandomRuns(8, 100, 200);
+  std::atomic<bool> inputWasDestroyed = false;
+  auto handle = detail::freshCancellationHandle();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  net::thread_pool pool{4};
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  auto blocks = parallelBlockMergeToRange<false>(
+      pool.get_executor(),
+      DestructionReportingInput{makeVectorInput(runs, 8), &inputWasDestroyed},
+      std::less<>{}, makeInMemoryStorageFactory<SizeVec>(2),
+      alwaysParallelOptions(7), std::move(handle));
+  EXPECT_THROW(blocks.get(), ad_utility::CancellationException);
+  EXPECT_TRUE(inputWasDestroyed);
+  // The exception is kept, so a consumer that keeps reading sees it again
+  // instead of a silent end of the range.
+  EXPECT_THROW(blocks.get(), ad_utility::CancellationException);
+}
+
 // _____________________________________________________________________________
 TEST(ParallelBlockMerge, rangeTakesTheSerialFastPath) {
   auto runs = makeRandomRuns(8, 100, 200);
@@ -1305,6 +1448,7 @@ namespace {
 struct DummyMergeState {
   using Block = SizeVec;
   void stop() {}
+  std::future<void> asyncWaitForCompletion() { return {}; }
 };
 struct DummySink {
   template <typename Token>
@@ -1322,10 +1466,200 @@ TEST(ParallelBlockMerge, rangeRequiresAStateAndASink) {
   using Range = detail::ParallelMergeRange<DummyMergeState, DummySink>;
   auto state = std::make_shared<DummyMergeState>();
   auto sink = std::make_shared<DummySink>();
-  AD_EXPECT_THROW_WITH_MESSAGE(Range(nullptr, sink),
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(nullptr, sink, 2),
                                ::testing::HasSubstr("state_ != nullptr"));
-  AD_EXPECT_THROW_WITH_MESSAGE(Range(state, nullptr),
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(state, nullptr, 2),
                                ::testing::HasSubstr("sink_ != nullptr"));
+  // A read-ahead of zero blocks would never make any progress, see
+  // `MergeOptions::numPrefetchedOutputBlocks`.
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(state, sink, 0),
+                               ::testing::HasSubstr("numPrefetchedBlocks > 0"));
+}
+
+// ___________________________________________________________________________
+// The read-ahead of the range: the chain of `asyncGetNextBlock` operations that
+// keeps `MergeOptions::numPrefetchedOutputBlocks` output blocks ready, see
+// `detail::BlockPrefetcher`.
+// ___________________________________________________________________________
+
+namespace {
+// A `BlockStorageConcept` that counts the blocks which the consumer side has
+// pulled out of it and forwards everything else to an `InMemoryBlockStorage`.
+// That counter is exactly the number of output blocks that the read-ahead has
+// fetched so far, which is what the test below observes.
+template <typename Block>
+class CountingBlockStorage {
+ public:
+  using OptionalBlock = ad_utility::parallelBlockMerge::OptionalBlock<Block>;
+  using GetResult = ad_utility::parallelBlockMerge::GetResult<Block>;
+  using Counter = std::shared_ptr<std::atomic<size_t>>;
+
+ private:
+  InMemoryBlockStorage<Block> storage_;
+  Counter numBlocksRead_;
+
+ public:
+  // Construct from the arguments of the underlying `InMemoryBlockStorage` plus
+  // the counter that the blocks are counted in.
+  CountingBlockStorage(Strand strand, size_t maxBufferedBlocksPerChunk,
+                       Counter numBlocksRead)
+      : storage_{std::move(strand), maxBufferedBlocksPerChunk},
+        numBlocksRead_{std::move(numBlocksRead)} {}
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto storeBlock(size_t chunkIndex, OptionalBlock block,
+                  CompletionToken&& completionToken) {
+    return storage_.storeBlock(chunkIndex, std::move(block),
+                               AD_FWD(completionToken));
+  }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto getBlock(size_t chunkIndex, CompletionToken&& completionToken) {
+    return net::async_initiate<CompletionToken,
+                               void(std::exception_ptr, GetResult)>(
+        [this, chunkIndex](auto handler) mutable {
+          // NOTE: The inner handler has no executor of its own and hence runs
+          // on the strand, just like the outer one, so the counter is only ever
+          // touched there.
+          storage_.getBlock(chunkIndex, [this, handler = std::move(handler)](
+                                            std::exception_ptr exception,
+                                            GetResult result) mutable {
+            if (result.hasValue()) {
+              numBlocksRead_->fetch_add(1);
+            }
+            std::move(handler)(std::move(exception), std::move(result));
+          });
+        },
+        completionToken);
+  }
+
+  // ________________________________________________________________________
+  void cancelAll() noexcept { storage_.cancelAll(); }
+};
+
+// A factory for a `CountingBlockStorage`, for the constructor of
+// `InOrderBlockSink`.
+template <typename Block>
+auto makeCountingStorageFactory(
+    size_t maxBufferedBlocksPerChunk,
+    typename CountingBlockStorage<Block>::Counter numBlocksRead) {
+  return [maxBufferedBlocksPerChunk,
+          numBlocksRead = std::move(numBlocksRead)](const Strand& strand) {
+    return CountingBlockStorage<Block>{strand, maxBufferedBlocksPerChunk,
+                                       numBlocksRead};
+  };
+}
+
+static_assert(BlockStorageConcept<CountingBlockStorage<SizeVec>, SizeVec>);
+
+// Return options for the parallel path with the given read-ahead.
+MergeOptions optionsWithPrefetching(size_t numPrefetchedOutputBlocks,
+                                    size_t outputBlockSize = 7) {
+  MergeOptions options = alwaysParallelOptions(outputBlockSize);
+  options.numPrefetchedOutputBlocks = numPrefetchedOutputBlocks;
+  return options;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// The read-ahead must not change the result, no matter how many blocks it keeps
+// ready: a single one, a few, the default, and many more than the merge will
+// ever produce.
+TEST(ParallelBlockMerge, rangeWithDifferentAmountsOfReadAhead) {
+  auto runs = makeRandomRuns(8, 100, 200);
+  auto expected = sortedConcatenation(runs);
+  for (size_t numPrefetched : {1u, 2u, 10u, 1000u}) {
+    auto result =
+        mergeToRangeAndCollect(makeVectorInput(runs, 16), std::less<>{},
+                               optionsWithPrefetching(numPrefetched));
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected))
+        << "with " << numPrefetched << " prefetched blocks";
+  }
+}
+
+// _____________________________________________________________________________
+// The read-ahead actually happens: a consumer that takes a single block and
+// then idles finds the buffer filled up to the configured number of blocks,
+// whereas a read-ahead of a single block hands out at most one further block.
+TEST(ParallelBlockMerge, readAheadFillsTheBufferWhileTheConsumerIdles) {
+  auto runs = makeRandomRuns(4, 2000, 2000);
+  // Return the number of output blocks that the merge has handed to the
+  // consumer side after the consumer has taken a single block and then idled.
+  auto numBlocksReadWhileIdling = [&runs](size_t numPrefetched) {
+    auto numBlocksRead = std::make_shared<std::atomic<size_t>>(0);
+    net::thread_pool pool{4};
+    absl::Cleanup joinPool = [&pool] { pool.join(); };
+    auto blocks = parallelBlockMergeToRange<false>(
+        pool.get_executor(), makeVectorInput(runs, 16), std::less<>{},
+        makeCountingStorageFactory<SizeVec>(1, numBlocksRead),
+        optionsWithPrefetching(numPrefetched));
+    auto it = blocks.begin();
+    EXPECT_NE(it, blocks.end());
+    // The read-ahead runs in the background while this thread does nothing at
+    // all, which is exactly the situation that it is for.
+    std::this_thread::sleep_for(std::chrono::milliseconds{200});
+    return numBlocksRead->load();
+  };
+  // With a read-ahead of a single block there are at most two blocks: the one
+  // that the consumer holds and the single one that was read ahead.
+  EXPECT_LE(numBlocksReadWhileIdling(1), 2u);
+  // With a read-ahead of ten blocks the buffer fills up to ten blocks plus the
+  // one that the consumer holds, and the chain then pauses. The lower bound is
+  // deliberately loose, such that a heavily loaded machine does not make this
+  // flaky.
+  size_t numBlocksWithReadAhead = numBlocksReadWhileIdling(10);
+  EXPECT_GE(numBlocksWithReadAhead, 6u);
+  EXPECT_LE(numBlocksWithReadAhead, 11u);
+}
+
+// _____________________________________________________________________________
+// Abandoning the range while a read-ahead is in flight must neither hang nor
+// crash: the destructor stops the merge first, so the operation that is in
+// flight completes promptly, and only then are the blocks and the sink
+// released, see the destructor of `detail::ParallelMergeRange`.
+TEST(ParallelBlockMerge, consumerAbandonsRangeWhileReadingAhead) {
+  auto runs = makeRandomRuns(50, 2000, 2000);
+  // Repeat this a few times, because the exact moment at which the range is
+  // destroyed is what this test is about.
+  for (size_t i = 0; i < 5; ++i) {
+    for (size_t numPrefetched : {1u, 64u}) {
+      net::thread_pool pool{8};
+      MergeOptions options = optionsWithPrefetching(numPrefetched, 16);
+      options.parallelismHint = 8;
+      {
+        auto blocks = parallelBlockMergeToRange<false>(
+            pool.get_executor(), makeVectorInput(runs, 64), std::less<>{},
+            makeInMemoryStorageFactory<SizeVec>(2), options);
+        auto it = blocks.begin();
+        ASSERT_NE(it, blocks.end());
+        EXPECT_FALSE(it->empty());
+      }
+      // Abandoning the range without consuming anything at all, which is the
+      // case where the very first operation of the read-ahead is still in
+      // flight.
+      {
+        [[maybe_unused]] auto blocks = parallelBlockMergeToRange<false>(
+            pool.get_executor(), makeVectorInput(runs, 64), std::less<>{},
+            makeInMemoryStorageFactory<SizeVec>(2), options);
+      }
+      pool.join();
+    }
+  }
+}
+
+// _____________________________________________________________________________
+// An exception still reaches the consumer, also when it arrives while several
+// blocks are already buffered by the read-ahead.
+TEST(ParallelBlockMerge, exceptionPropagatesThroughTheReadAhead) {
+  for (size_t numPrefetched : {1u, 64u}) {
+    expectExceptionPropagates([numPrefetched](InstrumentedInput input) {
+      return mergeToRangeAndCollect(std::move(input), std::less<>{},
+                                    optionsWithPrefetching(numPrefetched, 16),
+                                    4);
+    });
+  }
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

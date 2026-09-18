@@ -84,6 +84,52 @@ IdTableStatic<NumCols> readBlock(const CompressedBlockFile& file,
   return block;
 }
 
+// How a single block is compressed into a `CompressedBlockFile` and read back
+// from it. This is a customization point of the block storage (see
+// `CompressedIdTableBlockStorage.h`), such that that storage can also hold
+// blocks that are not themselves column-major, as long as they can be converted
+// to and from a column-major `IdTable`. The *file* is always column-major, no
+// matter what the block type is, because a column of a sorted block consists of
+// long runs of equal `Id`s and hence compresses much better than the same data
+// interleaved row by row.
+//
+// The default implementation is the one for the (column-major) `IdTableStatic`,
+// for which both directions are exactly the two functions above. For the
+// row-major block of the merge phase see `RowMajorMergeBlock.h`.
+template <typename Block>
+struct BlockCodec {
+  // Whether a block that is *not* written to the file still has to be brought
+  // into the layout that the consumer of the merge expects, see `finalize`
+  // below. A column-major block already is in that layout, so the default is
+  // `false` and the storage then never touches a block that it keeps in
+  // memory.
+  static constexpr bool needsFinalization = false;
+
+  // Bring a block that the storage keeps in memory into the layout that the
+  // consumer of the merge expects, which for a block that goes through the
+  // file is what `read` returns. The default is the identity, see
+  // `needsFinalization` above.
+  static Block finalize(
+      Block block, [[maybe_unused]] const AllocatorWithLimit<Id>& allocator) {
+    return block;
+  }
+
+  // Compress the `block` and append it to the `file`.
+  static BlockMetadata write(
+      CompressedBlockFile& file, const Block& block,
+      [[maybe_unused]] const AllocatorWithLimit<Id>& allocator) {
+    return writeBlock(file, block, 0, block.numRows());
+  }
+
+  // Read the block that is described by the `metadata` back from the `file`.
+  static Block read(const CompressedBlockFile& file,
+                    const BlockMetadata& metadata,
+                    const AllocatorWithLimit<Id>& allocator) {
+    return readBlock<static_cast<size_t>(Block::numStaticColumns)>(
+        file, metadata, allocator);
+  }
+};
+
 }  // namespace ad_utility::compressedIdTable
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_COMPRESSEDIDTABLEBLOCKS_H

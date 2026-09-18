@@ -143,6 +143,7 @@ add_subdirectory(rdfTypes)
 add_subdirectory(joinAlgorithms)
 add_subdirectory(libqlever)
 add_subdirectory(parallelBlockMerge)
+add_subdirectory(blockSort)
 
 OPTION(_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS "Disable some tests that cause undefined symbol errors when building with Emscripten." OFF)
 
@@ -304,6 +305,8 @@ addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
 
 addLinkAndDiscoverTest(TaskQueueTest)
+
+addLinkAndDiscoverTest(AsyncTaskQueueTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
@@ -609,6 +612,14 @@ addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(GlobalExecutorTest qlever_util)
+
+# The tests for the HPX executor adapter can only be built if HPX is part of
+# the build at all, see the `USE_HPX` option in the top-level `CMakeLists.txt`.
+if (USE_HPX)
+    addLinkAndDiscoverTest(HpxAsioExecutorTest qlever_util)
+endif ()
 
 addLinkAndDiscoverTest(MetricsTest metrics)
 

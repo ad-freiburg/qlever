@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <limits>
 #include <thread>
+#include <vector>
 
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
@@ -38,6 +39,11 @@ constexpr inline MemorySize DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY =
 // greater than one lead to a finer granularity, which in turn improves the load
 // balancing if the individual chunks require different amounts of work.
 constexpr inline size_t DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD = 4;
+
+// The default number of output blocks that the consumer side of a merge keeps
+// ready in advance, see `MergeOptions::numPrefetchedOutputBlocks`.
+constexpr inline size_t DEFAULT_PARALLEL_MERGE_NUM_PREFETCHED_OUTPUT_BLOCKS =
+    10;
 
 // The default number of input elements below which the merge is performed
 // serially. For small inputs the overhead of setting up the parallel merge
@@ -140,10 +146,41 @@ struct MergeOptions {
   // `0` means "as many as `parallelism()`".
   size_t maxNumChunksInFlight = 0;
 
+  // If not empty, the sizes (in elements) of the leading chunks of the merge:
+  // the `i`-th chunk gets the size `firstChunkSizes[i]`, and all the remaining
+  // chunks get the size that `targetNumChunks()` implies. The consumer has to
+  // drain the chunks in the order of their index, so smaller leading chunks
+  // make the first output blocks of the merge available much sooner.
+  //
+  // NOTE: These are targets and not guarantees, and they never *reduce* the
+  // number of chunks: a leading size that is not smaller than the size of a
+  // uniform chunk is ignored, see `computeChunkBoundaries` in
+  // `MergeHelpers.h`.
+  std::vector<size_t> firstChunkSizes{};
+
   // Merge serially in the calling thread if the input has at most that many
   // elements in total, see `shouldMergeSerially()`.
   size_t serialNumElementsThreshold =
       DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD;
+
+  // The number of output blocks that the consumer side of the merge keeps ready
+  // in advance: it reads those blocks in the background (on the very executor
+  // that the merge itself runs on) instead of fetching a block only once the
+  // consumer asks for it, see `detail::BlockPrefetcher`. Only
+  // `parallelBlockMergeToRange` (the blocking consumer) looks at this; the
+  // serial merge and a caller that reads the sink itself ignore it.
+  //
+  // The value `1` is the smallest possible read-ahead: a single block is
+  // fetched while the consumer works on the block that it currently holds. The
+  // value `0` is not allowed and rejected by an `AD_CONTRACT_CHECK`, because a
+  // merge without any read-ahead at all would never make progress.
+  //
+  // NOTE: Every one of these blocks costs memory, and so does the block that
+  // the operation which is currently in flight is about to deliver, so a caller
+  // with a memory budget has to account for `numPrefetchedOutputBlocks + 1`
+  // blocks besides the one that the consumer itself holds.
+  size_t numPrefetchedOutputBlocks =
+      DEFAULT_PARALLEL_MERGE_NUM_PREFETCHED_OUTPUT_BLOCKS;
 
   // Return the number of threads that the merge assumes, that is the
   // `parallelismHint` with the value `0` resolved to its default.
