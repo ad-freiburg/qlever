@@ -255,6 +255,22 @@ struct RuntimeParameters {
   DeduplicationModeParameter constructDeduplication_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
 
+  // Opt-in adaptive io_uring batch sizing for vocabulary lookups
+  // (`AdaptiveBatchController`): adapt the effective submission batch size
+  // to the ratio of outstanding I/Os to still-pending reads instead of
+  // submitting against the fixed ring window. Disabled by default; the
+  // fixed window behavior is unchanged until this is enabled and the
+  // benchmark in `docs/io_uring/adaptive-batching-design.md` says
+  // otherwise.
+  Bool iouringAdaptiveBatchEnabled_{false, "iouring-adaptive-batch-enabled"};
+  // Minimum prepared reads before the controller may flush early. Must be
+  // at least one (enforced by a parameter constraint); smaller groups keep
+  // their single end-of-batch submit.
+  SizeT iouringAdaptiveBatchMinSize_{16, "iouring-adaptive-batch-min-size"};
+  // Maximum prepared reads before a forced submit, so large batches still
+  // submit incrementally. Clamped against the ring size by the policy.
+  SizeT iouringAdaptiveBatchMaxSize_{256, "iouring-adaptive-batch-max-size"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.

@@ -107,17 +107,42 @@ void IoUringPolicy::addBatch(int fd,
   }
   numInFlightReadRequestsPerBatch_[handle] = numReadRequestsToPerform;
 
+  // Reads prepared since the last `io_uring_submit` and reads of this batch
+  // still waiting to be prepared (including the current one). Only used when
+  // adaptive batch sizing is enabled.
+  size_t numPreparedSinceSubmit = 0;
+  size_t numRemaining = numReadRequestsToPerform;
+
   for (const auto& [numBytesToRead, fileOffset, targetBuf] :
        ::ranges::views::zip(numBytesToReadPerRequest, fileOffsetPerRequest,
                             targetBufferPerRequest)) {
     // The ring has no free slot, so make room: submit what we have prepared so
-    // far and block until enough completions have been drained.
+    // far and block until enough completions have been drained. This hard
+    // safety bound applies with and without the controller.
     if (numInFlightReadRequests_ >= ringSize_) {
       // Flush the SQEs prepared so far to the kernel so the kernel can start
       // servicing them. Their completions will free up submission slots.
       io_uring_submit(&ring_);
       while (numInFlightReadRequests_ >= ringSize_) {
         drainOneCqe();
+      }
+      numPreparedSinceSubmit = 0;
+    } else if (adaptiveBatchController_.has_value()) {
+      const AdaptiveBatchController& controller = *adaptiveBatchController_;
+      // Clamp the deferred group to the configured maximum so a very large
+      // batch still submits incrementally and never exceeds the ring.
+      // Otherwise ask the controller once the minimum group size is reached:
+      // flush early when little work remains, defer while many I/Os are
+      // already in flight to increase amortization.
+      if (numPreparedSinceSubmit >= controller.maxBatchSize_) {
+        io_uring_submit(&ring_);
+        numPreparedSinceSubmit = 0;
+      } else if (numPreparedSinceSubmit >= controller.minBatchSize_ &&
+                 numPreparedSinceSubmit > 0 &&
+                 controller.shouldFlush(numInFlightReadRequests_,
+                                        numRemaining)) {
+        io_uring_submit(&ring_);
+        numPreparedSinceSubmit = 0;
       }
     }
 
@@ -140,6 +165,8 @@ void IoUringPolicy::addBatch(int fd,
     inFlightReadsByRequestId_[requestId] = InFlightRead{handle, numBytesToRead};
     io_uring_sqe_set_data64(sqe, requestId);
     numInFlightReadRequests_++;
+    numPreparedSinceSubmit++;
+    numRemaining--;
   }
   // Flush the remaining prepared SQEs to the kernel (the loop above only
   // submits when the submission queue is full, so the last group of SQEs has
