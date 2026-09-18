@@ -55,7 +55,11 @@ class FiberIoScheduler {
   // The calling thread's scheduler instance.
   static FiberIoScheduler& local();
 
-  // True when called from inside a scheduler fiber on a fiber-enabled build.
+  // True when called from inside a body running under `runAsFibers` on a
+  // fiber-enabled build. Tracked explicitly (rather than asking
+  // `boost::fibers::context::active()`, whose nullability on plain threads
+  // varies across Boost versions), so plain threads — including the main
+  // thread after fibers ran on it — always report false.
   static bool isInsideFiber();
 
   // Run each body as its own fiber on this thread and return once all have

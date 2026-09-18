@@ -16,7 +16,6 @@
 
 #if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
 #include <boost/fiber/algo/round_robin.hpp>
-#include <boost/fiber/context.hpp>
 #include <boost/fiber/fiber.hpp>
 #include <boost/fiber/operations.hpp>
 
@@ -24,6 +23,11 @@
 #endif
 
 namespace ad_utility {
+
+// Whether this thread is currently executing a `runAsFibers` body. Set by
+// the fiber wrapper below (save/restore, so nested `runAsFibers` calls are
+// safe); never set on plain threads.
+thread_local bool t_inSchedulerFiberBody = false;
 
 //______________________________________________________________________________
 FiberIoScheduler& FiberIoScheduler::local() {
@@ -34,7 +38,7 @@ FiberIoScheduler& FiberIoScheduler::local() {
 //______________________________________________________________________________
 bool FiberIoScheduler::isInsideFiber() {
 #if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
-  return boost::fibers::context::active() != nullptr;
+  return t_inSchedulerFiberBody;
 #else
   return false;
 #endif
@@ -65,9 +69,19 @@ void FiberIoScheduler::runAsFibers(std::vector<std::function<void()>> bodies) {
   std::vector<boost::fibers::fiber> fibers;
   fibers.reserve(bodies.size());
   for (auto& body : bodies) {
-    fibers.emplace_back([&scheduler, &body]() {
+    // `launch::post`: schedule the body instead of running it in the
+    // constructor. The default (`launch::dispatch`) runs the body
+    // immediately, so a throwing body would unwind through vector
+    // construction and terminate on the still-joinable earlier fibers;
+    // posted bodies transport their exceptions to `join` instead, where the
+    // loop below collects them.
+    fibers.emplace_back(boost::fibers::launch::post, [&scheduler, &body]() {
       scheduler.enterActive();
-      absl::Cleanup leaveActive{[&scheduler]() { scheduler.exitActive(); }};
+      absl::Cleanup leaveActive([&scheduler]() { scheduler.exitActive(); });
+      const bool wasInBody = t_inSchedulerFiberBody;
+      t_inSchedulerFiberBody = true;
+      absl::Cleanup restoreFlag(
+          [wasInBody]() { t_inSchedulerFiberBody = wasInBody; });
       body();
     });
   }
