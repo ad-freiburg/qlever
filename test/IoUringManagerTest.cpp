@@ -609,4 +609,81 @@ TEST(MakeBatchManager, backendMatchesFlagWhenIoUringPreferred) {
 #endif
   expectManagerWorks(*manager);
 }
+
+#ifdef QLEVER_HAS_IO_URING
+// Spin `reapAvailableCompletions` until `handle` completes, with a bounded
+// iteration cap so a lost completion fails the test instead of hanging it.
+void reapUntilComplete(ad_utility::IoUringPolicy& policy,
+                       ad_utility::IoUringPolicy::BatchHandle handle) {
+  constexpr size_t kMaxReapRounds = 1'000'000;
+  for (size_t round = 0; round < kMaxReapRounds; ++round) {
+    if (policy.isBatchComplete(handle)) {
+      return;
+    }
+    policy.reapAvailableCompletions();
+  }
+  FAIL() << "batch did not complete after " << kMaxReapRounds
+         << " non-blocking reap rounds";
+}
+
+// A fresh policy has nothing to reap: the non-blocking primitives report idle
+// without blocking, and unknown handles report complete (matching `wait`).
+TEST(NonBlockingReap, idlePolicyReapsNothing) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  ad_utility::IoUringPolicy policy(64);
+  EXPECT_FALSE(policy.tryReapOneCqe());
+  EXPECT_EQ(policy.reapAvailableCompletions(), 0u);
+  EXPECT_TRUE(policy.isBatchComplete(999));
+  EXPECT_EQ(policy.numOutstandingReads(), 0u);
+  EXPECT_FALSE(policy.isRingFull());
+}
+
+// A submitted batch drains fully through the non-blocking path alone: spin
+// `reapAvailableCompletions` until `isBatchComplete`, with no blocking `wait`.
+// Every read lands in its own buffer, like the `SingleBatch` typed test.
+TEST(NonBlockingReap, drainsSubmittedBatchWithoutBlocking) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+
+  ad_utility::IoUringPolicy policy(64);
+  ReadBatchForTesting batch;
+  batch.add({{8, 4}, {0, 4}, {12, 4}});
+  auto handle = batch.submitTo(policy, fd);
+  EXPECT_FALSE(policy.isBatchComplete(handle));
+  EXPECT_EQ(policy.numOutstandingReads(), 3u);
+
+  reapUntilComplete(policy, handle);
+
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
+  EXPECT_EQ(policy.numOutstandingReads(), 0u);
+  EXPECT_FALSE(policy.tryReapOneCqe());
+}
+
+// Two batches drained concurrently through the non-blocking path: completions
+// may arrive in any order, but each must be attributed to its own batch.
+TEST(NonBlockingReap, reapAttributesToCorrectBatch) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  auto [tmp, fd] = makeTempFile("AAAABBBB");
+
+  ad_utility::IoUringPolicy policy(64);
+  ReadBatchForTesting batchA;
+  batchA.add(0, 4);
+  ReadBatchForTesting batchB;
+  batchB.add(4, 4);
+  auto handleA = batchA.submitTo(policy, fd);
+  auto handleB = batchB.submitTo(policy, fd);
+
+  reapUntilComplete(policy, handleA);
+  reapUntilComplete(policy, handleB);
+
+  EXPECT_THAT(batchA.result(), ::testing::ElementsAre("AAAA"));
+  EXPECT_THAT(batchB.result(), ::testing::ElementsAre("BBBB"));
+}
+#endif
 }  // namespace

@@ -112,11 +112,11 @@ void IoUringPolicy::addBatch(int fd,
                             targetBufferPerRequest)) {
     // The ring has no free slot, so make room: submit what we have prepared so
     // far and block until enough completions have been drained.
-    if (numInFlightReadRequests_ >= ringSize_) {
+    if (isRingFull()) {
       // Flush the SQEs prepared so far to the kernel so the kernel can start
       // servicing them. Their completions will free up submission slots.
       io_uring_submit(&ring_);
-      while (numInFlightReadRequests_ >= ringSize_) {
+      while (isRingFull()) {
         drainOneCqe();
       }
     }
@@ -148,14 +148,45 @@ void IoUringPolicy::addBatch(int fd,
 }
 
 //______________________________________________________________________________
+bool IoUringPolicy::isBatchComplete(BatchHandle handle) const {
+  // `drainOneCqe`/`attributeCompletion` erases a batch as soon as its last
+  // read completes, so a present entry always still has outstanding reads.
+  return numInFlightReadRequestsPerBatch_.find(handle) ==
+         numInFlightReadRequestsPerBatch_.end();
+}
+
+//______________________________________________________________________________
 void IoUringPolicy::wait(BatchHandle handle) {
-  // Drain completions until this batch is gone. `drainOneCqe` erases a batch as
-  // soon as its last read completes, so a present entry always still has
-  // outstanding reads.
-  while (numInFlightReadRequestsPerBatch_.find(handle) !=
-         numInFlightReadRequestsPerBatch_.end()) {
+  // Drain completions until this batch is gone.
+  while (!isBatchComplete(handle)) {
     drainOneCqe();
   }
+}
+
+//______________________________________________________________________________
+bool IoUringPolicy::tryReapOneCqe() {
+  // Peek at the completion queue without blocking. Returns 0 with `cqe` set
+  // when a completion is available, `-EAGAIN` when the queue is empty.
+  io_uring_cqe* cqe = nullptr;
+  int ret = io_uring_peek_cqe(&ring_, &cqe);
+  if (ret == -EAGAIN) {
+    return false;
+  }
+  if (ret < 0) {
+    AD_THROW("io_uring_peek_cqe failed in IoUringPolicy");
+  }
+  AD_CORRECTNESS_CHECK(cqe != nullptr);
+  attributeCompletion(cqe);
+  return true;
+}
+
+//______________________________________________________________________________
+size_t IoUringPolicy::reapAvailableCompletions() {
+  size_t numReaped = 0;
+  while (tryReapOneCqe()) {
+    ++numReaped;
+  }
+  return numReaped;
 }
 
 //______________________________________________________________________________
@@ -166,7 +197,12 @@ void ad_utility::IoUringPolicy::drainOneCqe() {
   if (ret < 0) {
     AD_THROW("io_uring_wait_cqe failed in IoUringPolicy");
   }
+  attributeCompletion(cqe);
+}
 
+//______________________________________________________________________________
+void ad_utility::IoUringPolicy::attributeCompletion(io_uring_cqe* cqe) {
+  AD_CORRECTNESS_CHECK(cqe != nullptr);
   // Recover the read's result (`cqe->res`) and the request id we stored in the
   // SQE, then consume the CQE so its slot is freed. Do this before any throw.
   const int numBytesRead = cqe->res;
