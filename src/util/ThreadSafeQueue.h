@@ -85,17 +85,19 @@ class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
   // result is `Pushed`, so that the caller can hand the very same value over
   // again once there is space.
   TryPushResult tryPush(T&& value) {
-    std::unique_lock lock{mutex_};
-    if (finish_) {
-      return TryPushResult::Finished;
+    using enum TryPushResult;
+    {
+      std::unique_lock lock{mutex_};
+      if (finish_) {
+        return Finished;
+      }
+      if (queue_.size() >= maxSize_) {
+        return Full;
+      }
+      queue_.push(std::move(value));
     }
-    if (queue_.size() >= maxSize_) {
-      return TryPushResult::Full;
-    }
-    queue_.push(std::move(value));
-    lock.unlock();
     pushNotification_.notify_one();
-    return TryPushResult::Pushed;
+    return Pushed;
   }
 
   // The semantics of pushing an exception are as follows: All subsequent
@@ -164,6 +166,9 @@ class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
   // unchanged, which lets a blocked consumer react to a cancelled query.
   // `onWait` must not access this queue, as the mutex is not held while it
   // runs.
+  // NOTE: Throwing is the only way for `onWait` to abort. Returning `false`
+  // would require a richer return type than `std::optional<T>`, as the caller
+  // then has to distinguish "value", "queue done" and "aborted".
   template <typename Callback>
   std::optional<T> pop(std::chrono::milliseconds interval,
                        const Callback& onWait) {
