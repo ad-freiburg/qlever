@@ -68,7 +68,8 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
 // ____________________________________________________________________________
 Iri Iri::fromLangtagAndIriref(std::string_view langtag,
                               std::string_view stringWithBrackets) {
-  AD_CORRECTNESS_CHECK(!langtag.empty() && !ql::starts_with(langtag, '@'));
+  AD_CORRECTNESS_CHECK(!langtag.empty());
+  AD_CORRECTNESS_CHECK(!ql::starts_with(langtag, '@'));
   return Iri{absl::StrCat("@", langtag, "@",
                           RdfEscaping::unescapeIriref(stringWithBrackets))};
 }
@@ -135,7 +136,8 @@ Iri Iri::resolveAgainstBase(const qlever::util::ParsedUri& baseUri) const {
 
 // ____________________________________________________________________________
 Iri Iri::withLanguageTag(std::string_view langtag) const {
-  AD_CORRECTNESS_CHECK(!langtag.empty() && !ql::starts_with(langtag, '@'));
+  AD_CORRECTNESS_CHECK(!langtag.empty());
+  AD_CORRECTNESS_CHECK(!ql::starts_with(langtag, '@'));
   return Iri{absl::StrCat("@", langtag, "@", toStringRepresentation())};
 }
 
