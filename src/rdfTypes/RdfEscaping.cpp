@@ -14,8 +14,6 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
-#include "util/HashSet.h"
-#include "util/Log.h"
 #include "util/StringUtils.h"
 
 namespace RdfEscaping {
@@ -263,24 +261,29 @@ std::string unescapeIriref(std::string_view iriref) {
   return result;
 }
 
+// The characters that may follow a backslash in a "reserved character escape
+// sequence" of a prefixed IRI.
+static constexpr std::string_view escapableCharacters = "_~.-!$&'()*+,;=/?#@%";
+
 // __________________________________________________________________________
 std::string unescapePrefixedIri(std::string_view literal) {
+  constexpr auto npos = std::string_view::npos;
+  auto pos = literal.find('\\');
+  // The vast majority of prefixed IRIs contain no escape sequence at all.
+  if (pos == npos) [[likely]] {
+    return std::string{literal};
+  }
   std::string_view origLiteral = literal;
   std::string res;
-  ad_utility::HashSet<char> m{'_', '~',  '.', '-', '-', '!', '$',
-                              '&', '\'', '(', ')', '*', '+', ',',
-                              ';', '=',  '/', '?', '#', '@', '%'};
-  auto pos = literal.find('\\');
-  while (pos != literal.npos) {
+  res.reserve(literal.size());
+  while (pos != npos) {
     res.append(literal.begin(), literal.begin() + pos);
-    if (pos + 1 >= literal.size() || !m.contains(literal[pos + 1])) {
-      AD_LOG_ERROR
-          << "Error in function unescapePrefixedIri, could not unescape "
-             "prefixed iri "
-          << origLiteral << '\n';
-    }
-    AD_CONTRACT_CHECK(pos + 1 < literal.size());
-    AD_CONTRACT_CHECK(m.contains(literal[pos + 1]));
+    // The linear search is cheap enough, as it is only performed for IRIs that
+    // actually contain a backslash, which the vast majority of knowledge graphs
+    // never use.
+    AD_CONTRACT_CHECK(pos + 1 < literal.size() &&
+                          escapableCharacters.find(literal[pos + 1]) != npos,
+                      "Could not unescape the prefixed iri ", origLiteral);
     res += literal[pos + 1];
 
     literal.remove_prefix(pos + 2);
