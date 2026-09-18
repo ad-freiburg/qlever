@@ -39,13 +39,20 @@ class JoinImpl : public Operation {
   bool keepJoinColumn_ = true;
 
  public:
-  // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
+  // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests
+  // and by `getUpdatedQueryExecutionTreeWithPrefilterApplied`, which has to
+  // keep the column layout of the original join.
   JoinImpl(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
            ColumnIndex t2JoinCol, bool keepJoinColumn = true,
            bool allowSwappingChildrenOnlyForTesting = true);
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
+
+  // See `Join::getUpdatedQueryExecutionTreeWithPrefilterApplied`.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      const std::vector<PrefilterVariablePair>& prefilters) const override;
 
   std::string getDescriptor() const override;
 
