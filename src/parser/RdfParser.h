@@ -70,22 +70,26 @@ struct RdfParserSettings {
 
 namespace detail {
 // Find the end of the last match of the regex `[\r\n]+` in `input`, or
-// `std::nullopt` if there is no match. Used to split a block of input at a line
-// break.
+// `std::nullopt` if there is no match. Used by the serial `RdfStreamParser`,
+// which sees the blocks in order and backs up to the last complete statement if
+// one crosses a block boundary (see `resetStateAndRead`). A block therefore
+// only must not end inside a comment or a `PN_LOCAL`, see
+// `RdfStreamParser::initialize`.
 std::optional<size_t> findEndOfLastNewline(std::string_view input);
 
 // Find the end of the last match of the regex `\.[\t ]*[\r\n]+` in `input`, or
-// `std::nullopt` if there is no match. Used to split a block of input at a
-// Turtle statement boundary.
+// `std::nullopt` if there is no match. Used by the parallel
+// `RdfAsyncParallelParser`, whose independent sub-parsers cannot back up into
+// the previous block and hence need a full statement boundary. The search is
+// purely textual, which is why the parallel parser rejects multiline literals
+// (see `TurtleParser::stringParseImpl`); it can still be fooled by a comment
+// that ends in a dot, see `WARNING_PARALLEL_PARSING`.
 std::optional<size_t> findEndOfLastStatement(std::string_view input);
 
 // The human-readable description of what `findEndOfLastStatement` looks for,
-// used in the error messages of `AsyncStatementBoundaryBlockSource`. A Turtle
-// statement is ended by a dot (a `,` or a `;` only separates objects resp.
-// predicate-object pairs *within* a statement), which the grammar does not
-// require to be followed by a newline. QLever does require that newline, and
-// the description says so, because that is the part of the rule that a valid
-// Turtle file can actually violate.
+// used in the error messages of `AsyncStatementBoundaryBlockSource`. It
+// mentions the newline explicitly, because that (and not the dot) is the part
+// of the rule that a valid Turtle file can violate.
 inline constexpr std::string_view blockBoundaryDescription =
     "a dot that is followed by a newline (Turtle itself does not require that "
     "newline, but QLever does, so that it can split the input into blocks "

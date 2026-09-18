@@ -43,8 +43,9 @@ std::exception_ptr getNoBlockBoundaryError(std::string_view description,
       " bytes contains no such position. To fix this, use "
       "`--parser-buffer-size` to increase the buffer size",
       isParsedInParallel
-          ? ", or use `--parallel-parsing false` to disable parallel parsing, "
-            "which lets QLever end a block at any newline"
+          ? ", or use `--parallel-parsing false` for this input: the serial "
+            "parser can resume a statement that crosses a block boundary and "
+            "therefore ends a block at any newline"
           : "",
       ".")});
 }
