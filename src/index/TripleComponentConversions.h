@@ -73,7 +73,10 @@ class IndexImpl;
 // already stores, instead of a copy of it. This works for variables, strings,
 // literals and IRIs; for the values that are directly encoded in a
 // `TripleComponent` (numbers, dates, geo points, ...) there is no such string
-// to point to, and `std::nullopt` is returned. The returned view is only valid
+// to point to, and `std::nullopt` is returned. In particular, this also
+// applies to IRIs that are stored as an encoded `Id` because they are covered
+// by the `EncodedIriManager` (see `TurtleParser::iri()`), so they don't have a
+// string representation to point to either. The returned view is only valid
 // as long as `tripleComponent`. Use this instead of `toRdfLiteral` on hot paths
 // where the result is only read (for example to look it up in a hash map), to
 // avoid an allocation per call.
