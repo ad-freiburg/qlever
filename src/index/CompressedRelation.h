@@ -7,6 +7,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -360,6 +361,51 @@ class CompressedRelationWriter {
     MetadataCallback callback_;
   };
 
+  // A block of rows that is to be compressed and written by this writer. It
+  // either owns its rows (as an `IdTable`, whose buffer can then be recycled,
+  // see `recycleBlock` below), or it is a non-owning view of rows that are
+  // owned elsewhere, together with a `shared_ptr` that keeps that owner alive
+  // for as long as the block is being written. The latter allows writing a
+  // block of a large relation directly from the input block in which its rows
+  // reside, without copying them into an intermediate buffer first, see
+  // `PermutationWriter::addRowsOfCurrentRelation`.
+  class BlockToWrite {
+   public:
+    // A type-erased owner of the rows of a non-owning block.
+    using Owner = std::shared_ptr<const void>;
+
+   private:
+    // Exactly one of the following two is set: `table_` for an owning block,
+    // and `view_` (together with `owner_`) for a non-owning one.
+    std::optional<IdTable> table_;
+    std::optional<IdTableView<0>> view_;
+    Owner owner_;
+
+   public:
+    // Construct an owning block.
+    BlockToWrite(IdTable table) : table_{std::move(table)} {}
+
+    // Construct a non-owning block. The `owner_` has to keep the memory that
+    // the `view` points to alive.
+    BlockToWrite(IdTableView<0> view, Owner owner)
+        : view_{std::move(view)}, owner_{std::move(owner)} {}
+
+    // Return true iff this block owns its rows.
+    bool ownsRows() const { return table_.has_value(); }
+
+    // Return a view of the rows of this block. The view is valid for as long
+    // as this block lives.
+    IdTableView<0> view() const {
+      return ownsRows() ? table_.value().asStaticView<0>() : view_.value();
+    }
+
+    // Return the owned rows. May only be called if `ownsRows()` is true.
+    IdTable extractTable() && {
+      AD_CORRECTNESS_CHECK(ownsRows());
+      return std::move(table_).value();
+    }
+  };
+
   // The `PermutationWriter` can be used to write single or pair permutations.
   // It is defined in `CompressedRelationPermutationWriterImpl.h`.
   template <bool WritePair>
@@ -514,7 +560,7 @@ class CompressedRelationWriter {
   //
   // NOTE: The actual work is done asynchronously by the `blockWriteQueue_`, so
   // it is only guaranteed to be finished after a call to `finish()`.
-  void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id, IdTable block,
+  void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id, BlockToWrite block,
                              bool invokeCallback);
 
   // The actual work of `compressAndWriteBlock` (see there), performed in the
@@ -526,7 +572,8 @@ class CompressedRelationWriter {
   // occupy that thread and can deadlock the executor, see
   // `AddBlockOfSmallRelationsToSwitched`.
   void compressAndWriteBlockInCallingThread(Id firstCol0Id, Id lastCol0Id,
-                                            IdTable block, bool invokeCallback);
+                                            BlockToWrite block,
+                                            bool invokeCallback);
 
   // Return the number of rows that a single block of small relations may hold
   // at most.
@@ -629,7 +676,7 @@ class CompressedRelationWriter {
   // `finishLargeRelation`.
   // * The previously called function was `addBlockForLargeRelation` with the
   // same `col0Id`.
-  void addBlockForLargeRelation(Id col0Id, IdTable relation);
+  void addBlockForLargeRelation(Id col0Id, BlockToWrite relation);
 
   // Enable the recycling of block buffers, see `recycledBlocks_` above. Only
   // call this if the blocks that are added to this writer are obtained from

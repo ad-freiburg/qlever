@@ -5,6 +5,7 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <array>
 #include <deque>
 #include <future>
 #include <optional>
@@ -23,26 +24,44 @@ namespace compressedRelationHelpers {
 static constexpr size_t c1Idx = 1;
 static constexpr size_t c2Idx = 2;
 
+// Return the binary representation of the given `id` and make sure (using
+// `AD_EXPENSIVE_CHECK`) that it can be compared bitwise, which should always be
+// true for index building, because there are no `Id`s of a local vocabulary
+// then. Comparing the bits is much cheaper than the general comparison of
+// `Id`s, and (in contrast to the latter) it can be vectorized.
+inline Id::T bitsOfIdWithoutLocalVocab(Id id) {
+  AD_EXPENSIVE_CHECK(id.canBeComparedBitwise());
+  return id.getBits();
+}
+
 // Compares two rows based on the second, third and fourth column only (it
-// ignores the first column as well as any payload columns).
+// ignores the first column as well as any payload columns). The comparison is
+// performed on the bits of the `Id`s, see `bitsOfIdWithoutLocalVocab` above.
 struct ComparatorForConstCol0 {
+  // Pick the bits of the cells that this comparator looks at. The resulting
+  // `std::array`s compare lexicographically, which is exactly the desired
+  // order.
+  template <typename Row>
+  static std::array<Id::T, 3> pickBits(const Row& row) {
+    return {bitsOfIdWithoutLocalVocab(row[c1Idx]),
+            bitsOfIdWithoutLocalVocab(row[c2Idx]),
+            bitsOfIdWithoutLocalVocab(row[ADDITIONAL_COLUMN_GRAPH_ID])};
+  }
+
   template <typename A, typename B>
   bool operator()(const A& a, const B& b) const {
-    return std::tie(a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]) <
-           std::tie(b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]);
+    return pickBits(a) < pickBits(b);
   }
 };
 
 // Helper function to make a row from `IdTable` easier to compare. This selects
-// the binary representation of the cells of the given row with the indices 0, 1
-// and 2 and makes sure (using `AD_EXPENSIVE_CHECK`) that the resulting `Id`s
-// can be compared bitwise, which should always be true for index building. This
-// way comparison becomes really cheap.
+// the binary representation (see `bitsOfIdWithoutLocalVocab` above) of the
+// cells of the given row with the indices 0, 1 and 2. This way comparison
+// becomes really cheap.
 inline auto pickFirstThreeColumnsOfIdsWithoutLocalVocab = [](const auto& row) {
-  std::array result{row[0].getBits(), row[1].getBits(), row[2].getBits()};
-  AD_EXPENSIVE_CHECK(
-      ql::ranges::all_of(result, &Id::canBeComparedBitwise, &Id::fromBits));
-  return result;
+  return std::array{bitsOfIdWithoutLocalVocab(row[0]),
+                    bitsOfIdWithoutLocalVocab(row[1]),
+                    bitsOfIdWithoutLocalVocab(row[2])};
 };
 
 // Collect elements of type `T` in batches of size 100'000 and apply the
@@ -137,8 +156,12 @@ struct DistinctIdCountOfBlock {
 inline DistinctIdCountOfBlock countDistinctIds(ql::span<const Id> column) {
   AD_CORRECTNESS_CHECK(!column.empty());
   size_t count = 1;
+  // Note: The comparison of the bits (instead of the general comparison of
+  // `Id`s) is not only much cheaper per element, it also makes this loop
+  // vectorizable, which matters because it touches every single ID.
   for (size_t i = 1; i < column.size(); ++i) {
-    count += static_cast<size_t>(column[i] != column[i - 1]);
+    count += static_cast<size_t>(bitsOfIdWithoutLocalVocab(column[i]) !=
+                                 bitsOfIdWithoutLocalVocab(column[i - 1]));
   }
   return {count, column.front(), column.back()};
 }
@@ -204,7 +227,9 @@ class AsyncDistinctIdCounter {
     Block block = std::move(pending_.front().block_);
     pending_.pop_front();
     size_t count = countOfBlock.count_;
-    if (hasPreviousBlock_ && lastIdOfPreviousBlock_ == countOfBlock.first_) {
+    if (hasPreviousBlock_ &&
+        bitsOfIdWithoutLocalVocab(lastIdOfPreviousBlock_) ==
+            bitsOfIdWithoutLocalVocab(countOfBlock.first_)) {
       --count;
     }
     lastIdOfPreviousBlock_ = countOfBlock.last_;

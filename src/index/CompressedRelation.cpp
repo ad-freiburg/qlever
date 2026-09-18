@@ -1339,7 +1339,7 @@ CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
 // _____________________________________________________________________________
 void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
                                                      Id lastCol0Id,
-                                                     IdTable block,
+                                                     BlockToWrite block,
                                                      bool invokeCallback) {
   auto timer = blockWriteQueueTimer_.startMeasurement();
   blockWriteQueue_.push([this, block = std::move(block), firstCol0Id,
@@ -1352,19 +1352,23 @@ void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
 
 // _____________________________________________________________________________
 void CompressedRelationWriter::compressAndWriteBlockInCallingThread(
-    Id firstCol0Id, Id lastCol0Id, IdTable block, bool invokeCallback) {
+    Id firstCol0Id, Id lastCol0Id, BlockToWrite block, bool invokeCallback) {
+  // Note: The `view` is only used before the `block` is moved from below, and
+  // moving a `BlockToWrite` doesn't move the memory that the view points to
+  // anyway.
+  auto view = block.view();
   std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
-  for (const auto& column : block.getColumns()) {
+  for (const auto& column : view.getColumns()) {
     offsets.push_back(compressAndWriteColumn(column));
   }
   AD_CORRECTNESS_CHECK(!offsets.empty());
-  auto numRows = block.numRows();
-  const auto& first = block[0];
-  const auto& last = block[numRows - 1];
+  auto numRows = view.numRows();
+  const auto& first = view[0];
+  const auto& last = view[numRows - 1];
   AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
   AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
-  auto [hasDuplicates, graphInfo] = getGraphInfo(block);
+  auto [hasDuplicates, graphInfo] = getGraphInfo(view);
   blockBuffer_.wlock()->emplace_back(CompressedBlockMetadataNoBlockIndex{
       std::move(offsets),
       numRows,
@@ -1373,9 +1377,12 @@ void CompressedRelationWriter::compressAndWriteBlockInCallingThread(
       std::move(graphInfo),
       hasDuplicates});
   if (invokeCallback && smallBlocksCallback_) {
-    std::invoke(smallBlocksCallback_, std::move(block));
-  } else {
-    recycleBlock(std::move(block));
+    // Only blocks of small relations invoke the callback, and those always own
+    // their rows, because they are assembled in the `smallRelationsBuffer_`.
+    AD_CORRECTNESS_CHECK(block.ownsRows());
+    std::invoke(smallBlocksCallback_, std::move(block).extractTable());
+  } else if (block.ownsRows()) {
+    recycleBlock(std::move(block).extractTable());
   }
 }
 
@@ -1667,12 +1674,13 @@ ad_utility::AsyncTaskQueue CompressedRelationWriter::makeBlockWriteQueue(
 
 // _____________________________________________________________________________
 void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
-                                                        IdTable relation) {
-  AD_CORRECTNESS_CHECK(!relation.empty());
+                                                        BlockToWrite relation) {
+  size_t numRows = relation.view().numRows();
+  AD_CORRECTNESS_CHECK(numRows != 0);
   AD_CORRECTNESS_CHECK(currentCol0Id_ == col0Id ||
                        currentCol0Id_.isUndefined());
   currentCol0Id_ = col0Id;
-  currentRelationPreviousSize_ += relation.numRows();
+  currentRelationPreviousSize_ += numRows;
   writeBufferedRelationsToSingleBlock();
   // This is a block of a large relation, so we don't invoke the
   // `smallBlocksCallback_`. Hence the last argument is `false`.

@@ -8,8 +8,10 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 
+#include <algorithm>
 #include <boost/asio/strand.hpp>
 #include <future>
+#include <memory>
 #include <optional>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -34,12 +36,16 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
     blockOfSmallRelations.swapColumns(c1Idx, c2Idx);
 
     // We only need to sort by the columns of the triple + the graph
-    // column, not the additional payload. Note: We could also use
-    // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
-    // sort is far from being a performance bottleneck.
-    auto compare = [](const auto& a, const auto& b) {
-      return std::tie(a[0], a[1], a[2], a[3]) <
-             std::tie(b[0], b[1], b[2], b[3]);
+    // column, not the additional payload. The comparison is performed on the
+    // bits of the `Id`s, which is much cheaper, see
+    // `bitsOfIdWithoutLocalVocab`.
+    auto pickBits = [](const auto& row) {
+      return std::array{
+          bitsOfIdWithoutLocalVocab(row[0]), bitsOfIdWithoutLocalVocab(row[1]),
+          bitsOfIdWithoutLocalVocab(row[2]), bitsOfIdWithoutLocalVocab(row[3])};
+    };
+    auto compare = [&pickBits](const auto& a, const auto& b) {
+      return pickBits(a) < pickBits(b);
     };
     ql::ranges::sort(blockOfSmallRelations, compare);
     AD_CORRECTNESS_CHECK(!blockOfSmallRelations.empty());
@@ -80,16 +86,13 @@ struct BlockCallbackManager {
   ad_utility::Timer blockCallbackTimer_{ad_utility::Timer::Stopped};
 
   // Enqueue a call to each of the `perBlockCallbacks` for the current block.
-  void passToBlockCallbacks(IdTable block) {
+  void passToBlockCallbacks(std::shared_ptr<const IdTableStatic<0>> block) {
     blockCallbackTimer_.cont();
-    blockCallbackQueue_.push(
-        [block =
-             std::make_shared<std::decay_t<decltype(block)>>(std::move(block)),
-         this]() {
-          for (auto& callback : perBlockCallbacks_) {
-            callback(*block);
-          }
-        });
+    blockCallbackQueue_.push([block = std::move(block), this]() {
+      for (auto& callback : perBlockCallbacks_) {
+        callback(*block);
+      }
+    });
     blockCallbackTimer_.stop();
   }
 
@@ -137,6 +140,14 @@ struct CompressedRelationWriter::PermutationWriter {
   IdTable relation_{numColumns_, alloc_};
   size_t numBlocksCurrentRel_ = 0;
 
+  // The input block that is currently being processed (see
+  // `writePermutation`). It is held via a `shared_ptr`, because a block of a
+  // large relation may be written directly from it, without copying its rows
+  // into the `relation_` buffer first. The writing happens in the background,
+  // so it has to keep the input block alive, see
+  // `addBlockOfLargeRelationWithoutCopying`.
+  std::shared_ptr<const IdTableStatic<0>> inputBlock_;
+
   using TwinRelationSorter = ad_utility::CompressedExternalIdTableSorter<
       compressedRelationHelpers::ComparatorForConstCol0, 0>;
   IfPair<TwinRelationSorter> twinRelationSorter_;
@@ -167,8 +178,10 @@ struct CompressedRelationWriter::PermutationWriter {
   // The result of `writeBlockOfLargeRelation` below.
   struct WrittenBlock {
     // An empty block buffer whose memory is already allocated, so that it can
-    // be reused for one of the next blocks without a further allocation.
-    IdTable buffer_;
+    // be reused for one of the next blocks without a further allocation. It is
+    // only set if the block that was written owned its rows, because only then
+    // a buffer was consumed that has to be replaced.
+    std::optional<IdTable> buffer_;
     // The number of distinct `col1` IDs in the block that was written.
     compressedRelationHelpers::DistinctIdCountOfBlock distinctCol1Count_;
   };
@@ -264,23 +277,27 @@ struct CompressedRelationWriter::PermutationWriter {
   // `addBlockForLargeRelation`). It is the only user of `writer1_` and of the
   // `twinRelationSorter_` while it runs, because the caller waits for it
   // before it touches either of them again.
-  WrittenBlock writeBlockOfLargeRelation(Id col0Id, IdTable relation) {
+  WrittenBlock writeBlockOfLargeRelation(Id col0Id, BlockToWrite relation) {
     using namespace compressedRelationHelpers;
+    const bool ownsRows = relation.ownsRows();
+    auto view = relation.view();
     // Note: This scan of the `col1` column is the reason why counting the
     // distinct `col1` IDs is done here and not by the thread that fills the
     // buffers (which is the bottleneck of the permutation writing).
-    auto distinctCol1Count =
-        countDistinctIds(std::as_const(relation).getColumn(c1Idx));
+    auto distinctCol1Count = countDistinctIds(view.getColumn(c1Idx));
     if constexpr (WritePair) {
-      auto twinRelation = relation.asStaticView<0>();
+      auto twinRelation = view;
       twinRelation.swapColumns(c1Idx, c2Idx);
       // Note: `pushBlock` inserts the columns of the `twinRelation`
       // contiguously, which is much faster than pushing the rows one by one.
       twinRelationSorter_.pushBlock(twinRelation);
     }
-    writer1_->addBlockForLargeRelation(col0Id, std::move(relation).toDynamic());
-    return {writer1_->takeRecycledBlock(numColumns_, alloc_),
-            distinctCol1Count};
+    writer1_->addBlockForLargeRelation(col0Id, std::move(relation));
+    std::optional<IdTable> buffer;
+    if (ownsRows) {
+      buffer = writer1_->takeRecycledBlock(numColumns_, alloc_);
+    }
+    return {std::move(buffer), distinctCol1Count};
   }
 
   // Add the distinct `col1` count of a single block of the current relation to
@@ -288,8 +305,11 @@ struct CompressedRelationWriter::PermutationWriter {
   // one is only counted once.
   void addDistinctCol1CountOfBlock(
       const compressedRelationHelpers::DistinctIdCountOfBlock& count) {
+    using compressedRelationHelpers::bitsOfIdWithoutLocalVocab;
     numDistinctCol1_ += count.count_;
-    if (lastCol1OfPreviousBlock_ == count.first_) {
+    if (lastCol1OfPreviousBlock_.has_value() &&
+        bitsOfIdWithoutLocalVocab(lastCol1OfPreviousBlock_.value()) ==
+            bitsOfIdWithoutLocalVocab(count.first_)) {
       --numDistinctCol1_;
     }
     lastCol1OfPreviousBlock_ = count.last_;
@@ -313,9 +333,9 @@ struct CompressedRelationWriter::PermutationWriter {
   // Wait for the background task that writes the previous block of a large
   // relation, if there is such a task. This has to be called before `writer1_`
   // or the `twinRelationSorter_` are used again, because the background task
-  // uses both of them, see `writeBlockOfLargeRelation` above. The block buffer
-  // that the task yields is handed back to `writer1_`, from where it is taken
-  // again for one of the next blocks.
+  // uses both of them, see `writeBlockOfLargeRelation` above. If the task
+  // yields a block buffer, then that buffer is handed back to `writer1_`, from
+  // where it is taken again for one of the next blocks.
   void flushPendingBlockOfLargeRelation() {
     if (!pendingBlockOfLargeRelation_.has_value()) {
       return;
@@ -326,7 +346,9 @@ struct CompressedRelationWriter::PermutationWriter {
     pendingBlockOfLargeRelation_.reset();
     largeRelationBlockTimer_.stop();
     addDistinctCol1CountOfBlock(written.distinctCol1Count_);
-    writer1_->recycleBlock(std::move(written.buffer_));
+    if (written.buffer_.has_value()) {
+      writer1_->recycleBlock(std::move(written.buffer_).value());
+    }
   }
 
   // Write a block of a large relation with `writer1` and also push the block
@@ -355,10 +377,38 @@ struct CompressedRelationWriter::PermutationWriter {
       WrittenBlock written =
           writeBlockOfLargeRelation(col0Id, std::move(relation_));
       addDistinctCol1CountOfBlock(written.distinctCol1Count_);
-      relation_ = std::move(written.buffer_);
+      relation_ = std::move(written.buffer_).value();
     }
     relation_.clear();
     relation_.reserve(blocksize_);
+    ++numBlocksCurrentRel_;
+  }
+
+  // Write the given rows of the current input block as the next block of the
+  // current (large) relation, without copying them into the `relation_` buffer
+  // first. The `block` has to be a view of the rows of `inputBlock_`, which is
+  // kept alive until the block has been written. Apart from that, this behaves
+  // exactly like `addBlockForLargeRelation` above; in particular the actual
+  // work is also performed on a background thread. The `relation_` buffer has
+  // to be empty, so that the blocks of the relation are still written in the
+  // correct order.
+  void addBlockOfLargeRelationWithoutCopying(IdTableView<0> block) {
+    AD_CORRECTNESS_CHECK(relation_.empty() && !block.empty());
+    Id col0Id = col0IdCurrentRelation_.value();
+    BlockToWrite blockToWrite{std::move(block), inputBlock_};
+    if (offloadLargeRelationBlocks_) {
+      // Wait for the previously offloaded block, because the blocks of a
+      // relation have to be written in order.
+      flushPendingBlockOfLargeRelation();
+      pendingBlockOfLargeRelation_ = largeRelationBlockQueue_.submit(
+          [this, col0Id, blockToWrite = std::move(blockToWrite)]() mutable {
+            return writeBlockOfLargeRelation(col0Id, std::move(blockToWrite));
+          });
+    } else {
+      WrittenBlock written =
+          writeBlockOfLargeRelation(col0Id, std::move(blockToWrite));
+      addDistinctCol1CountOfBlock(written.distinctCol1Count_);
+    }
     ++numBlocksCurrentRel_;
   }
 
@@ -440,34 +490,44 @@ struct CompressedRelationWriter::PermutationWriter {
   }
 
   // Return the index of the first row in `rows[begin, end)` whose first three
-  // columns differ from the last triple that is currently buffered in
-  // `relation_`, or `end` if there is no such row. This is the first position
-  // at which a new block for a large relation may be started, because equal
-  // triples (when disregarding the graph and the payload columns) have to stay
-  // in the same block. Requires that `relation_` is not empty.
+  // columns differ from the `lastTriple`, or `end` if there is no such row.
+  // This is the first position at which a new block for a large relation may
+  // be started, because equal triples (when disregarding the graph and the
+  // payload columns) have to stay in the same block.
   //
-  // Note: The rows are compared row-wise. Scanning each of the three columns
-  // separately and taking the minimum of the resulting offsets would use the
-  // cache more efficiently, but it would also be slower if one of the columns
-  // is (almost) constant. This function is only called for large relations
-  // once the `relation_` buffer has reached the `blocksize_`, and it then
-  // typically finds a differing row immediately, so it is not a bottleneck
-  // (unless in a very degenerate case) and we keep the simpler implementation.
+  // Note: The rows are compared row-wise (and on the bits of the `Id`s, which
+  // is much cheaper, see `pickFirstThreeColumnsOfIdsWithoutLocalVocab`).
+  // Scanning each of the three columns separately and taking the minimum of
+  // the resulting offsets would use the cache more efficiently, but it would
+  // also be slower if one of the columns is (almost) constant. This function
+  // is only called once a complete block of a large relation has been found,
+  // and it then typically finds a differing row immediately, so it is not a
+  // bottleneck (unless in a very degenerate case) and we keep the simpler
+  // implementation.
+  template <typename Rows, typename Triple>
+  static size_t findFirstTripleChange(const Rows& rows, size_t begin,
+                                      size_t end, const Triple& lastTriple) {
+    using compressedRelationHelpers::
+        pickFirstThreeColumnsOfIdsWithoutLocalVocab;
+    auto it = ql::ranges::find_if(
+        rows.begin() + begin, rows.begin() + end,
+        [&lastTriple](const auto& triple) { return triple != lastTriple; },
+        pickFirstThreeColumnsOfIdsWithoutLocalVocab);
+    return static_cast<size_t>(it - rows.begin());
+  }
+
+  // The special case of `findFirstTripleChange` above where the rows are
+  // compared to the last triple that is currently buffered in `relation_`,
+  // which therefore must not be empty.
   template <typename Rows>
-  size_t findFirstTripleChange(const Rows& rows, size_t begin,
-                               size_t end) const {
+  size_t findFirstTripleChangeAfterBuffer(const Rows& rows, size_t begin,
+                                          size_t end) const {
     using compressedRelationHelpers::
         pickFirstThreeColumnsOfIdsWithoutLocalVocab;
     AD_CORRECTNESS_CHECK(!relation_.empty());
-    const auto lastBufferedTriple =
-        pickFirstThreeColumnsOfIdsWithoutLocalVocab(relation_.back());
-    auto it = ql::ranges::find_if(
-        rows.begin() + begin, rows.begin() + end,
-        [&lastBufferedTriple](const auto& triple) {
-          return triple != lastBufferedTriple;
-        },
-        pickFirstThreeColumnsOfIdsWithoutLocalVocab);
-    return static_cast<size_t>(it - rows.begin());
+    return findFirstTripleChange(
+        rows, begin, end,
+        pickFirstThreeColumnsOfIdsWithoutLocalVocab(relation_.back()));
   }
 
   // Append the rows `[begin, end)` of `permutedCols`, which all belong to the
@@ -486,10 +546,33 @@ struct CompressedRelationWriter::PermutationWriter {
   template <typename PermutedCols>
   void addRowsOfCurrentRelation(const PermutedCols& permutedCols, size_t begin,
                                 size_t end) {
+    using compressedRelationHelpers::
+        pickFirstThreeColumnsOfIdsWithoutLocalVocab;
     while (begin < end) {
       // Determine the largest chunk of rows that may be appended in one go.
       size_t chunkEnd;
       if (relation_.numRows() < blocksize_) {
+        // If the buffer is empty and the remaining rows suffice for a complete
+        // block, then that block can be written directly from the input block,
+        // without copying its rows into the buffer first (which for a large
+        // relation is a substantial part of the work of this thread). This
+        // requires that the block can be completed within the current input
+        // block, which is exactly the case if a triple change is found before
+        // the end of the rows; otherwise further equal triples may follow in
+        // the next input block, which then have to end up in the same block.
+        if (relation_.empty() && end - begin >= blocksize_) {
+          size_t blockEnd =
+              findFirstTripleChange(permutedCols, begin + blocksize_, end,
+                                    pickFirstThreeColumnsOfIdsWithoutLocalVocab(
+                                        permutedCols[begin + blocksize_ - 1]));
+          if (blockEnd < end) {
+            addBlockOfLargeRelationWithoutCopying(
+                permutedCols.subView(begin, blockEnd - begin));
+            increaseTripleCounter(blockEnd - begin);
+            begin = blockEnd;
+            continue;
+          }
+        }
         // The buffer is not yet full, so we can simply append the rows that
         // are missing to reach the `blocksize_`.
         chunkEnd = std::min(end, begin + (blocksize_ - relation_.numRows()));
@@ -497,7 +580,7 @@ struct CompressedRelationWriter::PermutationWriter {
         // The buffer is full, so we may only append rows that are equal to the
         // last buffered row with respect to the first three columns, because
         // equal triples have to stay in the same block.
-        chunkEnd = findFirstTripleChange(permutedCols, begin, end);
+        chunkEnd = findFirstTripleChangeAfterBuffer(permutedCols, begin, end);
         if (chunkEnd == begin) {
           // The very next row is already different, so the block is complete.
           // The next iteration then starts filling a fresh buffer.
@@ -537,11 +620,41 @@ struct CompressedRelationWriter::PermutationWriter {
   // `begin` and consists of all rows that have the same `col0` ID as that row.
   // Such a run is exactly the part of one relation that is contained in the
   // current input block.
+  //
+  // Note: The `col0` column is sorted, so the end of the run could be found by
+  // a binary search. That would be much slower than a linear scan for the
+  // short runs of the many small relations though, so we use an exponential
+  // ("galloping") search: The step size is doubled until the end of the run
+  // has been passed, and only the remaining range is then searched
+  // binarily. That way a short run is found with a handful of comparisons,
+  // while a long run (a large relation, whose run may span the complete input
+  // block) doesn't require a linear scan of its `col0` column. The comparison
+  // is performed on the bits of the `Id`s, which is much cheaper, see
+  // `bitsOfIdWithoutLocalVocab`.
   template <typename Col0>
   static size_t findEndOfRun(const Col0& col0, size_t begin) {
-    Id col0Id = col0[begin];
-    auto it = ql::ranges::find_if(col0.begin() + begin, col0.end(),
-                                  [col0Id](Id id) { return id != col0Id; });
+    using compressedRelationHelpers::bitsOfIdWithoutLocalVocab;
+    const auto col0Bits = bitsOfIdWithoutLocalVocab(col0[begin]);
+    auto belongsToRun = [col0Bits](Id id) {
+      return bitsOfIdWithoutLocalVocab(id) == col0Bits;
+    };
+    const size_t size = static_cast<size_t>(col0.size());
+    // Invariant of the following loop: The row `lastInRun` still belongs to
+    // the run, and `firstAfterRun` is an upper bound for the end of the run
+    // (it either is the end of the column, or a row that no longer belongs to
+    // the run).
+    size_t lastInRun = begin;
+    size_t firstAfterRun = size;
+    for (size_t step = 1; size - lastInRun > step; step *= 2) {
+      size_t next = lastInRun + step;
+      if (!belongsToRun(col0[next])) {
+        firstAfterRun = next;
+        break;
+      }
+      lastInRun = next;
+    }
+    auto it = std::partition_point(col0.begin() + lastInRun + 1,
+                                   col0.begin() + firstAfterRun, belongsToRun);
     return static_cast<size_t>(it - col0.begin());
   }
 
@@ -652,17 +765,23 @@ struct CompressedRelationWriter::PermutationWriter {
   // `PermutationWriter` object.
   IfPair<PermutationPairResult, PermutationSingleResult> writePermutation(
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples) {
+    using compressedRelationHelpers::bitsOfIdWithoutLocalVocab;
     inputWaitTimer_.cont();
 
     auto col0 = permutation_.keys().at(0);
 
-    for (auto& block : AD_FWD(sortedTriples)) {
-      AD_CORRECTNESS_CHECK(block.numColumns() == numColumns_);
+    for (auto& blockFromInput : AD_FWD(sortedTriples)) {
+      AD_CORRECTNESS_CHECK(blockFromInput.numColumns() == numColumns_);
       inputWaitTimer_.stop();
       // This only happens when the index is completely empty.
-      if (block.empty()) {
+      if (blockFromInput.empty()) {
         continue;
       }
+      // The input block is shared, because blocks of large relations may be
+      // written directly from it, see `addBlockOfLargeRelationWithoutCopying`.
+      inputBlock_ =
+          std::make_shared<const IdTableStatic<0>>(std::move(blockFromInput));
+      const auto& block = *inputBlock_;
       auto firstCol = block.getColumn(col0);
       auto permutedCols = block.asColumnSubsetView(getPermutedColIndices());
       if (!col0IdCurrentRelation_.has_value()) {
@@ -679,7 +798,9 @@ struct CompressedRelationWriter::PermutationWriter {
       size_t runBegin = 0;
       while (runBegin < block.numRows()) {
         Id col0Id = firstCol[runBegin];
-        if (col0Id != col0IdCurrentRelation_) {
+        if (!col0IdCurrentRelation_.has_value() ||
+            bitsOfIdWithoutLocalVocab(col0IdCurrentRelation_.value()) !=
+                bitsOfIdWithoutLocalVocab(col0Id)) {
           finishRelation();
           col0IdCurrentRelation_ = col0Id;
         }
@@ -696,7 +817,7 @@ struct CompressedRelationWriter::PermutationWriter {
           runBegin = runEnd;
         }
       }
-      blockCallbackManager_.passToBlockCallbacks(std::move(block));
+      blockCallbackManager_.passToBlockCallbacks(std::move(inputBlock_));
       inputWaitTimer_.cont();
     }
     if (showProgressBar_) {
