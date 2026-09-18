@@ -43,6 +43,7 @@ bool FiberIoScheduler::isInsideFiber() {
 #if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
 // Install the round-robin fiber scheduling algorithm on this thread once.
 // Must run before the first fiber is created on the thread.
+namespace {
 void ensureFiberAlgorithm() {
   thread_local bool installed = []() {
     boost::fibers::use_scheduling_algorithm<boost::fibers::algo::round_robin>();
@@ -50,6 +51,7 @@ void ensureFiberAlgorithm() {
   }();
   (void)installed;
 }
+}  // namespace
 #endif
 
 //______________________________________________________________________________
