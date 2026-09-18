@@ -13,7 +13,6 @@
 #include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
-#include <array>
 #include <cstring>
 #include <ctre-unicode.hpp>
 #include <exception>
@@ -32,6 +31,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "util/DateYearDuration.h"
 #include "util/ExceptionHandling.h"
+#include "util/StringUtils.h"
 
 namespace {
 // CTRE regex patterns, defined as variables for C++17 compatibility. They are
@@ -56,17 +56,6 @@ namespace detail {
 // _____________________________________________________________________________
 std::optional<size_t> findEndOfLastNewline(std::string_view input) {
   return findEndOfLastMatch(ctre::search<newlineRegex>, input);
-}
-
-// _____________________________________________________________________________
-size_t findFirstOf(std::string_view view, const DelimiterTable& table,
-                   size_t pos) {
-  AD_EXPENSIVE_CHECK(pos <= view.size());
-  auto rest = view.substr(pos);
-  auto it = ql::ranges::find_if(
-      rest, [&table](char c) { return table[static_cast<unsigned char>(c)]; });
-  return it == rest.end() ? std::string_view::npos
-                          : pos + static_cast<size_t>(it - rest.begin());
 }
 
 // _____________________________________________________________________________
@@ -921,17 +910,18 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   constexpr std::string_view prefixDelimiters = " \t\r\n,;[]():";
   constexpr std::string_view localNameDelimiters =
       prefixDelimiters.substr(0, prefixDelimiters.size() - 1);
-  static constexpr detail::DelimiterTable prefixDelimiterTable =
-      detail::makeDelimiterTable(prefixDelimiters);
-  static constexpr detail::DelimiterTable localNameDelimiterTable =
-      detail::makeDelimiterTable(localNameDelimiters);
+  static constexpr ad_utility::CharLookupTable prefixDelimiterTable =
+      ad_utility::makeCharLookupTable(prefixDelimiters);
+  static constexpr ad_utility::CharLookupTable localNameDelimiterTable =
+      ad_utility::makeCharLookupTable(localNameDelimiters);
   // If anything but a `:` comes first, this is not a prefixed name, but for
   // example the `[` of a blank node property list.
-  auto pos = detail::findFirstOf(view, prefixDelimiterTable);
+  auto pos = ad_utility::findFirstOfWithLookupTable(view, prefixDelimiterTable);
   if (pos == std::string::npos || view[pos] != ':') {
     return false;
   }
-  auto posEnd = detail::findFirstOf(view, localNameDelimiterTable, pos + 1);
+  auto posEnd = ad_utility::findFirstOfWithLookupTable(
+      view, localNameDelimiterTable, pos + 1);
   if (posEnd == std::string::npos) {
     // make tests work
     posEnd = view.size();
@@ -956,9 +946,10 @@ bool TurtleParser<T>::iriref() {
   if (!ql::starts_with(view, '<')) {
     return false;
   }
-  static constexpr detail::DelimiterTable irirefDelimiterTable =
-      detail::makeDelimiterTable("<>\"\n");
-  auto endPos = detail::findFirstOf(view, irirefDelimiterTable, 1);
+  static constexpr ad_utility::CharLookupTable irirefDelimiterTable =
+      ad_utility::makeCharLookupTable("<>\"\n");
+  auto endPos =
+      ad_utility::findFirstOfWithLookupTable(view, irirefDelimiterTable, 1);
   if (endPos == std::string::npos || view[endPos] != '>') {
     raise(
         "Unterminated IRI reference (found '<' but no '>' before "
