@@ -438,9 +438,12 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   auto a = iri("<a>");
   auto b = iri("<b>");
   auto lp = iri(LANGUAGE_PREDICATE);
-  auto de = TripleComponent{ad_utility::convertLangtagToEntityUri("de")};
-  auto en = TripleComponent{ad_utility::convertLangtagToEntityUri("en")};
-  auto es = TripleComponent{ad_utility::convertLangtagToEntityUri("es")};
+  auto de =
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("de")};
+  auto en =
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("en")};
+  auto es =
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("es")};
   EXPECT_THAT(deltaTriples,
               TriplesAre({{a, b, TripleComponent{1}},
                           {a, b, lit("\"abc\"")},

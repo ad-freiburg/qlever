@@ -18,7 +18,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
-#include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
 
 using std::string;
@@ -345,7 +344,7 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
           variable,
           PropertyPath::fromIri(ad_utility::triple_component::Iri::fromIriref(
               LANGUAGE_PREDICATE)),
-          ad_utility::convertLangtagToEntityUri(langTag)}}});
+          ad_utility::triple_component::Iri::fromLangtag(langTag)}}});
     }
 
     // Optimization if there already is a `BasicGraphPattern` we can use.

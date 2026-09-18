@@ -17,6 +17,7 @@
 #include <ctre-unicode.hpp>
 #include <utility>
 
+#include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Log.h"
 
@@ -66,12 +67,32 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
 }
 
 // ____________________________________________________________________________
+Iri Iri::fromOwnedIriref(std::string stringWithBrackets) {
+  std::string unescaped;
+  RdfEscaping::unescapeIriref(stringWithBrackets, unescaped);
+  // If there was nothing to unescape, `unescaped` is still empty and the input
+  // string can simply be reused instead of being copied.
+  return Iri{unescaped.empty() ? std::move(stringWithBrackets)
+                               : std::move(unescaped)};
+}
+
+// ____________________________________________________________________________
 Iri Iri::fromLangtagAndIriref(std::string_view langtag,
                               std::string_view stringWithBrackets) {
   AD_CORRECTNESS_CHECK(!langtag.empty());
   AD_CORRECTNESS_CHECK(!ql::starts_with(langtag, '@'));
-  return Iri{absl::StrCat("@", langtag, "@",
-                          RdfEscaping::unescapeIriref(stringWithBrackets))};
+  // The unescaped IRI is only an intermediate result that is copied into the
+  // final string anyway, so it doesn't have to be materialized separately if
+  // there is nothing to unescape.
+  std::string buffer;
+  return Iri{
+      absl::StrCat("@", langtag, "@",
+                   RdfEscaping::unescapeIriref(stringWithBrackets, buffer))};
+}
+
+// ____________________________________________________________________________
+Iri Iri::fromLangtag(std::string_view langtag) {
+  return fromOwnedIriref(makeQleverInternalIri("@", langtag));
 }
 
 // ____________________________________________________________________________
@@ -122,11 +143,9 @@ Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
   // The numeric escapes of an IRI reference are part of its lexical form, so
   // they have to be resolved before the IRI is resolved against the base IRI
   // (this is the same normalization that `fromIriref` applies).
-  if (iriStringWithBrackets.find('\\') != std::string_view::npos) {
-    return resolveNormalizedIri(
-        RdfEscaping::unescapeIriref(iriStringWithBrackets), baseUri);
-  }
-  return resolveNormalizedIri(iriStringWithBrackets, baseUri);
+  std::string buffer;
+  return resolveNormalizedIri(
+      RdfEscaping::unescapeIriref(iriStringWithBrackets, buffer), baseUri);
 }
 
 // ____________________________________________________________________________

@@ -119,7 +119,7 @@ class GraphStoreProtocol {
     // `http`. It doesn't matter that the URL is not `https` since it is not
     // actually accessed.
     ad_utility::triple_component::Iri graphStoreLocation =
-        ad_utility::triple_component::Iri::fromIriref(absl::StrCat(
+        ad_utility::triple_component::Iri::fromOwnedIriref(absl::StrCat(
             "<http://",
             std::string(rawRequest[boost::beast::http::field::host]), "/",
             GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, ">"));

@@ -38,6 +38,31 @@ TEST(IriTest, IriCreation) {
 }
 
 // _____________________________________________________________________________
+TEST(IriTest, fromOwnedIriref) {
+  // Whether or not the input has to be unescaped, the result is the same as
+  // that of `fromIriref`.
+  for (std::string_view input : {"<http://www.wikidata.org/entity/Q3138>",
+                                 R"(<http://example.org/\u0061>)"}) {
+    EXPECT_EQ(Iri::fromOwnedIriref(std::string{input}), Iri::fromIriref(input));
+  }
+  // If there is nothing to unescape, the input string is moved into the `Iri`
+  // instead of being copied. Note that the string is long enough to be stored
+  // on the heap, so moving it preserves the address of its data.
+  std::string input = "<http://www.wikidata.org/entity/Q3138>";
+  const char* data = input.data();
+  std::string representation =
+      Iri::fromOwnedIriref(std::move(input)).toStringRepresentation();
+  EXPECT_EQ(representation.data(), data);
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, fromLangtag) {
+  EXPECT_EQ(Iri::fromLangtag("en").toStringRepresentation(),
+            "<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>");
+  EXPECT_NE(Iri::fromLangtag("en"), Iri::fromLangtag("de"));
+}
+
+// _____________________________________________________________________________
 TEST(IriTest, fromIrirefValidated) {
   // Valid IRI references are accepted and behave like `fromIriref`.
   EXPECT_EQ(Iri::fromIrirefValidated("<http://www.wikidata.org/entity/Q3138>"),

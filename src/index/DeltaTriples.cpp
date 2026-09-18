@@ -276,7 +276,8 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     Id langtagId =
         languageTagCache_.getOrCompute(langtag, [this](const std::string& tag) {
           return toValueId(
-              TripleComponent{ad_utility::convertLangtagToEntityUri(tag)},
+              TripleComponent{
+                  ad_utility::triple_component::Iri::fromLangtag(tag)},
               index_, localVocab_);
         });
 

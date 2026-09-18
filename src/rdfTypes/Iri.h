@@ -131,6 +131,11 @@ class Iri : public BasicIri<true> {
   // with `<` and end with `>`.
   static Iri fromIriref(std::string_view stringWithBrackets);
 
+  // Same as `fromIriref`, but for callers that already own the input string.
+  // If it contains no escape sequence (by far the most common case), the
+  // string is moved into the `Iri` instead of being copied.
+  static Iri fromOwnedIriref(std::string stringWithBrackets);
+
   // Create a new `Iri` for QLever's internal representation of a
   // language-tagged predicate, which prefixes the IRI with the language tag,
   // e.g. `@en@<http://www.w3.org/2000/01/rdf-schema#label>`. The `langtag` must
@@ -138,6 +143,12 @@ class Iri : public BasicIri<true> {
   // handled exactly as in `fromIriref`.
   static Iri fromLangtagAndIriref(std::string_view langtag,
                                   std::string_view stringWithBrackets);
+
+  // Create QLever's internal entity IRI for the language tag `langtag` (e.g.
+  // `en` -> `<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>`). Those
+  // IRIs are the objects of the internal `ql:langtag` triples that implement
+  // the efficient language filter.
+  static Iri fromLangtag(std::string_view langtag);
 
   // Like `fromIriref`, but first validate that `stringWithBrackets` is a
   // syntactically valid `IRIREF` and `throw` an `ad_utility::Exception`

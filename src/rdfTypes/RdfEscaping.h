@@ -119,6 +119,16 @@ std::string normalizedContentFromLiteralOrIri(std::string&& input);
  */
 std::string unescapeIriref(std::string_view iriref);
 
+// Same as `unescapeIriref` above, but do not allocate if there is nothing to
+// unescape: return a view of the unescaped Iriref (including the angle
+// brackets). If `iriref` contains no escape sequence (by far the most common
+// case when parsing RDF input), a view of `iriref` itself is returned and
+// `buffer` is left untouched, which tells the caller that it can keep using
+// the original string. Otherwise the unescaped Iriref is stored in `buffer`
+// and a view of `buffer` is returned. `buffer` must be empty when calling this
+// function and has to outlive the returned view.
+std::string_view unescapeIriref(std::string_view iriref, std::string& buffer);
+
 /**
  * This function unescapes a prefixedIri (the "local" part in the form
  * prefix:local). These may only contain so-called "reserved character escape

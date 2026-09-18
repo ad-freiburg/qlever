@@ -1504,7 +1504,7 @@ RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
 TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
   auto iri = visitAlternative<std::string>(ctx->iriref(), ctx->prefixedName());
   if (!ctx->PREFIX_LANGTAG()) {
-    return TripleComponent::Iri::fromIriref(iri);
+    return TripleComponent::Iri::fromOwnedIriref(std::move(iri));
   }
   // The text of a `PREFIX_LANGTAG` is the language tag enclosed in `@`, e.g.
   // `@en@`; strip those to obtain the bare language tag.

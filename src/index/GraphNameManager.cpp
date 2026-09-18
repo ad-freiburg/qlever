@@ -20,7 +20,7 @@ GraphNameManager::GraphNameManager(std::string prefixWithoutBraces,
 
 // _____________________________________________________________________________
 ad_utility::triple_component::Iri GraphNameManager::allocateNewGraph() {
-  return ad_utility::triple_component::Iri::fromIriref(
+  return ad_utility::triple_component::Iri::fromOwnedIriref(
       absl::StrCat("<", prefixWithoutBraces_, nextUnallocatedGraph_++, ">"));
 }
 
