@@ -411,6 +411,10 @@ if (USE_FIBER_IO)
     # Boost_DIR cache entry would pin a repeated Boost lookup to the system
     # config and ignore HINTS, while the per-package DIR entries are
     # re-searched while cached as NOTFOUND.
+    # Drop stale dependency lists leaked by the system BoostConfig into our
+    # directory scope; the prefix configs resolve their own deps.
+    unset(_BOOST_FIBER_DEPS)
+    unset(_BOOST_CONTEXT_DEPS)
     find_package(boost_fiber QUIET CONFIG HINTS ${_fiber_hints})
     find_package(boost_context QUIET CONFIG HINTS ${_fiber_hints})
     set(Boost_USE_STATIC_LIBS ${_saved_Boost_USE_STATIC_LIBS})
