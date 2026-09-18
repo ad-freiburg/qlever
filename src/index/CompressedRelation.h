@@ -322,6 +322,20 @@ class CompressedRelationWriter {
   using SmallBlocksCallback = std::function<void(IdTable)>;
   SmallBlocksCallback smallBlocksCallback_;
 
+  // A small pool of block buffers that have already been written and whose
+  // memory can therefore be reused for the following blocks (see
+  // `takeRecycledBlock` and `recycleBlock`). Recycling is off by default and
+  // has to be enabled explicitly via `enableBlockRecycling`, because a buffer
+  // that nobody takes out of the pool again would only waste memory.
+  ad_utility::Synchronized<std::vector<IdTable>> recycledBlocks_;
+  bool recycleBlocks_ = false;
+
+  // The maximal number of buffers that are kept in the `recycledBlocks_`. Two
+  // buffers suffice for the only user (the `PermutationWriter`, which
+  // alternates between the buffer it currently fills and the buffer of the
+  // block that is currently written in the background).
+  static constexpr size_t maxNumRecycledBlocks_ = 2;
+
  public:
   /// Create using a filename, to which the relation data will be written.
   /// If `numWriterThreads` is set, it determines how many blocks this writer
@@ -616,6 +630,23 @@ class CompressedRelationWriter {
   // * The previously called function was `addBlockForLargeRelation` with the
   // same `col0Id`.
   void addBlockForLargeRelation(Id col0Id, IdTable relation);
+
+  // Enable the recycling of block buffers, see `recycledBlocks_` above. Only
+  // call this if the blocks that are added to this writer are obtained from
+  // `takeRecycledBlock`.
+  void enableBlockRecycling() { recycleBlocks_ = true; }
+
+  // Return a block buffer with `numColumns` columns and zero rows, which is
+  // taken from the `recycledBlocks_` if possible (then its memory is already
+  // allocated) and freshly constructed from the `allocator` otherwise.
+  // Thread-safe.
+  IdTable takeRecycledBlock(
+      size_t numColumns, const ad_utility::AllocatorWithLimit<Id>& allocator);
+
+  // Store the `block`, whose contents are no longer needed, in the
+  // `recycledBlocks_` if recycling is enabled and the pool is not yet full.
+  // Otherwise simply destroy it. Thread-safe.
+  void recycleBlock(IdTable block);
 
   // This function must be called after all blocks of a large relation have been
   // added via `addBlockForLargeRelation` before any other function may be

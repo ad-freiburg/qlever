@@ -1374,6 +1374,35 @@ void CompressedRelationWriter::compressAndWriteBlockInCallingThread(
       hasDuplicates});
   if (invokeCallback && smallBlocksCallback_) {
     std::invoke(smallBlocksCallback_, std::move(block));
+  } else {
+    recycleBlock(std::move(block));
+  }
+}
+
+// _____________________________________________________________________________
+IdTable CompressedRelationWriter::takeRecycledBlock(
+    size_t numColumns, const ad_utility::AllocatorWithLimit<Id>& allocator) {
+  auto recycledBlocks = recycledBlocks_.wlock();
+  // Blocks with a different number of columns cannot be reused, but this
+  // should never happen for the current users.
+  if (!recycledBlocks->empty() &&
+      recycledBlocks->back().numColumns() == numColumns) {
+    IdTable result = std::move(recycledBlocks->back());
+    recycledBlocks->pop_back();
+    return result;
+  }
+  return IdTable{numColumns, allocator};
+}
+
+// _____________________________________________________________________________
+void CompressedRelationWriter::recycleBlock(IdTable block) {
+  if (!recycleBlocks_) {
+    return;
+  }
+  block.clear();
+  auto recycledBlocks = recycledBlocks_.wlock();
+  if (recycledBlocks->size() < maxNumRecycledBlocks_) {
+    recycledBlocks->push_back(std::move(block));
   }
 }
 
@@ -1651,20 +1680,31 @@ void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
                         false);
 }
 
+// The number of blocks of a large relation for which the number of distinct
+// `col1` IDs is computed concurrently in `addCompleteLargeRelation` below. Each
+// of these blocks is held in memory, so this must not be too large.
+static constexpr size_t numBlocksInFlightForDistinctCol1Count = 3;
+
 // __________________________________________________________________________
 template <typename T>
 CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     Id col0Id, T&& sortedBlocks) {
   using namespace compressedRelationHelpers;
-  DistinctIdCounter distinctCol1Counter;
+  size_t numDistinctCol1 = 0;
+
+  // Counting the distinct IDs of column 1 is expensive, so it is performed on
+  // the global thread pool. The blocks themselves are yielded in their original
+  // order, because the merging of the blocks below has to happen in order.
+  AsyncDistinctIdCounter<std::remove_reference_t<T>> blocks{
+      sortedBlocks, c1Idx, numBlocksInFlightForDistinctCol1Count};
 
   // Buffer used to ensure the invariant that equal triples (when disregarding
   // the graph) stay in the same block.
   std::optional<IdTable> bufferedBlock;
 
-  for (auto& block :
-       sortedBlocks | ql::views::filter(std::not_fn(&IdTable::empty))) {
-    ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
+  while (auto nextBlockAndCount = blocks.next()) {
+    auto& [block, numDistinctCol1InBlock] = nextBlockAndCount.value();
+    numDistinctCol1 += numDistinctCol1InBlock;
 
     if (!bufferedBlock.has_value()) {
       // First non-empty block - initialize buffer.
@@ -1714,7 +1754,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     addBlockForLargeRelation(col0Id, std::move(bufferedBlock.value()));
   }
 
-  return finishLargeRelation(distinctCol1Counter.getAndReset());
+  return finishLargeRelation(numDistinctCol1);
 }
 
 // _____________________________________________________________________________
