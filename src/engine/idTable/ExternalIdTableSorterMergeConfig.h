@@ -41,17 +41,44 @@
 // without running a single merge.
 namespace ad_utility::compressedExternalIdTable {
 
-// The number of finished output blocks that the merge phase keeps in memory per
-// chunk before it starts spilling them to disk, see
-// `CompressedIdTableBlockStorage`.
+// The smallest number of finished output blocks that the merge phase keeps in
+// memory per chunk before it starts spilling them to disk, see
+// `CompressedIdTableBlockStorage`. The actual number is derived from the memory
+// that is left over once the size of the output blocks and the number of
+// concurrent chunks are fixed, see `numBufferedOutputBlocksPerChunk`.
 constexpr inline size_t MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK = 1;
+
+// The largest number of output blocks that the merge phase keeps in memory per
+// chunk, see `numBufferedOutputBlocksPerChunk`. The memory limit is the
+// criterion that normally decides this, and this ceiling only bounds the
+// bookkeeping (and the per-block overhead of the allocator, which the memory
+// accounting does not see) for a caller that pins a very small output block
+// size and has a very large memory limit.
+constexpr inline size_t MAX_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK = 1024;
 
 // The number of output blocks that a single in-flight chunk of the merge phase
 // occupies at the same time: the one that it is currently merging into, the one
-// that may be on its way to the spill file, and the ones that the block storage
-// keeps in memory (see above).
-constexpr inline size_t MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK =
-    MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK + 2;
+// that may be on its way to the spill file, and the
+// `numBufferedBlocksPerChunk` that the block storage keeps in memory (see
+// above).
+constexpr inline size_t mergePhaseOutputBlocksPerChunk(
+    size_t numBufferedBlocksPerChunk) {
+  return numBufferedBlocksPerChunk + 2;
+}
+
+// The number of spilled output blocks that the merge phase reads back from disk
+// concurrently, see `CompressedIdTableBlockStorage`. The blocks of the merge
+// have to be *consumed* in a single global order, so without such a read-ahead
+// every one of them would be decompressed one after the other in a single
+// thread, which for a merge that spills most of its output is a hard ceiling on
+// the throughput of the whole merge phase (a single core decompresses roughly
+// 1.5 GB/s, while the producers of 16 chunks compress several times that).
+// Only the chunk that is currently being consumed ever reads ahead, so this is
+// a single count for the whole merge phase and not one per chunk, and these
+// blocks are part of the `MergePhaseConfig::numBufferedOutputBlocks_` that the
+// merge phase reserves on the consumer side: they are taken from the read-ahead
+// of the consumer itself, see `makeMergeOptions`.
+constexpr inline size_t MERGE_PHASE_READ_AHEAD_BLOCKS = 4;
 
 // The compression that the merge phase applies to the output blocks that it
 // spills, see `makeMergePhaseBlockStorageFactory`. In contrast to the presorted
@@ -205,13 +232,18 @@ struct MergePhaseConfig {
   bool ignoreMemoryLimit_ = false;
 };
 
-// The two numbers that the memory limit has to be split between in the merge
-// phase, see `computeMergePhaseParameters`.
+// The numbers that the memory limit has to be split between in the merge phase,
+// see `computeMergePhaseParameters`.
 struct MergePhaseParameters {
   // The number of rows of a single output block.
   size_t outputBlockSize_;
   // The number of chunks that are merged concurrently.
   size_t numChunksInFlight_;
+  // The number of finished output blocks that a single chunk keeps in memory
+  // before it starts spilling them to disk, see
+  // `numBufferedOutputBlocksPerChunk`.
+  size_t numBufferedBlocksPerChunk_ =
+      MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK;
 };
 
 // Split the memory limit between the size of the output blocks and the number
@@ -263,21 +295,28 @@ struct MergePhaseParameters {
 // effectively keeps a chunk slot free for that bookkeeping.
 //
 // The reason why the size of an output block matters this much is the spill of
-// `makeMergePhaseBlockStorageFactory`: a chunk keeps only
-// `MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK` of its output blocks in
-// memory and compresses the rest, so with eight blocks per chunk 85 % of all
-// output bytes are compressed, written, read back and decompressed again.
+// `makeMergePhaseBlockStorageFactory`: the block size above consumes the whole
+// memory limit, so a chunk can keep only a single one of its output blocks in
+// memory and has to compress the rest, and with eight blocks per chunk 85 % of
+// all output bytes are compressed, written, read back and decompressed again.
 // Making that spill cheap is therefore worth as much as this whole formula,
 // see `MERGE_PHASE_SPILL_COMPRESSION`. With it, realistic data is within 4 %
 // of the merge that does not spill at all (0.47 s against 0.45 s), so there
 // is nothing left to gain there.
 //
-// TODO<joka921> Uniformly distributed `Id`s are the case that is still far
-// off: they compress much worse, so they spill 1.2 GB instead of 0.23 GB and
-// reach 0.66 s against the same 0.47 s. Buffering more than one output block
-// per chunk would spill less, at the price of chunk slots (see
-// `MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK`). That trade was never measured, and
-// it only matters for data that a real index build does not produce.
+// IMPORTANT: All of the above is about the case where this function is free to
+// *choose* the size of the output blocks. A caller that pins that size (see
+// `outputBlockSizeOverride_`) can leave a large part of the memory limit
+// unspent, and that part is then given to the block storage as additional
+// buffered blocks per chunk, see `numBufferedOutputBlocksPerChunk`. Without
+// that step a pinned size would be catastrophic: the twin permutation of the
+// index build pins the block size of the permutation (31250 rows, one megabyte)
+// while its sorter has a limit of 4 GB, for which the formula above would
+// otherwise happily afford blocks of 2.2 *million* rows. Every one of those
+// tiny blocks but one per chunk would be spilled, the whole output would travel
+// through the compressor, the page cache and the decompressor, and the
+// decompression alone would be serialized behind the single consumer of the
+// merge.
 //
 // NOTE: Before the output blocks were spilled to disk, a chunk that had run
 // ahead of the consumer suspended while holding on to its slot, so the
@@ -287,6 +326,52 @@ struct MergePhaseParameters {
 // block (1476562 rows and 3 concurrent chunks here) and reached only 2.9x. Note
 // that the new formula also makes the *serial* merge (a single chunk with
 // 843750-row blocks) 13% faster, because its output blocks got smaller.
+// Return the number of finished output blocks that a single chunk may keep in
+// memory, given that the merge phase uses output blocks of `outputBlockSize`
+// rows and merges `numChunksInFlight` chunks concurrently. This is the memory
+// that is left over once those two are fixed, divided evenly among the chunks
+// that are in flight, and it is what decides how much of the output of the
+// merge is spilled to disk (see `CompressedIdTableBlockStorage`): a chunk that
+// can buffer all of its blocks never writes a single byte.
+//
+// The result is never smaller than `MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_
+// CHUNK` (a chunk that cannot buffer anything at all would spill even the block
+// that the consumer is about to ask for) and never larger than
+// `MAX_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK`.
+//
+// NOTE: For a merge phase that chooses its own output block size this is
+// exactly the minimum, because that choice already spends the whole memory
+// limit. It only ever exceeds the minimum for a caller that pins a smaller
+// block size, see the IMPORTANT note at `computeMergePhaseParameters`.
+inline size_t numBufferedOutputBlocksPerChunk(const MergePhaseConfig& config,
+                                              size_t outputBlockSize,
+                                              size_t numChunksInFlight) {
+  AD_CORRECTNESS_CHECK(numChunksInFlight > 0);
+  const MemorySize inputMemory = config.numRuns_ * config.numColumns_ *
+                                 config.inputBlockSize_ * numChunksInFlight;
+  const MemorySize blockMemory =
+      MemorySize::bytes(outputBlockSize * config.numColumns_ * sizeof(Id));
+  if (config.ignoreMemoryLimit_ || inputMemory >= config.memoryLimit_ ||
+      blockMemory.getBytes() == 0) {
+    return MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK;
+  }
+  // The blocks that are not buffered by the chunks: those between the merge and
+  // the consumer (which include the read-ahead of the spill files, see
+  // `MERGE_PHASE_READ_AHEAD_BLOCKS`), and the two per chunk that
+  // `mergePhaseOutputBlocksPerChunk` adds on top of the buffered ones.
+  const size_t numUnbufferedBlocks =
+      config.numBufferedOutputBlocks_ + 2 * numChunksInFlight;
+  const size_t numAffordableBlocks =
+      (config.memoryLimit_ - inputMemory).getBytes() / blockMemory.getBytes();
+  if (numAffordableBlocks <= numUnbufferedBlocks) {
+    return MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK;
+  }
+  return std::clamp(
+      (numAffordableBlocks - numUnbufferedBlocks) / numChunksInFlight,
+      MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK,
+      MAX_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+}
+
 inline MergePhaseParameters computeMergePhaseParameters(
     const MergePhaseConfig& config) {
   AD_CONTRACT_CHECK(config.parallelism_ > 0);
@@ -294,18 +379,34 @@ inline MergePhaseParameters computeMergePhaseParameters(
   const MemorySize inputMemoryPerChunk =
       config.numRuns_ * config.numColumns_ * config.inputBlockSize_;
 
+  // Turn the two numbers that the memory limit is split between into the
+  // complete parameters, by deriving how many output blocks a single chunk may
+  // additionally keep in memory, see `numBufferedOutputBlocksPerChunk`.
+  auto withBufferedBlocks = [&config](size_t outputBlockSize,
+                                      size_t numChunksInFlight) {
+    return MergePhaseParameters{
+        outputBlockSize, numChunksInFlight,
+        numBufferedOutputBlocksPerChunk(config, outputBlockSize,
+                                        numChunksInFlight)};
+  };
+
   if (config.ignoreMemoryLimit_) {
     // For unit tests, always yield 5 rows at once, and let all the chunks
     // that the parallelism offers be in flight. Deriving either number from
     // the (deliberately tiny) memory limit of such a test would always
     // collapse the merge to a single chunk, and the parallel code path would
     // never be exercised.
-    return {config.outputBlockSizeOverride_.value_or(5), config.parallelism_};
+    return withBufferedBlocks(config.outputBlockSizeOverride_.value_or(5),
+                              config.parallelism_);
   }
 
   // Return the largest number of rows per output block that leaves room for
   // `numInFlight` concurrent chunks, or `std::nullopt` if the input blocks of
   // those chunks alone already exceed the memory limit.
+  //
+  // NOTE: This deliberately assumes the *minimal* number of buffered blocks per
+  // chunk, because it is the size of an output block that is being derived
+  // here, and the buffering only gets what that size leaves over.
   auto largestOutputBlockSize = [&config,
                                  inputMemoryPerChunk](size_t numInFlight) {
     const MemorySize inputMemory = inputMemoryPerChunk * numInFlight;
@@ -314,7 +415,9 @@ inline MergePhaseParameters computeMergePhaseParameters(
     }
     const size_t numOutputBlocks =
         config.numBufferedOutputBlocks_ +
-        MERGE_PHASE_OUTPUT_BLOCKS_PER_CHUNK * numInFlight;
+        mergePhaseOutputBlocksPerChunk(
+            MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK) *
+            numInFlight;
     const MemorySize perBlock =
         std::min((config.memoryLimit_ - inputMemory) / numOutputBlocks,
                  config.maxOutputBlockSize_);
@@ -339,10 +442,10 @@ inline MergePhaseParameters computeMergePhaseParameters(
     for (size_t numInFlight = config.parallelism_; numInFlight > 1;
          --numInFlight) {
       if (fits(numInFlight, numRows)) {
-        return {numRows, numInFlight};
+        return withBufferedBlocks(numRows, numInFlight);
       }
     }
-    return {numRows, 1};
+    return withBufferedBlocks(numRows, 1);
   }
 
   // Use as much parallelism as the memory limit allows, but never at the
@@ -352,7 +455,7 @@ inline MergePhaseParameters computeMergePhaseParameters(
     auto numRows = largestOutputBlockSize(numInFlight);
     if (numRows.has_value() &&
         numRows.value() >= MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE) {
-      return {numRows.value(), numInFlight};
+      return withBufferedBlocks(numRows.value(), numInFlight);
     }
   }
   // Not even two chunks leave room for a reasonably sized output block, so
@@ -364,7 +467,7 @@ inline MergePhaseParameters computeMergePhaseParameters(
         absl::StrCat("Insufficient memory for merging ", config.numRuns_,
                      " blocks. Please increase the memory settings")};
   }
-  return {numRows.value(), 1};
+  return withBufferedBlocks(numRows.value(), 1);
 }
 
 // Turn the `parameters` that `computeMergePhaseParameters` has derived into the
@@ -379,12 +482,18 @@ inline parallelBlockMerge::MergeOptions makeMergeOptions(
   options.parallelismHint = config.parallelism_;
   options.maxNumChunksInFlight = parameters.numChunksInFlight_;
   options.firstChunkSizes = mergePhaseFirstChunkSizes();
-  // Two of the buffered output blocks are the one that the consumer currently
-  // holds and the one that the merge is just finishing, so all the others are
-  // read ahead, see `MergePhaseConfig::numBufferedOutputBlocks_`.
-  options.numPrefetchedOutputBlocks = config.numBufferedOutputBlocks_ >= 3
-                                          ? config.numBufferedOutputBlocks_ - 2
-                                          : 1;
+  // The output blocks that the merge phase reserves on the consumer side (see
+  // `MergePhaseConfig::numBufferedOutputBlocks_`) are the one that the consumer
+  // currently holds, the one that the merge is just finishing, the ones that
+  // the storage reads back from the spill files in advance (see
+  // `MERGE_PHASE_READ_AHEAD_BLOCKS`), and the rest, which the consumer reads
+  // ahead. The read-ahead is never zero, see
+  // `MergeOptions::numPrefetchedOutputBlocks`.
+  constexpr size_t numReservedBlocks = MERGE_PHASE_READ_AHEAD_BLOCKS + 2;
+  options.numPrefetchedOutputBlocks =
+      config.numBufferedOutputBlocks_ > numReservedBlocks
+          ? config.numBufferedOutputBlocks_ - numReservedBlocks
+          : 1;
   return options;
 }
 
@@ -410,7 +519,10 @@ inline std::string makeSpillFilename(const std::string& sorterFilename,
 // producer. A suspended producer would hold on to its slot among the chunks
 // that are in flight, which is the scarce resource of the merge phase (see
 // `computeMergePhaseParameters`). As long as the consumer keeps up, no block is
-// ever written, see `CompressedIdTableBlockStorage`.
+// ever written, see `CompressedIdTableBlockStorage`, and neither is one written
+// while a chunk can still buffer it, which is what
+// `numBufferedBlocksPerChunk` (from
+// `MergePhaseParameters::numBufferedBlocksPerChunk_`) decides.
 //
 // NOTE: That storage is only ever used by the coroutine-based sink and hence
 // does not exist in the C++17 backports mode, where
@@ -421,6 +533,8 @@ auto makeMergePhaseBlockStorageFactory(
     [[maybe_unused]] boost::asio::any_io_executor ioExecutor,
     [[maybe_unused]] std::string spillFilenamePrefix,
     [[maybe_unused]] AllocatorWithLimit<Id> allocator,
+    [[maybe_unused]] size_t numBufferedBlocksPerChunk =
+        MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK,
     [[maybe_unused]] CompressedBlockFile::CompressionLevel compression =
         MERGE_PHASE_SPILL_COMPRESSION) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -428,8 +542,8 @@ auto makeMergePhaseBlockStorageFactory(
 #else
   return makeCompressedIdTableStorageFactory<NumCols>(
       std::move(ioExecutor), std::move(spillFilenamePrefix),
-      std::move(allocator), MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK,
-      compression);
+      std::move(allocator), numBufferedBlocksPerChunk,
+      MERGE_PHASE_READ_AHEAD_BLOCKS, compression);
 #endif
 }
 

@@ -137,6 +137,84 @@ TEST(ExternalIdTableSorterMergeConfig, pinnedOutputBlockSize) {
 }
 
 // _____________________________________________________________________________
+// A merge phase that chooses the size of its output blocks itself spends the
+// whole memory limit on them, so nothing is left over and a chunk buffers the
+// minimal number of blocks: with 125'000 rows per block (see `fullParallelism`)
+// a block occupies 2'000'000 bytes, of which the limit affords only ten, while
+// `4 + 4 + 2 * 2 = 12` of them are already spoken for.
+TEST(ExternalIdTableSorterMergeConfig, derivedBlockSizeLeavesNothingToBuffer) {
+  auto parameters = computeMergePhaseParameters(baseConfig());
+  EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
+            MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+}
+
+// _____________________________________________________________________________
+// A caller that pins a *small* output block size leaves a large part of the
+// memory limit unspent, and that part is given to the chunks as additional
+// buffered output blocks, so that they spill far less (or nothing at all). With
+// 1'000 rows per block a block occupies 16'000 bytes, of which the limit
+// affords `20'000'000 / 16'000 = 1250`, and `(1250 - 8) / 2 = 621` of them are
+// left for each of the two chunks that are in flight.
+TEST(ExternalIdTableSorterMergeConfig, pinnedBlockSizeIsSpentOnBuffering) {
+  auto config = baseConfig();
+  config.outputBlockSizeOverride_ = 1'000;
+  auto parameters = computeMergePhaseParameters(config);
+  EXPECT_EQ(parameters.outputBlockSize_, 1'000u);
+  EXPECT_EQ(parameters.numChunksInFlight_, 2u);
+  EXPECT_EQ(parameters.numBufferedBlocksPerChunk_, 621u);
+
+  // A pinned size that is not small does not leave anything over either.
+  config.outputBlockSizeOverride_ = 125'000;
+  parameters = computeMergePhaseParameters(config);
+  EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
+            MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+
+  // A memory limit that does not even suffice for the input blocks of a single
+  // chunk leaves nothing to buffer with, and a pinned block size is still not
+  // overridden, see `pinnedOutputBlockSize`.
+  config.outputBlockSizeOverride_ = 1'000;
+  config.memoryLimit_ = ad_utility::MemorySize::bytes(150);
+  parameters = computeMergePhaseParameters(config);
+  EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
+            MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+}
+
+// _____________________________________________________________________________
+// This is the configuration of the twin permutation of the index build, which
+// is what motivated the buffering above: it pins the block size of the
+// permutation (31'250 rows of four columns, one megabyte) while its sorter has
+// a limit of 4 GB, for which the formula would otherwise afford blocks of more
+// than two million rows. Without the buffering a chunk would keep a single one
+// of its roughly hundred output blocks and spill all the others.
+TEST(ExternalIdTableSorterMergeConfig, theTwinPermutationOfTheIndexBuild) {
+  MergePhaseConfig config;
+  config.numRuns_ = 3;
+  config.numColumns_ = 4;
+  config.memoryLimit_ = 4_GB;
+  config.inputBlockSize_ = 500_kB;
+  config.numBufferedOutputBlocks_ = 12;
+  config.maxOutputBlockSize_ = 1_GB;
+  config.parallelism_ = 16;
+  config.outputBlockSizeOverride_ = (250_kB).getBytes() / sizeof(Id);
+  auto parameters = computeMergePhaseParameters(config);
+  EXPECT_EQ(parameters.outputBlockSize_, 31'250u);
+  EXPECT_EQ(parameters.numChunksInFlight_, 16u);
+  EXPECT_GT(parameters.numBufferedBlocksPerChunk_, 100u);
+}
+
+// _____________________________________________________________________________
+// The number of buffered blocks per chunk never exceeds its ceiling, no matter
+// how tiny the pinned block size and how large the memory limit are.
+TEST(ExternalIdTableSorterMergeConfig, theBufferingIsCapped) {
+  auto config = baseConfig();
+  config.outputBlockSizeOverride_ = 1;
+  config.memoryLimit_ = 100_GB;
+  auto parameters = computeMergePhaseParameters(config);
+  EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
+            MAX_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+}
+
+// _____________________________________________________________________________
 // The tiny memory limits of the unit tests would always collapse the merge to a
 // single chunk, so those tests disable the memory limit entirely, which yields
 // small output blocks and full parallelism.
@@ -148,6 +226,10 @@ TEST(ExternalIdTableSorterMergeConfig, ignoredMemoryLimit) {
   auto parameters = computeMergePhaseParameters(config);
   EXPECT_EQ(parameters.outputBlockSize_, 5u);
   EXPECT_EQ(parameters.numChunksInFlight_, 7u);
+  // A disabled memory limit says nothing about how much may be buffered, so the
+  // minimum is used, which keeps the spilling path exercised by the tests.
+  EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
+            MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
 
   // A pinned block size still wins.
   config.outputBlockSizeOverride_ = 17;
@@ -179,10 +261,12 @@ TEST(ExternalIdTableSorterMergeConfig, mergeOptions) {
   EXPECT_EQ(options.maxNumChunksInFlight, parameters.numChunksInFlight_);
   EXPECT_EQ(options.numChunksInFlight(100), parameters.numChunksInFlight_);
   EXPECT_EQ(options.firstChunkSizes, mergePhaseFirstChunkSizes());
-  // All the buffered output blocks but two are read ahead, see
+  // All the buffered output blocks but the two that the consumer holds and the
+  // read-ahead of the spill files are read ahead by the consumer, see
   // `MergePhaseConfig::numBufferedOutputBlocks_`.
-  EXPECT_EQ(options.numPrefetchedOutputBlocks,
-            config.numBufferedOutputBlocks_ - 2);
+  config.numBufferedOutputBlocks_ = MERGE_PHASE_READ_AHEAD_BLOCKS + 7;
+  options = makeMergeOptions(config, computeMergePhaseParameters(config));
+  EXPECT_EQ(options.numPrefetchedOutputBlocks, 5u);
 }
 
 // _____________________________________________________________________________
@@ -191,7 +275,8 @@ TEST(ExternalIdTableSorterMergeConfig, mergeOptions) {
 // make progress, see `MergeOptions::numPrefetchedOutputBlocks`.
 TEST(ExternalIdTableSorterMergeConfig, mergeOptionsWithFewBufferedBlocks) {
   auto config = baseConfig();
-  for (size_t numBufferedOutputBlocks : {size_t{1}, size_t{2}, size_t{3}}) {
+  for (size_t numBufferedOutputBlocks :
+       {size_t{1}, size_t{2}, MERGE_PHASE_READ_AHEAD_BLOCKS + 2}) {
     config.numBufferedOutputBlocks_ = numBufferedOutputBlocks;
     auto options =
         makeMergeOptions(config, computeMergePhaseParameters(config));

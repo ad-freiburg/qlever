@@ -1173,15 +1173,13 @@ class CompressedExternalIdTableSorter
 
   // The maximal blocksize in the output phase.
   MemorySize maxOutputBlocksize_ = 1_GB;
-  // The number of merged blocks that are buffered during the
-  //  output phase. It is the number of output blocks that the memory
-  //  accounting of the merge phase reserves memory for (see
-  //  `compressedExternalIdTable::computeMergePhaseParameters`), and it is split
-  //  as follows: the merge reads `numBufferedOutputBlocks_ - 2` blocks ahead
-  //  (see `parallelBlockMerge::MergeOptions::numPrefetchedOutputBlocks` and
-  //  `compressedExternalIdTable::makeMergeOptions`), and the remaining two are
-  //  the block that the consumer currently holds and the one that the merge is
-  //  just finishing.
+  // The number of merged blocks that are buffered during the output phase. It
+  // is the number of output blocks that the memory accounting of the merge
+  // phase reserves memory for on the consumer side (see
+  // `compressedExternalIdTable::computeMergePhaseParameters`), and how it is
+  // split between the read-ahead of the consumer, the read-ahead of the spill
+  // files and the two blocks that are always in the consumer's hands is decided
+  // by `compressedExternalIdTable::makeMergeOptions`, see there.
   int numBufferedOutputBlocks_ = 12;
 
   // See the `moveResultOnMerge()` getter function for documentation.
@@ -1409,7 +1407,7 @@ class CompressedExternalIdTableSorter
     auto merged =
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
             mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
-            this->comparator_, makeBlockStorageFactory<N>(),
+            this->comparator_, makeBlockStorageFactory<N>(parameters),
             compressedExternalIdTable::makeMergeOptions(config, parameters),
             // NOTE: The sorter has no cancellation handle of its own, and the
             // merge requires one that is not `nullptr`, so this is a fresh
@@ -1421,13 +1419,18 @@ class CompressedExternalIdTableSorter
 
   // The factory for the intermediate storage of the output blocks of the merge
   // phase, see `compressedExternalIdTable::makeMergePhaseBlockStorageFactory`.
+  // How many of those blocks a chunk may buffer before it starts spilling is
+  // part of the `parameters` that the memory limit was split into, see
+  // `compressedExternalIdTable::numBufferedOutputBlocksPerChunk`.
   template <size_t N>
-  auto makeBlockStorageFactory() {
+  auto makeBlockStorageFactory(
+      const compressedExternalIdTable::MergePhaseParameters& parameters) {
     return compressedExternalIdTable::makeMergePhaseBlockStorageFactory<N>(
         mergeExecutor_,
         compressedExternalIdTable::makeSpillFilename(
             this->writer_.filename(), numMergePhases_.fetch_add(1)),
-        this->writer_.allocator(), mergeSpillCompression_);
+        this->writer_.allocator(), parameters.numBufferedBlocksPerChunk_,
+        mergeSpillCompression_);
   }
 
   // The configuration from which the parameters of the merge phase are derived,

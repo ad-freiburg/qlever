@@ -90,12 +90,30 @@ namespace net = boost::asio;
 // delete a file out from under an operation that is still writing to or reading
 // from it.
 //
+// READ-AHEAD: The consumer of a merge reads the blocks of a chunk strictly one
+// after the other, so without a read-ahead every spilled block would be
+// decompressed only once the consumer asks for it, and all those decompressions
+// would happen one at a time. For a merge phase that spills most of its output
+// that single-threaded decompression is the hard ceiling on the throughput of
+// the whole merge, no matter how many threads produce the blocks. Whenever the
+// consumer asks a chunk for a block, this storage therefore also starts the
+// reads of the next `maxReadAheadBlocks_` spilled blocks of that same chunk,
+// which run concurrently on the `ioExecutor`. A block whose read is in flight
+// occupies its place in the FIFO of the chunk, so the order is unaffected, and
+// a consumer that reaches such a place either finds the block already there or
+// waits for exactly that one read.
+//
+// Only the chunk that is currently being consumed ever reads ahead, so the
+// blocks that the read-ahead holds are bounded by `maxReadAheadBlocks_` for the
+// whole storage and not per chunk.
+//
 // NOTE: A `getBlock` whose block has to be read back from the file is not
 // cancelled by `cancelAll`, so a consumer that aborts the merge while such a
 // read is in flight sees that one last block instead of the end of the range.
 // Both are legal outcomes of a race between the consumer and the abort, and a
 // storage that keeps its blocks in memory is only more eager and not more
-// deterministic here.
+// deterministic here. The same holds for the reads that the read-ahead has
+// started: they run to completion and their blocks are simply dropped.
 template <size_t NumCols = 0>
 class CompressedIdTableBlockStorage : public NoCopyNoMove {
  public:
@@ -112,10 +130,27 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   using StoreHandler = absl::AnyInvocable<void(std::exception_ptr, bool) &&>;
   using GetHandler = absl::AnyInvocable<void(std::exception_ptr, GetResult) &&>;
 
-  // A single value in the FIFO queue of a chunk: either a block that is still
-  // in memory (where an empty `OptionalBlock` is the end-of-chunk sentinel), or
-  // the metadata of a block that was spilled to the file of that chunk.
-  using Entry = std::variant<OptionalBlock, compressedIdTable::BlockMetadata>;
+  // A spilled block whose read back from the file was started by the read-ahead
+  // and has not been consumed yet, see the READ-AHEAD note above. It is held by
+  // a `shared_ptr`, because the read refers to it while its place in the FIFO
+  // of the chunk may already have been handed to a consumer.
+  struct PendingRead {
+    // Both are only set once `isDone_` is true, and exactly one of them.
+    OptionalBlock block_;
+    std::exception_ptr exception_;
+    bool isDone_ = false;
+    // The consumer that reached this place in the FIFO before the read was
+    // done, if there is one. It is completed by the read itself.
+    GetHandler waitingConsumer_;
+  };
+  using SharedPendingRead = std::shared_ptr<PendingRead>;
+
+  // A single value in the FIFO queue of a chunk: a block that is still in
+  // memory (where an empty `OptionalBlock` is the end-of-chunk sentinel), the
+  // metadata of a block that was spilled to the file of that chunk, or a
+  // spilled block that the read-ahead is currently reading back.
+  using Entry = std::variant<OptionalBlock, compressedIdTable::BlockMetadata,
+                             SharedPendingRead>;
 
   // The file that a single chunk spills to. It is shared, because an operation
   // that runs on the `ioExecutor` holds on to it while the chunk may already
@@ -130,6 +165,12 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
     // memory. The end-of-chunk sentinel does not count, because it occupies no
     // memory and therefore is never spilled.
     size_t numBlocksInMemory_ = 0;
+    // The number of values in `queue_` that the read-ahead has turned into a
+    // `SharedPendingRead`, no matter whether that read is already done. It is
+    // decremented when such a value leaves the queue, so that it bounds the
+    // blocks that the read-ahead holds and not merely the concurrent I/O, see
+    // the READ-AHEAD note above.
+    size_t numPendingReads_ = 0;
     // The consumer that waits for the next value of this chunk, if there is
     // one.
     GetHandler waitingConsumer_;
@@ -142,6 +183,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   net::any_io_executor ioExecutor_;
   AllocatorWithLimit<Id> allocator_;
   size_t maxBufferedBlocksPerChunk_;
+  size_t maxReadAheadBlocks_;
   std::string filenamePrefix_;
   CompressedBlockFile::CompressionLevel compression_;
   HashMap<size_t, Chunk> chunks_;
@@ -155,12 +197,15 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   // confined to, the `ioExecutor` on which the compression, the decompression
   // and the I/O are run, the name of the file to spill to (which is overwritten
   // if it exists and deleted when this storage is destroyed), the `allocator`
-  // for the blocks that are read back, and the number of blocks that are kept
-  // in memory per chunk before that chunk starts spilling. That number may be
-  // zero, in which case every block is spilled. The `compression` decides how
-  // the spilled blocks are stored, see `CompressedBlockFile::CompressionLevel`;
-  // a spill file is short-lived and read back almost immediately, so a low
-  // level (or `NO_BLOCK_COMPRESSION`) is often faster than the default.
+  // for the blocks that are read back, the number of blocks that are kept in
+  // memory per chunk before that chunk starts spilling, and the number of
+  // spilled blocks that are read back concurrently (see the READ-AHEAD note
+  // above). The former may be zero, in which case every block is spilled; the
+  // latter may be zero as well, in which case a spilled block is only read once
+  // the consumer asks for it. The `compression` decides how the spilled blocks
+  // are stored, see `CompressedBlockFile::CompressionLevel`; a spill file is
+  // short-lived and read back almost immediately, so a low level (or
+  // `NO_BLOCK_COMPRESSION`) is often faster than the default.
   //
   // NOTE: The `filenamePrefix` is not a filename but the prefix of one per
   // chunk, see `spillFilename`. It has to be unique among all the storages that
@@ -169,12 +214,13 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   CompressedIdTableBlockStorage(
       Strand strand, net::any_io_executor ioExecutor,
       std::string filenamePrefix, AllocatorWithLimit<Id> allocator,
-      size_t maxBufferedBlocksPerChunk,
+      size_t maxBufferedBlocksPerChunk, size_t maxReadAheadBlocks = 0,
       CompressedBlockFile::CompressionLevel compression = ZSTD_DEFAULT_LEVEL)
       : strand_{std::move(strand)},
         ioExecutor_{std::move(ioExecutor)},
         allocator_{std::move(allocator)},
         maxBufferedBlocksPerChunk_{maxBufferedBlocksPerChunk},
+        maxReadAheadBlocks_{maxReadAheadBlocks},
         filenamePrefix_{std::move(filenamePrefix)},
         compression_{compression} {}
 
@@ -249,6 +295,14 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   // handed out.
   size_t numLiveChunksForTesting() const noexcept { return chunks_.size(); }
 
+  // The number of blocks of the chunk with the given `chunkIndex` that the
+  // read-ahead has claimed and that have not been consumed yet, see the
+  // READ-AHEAD note at the class comment above. Only used for testing.
+  size_t numPendingReadsForTesting(size_t chunkIndex) const noexcept {
+    auto iterator = chunks_.find(chunkIndex);
+    return iterator == chunks_.end() ? 0 : iterator->second.numPendingReads_;
+  }
+
  private:
   // The body of `storeBlock`, on the type-erased handler.
   void storeBlockImpl(size_t chunkIndex, OptionalBlock block,
@@ -315,6 +369,10 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
       chunk.waitingConsumer_ = std::move(handler);
       return;
     }
+    // This chunk is the one that the consumer is currently reading, so it is
+    // the one (and the only one) that reads ahead, see the READ-AHEAD note at
+    // the class comment above.
+    startReadAhead(chunk);
     Entry entry = std::move(chunk.queue_.front());
     chunk.queue_.pop_front();
     if (std::holds_alternative<OptionalBlock>(entry)) {
@@ -338,6 +396,18 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
                        GetResult::fromBlock(std::move(block).value()));
       return;
     }
+    if (std::holds_alternative<SharedPendingRead>(entry)) {
+      // The read-ahead has already started (and possibly finished) the read of
+      // this block.
+      AD_CORRECTNESS_CHECK(chunk.numPendingReads_ > 0);
+      --chunk.numPendingReads_;
+      servePendingRead(std::get<SharedPendingRead>(std::move(entry)),
+                       std::move(handler));
+      return;
+    }
+    // The read-ahead did not get to this block, so it is read now and the
+    // consumer waits for exactly that read.
+    //
     // NOTE: A spilled entry can only exist if the chunk has a file, and the
     // file is passed on as a `shared_ptr`, so erasing the chunk concurrently
     // cannot delete it while it is being read.
@@ -346,6 +416,78 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
         chunk.spillFile_,
         std::get<compressedIdTable::BlockMetadata>(std::move(entry)),
         std::move(handler));
+  }
+
+  // Complete the `handler` with the result of a `pending` read, waiting for
+  // that read if it is not done yet.
+  //
+  // PRECONDITION: This runs on `strand_`, and the `pending` read was already
+  // removed from the queue of its chunk.
+  void servePendingRead(SharedPendingRead pending, GetHandler handler) {
+    AD_CORRECTNESS_CHECK(pending != nullptr);
+    AD_CORRECTNESS_CHECK(!pending->waitingConsumer_);
+    if (!pending->isDone_) {
+      // The read completes this handler itself, see `finishReadAhead`.
+      pending->waitingConsumer_ = std::move(handler);
+      return;
+    }
+    completeFromPendingRead(*pending, std::move(handler));
+  }
+
+  // Complete the `handler` with the result of a `pending` read that is done.
+  //
+  // PRECONDITION: This runs on `strand_`, and `pending.isDone_` is true.
+  void completeFromPendingRead(PendingRead& pending, GetHandler handler) {
+    AD_CORRECTNESS_CHECK(pending.isDone_);
+    if (pending.exception_ != nullptr) {
+      completeOnStrand(std::move(handler), std::move(pending.exception_),
+                       GetResult{});
+      return;
+    }
+    AD_CORRECTNESS_CHECK(pending.block_.has_value());
+    completeOnStrand(std::move(handler), std::exception_ptr{},
+                     GetResult::fromBlock(std::move(pending.block_).value()));
+  }
+
+  // Start the reads of the next spilled blocks of the `chunk`, such that the
+  // consumer typically finds them already decompressed, see the READ-AHEAD note
+  // at the class comment above. Best effort: a read that cannot be started is
+  // simply not started, and the consumer reads that block itself later on.
+  //
+  // PRECONDITION: This runs on `strand_`, and the `chunk` is the one that the
+  // consumer is currently reading.
+  void startReadAhead(Chunk& chunk) noexcept {
+    // The number of values at the front of the queue that are inspected. Only
+    // the blocks that the consumer will ask for soon are worth reading ahead,
+    // and this keeps the cost of this function constant no matter how many
+    // blocks a chunk currently buffers in memory.
+    static constexpr size_t scanLimit = 64;
+    if (chunk.spillFile_ == nullptr) {
+      return;
+    }
+    size_t numInspected = 0;
+    for (Entry& entry : chunk.queue_) {
+      if (chunk.numPendingReads_ >= maxReadAheadBlocks_ ||
+          numInspected >= scanLimit) {
+        return;
+      }
+      ++numInspected;
+      if (!std::holds_alternative<compressedIdTable::BlockMetadata>(entry)) {
+        continue;
+      }
+      auto metadata = std::get<compressedIdTable::BlockMetadata>(entry);
+      SharedPendingRead pending;
+      try {
+        pending = std::make_shared<PendingRead>();
+      } catch (...) {
+        // Only an exhausted memory can get us here, and the read-ahead is the
+        // first thing that may then be dropped.
+        return;
+      }
+      entry = Entry{pending};
+      ++chunk.numPendingReads_;
+      readSpilledBlockAhead(chunk.spillFile_, metadata, std::move(pending));
+    }
   }
 
   // If a consumer of the chunk with the given `chunkIndex` is waiting, and that
@@ -518,6 +660,60 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
     });
   }
 
+  // Read a block that the read-ahead has claimed back from the `file` of its
+  // chunk on `ioExecutor_` and store the result in the `pending` read on
+  // `strand_`, see `finishReadAhead`. In contrast to `readSpilledBlock` there
+  // is no consumer for this block (yet), and several of these reads run
+  // concurrently, which is the whole point of the read-ahead.
+  //
+  // PRECONDITION: This runs on `strand_`.
+  void readSpilledBlockAhead(SharedSpillFile file,
+                             compressedIdTable::BlockMetadata metadata,
+                             SharedPendingRead pending) noexcept {
+    ad_utility::terminateIfThrows(
+        [this, &file, &metadata, &pending] {
+          net::post(ioExecutor_, [this, file = std::move(file),
+                                  metadata = std::move(metadata),
+                                  pending = std::move(pending)]() mutable {
+            std::exception_ptr exception;
+            OptionalBlock block;
+            try {
+              block = compressedIdTable::readBlock<NumCols>(*file, metadata,
+                                                            allocator_);
+            } catch (...) {
+              exception = std::current_exception();
+            }
+            net::post(strand_, [this, exception = std::move(exception),
+                                block = std::move(block),
+                                pending = std::move(pending)]() mutable {
+              finishReadAhead(std::move(pending), std::move(exception),
+                              std::move(block));
+            });
+          });
+        },
+        "Starting the read-ahead of a `CompressedIdTableBlockStorage` failed.");
+  }
+
+  // Store the result of a read that the read-ahead had started, and serve the
+  // consumer that has meanwhile reached that block, if there is one.
+  //
+  // PRECONDITION: This runs on `strand_`.
+  void finishReadAhead(SharedPendingRead pending, std::exception_ptr exception,
+                       OptionalBlock block) {
+    AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
+    AD_CORRECTNESS_CHECK(!pending->isDone_);
+    pending->exception_ = std::move(exception);
+    pending->block_ = std::move(block);
+    pending->isDone_ = true;
+    if (!pending->waitingConsumer_) {
+      // Nobody has asked for this block yet, it simply waits in the queue of
+      // its chunk (or, if that chunk is already gone, is dropped right here).
+      return;
+    }
+    GetHandler handler = std::move(pending->waitingConsumer_);
+    completeFromPendingRead(*pending, std::move(handler));
+  }
+
   // Invoke the `handler` with the given arguments, but only after a hop onto
   // `strand_`, as the CONTRACT of the `BlockStorageConcept` requires.
   void completeOnStrand(GetHandler handler, std::exception_ptr exception,
@@ -537,10 +733,12 @@ template <size_t NumCols>
 auto makeCompressedIdTableStorageFactory(
     net::any_io_executor ioExecutor, std::string filenamePrefix,
     AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
+    size_t maxReadAheadBlocks = 0,
     CompressedBlockFile::CompressionLevel compression = ZSTD_DEFAULT_LEVEL) {
   return [ioExecutor = std::move(ioExecutor),
           filenamePrefix = std::move(filenamePrefix),
           allocator = std::move(allocator), maxBufferedBlocksPerChunk,
+          maxReadAheadBlocks,
           compression](const parallelBlockMerge::Strand& strand) {
     // NOTE: The storage is neither copyable nor movable, so it is returned as a
     // prvalue and thereby constructed directly into the sink.
@@ -549,6 +747,7 @@ auto makeCompressedIdTableStorageFactory(
                                                   filenamePrefix,
                                                   allocator,
                                                   maxBufferedBlocksPerChunk,
+                                                  maxReadAheadBlocks,
                                                   compression};
   };
 }
