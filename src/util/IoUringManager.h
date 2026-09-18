@@ -327,9 +327,11 @@ inline std::unique_ptr<BatchManagerBase> makeBatchManager(
   }
 #else
   preferIoUring = false;
-#endif
   // The synchronous fallback performs blocking reads, which have nothing to
-  // pace, so a passed controller is ignored here by design.
+  // pace, so a passed controller is ignored here by design. The cast keeps
+  // `-Werror=unused-parameter` quiet in builds without io_uring.
+  (void)adaptiveBatchController;
+#endif
   return std::make_unique<BatchManager<SyncIoPolicy>>(ringSize);
 }
 
