@@ -73,9 +73,10 @@ struct BatchEvaluationContext {
 // Resolves `Id` values in variable columns to their string representations
 // (IRI, literal, etc.) via `ConstructQueryEvaluator::evaluateId`.
 //
-// The evaluation is column-oriented: for each variable (identified by their
-// `IdTable` column), all rows in the batch are evaluated before moving to the
-// next variable.
+// The evaluation runs in three phases per batch: per-column cache checks,
+// then concurrent vocabulary resolution of all columns' misses as fibers
+// (one fiber per lookup batch, sharing nothing but the I/O manager pool),
+// then per-column cache insertion in column order.
 //
 // An `IdCache` (LRU cache keyed by `Id`) avoids redundant evaluation of the
 // same `Id` across rows and batches.
@@ -90,12 +91,6 @@ class ConstructBatchEvaluator {
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
  private:
-  // Evaluate a single variable (identified by its `IdTable` column index)
-  // across all rows in the batch.
-  static EvaluatedVariableValues evaluateVariableByColumn(
-      size_t idTableColumnIdx, const BatchEvaluationContext& ctx,
-      const LocalVocab& localVocab, const Index& index, IdCache& idCache);
-
   // Convert the result of `ExportIds::idToStringAndType` to an `EvaluatedTerm`.
   static std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
       std::optional<std::pair<std::string, const char*>>&& optStringAndType);
