@@ -204,9 +204,6 @@ class IoUringPolicy {
   // `drainOneCqe`.
   ad_utility::HashMap<uint64_t, InFlightRead> inFlightReadsByRequestId_;
 
-  // Wait for one CQE and update the in-flight bookkeeping.
-  void drainOneCqe();
-
   // Attribute an already-reaped `cqe` to its batch: recover the result and
   // the request id, consume the CQE slot, check for I/O and short-read
   // errors, and update the in-flight bookkeeping. Shared by the blocking
@@ -246,6 +243,13 @@ class IoUringPolicy {
   // batch is still in flight, parking only as a last resort. Called from a
   // plain thread it keeps the current blocking behavior.
   void wait(BatchHandle handle);
+
+  // Block until at least one completion is available, then reap and
+  // attribute it (to whichever batch it belongs to, not necessarily the
+  // awaited one). Throws on I/O errors exactly like the non-blocking path.
+  // Used for the last-resort park in `FiberIoScheduler::waitUntil`: a
+  // parking fiber still serves its siblings while parked.
+  void drainOneCqe();
 
   // Try to reap a single available completion without blocking. Returns true
   // if a completion was reaped (and attributed to its batch), false if no
