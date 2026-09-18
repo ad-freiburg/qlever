@@ -27,7 +27,12 @@ jobs:
        (startsWith(github.event.comment.body, '/open-code-review-fanout') ||
         startsWith(github.event.comment.body, '@open-code-review-fanout')))
     runs-on: [self-hosted, linux, x64, ocr-fanout-local]
-    timeout-minutes: 180
+    # Full fan-out project-rules reviews need ~3.5-4h on larger diffs: runs
+    # 35110677564 and 35288058721 were both killed at exactly the old
+    # 180 min limit while the review agent was still streaming progress.
+    # Values above 360 are fine here: the 6h cap applies to GitHub-hosted
+    # runners only, this job runs on self-hosted runners.
+    timeout-minutes: 1800
     env:
       PATH: /home/userNoPriv/.local/bin:/home/userNoPriv/.local/share/npm/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
