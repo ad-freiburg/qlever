@@ -243,6 +243,9 @@ struct alignas(256) ItemMapManager {
     }
     auto& map = map_.map_;
     auto& buffer = map_.buffer_;
+    // The view always exists here: all values that are directly encoded into
+    // an `Id` were handled above, so `key` is a literal, an IRI, or a blank
+    // node string.
     auto repr = toRdfLiteralView(key.tripleComponent_).value();
     auto it = map.find(repr);
     if (it == map.end()) {

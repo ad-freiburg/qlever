@@ -1522,6 +1522,9 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
+    // The view always exists here: `handleStringOrId` above has turned all
+    // values that can be directly encoded into an `Id` into one, so what is
+    // left is a literal, an IRI, or a blank node string.
     if (vocab_.shouldBeExternalized(toRdfLiteralView(iriOrLiteral).value())) {
       component.isExternal_ = true;
     }
