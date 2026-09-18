@@ -106,9 +106,9 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
 
 // For each of the IdTriples in `input`: map its Ids using the `map` and
 // serialize the resulting batch of Id triples to the file `filename`, which is
-// created and closed by this function. The mapping is done in place, so
-// `input` holds the mapped Ids afterwards. Counterpart of
-// `readMappedIdsFromFile`.
+// created and closed by this function. `input` is only passed by reference so
+// that the caller can reuse its memory; its contents are unspecified
+// afterwards. Counterpart of `readMappedIdsFromFile`.
 void writeMappedIdsToFile(
     std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
     const HashMap<uint64_t, uint64_t>& map, const std::string& filename);

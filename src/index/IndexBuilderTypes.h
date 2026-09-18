@@ -31,6 +31,7 @@
 #include "parser/TripleComponent.h"
 #include "util/Conversions.h"
 #include "util/HashMap.h"
+#include "util/NoCopyNoMove.h"
 #include "util/RegexSet.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
@@ -139,9 +140,9 @@ class PartialVocabIndexWithExternalFlag {
 // deallocate all strings from a single batch of triples at once as soon as we
 // have finished processing them.
 
-// The type of the hash map. Note that the hash maps are not thrown away after
-// each partial vocabulary, but cleared and reused (see
-// `ItemMapAndBuffer::clear`), so a caching allocator is not needed.
+// The type of the hash map. The maps are cleared and reused between partial
+// vocabularies (see `ItemMapAndBuffer::clear`), so no caching allocator is
+// needed.
 using ItemMap =
     ad_utility::HashMap<std::string_view, PartialVocabIndexWithExternalFlag>;
 
@@ -170,37 +171,29 @@ class MonotonicBuffer {
     return {ptr, input.size()};
   }
 
-  // Deallocate all the strings in this buffer at once. All the `string_view`s
-  // that `addString` has returned dangle afterwards. The allocator stays valid,
-  // so the buffer can be filled again.
+  // Deallocate all the strings at once and make the buffer reusable. All the
+  // `string_view`s that `addString` has returned dangle afterwards.
   void clear() { buffer_->release(); }
 };
 
 // The hash map (which only stores pointers) together with the `MonotonicBuffer`
-// that manages the actual strings.
-struct ItemMapAndBuffer {
+// that manages the actual strings. Neither copyable nor movable: the
+// `string_view` keys of `map_` point into `buffer_`, and each task chain of the
+// first pass reuses a single instance via `clear` (see
+// `PartialVocabularyBuilder.h`).
+struct ItemMapAndBuffer : public ad_utility::NoCopyNoMove {
   ItemMap map_;
   MonotonicBuffer buffer_;
 
-  ItemMapAndBuffer() = default;
-  // Neither copied nor moved: each task chain of the first pass owns a single
-  // instance for its whole lifetime and reuses it via `clear` (see
-  // `PartialVocabularyBuilder.h`), and writing a partial vocabulary only reads
-  // it. Being immovable also rules out separating `map_` from the `buffer_`
-  // that its `string_view` keys point into.
-  ItemMapAndBuffer(const ItemMapAndBuffer&) = delete;
-  ItemMapAndBuffer& operator=(const ItemMapAndBuffer&) = delete;
-  ItemMapAndBuffer(ItemMapAndBuffer&&) = delete;
-  ItemMapAndBuffer& operator=(ItemMapAndBuffer&&) = delete;
-
-  // Remove all the entries and deallocate all the strings, but keep the memory
-  // of the hash map, so that the next partial vocabulary can reuse it.
+  // Remove all the entries and deallocate all the strings, but keep the hash
+  // map's memory for the next partial vocabulary.
   //
-  // NOTE: `erase(begin(), end())` is deliberately not `clear()`. For all but
-  // very small maps, `clear()` deallocates the hash map's backing array, while
-  // `erase(begin(), end())` only resets the control bytes and keeps the array
-  // (see `ClearBackingArray` in `absl/container/internal/raw_hash_set.cc`).
+  // NOTE: `erase(begin(), end())` is deliberately not `clear()`, which
+  // deallocates the backing array for all but very small maps (see
+  // `ClearBackingArray` in `absl/container/internal/raw_hash_set.cc`).
   void clear() {
+    // The above holds for the Abseil hash maps only.
+    static_assert(ad_utility::isInstantiation<ItemMap, absl::flat_hash_map>);
     map_.erase(map_.begin(), map_.end());
     buffer_.clear();
   }
@@ -225,10 +218,9 @@ struct alignas(256) ItemMapManager {
     addSpecialIds();
   }
 
-  // Reset to the state right after construction, but keep the memory of the
-  // hash map (see `ItemMapAndBuffer::clear`), so that the next partial
-  // vocabulary can reuse it. All the `string_view`s into this manager (in
-  // particular those of a previously created `ItemVec`) dangle afterwards.
+  // Reset to the state right after construction, but keep the hash map's memory
+  // (see `ItemMapAndBuffer::clear`). All the `string_view`s into this manager
+  // (in particular those of a previously created `ItemVec`) dangle afterwards.
   void clear() {
     map_.clear();
     specialIdMapping_.clear();

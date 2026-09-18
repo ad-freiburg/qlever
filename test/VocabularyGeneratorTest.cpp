@@ -582,11 +582,6 @@ TEST(MergeVocabulary, mappedIdsFileRoundTrip) {
               ::testing::ElementsAre(vocabId(12), Id::makeFromInt(3),
                                      Id::makeUndefined(), vocabId(10)));
 
-  // The Ids are mapped in place, so `input` now holds the mapped triples.
-  EXPECT_THAT(input[0],
-              ::testing::ElementsAre(vocabId(10), vocabId(11), vocabId(12),
-                                     Id::makeFromInt(7)));
-
   // An empty batch yields an empty table.
   std::vector<std::array<Id, NumColumnsIndexBuilding>> empty;
   writeMappedIdsToFile(empty, map, filename);

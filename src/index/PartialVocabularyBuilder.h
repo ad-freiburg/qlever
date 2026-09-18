@@ -45,8 +45,9 @@
 // - `void writePartialVocabulary(size_t partialVocabIdx,
 //   const ItemMapAndBuffer& items, std::vector<IdRow>& localIds)`, which
 //   writes the partial vocabulary with the given index and its triples
-//   (`IdRow` is defined in `IndexBuilderTypes.h`). It may modify the triples,
-//   but not the size of the vector, and must not hold on to anything from
+//   (`IdRow` is defined in `IndexBuilderTypes.h`). `localIds` is only passed
+//   by reference so that its memory can be reused; its contents are
+//   unspecified afterwards. The function must not hold on to anything from
 //   `items` after it returns. It is called concurrently from several task
 //   chains, but never twice for the same `partialVocabIdx`.
 namespace qlever::partialVocabularyBuilder {
@@ -174,9 +175,8 @@ class PartialVocabularyTaskChain {
 
  private:
   // Reset `itemMap_`, the triple buffer and the input-triple counter for a
-  // fresh partial vocabulary. Both the item map and the triple buffer keep
-  // their memory, so they only have to grow while the first partial vocabulary
-  // of this chain is built.
+  // fresh partial vocabulary. Both keep their memory, so they only have to grow
+  // for the first partial vocabulary of this chain.
   void startNewPartialVocabulary() {
     itemMap_.clear();
     localTriples_.clear();
