@@ -109,7 +109,10 @@ class ReadBatchForTesting {
   // handle.
   template <typename Manager>
   typename Manager::BatchHandle submitTo(Manager& manager, int fd) {
-    return manager.addBatch(fd, numBytes_, offsets_, bufferPointers());
+    // Keep the pointers in a named local: the span parameter cannot bind a
+    // temporary vector.
+    std::vector<char*> pointers = bufferPointers();
+    return manager.addBatch(fd, numBytes_, offsets_, pointers);
   }
 
   // Submit all accumulated reads to a raw policy (e.g. `IoUringPolicy`) for
@@ -117,7 +120,8 @@ class ReadBatchForTesting {
   template <typename Policy>
   void submitToWithHandle(Policy& policy, int fd,
                           typename Policy::BatchHandle handle) {
-    policy.addBatch(fd, numBytes_, offsets_, bufferPointers(), handle);
+    std::vector<char*> pointers = bufferPointers();
+    policy.addBatch(fd, numBytes_, offsets_, pointers, handle);
   }
 
   // The bytes read by each read, in request order (valid once the batch has
