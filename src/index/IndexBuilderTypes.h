@@ -29,7 +29,6 @@
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/StringSortComparator.h"
 #include "parser/TripleComponent.h"
-#include "util/Conversions.h"
 #include "util/HashMap.h"
 #include "util/RegexSet.h"
 #include "util/Serializer/Serializer.h"
@@ -313,11 +312,11 @@ void mapTripleToIds(QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& triple,
   if (!lt.langtag_.empty()) {
     // Get the `Id` for the language tag, e.g., `@en`.
     auto langTagId = map.getId(
-        TripleComponent{ad_utility::convertLangtagToEntityUri(lt.langtag_)});
+        TripleComponent{TripleComponent::Iri::fromLangtag(lt.langtag_)});
     // Get the `Id` for the special predicate, e.g., `@en@rdfs:label`.
     const auto& iri = lt.triple_[1].tripleComponent_.getIri();
-    auto langTaggedPredId = map.getId(TripleComponent{
-        ad_utility::convertToLanguageTaggedPredicate(iri, lt.langtag_)});
+    auto langTaggedPredId =
+        map.getId(TripleComponent{iri.withLanguageTag(lt.langtag_)});
     // Add the internal triple `<subject> @language@<predicate> <object>`.
     result.push_back(
         IdRow{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});

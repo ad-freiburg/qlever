@@ -26,8 +26,8 @@
 #include "global/Constants.h"
 #include "global/SpecialIds.h"
 #include "index/PartialVocabularyBuilder.h"
+#include "rdfTypes/Iri.h"
 #include "util/CachingMemoryResource.h"
-#include "util/Conversions.h"
 #include "util/HashMap.h"
 
 namespace {
@@ -327,11 +327,10 @@ TEST(PartialVocabularyBuilder, languageTaggedLiteralAddsInternalTriples) {
   EXPECT_EQ(result.numTriples_, 3u);
 
   auto graph = std::string{DEFAULT_GRAPH_IRI};
-  auto langTag =
-      str(TripleComponent{ad_utility::convertLangtagToEntityUri("en")});
+  auto langTag = str(
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("en")});
   auto langTaggedPredicate =
-      str(TripleComponent{ad_utility::convertToLanguageTaggedPredicate(
-          triple.predicate_.getIri(), "en")});
+      str(TripleComponent{triple.predicate_.getIri().withLanguageTag("en")});
   auto langPredicate = str(TripleComponent{iri(LANGUAGE_PREDICATE)});
   StringTriple expectedOriginal{str(triple.subject_), str(triple.predicate_),
                                 str(triple.object_), graph};
