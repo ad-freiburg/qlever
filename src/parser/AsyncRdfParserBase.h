@@ -21,6 +21,7 @@
 #include "backports/asio.h"
 #include "parser/RdfParser.h"
 #include "util/AsyncHandlerUtils.h"
+#include "util/Forward.h"
 
 // Abstract base class for RDF parsers that deliver their batches of triples
 // asynchronously via `boost::asio`. This is the asynchronous counterpart of
@@ -83,13 +84,22 @@ class AsyncRdfParserBase {
   //
   // The completion handler is always `post`ed (never `dispatch`ed) onto its
   // associated executor, and is therefore never invoked inline.
+  //
+  // `buffer` (which has to be empty) becomes the storage of the batch that
+  // this call completes with, so that a caller can pass back a batch it has
+  // consumed and thus reuse its capacity instead of having a fresh buffer
+  // grown for every batch. It is only an optimization: passing an empty buffer
+  // (see the overload below) is always correct. A call that completes with
+  // `nullopt` or with an error does not return the buffer.
   template <typename CompletionToken>
-  auto asyncGetBatch(CompletionToken&& token) {
+  auto asyncGetBatch(std::vector<TurtleTriple> buffer,
+                     CompletionToken&& token) {
     namespace net = boost::asio;
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr, OptionalTriples)>(
-        [this](auto handler) mutable {
+        [this, buffer = std::move(buffer)](auto handler) mutable {
           asyncGetBatchImpl(
+              std::move(buffer),
               ad_utility::makeHandlerExecutorAware<OptionalTriples>(
                   std::move(handler), executor_));
         },
@@ -98,14 +108,22 @@ class AsyncRdfParserBase {
         token);
   }
 
+  // The same for callers that have no buffer to reuse.
+  template <typename CompletionToken>
+  auto asyncGetBatch(CompletionToken&& token) {
+    return asyncGetBatch({}, AD_FWD(token));
+  }
+
  protected:
   // The single extension point required from every derived class. Must invoke
   // `handler` exactly once (synchronously or asynchronously, from any thread),
   // see `asyncGetBatch` for the semantics of the arguments. Must never throw,
   // but report errors via the `exception_ptr` argument of the handler.
   // `handler` may be invoked directly, also from within a strand, see the
-  // comment on `Handler` above.
-  virtual void asyncGetBatchImpl(Handler handler) = 0;
+  // comment on `Handler` above. `buffer` may be used as the storage of the
+  // batch, or simply be dropped.
+  virtual void asyncGetBatchImpl(std::vector<TurtleTriple> buffer,
+                                 Handler handler) = 0;
 };
 
 #endif  // QLEVER_SRC_PARSER_ASYNCRDFPARSERBASE_H
