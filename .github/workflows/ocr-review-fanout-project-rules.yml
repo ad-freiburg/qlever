@@ -27,7 +27,12 @@ jobs:
        (startsWith(github.event.comment.body, '/open-code-review-fanout') ||
         startsWith(github.event.comment.body, '@open-code-review-fanout')))
     runs-on: [self-hosted, linux, x64, ocr-fanout-local]
-    timeout-minutes: 180
+    # Full fan-out project-rules reviews need ~3.5-4h on larger diffs: runs
+    # 35110677564 and 35288058721 were both killed at exactly the old
+    # 180 min limit while the review agent was still streaming progress.
+    # Values above 360 are fine here: the 6h cap applies to GitHub-hosted
+    # runners only, this job runs on self-hosted runners.
+    timeout-minutes: 1800
     env:
       PATH: /home/userNoPriv/.local/bin:/home/userNoPriv/.local/share/npm/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
@@ -44,15 +49,6 @@ jobs:
             });
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('head_sha', pr.head.sha);
-      - name: Mint GitHub App token
-        id: app-token
-        if: ${{ vars.OCR_FANOUT_APP_ID != '' }}
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
-        with:
-          app-id: ${{ vars.OCR_FANOUT_APP_ID }}
-          private-key: ${{ secrets.OCR_FANOUT_APP_PRIVATE_KEY }}
-          owner: marvin7122
-          repositories: qlever
       - name: Isolate npm prefix for this run
         run: |
           prefix="${RUNNER_TEMP}/ocr-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -67,7 +63,10 @@ jobs:
       - name: Review pull request with fan-out project rules
         uses: marvin7122/open-code-review@48cc191fc147f0b4642e9658717805f6a3dfefa5
         with:
-          github_token: ${{ steps.app-token.outputs.token || github.token }}
+          # Deliberately the job-scoped GITHUB_TOKEN, not an App installation
+          # token: installation tokens expire after 1 hour, but large-diff
+          # reviews run for hours and must still post results at the end.
+          github_token: ${{ github.token }}
           llm_url: ${{ vars.OCR_LLM_URL }}
           llm_auth_token: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           llm_model: ${{ vars.OCR_LLM_MODEL }}
@@ -83,24 +82,13 @@ jobs:
           incremental: 'true'
           upload_artifacts: 'true'
           stream_progress: 'true'
-      - name: Mint fresh App token for stamping
-        id: app-token-stamp
-        if: ${{ vars.OCR_FANOUT_APP_ID != '' }}
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
-        with:
-          # Installation tokens expire after 1 hour; the review above can run
-          # for hours, so the token minted at job start may be dead by now.
-          app-id: ${{ vars.OCR_FANOUT_APP_ID }}
-          private-key: ${{ secrets.OCR_FANOUT_APP_PRIVATE_KEY }}
-          owner: marvin7122
-          repositories: qlever
       - name: Stamp summary with Actions run URL
         if: always()
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           OCR_POSTER_LABEL: OCR fan-out
         with:
-          github-token: ${{ steps.app-token-stamp.outputs.token || steps.app-token.outputs.token || github.token }}
+          github-token: ${{ github.token }}
           script: |
             const runId = context.runId;
             const attempt = context.runAttempt || 1;

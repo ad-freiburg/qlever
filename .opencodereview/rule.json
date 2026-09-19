@@ -1,7 +1,6 @@
 {
   "include": [
-    "test/**/*.{h,hpp,cpp,cc,cxx}",
-    "**/*Test.{h,hpp,cpp,cc,cxx}"
+    "**/*.{h,hpp,cpp,cc,cxx}"
   ],
   "exclude": [
     "**/generated/**",
