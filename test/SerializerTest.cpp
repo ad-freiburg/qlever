@@ -23,6 +23,7 @@
 #include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/SerializePair.h"
 #include "util/Serializer/SerializeString.h"
+#include "util/Serializer/SerializeVariant.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 
@@ -702,6 +703,73 @@ TEST(Serializer, serializeOptional) {
   reader >> nilExpected;
   EXPECT_THAT(sExpected, ::testing::Optional(std::string("hallo")));
   EXPECT_EQ(nilExpected, std::nullopt);
+}
+
+// _____________________________________________________________________________
+TEST(Serializer, serializeVariant) {
+  using Variant = std::variant<int, std::string, std::vector<int>>;
+  Variant number = 42;
+  Variant string = std::string{"hallo"};
+  Variant vector = std::vector<int>{1, 2, 3};
+
+  ByteBufferWriteSerializer writer;
+  writer << number;
+  writer << string;
+  writer << vector;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+
+  // The alternative that was written is also the alternative that is read, no
+  // matter which alternative the target currently holds.
+  Variant numberExpected = std::string{"not a number"};
+  Variant stringExpected;
+  Variant vectorExpected;
+  reader >> numberExpected;
+  reader >> stringExpected;
+  reader >> vectorExpected;
+  EXPECT_EQ(numberExpected, number);
+  EXPECT_EQ(stringExpected, string);
+  EXPECT_EQ(vectorExpected, vector);
+}
+
+// _____________________________________________________________________________
+TEST(Serializer, serializeVariantWithAnOutOfRangeIndex) {
+  using Variant = std::variant<int, std::string>;
+  // Write an index that is out of range for `Variant`, which can only happen
+  // for a corrupted or otherwise unsuitable input.
+  ByteBufferWriteSerializer writer;
+  writer << uint64_t{2};
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  Variant variant;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      reader >> variant,
+      ::testing::HasSubstr(
+          "out of range index 2 (the variant has 2 alternatives)"));
+  // The variant is unchanged, in particular it does not hold an alternative
+  // that was never read.
+  EXPECT_EQ(variant, Variant{int{}});
+}
+
+// A type that makes a `std::variant` `valueless_by_exception`, which is the
+// only state in which a variant holds no alternative at all.
+struct ThrowingOnMove {
+  int value_ = 0;
+  ThrowingOnMove() = default;
+  ThrowingOnMove(ThrowingOnMove&&) {
+    throw std::runtime_error{"deliberately throwing move constructor"};
+  }
+  ThrowingOnMove& operator=(ThrowingOnMove&&) = default;
+  AD_SERIALIZE_FRIEND_FUNCTION(ThrowingOnMove) { serializer | arg.value_; }
+};
+
+// _____________________________________________________________________________
+TEST(Serializer, serializeValuelessVariant) {
+  std::variant<int, ThrowingOnMove> variant;
+  EXPECT_ANY_THROW(variant.emplace<ThrowingOnMove>(ThrowingOnMove{}));
+  ASSERT_TRUE(variant.valueless_by_exception());
+
+  ByteBufferWriteSerializer writer;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writer << variant, ::testing::HasSubstr("`valueless_by_exception`"));
 }
 
 // _____________________________________________________________________________
