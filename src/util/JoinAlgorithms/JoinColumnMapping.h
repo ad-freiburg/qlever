@@ -13,6 +13,7 @@
 #include "global/Id.h"
 #include "index/LocalVocab.h"
 #include "util/Algorithm.h"
+#include "util/Allocator.h"
 #include "util/TransparentFunctors.h"
 
 namespace ad_utility {
@@ -35,45 +36,62 @@ class JoinColumnMapping {
  private:
   // For a documentation of those members, see the getter function with the same
   // name below.
-  std::vector<ColumnIndex> jcsLeft_;
-  std::vector<ColumnIndex> jcsRight_;
-  std::vector<ColumnIndex> permutationLeft_;
-  std::vector<ColumnIndex> permutationRight_;
-  std::vector<ColumnIndex> permutationResult_;
+  std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>> jcsLeft_;
+  std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>> jcsRight_;
+  std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>> permutationLeft_;
+  std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>> permutationRight_;
+  std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>> permutationResult_;
 
  public:
   // The join columns in the left input. For example if `jcsLeft()` is `[3, 0]`
   // this means that the primary join column is the third column of the left
   // input, and the secondary join column is the 0-th column of the left input.
-  const std::vector<ColumnIndex>& jcsLeft() const { return jcsLeft_; }
+  const std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>>& jcsLeft()
+      const {
+    return jcsLeft_;
+  }
   // The same, but for the right input.
-  const std::vector<ColumnIndex>& jcsRight() const { return jcsRight_; }
+  const std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>>& jcsRight()
+      const {
+    return jcsRight_;
+  }
 
   // This permutation has to be applied to the left input to obtain the column
   // order expected by the join algorithms (see above for details on the
   // different orderings). For example `permutationLeft()[0]` is `jcsLeft_[0]`
   // and `permutationLeft()[numJoinColumns]` is the index of the first non-join
   // column in the left input.
-  const std::vector<ColumnIndex>& permutationLeft() const {
+  const std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>>&
+  permutationLeft() const {
     return permutationLeft_;
   }
   // The same, but for the right input.
-  const std::vector<ColumnIndex>& permutationRight() const {
+  const std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>>&
+  permutationRight() const {
     return permutationRight_;
   }
   // This permutation has to be applied to the result of the join algorithms to
   // obtain the column order that the `Join` subclasses of `Operation` expect.
   // For example, `permutationResult[jcsLeft[0]] = 0`.
-  const std::vector<ColumnIndex>& permutationResult() const {
+  const std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>>&
+  permutationResult() const {
     return permutationResult_;
   }
 
   // Construct the mapping from the `joinColumn` (given as pairs of
   // (leftColIndex, rightColIndex)`), and the total number of columns in the
-  // left and right input respectively.
+  // left and right input respectively. The `allocator` is used for all 5
+  // internal permutation vectors, so that they are routed through the same
+  // (potentially PMR-backed) memory resource as the rest of the operation.
   JoinColumnMapping(const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
                     size_t numColsLeft, size_t numColsRight,
-                    bool keepJoinColumns = true) {
+                    const qlever::Allocator<ColumnIndex>& allocator,
+                    bool keepJoinColumns = true)
+      : jcsLeft_(allocator),
+        jcsRight_(allocator),
+        permutationLeft_(allocator),
+        permutationRight_(allocator),
+        permutationResult_(allocator) {
     permutationResult_.resize(numColsLeft + numColsRight - joinColumns.size());
     for (auto [colA, colB] : joinColumns) {
       permutationResult_.at(colA) = jcsLeft_.size();
