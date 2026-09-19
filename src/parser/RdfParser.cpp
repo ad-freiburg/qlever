@@ -63,37 +63,56 @@ std::optional<MatchPositions> findLastMatch(const Search& search,
 // beginning, because a `#` inside an IRI (like `<http://example.org#thing>`) or
 // inside a literal doesn't start a comment.
 bool dotIsCommentedOut(std::string_view lineUpToDot) {
-  for (size_t i = 0; i < lineUpToDot.size(); ++i) {
-    char c = lineUpToDot[i];
-    if (c == '#') {
-      // The rest of the line, including the dot, is a comment.
-      return true;
-    } else if (c == '\\') {
-      // An escape sequence, for example the `\#` in `ex:foo\#bar`.
-      ++i;
-    } else if (c == '<') {
-      // An IRI may contain a `#`, but neither a `>` nor a line break.
-      size_t end = lineUpToDot.find('>', i + 1);
-      if (end == std::string_view::npos) {
-        // Broken input, which is left to the parser (see below).
-        return false;
-      }
-      i = end;
-    } else if (c == '"' || c == '\'') {
-      // A literal may contain a `#` and a `<`.
-      ++i;
-      while (i < lineUpToDot.size() && lineUpToDot[i] != c) {
-        // A `\"` or `\\` doesn't close the literal.
-        i += lineUpToDot[i] == '\\' ? 2 : 1;
-      }
-      if (i >= lineUpToDot.size()) {
-        // The literal isn't closed before the dot, which means that the input
-        // is broken or contains a multiline literal. Both are left to the
-        // parser, which reports them much better than this function could.
-        return false;
-      }
+  // Whether the scan is currently inside an IRI or a literal, in which a `#`
+  // doesn't start a comment.
+  enum class State { Default, Iri, Literal };
+  auto state = State::Default;
+  // The character that will close the current literal, either `"` or `'`.
+  char quote = '\0';
+  // Whether the previous character was a backslash, which makes this character
+  // part of an escape sequence, for example the `\#` in `ex:foo\#bar`.
+  bool escaped = false;
+  for (char c : lineUpToDot) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    switch (state) {
+      case State::Default:
+        if (c == '#') {
+          // The rest of the line, including the dot, is a comment.
+          return true;
+        } else if (c == '\\') {
+          escaped = true;
+        } else if (c == '<') {
+          state = State::Iri;
+        } else if (c == '"' || c == '\'') {
+          state = State::Literal;
+          quote = c;
+        }
+        break;
+      case State::Iri:
+        // An IRI may contain a `#`, but neither a `>` nor a line break, and it
+        // has no escape sequences that could hide the closing `>`.
+        if (c == '>') {
+          state = State::Default;
+        }
+        break;
+      case State::Literal:
+        // A literal may contain a `#` and a `<`, and a `\"` or `\\` doesn't
+        // close it.
+        if (c == '\\') {
+          escaped = true;
+        } else if (c == quote) {
+          state = State::Default;
+        }
+        break;
     }
   }
+  // Either no `#` was found, or the line ends inside an IRI or a literal, which
+  // means that the input is broken or contains a multiline literal. Both are
+  // left to the parser, which reports them much better than this function
+  // could.
   return false;
 }
 }  // namespace
