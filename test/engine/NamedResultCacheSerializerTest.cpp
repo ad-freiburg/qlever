@@ -4,12 +4,15 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
+#include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "index/LocalVocabEntry.h"
@@ -20,6 +23,7 @@ using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAreArray;
 
 namespace {
+auto V = ad_utility::testing::VocabId;
 
 // Test fixture for NamedResultCacheSerializer tests.
 class NamedResultCacheSerializerTest : public ::testing::Test {
@@ -48,6 +52,31 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
   NamedResultCache::Value serializeAndDeserializeValue(
       const NamedResultCache::Value& value) {
     return serializeAndDeserializeValue(value, alloc_);
+  }
+
+  // Create a simple `Value` with a two-column table, one variable per column,
+  // and the given `cacheKey`.
+  static NamedResultCache::Value makeSimpleValue(std::string cacheKey) {
+    VariableToColumnMap varColMap;
+    varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+    varColMap[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
+    return NamedResultCache::Value{std::make_shared<const IdTable>(
+                                       makeIdTableFromVector({{1, 2}, {3, 4}})),
+                                   std::move(varColMap),
+                                   {0},
+                                   LocalVocab{},
+                                   std::move(cacheKey),
+                                   std::nullopt};
+  }
+
+  // Read a `Value` from the given serialized `data`.
+  NamedResultCache::Value deserializeValue(std::vector<char> data) const {
+    ByteBufferReadSerializer readSerializer{std::move(data)};
+    NamedResultCache::Value value;
+    value.allocatorForSerialization_ = ad_utility::makeUnlimitedAllocator<Id>();
+    value.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
+    readSerializer >> value;
+    return value;
   }
 };
 
@@ -278,6 +307,142 @@ TEST_F(NamedResultCacheSerializerTest, WrongMagicByteOrFormatVersionThrows) {
           readerWithWrongVersion, ad_utility::makeUnlimitedAllocator<Id>(),
           qec_->getLocalVocabContext()),
       ::testing::HasSubstr("format version"));
+}
+
+// _____________________________________________________________________________
+// Test that `getAllEntries` returns all entries of the cache, sorted by their
+// key, no matter in which order they were stored.
+TEST_F(NamedResultCacheSerializerTest, GetAllEntries) {
+  NamedResultCache cache;
+  EXPECT_THAT(cache.getAllEntries(), ::testing::IsEmpty());
+
+  cache.store("zebra", makeSimpleValue("key-zebra"));
+  cache.store("apple", makeSimpleValue("key-apple"));
+  cache.store("mango", makeSimpleValue("key-mango"));
+
+  auto entries = cache.getAllEntries();
+  ASSERT_EQ(entries.size(), 3);
+  EXPECT_THAT(entries | ql::views::keys,
+              ElementsAre("apple", "mango", "zebra"));
+  // The values are exactly the stored ones (the same objects that `get`
+  // returns).
+  for (const auto& [key, value] : entries) {
+    ASSERT_NE(value, nullptr);
+    EXPECT_EQ(value, cache.get(key));
+    EXPECT_EQ(value->cacheKey_, absl::StrCat("key-", key));
+  }
+}
+
+// _____________________________________________________________________________
+// Test that the serialization is deterministic: identical contents yield
+// identical bytes, also if the `varToColMap_` entries or the cache entries
+// were inserted in a different order.
+TEST_F(NamedResultCacheSerializerTest, SerializationIsDeterministic) {
+  // Create a `Value` with four variables that are inserted in the given
+  // order, but otherwise identical contents.
+  auto makeValue = [](bool reverseInsertionOrder) {
+    std::vector<std::string> names{"?d", "?c", "?b", "?a"};
+    VariableToColumnMap varColMap;
+    for (size_t i = 0; i < names.size(); ++i) {
+      size_t index = reverseInsertionOrder ? names.size() - 1 - i : i;
+      varColMap[Variable{names.at(index)}] = makeAlwaysDefinedColumn(index);
+    }
+    return NamedResultCache::Value{
+        std::make_shared<const IdTable>(
+            makeIdTableFromVector({{0, 1, 2, 3}, {4, 5, 6, 7}})),
+        std::move(varColMap),
+        {0, 1},
+        LocalVocab{},
+        "cache-key",
+        std::nullopt};
+  };
+  auto serializeValue = [](const NamedResultCache::Value& value) {
+    ByteBufferWriteSerializer writer;
+    writer << value;
+    return std::move(writer).data();
+  };
+
+  // Serializing the same value twice yields the same bytes.
+  auto value = makeValue(false);
+  EXPECT_EQ(serializeValue(value), serializeValue(value));
+
+  // Two values that only differ in the insertion order of their
+  // `varToColMap_` entries also yield the same bytes.
+  EXPECT_EQ(serializeValue(makeValue(false)), serializeValue(makeValue(true)));
+
+  // The same holds for a whole cache whose entries were stored in a different
+  // order.
+  auto serializeCache = [](const std::vector<std::string>& names) {
+    NamedResultCache cache;
+    for (const auto& name : names) {
+      cache.store(name, makeSimpleValue(absl::StrCat("key-", name)));
+    }
+    ByteBufferWriteSerializer writer;
+    cache.writeToSerializer(writer);
+    return std::move(writer).data();
+  };
+  EXPECT_EQ(serializeCache({"apple", "mango", "zebra"}),
+            serializeCache({"zebra", "apple", "mango"}));
+}
+
+// _____________________________________________________________________________
+// Test `writeValue` with columns and a sort order that differ from those of
+// the `Value`, and without the words of the local vocab, as a caller that has
+// rewritten the `Id`s to a persistent vocabulary would use it.
+TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
+  auto table = makeIdTableFromVector({{0, 7}, {9, 11}, {13, 17}});
+  VariableToColumnMap varColMap;
+  varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+  varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
+  LocalVocab localVocab;
+  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+      "<http://example.org/test>", qec_->getLocalVocabContext()));
+  ASSERT_EQ(localVocab.size(), 1);
+
+  NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
+                                std::move(varColMap),
+                                {0, 1},
+                                std::move(localVocab),
+                                "test-cache-key",
+                                std::nullopt};
+
+  // The replaced columns have the same shape as the table of the `value`, but
+  // different `Id`s. The sort order is shortened, because the replacement
+  // invalidates the sortedness of the second column.
+  std::vector<std::vector<Id>> replacedColumns{{V(1), V(2), V(3)},
+                                               {V(4), V(5), V(6)}};
+  std::vector<ColumnIndex> shortenedSortOrder{0};
+
+  ByteBufferWriteSerializer writer;
+  namedResultCacheSerializer::writeValue(writer, value, replacedColumns,
+                                         shortenedSortOrder,
+                                         /*writeLocalVocabWords=*/false);
+  auto readValue = deserializeValue(std::move(writer).data());
+
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(readValue.result_),
+              matchesIdTableFromVector({{1, 4}, {2, 5}, {3, 6}}));
+  EXPECT_THAT(readValue.resultSortedOn_, ElementsAre(0));
+  EXPECT_EQ(readValue.cacheKey_, "test-cache-key");
+  EXPECT_THAT(readValue.varToColMap_,
+              UnorderedElementsAreArray(value.varToColMap_));
+  // The words of the local vocab were not written, so the local vocab of the
+  // deserialized value is empty.
+  EXPECT_EQ(readValue.localVocab_.size(), 0);
+  EXPECT_THAT(readValue.localVocab_.getAllWordsForTesting(),
+              ::testing::IsEmpty());
+
+  // The number of the columns and the number of rows in each column have to
+  // agree with the table of the `value`.
+  std::vector<std::vector<Id>> tooFewColumns{{V(1), V(2), V(3)}};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      namedResultCacheSerializer::writeValue(writer, value, tooFewColumns,
+                                             shortenedSortOrder, false),
+      ::testing::HasSubstr("resultView.numColumns()"));
+  std::vector<std::vector<Id>> tooFewRows{{V(1), V(2)}, {V(4), V(5)}};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      namedResultCacheSerializer::writeValue(writer, value, tooFewRows,
+                                             shortenedSortOrder, false),
+      ::testing::HasSubstr("resultView.numRows()"));
 }
 
 }  // namespace

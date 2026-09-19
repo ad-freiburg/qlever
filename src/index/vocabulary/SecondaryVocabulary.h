@@ -10,12 +10,14 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_SECONDARYVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_SECONDARYVOCABULARY_H
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "global/IndexTypes.h"
+#include "util/CompactStringVector.h"
 
 // The secondary vocabulary of an index. It stores words that were added after
 // the main index was built and that are not part of the vocabulary of that
@@ -27,37 +29,67 @@
 // of the main vocabulary when compared bitwise, which is what makes those
 // words mergeable into a scan of the main index.
 //
-// TODO<joka921> This currently is a minimal placeholder that simply holds all
-// its words in RAM and that is only ever filled explicitly by unit tests (see
-// `IndexImpl::setSecondaryVocabForTesting`). The actual implementation stores
-// the words on disk, using the same vocabulary type (and hence the same split
-// into sub-vocabularies) as the main index, and it additionally stores, for
-// each of its words, the position at which that word would be sorted into the
-// main vocabulary. The latter is what a *semantic* (that is, by string value)
-// comparison of an `Id` of this vocabulary with an `Id` of the main vocabulary
-// needs; it follows in the changes that build on this one.
+// The words are kept in RAM, in insertion order, as an append-only sequence of
+// *segments* (see `appendSegment`). The `Id` of a word is its position in that
+// insertion order (the global index over the concatenation of all segments,
+// in the order in which they were appended), and it never changes when
+// further segments are appended. That is what allows a blob (see
+// `NamedCachedQueryBlobManager`) to add words to the secondary vocabulary
+// incrementally, one segment at a time, without invalidating the `Id`s that
+// were already handed out for the words of the earlier segments.
+//
+// There is no *semantic* (that is, by string value) order among the words of
+// this vocabulary; they compare by their `Id`s alone, which is why all `Id`s
+// of this vocabulary compare greater than all `Id`s of the main vocabulary.
+//
+// TODO<joka921> The eventual implementation additionally stores, for each
+// word, the position at which that word would be sorted into the main
+// vocabulary, which a *semantic* comparison of an `Id` of this vocabulary with
+// an `Id` of the main vocabulary needs; it follows in the changes that build
+// on this one.
 class SecondaryVocabulary {
  private:
-  // The words, in strictly ascending order, see the constructor.
-  std::vector<std::string> words_;
+  // The words, stored as an append-only sequence of segments, each of which
+  // holds its words in the order in which they were appended to that segment.
+  std::vector<CompactVectorOfStrings<char>> segments_;
+
+  // For each segment, the global index of its first word, that is, the sum of
+  // the sizes of all the segments that precede it. Has the same number of
+  // elements as `segments_`.
+  std::vector<uint64_t> segmentOffsets_;
+
+  // The global indices of all words, sorted by the word that each of them
+  // refers to (using `std::string_view`'s comparison). Rebuilt whenever a
+  // segment is appended, so that `getId` can look up a word by binary search.
+  std::vector<uint64_t> sortedIndices_;
 
  public:
   SecondaryVocabulary() = default;
 
-  // Create a vocabulary that holds the given `words`, none of which may be
-  // contained in the vocabulary of the main index. The words have to be in
-  // strictly ascending order with respect to `std::string`'s comparison, which
-  // is checked, so that they can be looked up by binary search.
-  //
-  // NOTE: The actual implementation will instead order its words by the
-  // comparator of the vocabulary of the main index at the `TOTAL` level, which
-  // this placeholder has no access to. The two orders do not agree in general,
-  // so the words that the unit tests use are deliberately chosen such that they
-  // do (see `test/SecondaryVocabularyTest.cpp`).
+  // Create a vocabulary that holds the given `words` as a single segment,
+  // none of which may be contained in the vocabulary of the main index. The
+  // words may be in any order, because the `Id` of a word is its position in
+  // `words`; they have to be pairwise distinct, which is checked.
   explicit SecondaryVocabulary(std::vector<std::string> words);
 
-  // Return the number of words.
-  size_t numWords() const { return words_.size(); }
+  // Append `segment` as a new segment of this vocabulary. The `Id`s of all the
+  // words that were already contained in this vocabulary stay unchanged;
+  // `segment`'s words are assigned the global indices that directly follow the
+  // ones of the previously last segment. None of `segment`'s words may already
+  // be contained in this vocabulary (across all of its segments), and the
+  // words within `segment` itself have to be pairwise distinct; both of these
+  // are checked. This is the operation that `NamedCachedQueryBlobManager` uses
+  // to load the segments of a blob into the secondary vocabulary of the
+  // corresponding index, one segment at a time. NOTE: If `segment` is a
+  // zero-copy view (see `CompactVectorOfStrings::fromZeroCopyDeserializer`),
+  // the buffer that it points into has to outlive this `SecondaryVocabulary`.
+  void appendSegment(CompactVectorOfStrings<char> segment);
+
+  // Return the number of words across all segments.
+  size_t numWords() const;
+
+  // Return the number of segments.
+  size_t numSegments() const;
 
   // Return the word with the given index.
   std::string_view operator[](SecondaryVocabIndex index) const;
@@ -65,6 +97,16 @@ class SecondaryVocabulary {
   // Look up `word`. Return its index if it is contained in this vocabulary, and
   // `std::nullopt` otherwise.
   std::optional<SecondaryVocabIndex> getId(std::string_view word) const;
+
+ private:
+  // Rebuild `sortedIndices_` from scratch, sorting the global indices of all
+  // currently contained words by the word that each of them refers to.
+  void rebuildSortedIndices();
+
+  // Return the word with the given global index. Used as the projection that
+  // sorts (and looks up) global indices by the word that each of them refers
+  // to, in `getId` and `rebuildSortedIndices`.
+  std::string_view wordAt(uint64_t globalIndex) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SECONDARYVOCABULARY_H
