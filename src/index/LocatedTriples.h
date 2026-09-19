@@ -18,7 +18,9 @@
 #include "global/IdTriple.h"
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
+#include "util/CowChunkedVector.h"
 #include "util/HashMap.h"
+#include "util/HashSet.h"
 #include "util/SortedSequence.h"
 #include "util/TimeTracer.h"
 #include "util/TransparentFunctors.h"
@@ -116,9 +118,20 @@ using LocatedTriples = SortedLocatedTriplesVector;
 // located triples for a permutation.
 class LocatedTriplesPerBlock {
  private:
-  // For each block with a non-empty set of located triples, the located triples
-  // in that block.
-  ad_utility::HashMap<size_t, LocatedTriples> map_;
+  // For each block with a non-empty set of located triples, the located
+  // triples in that block. The blocks are held via `shared_ptr` so that
+  // copies of this class (which are taken as part of every snapshot) are
+  // cheap. Mutating access goes through `mutableBlock`, which clones a block
+  // if it is shared with a copy, so previously made copies stay unaffected.
+  ad_utility::HashMap<size_t, std::shared_ptr<LocatedTriples>> map_;
+
+  // The blocks whose located triples have changed since the last call to
+  // `updateAugmentedMetadata` and `consolidateAllBlocks`, respectively. Both
+  // operations only have to process these blocks, which makes their cost
+  // proportional to the size of the update and not to the total number of
+  // blocks or located triples.
+  ad_utility::HashSet<size_t> blocksWithUpdatedTriples_;
+  ad_utility::HashSet<size_t> unconsolidatedBlocks_;
 
   FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
 
@@ -128,12 +141,22 @@ class LocatedTriplesPerBlock {
   IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
 
   // Stores the block metadata where the block borders have been adjusted for
-  // the updated triples.
-  std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
+  // the updated triples. The chunked copy-on-write representation makes
+  // copies (for snapshots) and residual updates (for the blocks touched by an
+  // update) cheap. Engaged once the first update arrives.
+  std::optional<ad_utility::CowChunkedVector<CompressedBlockMetadata>>
+      augmentedMetadata_;
   std::optional<std::shared_ptr<const std::vector<CompressedBlockMetadata>>>
       originalMetadata_;
 
+  // Return the block with the given index for mutation, creating it if it
+  // does not exist and cloning it first if it is shared with a copy of this
+  // class. Also mark the block as changed in the two sets above.
+  LocatedTriples& mutableBlock(size_t blockIndex);
+
  public:
+  // Recompute the augmented metadata of all blocks whose located triples have
+  // changed since the last call.
   void updateAugmentedMetadata();
 
  public:
@@ -213,8 +236,9 @@ class LocatedTriplesPerBlock {
   // Return whether there are any updates at all.
   bool isEmpty() const { return map_.empty(); }
 
-  // Consolidate the located triples in all blocks. Forwards to
-  // `SortedSequence`. Must be called before any sorted access
+  // Consolidate the located triples in all blocks that were modified since
+  // the last call to this function. Forwards to `SortedSequence`. Must be
+  // called before any sorted access
   // (begin/end/size/mergeTriples/updateAugmentedMetadata) if the
   // `LocatedTriples` were modified since the last call to this function.
   void consolidateAllBlocks();
@@ -232,19 +256,23 @@ class LocatedTriplesPerBlock {
 
   // Returns the block metadata where the block borders have been updated to
   // account for the update triples. All triples (both insert and delete) will
-  // enlarge the block borders.
-  const std::vector<CompressedBlockMetadata>& getAugmentedMetadata() const {
-    if (augmentedMetadata_.has_value()) {
-      return augmentedMetadata_.value();
-    }
-    AD_CONTRACT_CHECK(originalMetadata_.has_value());
-    return *originalMetadata_.value();
-  }
+  // enlarge the block borders. The metadata is returned as a sequence of
+  // contiguous chunks; their concatenation is the metadata of all blocks in
+  // order. The spans remain valid as long as the located triples state they
+  // were obtained from is alive and unmodified.
+  std::vector<ql::span<const CompressedBlockMetadata>> getAugmentedMetadata()
+      const;
+
+  // Materialized copy of the augmented metadata, for tests and expensive
+  // checks only.
+  std::vector<CompressedBlockMetadata> getAugmentedMetadataForTesting() const;
 
   // Remove all located triples.
   void clear() {
     map_.clear();
     augmentedMetadata_.reset();
+    blocksWithUpdatedTriples_.clear();
+    unconsolidatedBlocks_.clear();
   }
 
   // Identify, for all blocks in `perm` whose number of located triples is at
@@ -279,7 +307,7 @@ class LocatedTriplesPerBlock {
                      std::back_inserter(blockIndices));
     ql::ranges::sort(blockIndices);
     for (auto blockIndex : blockIndices) {
-      os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
+      os << "LTs in Block #" << blockIndex << ": " << *ltpb.map_.at(blockIndex)
          << std::endl;
     }
     return os;
