@@ -56,10 +56,10 @@ jobs:
           echo "NPM_CONFIG_PREFIX=${prefix}" >> "$GITHUB_ENV"
           echo "OCR_NPM_PREFIX=${prefix}" >> "$GITHUB_ENV"
           echo "${prefix}/bin" >> "$GITHUB_PATH"
-      - name: Set up Go toolchain (ocr_install_from=source builds from source)
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: stable
+      # No setup-go step: the self-hosted runner image ships a pinned Go
+      # toolchain (>= go.mod minimum) and a shared persistent GOCACHE, so
+      # the source build below neither fetches a toolchain nor cold-compiles.
+      # Keep them in sync: bump the image GO_VERSION with the action pin.
       - name: Review pull request with fan-out project rules
         uses: marvin7122/open-code-review@48cc191fc147f0b4642e9658717805f6a3dfefa5
         with:
