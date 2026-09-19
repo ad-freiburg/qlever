@@ -268,7 +268,9 @@ struct RuntimeParameters {
   // their single end-of-batch submit.
   SizeT iouringAdaptiveBatchMinSize_{16, "iouring-adaptive-batch-min-size"};
   // Maximum prepared reads before a forced submit, so large batches still
-  // submit incrementally. Clamped against the ring size by the policy.
+  // submit incrementally. Must be at least one (enforced by a parameter
+  // constraint); a value below the minimum, or above the ring size, is
+  // clamped by the policy when the controller is installed.
   SizeT iouringAdaptiveBatchMaxSize_{256, "iouring-adaptive-batch-max-size"};
 
   // ___________________________________________________________________________

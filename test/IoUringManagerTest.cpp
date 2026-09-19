@@ -629,6 +629,24 @@ TEST(AdaptiveBatchController, customDeferRatio) {
   EXPECT_TRUE(controller.shouldFlush(199, 100));
 }
 
+TEST(AdaptiveBatchController, normalizedHardensBounds) {
+  // A zero denominator would silently pin flush-everything, a zero
+  // numerator defer-everything; both normalize to one.
+  ad_utility::AdaptiveBatchController controller;
+  controller.deferNumerator_ = 0;
+  controller.deferDenominator_ = 0;
+  auto normalized = controller.normalized(256);
+  EXPECT_EQ(normalized.deferNumerator_, 1);
+  EXPECT_EQ(normalized.deferDenominator_, 1);
+  // A ring smaller than the minimum keeps max at the minimum; the
+  // ring-full safety bound still paces submission.
+  controller.minBatchSize_ = 16;
+  controller.maxBatchSize_ = 256;
+  normalized = controller.normalized(4);
+  EXPECT_EQ(normalized.minBatchSize_, 16);
+  EXPECT_EQ(normalized.maxBatchSize_, 16);
+}
+
 #ifdef QLEVER_HAS_IO_URING
 // Constructing an `IoUringPolicy` needs a working `io_uring_setup`, so the
 // controller plumbing tests below skip when io_uring is blocked at runtime

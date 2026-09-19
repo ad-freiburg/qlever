@@ -13,9 +13,9 @@
 
 #include <gtest/gtest_prod.h>
 
-#include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 
@@ -74,6 +74,25 @@ class BatchManagerBase {
 // validating the input spans) and delegates the reads from the underlying
 // Vocabulary to the `Policy`, which must satisfy the `ReadPolicy` concept
 // above.
+
+// Detection helpers for optional controller support (`IoUringPolicy` has
+// it, `SyncIoPolicy` does not). Written with `std::void_t` instead of a
+// C++20 requires-expression so the C++17 backports build keeps working;
+// see the same idiom in `util/Synchronized.h`.
+template <typename T, typename = void>
+struct HasAdaptiveBatchControllerSetter : std::false_type {};
+template <typename T>
+struct HasAdaptiveBatchControllerSetter<
+    T, std::void_t<decltype(std::declval<T&>().setAdaptiveBatchController(
+           std::declval<AdaptiveBatchController>()))>> : std::true_type {};
+template <typename T, typename = void>
+struct HasAdaptiveBatchControllerGetter : std::false_type {};
+template <typename T>
+struct HasAdaptiveBatchControllerGetter<
+    T,
+    std::void_t<decltype(std::declval<const T&>().adaptiveBatchController())>>
+    : std::true_type {};
+
 template <typename ReadPolicy>
 class BatchManager final : public BatchManagerBase {
   static_assert(
@@ -113,9 +132,7 @@ class BatchManager final : public BatchManagerBase {
   // controller support (`IoUringPolicy`) accept it; for others
   // (`SyncIoPolicy`, whose blocking reads have nothing to pace) it throws.
   void setAdaptiveBatchController(AdaptiveBatchController controller) {
-    if constexpr (requires(ReadPolicy& policy) {
-                    policy.setAdaptiveBatchController(controller);
-                  }) {
+    if constexpr (HasAdaptiveBatchControllerSetter<ReadPolicy>::value) {
       policy_.setAdaptiveBatchController(std::move(controller));
     } else {
       AD_THROW(
@@ -128,9 +145,7 @@ class BatchManager final : public BatchManagerBase {
   // is disabled or the policy has no controller support (`SyncIoPolicy`).
   [[nodiscard]] std::optional<AdaptiveBatchController> adaptiveBatchController()
       const {
-    if constexpr (requires(const ReadPolicy& policy) {
-                    policy.adaptiveBatchController();
-                  }) {
+    if constexpr (HasAdaptiveBatchControllerGetter<ReadPolicy>::value) {
       return policy_.adaptiveBatchController();
     } else {
       return std::nullopt;
@@ -253,16 +268,12 @@ class IoUringPolicy {
   ~IoUringPolicy();
 
   // Enable adaptive batch sizing with `controller`. The bounds are
-  // normalized: the minimum batch size is at least one (a nearly finished
-  // batch always flushes instead of waiting for work that will never
-  // arrive) and the maximum batch size is at most `ringSize_` (a deferred
-  // group never exceeds the ring) and at least the minimum.
+  // normalized against `ringSize_` (see `AdaptiveBatchController::
+  // normalized`); this is the single normalization boundary, so callers
+  // may pass raw configured values.
   void setAdaptiveBatchController(AdaptiveBatchController controller) {
-    controller.minBatchSize_ = std::max<size_t>(controller.minBatchSize_, 1);
-    controller.maxBatchSize_ =
-        std::clamp(controller.maxBatchSize_, controller.minBatchSize_,
-                   static_cast<size_t>(ringSize_));
-    adaptiveBatchController_ = controller;
+    adaptiveBatchController_ =
+        controller.normalized(static_cast<size_t>(ringSize_));
   }
 
   // The controller from `setAdaptiveBatchController`, or `std::nullopt`
@@ -327,11 +338,17 @@ inline std::unique_ptr<BatchManagerBase> makeBatchManager(
   }
 #else
   preferIoUring = false;
-  // The synchronous fallback performs blocking reads, which have nothing to
-  // pace, so a passed controller is ignored here by design. The cast keeps
-  // `-Werror=unused-parameter` quiet in builds without io_uring.
+  // Keep `-Werror=unused-parameter` quiet in builds without io_uring.
   (void)adaptiveBatchController;
 #endif
+  // The synchronous fallback performs blocking reads, which have nothing to
+  // pace. Say so loudly when a controller was requested: silently dropping
+  // it would mislead the caller into believing pacing is active.
+  if (adaptiveBatchController.has_value()) {
+    AD_LOG_WARN << "adaptive batch sizing requested, but vocabulary lookups "
+                   "fall back to synchronous pread; continuing without pacing"
+                << std::endl;
+  }
   return std::make_unique<BatchManager<SyncIoPolicy>>(ringSize);
 }
 

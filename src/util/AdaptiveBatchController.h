@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_UTIL_ADAPTIVEBATCHCONTROLLER_H
 #define QLEVER_SRC_UTIL_ADAPTIVEBATCHCONTROLLER_H
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 
@@ -49,17 +50,39 @@ struct AdaptiveBatchController {
   // I/Os in flight relative to the remaining work), defer the submit to
   // increase amortization. Otherwise flush early to keep the device busy.
   // The default of 1/1 defers once the outstanding I/Os outnumber the
-  // still-pending reads.
+  // still-pending reads. Both parts are normalized to at least one (see
+  // `normalized`), since zero would silently pin one decision.
   uint64_t deferNumerator_ = 1;
   uint64_t deferDenominator_ = 1;
 
+  // Return a copy with enforceable bounds: the minimum batch size is at
+  // least one (a nearly finished batch always flushes instead of waiting
+  // for work that will never arrive), the maximum is at most `ringSize`
+  // and at least the minimum (a deferred group never exceeds the ring),
+  // and the defer ratio is strictly positive (a zero denominator or
+  // numerator would silently force flush-everything or defer-everything).
+  // The struct itself stays a plain aggregate; this is the single
+  // normalization boundary, applied by the policy when the controller is
+  // installed. `shouldFlush` therefore assumes normalized values.
+  [[nodiscard]] AdaptiveBatchController normalized(size_t ringSize) const {
+    AdaptiveBatchController result = *this;
+    result.minBatchSize_ = std::max<size_t>(result.minBatchSize_, 1);
+    const size_t upperBound = std::max<size_t>(ringSize, result.minBatchSize_);
+    result.maxBatchSize_ =
+        std::clamp(result.maxBatchSize_, result.minBatchSize_, upperBound);
+    result.deferNumerator_ = std::max<uint64_t>(result.deferNumerator_, 1);
+    result.deferDenominator_ = std::max<uint64_t>(result.deferDenominator_, 1);
+    return result;
+  }
+
   // Decide whether the currently prepared group should be submitted now.
-  // Returns true (flush early) when there is nothing left to batch
-  // (`pending == 0`), when the device is idle (`outstanding == 0`), or
-  // when only a tail of at most `minBatchSize_` reads remains. Returns
-  // false (defer, keep preparing) when many I/Os are already in flight
-  // relative to the remaining work. Both counts are numbers of reads;
-  // `pending` includes the read currently being prepared.
+  // Requires normalized bounds (see `normalized`). Returns true (flush
+  // early) when there is nothing left to batch (`pending == 0`), when the
+  // device is idle (`outstanding == 0`), or when only a tail of at most
+  // `minBatchSize_` reads remains. Returns false (defer, keep preparing)
+  // when many I/Os are already in flight relative to the remaining work.
+  // Both counts are numbers of reads; `pending` includes the read
+  // currently being prepared.
   [[nodiscard]] bool shouldFlush(size_t outstanding, size_t pending) const {
     if (pending == 0) {
       return true;

@@ -122,7 +122,9 @@ void IoUringPolicy::addBatch(int fd,
     if (numInFlightReadRequests_ >= ringSize_) {
       // Flush the SQEs prepared so far to the kernel so the kernel can start
       // servicing them. Their completions will free up submission slots.
-      io_uring_submit(&ring_);
+      if (io_uring_submit(&ring_) < 0) {
+        AD_THROW("io_uring_submit failed in IoUringPolicy");
+      }
       while (numInFlightReadRequests_ >= ringSize_) {
         drainOneCqe();
       }
@@ -133,15 +135,20 @@ void IoUringPolicy::addBatch(int fd,
       // batch still submits incrementally and never exceeds the ring.
       // Otherwise ask the controller once the minimum group size is reached:
       // flush early when little work remains, defer while many I/Os are
-      // already in flight to increase amortization.
+      // already in flight to increase amortization. `outstanding` spans all
+      // batches by design: every in-flight read occupies device queue
+      // depth, while `pending` is this batch's remainder.
       if (numPreparedSinceSubmit >= controller.maxBatchSize_) {
-        io_uring_submit(&ring_);
+        if (io_uring_submit(&ring_) < 0) {
+          AD_THROW("io_uring_submit failed in IoUringPolicy");
+        }
         numPreparedSinceSubmit = 0;
       } else if (numPreparedSinceSubmit >= controller.minBatchSize_ &&
-                 numPreparedSinceSubmit > 0 &&
                  controller.shouldFlush(numInFlightReadRequests_,
                                         numRemaining)) {
-        io_uring_submit(&ring_);
+        if (io_uring_submit(&ring_) < 0) {
+          AD_THROW("io_uring_submit failed in IoUringPolicy");
+        }
         numPreparedSinceSubmit = 0;
       }
     }
@@ -171,7 +178,9 @@ void IoUringPolicy::addBatch(int fd,
   // Flush the remaining prepared SQEs to the kernel (the loop above only
   // submits when the submission queue is full, so the last group of SQEs has
   // not yet been submitted).
-  io_uring_submit(&ring_);
+  if (io_uring_submit(&ring_) < 0) {
+    AD_THROW("io_uring_submit failed in IoUringPolicy");
+  }
 }
 
 //______________________________________________________________________________
