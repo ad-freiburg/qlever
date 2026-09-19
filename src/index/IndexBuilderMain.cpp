@@ -329,6 +329,14 @@ int main(int argc, char** argv) {
       "built-in default), `none` (both are stored uncompressed), or a ZSTD "
       "compression level for both (negative levels are the `zstd --fast` "
       "modes).");
+  add("merge-phase-max-chunks-in-flight",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::mergePhaseMaxChunksInFlight_>(),
+      "The largest number of chunks that the merge phase of an external sorter "
+      "merges at the same time, or 0 (the default) for as many as the memory "
+      "limit allows. Chunks that run ahead of the consumer of the merge spill "
+      "their output to disk, so a smaller number makes the merge and its "
+      "consumer overlap, at the price of less parallelism in the merge.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),

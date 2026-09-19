@@ -1720,6 +1720,10 @@ class CompressedExternalIdTableSorterTypeErased {
   virtual void pushBlock(const IdTableStatic<0>& block) = 0;
   // Push a complete block given as a non-owning view at once.
   virtual void pushBlock(const IdTableView<0>& block) = 0;
+  // Push a complete block given as a non-owning view, in a way that several
+  // threads may do at the same time, see
+  // `CompressedExternalIdTableBase::pushBlockConcurrently`.
+  virtual void pushBlockConcurrently(const IdTableView<0>& block) = 0;
   // Get the sorted output after all blocks have been pushed. If `blocksize ==
   // nullopt`, the size of the returned blocks will be chosen automatically.
   virtual ad_utility::InputRangeTypeErased<IdTableStatic<0>> getSortedOutput(
@@ -1877,6 +1881,9 @@ class CompressedExternalIdTableSorter
   // Explicitly inherit the `push` function, such that we can use it unqualified
   // within this class.
   using Base::push;
+  // The overrides of the type-erased interface below would otherwise hide the
+  // templates of the base class, which take any kind of `IdTable`.
+  using Base::pushBlockConcurrently;
 
   // Set the executor on which the merge phase runs, together with the number of
   // threads that run that executor. Use this to share a thread pool with other
@@ -1957,6 +1964,12 @@ class CompressedExternalIdTableSorter
   // given as a non-owning view at once.
   void pushBlock(const IdTableView<0>& block) override {
     Base::pushBlock(block);
+  }
+
+  // The implementation of the type-erased interface. Push a complete block
+  // given as a non-owning view, concurrently with other pushes.
+  void pushBlockConcurrently(const IdTableView<0>& block) override {
+    Base::pushBlockConcurrently(block);
   }
 
   // The implementation of the type-erased interface. Get the sorted blocks as
@@ -2171,6 +2184,13 @@ class CompressedExternalIdTableSorter
         static_cast<size_t>(numBufferedOutputBlocks_);
     config.maxOutputBlockSize_ = maxOutputBlocksize_;
     config.parallelism_ = mergeParallelism_;
+    // A cap that the user has set explicitly wins over the parallelism, see
+    // `RuntimeParameters::mergePhaseMaxChunksInFlight_`.
+    if (auto cap = getRuntimeParameter<
+            &RuntimeParameters::mergePhaseMaxChunksInFlight_>();
+        cap != 0) {
+      config.parallelism_ = std::min(config.parallelism_, cap);
+    }
     config.outputBlockSizeOverride_ = blocksize;
     config.ignoreMemoryLimit_ =
         EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING;

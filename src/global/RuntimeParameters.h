@@ -264,6 +264,14 @@ struct RuntimeParameters {
   String externalSorterCompressionLevel_{"default",
                                          "external-sorter-compression-level"};
 
+  // The largest number of chunks that the merge phase of an external sorter
+  // keeps in flight, or 0 for "as many as the memory limit allows". The chunks
+  // that run ahead of the consumer spill their finished output blocks to disk,
+  // so a smaller number makes the merge and its consumer overlap instead of
+  // writing the whole output once more, at the price of less parallelism in
+  // the merge itself. A sorter reads this parameter once per merge phase.
+  SizeT mergePhaseMaxChunksInFlight_{0, "merge-phase-max-chunks-in-flight"};
+
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
