@@ -66,7 +66,8 @@ bool dotIsCommentedOut(std::string_view lineUpToDot) {
   // Whether the scan is currently inside an IRI or a literal, in which a `#`
   // doesn't start a comment.
   enum class State { Default, Iri, Literal };
-  auto state = State::Default;
+  using enum State;
+  auto state = Default;
   // The character that will close the current literal, either `"` or `'`.
   char quote = '\0';
   // Whether the previous character was a backslash, which makes this character
@@ -78,33 +79,33 @@ bool dotIsCommentedOut(std::string_view lineUpToDot) {
       continue;
     }
     switch (state) {
-      case State::Default:
+      case Default:
         if (c == '#') {
           // The rest of the line, including the dot, is a comment.
           return true;
         } else if (c == '\\') {
           escaped = true;
         } else if (c == '<') {
-          state = State::Iri;
+          state = Iri;
         } else if (c == '"' || c == '\'') {
-          state = State::Literal;
+          state = Literal;
           quote = c;
         }
         break;
-      case State::Iri:
+      case Iri:
         // An IRI may contain a `#`, but neither a `>` nor a line break, and it
         // has no escape sequences that could hide the closing `>`.
         if (c == '>') {
-          state = State::Default;
+          state = Default;
         }
         break;
-      case State::Literal:
+      case Literal:
         // A literal may contain a `#` and a `<`, and a `\"` or `\\` doesn't
         // close it.
         if (c == '\\') {
           escaped = true;
         } else if (c == quote) {
-          state = State::Default;
+          state = Default;
         }
         break;
     }
