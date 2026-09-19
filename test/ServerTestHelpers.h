@@ -99,8 +99,8 @@ class ServerForTesting {
     return server_->indexAndViewsSnapshot()->index_.deltaTriplesManager();
   }
 
-  // Access the `Index` of the underlying `Server`, e.g. to inspect the KB or
-  // text description after setting it via `?index-description=` or
+  // Access the `Index` of the underlying `Server`, e.g. to inspect the index
+  // or text description after setting it via `?index-description=` or
   // `?text-description=`.
   const Index& getIndex() const {
     return server_->indexAndViewsSnapshot()->index_;

@@ -133,13 +133,13 @@ float Index::getAverageNofEntityContexts() const {
 }
 
 // ____________________________________________________________________________
-void Index::setKbName(const std::string& name) {
-  return pimpl_->setKbName(name);
+void Index::setIndexDescription(const std::string& name) {
+  return pimpl_->setIndexDescription(name);
 }
 
 // ____________________________________________________________________________
-void Index::setTextName(const std::string& name) {
-  return pimpl_->setTextName(name);
+void Index::setTextIndexDescription(const std::string& name) {
+  return pimpl_->setTextIndexDescription(name);
 }
 
 // ____________________________________________________________________________
@@ -200,10 +200,14 @@ void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
 }
 
 // ____________________________________________________________________________
-const std::string& Index::getTextName() const { return pimpl_->getTextName(); }
+const std::string& Index::getTextIndexDescription() const {
+  return pimpl_->getTextIndexDescription();
+}
 
 // ____________________________________________________________________________
-const std::string& Index::getKbName() const { return pimpl_->getKbName(); }
+const std::string& Index::getIndexDescription() const {
+  return pimpl_->getIndexDescription();
+}
 
 // ____________________________________________________________________________
 const std::string& Index::getOnDiskBase() const {
