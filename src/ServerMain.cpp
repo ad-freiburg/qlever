@@ -274,10 +274,8 @@ int main(int argc, char** argv) {
       "the main server port. Accessing the endpoint requires a valid access "
       "token.");
   add("enable-tracing", po::bool_switch(&tracingEnabled)->default_value(false),
-      "Enable OpenTelemetry tracing of HTTP requests. Where the "
-      "spans are sent is configured via the standard OTEL environment "
-      "variables: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT selects the endpoint that "
-      "OTLP/HTTP sends them to (http://localhost:4318/v1/traces by default).");
+      "Enable OpenTelemetry tracing of HTTP requests. Note: use the standard "
+      "OTEL environment variables to configure the endpoint.");
   std::vector<std::string> runtimeParameterAssignments;
   add("set-runtime-parameter",
       po::value<std::vector<std::string>>(&runtimeParameterAssignments)
@@ -400,8 +398,7 @@ int main(int argc, char** argv) {
                             std::chrono::seconds{resourceUsageIntervalS});
     }
     // Declared before the `Server`, so that it is destroyed after it: the
-    // handle uninstalls the tracer provider and flushes the buffered spans, and
-    // no span may be created after that has happened.
+    // handle uninstalls the tracer provider and flushes the buffered spans.
     ad_utility::tracing::TracingHandle tracingHandle;
     if (tracingEnabled) {
       tracingHandle = ad_utility::tracing::initialize();

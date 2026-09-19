@@ -64,9 +64,7 @@ class [[nodiscard(
 };
 
 // Sets up tracing. Configures tracing using the provided `OTEL_*` environment
-// variables and continuation of traces from incoming HTTP requests. When
-// `TracingHandle` is dropped, the default no-op behaviour of tracing is
-// restored.
+// variables. When `TracingHandle` is dropped, no-op behaviour is restored.
 [[nodiscard]] TracingHandle initialize();
 
 // Returns the single tracer instance for this process.
@@ -74,13 +72,11 @@ opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer();
 
 // Owns a span and ends it on destruction. If none of `setOk`, `setError` or
 // `recordException` is called before the span ends, it is assumed that the
-// coroutine was cancelled. Only ended spans are exported by the SDK. By ending
-// them in the destructor we ensure that this is always the case, also for
-// exceptions.
+// coroutine was cancelled.
 class [[nodiscard(
     "The span is ended when this guard is destroyed. Store it in a "
     "variable.")]] SpanGuard {
-  opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span> span_;
+  std::shared_ptr<opentelemetry::trace::Span> span_;
   bool statusRecorded_ = false;
 
  public:
@@ -95,13 +91,7 @@ class [[nodiscard(
   SpanGuard(const SpanGuard&) = delete;
   SpanGuard& operator=(const SpanGuard&) = delete;
 
-  opentelemetry::trace::Span& span() const { return *span_; }
-
-  // The owned span as a shared pointer.
-  opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span> sharedSpan()
-      const {
-    return span_;
-  }
+  opentelemetry::trace::Span& span() { return *span_; }
 
   // The context of this span, to be passed as the parent of child spans.
   opentelemetry::trace::SpanContext context() const;
@@ -158,15 +148,14 @@ class RequestHeaderCarrier
   }
 };
 
-// Extract the span context a client sent via the
-// `request`, using the propagator configured by `initialize`. Returns
-// `std::nullopt` when there is no valid header.
+// Extract the span context a client sent via the `request`, using the
+// propagator configured by `initialize`. Returns `std::nullopt` when there is
+// no valid header.
 template <typename RequestT>
 std::optional<opentelemetry::trace::SpanContext> extractParentFromRequest(
     const RequestT& request) {
   RequestHeaderCarrier<const RequestT> carrier{request};
-  // `Extract` takes its input context by non-const reference, so it needs a
-  // named variable rather than a temporary.
+  // Dummy value required by the interface.
   opentelemetry::context::Context emptyContext{};
   auto context = opentelemetry::context::propagation::GlobalTextMapPropagator::
                      GetGlobalPropagator()
@@ -208,6 +197,7 @@ void setRequestAttributes(opentelemetry::trace::Span& span,
                boost::beast::http::field::user_agent);
   // The client's address as seen by a reverse proxy in front of QLever, which
   // is the only place it is available; the socket peer is the proxy.
+  // TODO: use the IP as a default.
   std::string_view clientIp = request.base()["X-Real-IP"];
   if (!clientIp.empty()) {
     span.SetAttribute(semconv::client::kClientAddress, clientIp);

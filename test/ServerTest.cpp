@@ -346,282 +346,143 @@ MATCHER_P(StatusIs, status,
 using namespace serverTestHelpers;
 
 // _____________________________________________________________________________
-// The spans of a request, keyed by name, with the parent/child structure
-// checked by the helpers below.
-namespace {
-using SpanDataPtr = std::unique_ptr<opentelemetry::sdk::trace::SpanData>;
+TEST(ServerTest, tracing) {
+  auto expect = [](auto request, const auto& spansMatcher,
+                   const testing::Matcher<const ResT&>& responseMatcher =
+                       testing::_,
+                   ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(loc);
 
-// Find the single span with the given name, failing the test if there is not
-// exactly one.
-const opentelemetry::sdk::trace::SpanData* findSpan(
-    const std::vector<SpanDataPtr>& spans, std::string_view name) {
-  const opentelemetry::sdk::trace::SpanData* result = nullptr;
-  for (const auto& span : spans) {
-    if (span->GetName() == name) {
-      EXPECT_EQ(result, nullptr) << "more than one span named " << name;
-      result = span.get();
-    }
+    tracingTestHelpers::ScopedInMemoryTracer scopedTracer;
+    auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+    ServerForTesting server{
+        1, "accessToken",
+        getDefaultConfigWithName(qec->getIndex().getOnDiskBase())};
+
+    auto response = server.process(request);
+    EXPECT_THAT(response, responseMatcher);
+    // Consume the lazy response to actually end the trace.
+    responseBodyToString(std::move(response.body()));
+    EXPECT_THAT(scopedTracer.spans(), spansMatcher);
+  };
+  using namespace tracingTestHelpers;
+  {
+    expect(
+        makeRequest(http::verb::post, "/sparql",
+                    {{http::field::content_type, "application/sparql-query"}},
+                    "SELECT * WHERE { ?s ?p ?o }"),
+        testing::AllOf(
+            AllSpansAreDirectChildrenOfRoot("POST /sparql"),
+            testing::UnorderedElementsAre(
+                SpanWithName(
+                    "POST /sparql",
+                    testing::AllOf(
+                        StatusIs(opentelemetry::trace::StatusCode::kOk),
+                        HasAttribute<std::string>("http.request.method",
+                                                  "POST"),
+                        HasAttribute<std::string>("url.path", "/sparql"),
+                        HasAttribute<std::string>("db.system.name", "qlever"),
+                        HasAttribute<std::string>("db.operation.name",
+                                                  "SELECT"),
+                        HasAttribute<std::string>(
+                            "db.query.text", "SELECT * WHERE { ?s ?p ?o }"),
+                        testing::Not(HasAttribute<std::string>(
+                            "db.operation.batch.size", testing::_)),
+                        HasAttribute<int64_t>("http.response.status_code",
+                                              200))),
+                SpanWithName("parsing", testing::_),
+                SpanWithName("planning", testing::_),
+                SpanWithName("export",
+                             HasAttribute<std::string>(
+                                 "qlever.result.media_type",
+                                 "application/sparql-results+json")))),
+        StatusIs(http::status::ok));
   }
-  EXPECT_NE(result, nullptr) << "no span named " << name;
-  return result;
-}
-
-// The value of a string attribute, or a marker when it is absent or of another
-// type, so that a wrong expectation fails the test instead of throwing out of
-// the variant access.
-std::string attribute(const opentelemetry::sdk::trace::SpanData& span,
-                      const std::string& key) {
-  auto it = span.GetAttributes().find(key);
-  if (it == span.GetAttributes().end()) {
-    return "<missing>";
+  {
+    // External trace using W3C Trace Context standard is continued.
+    auto request =
+        makeRequest(http::verb::post, "/sparql",
+                    {{http::field::content_type, "application/sparql-query"}},
+                    "SELECT * WHERE { ?s ?p ?o }");
+    request.set("traceparent",
+                "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01");
+    auto TraceId = TraceIdIs("0af7651916cd43dd8448eb211c80319c");
+    expect(
+        request,
+        testing::AllOf(
+            // The root span has the incoming span set as parent.
+            testing::Contains(SpanWithName(
+                "POST /sparql",
+                testing::AllOf(TraceId, ParentSpanIdIs("b7ad6b7169203331")))),
+            // Each span has the parent trace id set.
+            testing::Each(testing::Pointee(TraceId))));
   }
-  if (!opentelemetry::nostd::holds_alternative<std::string>(it->second)) {
-    return "<not a string>";
+  {
+    // A syntactically invalid query. The request is rejected during parsing, so
+    // there is no `plan` and no `export` span, but there is still a root span
+    // recording the failure.
+    expect(
+        makeRequest(http::verb::post, "/sparql",
+                    {{http::field::content_type, "application/sparql-query"}},
+                    "SELECT * WHERE { this is not SPARQL"),
+        testing::Contains(SpanWithName(
+            "POST /sparql",
+            testing::AllOf(
+                StatusIs(opentelemetry::trace::StatusCode::kError),
+                HasAttribute<std::string>("error.type", "syntax"),
+                HasAttribute<int64_t>("http.response.status_code", 400),
+                Events(testing::ElementsAre(Event("exception")))))),
+        StatusIs(http::status::bad_request));
   }
-  return opentelemetry::nostd::get<std::string>(it->second);
-}
-
-// The value of an integer attribute, or `std::nullopt` when it is absent or of
-// another type.
-std::optional<int64_t> intAttribute(
-    const opentelemetry::sdk::trace::SpanData& span, const std::string& key) {
-  auto it = span.GetAttributes().find(key);
-  if (it == span.GetAttributes().end() ||
-      !opentelemetry::nostd::holds_alternative<int64_t>(it->second)) {
-    return std::nullopt;
+  {
+    // An unknown path produces a 404 without any SPARQL processing. The root
+    // span is created before the request is parsed precisely so that such
+    // requests are still visible in a trace.
+    expect(makeGetRequest("/no-such-path"),
+           testing::ElementsAre(SpanWithName(
+               "GET /no-such-path",
+               testing::AllOf(
+                   StatusIs(opentelemetry::trace::StatusCode::kOk),
+                   testing::Not(HasAttribute<std::string>("db.operation.name",
+                                                          testing::_)),
+                   HasAttribute<int64_t>("http.response.status_code", 404)))),
+           StatusIs(http::status::not_found));
   }
-  return opentelemetry::nostd::get<int64_t>(it->second);
-}
-}  // namespace
-
-// _____________________________________________________________________________
-TEST(ServerTest, tracingOfQueryRequest) {
-  tracingTestHelpers::ScopedInMemoryTracer scopedTracer;
-  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
-  ServerForTesting server{
-      1, "accessToken",
-      getDefaultConfigWithName(qec->getIndex().getOnDiskBase())};
-
-  auto response = server.process(
-      makeRequest(http::verb::post, "/sparql",
-                  {{http::field::content_type, "application/sparql-query"}},
-                  "SELECT * WHERE { ?s ?p ?o }"));
-  ASSERT_THAT(response, StatusIs(http::status::ok));
-  // The body has to be consumed, because the result is computed lazily while it
-  // is serialized, and the `export` span is only ended after that.
-  responseBodyToString(std::move(response.body()));
-
-  auto spans = scopedTracer.spans();
-  ASSERT_EQ(spans.size(), 4) << "expected root, parsing, planning and export";
-  const auto* root = findSpan(spans, "POST /sparql");
-  const auto* parse = findSpan(spans, "parsing");
-  const auto* plan = findSpan(spans, "planning");
-  const auto* exportSpan = findSpan(spans, "export");
-  ASSERT_TRUE(root && parse && plan && exportSpan);
-
-  // The root is a trace root, the three phases are its children, and all four
-  // belong to one trace.
-  EXPECT_FALSE(root->GetParentSpanId().IsValid());
-  for (const auto* phase : {parse, plan, exportSpan}) {
-    EXPECT_EQ(phase->GetParentSpanId(), root->GetSpanId())
-        << "span " << phase->GetName() << " is not a child of the root";
-    EXPECT_EQ(phase->GetTraceId(), root->GetTraceId());
+  {
+    // For a GET request the request-target carries the operation in its query
+    // string, which the conventions keep separate from the path.
+    expect(makeGetRequest("/sparql?query=SELECT%20%2A%20WHERE%20%7B%"
+                          "20%3Fs%20%3Fp%20%3Fo%20%7D"),
+           testing::Contains(SpanWithName(
+               "GET /sparql",
+               testing::AllOf(
+                   HasAttribute<std::string>("url.path", "/sparql"),
+                   HasAttribute<std::string>("url.query",
+                                             "query=SELECT%20%2A%20WHERE%20%7B%"
+                                             "20%3Fs%20%3Fp%20%3Fo%20%7D")))),
+           StatusIs(http::status::ok));
   }
-
-  EXPECT_EQ(root->GetStatus(), opentelemetry::trace::StatusCode::kOk);
-  EXPECT_EQ(attribute(*root, "http.request.method"), "POST");
-  EXPECT_EQ(attribute(*root, "http.route"), "/sparql");
-  EXPECT_EQ(attribute(*root, "url.path"), "/sparql");
-  // The operation is described with the conventional database attributes.
-  EXPECT_EQ(attribute(*root, "db.system.name"), "qlever");
-  EXPECT_EQ(attribute(*root, "db.operation.name"), "SELECT");
-  EXPECT_EQ(attribute(*root, "db.query.text"), "SELECT * WHERE { ?s ?p ?o }");
-  // A query is not a batch, so the batch size is not set.
-  EXPECT_EQ(intAttribute(*root, "db.operation.batch.size"), std::nullopt);
-  EXPECT_EQ(attribute(*exportSpan, "qlever.result.media_type"),
-            "application/sparql-results+json");
-  EXPECT_THAT(intAttribute(*root, "http.response.status_code"),
-              testing::Optional(200));
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, tracingContinuesClientTrace) {
-  tracingTestHelpers::ScopedInMemoryTracer scopedTracer;
-  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
-  ServerForTesting server{
-      1, "accessToken",
-      getDefaultConfigWithName(qec->getIndex().getOnDiskBase())};
-
-  auto request =
-      makeRequest(http::verb::post, "/sparql",
-                  {{http::field::content_type, "application/sparql-query"}},
-                  "SELECT * WHERE { ?s ?p ?o }");
-  request.set("traceparent",
-              "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01");
-  auto response = server.process(request);
-  responseBodyToString(std::move(response.body()));
-
-  auto spans = scopedTracer.spans();
-  ASSERT_FALSE(spans.empty());
-  const auto* root = findSpan(spans, "POST /sparql");
-  ASSERT_TRUE(root);
-  // The root adopts the client's trace and span as its parent, so that the
-  // client sees one trace spanning both.
-  std::string traceId(32, '\0');
-  root->GetTraceId().ToLowerBase16(
-      opentelemetry::nostd::span<char, 32>{traceId.data(), traceId.size()});
-  EXPECT_EQ(traceId, "0af7651916cd43dd8448eb211c80319c");
-  std::string parentId(16, '\0');
-  root->GetParentSpanId().ToLowerBase16(
-      opentelemetry::nostd::span<char, 16>{parentId.data(), parentId.size()});
-  EXPECT_EQ(parentId, "b7ad6b7169203331");
-  // Every span of the request is in the client's trace.
-  for (const auto& span : spans) {
-    EXPECT_EQ(span->GetTraceId(), root->GetTraceId());
+  {
+    // A chained update contains two `update` spans with `qlever.update.index`
+    expect(
+        makeRequest(http::verb::post, "/sparql",
+                    {{http::field::content_type, "application/sparql-update"},
+                     {http::field::authorization, "Bearer accessToken"}},
+                    "INSERT DATA { <x> <y> <z> }; INSERT DATA { <p> <q> <r> }"),
+        testing::UnorderedElementsAre(
+            SpanWithName(
+                "POST /sparql",
+                testing::AllOf(
+                    StatusIs(opentelemetry::trace::StatusCode::kOk),
+                    HasAttribute<std::string>("db.operation.name", "UPDATE"),
+                    HasAttribute<uint64_t>("db.operation.batch.size", 2))),
+            SpanWithName("parsing", testing::_),
+            SpanWithName("update",
+                         HasAttribute<int64_t>("qlever.update.index", 0)),
+            SpanWithName("update",
+                         HasAttribute<int64_t>("qlever.update.index", 1))),
+        StatusIs(http::status::ok));
   }
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, tracingOfFailedRequest) {
-  tracingTestHelpers::ScopedInMemoryTracer scopedTracer;
-  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
-  ServerForTesting server{
-      1, "accessToken",
-      getDefaultConfigWithName(qec->getIndex().getOnDiskBase())};
-
-  // A syntactically invalid query. The request is rejected during parsing, so
-  // there is no `plan` and no `export` span, but there is still a root span
-  // recording the failure.
-  auto response = server.process(
-      makeRequest(http::verb::post, "/sparql",
-                  {{http::field::content_type, "application/sparql-query"}},
-                  "SELECT * WHERE { this is not SPARQL"));
-  EXPECT_THAT(response, StatusIs(http::status::bad_request));
-
-  auto spans = scopedTracer.spans();
-  const auto* root = findSpan(spans, "POST /sparql");
-  ASSERT_TRUE(root);
-  EXPECT_EQ(root->GetStatus(), opentelemetry::trace::StatusCode::kError);
-  EXPECT_EQ(attribute(*root, "error.type"), "syntax");
-  EXPECT_THAT(intAttribute(*root, "http.response.status_code"),
-              testing::Optional(400));
-  ASSERT_EQ(root->GetEvents().size(), 1);
-  EXPECT_EQ(root->GetEvents().at(0).GetName(), "exception");
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, tracingOfRequestRejectedBeforeParsing) {
-  tracingTestHelpers::ScopedInMemoryTracer scopedTracer;
-  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
-  ServerForTesting server{
-      1, "accessToken",
-      getDefaultConfigWithName(qec->getIndex().getOnDiskBase())};
-
-  // An unknown path produces a 404 without any SPARQL processing. The root span
-  // is created before the request is parsed precisely so that such requests are
-  // still visible in a trace.
-  auto response = server.process(makeGetRequest("/no-such-path"));
-  EXPECT_THAT(response, StatusIs(http::status::not_found));
-
-  auto spans = scopedTracer.spans();
-  ASSERT_EQ(spans.size(), 1) << "only the root span, no phases";
-  const auto* root = findSpan(spans, "GET /no-such-path");
-  ASSERT_TRUE(root);
-  EXPECT_EQ(root->GetStatus(), opentelemetry::trace::StatusCode::kOk)
-      << "a 404 is not an error of the server";
-  EXPECT_EQ(attribute(*root, "db.operation.name"), "<missing>");
-  EXPECT_THAT(intAttribute(*root, "http.response.status_code"),
-              testing::Optional(404));
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, tracingSplitsTargetIntoPathAndQuery) {
-  tracingTestHelpers::ScopedInMemoryTracer scopedTracer;
-  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
-  ServerForTesting server{
-      1, "accessToken",
-      getDefaultConfigWithName(qec->getIndex().getOnDiskBase())};
-
-  // For a GET request the request-target carries the operation in its query
-  // string, which the conventions keep separate from the path.
-  auto response =
-      server.process(makeGetRequest("/sparql?query=SELECT%20%2A%20WHERE%20%7B%"
-                                    "20%3Fs%20%3Fp%20%3Fo%20%7D"));
-  ASSERT_THAT(response, StatusIs(http::status::ok));
-  responseBodyToString(std::move(response.body()));
-
-  auto spans = scopedTracer.spans();
-  const auto* root = findSpan(spans, "GET /sparql");
-  ASSERT_TRUE(root);
-  EXPECT_EQ(attribute(*root, "url.path"), "/sparql");
-  EXPECT_EQ(attribute(*root, "url.query"),
-            "query=SELECT%20%2A%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, tracingOfUpdateRequest) {
-  tracingTestHelpers::ScopedInMemoryTracer scopedTracer;
-  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
-  ServerForTesting server{
-      1, "accessToken",
-      getDefaultConfigWithName(qec->getIndex().getOnDiskBase())};
-
-  // Two `;`-separated parts, so that the per-part spans can be told apart.
-  auto response = server.process(
-      makeRequest(http::verb::post, "/sparql",
-                  {{http::field::content_type, "application/sparql-update"},
-                   {http::field::authorization, "Bearer accessToken"}},
-                  "INSERT DATA { <x> <y> <z> }; INSERT DATA { <p> <q> <r> }"));
-  ASSERT_THAT(response, StatusIs(http::status::ok));
-  responseBodyToString(std::move(response.body()));
-
-  auto spans = scopedTracer.spans();
-  const auto* root = findSpan(spans, "POST /sparql");
-  const auto* parse = findSpan(spans, "parsing");
-  ASSERT_TRUE(root && parse);
-  EXPECT_EQ(attribute(*root, "db.operation.name"), "UPDATE");
-  // The two `;`-separated parts make this a batch, which is recorded once on
-  // the root and not on every part.
-  EXPECT_THAT(intAttribute(*root, "db.operation.batch.size"),
-              testing::Optional(2));
-  EXPECT_EQ(root->GetStatus(), opentelemetry::trace::StatusCode::kOk);
-  // `parse` is a direct child of the root.
-  EXPECT_EQ(parse->GetParentSpanId(), root->GetSpanId());
-
-  // One `update` span per part, also directly under the root, distinguished by
-  // an attribute rather than by name.
-  std::vector<const opentelemetry::sdk::trace::SpanData*> updateSpans;
-  for (const auto& span : spans) {
-    if (span->GetName() == "update") {
-      updateSpans.push_back(span.get());
-    }
-  }
-  ASSERT_EQ(updateSpans.size(), 2);
-  std::vector<int64_t> indices;
-  for (const auto* updateSpan : updateSpans) {
-    EXPECT_EQ(updateSpan->GetParentSpanId(), root->GetSpanId());
-    EXPECT_EQ(updateSpan->GetTraceId(), root->GetTraceId());
-    indices.push_back(intAttribute(*updateSpan, "qlever.update.index").value());
-  }
-  EXPECT_THAT(indices, testing::UnorderedElementsAre(0, 1));
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, noSpansWhenTracingIsDisabled) {
-  // Without a tracer provider installed, all the instrumentation added to the
-  // request handling has to be inert.
-  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
-  ServerForTesting server{
-      1, "accessToken",
-      getDefaultConfigWithName(qec->getIndex().getOnDiskBase())};
-
-  auto response = server.process(
-      makeRequest(http::verb::post, "/sparql",
-                  {{http::field::content_type, "application/sparql-query"}},
-                  "SELECT * WHERE { ?s ?p ?o }"));
-  EXPECT_THAT(response, StatusIs(http::status::ok));
-  EXPECT_THAT(responseBodyToString(std::move(response.body())),
-              testing::HasSubstr("\"results\""));
 }
 
 // A minimal MetricsReader that returns a fixed Prometheus-format string.

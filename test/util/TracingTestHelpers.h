@@ -10,17 +10,28 @@
 #ifndef QLEVER_TEST_UTIL_TRACINGTESTHELPERS_H
 #define QLEVER_TEST_UTIL_TRACINGTESTHELPERS_H
 
+#include <absl/strings/str_cat.h>
+#include <gmock/gmock.h>
 #include <opentelemetry/context/propagation/global_propagator.h>
 #include <opentelemetry/exporters/memory/in_memory_span_data.h>
 #include <opentelemetry/exporters/memory/in_memory_span_exporter_factory.h>
+#include <opentelemetry/nostd/span.h>
+#include <opentelemetry/nostd/variant.h>
 #include <opentelemetry/sdk/trace/simple_processor_factory.h>
+#include <opentelemetry/sdk/trace/span_data.h>
 #include <opentelemetry/sdk/trace/tracer_provider_factory.h>
 #include <opentelemetry/trace/propagation/http_trace_context.h>
 #include <opentelemetry/trace/provider.h>
 
+#include <cstddef>
 #include <memory>
+#include <ostream>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
+
+#include "GTestHelpers.h"
 
 namespace tracingTestHelpers {
 
@@ -89,6 +100,158 @@ class ScopedInMemoryTracer {
     return spanData_->GetSpans();
   }
 };
+
+namespace detail {
+template <typename T>
+class AttributeMatcher : public testing::MatcherInterface<
+                             const opentelemetry::sdk::trace::SpanData&> {
+  std::string key_;
+  testing::Matcher<const T&> valueMatcher_;
+
+ public:
+  AttributeMatcher(std::string key, testing::Matcher<const T&> valueMatcher)
+      : key_{std::move(key)}, valueMatcher_{std::move(valueMatcher)} {}
+
+  bool MatchAndExplain(const opentelemetry::sdk::trace::SpanData& span,
+                       testing::MatchResultListener* listener) const override {
+    const auto& attributes = span.GetAttributes();
+    auto it = attributes.find(key_);
+    if (it == attributes.end()) {
+      *listener << "which has no attribute \"" << key_ << '"';
+      return false;
+    }
+    // A wrong type is reported instead of being accessed, because accessing the
+    // wrong alternative would throw out of the matcher.
+    if (!opentelemetry::nostd::holds_alternative<T>(it->second)) {
+      *listener << "whose attribute \"" << key_
+                << "\" is not of the expected type";
+      return false;
+    }
+    const T& value = opentelemetry::nostd::get<T>(it->second);
+    *listener << "whose attribute \"" << key_ << "\" is "
+              << testing::PrintToString(value) << ' ';
+    return valueMatcher_.MatchAndExplain(value, listener);
+  }
+
+  void DescribeTo(std::ostream* os) const override {
+    *os << "has an attribute \"" << key_ << "\" that ";
+    valueMatcher_.DescribeTo(os);
+  }
+
+  void DescribeNegationTo(std::ostream* os) const override {
+    *os << "has no attribute \"" << key_ << "\" that ";
+    valueMatcher_.DescribeTo(os);
+  }
+};
+
+}  // namespace detail
+
+template <typename Id>
+std::string traceIdToHex(const Id& id) {
+  std::string hex(2 * Id::kSize, '\0');
+  id.ToLowerBase16(
+      opentelemetry::nostd::span<char, 2 * Id::kSize>{hex.data(), hex.size()});
+  return hex;
+}
+
+template <typename T, typename MatcherT>
+testing::Matcher<const opentelemetry::sdk::trace::SpanData&> HasAttribute(
+    std::string key, const MatcherT& matcher) {
+  return testing::MakeMatcher(new detail::AttributeMatcher<T>{
+      std::move(key), testing::MatcherCast<const T&>(matcher)});
+}
+
+testing::Matcher<const std::unique_ptr<opentelemetry::sdk::trace::SpanData>&>
+SpanWithName(const std::string& name, auto m) {
+  return testing::Pointee(testing::AllOf(
+      AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetName, name), m));
+}
+
+MATCHER_P2(
+    HasSpan, name, matcher,
+    absl::StrCat(
+        negation ? "does not have exactly one span named \""
+                 : "has exactly one span named \"",
+        name, "\" that ",
+        testing::DescribeMatcher<const opentelemetry::sdk::trace::SpanData&>(
+            matcher))) {
+  const opentelemetry::sdk::trace::SpanData* match = nullptr;
+  size_t numMatches = 0;
+  for (const auto& span : arg) {
+    auto spanName = span->GetName();
+    if (std::string_view{spanName.data(), spanName.size()} ==
+        std::string_view{name}) {
+      ++numMatches;
+      match = std::to_address(span);
+    }
+  }
+  if (numMatches != 1) {
+    *result_listener << "which has " << numMatches << " spans named \"" << name
+                     << '"';
+    return false;
+  }
+  *result_listener << "whose span named \"" << name << "\" is one ";
+  return testing::ExplainMatchResult(matcher, *match, result_listener);
+}
+
+inline testing::Matcher<const opentelemetry::sdk::trace::SpanData&> StatusIs(
+    opentelemetry::trace::StatusCode code) {
+  return AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetStatus, code);
+}
+
+MATCHER_P(IdIs, hex,
+          absl::StrCat(negation ? "is not the id \"" : "is the id \"", hex,
+                       "\"")) {
+  auto actual = traceIdToHex(arg);
+  *result_listener << "which is the id \"" << actual << '"';
+  return actual == hex;
+}
+
+constexpr auto TraceIdIs = [](const std::string& hex) {
+  return AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetTraceId,
+                     IdIs(hex));
+};
+constexpr auto SpanIdIs = [](const std::string& hex) {
+  return AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetSpanId, IdIs(hex));
+};
+constexpr auto ParentSpanIdIs = [](const std::string& hex) {
+  return AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetParentSpanId,
+                     IdIs(hex));
+};
+
+testing::Matcher<const opentelemetry::sdk::trace::SpanData&> Events(
+    const auto m) {
+  return AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetEvents, m);
+}
+
+inline testing::Matcher<const opentelemetry::sdk::trace::SpanDataEvent&> Event(
+    const std::string& name) {
+  return AD_PROPERTY(opentelemetry::sdk::trace::SpanDataEvent, GetName, name);
+}
+
+MATCHER_P(AllSpansAreDirectChildrenOfRoot, rootName,
+          absl::StrCat(negation ? "one span is not a direct child of \""
+                                : "all other spans are direct children of \"",
+                       rootName, "\"")) {
+  auto rootView = arg | ql::ranges::views::filter([&](const auto& elem) {
+                    return elem->GetName() == rootName;
+                  });
+  auto numRootElements = ql::ranges::distance(rootView);
+  if (numRootElements != 1) {
+    *result_listener << "which has " << numRootElements
+                     << " spans that with the root name \"" << rootName << "\"";
+  }
+  const auto* root = rootView.begin()->get();
+
+  auto rootSpanId = traceIdToHex(root->GetSpanId());
+  return testing::ExplainMatchResult(
+      testing::Each(testing::Pointee(testing::AllOf(
+          // All spans belong to the same trace as the root trace
+          TraceIdIs(traceIdToHex(root->GetTraceId())),
+          // Spans are either the root span or a direct child of it
+          testing::AnyOf(SpanIdIs(rootSpanId), ParentSpanIdIs(rootSpanId))))),
+      arg, result_listener);
+}
 
 }  // namespace tracingTestHelpers
 

@@ -359,10 +359,7 @@ class Server {
   /// \param req The HTTP request.
   /// \param send The action that sends a http:response. (see the
   ///             `HttpServer.h` for documentation).
-  /// \param rootSpan The span covering the whole request. Owned by the caller,
-  ///             because the caller both creates the response for exceptions
-  ///             that escape this function and records the status code of
-  ///             every response.
+  /// \param rootSpan The span covering the whole request.
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> process(RequestT& request, SendT&& send,

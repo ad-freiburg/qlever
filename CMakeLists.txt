@@ -665,24 +665,16 @@ set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 ################################
 # OpenTelemetry C++ SDK
 ################################
-# Needed for the OTLP/HTTP span exporter, which is how traces reach a collector
-# (see `src/util/metrics/Tracing.h`).
-#
-# This requires protobuf (including `protoc`) and libcurl as build dependencies.
-# On Debian and Ubuntu, install them with
-#
-#     apt install libprotobuf-dev protobuf-compiler libcurl4-openssl-dev
-#
-# If they are not found, OTEL's `cmake/protobuf.cmake` and `cmake/curl.cmake`
-# fall back to `FetchContent` and build protobuf, `protoc`, `opentelemetry-proto`
-# and curl from source. That works without any installed packages, but makes the
-# first configure and build considerably slower. Check which of the two happened
-# in OTEL's configure summary, which reports either
-# `Protobuf: <version> (find_package ...)` or `(fetch_repository ...)`.
+# Requires protobuf (including `protoc`) and libcurl as build dependencies.
+# On Debian and Ubuntu, install them with `apt install libprotobuf-dev
+# protobuf-compiler libcurl4-openssl-dev`. If they are not found, OTEL will
+# build them from source. This works without any installed packages, but makes
+# the first configure and build considerably slower.
 set(WITH_OTLP_HTTP ON CACHE BOOL "" FORCE)
+set(WITH_OTLP_HTTP_COMPRESSION OFF CACHE BOOL "" FORCE)
 set(WITH_OTLP_GRPC OFF CACHE BOOL "" FORCE)
 set(WITH_PROMETHEUS ON CACHE BOOL "" FORCE)
-# Disable gzip compression of the builtin `/metrics` which we don't use.
+# Disable gzip compression for `prometheus-cpp`.
 # Removes the need for zlib as a dependency.
 set(ENABLE_COMPRESSION OFF CACHE BOOL "" FORCE)
 set(WITH_BENCHMARK OFF CACHE BOOL "" FORCE)
@@ -696,6 +688,9 @@ set(WITH_ABI_VERSION_1 OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
         opentelemetry-cpp
         GIT_REPOSITORY https://github.com/open-telemetry/opentelemetry-cpp
+        # 1.26.0. currently is the latest supported version. Newer versions
+        # trigger an error related to partial template specialization when
+        # `ranges-v3` is included before the `resource.h` OTEL header.
         GIT_TAG 2d80af1b1d26e300d9c0f7f51fa360f22c773523 # v1.26.0
         GIT_SHALLOW TRUE
         EXCLUDE_FROM_ALL
@@ -718,14 +713,9 @@ if (EMSCRIPTEN)
     # and profiled with source information in the browser dev tools.
     add_link_options("$<$<CONFIG:Debug,RelWithDebInfo>:-g>")
 endif ()
-# `nlohmann-json` is made available before all others, because
+# HACK: `nlohmann-json` is made available before all others, because
 # `opentelemetry-cpp` needs it for the OTLP/HTTP exporter and would otherwise
-# provide it itself: it looks for the package with `find_package` and falls back
-# to its own git submodule, which then tries to define a second `nlohmann_json`
-# target and fails with a name clash. Pointing `find_package` at the config file
-# that `nlohmann-json` writes into its own build directory avoids that. That
-# file only defines targets if they don't exist yet, so `opentelemetry-cpp` ends
-# up using exactly the target created here.
+# provide it itself resulting in a clash. Alternatively rename to `nlohmann_json`.
 FetchContent_MakeAvailable(nlohmann-json)
 set(nlohmann_json_DIR "${nlohmann-json_BINARY_DIR}" CACHE PATH "Directory of the `nlohmann_json` package configuration" FORCE)
 FetchContent_MakeAvailable(googletest ctre abseil fsst antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)

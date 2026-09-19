@@ -53,17 +53,17 @@
 using namespace std::string_literals;
 using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::metrics;
+namespace semconv = opentelemetry::semconv;
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
 namespace {
-namespace semconv = opentelemetry::semconv;
 
-// The form of a SPARQL query, for the `db.operation.name` attribute below.
-// `DESCRIBE` does not appear because the parser rewrites it into a `CONSTRUCT`.
+// Determine `db.operation.name`. `DESCRIBE` is rewritten to `CONSTRUCT`.
 std::string_view queryOperationName(const ParsedQuery& query) {
+  AD_CONTRACT_CHECK(!query.hasUpdateClause());
   if (query.hasSelectClause()) {
     return "SELECT";
   }
@@ -75,21 +75,16 @@ std::string_view queryOperationName(const ParsedQuery& query) {
 }
 
 // Record the attributes describing the SPARQL operation.
-// `operationName` should be low-cardinality, so it is the form of the operation
-// (`SELECT`, `UPDATE`, ...).
 void setOperationAttributes(opentelemetry::trace::Span& span,
                             std::string_view operationName,
                             std::string_view operationString,
                             size_t batchSize) {
-  // Note: these attributes are specified for clients but we just use them
-  // anyways.
   span.SetAttribute(semconv::db::kDbSystemName, "qlever");
   span.SetAttribute(semconv::db::kDbOperationName, operationName);
   span.SetAttribute(semconv::db::kDbQueryText,
                     ad_utility::truncateOperationString(operationString));
   if (batchSize > 1) {
-    span.SetAttribute(semconv::db::kDbOperationBatchSize,
-                      static_cast<int64_t>(batchSize));
+    span.SetAttribute(semconv::db::kDbOperationBatchSize, batchSize);
   }
 }
 }  // namespace
@@ -188,9 +183,8 @@ CPP_template_def(typename RequestT, typename SendT)(
     Awaitable<void> Server::handleHttpRequest(RequestT request, SendT& send) {
   using namespace ad_utility::httpUtils;
 
-  // The root span of the trace for this request. Clients can pass in a parent
-  // trace to continue via the W3C Trace Context standard. The name is only
-  // the HTTP method for now.
+  // The root span of the trace for this request. Incoming traces following the
+  // W3C Trace Context standard are continued.
   ad_utility::tracing::SpanGuard rootSpan{
       std::string_view{request.method_string()},
       ad_utility::tracing::extractParentFromRequest(request)};
@@ -1031,14 +1025,8 @@ CPP_template_def(typename RequestT, typename SendT)(
   auto parsedHttpRequest = SparqlProtocol::parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
 
-  // QLever has no routing table, it serves SPARQL on every path that is not one
-  // of the few special ones, so the path is the closest thing to a route that
-  // exists here. The root span can only be named now, because the route is not
-  // known before the request is parsed.
   rootSpan.span().UpdateName(absl::StrCat(
       std::string_view{request.method_string()}, " ", parsedHttpRequest.path_));
-  rootSpan.span().SetAttribute(semconv::http::kHttpRoute,
-                               parsedHttpRequest.path_);
 
   auto checkParameter = makeCheckParameter(parameters);
 

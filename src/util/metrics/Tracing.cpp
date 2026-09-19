@@ -22,8 +22,9 @@
 #include <opentelemetry/trace/provider.h>
 #include <opentelemetry/trace/span_metadata.h>
 
+#include <memory>
 #include <optional>
-#include <string>
+#include <string_view>
 #include <utility>
 
 #include "util/metrics/Resource.h"
@@ -35,15 +36,6 @@ namespace trace_sdk = opentelemetry::sdk::trace;
 namespace semconv = opentelemetry::semconv;
 
 namespace ad_utility::tracing {
-namespace {
-
-// Convert to the string view type of the OTEL API. Note that this has to keep
-// the size: a `std::string_view` is not necessarily null-terminated, so passing
-// its `data()` as a `const char*` attribute value would read out of bounds.
-nostd::string_view toOtel(std::string_view view) {
-  return {view.data(), view.size()};
-}
-}  // namespace
 
 // _____________________________________________________________________________
 TracingHandle::TracingHandle(
@@ -84,7 +76,7 @@ void TracingHandle::shutdown() {
 // _____________________________________________________________________________
 TracingHandle initialize() {
   // The endpoint is configured with the standard `OTEL_EXPORTER_OTLP_TRACES_*`
-  // variables.
+  // environment variables.
   auto exporter =
       opentelemetry::exporter::otlp::OtlpHttpExporterFactory::Create();
   auto provider = trace_sdk::TracerProviderFactory::Create(
@@ -130,7 +122,7 @@ SpanGuard::SpanGuard(std::string_view name,
     options.parent = opentelemetry::context::Context{}.SetValue(
         trace_api::kIsRootSpanKey, true);
   }
-  span_ = tracer()->StartSpan(toOtel(name), options);
+  span_ = tracer()->StartSpan(name, options);
 }
 
 // _____________________________________________________________________________
@@ -156,8 +148,8 @@ void SpanGuard::setOk() {
 
 // _____________________________________________________________________________
 void SpanGuard::setError(std::string_view errorType, std::string_view message) {
-  span_->SetAttribute(semconv::error::kErrorType, toOtel(errorType));
-  span_->SetStatus(trace_api::StatusCode::kError, toOtel(message));
+  span_->SetAttribute(semconv::error::kErrorType, errorType);
+  span_->SetStatus(trace_api::StatusCode::kError, message);
   statusRecorded_ = true;
 }
 
@@ -165,7 +157,7 @@ void SpanGuard::setError(std::string_view errorType, std::string_view message) {
 void SpanGuard::recordException(const std::exception& exception,
                                 std::string_view errorType) {
   span_->AddEvent("exception",
-                  {{semconv::exception::kExceptionType, toOtel(errorType)},
+                  {{semconv::exception::kExceptionType, errorType},
                    {semconv::exception::kExceptionMessage, exception.what()}});
   setError(errorType, exception.what());
 }
