@@ -15,6 +15,8 @@
 #include <functional>
 #include <vector>
 
+#include "util/Exception.h"
+
 namespace ad_utility {
 
 // Forward declaration; defined in `util/IoUringManager.h` on io_uring builds.
@@ -99,15 +101,25 @@ class FiberIoScheduler {
   size_t numActiveFibers_ = 0;
 
   // A sibling fiber is doing non-wait work (submitting, formatting) when
-  // more fibers are active than waiting; yielding then lets it run.
+  // more fibers are active than waiting; yielding then lets it run. This is
+  // a heuristic: a fiber between submit and wait counts as active-not-
+  // waiting and may cause a spurious yield. That only costs a context
+  // switch — and the one-yield grace in `waitUntil` covers the reverse case
+  // of a just-woken sibling — so a precise runnable signal is not needed.
   bool siblingsMayHaveWork() const {
     return numActiveFibers_ > numWaitingFibers_;
   }
 
   void enterWait() { ++numWaitingFibers_; }
-  void exitWait() { --numWaitingFibers_; }
+  void exitWait() {
+    AD_CORRECTNESS_CHECK(numWaitingFibers_ > 0);
+    --numWaitingFibers_;
+  }
   void enterActive() { ++numActiveFibers_; }
-  void exitActive() { --numActiveFibers_; }
+  void exitActive() {
+    AD_CORRECTNESS_CHECK(numActiveFibers_ > 0);
+    --numActiveFibers_;
+  }
 
   // Shared cooperative loop behind `waitForBatch` and `waitForFreeSlot`.
   // Only declared meaningfully on fiber-enabled io_uring builds; defined in

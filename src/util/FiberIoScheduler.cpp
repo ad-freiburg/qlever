@@ -73,25 +73,38 @@ void FiberIoScheduler::runAsFibers(std::vector<std::function<void()>> bodies) {
   std::vector<std::exception_ptr> errors(bodies.size());
   std::vector<boost::fibers::fiber> fibers;
   fibers.reserve(bodies.size());
-  for (size_t i = 0; i < bodies.size(); ++i) {
-    // `launch::post`: schedule the body instead of running it in the
-    // constructor. The default (`launch::dispatch`) runs the body
-    // immediately, so a throwing body would unwind through vector
-    // construction and terminate on the still-joinable earlier fibers.
-    fibers.emplace_back(
-        boost::fibers::launch::post, [&scheduler, &bodies, &errors, i]() {
-          scheduler.enterActive();
-          absl::Cleanup leaveActive([&scheduler]() { scheduler.exitActive(); });
-          const bool wasInBody = t_inSchedulerFiberBody;
-          t_inSchedulerFiberBody = true;
-          absl::Cleanup restoreFlag(
-              [wasInBody]() { t_inSchedulerFiberBody = wasInBody; });
-          try {
-            bodies[i]();
-          } catch (...) {
-            errors[i] = std::current_exception();
-          }
-        });
+  try {
+    for (size_t i = 0; i < bodies.size(); ++i) {
+      // `launch::post`: schedule the body instead of running it in the
+      // constructor. The default (`launch::dispatch`) runs the body
+      // immediately, so a throwing body would unwind through vector
+      // construction and terminate on the still-joinable earlier fibers.
+      fibers.emplace_back(boost::fibers::launch::post, [&scheduler, &bodies,
+                                                        &errors, i]() {
+        scheduler.enterActive();
+        absl::Cleanup leaveActive([&scheduler]() { scheduler.exitActive(); });
+        const bool wasInBody = t_inSchedulerFiberBody;
+        t_inSchedulerFiberBody = true;
+        absl::Cleanup restoreFlag(
+            [wasInBody]() { t_inSchedulerFiberBody = wasInBody; });
+        try {
+          bodies[i]();
+        } catch (...) {
+          errors[i] = std::current_exception();
+        }
+      });
+    }
+  } catch (...) {
+    // Construction failed partway (e.g. `bad_alloc` from `emplace_back`
+    // despite the reserve): join what exists, since destroying a joinable
+    // fiber calls `std::terminate`, then rethrow the original error.
+    for (auto& fiber : fibers) {
+      try {
+        fiber.join();
+      } catch (...) {
+      }
+    }
+    throw;
   }
   // Join every fiber: a joinable fiber's destructor would call
   // `std::terminate`. Bodies cannot throw past the wrapper anymore, so a
@@ -119,7 +132,11 @@ void FiberIoScheduler::runAsFibers(std::vector<std::function<void()>> bodies) {
 // (`drainOneCqe`) reaps and attributes the next completion of any batch, so
 // a parking fiber still serves its siblings and every park terminates: all
 // awaited reads were already submitted, and the kernel posts their
-// completions independently of fiber activity.
+// completions independently of fiber activity. This rests on the same
+// assumption as the pre-existing blocking `wait` — completions for
+// submitted reads always arrive — so a lost completion would hang exactly
+// as `io_uring_wait_cqe` would; no timeout is added because silently
+// abandoning in-flight reads would be worse than hanging loudly.
 void FiberIoScheduler::waitUntil(IoUringPolicy& policy,
                                  const std::function<bool()>& isDone) {
   enterWait();
