@@ -90,7 +90,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 StripColumns::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // Push `bind` down to the child. If successful, create a new `StripColumns`
   // that also keeps the bound target variable.
-  auto newChild = child_->getRootOperation()->makeTreeWithBindColumn(bind);
+  auto newChild = QueryExecutionTree::makeTreeWithBindColumn(child_, bind);
   if (!newChild) {
     return std::nullopt;
   }

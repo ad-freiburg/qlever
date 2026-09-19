@@ -9,6 +9,7 @@
 #include "engine/MinusRowHandler.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
@@ -93,6 +94,26 @@ std::vector<ColumnIndex> Minus::resultSortedOn() const {
     return _left->getRootOperation()->getChildren().at(0)->resultSortedOn();
   }
   return _left->resultSortedOn();
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Minus::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left child. Also refuse if `_right`
+  // (the negated pattern) happens to use the `BIND`'s target variable for one
+  // of its own columns: `_right`'s variables are not visible outside the
+  // `MINUS`, so this is legal SPARQL, but after the push down `Minus` would
+  // treat it as a join column shared with `_left`, which can change which
+  // rows get excluded.
+  if (_right->isVariableCovered(bind._target)) {
+    return std::nullopt;
+  }
+  auto newLeft = QueryExecutionTree::makeTreeWithBindColumn(_left, bind);
+  if (!newLeft.has_value()) {
+    return std::nullopt;
+  }
+  return ad_utility::makeExecutionTree<Minus>(
+      getExecutionContext(), std::move(newLeft.value()), _right);
 }
 
 // _____________________________________________________________________________

@@ -58,6 +58,9 @@ class Filter : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+
  private:
   [[nodiscard]] bool isDeterministicImpl() const override;
 
