@@ -1870,6 +1870,49 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
 }
 
 // _____________________________________________________________________________
+// Regression test: the export of a CONSTRUCT query as QLever JSON has to keep
+// the `Result` alive for as long as the export runs, even if the result is
+// evicted from the cache in the meantime. In an earlier version of the code,
+// the export only borrowed the result, which led to a use-after-free when the
+// cache evicted it during a long export.
+TEST(ExportQueryExecutionTrees,
+     constructQueryResultToQLeverJSONKeepsResultAlive) {
+  auto* qec = ad_utility::testing::getQec("<s> <p> <o1> . <s> <p> <o2>");
+  qec->getQueryTreeCache().clearAll();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner qp{qec, cancellationHandle};
+  auto pq = parseQuery("CONSTRUCT { ?s <q> ?o } WHERE { ?s <p> ?o }");
+  auto qet = qp.createExecutionTree(pq);
+
+  // Compute the (cached) result and keep a `weak_ptr` to track its lifetime.
+  std::shared_ptr<const Result> result = qet.getResult();
+  std::weak_ptr<const Result> weakResult = result;
+  {
+    uint64_t resultSize = 0;
+    auto jsonStream =
+        ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
+            qet, pq.constructClause().triples_, pq._limitOffset,
+            std::move(result), resultSize, cancellationHandle);
+
+    // Evict the result from the cache. The export must now hold the last
+    // reference to it.
+    qec->getQueryTreeCache().clearAll();
+    ASSERT_FALSE(weakResult.expired());
+
+    std::vector<std::string> bindings;
+    for (const auto& binding : jsonStream) {
+      bindings.push_back(binding);
+    }
+    EXPECT_EQ(bindings.size(), 2u);
+    EXPECT_EQ(resultSize, 2u);
+    EXPECT_FALSE(weakResult.expired());
+  }
+  // Once the export is destroyed, so is the result.
+  EXPECT_TRUE(weakResult.expired());
+}
+
+// _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   std::string_view query =
       "SELECT * WHERE { ?x ?y ?z . FILTER(?y != <p2>) } OFFSET 1 LIMIT 4";
