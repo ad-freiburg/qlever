@@ -2183,6 +2183,16 @@ class CompressedExternalIdTableSorter
     config.numBufferedOutputBlocks_ =
         static_cast<size_t>(numBufferedOutputBlocks_);
     config.maxOutputBlockSize_ = maxOutputBlocksize_;
+    // A bound that the user has set explicitly, see
+    // `RuntimeParameters::mergePhaseMaxOutputBlockRows_`.
+    if (auto maxRows = getRuntimeParameter<
+            &RuntimeParameters::mergePhaseMaxOutputBlockRows_>();
+        maxRows != 0) {
+      config.maxOutputBlockSize_ =
+          std::min(config.maxOutputBlockSize_,
+                   ad_utility::MemorySize::bytes(maxRows * this->numColumns_ *
+                                                 sizeof(Id)));
+    }
     config.parallelism_ = mergeParallelism_;
     // A cap that the user has set explicitly wins over the parallelism, see
     // `RuntimeParameters::mergePhaseMaxChunksInFlight_`.

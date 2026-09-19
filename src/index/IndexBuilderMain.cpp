@@ -337,6 +337,14 @@ int main(int argc, char** argv) {
       "limit allows. Chunks that run ahead of the consumer of the merge spill "
       "their output to disk, so a smaller number makes the merge and its "
       "consumer overlap, at the price of less parallelism in the merge.");
+  add("merge-phase-max-output-block-rows",
+      optionFactory.getProgramOption<
+          &RuntimeParameters::mergePhaseMaxOutputBlockRows_>(),
+      "The largest output block of the merge phase of an external sorter, in "
+      "rows, or 0 (the default) for as large as the memory limit allows. The "
+      "memory that a smaller block leaves over is spent on buffering the "
+      "output blocks of a chunk instead, which makes a chunk spill less and "
+      "lets the consumer of the merge start on a smaller unit of work.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),

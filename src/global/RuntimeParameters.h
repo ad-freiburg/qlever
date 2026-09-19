@@ -272,6 +272,14 @@ struct RuntimeParameters {
   // the merge itself. A sorter reads this parameter once per merge phase.
   SizeT mergePhaseMaxChunksInFlight_{0, "merge-phase-max-chunks-in-flight"};
 
+  // The largest output block of the merge phase of an external sorter, in
+  // rows, or 0 for "as large as the memory limit allows". The memory that a
+  // smaller block leaves over becomes additional buffered output blocks per
+  // chunk, so that a chunk spills less and the consumer of the merge waits for
+  // a smaller unit of work. A sorter reads this parameter once per merge
+  // phase.
+  SizeT mergePhaseMaxOutputBlockRows_{0, "merge-phase-max-output-block-rows"};
+
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
