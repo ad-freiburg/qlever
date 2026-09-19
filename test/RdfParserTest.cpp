@@ -176,6 +176,11 @@ TEST(RdfParserTest, prefixedName) {
   {
     CtreParser p{encodedIriManager()};
     runCommonTests(p);
+    // Input that contains none of the delimiters that `pnameLnRelaxed` looks
+    // for, so neither `pnameLnRelaxed` nor `pnameNS` finds a `:`.
+    p.setInputStream("noDelimiterAtAll");
+    ASSERT_FALSE(p.prefixedName());
+    ASSERT_EQ(p.getPosition(), 0u);
     // These unit tests document the current (fast, but suboptimal) behavior of
     // the CTRE parser. TODO: Try to improve the parser without sacrificing
     // speed. If that succeeds, adapt this unit test.
