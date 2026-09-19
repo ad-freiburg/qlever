@@ -84,6 +84,10 @@ class CompressedExternalIdTableWriter {
 
   // The filename and actual file to which the `IdTable` is written .
   std::string filename_;
+  // The offset at which the next block is written. The blocks are written
+  // with the positioned `File::write`, so a thread only has to reserve its
+  // range here, see `writeBytes`.
+  std::atomic<off_t> nextOffset_{0};
   ad_utility::Synchronized<ad_utility::File, std::shared_mutex> file_{filename_,
                                                                       "w+"};
   // For a single column, the concatenation of the blocks for that column of all
@@ -296,12 +300,16 @@ class CompressedExternalIdTableWriter {
                               size_t globalBlockIdx, size_t columnIdx) {
     auto uncompressedSize = numRows * sizeof(Id);
     auto writeBytes = [this](const void* data, size_t numBytes) {
-      size_t offset = 0;
-      file_.withWriteLock([&offset, data, numBytes](ad_utility::File& file) {
-        offset = file.tell();
-        file.write(data, numBytes);
-      });
-      return offset;
+      // Reserve a range of the file and then write to it with the positioned
+      // `File::write`, which only needs a shared lock. Several threads
+      // therefore write concurrently, instead of queueing for the exclusive
+      // lock that a write at the shared file position would need. Only the
+      // positioned `read` and `write` are used on this file.
+      auto offset = nextOffset_.fetch_add(static_cast<off_t>(numBytes));
+      auto numBytesWritten = file_.rlock()->write(data, numBytes, offset);
+      AD_CORRECTNESS_CHECK(numBytesWritten == static_cast<ssize_t>(numBytes),
+                           "Writing a block to a temporary file failed");
+      return static_cast<size_t>(offset);
     };
     if (!compressionLevel_.has_value()) {
       blocksPerColumn_.at(columnIdx).at(globalBlockIdx) =
@@ -493,6 +501,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->close();
     ad_utility::deleteFile(filename_);
     file_.wlock()->open(filename_, "w+");
+    nextOffset_.store(0);
     ql::ranges::for_each(blocksPerColumn_, [](auto& block) { block.clear(); });
     startOfSingleIdTables_.clear();
     firstAndLastRowPerBlock_.clear();

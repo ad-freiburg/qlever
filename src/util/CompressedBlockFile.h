@@ -12,6 +12,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <atomic>
 #include <cerrno>
 #include <cstddef>
 #include <cstring>
@@ -43,18 +44,17 @@ constexpr inline int ZSTD_DEFAULT_LEVEL = 3;
 // `engine/idTable/CompressedIdTableBlocks.h`).
 //
 // THREAD SAFETY: All the operations of this class may be called concurrently
-// from any number of threads. Appending takes an exclusive lock (it has to,
-// because it uses the shared file offset), whereas reading takes a shared lock
-// only, because it is implemented via `pread` (see `File::read` with an
-// explicit offset). Reading can therefore run concurrently with other reads,
-// and also with an append (a block that was appended before, and that the
-// caller consequently holds the metadata of, is not touched by later appends).
+// from any number of threads. Both appending and reading take a shared lock
+// only: an append reserves its range of the file with an atomic counter and
+// then writes it with `pwrite` (see `File::write` with an explicit offset),
+// and a read uses `pread` (see `File::read` with an explicit offset). Any
+// number of appends and reads therefore run at the same time (a block that
+// was appended before, and that the caller consequently holds the metadata
+// of, is not touched by later appends).
 //
-// NOTE: Appending writes through the buffered `fwrite`, whereas reading uses
-// `pread`, which bypasses that buffer. Each append therefore flushes the file
-// before it releases the lock, so that every block is readable as soon as
-// `appendBlock` has returned. This is affordable because the blocks are large;
-// if that should ever change, the flush can be made explicit.
+// NOTE: Neither an append nor a read goes through the buffer of the `FILE*`,
+// so a block is readable as soon as `appendBlock` has returned, and no flush
+// is needed in between.
 //
 // NOTE: The file is deleted in the destructor, so this class is only suitable
 // for temporary data.
@@ -85,6 +85,8 @@ class CompressedBlockFile {
   std::string filename_;
   CompressionLevel compressionLevel_;
   Synchronized<File, std::shared_mutex> file_{filename_, "w+"};
+  // The offset at which the next block is appended, see `appendBytes`.
+  std::atomic<off_t> nextOffset_{0};
 
  public:
   // Create the file at `filename`, overwriting it if it already exists, and
@@ -154,29 +156,26 @@ class CompressedBlockFile {
     file->close();
     ad_utility::deleteFile(filename_);
     file->open(filename_, "w+");
+    nextOffset_.store(0);
   }
 
  private:
   // Append the `numBytes` bytes at `data` to the file and return the offset at
-  // which they were written. This takes an exclusive lock, because it uses the
-  // shared file offset. The file is flushed before the lock is released, see
-  // the note on the buffering at the top of this class. Throw a
-  // `std::runtime_error` if the write or the flush fails (for example because
-  // the disk is full), so that this is noticed at the append and not only when
-  // the block is read back.
+  // which they were written. The range is reserved with an atomic counter and
+  // written with the positioned `File::write`, so this needs a shared lock
+  // only, see the note on the thread safety at the top of this class. Throw a
+  // `std::runtime_error` if the write fails (for example because the disk is
+  // full), so that this is noticed at the append and not only when the block
+  // is read back.
   size_t appendBytes(const void* data, size_t numBytes) {
-    size_t offset = 0;
-    file_.withWriteLock([this, &offset, data, numBytes](File& file) {
-      offset = static_cast<size_t>(file.tell());
-      size_t numBytesWritten = file.write(data, numBytes);
-      bool flushed = file.flush();
-      if (numBytesWritten != numBytes || !flushed) {
-        throw std::runtime_error{absl::StrCat(
-            "Writing ", numBytes, " bytes to the temporary file \"", filename_,
-            "\" failed (", std::strerror(errno), ")")};
-      }
-    });
-    return offset;
+    auto offset = nextOffset_.fetch_add(static_cast<off_t>(numBytes));
+    ssize_t numBytesWritten = file_.rlock()->write(data, numBytes, offset);
+    if (numBytesWritten != static_cast<ssize_t>(numBytes)) {
+      throw std::runtime_error{
+          absl::StrCat("Writing ", numBytes, " bytes to the temporary file \"",
+                       filename_, "\" failed (", std::strerror(errno), ")")};
+    }
+    return static_cast<size_t>(offset);
   }
 
   // Read the `compressedSize_` bytes of the block that is described by

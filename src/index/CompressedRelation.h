@@ -7,8 +7,10 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <atomic>
 #include <memory>
 #include <optional>
+#include <shared_mutex>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -290,7 +292,13 @@ AD_SERIALIZE_FUNCTION(CompressedRelationMetadata) {
 /// build.
 class CompressedRelationWriter {
  private:
-  ad_utility::Synchronized<ad_utility::File> outfile_;
+  // The file that the blocks of the permutation are written to. A shared
+  // mutex suffices, because the blocks are written with the positioned
+  // `File::write` at a range that `nextOffset_` hands out, see
+  // `compressAndWriteColumn`.
+  ad_utility::Synchronized<ad_utility::File, std::shared_mutex> outfile_;
+  // The offset at which the next block is written.
+  std::atomic<off_t> nextOffset_{0};
   ad_utility::Synchronized<std::vector<CompressedBlockMetadataNoBlockIndex>>
       blockBuffer_;
   // If multiple small relations are stored in the same block, keep track of the

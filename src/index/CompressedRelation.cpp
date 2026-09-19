@@ -1330,10 +1330,15 @@ CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
   std::vector<char> compressedBlock = ZstdWrapper::compress(
       (void*)(column.data()), column.size() * sizeof(column[0]));
   auto compressedSize = compressedBlock.size();
-  auto file = outfile_.wlock();
-  auto offsetInFile = file->tell();
-  file->write(compressedBlock.data(), compressedBlock.size());
-  return {offsetInFile, compressedSize};
+  // Reserve a range of the file and write to it with the positioned
+  // `File::write`, which needs a shared lock only. The compression above and
+  // the write itself therefore run concurrently for any number of blocks.
+  auto offsetInFile = nextOffset_.fetch_add(static_cast<off_t>(compressedSize));
+  auto numBytesWritten = outfile_.rlock()->write(compressedBlock.data(),
+                                                 compressedSize, offsetInFile);
+  AD_CORRECTNESS_CHECK(numBytesWritten == static_cast<ssize_t>(compressedSize),
+                       "Writing a block of a permutation failed");
+  return {static_cast<size_t>(offsetInFile), compressedSize};
 }
 
 // _____________________________________________________________________________
