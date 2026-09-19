@@ -101,51 +101,6 @@ class ScopedInMemoryTracer {
   }
 };
 
-namespace detail {
-template <typename T>
-class AttributeMatcher : public testing::MatcherInterface<
-                             const opentelemetry::sdk::trace::SpanData&> {
-  std::string key_;
-  testing::Matcher<const T&> valueMatcher_;
-
- public:
-  AttributeMatcher(std::string key, testing::Matcher<const T&> valueMatcher)
-      : key_{std::move(key)}, valueMatcher_{std::move(valueMatcher)} {}
-
-  bool MatchAndExplain(const opentelemetry::sdk::trace::SpanData& span,
-                       testing::MatchResultListener* listener) const override {
-    const auto& attributes = span.GetAttributes();
-    auto it = attributes.find(key_);
-    if (it == attributes.end()) {
-      *listener << "which has no attribute \"" << key_ << '"';
-      return false;
-    }
-    // A wrong type is reported instead of being accessed, because accessing the
-    // wrong alternative would throw out of the matcher.
-    if (!opentelemetry::nostd::holds_alternative<T>(it->second)) {
-      *listener << "whose attribute \"" << key_
-                << "\" is not of the expected type";
-      return false;
-    }
-    const T& value = opentelemetry::nostd::get<T>(it->second);
-    *listener << "whose attribute \"" << key_ << "\" is "
-              << testing::PrintToString(value) << ' ';
-    return valueMatcher_.MatchAndExplain(value, listener);
-  }
-
-  void DescribeTo(std::ostream* os) const override {
-    *os << "has an attribute \"" << key_ << "\" that ";
-    valueMatcher_.DescribeTo(os);
-  }
-
-  void DescribeNegationTo(std::ostream* os) const override {
-    *os << "has no attribute \"" << key_ << "\" that ";
-    valueMatcher_.DescribeTo(os);
-  }
-};
-
-}  // namespace detail
-
 template <typename Id>
 std::string traceIdToHex(const Id& id) {
   std::string hex(2 * Id::kSize, '\0');
@@ -154,15 +109,25 @@ std::string traceIdToHex(const Id& id) {
   return hex;
 }
 
+template <typename T>
+auto Attribute(const std::string& key,
+               const testing::Matcher<const T&>& valueMatcher) {
+  return testing::Pair(key, testing::VariantWith<T>(valueMatcher));
+}
+
 template <typename T, typename MatcherT>
 testing::Matcher<const opentelemetry::sdk::trace::SpanData&> HasAttribute(
     std::string key, const MatcherT& matcher) {
-  return testing::MakeMatcher(new detail::AttributeMatcher<T>{
-      std::move(key), testing::MatcherCast<const T&>(matcher)});
+  return AD_PROPERTY(
+      opentelemetry::sdk::trace::SpanData, GetAttributes,
+      testing::Contains(testing::Pair(key, testing::VariantWith<T>(matcher))));
 }
 
-testing::Matcher<const std::unique_ptr<opentelemetry::sdk::trace::SpanData>&>
-SpanWithName(const std::string& name, auto m) {
+inline testing::Matcher<
+    const std::unique_ptr<opentelemetry::sdk::trace::SpanData>&>
+SpanWithName(const std::string& name,
+             const testing::Matcher<const opentelemetry::sdk::trace::SpanData&>&
+                 m = testing::_) {
   return testing::Pointee(testing::AllOf(
       AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetName, name), m));
 }
@@ -199,6 +164,11 @@ inline testing::Matcher<const opentelemetry::sdk::trace::SpanData&> StatusIs(
   return AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetStatus, code);
 }
 
+inline testing::Matcher<const opentelemetry::sdk::trace::SpanData&>
+DescriptionIs(const std::string& desc) {
+  return AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetDescription, desc);
+}
+
 MATCHER_P(IdIs, hex,
           absl::StrCat(negation ? "is not the id \"" : "is the id \"", hex,
                        "\"")) {
@@ -225,8 +195,11 @@ testing::Matcher<const opentelemetry::sdk::trace::SpanData&> Events(
 }
 
 inline testing::Matcher<const opentelemetry::sdk::trace::SpanDataEvent&> Event(
-    const std::string& name) {
-  return AD_PROPERTY(opentelemetry::sdk::trace::SpanDataEvent, GetName, name);
+    const std::string& name,
+    const testing::Matcher<const opentelemetry::sdk::trace::SpanDataEvent&>& m =
+        testing::_) {
+  return testing::AllOf(
+      AD_PROPERTY(opentelemetry::sdk::trace::SpanDataEvent, GetName, name), m);
 }
 
 MATCHER_P(AllSpansAreDirectChildrenOfRoot, rootName,
@@ -251,6 +224,37 @@ MATCHER_P(AllSpansAreDirectChildrenOfRoot, rootName,
           // Spans are either the root span or a direct child of it
           testing::AnyOf(SpanIdIs(rootSpanId), ParentSpanIdIs(rootSpanId))))),
       arg, result_listener);
+}
+
+// Matches a span that starts its own trace, i.e. that has no parent.
+inline testing::Matcher<const opentelemetry::sdk::trace::SpanData&>
+IsRootSpan() {
+  return AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetParentSpanId,
+                     AD_PROPERTY(opentelemetry::trace::SpanId, IsValid, false));
+}
+
+// Matches a range of spans in which no two spans belong to the same trace.
+MATCHER(SpansAreInDistinctTraces, negation
+                                      ? "has two spans in the same trace"
+                                      : "has no two spans in the same trace") {
+  std::unordered_map<std::string, std::string> spanNameByTraceId;
+  for (const auto& span : arg) {
+    auto name = span->GetName();
+    auto [it, inserted] =
+        spanNameByTraceId.emplace(traceIdToHex(span->GetTraceId()),
+                                  std::string{name.data(), name.size()});
+    if (!inserted) {
+      *result_listener << "where the spans \"" << it->second << "\" and \""
+                       << std::string_view{name.data(), name.size()}
+                       << "\" share the trace id \"" << it->first << '"';
+      return false;
+    }
+  }
+  return true;
+}
+
+MATCHER_P(Attributes, m, "") {
+  return testing::ExplainMatchResult(m, arg.GetAttributes(), result_listener);
 }
 
 }  // namespace tracingTestHelpers

@@ -390,8 +390,7 @@ TEST(ServerTest, tracing) {
                             "db.operation.batch.size", testing::_)),
                         HasAttribute<int64_t>("http.response.status_code",
                                               200))),
-                SpanWithName("parsing", testing::_),
-                SpanWithName("planning", testing::_),
+                SpanWithName("parsing"), SpanWithName("planning"),
                 SpanWithName("export",
                              HasAttribute<std::string>(
                                  "qlever.result.media_type",
@@ -476,7 +475,7 @@ TEST(ServerTest, tracing) {
                     StatusIs(opentelemetry::trace::StatusCode::kOk),
                     HasAttribute<std::string>("db.operation.name", "UPDATE"),
                     HasAttribute<uint64_t>("db.operation.batch.size", 2))),
-            SpanWithName("parsing", testing::_),
+            SpanWithName("parsing"),
             SpanWithName("update",
                          HasAttribute<int64_t>("qlever.update.index", 0)),
             SpanWithName("update",
