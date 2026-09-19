@@ -423,9 +423,12 @@ const Variable& MaterializedView::dummyObject() {
 }
 
 // _____________________________________________________________________________
-MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
+MaterializedView::MaterializedView(std::string onDiskBase, std::string name,
+                                   ad_utility::AllocatorWithLimit<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
+      permutation_{std::make_shared<Permutation>(Permutation::Enum::SPO,
+                                                 std::move(allocator), name_)},
       locatedTriplesState_{makeEmptyLocatedTriplesState()} {
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
@@ -529,7 +532,7 @@ MaterializedViewsManager::loadViewIntoLockedState(
   if (auto it = state.views_.find(name); it != state.views_.end()) {
     return it->second;
   }
-  auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
+  auto view = std::make_shared<MaterializedView>(onDiskBase_, name, allocator_);
   view->connectPermutationBackReference();
   state.views_.insert({name, view});
   // If we would analyze the view at the time of writing and (de)serialize an
