@@ -36,6 +36,17 @@ struct PreparedSpatialJoinParams {
   std::vector<ColumnIndex> leftSelectedCols_;
   std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
+  // If a side was produced by a block-prefiltered index scan (at planning
+  // time or by the runtime geo block prefilter of `prepareJoin`), the row
+  // total of the unprefiltered blocks; used for the geometry funnel in the
+  // runtime details.
+  std::optional<uint64_t> numRowsBeforeBlockPrefilterLeft_ = std::nullopt;
+  std::optional<uint64_t> numRowsBeforeBlockPrefilterRight_ = std::nullopt;
+  // Time spent by the runtime geo block prefilter of `prepareJoin`
+  // (computing the small side's rectangle and pruning the blocks), without
+  // the materialization of the small side (which is needed anyway and
+  // reported by the child operation).
+  std::chrono::milliseconds timeBlockPrefilter_ = std::chrono::milliseconds{0};
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -189,6 +200,31 @@ class SpatialJoin : public Operation {
   std::optional<std::shared_ptr<SpatialJoin>> cloneWithBoundingBoxColumns()
       const;
 
+  // If this spatial join is a within-distance join whose one side is a single
+  // fixed geometry (a one-row `VALUES`, as constructed by the rewriting of
+  // filters like `geof:metricDistance(<constant>, ?wkt) <= <dist>`), push a
+  // `GeoRectangleExpression` block prefilter for the padded query rectangle
+  // into the other side. Returns `std::nullopt` if not applicable or if the
+  // other side could not apply the prefilter (e.g. it is not an index scan
+  // sorted by the geometry variable).
+  std::optional<std::shared_ptr<SpatialJoin>> cloneWithGeoBlockPrefilter()
+      const;
+
+  // Runtime counterpart of `cloneWithGeoBlockPrefilter` for joins whose
+  // sides are only known at execution time: materialize the (estimated)
+  // smaller side, compute the padded bounding rectangle of its geometries
+  // from the precomputed geometry info, and prune the blocks of the other
+  // side's index scan before it is read. Returns the (possibly replaced)
+  // children. Conservative and result-preserving; a no-op if the other side
+  // is not an index scan sorted by its geometry variable.
+  std::pair<std::shared_ptr<QueryExecutionTree>,
+            std::shared_ptr<QueryExecutionTree>>
+  applyRuntimeGeoBlockPrefilter(
+      std::shared_ptr<QueryExecutionTree> childLeft,
+      std::shared_ptr<QueryExecutionTree> childRight, const Variable& varLeft,
+      const Variable& varRight,
+      std::chrono::milliseconds& timeBlockPrefilter) const;
+
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
@@ -226,6 +262,20 @@ class SpatialJoin : public Operation {
   SpatialJoinConfiguration config_;
 
   bool substitutesFilterOp_ = false;
+
+  // Set iff the rectangle of one side was known at planning time (see
+  // `cloneWithGeoBlockPrefilter`): the estimated fraction of the other side's
+  // rows that lie in the rectangle. The size estimate then uses it instead of
+  // the generic selectivity constant.
+  std::optional<double> geometrySideSelectivity_;
+
+  // The estimated share of the rows of `tree` inside `rectangle`, from the
+  // block metadata of the scan that binds `variable` (as object with a fixed
+  // predicate), in the permutation sorted by `variable`. `std::nullopt` if
+  // there is no such scan. Used by `cloneWithGeoBlockPrefilter`.
+  std::optional<double> blockShareOfRectangle(
+      const QueryExecutionTree& tree, const Variable& variable,
+      const ad_utility::GeoRectangle& rectangle) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H
