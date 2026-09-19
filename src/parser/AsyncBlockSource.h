@@ -218,17 +218,27 @@ class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
   Block remainder_;
   EndPositionFinder findEndPosition_;
   std::string description_;
+  std::string inputName_;
+  bool isParsedInParallel_;
   bool exhausted_ = false;
 
  public:
   // Wrap `inner` and cut its blocks at the positions determined by
   // `findEndPosition`. `description` is used in error messages to describe what
-  // marks the end of a statement. `exec` is only used as the default executor
-  // for the completions (see `AsyncBlockSource`'s constructor).
+  // marks the end of a statement, and `inputName` to name the input that
+  // `inner` reads (typically a filename, see
+  // `qlever::InputFileSpecification::filename`), such that an error can be
+  // attributed to one of the possibly many inputs of an index build.
+  // `isParsedInParallel` only selects the fixes that such an error suggests:
+  // disabling parallel parsing is no fix for an input that is parsed serially
+  // to begin with. `exec` is only used as the default executor for the
+  // completions (see `AsyncBlockSource`'s constructor).
   AsyncStatementBoundaryBlockSource(const ql::any_io_executor& exec,
                                     std::unique_ptr<AsyncBlockSource> inner,
                                     EndPositionFinder findEndPosition,
-                                    std::string description);
+                                    std::string description,
+                                    std::string inputName,
+                                    bool isParsedInParallel);
 
  protected:
   void asyncGetNextBlockImpl(Handler handler) override;

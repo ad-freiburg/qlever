@@ -1084,6 +1084,32 @@ TEST(RdfParserTest, multilineComments) {
   forAllParsers(testWithParser, input, expected);
 }
 
+// A comment that ends with a dot looks exactly like the end of a statement, but
+// must not be used as the end of a block, because the statement it interrupts
+// then remains unfinished.
+TEST(RdfParserTest, commentThatEndsWithADot) {
+  std::string filename{gtestCurrentTestName()};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  std::string statement = "<subject> <predicate> <object> .\n";
+  std::string interruptedStatement =
+      "<subject> # A comment that ends with a dot.\n<predicate> <object> .\n";
+  ad_utility::makeOfstream(filename)
+      << statement << interruptedStatement << statement;
+  // A buffer that ends two bytes after the comment, such that the last dot
+  // followed by a newline in the first block is the one inside the comment.
+  auto bufferSize = ad_utility::MemorySize::bytes(
+      statement.size() + interruptedStatement.find('\n') + 3);
+
+  std::vector<TurtleTriple> expected(
+      3, {iri("<subject>"), iri("<predicate>"), iri("<object>")});
+  auto testWithParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    EXPECT_THAT(parseFromFile<Parser>(filename, bufferSize),
+                ::testing::UnorderedElementsAreArray(expected));
+  };
+  forAllParsers(testWithParser);
+}
+
 // Test that exceptions during the turtle parsing are properly propagated to the
 // calling code. This is especially important for the parallel parsers where the
 // actual parsing happens on background threads.
@@ -1116,8 +1142,15 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         (parseFromFile<Parser>(filename, bufferSize)),
         ::testing::AllOf(
-            ::testing::HasSubstr("No statement boundary"),
+            // The input has to be named, see issue #3288.
+            ::testing::HasSubstr(
+                absl::StrCat("Could not split the input \"", filename, "\"")),
+            // What a block may end at, and which part of that rule goes
+            // beyond what the Turtle grammar itself demands.
+            ::testing::HasSubstr("a dot that is followed by a newline"),
+            ::testing::HasSubstr("Turtle itself does not require that newline"),
             ::testing::HasSubstr("use `--parser-buffer-size`"),
+            // These parsers do parse in parallel, so disabling that is a fix.
             ::testing::HasSubstr("use `--parallel-parsing false`")));
     ad_utility::deleteFile(filename);
   };
@@ -1527,7 +1560,7 @@ TEST(RdfParserTest, asyncParallelParserHaltsOnHeaderError) {
     ASSERT_NE(error, nullptr);
     AD_EXPECT_THROW_WITH_MESSAGE(
         std::rethrow_exception(error),
-        ::testing::ContainsRegex("Parse error at byte position 12"));
+        ::testing::ContainsRegex("at byte position 12"));
   };
   forAllAsyncParallelParsers(testWithParser);
 }
@@ -1626,6 +1659,36 @@ TEST(RdfParserTest, asyncSerialParserAdapterEofAfterExhaustion) {
   EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(), std::nullopt);
 }
 
+// Test that the parse errors of all the parsers that read from a file name that
+// file. An index build parses many files at the same time, so without the name
+// an error cannot be attributed to any of them (see issue #3288).
+// _____________________________________________________________________________
+TEST(RdfParserTest, parseErrorNamesTheInputFile) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  ad_utility::makeOfstream(filename) << "<subject> <predicate> .\n";
+  absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
+
+  auto testWithParser = [&filename](auto t) {
+    using Parser = typename decltype(t)::type;
+    AD_EXPECT_THROW_WITH_MESSAGE((parseFromFile<Parser>(filename)),
+                                 ::testing::HasSubstr(absl::StrCat(
+                                     "Parse error in \"", filename, "\"")));
+  };
+  forAllParsers(testWithParser);
+}
+
+// Test that a parser that reads from an unnamed input (for example a term of a
+// SPARQL query) keeps the shorter error message without a file name.
+// _____________________________________________________________________________
+TEST(RdfParserTest, parseErrorOfStringParserHasNoInputName) {
+  Re2Parser parser{encodedIriManager()};
+  parser.setInputStream("<subject> <predicate> .");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parser.parseAndReturnAllTriples(),
+      ::testing::AllOf(::testing::HasSubstr("Parse error at byte position"),
+                       ::testing::Not(::testing::HasSubstr("Parse error in"))));
+}
+
 // Test that a parse error of a parallel parser reports a byte position that is
 // relative to the beginning of the input file, and not to the beginning of the
 // block in which the error occurred. The offset of a block is tracked by
@@ -1660,8 +1723,8 @@ TEST(RdfParserTest, parallelParserReportsFileAbsoluteErrorPosition) {
       }
     };
     AD_EXPECT_THROW_WITH_MESSAGE(
-        drain(), ::testing::HasSubstr(absl::StrCat(
-                     "Parse error at byte position ", expectedPosition, ":")));
+        drain(), ::testing::HasSubstr(
+                     absl::StrCat("at byte position ", expectedPosition, ":")));
   };
   forAllParallelParsers(testWithParser);
 }
@@ -2684,4 +2747,40 @@ TEST(RdfParserTest, findEndOfLastStatement) {
   // The last statement end is found.
   EXPECT_THAT(findEndOfLastStatement("a.\nbc.\ndef"), Optional(Eq(7u)));
   EXPECT_THAT(findEndOfLastStatement("a.\n# comment\n"), Optional(Eq(3u)));
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, findEndOfLastStatementIgnoresComments) {
+  using detail::findEndOfLastStatement;
+  using ::testing::Eq;
+  using ::testing::Optional;
+
+  // A dot inside a comment doesn't end a statement, so the search continues
+  // before the line of that comment.
+  EXPECT_THAT(findEndOfLastStatement("a.\n# A comment.\n"), Optional(Eq(3u)));
+  EXPECT_THAT(findEndOfLastStatement("a.\n# One.\n# Two.\n"), Optional(Eq(3u)));
+  EXPECT_EQ(findEndOfLastStatement("# Only a comment.\n"), std::nullopt);
+  // A dot that is followed by a comment instead of a newline is no match
+  // either.
+  EXPECT_EQ(findEndOfLastStatement("<s> <p> <o> . # A comment\n"),
+            std::nullopt);
+
+  // A `#` that is part of an IRI, of a literal, or of an escape sequence in a
+  // prefixed name doesn't start a comment, so these are all statement ends.
+  auto expectIsCompleteStatement = [](std::string_view input) {
+    EXPECT_THAT(findEndOfLastStatement(input), Optional(Eq(input.size())))
+        << input;
+  };
+  expectIsCompleteStatement("<s> <p> <http://example.org#object> .\n");
+  expectIsCompleteStatement("<s> <p> \"a literal # with a hash\" .\n");
+  expectIsCompleteStatement("<s> <p> 'a literal # with a hash' .\n");
+  expectIsCompleteStatement("<s> <p> \"an escaped quote \\\" # \" .\n");
+  expectIsCompleteStatement("<s> <p> \"a backslash \\\\\" .\n");
+  expectIsCompleteStatement("ex:subject\\#1 <p> <o> .\n");
+  // An IRI or a literal that isn't closed before the dot means that the input
+  // is broken or has a multiline literal. Both are left to the parser, which
+  // reports them much better, so the dot counts as a statement end.
+  expectIsCompleteStatement("<s> <p> <unclosed .\n");
+  expectIsCompleteStatement("<s> <p> \"unclosed .\n");
+  expectIsCompleteStatement("<s> <p> 'unclosed .\n");
 }

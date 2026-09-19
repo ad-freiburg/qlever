@@ -29,10 +29,13 @@ RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
     const EncodedIriManager* encodedIriManager,
     const TripleComponent& defaultGraphIri, RdfParserSettings settings)
     : AsyncRdfParserBase{executor},
-      state_{encodedIriManager, defaultGraphIri, settings},
-      blockSource_{executor, spec.makeAsyncBlockSource(executor, blocksize),
+      state_{encodedIriManager, defaultGraphIri, spec.filename(), settings},
+      blockSource_{executor,
+                   spec.makeAsyncBlockSource(executor, blocksize),
                    detail::findEndOfLastStatement,
-                   std::string{detail::statementBoundaryDescription}},
+                   std::string{detail::blockBoundaryDescription},
+                   spec.filename(),
+                   true},
       blockFetchPermit_{executor, 1} {}
 
 // _____________________________________________________________________________
