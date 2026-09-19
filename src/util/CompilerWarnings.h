@@ -7,8 +7,26 @@
 
 /// Helper macros that allow suppressing specific warnings in certain compiler
 /// versions that turn out to be false positives.
+///
+/// NOTE: Several of the warnings below (`-Wuninitialized`,
+/// `-Wmaybe-uninitialized`, `-Warray-bounds`, `-Wstringop-overflow`) are
+/// emitted by GCC's *middle end*, long after the preprocessor has run. Two
+/// consequences follow, and together they explain where the suppressions in
+/// QLever have to be placed:
+///
+/// * Such a warning is NOT suppressed by the offending header being a system
+///   header (`-isystem`, `/usr/include`), so a false positive inside a
+///   dependency cannot be silenced by the include alone. It has to be disabled
+///   for the whole target instead, see for example the options of the `s2` and
+///   `spatialjoin` targets in the top-level `CMakeLists.txt`.
+/// * It IS suppressed by an explicit `#pragma GCC diagnostic` region, because
+///   GCC walks the inlining chain when it decides whether a warning is
+///   disabled. Wrapping the *definition* of the offending function (or the
+///   `#include` that provides it) in the macros below therefore covers every
+///   translation unit that instantiates it, which is why they are used at
+///   definitions and not at the individual call sites.
 
-#if defined(__GNUC__) && (__GNUC__ >= 11 && __GNUC__ <= 15)
+#if defined(__GNUC__) && (__GNUC__ >= 11 && __GNUC__ <= 16)
 
 // Disable the `maybe-uninitialized` warning, which has many false positives.
 #define DISABLE_UNINITIALIZED_WARNINGS \
