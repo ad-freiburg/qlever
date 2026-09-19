@@ -21,19 +21,12 @@ namespace qlever::constructExport {
 namespace {
 
 // Per-column intermediate state between the three evaluation phases below.
-struct ColumnWork {
-  ColumnIndex columnIdx_;
-  // Resolved values per batch row; cache hits are scattered in phase A, cache
-  // misses in phase C.
-  EvaluatedVariableValues result_;
-  // Unique `Id`s not found in `idCache`, in sorted order; entry `i`
-  // corresponds to `missRows_[i]` and (after phase B) to `missResolved_[i]`.
-  std::vector<Id> missIds_;
-  // For each entry in `missIds_`, the batch row indices holding that `Id`.
-  std::vector<absl::InlinedVector<size_t, 3>> missRows_;
-  // Phase B output: the resolved miss strings, parallel to `missIds_`.
-  std::vector<std::optional<std::pair<std::string, const char*>>> missResolved_;
-};
+// ColumnWork holds intermediate state between evaluation phases.
+// - columnIdx_: the column index being evaluated
+// - result_: resolved variable values for this column (phase A)
+// - missIds_: unique IDs not found in idCache, in sorted order
+// - missRows_: batch row indices for each missed ID
+// - missResolved_: resolved string representations of missed IDs
 
 // Phase A: sort the column, check the cache, scatter hits to
 // `work.result_`, and collect misses into `work.missIds_`/`missRows_`. Pure
