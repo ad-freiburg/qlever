@@ -43,17 +43,6 @@ DistinctGraphs makeDistinctGraphsFromQuads(std::string nquads) {
 }
 
 using Graphs = qlever::index::GraphFilter<TripleComponent>;
-
-// Create a `GraphFilter` that only allows the graphs with the given IRIs.
-Graphs graphWhitelist(const std::vector<std::string_view>& iris) {
-  ad_utility::HashSet<TripleComponent> whitelist;
-  for (std::string_view iri : iris) {
-    whitelist.insert(
-        TripleComponent{ad_utility::triple_component::Iri::fromIriref(iri)});
-  }
-  return Graphs::Whitelist(std::move(whitelist));
-}
-
 }  // namespace
 
 // _____________________________________________________________________________
@@ -239,8 +228,11 @@ TEST(DistinctGraphs, makeAllGraphsExcludesTheBlacklistedDefaultGraph) {
 // _____________________________________________________________________________
 TEST(DistinctGraphs, makeAllGraphsUsesValuesForAWhitelist) {
   auto* qec = ad_utility::testing::getQec();
-  auto tree = DistinctGraphs::makeAllGraphs(qec, Variable{"?g"},
-                                            graphWhitelist({"<g2>", "<g1>"}));
+  auto tree = DistinctGraphs::makeAllGraphs(
+      qec, Variable{"?g"},
+      Graphs::Whitelist(
+          {TripleComponent{TripleComponent::Iri::fromIriref("<g2>")},
+           TripleComponent{TripleComponent::Iri::fromIriref("<g1>")}}));
 
   // A whitelisted graph is part of the dataset even if it contains no triple,
   // so the graphs are not looked up in the index. The order of the hash set is

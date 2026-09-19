@@ -31,16 +31,6 @@ using Vars = std::vector<std::optional<Variable>>;
 using Graphs = qlever::index::GraphFilter<TripleComponent>;
 auto U = Id::makeUndefined();
 using namespace ::testing;
-
-// Create a `GraphFilter` that only allows the graphs with the given IRIs.
-Graphs graphWhitelist(const std::vector<std::string_view>& iris) {
-  ad_utility::HashSet<TripleComponent> whitelist;
-  for (std::string_view iri : iris) {
-    whitelist.insert(
-        TripleComponent{ad_utility::triple_component::Iri::fromIriref(iri)});
-  }
-  return Graphs::Whitelist(std::move(whitelist));
-}
 }  // namespace
 
 // The first bool indicates if binary search should be used (true) or hash map
@@ -2046,7 +2036,8 @@ TEST_P(TransitivePathTest, graphVariableEmptyPathWithRestrictedGraphs) {
       {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}}, left,
       right, 0, std::numeric_limits<size_t>::max(),
       "<a> <b> <c> <a> . <a> <b> <c> <c> .", {Variable{"?g"}},
-      graphWhitelist({"<a>", "<b>"}));
+      Graphs::Whitelist(
+          {TripleComponent{iri("<a>")}, TripleComponent{iri("<b>")}}));
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
