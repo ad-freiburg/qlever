@@ -14,6 +14,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/ChunkedForLoop.h"
+#include "util/ColumnStrippingHelpers.h"
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
@@ -249,4 +250,42 @@ bool Bind::isDeterministicImpl() const {
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
   return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Bind::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  // Collect variables required from subtree.
+  VarsRequiredFromSubtree helper(variables);
+
+  // Check whether bind-target is requested from parent tree. If not, the bind
+  // operation is not needed in the execution-tree and can be erased.
+  bool bindTargetNeeded = true;
+  if (variables.find(_bind._target) != variables.end()) {
+    for (const Variable* bindVar : _bind._expression.containedVariables()) {
+      helper.add(*bindVar);
+    }
+  } else {
+    bindTargetNeeded = false;
+  }
+
+  // Collect all variables required from the subtree
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
+
+  // Continue with the recursion and strip columns of subtree.
+  std::shared_ptr<QueryExecutionTree> subtree =
+      QueryExecutionTree::makeTreeWithStrippedColumns(_subtree,
+                                                      varsRequiredFromSubtree);
+
+  // "Delete" bind operation from the queryExecutionTree, if its target is not
+  // needed.
+  if (bindTargetNeeded == false) {
+    return subtree;
+  }
+
+  // Create query execution tree with Bind-Operation as root-Operation and add
+  // additional stripColumns-Operation if needed.
+  return makeTreeWithOptionalStripOperation<Bind>(
+      getExecutionContext(), variables, _bind._expression.containedVariables(),
+      std::move(subtree), _bind);
 }
