@@ -7,6 +7,7 @@
 #include "./PrefilterExpressionTestHelpers.h"
 #include "engine/Filter.h"
 #include "engine/IndexScan.h"
+#include "engine/Sort.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -41,6 +42,17 @@ std::vector<IdTable> toVector(Result::LazyResult generator) {
 // Shorthand helper function
 ad_utility::triple_component::Iri iri(std::string_view string) {
   return TripleComponent::Iri::fromIriref(string);
+}
+
+// Return true iff the root operation of `tree` is of type `Op`.
+template <typename Op>
+bool rootIs(const QueryExecutionTree& tree) {
+  return std::dynamic_pointer_cast<Op>(tree.getRootOperation()) != nullptr;
+}
+
+// Return the only child of `tree`. Throws if `tree` has no children.
+const QueryExecutionTree& onlyChild(const QueryExecutionTree& tree) {
+  return *tree.getRootOperation()->getChildren().at(0);
 }
 
 // _____________________________________________________________________________
@@ -291,4 +303,86 @@ TEST(Filter, isDeterministic) {
   Filter nonDetFilter{
       qec, makeTree(), {std::make_unique<RandomExpression>(), "RAND()"}};
   EXPECT_FALSE(nonDetFilter.isDeterministic());
+}
+
+// _____________________________________________________________________________
+TEST(Filter, makeSortedTree) {
+  using namespace makeSparqlExpression;
+  auto I = ad_utility::testing::IntId;
+  QueryExecutionContext* qec = ad_utility::testing::getQec();
+
+  auto makeFilter = [qec, I](std::shared_ptr<QueryExecutionTree> subtree) {
+    return Filter{
+        qec, std::move(subtree), {ltSprql(Variable{"?z"}, I(5)), "?z < 5"}};
+  };
+  auto makeValues = [qec, I](std::vector<ColumnIndex> sortedColumns) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{1, 2}}, I),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
+        false, std::move(sortedColumns));
+  };
+  // Check that `filter.makeSortedTree(sortColumns)` pushed the sorting down to
+  // the child, and return the resulting tree.
+  auto checkPushedDown = [](const Filter& filter,
+                            const std::vector<ColumnIndex>& sortColumns) {
+    auto tree = filter.makeSortedTree(sortColumns);
+    EXPECT_TRUE(tree.has_value());
+    if (tree.has_value()) {
+      EXPECT_TRUE(rootIs<Filter>(*tree.value()));
+      EXPECT_TRUE(tree.value()->getRootOperation()->isSortedBy(sortColumns));
+      // A `Filter` doesn't change the columns of its child.
+      EXPECT_EQ(tree.value()->getVariableColumns(),
+                filter.getSubtree()->getVariableColumns());
+    }
+    return tree;
+  };
+
+  // An `IndexScan` can change its sort order by changing its permutation, so
+  // the sorting is pushed down into the scan and no `Sort` is required at all.
+  {
+    // A prefiltered `IndexScan` is tied to its permutation and hence cannot be
+    // re-sorted, so we disable the prefilter here.
+    auto rtp = setRuntimeParameterForTest<
+        &RuntimeParameters::enablePrefilterOnIndexScans_>(false);
+    auto scan = ad_utility::makeExecutionTree<IndexScan>(
+        qec, Permutation::PSO,
+        SparqlTripleSimple{Variable{"?x"}, iri("<p>"), Variable{"?z"}});
+    ASSERT_EQ(scan->resultSortedOn(), (std::vector<ColumnIndex>{0, 1}));
+    auto filter = makeFilter(scan);
+
+    // The `Filter` already is sorted by `{0}`, so requesting that sort order
+    // violates the precondition of `makeSortedTree`.
+    EXPECT_THROW(filter.makeSortedTree({0}), ad_utility::Exception);
+
+    auto tree = checkPushedDown(filter, {1});
+    ASSERT_TRUE(tree.has_value());
+    // Only the sort order changed, the scan still is a scan.
+    EXPECT_EQ(tree.value()->resultSortedOn(), (std::vector<ColumnIndex>{1, 0}));
+    EXPECT_TRUE(rootIs<IndexScan>(onlyChild(*tree.value())));
+  }
+
+  // A `ValuesForTesting` cannot change its sort order, so an explicit `Sort` is
+  // required. That `Sort` is not pushed below the `Filter`, because sorting
+  // only the rows that pass the filter is cheaper.
+  {
+    auto filter = makeFilter(makeValues({0}));
+    EXPECT_FALSE(filter.makeSortedTree({1}).has_value());
+  }
+
+  // If the child already is a `Sort`, the sorting is pushed down, because
+  // re-sorting the child doesn't add another `Sort`, but only changes the sort
+  // order of the existing one.
+  {
+    auto sortedValues = ad_utility::makeExecutionTree<Sort>(
+        qec, makeValues({}), std::vector<ColumnIndex>{1});
+    auto filter = makeFilter(sortedValues);
+    ASSERT_EQ(filter.resultSortedOn(), (std::vector<ColumnIndex>{1}));
+
+    auto tree = checkPushedDown(filter, {0});
+    ASSERT_TRUE(tree.has_value());
+    // The `Sort` of the child was replaced instead of stacking a second `Sort`
+    // on top of it.
+    ASSERT_TRUE(rootIs<Sort>(onlyChild(*tree.value())));
+    EXPECT_FALSE(rootIs<Sort>(onlyChild(onlyChild(*tree.value()))));
+  }
 }
