@@ -15,6 +15,8 @@
 #include <utility>
 
 #include "engine/CallFixedSize.h"
+#include "engine/CartesianProductJoin.h"
+#include "engine/DistinctGraphs.h"
 #include "engine/EmptyPath.h"
 #include "engine/IndexScan.h"
 #include "engine/TransitivePathBinSearch.h"
@@ -71,17 +73,13 @@ TransitivePathBase::TransitivePathBase(
               qec, makeInternalVariable("x"), activeGraphs_, graphVariable_),
           0);
     } else if (!startingSide.isVariable()) {
-      // TODO<RobinTF> According to the SPARQL standard there shouldn't be an
-      // existence check at all: A value should simply be matched once in every
-      // graph, even if it doesn't occur in the dataset. Only the invariants of
-      // the transitive path implementations (like always supplying a graph id)
-      // currently require this. See
-      // https://github.com/ad-freiburg/qlever/pull/2911 for the operation that
-      // will make this obsolete.
-      startingSide.treeAndCol_.emplace(
-          checkValueExistsInGraph(qec, activeGraphs_, graphVariable_,
-                                  startingSide.value_),
-          0);
+      // According to the SPARQL standard a hardcoded value is matched once in
+      // every graph, even if it doesn't occur in the dataset at all, so we
+      // simply feed the value itself into the transitive path.
+      auto tree = makeStartingPoint(qec, activeGraphs_, graphVariable_,
+                                    startingSide.value_);
+      auto column = tree->getVariableColumn(makeInternalVariable("x"));
+      startingSide.treeAndCol_.emplace(std::move(tree), column);
     }
   }
 
@@ -101,15 +99,23 @@ TransitivePathBase::TransitivePathBase(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> TransitivePathBase::checkValueExistsInGraph(
-    QueryExecutionContext* qec, Graphs activeGraphs,
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeStartingPoint(
+    QueryExecutionContext* qec, const Graphs& activeGraphs,
     const std::optional<Variable>& graphVariable,
     const TripleComponent& tripleComponent) {
-  auto variable = makeInternalVariable("x");
-  auto valuesClause = makeValuesForSingleValue(qec, variable, tripleComponent);
-  return ad_utility::makeExecutionTree<EmptyPath>(
-      qec, std::move(variable), std::move(activeGraphs), graphVariable,
-      EmptyPath::CheckedChild{std::move(valuesClause), 0});
+  auto tree =
+      makeValuesForSingleValue(qec, makeInternalVariable("x"), tripleComponent);
+  if (graphVariable.has_value()) {
+    // The transitive path implementations require a graph id for every starting
+    // point, so the single value has to be combined with every graph it is
+    // matched in.
+    tree = ad_utility::makeExecutionTree<CartesianProductJoin>(
+        qec,
+        std::vector<std::shared_ptr<QueryExecutionTree>>{
+            std::move(tree), DistinctGraphs::makeAllGraphs(
+                                 qec, graphVariable.value(), activeGraphs)});
+  }
+  return tree;
 }
 
 // _____________________________________________________________________________
@@ -568,7 +574,20 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
 bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
-  return variable == lhs_.value_ || variable == rhs_.value_;
+  if (variable != lhs_.value_ && variable != rhs_.value_) {
+    // The payload columns of the bound side are copied over verbatim, so they
+    // inherit the guarantee of that operation. The graph column ends up here
+    // too (unless it is one of the two sides), but `subtree_` always provides
+    // it and reports `false` for it, because in RDF only subjects and objects
+    // are nodes (see `IndexScan::columnOriginatesFromGraphOrUndef`), so the
+    // answer stays `false` for graphs as it has to.
+    return Operation::columnOriginatesFromGraphOrUndef(variable);
+  }
+  // The empty path copies a hardcoded value over to the other side without
+  // checking it against the knowledge graph (see the constructor), so in that
+  // case the remaining variable may be bound to a value that is not part of the
+  // knowledge graph.
+  return minDist_ != 0 || (lhs_.isVariable() && rhs_.isVariable());
 }
 
 // _____________________________________________________________________________
