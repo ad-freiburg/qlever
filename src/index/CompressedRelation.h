@@ -685,6 +685,13 @@ class CompressedRelationWriter {
   // same `col0Id`.
   void addBlockForLargeRelation(Id col0Id, BlockToWrite relation);
 
+  // Write the `block` of a large relation as blocks of about `blocksize()`
+  // rows each (see `addBlockForLargeRelation`). This lets the source of the
+  // blocks (the twin sorter of a large relation, see
+  // `addCompleteLargeRelation`) work with much larger blocks than the ones
+  // that end up in the permutation, which has a per-block cost.
+  void writeLargeRelationBlockInSlices(Id col0Id, IdTable block);
+
   // Enable the recycling of block buffers, see `recycledBlocks_` above, with a
   // pool that holds at most `maxNumRecycledBlocks` buffers. That number should
   // be the number of buffers that the caller has in flight at the same time,
