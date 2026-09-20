@@ -81,7 +81,8 @@
 
 ### 5. Compatibility Matrix
 * **Supported in V2:** `SELECT`, `CONSTRUCT`, SPARQL graph pattern scans (SPO, POS, PSO, etc.), join operations, value filters, and all export MIME types (`text/tab-separated-values`, `text/csv`, `text/turtle`, `application/n-triples`).
-* **Fallback to V1:** Distributed federated SPARQL queries (`SERVICE`), external Python plugins.
+* **Fallback to V1:** Distributed federated SPARQL queries (`SERVICE`), external Python plugins, distributed aggregation, `GROUP BY` / aggregations, `ORDER BY` without index ordering, `DISTINCT` / `REDUCED`, `OPTIONAL`, `UNION`, `MINUS`, subqueries, and any other global or blocking operator the plan eligibility check rejects.
+* **Request-signal precedence:** an explicit query parameter (`export-engine=v2` / `fast-export=1`) overrides the `X-QLever-Export-Engine` header, which overrides the server CLI default. Plan eligibility always gates: an unsupported plan routes to V1 no matter which signal asked for V2.
 
 ---
 
@@ -157,7 +158,7 @@
 * **Components:**
   - `src/engine/export_v2/MonomorphicSerializers.h`
   - `src/util/FastIntToString.h`
-  - `src/engine/SimdEscapeClassifier.h`
+  - `src/engine/export_v2/SimdEscapeClassifier.h`
   - `src/util/SwarDelimiterPacker.h`
 * **Mechanics:**
   1. The query planner analyzes the output column types (e.g. `Triple<IRI, IRI, LITERAL>`).
@@ -168,15 +169,17 @@
   5. Delimiters (tabs, quotes, angle brackets, newlines) are packed into 64-bit unsigned integers via `SwarDelimiterPacker` and written in single 64-bit store instructions.
 
 ### 3. Performance Rationale
-* **Branch Elimination:** Branch count drops from ~12 branches/row down to 0 branches/row on the fast path. Branch misprediction rate drops to <0.2%.
-* **High IPC (Instructions Per Cycle):** Compiler unrolling achieves sustained **>2.85 IPC** on modern x86-64 microarchitectures.
+All figures below are design targets, not measured results: the
+microbenchmarks that would validate them do not ship yet.
+* **Branch Elimination (target):** Branch count drops from ~12 branches/row down to 0 branches/row on the fast path. Branch misprediction rate drops to <0.2%.
+* **High IPC (Instructions Per Cycle, target):** Compiler unrolling achieves sustained **>2.75 IPC** on modern x86-64 microarchitectures (same target as the master specification Definition of Done).
 
 ### 4. Benchmarking & Verification Plan
-* **Microbenchmarks:**
-  - `FastNumberFormatterBenchmark` (Validated: >180M nums/sec)
-  - `SimdEscapeBenchmark` (Validated: 13.94 GB/s AVX2)
-  - `BranchlessDispatcherBenchmark` (Validated: 42.4M terms/sec)
-  - `MonomorphicSerializerBenchmark` (Validated: 2.90 IPC)
+* **Microbenchmarks (planned, not yet shipping):**
+  - Number formatting throughput (target: >180M nums/sec)
+  - `SimdEscapeClassifierBenchmark` (target: 13.94 GB/s AVX2)
+  - Type-dispatch throughput (target: 42.4M terms/sec)
+  - Monomorphic serialization (target: >2.75 IPC, <0.25% branch misprediction)
 * **Metrics:** Branch misprediction rate, CPU cycles per row, formatted throughput (MB/s).
 
 ---
@@ -220,6 +223,7 @@
      - Direct pointers to the arena string spans.
   3. `InPlaceHttpChunkFraming` pre-reserves 16 bytes at the buffer head and writes the HTTP hex chunk length (e.g. `1a4f0\r\n`) in-place.
   4. The complete chunk is transmitted via a single `::writev()` or `io_uring_prep_send_zc` call.
+  5. **Lifetime contract (Phase 4 x Phase 5):** every `iovec` entry borrows its bytes (arena span, static delimiter, or in-place frame header). The assembled chunk object retains shared ownership of every referenced arena page, and neither an arena page nor a ring slot may be recycled until the send that references it has observably completed (writev return or send_zc completion). In-place framing writes only into headroom owned by the same chunk.
 
 ### 3. Performance Rationale
 * **Zero Intermediate Copies:** Memory copying drops from 3 intermediate copies per term to **0 copies**.
@@ -266,7 +270,7 @@
   1. Maintains two page-aligned 4MB buffer slots (`Slot A` and `Slot B`).
   2. While `Slot A` is being transmitted to the client socket asynchronously (via non-blocking socket I/O, Boost.Asio coroutine, or `io_uring`), the CPU immediately begins decompressing, resolving, and formatting `Slot B`.
   3. When `Slot B` is full, the pipeline waits for `Slot A`'s transmission completion (which typically finished long before), then seamlessly flips the active slots.
-  4. **Strict Single-Core Concurrency:** All operations execute on the single query worker thread using cooperative asynchronous suspension, honoring single-core supervisor constraints.
+  4. **Elastic Concurrency:** Chunk formatting may additionally run on leased helper threads while the server is idle (single-core default otherwise); helpers surrender in less than 1 millisecond when foreground queries arrive. See the master specification section 3.
   5. **Backpressure Safety:** If the network socket is choked by a slow client, chunk generation suspends until the socket drains, preventing unbounded memory growth.
 
 ### 3. Performance Rationale

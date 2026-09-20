@@ -229,7 +229,7 @@ To enable independent implementation and clean reviewability, the V2 engine is d
 * **Task Description:**
   - Enforce single-core execution when concurrent queries exist.
   - Implement dynamic work-stealing morsel leasing when server is completely idle.
-  - Implement immediate preemption and worker thread surrender on new query arrival (<500μs latency).
+  - Implement immediate preemption and worker thread surrender on new query arrival (<1ms latency, consistent with the <1 millisecond bound derived in section 3 from the 200-500μs morsel bound).
 * **Definition of Done:** Multi-client concurrency tests verify zero head-of-line blocking or latency degradation for interactive queries.
 
 ---

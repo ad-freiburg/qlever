@@ -66,9 +66,9 @@ To maintain strict backward compatibility with 100% of existing queries and test
 
 1. **Phase 1: Ingress Routing & Feature Gate** (`src/engine/ExportPipelineRouter.h`)
 2. **Phase 2: Push-Based Vector Stream Execution** (`src/engine/export_v2/VectorStreamSource.h`)
-3. **Phase 3: Monomorphic Template Schema Specialization** (`src/engine/export_v2/Monomorphic.h`)
-4. **Phase 4: Zero-Copy Arena Scatter-Gather** (`src/engine/export_v2/ScatterGatherStreamer.h`)
-5. **Phase 5: Double-Buffered Asynchronous Backpressure Ring** (`src/engine/export_v2/Pipeline.h`)
+3. **Phase 3: Monomorphic Template Schema Specialization** (`src/engine/export_v2/MonomorphicSerializers.h`)
+4. **Phase 4: Zero-Copy Arena Scatter-Gather** (`src/engine/export_v2/ScatterGatherArenaStreamer.h`)
+5. **Phase 5: Double-Buffered Asynchronous Backpressure Ring** (`src/engine/export_v2/AsyncChunkPipeline.h`)
 6. **Phase 6: End-to-End Server Integration & Differential Benchmarks** (`benchmark/EndToEndExportBenchmark.cpp`)
 
 ---
@@ -78,4 +78,4 @@ To maintain strict backward compatibility with 100% of existing queries and test
 1. **Information Hiding:** Internal SIMD registers, chunk rings, and `iovec` arrays are completely encapsulated within `ExportExecutionEngineV2`.
 2. **Zero Accounting Leakage:** Ring slot indices, partial buffer pointers, and backpressure state never leak outside the streamer.
 3. **Defining Errors Out of Existence:** Unsupported query shapes route cleanly to V1 at planning time.
-4. **Single-Core Discipline:** Interleaved compute and I/O runs asynchronously on the single query worker thread using non-blocking I/O.
+4. **Elastic Concurrency Discipline:** Single-core by default (interleaved compute and I/O run asynchronously on the single query worker thread using non-blocking I/O); when the server is idle the export coordinator may lease up to N-1 helper threads, which surrender in less than 1 millisecond on new query arrival. See the master specification section 3.
