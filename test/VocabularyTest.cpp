@@ -316,6 +316,21 @@ TEST(VocabularyTest, LookupBatch) {
   EXPECT_THAT((*dupResult), ::testing::ElementsAre("ab", "ab", "a"));
 }
 
+// The compressed on-disk vocabulary serves `lookupBatch` from one underlying
+// batch plus per-word decompression (the io_uring ring path for on-disk
+// words). Shuffled indices with duplicates must resolve exactly like
+// sequential single lookups, in input order.
+TEST(VocabularyTest, LookupBatchCompressedBatched) {
+  auto v = createExampleVocabulary();
+  std::vector<size_t> indices{3, 1, 3, 0, 2, 1, 0, 3, 2, 2, 1, 0};
+  auto result = v->lookupBatch(indices);
+  EXPECT_THAT((*result),
+              ::testing::ElementsAre("car", "ab", "car", "a", "ba", "ab", "a",
+                                     "car", "ba", "ba", "ab", "a"));
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*v, result,
+                                                                indices);
+}
+
 // Each streamed result must equal the eager `lookupBatch` for that batch's
 // indices, and the batches must be yielded in input order.
 TEST(VocabularyTest, LookupBatchesStreamed) {

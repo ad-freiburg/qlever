@@ -61,7 +61,38 @@ class VocabularyInternalExternal {
 
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    AD_CONTRACT_CHECK(!indices.empty());
+    // Serve every index from the in-RAM vocabulary when present; batch all
+    // remaining indices into a single lookup on the external (on-disk)
+    // vocabulary, which serves them from its io_uring ring pool. Results keep
+    // input order, exactly like sequential single lookups.
+    auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+    data->buffer().resize(indices.size());
+    std::vector<size_t> missPositions;
+    std::vector<size_t> missIndices;
+    missPositions.reserve(indices.size());
+    missIndices.reserve(indices.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+      if (auto hit = internalVocab_[indices[i]]; hit.has_value()) {
+        data->buffer()[i] = std::string{hit.value()};
+      } else {
+        missPositions.push_back(i);
+        missIndices.push_back(indices[i]);
+      }
+    }
+    if (!missIndices.empty()) {
+      auto external = externalVocab_.lookupBatch(missIndices);
+      for (size_t m = 0; m < missIndices.size(); ++m) {
+        data->buffer()[missPositions[m]] = std::string{(*external)[m]};
+      }
+    }
+    // Build the views after the buffer is complete, so no reallocation can
+    // move the bytes the views point into.
+    data->views().reserve(data->buffer().size());
+    for (const auto& word : data->buffer()) {
+      data->views().emplace_back(word);
+    }
+    return StringVectorVocabBatchLookupData::asResult(std::move(data));
   }
 
   //____________________________________________________________________________
