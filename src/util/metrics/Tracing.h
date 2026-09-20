@@ -195,9 +195,9 @@ void setRequestAttributes(opentelemetry::trace::Span& span,
   };
   setIfPresent(semconv::user_agent::kUserAgentOriginal,
                boost::beast::http::field::user_agent);
-  // The client's address as seen by a reverse proxy in front of QLever, which
-  // is the only place it is available; the socket peer is the proxy.
-  // TODO: use the IP as a default.
+  // The socket peer address is not available and also isn't meaningful for a
+  // common QLever setup which is behind a reverse proxy. Use the `X-Real-IP` if
+  // available.
   std::string_view clientIp = request.base()["X-Real-IP"];
   if (!clientIp.empty()) {
     span.SetAttribute(semconv::client::kClientAddress, clientIp);
