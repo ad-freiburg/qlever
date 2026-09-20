@@ -1252,6 +1252,32 @@ std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
 }
 
 // ___________________________________________________________________________
+void IndexImpl::recordCurrentFormatVersionInConfigurationFile() {
+  std::string filename = onDiskBase_ + CONFIGURATION_FILE;
+  try {
+    if (!ql::filesystem::exists(filename)) {
+      return;
+    }
+    auto configuration = fileToJson<nlohmann::json>(filename);
+    if (!configuration.contains("index-format-version") ||
+        configuration["index-format-version"]
+                .get<qlever::IndexFormatVersion>() !=
+            qlever::previousIndexFormatVersion) {
+      return;
+    }
+    configuration["index-format-version"] = qlever::indexFormatVersion;
+    ad_utility::makeOfstream(filename) << configuration.dump(4) << std::endl;
+    configurationJson_["index-format-version"] = qlever::indexFormatVersion;
+    AD_LOG_INFO << "Recorded the current index format in the file \""
+                << filename << "\"" << std::endl;
+  } catch (const std::exception& e) {
+    AD_LOG_WARN << "Could not record the current index format in the file \""
+                << filename << "\" (" << e.what()
+                << "), the index is used anyway" << std::endl;
+  }
+}
+
+// ___________________________________________________________________________
 void IndexImpl::readConfiguration() {
   applyConfiguration(
       fileToJson<nlohmann::json>(onDiskBase_ + CONFIGURATION_FILE));
@@ -1288,7 +1314,31 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
     auto indexFormatVersion = static_cast<qlever::IndexFormatVersion>(
         configurationJson_["index-format-version"]);
     const auto& currentVersion = qlever::indexFormatVersion;
-    if (indexFormatVersion != currentVersion) {
+    // An index in exactly the format that the `qlever-upgrade-index` binary
+    // upgrades from is accepted if the conversion would not change it (see
+    // `indexNeedsNoConversion`).
+    auto isAcceptedPreviousFormat = [this, &indexFormatVersion,
+                                     &currentVersion]() {
+      using namespace qlever::indexFormatConverter;
+      if (indexFormatVersion != sourceVersion ||
+          currentVersion != targetVersion ||
+          !indexNeedsNoConversion(onDiskBase_)) {
+        return false;
+      }
+      AD_LOG_INFO << "The index is in the previous index format (PR = "
+                  << indexFormatVersion.prNumber_ << ", Date = "
+                  << indexFormatVersion.date_.toStringAndType().first
+                  << ") and this version of QLever uses the format (PR = "
+                  << currentVersion.prNumber_
+                  << ", Date = " << currentVersion.date_.toStringAndType().first
+                  << "). That is fine, because the only difference between "
+                     "the two formats is the encoding of geo points, of "
+                     "which this index has none"
+                  << std::endl;
+      recordCurrentFormatVersionInConfigurationFile();
+      return true;
+    };
+    if (indexFormatVersion != currentVersion && !isAcceptedPreviousFormat()) {
       if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
         AD_LOG_ERROR
             << "The version of QLever you are using is too old for this "
