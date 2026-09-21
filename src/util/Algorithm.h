@@ -279,8 +279,8 @@ CPP_template(typename ForwardIterator, typename Tp,
 // carrying the previous result as the hint.
 CPP_template(typename RandomIt, typename Tp, typename Compare)(
     requires ql::concepts::random_access_iterator<RandomIt>) constexpr RandomIt
-    gallop_lower_bound_iterator(RandomIt first, RandomIt last, const Tp& val,
-                                Compare comp, RandomIt hint) {
+    gallop_lower_bound_iterator([[maybe_unused]] RandomIt first, RandomIt last,
+                                const Tp& val, Compare comp, RandomIt hint) {
   using DistanceType = typename std::iterator_traits<RandomIt>::difference_type;
   RandomIt lo = hint;
   DistanceType step = 1;
@@ -303,8 +303,8 @@ CPP_template(typename RandomIt, typename Tp, typename Compare)(
 // before the answer.
 CPP_template(typename RandomIt, typename Tp, typename Compare)(
     requires ql::concepts::random_access_iterator<RandomIt>) constexpr RandomIt
-    gallop_upper_bound_iterator(RandomIt first, RandomIt last, const Tp& val,
-                                Compare comp, RandomIt hint) {
+    gallop_upper_bound_iterator([[maybe_unused]] RandomIt first, RandomIt last,
+                                const Tp& val, Compare comp, RandomIt hint) {
   using DistanceType = typename std::iterator_traits<RandomIt>::difference_type;
   RandomIt lo = hint;
   DistanceType step = 1;
@@ -330,23 +330,21 @@ CPP_template(typename RandomIt, typename Tp, typename Compare)(
 // `first`, because such a query may lie before the hint. Callers distinguish
 // exact hits from holes by comparing each result against the query.
 CPP_template(typename RandomIt, typename QueryRange)(
-    requires ql::concepts::random_access_iterator<RandomIt>) std::vector<size_t>
-    batch_lower_bound_with_hints(RandomIt first, RandomIt last,
-                                 const QueryRange& queries) {
+    requires ql::concepts::random_access_iterator<RandomIt>)
+    std::vector<size_t> batch_lower_bound_with_hints(
+        RandomIt first, RandomIt last, const QueryRange& queries) {
   // `remove_const_t` because the value type of e.g. `ql::span<const size_t>`
   // is `const size_t`, which must not be copied into the sorted query pairs.
-  using QueryType =
-      std::remove_const_t<ql::ranges::range_value_t<QueryRange>>;
+  using QueryType = std::remove_const_t<ql::ranges::range_value_t<QueryRange>>;
   std::vector<std::pair<QueryType, size_t>> sortedQueries;
   sortedQueries.reserve(ql::ranges::size(queries));
   size_t index = 0;
   for (const auto& query : queries) {
     sortedQueries.emplace_back(query, index++);
   }
-  ql::ranges::sort(sortedQueries,
-                   [](const auto& a, const auto& b) {
-                     return a.first < b.first;
-                   });
+  ql::ranges::sort(sortedQueries, [](const auto& a, const auto& b) {
+    return a.first < b.first;
+  });
   std::vector<size_t> result(sortedQueries.size());
   if (sortedQueries.empty()) {
     return result;
