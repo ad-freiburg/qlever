@@ -72,6 +72,7 @@
 #include <variant>
 
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/http/HttpClient.h"
 
 namespace {
@@ -245,14 +246,6 @@ using BodyChunk = std::optional<std::string>;
 using Step = std::variant<ResponseHead, BodyChunk>;
 using StepPromise = std::promise<Step>;
 
-// The head or the chunk that the given step has to be at this point of the
-// protocol: the head comes first, and everything after it is a chunk.
-template <typename Kind>
-Kind& stepAs(Step& step) {
-  AD_CORRECTNESS_CHECK(std::holds_alternative<Kind>(step));
-  return std::get<Kind>(step);
-}
-
 // The thread that performs the requests, created on first use and then alive
 // until the process exits. Deliberately not the main runtime thread, which
 // might itself be the thread that waits, for example when a query is run from
@@ -280,19 +273,18 @@ pthread_t networkThread() {
   return thread;
 }
 
-// Hand `work` over to the network thread and return right away. False if that
-// thread could not be created.
-[[nodiscard]] bool runOnNetworkThread(std::function<void()> work) {
+// Hand `work` over to the network thread and return right away. Throws if that
+// thread cannot be reached, in which case `work` never runs and is destroyed
+// right here.
+void runOnNetworkThread(std::function<void()> work) {
   // Deliberately never destroyed: `em_proxying_queue_destroy` frees the queue
   // and its pending tasks without draining them, and the network thread
   // outlives the static objects of the process, so it could still run a task
   // that a request destroyed shortly before the exit left behind.
   static absl::NoDestructor<emscripten::ProxyingQueue> queue;
-  return queue->proxyAsync(networkThread(), std::move(work));
-}
-
-[[noreturn]] void throwNoNetworkThread() {
-  AD_THROW("Could not reach the thread that performs the HTTP requests");
+  if (!queue->proxyAsync(networkThread(), std::move(work))) {
+    AD_THROW("Could not reach the thread that performs the HTTP requests");
+  }
 }
 
 // Take the next step of `response` and report what it yielded through
@@ -333,16 +325,37 @@ val performStep(val response, std::string url,
 }
 
 // Give up on a response and destroy it. Both may only happen on the network
-// thread, so both are proxied there. If it cannot be reached, it never came up
-// and there is nothing to give up on.
+// thread, so both are proxied there.
 struct GiveUpOnResponse {
-  void operator()(val* response) const {
-    static_cast<void>(runOnNetworkThread([response]() {
-      response->call<void>("cancel");
-      delete response;
-    }));
+  void operator()(val* response) const noexcept {
+    ad_utility::ignoreExceptionIfThrows(
+        [response]() {
+          runOnNetworkThread([response]() {
+            response->call<void>("cancel");
+            std::default_delete<val>{}(response);
+          });
+        },
+        "An HTTP request whose response nobody reads any more was therefore "
+        "not cancelled; its connection stays open until the process exits.");
   }
 };
+
+// Owns the generator over one response, see `qleverFetch`.
+using ResponsePtr = std::unique_ptr<val, GiveUpOnResponse>;
+
+// Start the request and take ownership of the generator over its response.
+// Throws if the network thread cannot be reached, in which case nothing was
+// started.
+ResponsePtr startRequestOnNetworkThread(RequestDescription description) {
+  // Plainly owned until the hand-over has succeeded: an `undefined` value
+  // belongs to no thread and may therefore be destroyed right here.
+  auto response = std::make_unique<val>(val::undefined());
+  runOnNetworkThread(
+      [response = response.get(), description = std::move(description)]() {
+        *response = startRequest(description);
+      });
+  return ResponsePtr{response.release()};
+}
 
 // A request that is being performed, as the requesting thread sees it. The
 // generator over its response may only be touched on the network thread, so
@@ -351,37 +364,26 @@ struct GiveUpOnResponse {
 // not keep its connection open.
 class Request {
  private:
-  std::unique_ptr<val, GiveUpOnResponse> response_;
   // Only for the message of a request that fails.
   std::string url_;
+  ResponsePtr response_;
 
  public:
   // Start the request. Throws if the network thread cannot be reached, in which
   // case nothing was started.
-  explicit Request(RequestDescription description) : url_{description.url_} {
-    // Plainly owned until the hand-over has succeeded: an `undefined` value
-    // belongs to no thread and may therefore be destroyed right here.
-    auto response = std::make_unique<val>(val::undefined());
-    if (!runOnNetworkThread([response = response.get(),
-                             description = std::move(description)]() {
-          *response = startRequest(description);
-        })) {
-      throwNoNetworkThread();
-    }
-    response_.reset(response.release());
-  }
+  explicit Request(RequestDescription description)
+      : url_{description.url_},
+        response_{startRequestOnNetworkThread(std::move(description))} {}
 
   // Take the next step of the request and return what it yielded. Throws if the
   // request failed, or if the query was cancelled while we waited.
   Step nextStep(const ad_utility::SharedCancellationHandle& handle) const {
     auto promise = std::make_shared<StepPromise>();
     std::future<Step> step = promise->get_future();
-    if (!runOnNetworkThread([response = response_.get(), url = url_,
-                             promise = std::move(promise)]() {
-          performStep(*response, url, promise);
-        })) {
-      throwNoNetworkThread();
-    }
+    runOnNetworkThread([response = response_.get(), url = url_,
+                        promise = std::move(promise)]() {
+      performStep(*response, url, promise);
+    });
     // Waiting in intervals rather than for the whole step is what lets a
     // cancelled query stop even when the endpoint never answers.
     while (true) {
@@ -404,7 +406,7 @@ cppcoro::generator<ql::span<std::byte>> readResponseBody(
     Request request, ad_utility::SharedCancellationHandle handle) {
   while (true) {
     Step step = request.nextStep(handle);
-    BodyChunk& chunk = stepAs<BodyChunk>(step);
+    BodyChunk& chunk = std::get<BodyChunk>(step);
     if (!chunk.has_value()) {
       co_return;
     }
@@ -464,9 +466,11 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
 
   // Wait for the head of the response; a request that fails throws here.
   Step step = request.nextStep(handle);
-  ResponseHead& head = stepAs<ResponseHead>(step);
+  ResponseHead& head = std::get<ResponseHead>(step);
   return {.status_ = head.status_,
           .contentType_ = std::move(head.contentType_),
+          // Deliberately empty, see the note at the top of this file.
+          .location_ = {},
           .body_ = readResponseBody(std::move(request), std::move(handle))};
 }
 
