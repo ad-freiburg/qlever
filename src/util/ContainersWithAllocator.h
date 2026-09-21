@@ -18,14 +18,23 @@
 
 #include "util/Allocator.h"
 
-// This file contains, in the `qlm` namespace ( roughly `QLever memory`),
+// This file contains, in the `qlm` namespace (roughly `QLever memory`),
 // aliases for containers from the standard library with their allocator rebound
 // to `qlever::Allocator`. This is similar to the `std::pmr` namespace for
 // polymorphic allocators.
-
-// Note: The namespace name `qlm` intentionally has three letters, same as
+//
+// NOTE 1: The namespace name `qlm` intentionally has three letters, same as
 // `std`, so e.g. changing a `std::vector` to a `qlm::vector` will not trigger a
 // reformatting.
+//
+// NOTE 2: The older aliases `ad_utility::VectorWithMemoryLimit`,
+// `HashMapWithMemoryLimit` and `HashSetWithMemoryLimit` serve the same purpose
+// for a vector, a hash map and a hash set. `VectorWithMemoryLimit` is a class
+// (not a plain alias) because a `std::vector` with a non-default-constructible
+// allocator does not work with `ql::ranges` on libc++ (see the comment in
+// `util/VectorWithMemoryLimit.h`). The same caveat applies to `qlm::vector`,
+// so prefer `VectorWithMemoryLimit` for a vector that is passed to `ql::ranges`
+// algorithms or views.
 namespace qlm {
 
 template <typename T>

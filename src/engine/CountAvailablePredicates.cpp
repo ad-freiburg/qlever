@@ -284,7 +284,7 @@ void CountAvailablePredicates::computePatternTrick(
 
   // flatten into a vector, to make iterable
   AD_LOG_DEBUG << "Converting PatternMap to vector" << std::endl;
-  qlm::vector<std::pair<size_t, size_t>> patternVec{
+  const qlm::vector<std::pair<size_t, size_t>> patternVec{
       patternCounts.begin(), patternCounts.end(), dynResult->getAllocator()};
 
   // Gather the statistics, and check that all the pattern indices are valid.

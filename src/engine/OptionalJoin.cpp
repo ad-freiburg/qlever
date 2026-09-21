@@ -15,7 +15,6 @@
 #include "global/RuntimeParameters.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
-#include "util/ContainersWithAllocator.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
@@ -45,7 +44,6 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
   bool rightHasUndefColumn = false;
   size_t numUndefColumnsLeft = 0;
   ColumnIndex undefColumnLeftIndex = 0;
-  qlm::vector<bool> leftUndefJoinCols{allocator()};
   for (size_t i = 0; i < _joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = _joinColumns.at(i);
     auto leftIt = _left->getVariableAndInfoByColumnIndex(leftCol);
