@@ -52,10 +52,10 @@ jobs:
             toolchain: clang16
             build-type: RelWithDebInfo
             extra-flags: "-fsanitize=undefined"
-          - image: clang17
-            toolchain: clang17
-            build-type: Debug
-            extra-flags: "-fsanitize=thread -O1 -g -D_NO_TIMING_TESTS=ON"
+          # NOTE: no TSan leg here. ThreadSanitizer aborts with "unexpected
+          # memory mapping" unless the host sets vm.mmap_rnd_bits=28, which
+          # needs root on the runner hosts. TSan stays on the GitHub-hosted
+          # leg (which applies the sysctl) until the host config lands.
     env:
       PODMAN_ROOT: /local/data-ssd/stoetzem/containers-storage
       PODMAN_TMP: /local/data-ssd/stoetzem/containers-tmp
