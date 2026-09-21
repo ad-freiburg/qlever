@@ -63,6 +63,13 @@ jobs:
           mkdir -p "${npmcache}"
           echo "NPM_CONFIG_CACHE=${npmcache}" >> "$GITHUB_ENV"
           echo "OCR_NPM_CACHE=${npmcache}" >> "$GITHUB_ENV"
+          # HOME itself must be per-run too: the review tool creates
+          # ~/.opencodereview, and NFS home rejects new writes with
+          # "disk quota exceeded" on Wolga. RUNNER_TEMP is local SSD.
+          ocrhome="${RUNNER_TEMP}/ocr-home-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "${ocrhome}"
+          echo "HOME=${ocrhome}" >> "$GITHUB_ENV"
+          echo "OCR_HOME=${ocrhome}" >> "$GITHUB_ENV"
       - name: Review pull request
         uses: alibaba/open-code-review@810aeb5dc2e2b9485f5a1981485e65b25250f609 # v1.11.7
         with:
@@ -116,6 +123,6 @@ jobs:
                 body: `${stamp}\n${body}`,
               });
             }
-      - name: Remove isolated npm prefix and cache
+      - name: Remove isolated npm prefix, cache, and home
         if: always()
-        run: rm -rf "${OCR_NPM_PREFIX:?}" "${OCR_NPM_CACHE:?}"
+        run: rm -rf "${OCR_NPM_PREFIX:?}" "${OCR_NPM_CACHE:?}" "${OCR_HOME:?}"
