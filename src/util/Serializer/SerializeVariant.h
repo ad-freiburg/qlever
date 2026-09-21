@@ -41,9 +41,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
                       " alternatives)");
     ad_utility::RuntimeValueToCompileTimeValueVi<numAlternatives - 1>(
         index, [&serializer, &arg](auto indexVi) {
-          std::variant_alternative_t<decltype(indexVi)::value, V> alternative{};
-          serializer >> alternative;
-          arg = std::move(alternative);
+          serializer >> arg.template emplace<decltype(indexVi)::value>();
         });
   } else {
     // A `valueless_by_exception` variant holds no alternative at all, so there

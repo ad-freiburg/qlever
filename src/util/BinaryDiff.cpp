@@ -12,11 +12,13 @@
 #include <absl/numeric/bits.h>
 
 #include <string_view>
+#include <utility>
 
 #include "backports/algorithm.h"
 #include "util/BitUtils.h"
 #include "util/CryptographicHashUtils.h"
 #include "util/OverloadCallOperator.h"
+#include "util/TransparentFunctors.h"
 #include "util/VariantRangeFilter.h"
 
 namespace ad_utility {
@@ -34,11 +36,9 @@ void BinaryDiff::addAlign(uint64_t alignment) {
   size_t alignedSize = alignUp(targetSize_, alignment);
   // An alignment that the target already has is a no-op, see `addAlign` in the
   // header.
-  if (alignedSize == targetSize_) {
-    return;
+  if (std::exchange(targetSize_, alignedSize) != alignedSize) {
+    instructions_.push_back(Align{alignment});
   }
-  instructions_.push_back(Align{alignment});
-  targetSize_ = alignedSize;
 }
 
 // _____________________________________________________________________________
@@ -95,9 +95,7 @@ BinaryDiff::Checksum BinaryDiff::checksum(ql::span<const char> bytes) {
   auto digest = HashSha256{}(std::string_view{bytes.data(), bytes.size()});
   Checksum result{};
   AD_CORRECTNESS_CHECK(digest.size() == result.size());
-  ql::ranges::transform(digest, result.begin(), [](unsigned char byte) {
-    return static_cast<char>(byte);
-  });
+  ql::ranges::transform(digest, result.begin(), ad_utility::staticCast<char>);
   return result;
 }
 
@@ -129,16 +127,16 @@ void BinaryDiff::applyToCheckedTarget(ql::span<const char> base,
                                       ql::span<char> target) const {
   size_t offset = 0;
   auto visitor = OverloadCallOperator{
-      [&](const Copy& copy) {
+      [&base, &target, &offset](const Copy& copy) {
         ql::ranges::copy(base.subspan(copy.baseOffset_, copy.length_),
                          target.begin() + offset);
         offset += copy.length_;
       },
-      [&](const Insert& insert) {
+      [&target, &offset](const Insert& insert) {
         ql::ranges::copy(insert.bytes_, target.begin() + offset);
         offset += insert.bytes_.size();
       },
-      [&](const Align& align) {
+      [&target, &offset](const Align& align) {
         size_t alignedOffset = alignUp(offset, align.alignment_);
         // NOTE: The padding has to be written explicitly, because `target`
         // might be a buffer of the caller that contains arbitrary bytes.

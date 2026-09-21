@@ -40,22 +40,17 @@ class BinaryDiffSerializer;
 // sequence of instructions, each of which copies a range of the base (`Copy`),
 // inserts literal bytes (`Insert`), or pads the target with zeros up to a
 // given alignment (`Align`). A diff is created by constructing it from the
-// base and then appending instructions (see `addAlign`, `addCopy` and
-// `addInsert`), and it is applied to a base via `apply`. It can be serialized
-// and deserialized with the QLever serializer framework (see
-// `util/Serializer/Serializer.h`, and `BinaryDiffSerializer` below for the
-// format).
+// base (which is used only to record the size and the checksum of the base,
+// see BASE IDENTIFICATION below) and then appending instructions (see
+// `addAlign`, `addCopy` and `addInsert`), and it is applied to a base via
+// `apply`. It can be serialized and deserialized with the QLever serializer
+// framework (see `util/Serializer/Serializer.h`, and `BinaryDiffSerializer`
+// below for the format).
 //
 // ALIGNMENT: The alignment is not a property of the diff, but an ordinary
-// instruction, so that it can change from one part of the target to the next
-// ("align to 8, copy these bytes, insert those bytes, now align to 16, ...").
-// This makes it possible to diff a format that consists of aligned,
-// *position-independent* blocks: such a block can be copied to any other
-// suitably aligned offset of the target and still be read back correctly, so
-// that a target buffer can be assembled from blocks of the base buffer. It is
-// then up to the creator of the diff to emit an `Align` in front of every such
-// block; a format without alignment requirements simply uses no `Align` at
-// all.
+// instruction, so that it can change within a single target ("align to 8, copy
+// these bytes, insert those bytes, align to 16, ..."). It is up to the creator
+// of a diff to emit the `Align` instructions that the target format requires.
 //
 // BASE IDENTIFICATION: A diff stores the size and the SHA-256 checksum (see
 // `checksum`) of the base that it was created against, and `apply` verifies
