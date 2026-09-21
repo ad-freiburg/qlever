@@ -29,7 +29,10 @@ jobs:
     runs-on: [self-hosted, linux, x64, wolga]
     timeout-minutes: 240
     env:
-      PATH: /home/stoetzem/.local/bin:/local/data-ssd/stoetzem/node22/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      # ocr-stable is a fallback for the per-run npm prefix: if the
+      # freshly installed binary ever goes missing mid-job, review steps
+      # still resolve a pinned v1.11.7 copy from local SSD.
+      PATH: /home/stoetzem/.local/bin:/local/data-ssd/stoetzem/node22/bin:/local/data-ssd/stoetzem/ocr-stable/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - name: Resolve PR context for comment-triggered reviews
         id: pr-context
