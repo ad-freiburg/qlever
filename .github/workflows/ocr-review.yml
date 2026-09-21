@@ -51,12 +51,18 @@ jobs:
           # prefix must additionally be unique per run: one job's
           # `npm install -g` would otherwise delete the `ocr` binary out from
           # under another job's `ocr config` step (node MODULE_NOT_FOUND).
-          # The shared npm cache stays as-is (content-addressed).
+          # The npm cache must be per-run too: the shared ~/.npm/_cacache
+          # lives on NFS home and concurrent jobs fail there with
+          # "Unknown system error -122" on Wolga.
           prefix="${RUNNER_TEMP}/ocr-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           mkdir -p "${prefix}"
           echo "NPM_CONFIG_PREFIX=${prefix}" >> "$GITHUB_ENV"
           echo "OCR_NPM_PREFIX=${prefix}" >> "$GITHUB_ENV"
           echo "${prefix}/bin" >> "$GITHUB_PATH"
+          npmcache="${RUNNER_TEMP}/ocr-npm-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "${npmcache}"
+          echo "NPM_CONFIG_CACHE=${npmcache}" >> "$GITHUB_ENV"
+          echo "OCR_NPM_CACHE=${npmcache}" >> "$GITHUB_ENV"
       - name: Review pull request
         uses: alibaba/open-code-review@810aeb5dc2e2b9485f5a1981485e65b25250f609 # v1.11.7
         with:
@@ -110,6 +116,6 @@ jobs:
                 body: `${stamp}\n${body}`,
               });
             }
-      - name: Remove isolated npm prefix
+      - name: Remove isolated npm prefix and cache
         if: always()
-        run: rm -rf "${OCR_NPM_PREFIX:?}"
+        run: rm -rf "${OCR_NPM_PREFIX:?}" "${OCR_NPM_CACHE:?}"
