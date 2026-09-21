@@ -1,0 +1,64 @@
+name: Wolga build pilot (rootless podman)
+
+# Pilot for migrating heavy Linux CI legs to Wolga self-hosted runners.
+# Isolated workflow: manual dispatch only, zero impact on the required
+# matrix. Builds one native leg inside an Ubuntu container via rootless
+# podman (no sudo on the host; container provides its own toolchain).
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: CMake target to build (empty builds everything)
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: [self-hosted, linux, x64, wolga]
+    timeout-minutes: 240
+    env:
+      PODMAN_ROOT: /local/data-ssd/stoetzem/containers-storage
+      PODMAN_TMP: /local/data-ssd/stoetzem/containers-tmp
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Native gcc-13 Release build inside Ubuntu 24.04 container
+        run: |
+          mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
+          podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
+            --network=none \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            -e DEBIAN_FRONTEND=noninteractive \
+            ubuntu:24.04 bash -c '
+              set -e
+              apt-get update
+              apt-get install -y sudo build-essential cmake git pkg-config \
+                python3-yaml unzip python3-icu libicu-dev tzdata libzstd-dev \
+                libjemalloc-dev libssl-dev mold gcc-13 g++-13 software-properties-common
+              add-apt-repository -y ppa:mhier/libboost-latest
+              apt-get update
+              apt-get install -y libboost1.83-all-dev libboost-url1.83-dev \
+                libboost-container1.83-dev libboost-filesystem1.83-dev
+              export CC=gcc-13 CXX=g++-13
+              cmake -B /work/build -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/gcc13.cmake" \
+                -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror " \
+                -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
+                -DENABLE_EXPENSIVE_CHECKS=true \
+                -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold" \
+                -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON \
+                -DUSE_PRECOMPILED_HEADERS=OFF -DCHEAPER_COMPILATION=OFF \
+                -DQLEVER_ALLOCATOR_BACKEND=limit
+              if [ -n "${{ inputs.target }}" ]; then
+                TARGET_ARG="--target ${{ inputs.target }}"
+              else
+                TARGET_ARG=""
+              fi
+              # shellcheck disable=SC2086
+              cmake --build /work/build --config Release ${TARGET_ARG} -- -j $(nproc)
+            '
