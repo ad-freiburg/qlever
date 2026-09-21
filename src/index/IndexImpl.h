@@ -143,7 +143,6 @@ class IndexImpl {
   // If true, add `ql:has-word` triples for each word in each literal.
   bool addHasWordTriples_ = false;
 
-  size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
   NumNormalAndInternal numSubjects_;
@@ -916,6 +915,19 @@ class IndexImpl {
 
   void writeConfiguration() const;
   void readConfiguration();
+
+  // If the configuration file of this index (at `onDiskBase_`) exists and
+  // records the index format that directly precedes the current one, set the
+  // format version in that file to the current one. This is called by
+  // `applyConfiguration` when it accepts an index in the previous format
+  // because the two formats do not differ for that index (see
+  // `qlever::indexFormatConverter::indexNeedsNoConversion`), so that the
+  // check is not repeated at every start and so that updates persisted from
+  // now on (which are written in the current format) belong to an index in
+  // the current format. A failure to write the file (for example, because the
+  // index directory is read-only) is logged as a warning and otherwise
+  // ignored.
+  void recordCurrentFormatVersionInConfigurationFile();
 
   // initialize the index-build-time settings for the vocabulary
   void readIndexBuilderSettingsFromFile();

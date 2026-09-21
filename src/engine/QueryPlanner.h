@@ -729,6 +729,18 @@ class QueryPlanner {
     // is made via the type member of the `SubtreePlan`s.
     void visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& candidates);
 
+    // Helper function for `graphPatternOperationVisitor`. For a
+    // `GRAPH ?graphVar {...}` clause, make sure that `graphVar` is bound in
+    // every candidate: if a candidate does not already contain a column for
+    // `graphVar`, cross-join it with all graphs that could possibly match
+    // (the declared `FROM NAMED` graphs, or -- if none were declared -- all
+    // distinct graphs in the index, including the default graph only if
+    // `behaviour` is `ALL`).
+    void bindGraphVariableIfUnbound(
+        const Variable& graphVar,
+        parsedQuery::GroupGraphPattern::GraphVariableBehaviour behaviour,
+        std::vector<SubtreePlan>& candidates);
+
     // This function finds a set of candidates that unite all the different
     // `candidatePlans_` and `candidateTriples_`. It then replaces the contents
     // of `candidatePlans_` with those plans and clears the `candidateTriples_`.

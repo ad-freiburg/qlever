@@ -57,8 +57,8 @@ class GeoPoint {
   // of any quadtree cell (a square of side `2^k` in the quantized coordinate
   // space, aligned at a multiple of `2^k`) form one contiguous range of bit
   // representations, so that a geographic rectangle maps to a small set of
-  // ranges, see `bitRangesForRectangle`. This is what makes the block
-  // prefilter of spatial joins effective for points.
+  // ranges, see `bitRangesForRectangle`. This is what makes the prefilter
+  // on the `Id`s of points effective.
   static constexpr T numDataBits = 60;
   static constexpr T numDataBitsCoordinate = numDataBits / 2;
   static constexpr T coordinateMaskFreeBits =

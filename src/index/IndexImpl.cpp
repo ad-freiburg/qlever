@@ -117,27 +117,19 @@ std::unique_ptr<AsyncRdfParserBase> IndexImpl::makeRdfParser(
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // The reduced feature set has no coroutines (and only Boost 1.71), so the
   // asynchronous multifile parser is not available. Fall back to the
-  // synchronous `RdfMultifileParser` behind an `AsyncSerialParserAdapter`, and
-  // ignore the request for parallel parsing, so that every file is parsed by
-  // the simple stream parser. The files are still produced lazily.
-  auto serialFiles =
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{
-          ql::views::transform(std::move(files),
-                               [](qlever::InputFileSpecification file) {
-                                 file.parseInParallel_ = false;
-                                 return file;
-                               })};
+  // synchronous `RdfMultifileParser` behind an `AsyncSerialParserAdapter`. That
+  // parser has no parallel parser for a single file and therefore ignores
+  // `parseInParallel_` (with a warning, see the comment on that class). The
+  // files are still produced lazily.
   // NOTE: The adapter creates the parser lazily on the first `asyncGetBatch()`
   // call, see the constructor of `AsyncSerialParserAdapter`.
   return std::make_unique<AsyncSerialParserAdapter>(
       executor,
-      [serialFiles = std::move(serialFiles),
-       encodedIriManager = &encodedIriManager(),
+      [files = std::move(files), encodedIriManager = &encodedIriManager(),
        bufferSize = parserBufferSize(),
        parserSettings]() mutable -> std::unique_ptr<RdfParserBase> {
-        return std::make_unique<RdfMultifileParser>(std::move(serialFiles),
-                                                    encodedIriManager,
-                                                    bufferSize, parserSettings);
+        return std::make_unique<RdfMultifileParser>(
+            std::move(files), encodedIriManager, bufferSize, parserSettings);
       });
 #else
   return std::make_unique<RdfAsyncMultifileParser>(
@@ -1288,6 +1280,32 @@ std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
 }
 
 // ___________________________________________________________________________
+void IndexImpl::recordCurrentFormatVersionInConfigurationFile() {
+  std::string filename = onDiskBase_ + CONFIGURATION_FILE;
+  try {
+    if (!ql::filesystem::exists(filename)) {
+      return;
+    }
+    auto configuration = fileToJson<nlohmann::json>(filename);
+    if (!configuration.contains("index-format-version") ||
+        configuration["index-format-version"]
+                .get<qlever::IndexFormatVersion>() !=
+            qlever::previousIndexFormatVersion) {
+      return;
+    }
+    configuration["index-format-version"] = qlever::indexFormatVersion;
+    ad_utility::makeOfstream(filename) << configuration.dump(4) << std::endl;
+    configurationJson_["index-format-version"] = qlever::indexFormatVersion;
+    AD_LOG_INFO << "Recorded the current index format in the file \""
+                << filename << "\"" << std::endl;
+  } catch (const std::exception& e) {
+    AD_LOG_WARN << "Could not record the current index format in the file \""
+                << filename << "\" (" << e.what()
+                << "), the index is used anyway" << std::endl;
+  }
+}
+
+// ___________________________________________________________________________
 void IndexImpl::readConfiguration() {
   applyConfiguration(
       fileToJson<nlohmann::json>(onDiskBase_ + CONFIGURATION_FILE));
@@ -1324,7 +1342,31 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
     auto indexFormatVersion = static_cast<qlever::IndexFormatVersion>(
         configurationJson_["index-format-version"]);
     const auto& currentVersion = qlever::indexFormatVersion;
-    if (indexFormatVersion != currentVersion) {
+    // An index in exactly the format that the `qlever-upgrade-index` binary
+    // upgrades from is accepted if the conversion would not change it (see
+    // `indexNeedsNoConversion`).
+    auto isAcceptedPreviousFormat = [this, &indexFormatVersion,
+                                     &currentVersion]() {
+      using namespace qlever::indexFormatConverter;
+      if (indexFormatVersion != sourceVersion ||
+          currentVersion != targetVersion ||
+          !indexNeedsNoConversion(onDiskBase_)) {
+        return false;
+      }
+      AD_LOG_INFO << "The index is in the previous index format (PR = "
+                  << indexFormatVersion.prNumber_ << ", Date = "
+                  << indexFormatVersion.date_.toStringAndType().first
+                  << ") and this version of QLever uses the format (PR = "
+                  << currentVersion.prNumber_
+                  << ", Date = " << currentVersion.date_.toStringAndType().first
+                  << "). That is fine, because the only difference between "
+                     "the two formats is the encoding of geo points, of "
+                     "which this index has none"
+                  << std::endl;
+      recordCurrentFormatVersionInConfigurationFile();
+      return true;
+    };
+    if (indexFormatVersion != currentVersion && !isAcceptedPreviousFormat()) {
       if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
         AD_LOG_ERROR
             << "The version of QLever you are using is too old for this "
@@ -1559,7 +1601,10 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    if (vocab_.shouldBeExternalized(toRdfLiteral(iriOrLiteral))) {
+    // The view always exists here: `handleStringOrId` above has turned all
+    // values that can be directly encoded into an `Id` into one, so what is
+    // left is a literal, an IRI, or a blank node string.
+    if (vocab_.shouldBeExternalized(toRdfLiteralView(iriOrLiteral).value())) {
       component.isExternal_ = true;
     }
   }
@@ -1650,14 +1695,6 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
         << "You specified \"num-triples-per-batch = " << numTriplesPerBatch_
         << "\", choose a lower value if the index builder runs out of memory"
         << std::endl;
-  }
-
-  if (j.count("parser-batch-size")) {
-    parserBatchSize_ = size_t{j["parser-batch-size"]};
-    AD_LOG_INFO << "Overriding setting parser-batch-size to "
-                << parserBatchSize_
-                << " This might influence performance during index build."
-                << std::endl;
   }
 
   std::string overflowingIntegersThrow = "overflowing-integers-throw";
