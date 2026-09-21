@@ -30,7 +30,7 @@ jobs:
         run: |
           mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
           podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
-            --network=none \
+            --network=host \
             -v "${{ github.workspace }}:/work" \
             -w /work \
             localhost/qlever-ci:gcc13 bash -c '
