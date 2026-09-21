@@ -15,6 +15,7 @@
 #ifdef __EMSCRIPTEN__
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/escaping.h>
 #include <absl/strings/str_cat.h>
 #include <emscripten/em_js.h>
 #include <emscripten/emscripten.h>
@@ -43,19 +44,20 @@ using ad_utility::httpUtils::Url;
 // parameters of the server rather than literals in its JavaScript code, so that
 // the expectations of the tests don't have to repeat them.
 //
-// The body of `/large` is larger than the buffer for a single chunk, and the
-// one of `/stream` is more than an order of magnitude larger than the queue of
-// a request. Byte `i` of the latter is `i % STREAM_BYTE_MODULUS`, so that a
-// consumer can tell whether it received exactly the bytes that were sent, in
-// order (see `expectStreamedBytes`).
+// Both are far too large to be delivered in a single piece, so a consumer has
+// to receive them chunk by chunk. Byte `i` of the body of `/stream` is
+// `i % STREAM_BYTE_MODULUS`, so that a consumer can tell whether it received
+// exactly the bytes that were sent, in order (see `expectStreamedBytes`).
 constexpr int32_t LARGE_BODY_SIZE = 500'000;
 constexpr int32_t NUM_STREAM_CHUNKS = 200;
 constexpr int32_t STREAM_CHUNK_SIZE = 1 << 16;  // 64 KiB
 constexpr int32_t STREAM_BYTE_MODULUS = 251;
 
-// The length of the `Content-Type` of `/long-content-type`, which is longer
-// than the buffer that the client has for a header value (`STRING_CAPACITY` in
-// `HttpClientEmscripten.cpp`), so that the request has to fail.
+// How often `/all-bytes` repeats the 256 byte values.
+constexpr int32_t NUM_ALL_BYTE_ROUNDS = 40;
+
+// The length of the padding of the `Content-Type` of `/long-content-type`,
+// which is far longer than any header value that QLever itself ever sees.
 constexpr int32_t LONG_HEADER_SIZE = 4096;
 
 // NOTE: `clang-format` is disabled below because it breaks JavaScript (it turns
@@ -74,7 +76,7 @@ EM_JS(bool, isNodeJs, (void), {
 EM_JS(void, startTestServer,
       (void* portAddress, int32_t largeBodySize, int32_t numStreamChunks,
        int32_t streamChunkSize, int32_t streamByteModulus,
-       int32_t longHeaderSize), {
+       int32_t longHeaderSize, int32_t numAllByteRounds), {
   const http = require("http");
   const server = http.createServer((request, response) => {
     if (request.url === "/hello") {
@@ -89,10 +91,17 @@ EM_JS(void, startTestServer,
         response.end(JSON.stringify({
           method : request.method,
           body : Buffer.concat(chunks).toString(),
+          bodyHex : Buffer.concat(chunks).toString("hex"),
           accept : request.headers["accept"] ?? "",
           contentType : request.headers["content-type"] ?? ""
         }));
       });
+    } else if (request.url === "/all-bytes") {
+      // Every byte value, several times over.
+      response.writeHead(200, {"Content-Type" : "application/octet-stream"});
+      const all = Buffer.alloc(256 * numAllByteRounds);
+      for (let i = 0; i < all.length; ++i) { all[i] = i % 256; }
+      response.end(all);
     } else if (request.url === "/large") {
       // Sent in many small pieces, so that the client has to assemble it.
       response.writeHead(200, {"Content-Type" : "text/plain"});
@@ -168,7 +177,8 @@ const std::string& testServerUrl() {
     static std::atomic<int32_t> port{0};
     std::thread{[]() {
       startTestServer(&port, LARGE_BODY_SIZE, NUM_STREAM_CHUNKS,
-                      STREAM_CHUNK_SIZE, STREAM_BYTE_MODULUS, LONG_HEADER_SIZE);
+                      STREAM_CHUNK_SIZE, STREAM_BYTE_MODULUS, LONG_HEADER_SIZE,
+                      NUM_ALL_BYTE_ROUNDS);
       // Keep the Web Worker of this thread (and hence the server) alive.
       emscripten_exit_with_live_runtime();
     }}.detach();
@@ -232,8 +242,11 @@ class HttpClientEmscriptenTest : public ::testing::Test {
     }
     EXPECT_EQ(numBytes,
               static_cast<size_t>(NUM_STREAM_CHUNKS * STREAM_CHUNK_SIZE));
-    // The body has to have been consumed as it arrived, not in one piece.
-    EXPECT_GT(numChunks, static_cast<size_t>(NUM_STREAM_CHUNKS / 2));
+    // The body has to have been consumed as it arrived, not in one piece. How
+    // many chunks that makes is up to the JavaScript environment, which cuts
+    // the response wherever it happens to, so this is deliberately a long way
+    // below the number of pieces that the server sends.
+    EXPECT_GT(numChunks, static_cast<size_t>(NUM_STREAM_CHUNKS / 10));
   }
 
   // Request `/stream` (a response that is still being sent when `consume`
@@ -274,11 +287,57 @@ TEST_F(HttpClientEmscriptenTest, postRequestWithBodyAndHeaders) {
       "SELECT * WHERE { ?s ?p ?o }", "application/sparql-query",
       "application/sparql-results+json");
   EXPECT_EQ(response.status_, http::status::ok);
-  EXPECT_EQ(nlohmann::json::parse(toString(response)),
-            nlohmann::json({{"method", "POST"},
-                            {"body", "SELECT * WHERE { ?s ?p ?o }"},
-                            {"accept", "application/sparql-results+json"},
-                            {"contentType", "application/sparql-query"}}));
+  EXPECT_EQ(
+      nlohmann::json::parse(toString(response)),
+      nlohmann::json(
+          {{"method", "POST"},
+           {"body", "SELECT * WHERE { ?s ?p ?o }"},
+           {"bodyHex", absl::BytesToHexString("SELECT * WHERE { ?s ?p ?o }")},
+           {"accept", "application/sparql-results+json"},
+           {"contentType", "application/sparql-query"}}));
+}
+
+// _____________________________________________________________________________
+TEST_F(HttpClientEmscriptenTest, binaryResponseBody) {
+  // A response body is bytes, not text: every byte value has to arrive exactly
+  // as it was sent, including the null byte and the ones that are not valid
+  // UTF-8. This matters for the binary result formats that a `SERVICE` to
+  // another QLever instance may use.
+  auto response = sendHttpOrHttpsRequest(Url{url_ + "/all-bytes"}, handle_);
+  EXPECT_EQ(response.contentType_, "application/octet-stream");
+  std::string body = toString(response);
+  ASSERT_EQ(body.size(), static_cast<size_t>(256 * NUM_ALL_BYTE_ROUNDS));
+  std::string expected;
+  for (int round = 0; round < NUM_ALL_BYTE_ROUNDS; ++round) {
+    for (int byte = 0; byte < 256; ++byte) {
+      expected += static_cast<char>(byte);
+    }
+  }
+  EXPECT_EQ(body, expected);
+}
+
+// _____________________________________________________________________________
+TEST_F(HttpClientEmscriptenTest, binaryRequestBody) {
+  // Every byte value, including the ones that are not valid UTF-8 and the null
+  // byte, has to arrive exactly as it was sent.
+  std::string body;
+  for (int byte = 0; byte < 256; ++byte) {
+    body += static_cast<char>(byte);
+  }
+  auto response =
+      sendHttpOrHttpsRequest(Url{url_ + "/echo"}, handle_, http::verb::post,
+                             body, "application/octet-stream", "*/*");
+  EXPECT_EQ(
+      nlohmann::json::parse(toString(response))["bodyHex"].get<std::string>(),
+      absl::BytesToHexString(body));
+}
+
+// _____________________________________________________________________________
+TEST_F(HttpClientEmscriptenTest, emptyRequestBodyIsNotSent) {
+  // `fetch` rejects a `GET` that has a body, so an empty one must not become
+  // an empty `Uint8Array` that is then sent anyway.
+  auto response = sendHttpOrHttpsRequest(Url{url_ + "/hello"}, handle_);
+  EXPECT_EQ(toString(response), "Hello, World!");
 }
 
 // _____________________________________________________________________________
@@ -301,19 +360,19 @@ TEST_F(HttpClientEmscriptenTest, bodyThatIsNotReadCompletely) {
 }
 
 // _____________________________________________________________________________
-TEST_F(HttpClientEmscriptenTest, bodyLargerThanTheQueueIsStreamed) {
-  // The body is far larger than the queue of a request holds, so this only
-  // works if it is consumed as it arrives.
+TEST_F(HttpClientEmscriptenTest, largeBodyIsStreamed) {
+  // The body is far larger than anything that is buffered along the way, so
+  // this only works if it is consumed as it arrives.
   auto response = sendHttpOrHttpsRequest(Url{url_ + "/stream"}, handle_);
   expectStreamedBytes(response);
 }
 
 // _____________________________________________________________________________
 TEST_F(HttpClientEmscriptenTest, slowConsumerGetsTheWholeBody) {
-  // Consume much slower than the server sends, so that the queue of the request
-  // fills up and the JavaScript side has to stop and wait for space (which the
-  // test above, where the consumer is the faster one, does not exercise). Not a
-  // single byte may be lost or duplicated when it continues.
+  // Consume much slower than the server sends, so that the response piles up in
+  // the JavaScript environment while we are not asking for it (which the test
+  // above, where the consumer is the faster one, does not exercise). Not a
+  // single byte may be lost or duplicated when we continue.
   auto response = sendHttpOrHttpsRequest(Url{url_ + "/stream"}, handle_);
   expectStreamedBytes(response, 2);
 }
@@ -329,10 +388,9 @@ TEST_F(HttpClientEmscriptenTest, notReadingTheBodyToTheEndAbortsTheRequest) {
 }
 
 // _____________________________________________________________________________
-TEST_F(HttpClientEmscriptenTest, abortingWhileTheQueueIsFullWorks) {
-  // Read a few chunks slowly, so that the queue is full and the JavaScript side
-  // is waiting for space when we stop. That wait has to end, even though the
-  // space it waits for will never come.
+TEST_F(HttpClientEmscriptenTest, abortingInTheMiddleOfAResponseWorks) {
+  // Read a few chunks slowly, so that the response is still being sent, and
+  // more of it is already waiting in the JavaScript environment, when we stop.
   expectRequestIsAborted([](HttpOrHttpsResponse& response) {
     size_t numChunks = 0;
     for ([[maybe_unused]] ql::span<std::byte> bytes : response.body_) {
@@ -389,10 +447,13 @@ TEST_F(HttpClientEmscriptenTest, unreachableEndpoint) {
 }
 
 // _____________________________________________________________________________
-TEST_F(HttpClientEmscriptenTest, headerValueThatIsTooLongFailsTheRequest) {
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      sendHttpOrHttpsRequest(Url{url_ + "/long-content-type"}, handle_),
-      ::testing::HasSubstr("Content-Type header of the response is longer"));
+TEST_F(HttpClientEmscriptenTest, longHeaderValue) {
+  // A header value of any length simply arrives; nothing truncates it.
+  auto response =
+      sendHttpOrHttpsRequest(Url{url_ + "/long-content-type"}, handle_);
+  EXPECT_EQ(response.contentType_,
+            absl::StrCat("text/plain;x=", std::string(LONG_HEADER_SIZE, 'y')));
+  EXPECT_EQ(toString(response), "body");
 }
 
 // _____________________________________________________________________________

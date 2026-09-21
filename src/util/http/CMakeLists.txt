@@ -9,4 +9,11 @@ add_library(http HttpServer.h HttpServer.cpp HttpClient.h HttpClient.cpp HttpCli
         websocket/QueryHub.cpp websocket/UpdateFetcher.cpp)
 
 qlever_target_link_libraries(http sparqlParser qlever_util mediaTypes httpParser metrics OpenSSL::SSL OpenSSL::Crypto Boost::iostreams)
+
+if (EMSCRIPTEN)
+    # `HttpClientEmscripten.cpp` drives the `fetch` API with `embind`
+    # (`emscripten::val`), whose JavaScript side has to be linked into every
+    # binary that uses the HTTP client, hence `PUBLIC`.
+    target_link_options(http PUBLIC -lembind)
+endif ()
 endif()
