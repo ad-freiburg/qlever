@@ -68,7 +68,7 @@ class [[nodiscard(
 [[nodiscard]] TracingHandle initialize();
 
 // Returns the single tracer instance for this process.
-opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer();
+std::shared_ptr<opentelemetry::trace::Tracer> tracer();
 
 // Owns a span and ends it on destruction. If none of `setOk`, `setError` or
 // `recordException` is called before the span ends, it is assumed that the
@@ -118,16 +118,14 @@ class RequestHeaderCarrier
     : public opentelemetry::context::propagation::TextMapCarrier {
   RequestT& request_;
 
-  static boost::beast::string_view toBeast(
-      opentelemetry::nostd::string_view view) {
+  static boost::beast::string_view toBeast(std::string_view view) {
     return {view.data(), view.size()};
   }
 
  public:
   explicit RequestHeaderCarrier(RequestT& request) : request_{request} {}
 
-  opentelemetry::nostd::string_view Get(
-      opentelemetry::nostd::string_view key) const noexcept override {
+  std::string_view Get(std::string_view key) const noexcept override {
     auto it = request_.base().find(toBeast(key));
     if (it == request_.base().end()) {
       return {};
@@ -135,8 +133,7 @@ class RequestHeaderCarrier
     return {it->value().data(), it->value().size()};
   }
 
-  void Set(opentelemetry::nostd::string_view key,
-           opentelemetry::nostd::string_view value) noexcept override {
+  void Set(std::string_view key, std::string_view value) noexcept override {
     if constexpr (std::is_const_v<RequestT>) {
       // The interface is unfortunate, because it mixes injection and
       // extraction.

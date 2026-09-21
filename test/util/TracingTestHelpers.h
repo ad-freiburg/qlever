@@ -55,8 +55,8 @@ class ScopedInMemoryTracer {
   using TextMapPropagator =
       opentelemetry::context::propagation::TextMapPropagator;
 
-  opentelemetry::nostd::shared_ptr<TracerProvider> previousProvider_;
-  opentelemetry::nostd::shared_ptr<TextMapPropagator> previousPropagator_;
+  std::shared_ptr<TracerProvider> previousProvider_;
+  std::shared_ptr<TextMapPropagator> previousPropagator_;
   std::shared_ptr<opentelemetry::exporter::memory::InMemorySpanData> spanData_;
 
  public:
@@ -72,9 +72,9 @@ class ScopedInMemoryTracer {
         opentelemetry::sdk::trace::SimpleSpanProcessorFactory::Create(
             std::move(exporter)));
     opentelemetry::trace::Provider::SetTracerProvider(
-        opentelemetry::nostd::shared_ptr<TracerProvider>{provider.release()});
+        std::shared_ptr<TracerProvider>{provider.release()});
     opentelemetry::context::propagation::GlobalTextMapPropagator::
-        SetGlobalPropagator(opentelemetry::nostd::shared_ptr<TextMapPropagator>{
+        SetGlobalPropagator(std::shared_ptr<TextMapPropagator>{
             new opentelemetry::trace::propagation::HttpTraceContext{}});
   }
 
@@ -88,8 +88,7 @@ class ScopedInMemoryTracer {
   ScopedInMemoryTracer& operator=(const ScopedInMemoryTracer&) = delete;
 
   // The tracer that tests should create their spans with.
-  opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer()
-      const {
+  std::shared_ptr<opentelemetry::trace::Tracer> tracer() const {
     return opentelemetry::trace::Provider::GetTracerProvider()->GetTracer(
         "qlever.test");
   }
@@ -104,8 +103,7 @@ class ScopedInMemoryTracer {
 template <typename Id>
 std::string traceIdToHex(const Id& id) {
   std::string hex(2 * Id::kSize, '\0');
-  id.ToLowerBase16(
-      opentelemetry::nostd::span<char, 2 * Id::kSize>{hex.data(), hex.size()});
+  id.ToLowerBase16(std::span<char, 2 * Id::kSize>{hex.data(), hex.size()});
   return hex;
 }
 

@@ -42,13 +42,12 @@ class ScopedSilentOtelLog {
   using GlobalLogHandler =
       opentelemetry::sdk::common::internal_log::GlobalLogHandler;
 
-  opentelemetry::nostd::shared_ptr<LogHandler> previousHandler_;
+  std::shared_ptr<LogHandler> previousHandler_;
 
  public:
   ScopedSilentOtelLog() : previousHandler_{GlobalLogHandler::GetLogHandler()} {
-    GlobalLogHandler::SetLogHandler(
-        opentelemetry::nostd::shared_ptr<LogHandler>{
-            new opentelemetry::sdk::common::internal_log::NoopLogHandler{}});
+    GlobalLogHandler::SetLogHandler(std::shared_ptr<LogHandler>{
+        new opentelemetry::sdk::common::internal_log::NoopLogHandler{}});
   }
   ~ScopedSilentOtelLog() { GlobalLogHandler::SetLogHandler(previousHandler_); }
 
@@ -206,7 +205,7 @@ TEST(Tracing, extractParentFromRequest) {
   // directly here, so that this test does not depend on an exporter.
   opentelemetry::context::propagation::GlobalTextMapPropagator::
       SetGlobalPropagator(
-          opentelemetry::nostd::shared_ptr<
+          std::shared_ptr<
               opentelemetry::context::propagation::TextMapPropagator>{
               new opentelemetry::trace::propagation::HttpTraceContext{}});
   using namespace tracingTestHelpers;

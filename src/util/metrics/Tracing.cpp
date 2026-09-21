@@ -29,7 +29,6 @@
 
 #include "util/metrics/Resource.h"
 
-namespace nostd = opentelemetry::nostd;
 namespace otel_propagation = opentelemetry::context::propagation;
 namespace trace_api = opentelemetry::trace;
 namespace trace_sdk = opentelemetry::sdk::trace;
@@ -66,7 +65,7 @@ void TracingHandle::shutdown() {
   // Uninstall first, so that anything that creates a span from here on gets the
   // no-op provider instead of one whose exporter is being torn down.
   trace_api::Provider::SetTracerProvider(
-      nostd::shared_ptr<trace_api::TracerProvider>{});
+      std::shared_ptr<trace_api::TracerProvider>{});
   // The batch processor buffers spans and exports them from a background
   // thread, so without this the spans of the last few seconds would be lost.
   provider_->Shutdown();
@@ -90,7 +89,7 @@ TracingHandle initialize() {
 
   auto sharedProvider = std::shared_ptr{std::move(provider)};
   trace_api::Provider::SetTracerProvider(
-      nostd::shared_ptr<trace_api::TracerProvider>{sharedProvider});
+      std::shared_ptr<trace_api::TracerProvider>{sharedProvider});
 
   // Propagate the trace context using the W3C Trace Context standard.
   // NOTES:
@@ -99,14 +98,14 @@ TracingHandle initialize() {
   // use or need it. To use it we'd also need a `BaggagePropagator` among other
   // changes.
   otel_propagation::GlobalTextMapPropagator::SetGlobalPropagator(
-      nostd::shared_ptr<otel_propagation::TextMapPropagator>{
+      std::shared_ptr<otel_propagation::TextMapPropagator>{
           new trace_api::propagation::HttpTraceContext{}});
 
   return TracingHandle{std::move(sharedProvider)};
 }
 
 // _____________________________________________________________________________
-nostd::shared_ptr<trace_api::Tracer> tracer() {
+std::shared_ptr<trace_api::Tracer> tracer() {
   return trace_api::Provider::GetTracerProvider()->GetTracer("qlever");
 }
 
