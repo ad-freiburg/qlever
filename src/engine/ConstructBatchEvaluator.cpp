@@ -106,7 +106,11 @@ void resolveColumnMisses(const Index& index, const LocalVocab& localVocab,
 void scatterColumnResolved(ColumnWork& work, IdCache& idCache) {
   for (auto&& [id, resolved, rows] : ::ranges::views::zip(
            work.missIds_, work.missResolved_, work.missRows_)) {
-    auto evaluate = [&resolved](const Id&) {
+    // Init-capture (not a reference capture): the factory moves from the
+    // lambda's own member, so a repeated invocation could never observe a
+    // moved-from outer element. `getOrCompute` invokes the factory at most
+    // once, but the capture makes that a non-requirement.
+    auto evaluate = [resolved = std::move(resolved)](const Id&) mutable {
       return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
           std::move(resolved));
     };
