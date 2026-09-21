@@ -242,7 +242,7 @@ namespace {
 // corresponding result column and the `UndefStatus`.
 using ExpectedColumns = ad_utility::HashMap<
     Variable,
-    std::pair<ql::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
+    std::pair<ConstIdColumnRef, ColumnIndexAndTypeInfo::UndefStatus>>;
 
 // Test that the result of the `join` matches the `expected` outcome.
 // If `requestLaziness` is true, the join is requested to be lazy. If

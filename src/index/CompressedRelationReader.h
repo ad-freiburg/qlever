@@ -280,7 +280,7 @@ class CompressedRelationReader {
     size_t numHandledBlocks{0};
   };
   static GetBlocksForJoinResult getBlocksForJoin(
-      ql::span<const Id> joinColumn,
+      ConstIdColumnRef joinColumn,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 
   // For each of `metadataAndBlocks, metadataAndBlocks2` get the blocks (an

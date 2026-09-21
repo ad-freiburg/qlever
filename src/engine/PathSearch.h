@@ -273,7 +273,7 @@ class PathSearch : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  std::pair<ql::span<const Id>, ql::span<const Id>> handleSearchSides() const;
+  std::pair<ConstIdColumnRef, ConstIdColumnRef> handleSearchSides() const;
 
   /**
    * @brief Finds paths based on the configured algorithm.

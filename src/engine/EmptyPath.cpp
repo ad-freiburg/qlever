@@ -399,7 +399,7 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
         "them have to be read and combined with each of the affected rows, "
         "which can be very slow.");
   }
-  ql::span<const Id> joinColumn =
+  ConstIdColumnRef joinColumn =
       input.getColumn(checkedChild_.value().joinColumn_);
   std::vector<size_t> undefRows;
   ql::ranges::copy_if(
@@ -431,7 +431,7 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
 Result::Generator EmptyPath::processTable(IdTableView<0> table,
                                           const LocalVocab& localVocab,
                                           bool& hasWarnedAboutUndef) const {
-  ql::span<const Id> joinColumn =
+  ConstIdColumnRef joinColumn =
       table.getColumn(checkedChild_.value().joinColumn_);
   // The distinct values of the join column that have to be looked up.
   std::vector<Id> ids;

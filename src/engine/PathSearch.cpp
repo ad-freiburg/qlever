@@ -295,10 +295,10 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::pair<ql::span<const Id>, ql::span<const Id>>
+std::pair<ConstIdColumnRef, ConstIdColumnRef>
 PathSearch::handleSearchSides() const {
-  ql::span<const Id> sourceIds;
-  ql::span<const Id> targetIds;
+  ConstIdColumnRef sourceIds;
+  ConstIdColumnRef targetIds;
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
