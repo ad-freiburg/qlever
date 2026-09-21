@@ -70,16 +70,16 @@ resource_sdk::ResourceAttributes detail::qleverResourceAttributes() {
   // belongs on the resource, so it does not have to be repeated for every
   // metric and span.
   resource_sdk::ResourceAttributes attributes{
-      {semconv::service::kServiceVersion,
-       *qlever::version::projectVersionWithoutLinking.rlock()},
-      {"qlever.git_hash", *qlever::version::gitShortHashWithoutLinking.rlock()},
       {"qlever.compiler", *qlever::version::compilerWithoutLinking.rlock()},
       {"qlever.compiler_version",
        *qlever::version::compilerVersionWithoutLinking.rlock()},
-      {"qlever.cxx_standard",
-       *qlever::version::cxxStandardWithoutLinking.rlock()},
+      {semconv::service::kServiceVersion,
+       *qlever::version::projectVersionWithoutLinking.rlock()},
+      {"qlever.git_hash", *qlever::version::gitShortHashWithoutLinking.rlock()},
       {"qlever.compile_time",
-       *qlever::version::timeOfCompilationUnixWithoutLinking.rlock()}};
+       *qlever::version::timeOfCompilationUnixWithoutLinking.rlock()},
+      {"qlever.cxx_standard",
+       *qlever::version::cxxStandardWithoutLinking.rlock()}};
   if (!hasServiceNameFromEnv()) {
     attributes.SetAttribute(semconv::service::kServiceName,
                             DEFAULT_SERVICE_NAME);
