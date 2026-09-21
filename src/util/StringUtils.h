@@ -307,8 +307,10 @@ constexpr CharLookupTable makeCharLookupTable(std::string_view chars) {
 // `table == makeCharLookupTable(chars)`, but faster: `find_first_of` rescans
 // `chars` for each character of `view` (in libstdc++ with a call to `memchr`
 // each time), whereas the table needs a single lookup per character. `pos` must
-// not be greater than `view.size()`. Note: This function is defined in the
-// header, because it is used in hot loops where inlining matters.
+// not be greater than `view.size()`.
+//
+// NOTE: This function is defined in the header, because it is used in hot
+// loops where inlining matters.
 inline size_t findFirstOfWithLookupTable(std::string_view view,
                                          const CharLookupTable& table,
                                          size_t pos = 0) {
