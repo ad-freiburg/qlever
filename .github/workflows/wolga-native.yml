@@ -1,11 +1,15 @@
-name: Wolga native (gcc-13)
+name: Wolga native
 
-# First production Wolga leg of the heavy Linux CI migration (pilot proved
-# the rootless-podman path in wolga-build-pilot.yml). Runs the gcc-13
-# Release build + unit tests inside the prebuilt localhost/qlever-ci:gcc13
-# image, so it is immune to Launchpad PPA outages that keep killing the
-# GitHub-hosted legs. Isolated workflow: not required, zero impact on the
-# existing matrix. More toolchains follow as their images land.
+# Heavy Linux CI legs on Wolga self-hosted runners (rootless podman,
+# prebuilt localhost/qlever-ci images). Immune to the Launchpad PPA outages
+# that keep killing the GitHub-hosted legs. Isolated workflow: not required,
+# zero impact on the existing matrix.
+#
+# Legs mirror native-build.yml configurations:
+# - gcc-13 Release (default flags)
+# - clang-21 Release
+# - clang-16 ASan / UBSan (RelWithDebInfo, like the GitHub sanitizer legs)
+# - clang-17 TSan (Debug, timing tests off)
 
 on:
   push:
@@ -26,6 +30,30 @@ jobs:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
     runs-on: [self-hosted, linux, x64, wolga]
     timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: gcc13
+            toolchain: gcc13
+            build-type: Release
+            extra-flags: ""
+          - image: clang21
+            toolchain: clang21
+            build-type: Release
+            extra-flags: ""
+          - image: clang16
+            toolchain: clang16
+            build-type: RelWithDebInfo
+            extra-flags: "-fsanitize=address -fno-omit-frame-pointer"
+          - image: clang16
+            toolchain: clang16
+            build-type: RelWithDebInfo
+            extra-flags: "-fsanitize=undefined"
+          - image: clang17
+            toolchain: clang17
+            build-type: Debug
+            extra-flags: "-fsanitize=thread -O1 -g -D_NO_TIMING_TESTS=ON"
     env:
       PODMAN_ROOT: /local/data-ssd/stoetzem/containers-storage
       PODMAN_TMP: /local/data-ssd/stoetzem/containers-tmp
@@ -33,26 +61,25 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - name: Native gcc-13 Release build + tests inside prebuilt CI image
+      - name: Native ${{ matrix.toolchain }} build + tests inside prebuilt CI image
         run: |
           mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
           podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
             --network=host \
             -v "${{ github.workspace }}:/work" \
             -w /work \
-            localhost/qlever-ci:gcc13 bash -c '
+            localhost/qlever-ci:${{ matrix.image }} bash -c '
               set -e
-              export CC=gcc-13 CXX=g++-13
-              cmake -B /work/build -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/gcc13.cmake" \
-                -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror " \
+              cmake -B /work/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+                -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/${{ matrix.toolchain }}.cmake" \
+                -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror ${{ matrix.extra-flags }}" \
                 -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
                 -DENABLE_EXPENSIVE_CHECKS=true \
                 -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold" \
                 -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON \
                 -DUSE_PRECOMPILED_HEADERS=OFF -DCHEAPER_COMPILATION=OFF \
                 -DQLEVER_ALLOCATOR_BACKEND=limit
-              cmake --build /work/build --config Release -- -j $(nproc)
+              cmake --build /work/build --config ${{ matrix.build-type }} -- -j $(nproc)
               cd /work/build/test
-              env CTEST_OUTPUT_ON_FAILURE=1 ctest -C Release -j $(nproc) .
+              env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{ matrix.build-type }} -j $(nproc) .
             '
