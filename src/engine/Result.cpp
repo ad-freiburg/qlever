@@ -10,6 +10,7 @@
 #include <absl/cleanup/cleanup.h>
 
 #include "backports/shift.h"
+#include "engine/idTable/IdColumn.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
@@ -150,7 +151,7 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =
-           limitOffset.upperBound(idTable.numRows())](ql::span<Id> column) {
+           limitOffset.upperBound(idTable.numRows())](IdColumn column) {
         ql::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.

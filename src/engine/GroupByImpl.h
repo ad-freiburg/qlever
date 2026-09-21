@@ -21,6 +21,7 @@
 #include "engine/Join.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/idTable/IdColumn.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "parser/Alias.h"
@@ -397,7 +398,7 @@ class GroupByImpl : public Operation {
     // Returns a vector containing the offsets for all ids of `groupByCols`,
     // inserting entries if necessary.
     std::vector<size_t> getHashEntries(
-        const ArrayOrVector<ql::span<const Id>>& groupByCols);
+        const ArrayOrVector<ConstIdColumn>& groupByCols);
 
     // Return the index of `id`.
     [[nodiscard]] size_t getIndex(const ArrayOrVector<Id>& ids) const {

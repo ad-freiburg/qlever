@@ -16,6 +16,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathImpl.h"
+#include "engine/idTable/IdColumn.h"
 #include "engine/idTable/IdTable.h"
 
 // A set of edges of the implicit graph of a transitive path operation together
@@ -30,9 +31,9 @@ class BinSearchMap {
   // source node. The first two ranges have the same size. The third one either
   // has the same size (for a transitive path operation inside a GRAPH clause)
   // or otherwise is empty.
-  ql::span<const Id> startIds_;
-  ql::span<const Id> targetIds_;
-  ql::span<const Id> graphIds_;
+  ConstIdColumn startIds_;
+  ConstIdColumn targetIds_;
+  ConstIdColumn graphIds_;
 
   // The index of the first edge of the currently active graph and the number
   // of edges in that graph.
@@ -44,12 +45,12 @@ class BinSearchMap {
   // total number of edges if no graphs are given, or to zero otherwise. In the
   // latter case, the correct size has to be set via `setGraphId`.
   BinSearchMap(
-      ql::span<const Id> startIds, ql::span<const Id> targetIds,
-      const std::optional<ql::span<const Id>>& graphIds = std::nullopt);
+      ConstIdColumn startIds, ConstIdColumn targetIds,
+      const std::optional<ConstIdColumn>& graphIds = std::nullopt);
 
   // Return all target nodes for the given source node in the currently
   // active graph.
-  ql::span<const Id> successors(Id node) const;
+  ConstIdColumn successors(Id node) const;
 
   // Find all `Id`s in `startIds_` that are equal to `id` together with the
   // corresponding graph `Id`s, with the following special cases:

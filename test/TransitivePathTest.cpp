@@ -15,6 +15,7 @@
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/idTable/IdColumn.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -2001,8 +2002,8 @@ namespace {
 // _____________________________________________________________________________
 HashMapWrapper::MapOfMaps columnsToMap(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    ql::span<const Id> startCol, ql::span<const Id> targetCol,
-    ql::span<const Id> graphCol) {
+    ConstIdColumn startCol, ConstIdColumn targetCol,
+    ConstIdColumn graphCol) {
   HashMapWrapper::MapOfMaps edgesWithGraph{allocator};
   for (size_t i = 0; i < startCol.size(); i++) {
     auto it1 = edgesWithGraph.try_emplace(graphCol[i], allocator).first;
@@ -2015,7 +2016,7 @@ HashMapWrapper::MapOfMaps columnsToMap(
 // _____________________________________________________________________________
 HashMapWrapper::Map columnsToMap(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    ql::span<const Id> startCol, ql::span<const Id> targetCol) {
+    ConstIdColumn startCol, ConstIdColumn targetCol) {
   HashMapWrapper::Map edges{allocator};
 
   for (size_t i = 0; i < startCol.size(); i++) {

@@ -13,6 +13,7 @@
 #include "backports/concepts.h"
 #include "backports/filesystem.h"
 #include "backports/type_traits.h"
+#include "engine/idTable/IdColumn.h"
 #include "global/Id.h"
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
@@ -138,7 +139,7 @@ CPP_template(typename Range, typename Serializer)(
 }
 
 // TODO<joka921> Comments.
-inline void remapLocalVocab(ql::span<Id> ids,
+inline void remapLocalVocab(IdColumn ids,
                             const absl::flat_hash_map<Id::T, Id>& mapping) {
   for (Id& id : ids) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
@@ -152,7 +153,7 @@ inline void remapLocalVocab(ql::span<Id> ids,
 template <typename Serializer>
 void deserializeIds(Serializer& serializer,
                     const absl::flat_hash_map<Id::T, Id>& mapping,
-                    ql::span<Id> ids) {
+                    IdColumn ids) {
   serializer >> ids;
   remapLocalVocab(ids, mapping);
 }
