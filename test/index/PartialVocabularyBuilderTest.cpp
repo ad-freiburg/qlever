@@ -27,7 +27,6 @@
 #include "global/Constants.h"
 #include "global/SpecialIds.h"
 #include "index/PartialVocabularyBuilder.h"
-#include "util/CachingMemoryResource.h"
 #include "util/Conversions.h"
 #include "util/HashMap.h"
 
@@ -127,8 +126,9 @@ class MockIndex {
     return result;
   }
 
-  void writePartialVocabulary(size_t partialVocabIdx, ItemMapAndBuffer items,
-                              std::vector<IdRow> localIds) {
+  void writePartialVocabulary(size_t partialVocabIdx,
+                              const ItemMapAndBuffer& items,
+                              std::vector<IdRow>& localIds) {
     if (throwOnWrite_) {
       throw std::runtime_error{"write error"};
     }
@@ -213,12 +213,9 @@ struct RunResult {
 RunResult run(MockIndex& index, std::vector<std::vector<TurtleTriple>> batches,
               size_t linesPerPartial, size_t numThreads,
               std::optional<size_t> failAtBatch = std::nullopt) {
-  ad_utility::CachingMemoryResource cachingMemoryResource;
-  ItemAlloc itemAlloc(&cachingMemoryResource);
   TripleComponentComparator comparator;
 
-  FirstPassSharedState<MockIndex> shared{&index, &comparator, itemAlloc,
-                                         linesPerPartial};
+  FirstPassSharedState<MockIndex> shared{&index, &comparator, linesPerPartial};
   // Outlives `runTaskChains` (and hence the `MockParser` that writes it).
   std::atomic<size_t> numCallsWithReusedBuffer{0};
   runTaskChains(shared, numThreads,

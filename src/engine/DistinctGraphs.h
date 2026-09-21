@@ -11,10 +11,12 @@
 #define QLEVER_SRC_ENGINE_DISTINCTGRAPHS_H
 
 #include <cstdint>
+#include <memory>
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/GraphFilter.h"
 #include "rdfTypes/Variable.h"
 #include "util/Algorithm.h"
 
@@ -46,6 +48,17 @@ class DistinctGraphs : public Operation {
  public:
   DistinctGraphs(QueryExecutionContext* qec, Variable graphVariable,
                  bool includeDefaultGraph);
+
+  // Return an execution tree with a single column that yields all the graphs
+  // the `graphVariable` can be bound to. If `activeGraphs` is a whitelist (the
+  // query declared the graphs via `FROM NAMED`), then a `VALUES` clause with
+  // exactly those graphs is the correct and cheapest choice: such a graph is
+  // part of the dataset even if it doesn't contain a single triple. Otherwise
+  // a `DistinctGraphs` operation enumerates all the graphs of the index,
+  // including the default graph iff `activeGraphs` allows it.
+  static std::shared_ptr<QueryExecutionTree> makeAllGraphs(
+      QueryExecutionContext* qec, const Variable& graphVariable,
+      const qlever::index::GraphFilter<TripleComponent>& activeGraphs);
 
   [[nodiscard]] std::string getDescriptor() const override {
     return "Distinct Graphs";
