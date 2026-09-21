@@ -10,6 +10,10 @@ name: Build base image clones (rootless workaround)
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - misc/ci-images/base/**
+      - .github/workflows/base-clone-builder.yml
 
 permissions:
   contents: read
