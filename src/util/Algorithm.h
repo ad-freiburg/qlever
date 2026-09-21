@@ -310,7 +310,7 @@ CPP_template(typename RandomIt, typename Tp, typename Compare)(
     DistanceType remaining = last - lo;
     DistanceType jump = step < remaining ? step : remaining;
     RandomIt hi = lo + jump;
-    if (hi == last || !comp(val, hi)) {
+    if (hi == last || comp(val, hi)) {
       return upper_bound_iterator(lo, hi, val, comp);
     }
     lo = hi;
