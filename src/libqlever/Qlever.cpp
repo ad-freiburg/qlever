@@ -34,6 +34,7 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
+#include "util/GlobalExecutor.h"
 #include "util/Log.h"
 #include "util/TimeTracer.h"
 
@@ -122,6 +123,11 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
 void Qlever::buildIndex(IndexBuilderConfig config) {
   // Reject invalid configurations early and with an informative error message.
   config.validate();
+  // Make the size of the global thread pool respect the number of threads that
+  // was configured for the index build. This has to happen before the build
+  // starts, because the pool is created on its first use and its size cannot be
+  // changed afterwards.
+  ad_utility::setGlobalExecutorNumThreads(config.numThreads_);
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Set memory limit and parser buffer size if specified.

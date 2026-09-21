@@ -11,12 +11,13 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <future>
 #include <thread>
 #include <vector>
 
+#include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/GlobalExecutor.h"
-#include "util/PostAndGetFuture.h"
 
 // NOTE: The global executor is a process-wide singleton, so none of the
 // following tests may assume that the pool doesn't exist yet. They are
@@ -36,7 +37,8 @@ TEST(GlobalExecutor, numThreadsMustBePositive) {
 TEST(GlobalExecutor, executorRunsPostedTasks) {
   auto executor = ad_utility::globalExecutor();
   ASSERT_TRUE(static_cast<bool>(executor));
-  auto future = ad_utility::postAndGetFuture(executor, []() { return 42; });
+  auto future = ad_utility::runFunctionOnExecutor(
+      executor, []() { return 42; }, ad_utility::net::use_future);
   EXPECT_EQ(future.get(), 42);
 }
 
@@ -47,8 +49,8 @@ TEST(GlobalExecutor, executorRunsManyTasks) {
   std::vector<std::future<void>> futures;
   static constexpr size_t numTasks = 100;
   for (size_t i = 0; i < numTasks; ++i) {
-    futures.push_back(
-        ad_utility::postAndGetFuture(executor, [&counter]() { ++counter; }));
+    futures.push_back(ad_utility::runFunctionOnExecutor(
+        executor, [&counter]() { ++counter; }, ad_utility::net::use_future));
   }
   for (auto& future : futures) {
     future.get();
@@ -65,8 +67,9 @@ TEST(GlobalExecutor, settingTheNumThreadsTooLateIsIgnored) {
   // nothing else. In particular, the executor still works afterwards.
   ad_utility::setGlobalExecutorNumThreads(numThreadsBefore + 1);
   EXPECT_EQ(ad_utility::globalExecutorNumThreads(), numThreadsBefore);
-  auto future = ad_utility::postAndGetFuture(ad_utility::globalExecutor(),
-                                             []() { return 1; });
+  auto future = ad_utility::runFunctionOnExecutor(
+      ad_utility::globalExecutor(), []() { return 1; },
+      ad_utility::net::use_future);
   EXPECT_EQ(future.get(), 1);
 }
 

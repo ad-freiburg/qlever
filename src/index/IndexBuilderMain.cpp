@@ -20,7 +20,6 @@
 #include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
-#include "util/GlobalExecutor.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
@@ -335,11 +334,10 @@ int main(int argc, char** argv) {
   add("num-threads,j", po::value(&config.numThreads_),
       "The number of threads used during the index build. Must be at least 1. "
       "Default: the number of hardware threads of the machine. NOTE: Currently "
-      "the first pass (parsing the input and creating the partial "
-      "vocabularies), the conversion to global IDs, and the number of threads "
-      "of the global thread pool that the first pass runs on use this number; "
-      "the other phases use their own parallelism (making all phases respect "
-      "this option is work in progress). The memory of the first pass grows "
+      "only the first pass (parsing the input and creating the partial "
+      "vocabularies) and the conversion to global IDs use this number; the "
+      "other phases use their own parallelism (making all phases respect this "
+      "option is work in progress). The memory of the first pass grows "
       "linearly with this number, since each thread holds one batch of "
       "`num-triples-per-batch` triples with its partial vocabulary in RAM.");
 
@@ -386,11 +384,6 @@ int main(int argc, char** argv) {
     // default (which is optimized for `rebuild-index`, where six permutations
     // are written simultaneously).
     setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(5);
-    // Make the size of the global thread pool, on which the first pass of the
-    // index build runs, respect the `--num-threads / -j` option. This has to
-    // happen before the index build starts, because the pool is created on its
-    // first use and its size cannot be changed afterwards.
-    ad_utility::setGlobalExecutorNumThreads(config.numThreads_);
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "
