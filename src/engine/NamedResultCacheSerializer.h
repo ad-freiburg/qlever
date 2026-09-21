@@ -175,9 +175,12 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
   // Serialize `cacheKey` (string).
   serializer << value.cacheKey_;
 
-  // Serialize the `cachedGeoIndex_`. Note: The `cachedGeoIndex_` is not
-  // default-constructible, so we use manual serialization (see the comment
-  // above for the manual serialization of the `varToColMap_` for details).
+  // Serialize the `cachedGeoIndex_`.
+  //
+  // NOTE: The `cachedGeoIndex_` is not default-constructible, so it cannot be
+  // read back via the generic serialization of a `std::optional`, and for
+  // consistency it is written manually as well (the same reasoning as for the
+  // `VariableToColumnMap`, see `serializeDeterministically`).
   bool hasGeoIndex = value.cachedGeoIndex_.has_value();
   serializer << hasGeoIndex;
   if (hasGeoIndex) {
