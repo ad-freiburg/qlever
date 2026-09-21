@@ -12,9 +12,11 @@
 
 #include <atomic>
 #include <boost/asio/bind_executor.hpp>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
-#include <boost/asio/thread_pool.hpp>
 #include <exception>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -24,18 +26,23 @@
 #include "backports/asio.h"
 #include "index/IndexBuilderTypes.h"
 #include "parser/AsyncRdfParserBase.h"
+#include "util/GlobalExecutor.h"
 #include "util/Log.h"
+#include "util/PostAndGetFuture.h"
 #include "util/ProgressBar.h"
 #include "util/Synchronized.h"
 
 // The building blocks of the first pass of the index building (see
-// `IndexImpl::buildPartialVocabularies`): a single `boost::asio::thread_pool`
+// `IndexImpl::buildPartialVocabularies`): a single `boost::asio::io_context`
 // (owned by `runTaskChains` below) is driven by several "task chains", each of
 // which repeatedly asks the asynchronous RDF parser for a batch of triples,
 // maps the triples to local IDs and writes a partial vocabulary (together with
 // the corresponding ID triples) whenever enough triples have been collected.
-// The parser runs on the same thread pool, so that there is exactly one
-// compute resource for the whole first pass.
+// The parser runs on the same `io_context`, so that there is exactly one
+// compute resource for the whole first pass. The threads that drive the
+// `io_context` are donated by the global thread pool (see
+// `util/GlobalExecutor.h`), so that the first pass and the other phases of the
+// index build share a single set of threads.
 //
 // The classes are templated on the `Index` type (`IndexImpl` in production)
 // so that the pipeline can be unit-tested in isolation with a mock index. An
@@ -166,11 +173,12 @@ class PartialVocabularyTaskChain {
   }
 
   // Schedule the first step of this chain. Must be called exactly once, after
-  // all task chains have been constructed and before the thread pool behind
-  // `executor_` is joined. This is `noexcept` because `runTaskChains` starts
-  // the chains one after the other: if starting a later chain threw (which
-  // only `bad_alloc` from `post` could do), the earlier chains would already
-  // be running on the pool while `runTaskChains` unwinds and destroys them.
+  // all task chains have been constructed and while the `io_context` behind
+  // `executor_` is still being run (see `runTaskChains`). This is `noexcept`
+  // because `runTaskChains` starts the chains one after the other: if starting
+  // a later chain threw (which only `bad_alloc` from `post` could do), the
+  // earlier chains would already be running while `runTaskChains` unwinds and
+  // destroys them.
   void start() noexcept { postNextStep(); }
 
  private:
@@ -263,42 +271,104 @@ class PartialVocabularyTaskChain {
   }
 };
 
-// Run `numThreads` task chains on a thread pool with `numThreads` threads,
-// which is created (and destroyed) by this function, and block until all of
-// them have ended, i.e. until the parser has delivered the end of its input to
-// every chain or a chain has failed. In the latter case, rethrow the first
-// recorded error. The parser is created by `makeParser`, which is called with
-// the executor of the thread pool and must return a
+// Run `numThreads` task chains and block until all of them have ended, i.e.
+// until the parser has delivered the end of its input to every chain or a
+// chain has failed. In the latter case, rethrow the first recorded error. The
+// parser is created by `makeParser`, which is called with the executor of this
+// function's `io_context` (see below) and must return a
 // `std::unique_ptr<AsyncRdfParserBase>` that schedules all of its work on that
 // executor. Afterwards, `shared.nextPartialVocabIdx_` is the number of partial
 // vocabularies that were written (each index below it was claimed by exactly
 // one chain) and `shared.numTriples_` the total number of triples that were
 // written.
+//
+// The actual computing power comes from the global thread pool (see
+// `util/GlobalExecutor.h`): this function donates `numThreads` of its threads
+// to a local `io_context` that it owns. The local `io_context` is needed
+// because the chains and the parser have to be destroyed only when no
+// asynchronous operation of theirs is left, and the global pool (which is
+// never joined, and which other phases may be using at the same time) cannot
+// provide that guarantee per phase. Running the local `io_context` until it
+// runs out of work is the exact equivalent of joining a thread pool of this
+// function's own; it is part of the same "hacky for now" story as the global
+// pool itself.
+//
+// NOTE: The futures of the donated threads are awaited on the calling thread,
+// which therefore must not be one of the threads of the global thread pool
+// (that thread would block while holding a thread that the donated runners may
+// be waiting for).
 template <typename Index, typename MakeParser>
 void runTaskChains(FirstPassSharedState<Index>& shared, size_t numThreads,
                    MakeParser makeParser) {
-  // `pool` is declared before `parser` and `chains`, so that these (whose
-  // asynchronous operations are scheduled on `pool`) are destroyed first, in
-  // reverse declaration order.
-  boost::asio::thread_pool pool{numThreads};
+  // `ioContext` is declared before `parser` and `chains`, so that these (whose
+  // asynchronous operations are scheduled on `ioContext`) are destroyed first,
+  // in reverse declaration order.
+  boost::asio::io_context ioContext;
+  // Keep the donated runners (see below) from returning immediately: they are
+  // started before the chains, at which point the `io_context` has no work yet.
+  auto workGuard = boost::asio::make_work_guard(ioContext);
   std::unique_ptr<AsyncRdfParserBase> parser =
-      std::move(makeParser)(pool.get_executor());
-  // The chains are owned here, outside of the thread pool, and are kept alive
-  // until `join()` has returned. This is simpler than passing `shared_ptr`s to
-  // the chains through every asynchronous step.
+      std::move(makeParser)(ql::any_io_executor{ioContext.get_executor()});
+  // The chains are owned here, outside of the `io_context`, and are kept alive
+  // until all the runners have returned. This is simpler than passing
+  // `shared_ptr`s to the chains through every asynchronous step.
   std::vector<std::unique_ptr<PartialVocabularyTaskChain<Index>>> chains;
   chains.reserve(numThreads);
   for (size_t i = 0; i < numThreads; ++i) {
     chains.push_back(std::make_unique<PartialVocabularyTaskChain<Index>>(
-        shared, *parser, pool.get_executor()));
+        shared, *parser, ql::any_io_executor{ioContext.get_executor()}));
   }
+
+  // Donate `numThreads` threads of the global thread pool to `ioContext`.
+  //
+  // NOTE: It is harmless to donate more runners than the global pool has
+  // threads: a runner that only starts when the work is already done simply
+  // finds an empty (and stopped) `io_context` and returns immediately.
+  //
+  // NOTE: A completion handler that throws would make `run()` exit before the
+  // work is done, so the runner keeps running the `io_context` until it
+  // returns normally. This should never happen (the chains catch all
+  // exceptions of their own steps, see `PartialVocabularyTaskChain::step`),
+  // but if it does, the error is reported like any other error of a chain,
+  // instead of terminating the process (which is what a `boost::asio::
+  // thread_pool` would do).
+  auto globalExecutor = ad_utility::globalExecutor();
+  std::vector<std::future<void>> runners;
+  runners.reserve(numThreads);
+  for (size_t i = 0; i < numThreads; ++i) {
+    runners.push_back(
+        ad_utility::postAndGetFuture(globalExecutor, [&ioContext, &shared]() {
+          while (true) {
+            try {
+              ioContext.run();
+              return;
+            } catch (...) {
+              shared.reportError(std::current_exception());
+            }
+          }
+        }));
+  }
+
   for (auto& chain : chains) {
     chain->start();
   }
-  // Block until every task chain has ended, i.e. no more `asyncGetBatch`
-  // calls are in flight and no more steps are queued. As the parser also runs
-  // on `pool`, this means that no asynchronous operation at all is left.
-  pool.join();
+  // All the chains are started, so from now on the `io_context` runs out of
+  // work exactly when the first pass is done.
+  workGuard.reset();
+
+  // Block until every donated runner has returned, which happens only when the
+  // `io_context` has no work left, i.e. when every task chain has ended: no
+  // more `asyncGetBatch` calls are in flight and no more steps are queued. As
+  // the parser also runs on `ioContext`, this means that no asynchronous
+  // operation at all is left, and the chains, the parser and the `io_context`
+  // can safely be destroyed. This is the exact replacement of the
+  // `boost::asio::thread_pool::join()` that this function used before.
+  //
+  // NOTE: Every runner is awaited, also when an earlier one has already
+  // reported an error, because `ioContext` must outlive all of them.
+  for (auto& runner : runners) {
+    runner.get();
+  }
 
   std::exception_ptr firstError = *shared.firstError_.wlock();
   if (firstError) {

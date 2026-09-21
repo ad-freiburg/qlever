@@ -546,7 +546,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   using namespace qlever::partialVocabularyBuilder;
   FirstPassSharedState<IndexImpl> shared{this, &vocab_.getCaseComparator(),
                                          linesPerPartial};
-  // The thread pool and the parser are owned by `runTaskChains`, which only
+  // The `io_context` and the parser are owned by `runTaskChains`, which only
   // returns once no asynchronous operation is left.
   runTaskChains(shared, numThreads,
                 [this, &files](const ql::any_io_executor& executor) {
