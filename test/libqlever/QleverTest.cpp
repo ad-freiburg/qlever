@@ -14,7 +14,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
-#include "QleverTestHelpers.h"
+#include "./QleverTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExternalValues.h"
 #include "engine/MaterializedViews.h"
