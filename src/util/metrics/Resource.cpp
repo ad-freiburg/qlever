@@ -12,12 +12,14 @@
 #include <absl/strings/str_split.h>
 #include <absl/strings/strip.h>
 #include <opentelemetry/sdk/common/env_variables.h>
+#include <opentelemetry/sdk/resource/resource_detector.h>
 #include <opentelemetry/semconv/service_attributes.h>
 
 #include <string>
 #include <string_view>
 
 #include "CompilationInfo.h"
+#include "backports/algorithm.h"
 
 namespace resource_sdk = opentelemetry::sdk::resource;
 namespace otel_common = opentelemetry::sdk::common;
@@ -42,18 +44,14 @@ bool hasServiceNameFromEnv() {
       !value.empty()) {
     return true;
   }
-  if (!otel_common::GetStringEnvironmentVariable(RESOURCE_ATTRIBUTES_ENV_VAR,
-                                                 value)) {
-    return false;
-  }
-  // `OTEL_RESOURCE_ATTRIBUTES` is a comma-separated list of `key=value` pairs.
-  for (std::string_view entry : absl::StrSplit(value, ',')) {
-    std::string_view key = entry.substr(0, entry.find('='));
-    if (absl::StripAsciiWhitespace(key) == semconv::service::kServiceName) {
-      return true;
-    }
-  }
-  return false;
+  // Reads and parses `OTEL_RESOURCE_ATTRIBUTES`. Return whether a non-empty
+  // service name was set (mirroring `GetStringEnvironmentVariable`).
+  auto res = opentelemetry::sdk::resource::OTELResourceDetector().Detect();
+  return ql::ranges::any_of(res.GetAttributes(), [](const auto& attribute) {
+    return attribute.first == semconv::service::kServiceName &&
+           std::holds_alternative<std::string>(attribute.second) &&
+           !std::get<std::string>(attribute.second).empty();
+  });
 }
 
 // _____________________________________________________________________________
