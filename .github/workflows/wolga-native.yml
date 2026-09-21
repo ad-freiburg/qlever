@@ -34,6 +34,9 @@ jobs:
     timeout-minutes: 240
     strategy:
       fail-fast: false
+      # Sequential legs: one full build+test at a time per run, so a shared
+      # 16-core host is never oversubscribed and stays usable for others.
+      max-parallel: 1
       matrix:
         include:
           - image: gcc13
