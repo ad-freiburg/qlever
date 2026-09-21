@@ -23,6 +23,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/span.h"
+#include "engine/idTable/IdColumn.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
@@ -239,7 +240,7 @@ class CompressedRelationWriter {
   // Compress the `column` and write it to the `outfile_`. Return the offset and
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
-      ql::span<const Id> column);
+      ConstIdColumn column);
 
   // Return the number of columns that is stored inside the blocks.
   size_t numColumns() const { return numColumns_; }

@@ -24,6 +24,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/span.h"
+#include "engine/idTable/IdColumn.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
@@ -280,7 +281,7 @@ class CompressedRelationReader {
     size_t numHandledBlocks{0};
   };
   static GetBlocksForJoinResult getBlocksForJoin(
-      ql::span<const Id> joinColumn,
+      ConstIdColumn joinColumn,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 
   // For each of `metadataAndBlocks, metadataAndBlocks2` get the blocks (an

@@ -12,6 +12,7 @@
 
 #include "backports/span.h"
 #include "engine/Operation.h"
+#include "engine/idTable/IdColumn.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/VectorWithMemoryLimit.h"
@@ -273,7 +274,7 @@ class PathSearch : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  std::pair<ql::span<const Id>, ql::span<const Id>> handleSearchSides() const;
+  std::pair<ConstIdColumn, ConstIdColumn> handleSearchSides() const;
 
   /**
    * @brief Finds paths based on the configured algorithm.

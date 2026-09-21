@@ -16,6 +16,7 @@
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathGraphSearch.h"
 #include "engine/TransitivePathHashMap.h"
+#include "engine/idTable/IdColumn.h"
 #include "global/Constants.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/AllocatorWithLimit.h"
@@ -138,8 +139,8 @@ class GraphSearchTest : public Test {
             targetIds.emplace_back(Id::makeFromInt(targetNode));
           }
         }
-        graphs_.push_back(BinSearchMap(ql::span<const Id>(startIds),
-                                       ql::span<const Id>(targetIds)));
+        graphs_.push_back(BinSearchMap(ConstIdColumn(startIds),
+                                       ConstIdColumn(targetIds)));
       }
     }
   }
