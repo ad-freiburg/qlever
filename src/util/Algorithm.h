@@ -10,7 +10,9 @@
 #include <numeric>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/shift.h"
@@ -316,6 +318,56 @@ CPP_template(typename RandomIt, typename Tp, typename Compare)(
     lo = hi;
     step *= 2;
   }
+}
+
+// Resolve a batch of `queries` against the sorted range `[first, last)` and
+// return one `lower_bound` offset per query, in the original order of
+// `queries`. A copy of the batch is processed in sorted order (keeping each
+// query's original position for scattering the results back), carrying the
+// previous hit as the gallop hint for `gallop_lower_bound_iterator`. A query
+// that goes backwards (smaller than its predecessor, which cannot happen for
+// correctly sorted input) falls back to a plain `lower_bound_iterator` from
+// `first`, because such a query may lie before the hint. Callers distinguish
+// exact hits from holes by comparing each result against the query.
+CPP_template(typename RandomIt, typename QueryRange)(
+    requires ql::concepts::random_access_iterator<RandomIt>) std::vector<size_t>
+    batch_lower_bound_with_hints(RandomIt first, RandomIt last,
+                                 const QueryRange& queries) {
+  // `remove_const_t` because the value type of e.g. `ql::span<const size_t>`
+  // is `const size_t`, which must not be copied into the sorted query pairs.
+  using QueryType =
+      std::remove_const_t<ql::ranges::range_value_t<QueryRange>>;
+  std::vector<std::pair<QueryType, size_t>> sortedQueries;
+  sortedQueries.reserve(ql::ranges::size(queries));
+  size_t index = 0;
+  for (const auto& query : queries) {
+    sortedQueries.emplace_back(query, index++);
+  }
+  ql::ranges::sort(sortedQueries,
+                   [](const auto& a, const auto& b) {
+                     return a.first < b.first;
+                   });
+  std::vector<size_t> result(sortedQueries.size());
+  if (sortedQueries.empty()) {
+    return result;
+  }
+  auto comp = [](RandomIt it, const QueryType& value) { return *it < value; };
+  RandomIt hint = first;
+  // Start at the smallest query, so the first iteration already takes the
+  // gallop path with `hint == first`, which is always a valid hint.
+  QueryType prev = sortedQueries.front().first;
+  for (const auto& [query, originalIndex] : sortedQueries) {
+    RandomIt it;
+    if (query < prev) {
+      it = lower_bound_iterator(first, last, query, comp);
+    } else {
+      it = gallop_lower_bound_iterator(first, last, query, comp, hint);
+    }
+    result[originalIndex] = static_cast<size_t>(it - first);
+    hint = it;
+    prev = query;
+  }
+  return result;
 }
 
 // In place version of `ql::ranges::set_difference` which writes the output to

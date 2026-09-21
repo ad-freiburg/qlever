@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <map>
 
+#include "backports/span.h"
 #include "util/Algorithm.h"
 #include "util/GTestHelpers.h"
 #include "util/HashMap.h"
@@ -308,6 +309,50 @@ TEST(AlgorithmTest, gallopBoundIterator) {
                 single.begin(), single.end(), 6u, compForLowerBound,
                 single.begin()),
             single.end());
+}
+
+// _____________________________________________________________________________
+TEST(AlgorithmTest, batchLowerBoundWithHints) {
+  // Sorted index array with holes (even numbers only, like a vocabulary with
+  // holes). The existing `gallopBoundIterator` test covers single searches
+  // with explicit hints; this test covers the batch driver: sorting a copy of
+  // the batch, carrying the previous hit as the hint, and scattering the
+  // results back into the original order.
+  std::vector<size_t> sorted{0, 2, 4, 6, 8,  10,
+                             12, 14, 16, 18, 20};
+  auto reference = [&sorted](const std::vector<size_t>& queries) {
+    std::vector<size_t> expected;
+    for (auto query : queries) {
+      expected.push_back(static_cast<size_t>(
+          ql::ranges::lower_bound(sorted, query) - sorted.begin()));
+    }
+    return expected;
+  };
+  // Ascending, descending, and mixed batches, with duplicates, holes, and
+  // out-of-range queries.
+  std::vector<std::vector<size_t>> batches{
+      {0, 2, 4, 20}, {20, 4, 2, 0},          {3, 3, 3},
+      {1, 7, 5, 9, 0, 21, 22}, {5},          {21},
+      {0},                     {20},         {10, 10, 11, 9, 9, 12},
+      {22, 0, 20, 1, 19, 2, 3, 4, 5, 6, 21}};
+  for (const auto& queries : batches) {
+    EXPECT_EQ(batch_lower_bound_with_hints(sorted.begin(), sorted.end(),
+                                           queries),
+              reference(queries));
+    // The vocabularies pass their batches as `ql::span<const size_t>`.
+    ql::span<const size_t> spanQueries{queries.data(), queries.size()};
+    EXPECT_EQ(batch_lower_bound_with_hints(sorted.begin(), sorted.end(),
+                                           spanQueries),
+              reference(queries));
+  }
+  // Empty batch and empty range.
+  EXPECT_TRUE(batch_lower_bound_with_hints(sorted.begin(), sorted.end(),
+                                           std::vector<size_t>{})
+                  .empty());
+  std::vector<size_t> empty;
+  EXPECT_EQ(batch_lower_bound_with_hints(empty.begin(), empty.end(),
+                                         std::vector<size_t>{1, 2}),
+            (std::vector<size_t>{0, 0}));
 }
 
 // ____________________________________________________________________________

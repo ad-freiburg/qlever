@@ -18,6 +18,7 @@
 #include "index/vocabulary/PrefixHeuristic.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/Algorithm.h"
 #include "util/FsstCompressor.h"
 #include "util/InputRangeUtils.h"
 #include "util/OverloadCallOperator.h"
@@ -160,10 +161,12 @@ CPP_template(typename UnderlyingVocabulary,
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
+    // For an underlying vocabulary with holes each `operator[]` performs a
+    // binary search (`positionOfIndex`), so resolve the whole batch with a
+    // single galloping pass instead (see `lookupBatchWithGallopHints`). All
+    // other underlying vocabularies translate indices to positions in O(1).
     if constexpr (underlyingHasHoles) {
-      // Indices that are holes report a placeholder; keep the per-index path
-      // that implements that mapping.
-      return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+      return lookupBatchWithGallopHints(indices);
     } else {
       // Fetch the compressed words in one batch through the underlying
       // vocabulary (an on-disk underlying vocabulary serves this from its
@@ -601,6 +604,39 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
  private:
+  // Batch lookup for an underlying vocabulary with holes: sort a copy of the
+  // batch and resolve all index-to-position translations with a single
+  // galloping pass over the underlying sorted indices (see
+  // `batch_lower_bound_with_hints`), then decompress each hit directly from
+  // its position. Behavior-preserving: same words, placeholders, and order as
+  // `sequentialLookupBatch`, but one galloping search instead of one binary
+  // search (`positionOfIndex`) per index. Only instantiated when
+  // `underlyingHasHoles`, the only case where the underlying vocabulary
+  // exposes `indices()` and `wordAtPosition()`.
+  VocabBatchLookupResult lookupBatchWithGallopHints(
+      ql::span<const size_t> indices) const {
+    AD_CONTRACT_CHECK(!indices.empty());
+    auto sortedIndices = underlyingVocabulary_.indices();
+    auto positions = ad_utility::batch_lower_bound_with_hints(
+        sortedIndices.begin(), sortedIndices.end(), indices);
+    std::vector<std::string> words;
+    words.reserve(indices.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+      size_t position = positions[i];
+      if (position < sortedIndices.size() &&
+          sortedIndices[position] == indices[i]) {
+        words.push_back(compressionWrapper_.decompress(
+            underlyingVocabulary_.wordAtPosition(position),
+            getDecoderIdxFromPosition(position)));
+      } else {
+        words.push_back(
+            ad_utility::vocabulary::placeholderForMissingVocabIndex(
+                indices[i]));
+      }
+    }
+    return ad_utility::vocabulary::makeBatchResultFromWords(std::move(words));
+  }
+
   // Get the correct decoder for the word at the given position. One decoder is
   // created per `NumWordsPerBlock` words that are pushed to the `WordWriter`,
   // so `position` has to be the position of the word in exactly that sequence

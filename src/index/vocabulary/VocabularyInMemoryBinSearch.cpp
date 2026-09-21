@@ -76,6 +76,28 @@ std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
 }
 
 // _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInMemoryBinSearch::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+  auto sortedIndices = this->indices();
+  auto positions = ad_utility::batch_lower_bound_with_hints(
+      sortedIndices.begin(), sortedIndices.end(), indices);
+  std::vector<std::string> words;
+  words.reserve(indices.size());
+  for (size_t i = 0; i < indices.size(); ++i) {
+    size_t position = positions[i];
+    if (position < sortedIndices.size() &&
+        sortedIndices[position] == indices[i]) {
+      words.emplace_back(wordAtPosition(position));
+    } else {
+      words.push_back(
+          ad_utility::vocabulary::placeholderForMissingVocabIndex(indices[i]));
+    }
+  }
+  return ad_utility::vocabulary::makeBatchResultFromWords(std::move(words));
+}
+
+// _____________________________________________________________________________
 WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
     ql::ranges::iterator_t<Words> it) const {
   if (it == words_.end()) {

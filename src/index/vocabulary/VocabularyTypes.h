@@ -250,6 +250,21 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
   return StringVectorVocabBatchLookupData::asResult(std::move(data));
 }
 
+// Build a `VocabBatchLookupResult` from already materialized owning `words`
+// (one per looked-up index, in batch order). Shared by batch implementations
+// that resolve the words in a different order first (e.g. sorted with gallop
+// hints, see `batch_lower_bound_with_hints`) and therefore cannot use
+// `sequentialLookupBatch` above.
+inline VocabBatchLookupResult makeBatchResultFromWords(
+    std::vector<std::string> words) {
+  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+  data->buffer() = std::move(words);
+  data->views() = ::ranges::to_vector(
+      data->buffer() |
+      ql::views::transform(ad_utility::staticCast<std::string_view>));
+  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+}
+
 // Streamed version of `lookupBatch`: lazily apply `vocab.lookupBatch` for the
 // passed `vocab` to each batch of the (type-erased) input range.
 // The referenced `vocab` must outlive the returned range.
