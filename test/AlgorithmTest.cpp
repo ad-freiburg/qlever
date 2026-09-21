@@ -250,7 +250,6 @@ TEST(AlgorithmTest, lowerUpperBoundIterator) {
 
 // _____________________________________________________________________________
 TEST(AlgorithmTest, gallopBoundIterator) {
-  std::vector<size_t> input{0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20};
   auto compForLowerBound = [](auto iterator, size_t value) {
     return *iterator < value;
   };
@@ -260,55 +259,60 @@ TEST(AlgorithmTest, gallopBoundIterator) {
   // Every hint at or before the answer must find it; begin and end are
   // always valid hints (sorted-batch resolving carries a valid hint by
   // construction).
-  for (size_t value = 0; value <= 22; ++value) {
-    auto expectedLower = ql::ranges::lower_bound(input, value);
-    auto expectedUpper = ql::ranges::upper_bound(input, value);
-    auto answerIdx =
-        static_cast<size_t>(expectedLower - input.begin());
-    for (size_t hintIdx = 0; hintIdx <= answerIdx; ++hintIdx) {
-      auto hint = input.begin() + hintIdx;
-      EXPECT_EQ(ad_utility::gallop_lower_bound_iterator(
-                    input.begin(), input.end(), value, compForLowerBound,
-                    hint),
-                expectedLower)
-          << "value " << value << " hintIdx " << hintIdx;
-      EXPECT_EQ(ad_utility::gallop_upper_bound_iterator(
-                    input.begin(), input.end(), value, compForUpperBound,
-                    hint),
-                expectedUpper)
-          << "value " << value << " hintIdx " << hintIdx;
+  auto checkRange = [&](const std::vector<size_t>& input, size_t maxValue) {
+    for (size_t value = 0; value <= maxValue; ++value) {
+      auto expectedLower = ql::ranges::lower_bound(input, value);
+      auto expectedUpper = ql::ranges::upper_bound(input, value);
+      auto answerIdx = static_cast<size_t>(expectedLower - input.begin());
+      for (size_t hintIdx = 0; hintIdx <= answerIdx; ++hintIdx) {
+        auto hint = input.begin() + hintIdx;
+        EXPECT_EQ(
+            ad_utility::gallop_lower_bound_iterator(
+                input.begin(), input.end(), value, compForLowerBound, hint),
+            expectedLower)
+            << "value " << value << " hintIdx " << hintIdx;
+        EXPECT_EQ(
+            ad_utility::gallop_upper_bound_iterator(
+                input.begin(), input.end(), value, compForUpperBound, hint),
+            expectedUpper)
+            << "value " << value << " hintIdx " << hintIdx;
+      }
+      // The end hint is only valid when the answer is the end.
+      if (expectedLower == input.end()) {
+        EXPECT_EQ(ad_utility::gallop_lower_bound_iterator(
+                      input.begin(), input.end(), value, compForLowerBound,
+                      input.end()),
+                  expectedLower)
+            << "value " << value;
+      }
+      if (expectedUpper == input.end()) {
+        EXPECT_EQ(ad_utility::gallop_upper_bound_iterator(
+                      input.begin(), input.end(), value, compForUpperBound,
+                      input.end()),
+                  expectedUpper)
+            << "value " << value;
+      }
     }
-    // The end hint is only valid when the answer is the end.
-    if (expectedLower == input.end()) {
-      EXPECT_EQ(ad_utility::gallop_lower_bound_iterator(
-                    input.begin(), input.end(), value, compForLowerBound,
-                    input.end()),
-                expectedLower)
-          << "value " << value;
-    }
-    if (expectedUpper == input.end()) {
-      EXPECT_EQ(ad_utility::gallop_upper_bound_iterator(
-                    input.begin(), input.end(), value, compForUpperBound,
-                    input.end()),
-                expectedUpper)
-          << "value " << value;
-    }
-  }
+  };
+  checkRange({0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20}, 22);
+  // Run of equal elements: hints inside the run must still bracket it, with
+  // the lower bound at its start and the upper bound past its end.
+  checkRange({0, 2, 4, 4, 4, 6, 8}, 10);
   // Empty and single-element ranges.
   std::vector<size_t> empty;
-  EXPECT_EQ(ad_utility::gallop_lower_bound_iterator(
-                empty.begin(), empty.end(), 1u, compForLowerBound,
-                empty.begin()),
-            empty.end());
+  EXPECT_EQ(
+      ad_utility::gallop_lower_bound_iterator(empty.begin(), empty.end(), 1u,
+                                              compForLowerBound, empty.begin()),
+      empty.end());
   std::vector<size_t> single{5};
-  EXPECT_EQ(ad_utility::gallop_lower_bound_iterator(
-                single.begin(), single.end(), 5u, compForLowerBound,
-                single.begin()),
-            single.begin());
-  EXPECT_EQ(ad_utility::gallop_lower_bound_iterator(
-                single.begin(), single.end(), 6u, compForLowerBound,
-                single.begin()),
-            single.end());
+  EXPECT_EQ(
+      ad_utility::gallop_lower_bound_iterator(
+          single.begin(), single.end(), 5u, compForLowerBound, single.begin()),
+      single.begin());
+  EXPECT_EQ(
+      ad_utility::gallop_lower_bound_iterator(
+          single.begin(), single.end(), 6u, compForLowerBound, single.begin()),
+      single.end());
 }
 
 // _____________________________________________________________________________
@@ -318,8 +322,7 @@ TEST(AlgorithmTest, batchLowerBoundWithHints) {
   // with explicit hints; this test covers the batch driver: sorting a copy of
   // the batch, carrying the previous hit as the hint, and scattering the
   // results back into the original order.
-  std::vector<size_t> sorted{0, 2, 4, 6, 8,  10,
-                             12, 14, 16, 18, 20};
+  std::vector<size_t> sorted{0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20};
   auto reference = [&sorted](const std::vector<size_t>& queries) {
     std::vector<size_t> expected;
     for (auto query : queries) {
@@ -331,19 +334,25 @@ TEST(AlgorithmTest, batchLowerBoundWithHints) {
   // Ascending, descending, and mixed batches, with duplicates, holes, and
   // out-of-range queries.
   std::vector<std::vector<size_t>> batches{
-      {0, 2, 4, 20}, {20, 4, 2, 0},          {3, 3, 3},
-      {1, 7, 5, 9, 0, 21, 22}, {5},          {21},
-      {0},                     {20},         {10, 10, 11, 9, 9, 12},
+      {0, 2, 4, 20},
+      {20, 4, 2, 0},
+      {3, 3, 3},
+      {1, 7, 5, 9, 0, 21, 22},
+      {5},
+      {21},
+      {0},
+      {20},
+      {10, 10, 11, 9, 9, 12},
       {22, 0, 20, 1, 19, 2, 3, 4, 5, 6, 21}};
   for (const auto& queries : batches) {
-    EXPECT_EQ(batch_lower_bound_with_hints(sorted.begin(), sorted.end(),
-                                           queries),
-              reference(queries));
+    EXPECT_EQ(
+        batch_lower_bound_with_hints(sorted.begin(), sorted.end(), queries),
+        reference(queries));
     // The vocabularies pass their batches as `ql::span<const size_t>`.
     ql::span<const size_t> spanQueries{queries.data(), queries.size()};
-    EXPECT_EQ(batch_lower_bound_with_hints(sorted.begin(), sorted.end(),
-                                           spanQueries),
-              reference(queries));
+    EXPECT_EQ(
+        batch_lower_bound_with_hints(sorted.begin(), sorted.end(), spanQueries),
+        reference(queries));
   }
   // Empty batch and empty range.
   EXPECT_TRUE(batch_lower_bound_with_hints(sorted.begin(), sorted.end(),
