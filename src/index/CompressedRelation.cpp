@@ -6,6 +6,7 @@
 
 #include "index/CompressedRelation.h"
 
+#include <algorithm>
 #include <thread>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -14,11 +15,14 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
 #include "index/DistinctCol0Ids.h"
 #include "index/GraphComputation.h"
 #include "index/IdTableUtils.h"
 #include "index/LocatedTriples.h"
+#include "util/Algorithm.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
@@ -1507,6 +1511,37 @@ auto CompressedRelationReader::getFirstAndLastTripleIgnoringGraph(
 }
 
 // ____________________________________________________________________________
+ad_utility::HashSetWithMemoryLimit<Id::T>
+CompressedRelationReader::computeUniqueGraphIds(
+    const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const CancellationHandle& cancellationHandle,
+    const Allocator& allocator) const {
+  ad_utility::HashSetWithMemoryLimit<Id::T> graphIds{allocator.as<Id::T>()};
+  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+  const auto scanConfig =
+      getScanConfig(ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+                    additionalColumns, locatedTriplesPerBlock);
+
+  for (const auto& metadata : scanSpecAndBlocks.getBlockMetadataView()) {
+    bool shouldScan =
+        !metadata.graphInfo_.has_value() ||
+        ql::ranges::any_of(metadata.graphInfo_.value(), [&graphIds](Id id) {
+          return !ad_utility::contains(graphIds, id.getBits());
+        });
+    if (shouldScan) {
+      auto block = readAndDecompressBlock(metadata, scanConfig);
+      cancellationHandle->throwIfCancelled();
+      AD_CORRECTNESS_CHECK(block.has_value());
+      for (Id id : block->block_.getColumn(ADDITIONAL_COLUMN_GRAPH_ID)) {
+        graphIds.insert(id.getBits());
+      }
+    }
+  }
+  return graphIds;
+}
+
+// ____________________________________________________________________________
 std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
     std::initializer_list<ColumnIndex> baseColumns,
     ColumnIndicesRef additionalColumns) {
@@ -1552,40 +1587,6 @@ std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
                          static_cast<int>(numScanColumns));
   }
   return {numScanColumns, containsGraphId};
-}
-
-// _____________________________________________________________________________
-CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
-    Id col0Id, size_t numDistinctC1, const IdTable& relation) {
-  AD_CORRECTNESS_CHECK(!relation.empty());
-  size_t numRows = relation.numRows();
-  // Make sure that the blocks don't become too large: If the previously
-  // buffered small relations together with the new relations would exceed
-  // `1.5 * blocksize` then we start a new block for the current relation.
-  //
-  // NOTE: there are some unit tests that rely on this factor being `1.5`.
-  if (static_cast<double>(numRows + smallRelationsBuffer_.numRows()) >
-      static_cast<double>(blocksize()) * 1.5) {
-    writeBufferedRelationsToSingleBlock();
-  }
-  auto offsetInBlock = smallRelationsBuffer_.size();
-
-  // We have to keep track of the first and last `col0` of each block.
-  if (smallRelationsBuffer_.numRows() == 0) {
-    currentBlockFirstCol0_ = col0Id;
-  }
-  currentBlockLastCol0_ = col0Id;
-
-  smallRelationsBuffer_.resize(offsetInBlock + numRows);
-  for (size_t i = 0; i < relation.numColumns(); ++i) {
-    ql::ranges::copy(
-        relation.getColumn(i),
-        smallRelationsBuffer_.getColumn(i).begin() + offsetInBlock);
-  }
-  // Note: the multiplicity of the `col2` (where we set the dummy here) will
-  // be set later in `createPermutationPair`.
-  return {col0Id, numRows, computeMultiplicity(numRows, numDistinctC1),
-          multiplicityDummy, offsetInBlock};
 }
 
 // _____________________________________________________________________________

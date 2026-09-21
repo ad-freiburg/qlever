@@ -482,6 +482,33 @@ TEST(SparqlExpression, multiplyExpressionWithVariable) {
                           sparqlExpressionResultMatcher(expected)));
 }
 
+// _____________________________________________________________________________
+TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
+  V<Id> ints{{I(1), I(-2), I(3)}, alloc};
+  V<Id> doubles{{D(0.5), D(2.0), D(-1.5)}, alloc};
+
+  // Vector-vector: Int/Int, Int/Double, Double/Double.
+  testPlus(V<Id>{{I(2), I(-4), I(6)}, alloc}, ints, ints);
+  testPlus(V<Id>{{D(1.5), D(0.0), D(1.5)}, alloc}, ints, doubles);
+  testPlus(V<Id>{{D(1.0), D(4.0), D(-3.0)}, alloc}, doubles, doubles);
+
+  // Vector-constant and constant-vector. `testPlus` checks both operand orders.
+  testPlus(V<Id>{{I(3), I(0), I(5)}, alloc}, ints, I(2));
+  testPlus(V<Id>{{D(2.5), D(4.0), D(0.5)}, alloc}, doubles, D(2.0));
+
+  // Exercise the `MakeNumericExpression` -> `NumericIdWrapper` fast-path
+  // mapping.
+  testMultiply(V<Id>{{I(2), I(-4), I(6)}, alloc}, ints, I(2));
+  testMultiply(V<Id>{{D(0.5), D(-4.0), D(-4.5)}, alloc}, ints, doubles);
+
+  // Preserve `NanOrInfToUndef` in the homogeneous numeric fast path.
+  testDivide(V<Id>{{U, U, U}, alloc}, ints, I(0));
+
+  // A mixed numeric vector must fall back to the generic path.
+  V<Id> mixed{{I(1), D(2.0), I(3)}, alloc};
+  testPlus(V<Id>{{I(2), D(3.0), I(4)}, alloc}, mixed, I(1));
+}
+
 // _____________________________________________________________________________________
 TEST(SparqlExpression, arithmeticOperators) {
   // Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
@@ -1898,11 +1925,18 @@ TEST(SparqlExpression, ifAndCoalesce) {
   // If all children are unbound constants, the result is a single UNDEF.
   checkCoalesce(U, std::tuple{U, U});
 
-  // Check COALESCE with no arguments or empty arguments.
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}, Ids{}});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}, Ids{}, Ids{}});
+  // Check COALESCE with no arguments or empty arguments. The result is a single
+  // UNDEF and not an empty vector, by the same rule as in the case directly
+  // above: nothing is bound, and for an empty input nothing ever can be. Both
+  // representations are equivalent for an ordinary expression (the number of
+  // result rows is determined by the input, not by this result), but only a
+  // constant is accepted when the `COALESCE` is evaluated as part of an
+  // implicit `GROUP BY` over an empty input, see the
+  // `CoalesceWithAggregateOnEmptyImplicitGroup` test in `GroupByTest.cpp`.
+  checkCoalesce(U, std::tuple{});
+  checkCoalesce(U, std::tuple{Ids{}});
+  checkCoalesce(U, std::tuple{Ids{}, Ids{}});
+  checkCoalesce(U, std::tuple{Ids{}, Ids{}, Ids{}});
 
   auto coalesceExpr = makeCoalesceExpressionVariadic(
       std::make_unique<IriExpression>(iri("<bim>")),
