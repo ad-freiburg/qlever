@@ -66,6 +66,10 @@ class GetResult {
   // the state in which a storage that has nothing to report may complete.
   GetResult() = default;
 
+  // Construct the "the storage was cancelled" state explicitly, see the default
+  // constructor above.
+  static GetResult cancelled() { return GetResult{}; }
+
   // Construct the end-of-chunk sentinel.
   static GetResult endOfChunk() {
     return GetResult{OptionalBlock<Block>{std::nullopt}};

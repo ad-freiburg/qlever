@@ -48,36 +48,20 @@ namespace net = boost::asio;
 // A `parallelBlockMerge::BlockStorageConcept` for blocks of type
 // `IdTableStatic`, which keeps only a bounded number of blocks per chunk in
 // memory and spills the rest to a temporary file, compressed. A producer
-// therefore never waits (except for the duration of the I/O), so a chunk that
-// is far ahead of the consumer can be merged to completion; the price is that
-// its blocks have to be compressed, written, read back and decompressed again.
+// therefore never waits (except for the duration of the I/O), at the price of
+// compressing and writing its blocks and reading them back again.
 //
-// This class is deliberately nothing but the owner of one queue per chunk: all
-// the actual work happens in the `compressedIdTable::ChunkQueue` (see
-// `CompressedIdTableChunkQueue.h`), because a chunk is the unit that everything
-// is bounded and accounted per. Each chunk that actually spills owns a file of
-// its own, which is created with its first spilled block and deleted again as
-// soon as that chunk is done. The disk space that this storage occupies is
-// therefore proportional to the chunks that are in flight and not to their
-// total number, exactly like the memory that it occupies.
+// This class is nothing but the owner of one `compressedIdTable::ChunkQueue`
+// per chunk, which does all the actual work (see
+// `CompressedIdTableChunkQueue.h`) and owns the file that its chunk spills to.
 //
-// THREAD SAFETY: The two asynchronous operations may be initiated from
-// anywhere, because they schedule themselves onto a strand of this storage;
-// only the PRECONDITIONS of the `BlockStorageConcept` apply. Nothing ever
-// blocks that strand, and the chunks do not serialize with each other, because
-// each of them has a strand of its own.
+// THREAD SAFETY: The asynchronous operations may be initiated from anywhere,
+// because they schedule themselves onto `strand_`, which nothing ever blocks.
+// The chunks do not serialize with each other, as each has a strand of its own.
 //
 // LIFETIME: This storage has to outlive every operation of it that is in
-// flight, because such an operation refers to it by plain pointer. The parallel
-// merge guarantees this, because the handler of every operation transitively
-// holds a `shared_ptr` to the `ParallelMergeState` that owns the sink and
-// thereby this storage. The queues and the strand-confined state are the
-// exception: they are shared, see `State`.
-//
-// NOTE: A `getBlock` whose block has to be read back from the file is not
-// cancelled by `cancelAll`, so a consumer that aborts the merge while such a
-// read is in flight sees that one last block instead of the end of the range.
-// Both are legal outcomes of a race between the consumer and the abort.
+// flight, which the parallel merge guarantees. Its queues and its `State` are
+// the exception, as those are shared with the operations.
 template <size_t NumCols = 0>
 class CompressedIdTableBlockStorage : public NoCopyNoMove {
  public:
@@ -121,9 +105,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   // that are kept in memory per chunk before that chunk starts spilling. That
   // number may be zero, in which case every block is spilled. The
   // `compressionLevel` decides how the spilled blocks are stored, see
-  // `CompressedBlockFile::CompressionLevel`; a spill file is short-lived and
-  // read back almost immediately, so a low level (or `NO_BLOCK_COMPRESSION`) is
-  // often faster than the default.
+  // `CompressedBlockFile::CompressionLevel`.
   //
   // NOTE: The `filenamePrefix` is not a filename but the prefix of one per
   // chunk, see `spillFilename`. It has to be unique among all the storages that
@@ -165,14 +147,19 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
                   CompletionToken&& completionToken) {
     return net::co_spawn(
         strand_,
-        [this, chunkIndex, block = std::move(block),
-         state = state_]() mutable -> net::awaitable<bool> {
+        [](CompressedIdTableBlockStorage* self, size_t chunkIndex,
+           OptionalBlock block,
+           std::shared_ptr<State> state) -> net::awaitable<bool> {
           AD_CORRECTNESS_CHECK(!state->wasCancelled_);
-          SharedChunkQueue chunk = getOrCreateChunk(*state, chunkIndex);
+          SharedChunkQueue chunk = self->getOrCreateChunk(*state, chunkIndex);
+          // NOTE: Awaiting the chunk releases `strand_`: the chunk runs on a
+          // strand of its own and resumes this coroutine back on `strand_`, so
+          // the compression and the I/O never occupy the strand of this
+          // storage, which is hence no bottleneck.
           bool wasStored =
               co_await chunk->storeBlock(std::move(block), net::use_awaitable);
           co_return wasStored;
-        },
+        }(this, chunkIndex, std::move(block), state_),
         AD_FWD(completionToken));
   }
 
@@ -182,12 +169,14 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   auto getBlock(size_t chunkIndex, CompletionToken&& completionToken) {
     return net::co_spawn(
         strand_,
-        [this, chunkIndex, state = state_]() -> net::awaitable<GetResult> {
+        [](CompressedIdTableBlockStorage* self, size_t chunkIndex,
+           std::shared_ptr<State> state) -> net::awaitable<GetResult> {
           AD_CORRECTNESS_CHECK(!state->wasCancelled_);
           // NOTE: The queue of a chunk that does not exist yet is created,
           // because the consumer of a chunk may well be faster than its
           // producer, see `BlockStorageConcept::getBlock`.
-          SharedChunkQueue chunk = getOrCreateChunk(*state, chunkIndex);
+          SharedChunkQueue chunk = self->getOrCreateChunk(*state, chunkIndex);
+          // NOTE: Awaiting the chunk releases `strand_`, see `storeBlock`.
           GetResult result = co_await chunk->getBlock(net::use_awaitable);
           if (result.isEndOfChunk()) {
             // This chunk is done, so its queue may be dropped, see
@@ -196,7 +185,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
             state->chunks_.erase(chunkIndex);
           }
           co_return std::move(result);
-        },
+        }(this, chunkIndex, state_),
         AD_FWD(completionToken));
   }
 
