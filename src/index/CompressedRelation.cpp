@@ -4,6 +4,7 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include "engine/idTable/IdColumn.h"
 #include "index/CompressedRelation.h"
 
 #include <algorithm>
@@ -624,7 +625,7 @@ Id CompressedRelationReader::getRelevantIdFromTriple(
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getBlocksForJoin(
-    ql::span<const Id> joinColumn,
+    ConstIdColumn joinColumn,
     const ScanSpecAndBlocksAndBounds& metadataAndBlocks)
     -> GetBlocksForJoinResult {
   if (joinColumn.empty() || metadataAndBlocks.getBlockMetadataView().empty()) {
@@ -1325,7 +1326,7 @@ CompressedRelationReader::readAndDecompressBlock(
 
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
-CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
+CompressedRelationWriter::compressAndWriteColumn(ConstIdColumn column) {
   std::vector<char> compressedBlock = ZstdWrapper::compress(
       (void*)(column.data()), column.size() * sizeof(column[0]));
   auto compressedSize = compressedBlock.size();

@@ -17,6 +17,7 @@
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
+#include "engine/idTable/IdColumn.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -1521,7 +1522,7 @@ GroupByImpl::substituteAllAggregates(
 template <size_t NUM_GROUP_COLUMNS>
 std::vector<size_t>
 GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
-    const ArrayOrVector<ql::span<const Id>>& groupByCols) {
+    const ArrayOrVector<ConstIdColumn>& groupByCols) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
   std::vector<size_t> hashEntries;
@@ -1898,7 +1899,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
 
       // Perform HashMap lookup once for all groups in current block
       using U = typename HashMapAggregationData<
-          NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
+          NUM_GROUP_COLUMNS>::template ArrayOrVector<ConstIdColumn>;
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());
 

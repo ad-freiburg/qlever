@@ -24,6 +24,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/idTable/IdColumn.h"
 #include "engine/idTable/IdTable.h"
 #include "index/IdTableUtils.h"
 #include "util/Forward.h"
@@ -242,7 +243,7 @@ namespace {
 // corresponding result column and the `UndefStatus`.
 using ExpectedColumns = ad_utility::HashMap<
     Variable,
-    std::pair<ql::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
+    std::pair<ConstIdColumn, ColumnIndexAndTypeInfo::UndefStatus>>;
 
 // Test that the result of the `join` matches the `expected` outcome.
 // If `requestLaziness` is true, the join is requested to be lazy. If

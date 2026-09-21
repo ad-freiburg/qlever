@@ -13,6 +13,7 @@
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
+#include "engine/idTable/IdColumn.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/KeyOrder.h"
@@ -484,7 +485,7 @@ class CompressedRelationWriter {
   // Compress the `column` and write it to the `outfile_`. Return the offset and
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
-      ql::span<const Id> column);
+      ConstIdColumn column);
 
   // Return the number of columns that is stored inside the blocks.
   size_t numColumns() const { return numColumns_; }
@@ -860,7 +861,7 @@ class CompressedRelationReader {
     size_t numHandledBlocks{0};
   };
   static GetBlocksForJoinResult getBlocksForJoin(
-      ql::span<const Id> joinColumn,
+      ConstIdColumn joinColumn,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 
   // For each of `metadataAndBlocks, metadataAndBlocks2` get the blocks (an

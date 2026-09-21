@@ -13,6 +13,7 @@
 
 #include "engine/TransitivePathBase.h"
 #include "engine/TransitivePathGraphSearch.h"
+#include "engine/idTable/IdColumn.h"
 #include "index/TripleComponentConversions.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
@@ -74,7 +75,7 @@ template <typename T>
 class TransitivePathImpl : public TransitivePathBase {
   // Tuple-like class
   using ZippedType = ql::ranges::range_value_t<
-      ::ranges::zip_view<ql::span<const Id>, ::ranges::repeat_view<Id>>>;
+      ::ranges::zip_view<ConstIdColumn, ::ranges::repeat_view<Id>>>;
   using TableColumnWithVocab = detail::TableColumnWithVocab<
       ad_utility::InputRangeTypeErased<ZippedType>>;
 
@@ -354,7 +355,7 @@ class TransitivePathImpl : public TransitivePathBase {
         computeColumnsWithoutJoinColumns(joinColumn, cols, graphColumn);
     auto columnsToRange = [graphColumn = std::move(graphColumn),
                            joinColumn](const auto& idTable) {
-      ql::span<const Id> startNodes = idTable.getColumn(joinColumn);
+      ConstIdColumn startNodes = idTable.getColumn(joinColumn);
       return graphColumn.has_value()
                  ? InputRangeTypeErased{zipColumns(
                        startNodes, idTable.getColumn(graphColumn.value()))}
@@ -417,14 +418,14 @@ class TransitivePathImpl : public TransitivePathBase {
 
   // Create a zipped view that returns `Id::makeUndefined()` for the graph
   // column.
-  static auto padWithMissingGraph(ql::span<const Id> input) {
+  static auto padWithMissingGraph(ConstIdColumn input) {
     return ::ranges::views::zip(input,
                                 ::ranges::views::repeat(Id::makeUndefined()));
   }
 
   // Create a zipped view from two columns.
-  static auto zipColumns(ql::span<const Id> input,
-                         ql::span<const Id> graphInput) {
+  static auto zipColumns(ConstIdColumn input,
+                         ConstIdColumn graphInput) {
     return ::ranges::views::zip(input, graphInput);
   }
 };

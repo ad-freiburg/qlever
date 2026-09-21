@@ -13,6 +13,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/idTable/IdColumn.h"
 
 // An operation that takes a set of subresults that pairwise-disjoint sets of
 // bound variables and materializes the full Cartesian product of these
@@ -128,8 +129,8 @@ class CartesianProductJoin : public Operation {
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write.
-  void writeResultColumn(ql::span<Id> targetColumn,
-                         ql::span<const Id> inputColumn, size_t groupSize,
+  void writeResultColumn(IdColumn targetColumn,
+                         ConstIdColumn inputColumn, size_t groupSize,
                          size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
