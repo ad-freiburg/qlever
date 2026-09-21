@@ -13,6 +13,7 @@
 #include <memory>
 #include <tuple>
 #include <variant>
+#include <vector>
 
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -179,19 +180,21 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifyOperands) {
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        ClassifySingleValueIdWithPreferredType) {
   const auto intClassification = classifyNumericOperandWithPreferredType(I(42));
-  EXPECT_EQ(intClassification.homogeneousType, HomogeneousNumericType::Int);
-  EXPECT_EQ(intClassification.preferredType, HomogeneousNumericType::Int);
+  EXPECT_EQ(intClassification.homogeneousType_, HomogeneousNumericType::Int);
+  EXPECT_EQ(intClassification.preferredType_, HomogeneousNumericType::Int);
 
   const auto doubleClassification =
       classifyNumericOperandWithPreferredType(D(3.5));
-  EXPECT_EQ(doubleClassification.homogeneousType,
+  EXPECT_EQ(doubleClassification.homogeneousType_,
             HomogeneousNumericType::Double);
-  EXPECT_EQ(doubleClassification.preferredType, HomogeneousNumericType::Double);
+  EXPECT_EQ(doubleClassification.preferredType_,
+            HomogeneousNumericType::Double);
 
   const auto otherClassification =
       classifyNumericOperandWithPreferredType(Id::makeFromBool(true));
-  EXPECT_EQ(otherClassification.homogeneousType, HomogeneousNumericType::Other);
-  EXPECT_EQ(otherClassification.preferredType, HomogeneousNumericType::Other);
+  EXPECT_EQ(otherClassification.homogeneousType_,
+            HomogeneousNumericType::Other);
+  EXPECT_EQ(otherClassification.preferredType_, HomogeneousNumericType::Other);
 }
 
 // _____________________________________________________________________________
@@ -204,41 +207,65 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySpanWithPreferredType) {
   std::array<ValueId, 0> empty{};
   std::array<ValueId, 4> withNonNumeric{I(1), I(2), Id::makeFromBool(true),
                                         D(4.0)};
+  std::array<ValueId, 4> withUndefined{I(1), I(2), Id::makeUndefined(), I(4)};
+  std::vector<ValueId> mostlyNonNumeric(200, Id::makeFromBool(true));
+  mostlyNonNumeric.push_back(D(1.0));
+  mostlyNonNumeric.push_back(D(2.0));
+  mostlyNonNumeric.push_back(D(3.0));
+  mostlyNonNumeric.push_back(I(1));
+  mostlyNonNumeric.push_back(I(2));
+  std::array<ValueId, 5> tiedWithNonNumeric{
+      I(1), I(2), D(3.0), Id::makeFromBool(true), Id::makeFromBool(false)};
 
   auto classification = classifyNumericOperandWithPreferredType(
       ql::span<const ValueId>{ints}, &context_);
-  EXPECT_EQ(classification.homogeneousType, HomogeneousNumericType::Int);
-  EXPECT_EQ(classification.preferredType, HomogeneousNumericType::Int);
+  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Int);
+  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Int);
 
   classification = classifyNumericOperandWithPreferredType(
       ql::span<const ValueId>{doubles}, &context_);
-  EXPECT_EQ(classification.homogeneousType, HomogeneousNumericType::Double);
-  EXPECT_EQ(classification.preferredType, HomogeneousNumericType::Double);
+  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Double);
+  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Double);
 
   classification = classifyNumericOperandWithPreferredType(
       ql::span<const ValueId>{mostlyInts}, &context_);
-  EXPECT_EQ(classification.homogeneousType, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType, HomogeneousNumericType::Int);
+  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Int);
 
   classification = classifyNumericOperandWithPreferredType(
       ql::span<const ValueId>{mostlyDoubles}, &context_);
-  EXPECT_EQ(classification.homogeneousType, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType, HomogeneousNumericType::Double);
+  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Double);
 
   classification = classifyNumericOperandWithPreferredType(
       ql::span<const ValueId>{tied}, &context_);
-  EXPECT_EQ(classification.homogeneousType, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType, HomogeneousNumericType::Int);
+  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Other);
 
   classification = classifyNumericOperandWithPreferredType(
       ql::span<const ValueId>{empty}, &context_);
-  EXPECT_EQ(classification.homogeneousType, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Other);
 
   classification = classifyNumericOperandWithPreferredType(
       ql::span<const ValueId>{withNonNumeric}, &context_);
-  EXPECT_EQ(classification.homogeneousType, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Int);
+
+  classification = classifyNumericOperandWithPreferredType(
+      ql::span<const ValueId>{withUndefined}, &context_);
+  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Int);
+
+  classification = classifyNumericOperandWithPreferredType(
+      ql::span<const ValueId>{mostlyNonNumeric}, &context_);
+  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Other);
+
+  classification = classifyNumericOperandWithPreferredType(
+      ql::span<const ValueId>{tiedWithNonNumeric}, &context_);
+  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Other);
 }
 
 // _____________________________________________________________________________
@@ -253,14 +280,14 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   const auto classifications = classifyNumericOperandsWithPreferredType(
       &context_, intsSpan, doublesSpan, I(5));
 
-  EXPECT_EQ(classifications[0].homogeneousType, HomogeneousNumericType::Other);
-  EXPECT_EQ(classifications[0].preferredType, HomogeneousNumericType::Int);
+  EXPECT_EQ(classifications[0].homogeneousType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classifications[0].preferredType_, HomogeneousNumericType::Int);
 
-  EXPECT_EQ(classifications[1].homogeneousType, HomogeneousNumericType::Other);
-  EXPECT_EQ(classifications[1].preferredType, HomogeneousNumericType::Double);
+  EXPECT_EQ(classifications[1].homogeneousType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classifications[1].preferredType_, HomogeneousNumericType::Double);
 
-  EXPECT_EQ(classifications[2].homogeneousType, HomogeneousNumericType::Int);
-  EXPECT_EQ(classifications[2].preferredType, HomogeneousNumericType::Int);
+  EXPECT_EQ(classifications[2].homogeneousType_, HomogeneousNumericType::Int);
+  EXPECT_EQ(classifications[2].preferredType_, HomogeneousNumericType::Int);
 }
 
 // _____________________________________________________________________________
@@ -392,6 +419,29 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   EXPECT_EQ((*resultVector)[0], D(5.5));
   EXPECT_EQ((*resultVector)[1], D(7.5));
   EXPECT_EQ((*resultVector)[2], D(9.5));
+}
+
+// _____________________________________________________________________________
+TEST_F(HomogeneousNumericExpressionHelpersTest,
+       EvaluateSpeculativeNumericOperationSlowPathNumericCombinations) {
+  std::array<ValueId, 3> left{I(1), D(2.5), D(3.5)};
+  std::array<ValueId, 3> right{I(4), I(5), D(6.5)};
+
+  auto leftSpan = ql::span<const ValueId>{left};
+  auto rightSpan = ql::span<const ValueId>{right};
+
+  auto result = evaluateSpeculativeNumericOperation<
+      TestNumericAdd, TestNumericValueGetter, TestNumericValueGetter, double,
+      int64_t>(leftSpan, rightSpan, &context_);
+
+  const auto* resultVector = std::get_if<VectorWithMemoryLimit<Id>>(&result);
+
+  ASSERT_NE(resultVector, nullptr);
+  ASSERT_EQ(resultVector->size(), 3);
+
+  EXPECT_EQ((*resultVector)[0], I(5));
+  EXPECT_EQ((*resultVector)[1], D(7.5));
+  EXPECT_EQ((*resultVector)[2], D(10.0));
 }
 
 // _____________________________________________________________________________

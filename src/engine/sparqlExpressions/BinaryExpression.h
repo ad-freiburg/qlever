@@ -103,8 +103,8 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
           classifyNumericOperandsWithPreferredType(context, left, right);
 
       const std::array<HomogeneousNumericType, 2> homogeneousTypes{
-          classifications[0].homogeneousType,
-          classifications[1].homogeneousType};
+          classifications[0].homogeneousType_,
+          classifications[1].homogeneousType_};
 
       if (ql::ranges::all_of(homogeneousTypes, [](HomogeneousNumericType type) {
             return type != HomogeneousNumericType::Other;
@@ -123,7 +123,7 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
       }
 
       const std::array<HomogeneousNumericType, 2> preferredTypes{
-          classifications[0].preferredType, classifications[1].preferredType};
+          classifications[0].preferredType_, classifications[1].preferredType_};
 
       if (ql::ranges::all_of(preferredTypes, [](HomogeneousNumericType type) {
             return type != HomogeneousNumericType::Other;
