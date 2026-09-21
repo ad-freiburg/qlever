@@ -268,6 +268,56 @@ CPP_template(typename ForwardIterator, typename Tp,
   return first;
 }
 
+// Galloping `lower_bound_iterator` starting from `hint`: exponential probe
+// forward while the probed element is still less than `val`, then binary
+// search in the bracket. Preconditions: `hint` is within `[first, last]` and
+// at or before the answer, and the range is sorted by `comp` (same comparator
+// contract as `lower_bound_iterator`, which compares an iterator as the first
+// argument to a value). Both hold when resolving a batch in sorted order
+// carrying the previous result as the hint.
+CPP_template(typename RandomIt, typename Tp, typename Compare)(
+    requires ql::concepts::random_access_iterator<RandomIt>) constexpr RandomIt
+    gallop_lower_bound_iterator(RandomIt first, RandomIt last, const Tp& val,
+                                Compare comp, RandomIt hint) {
+  using DistanceType = typename std::iterator_traits<RandomIt>::difference_type;
+  RandomIt lo = hint;
+  DistanceType step = 1;
+  while (true) {
+    DistanceType remaining = last - lo;
+    DistanceType jump = step < remaining ? step : remaining;
+    RandomIt hi = lo + jump;
+    if (hi == last || !comp(hi, val)) {
+      return lower_bound_iterator(lo, hi, val, comp);
+    }
+    lo = hi;
+    step *= 2;
+  }
+}
+
+// Galloping `upper_bound_iterator` starting from `hint`: mirror image of
+// `gallop_lower_bound_iterator` for the comparator contract of
+// `upper_bound_iterator` (a value as the first argument, an iterator as the
+// second). Same preconditions: `hint` is within `[first, last]` and at or
+// before the answer.
+CPP_template(typename RandomIt, typename Tp, typename Compare)(
+    requires ql::concepts::random_access_iterator<RandomIt>) constexpr RandomIt
+    gallop_upper_bound_iterator(RandomIt first, RandomIt last, const Tp& val,
+                                Compare comp, RandomIt hint) {
+  using DistanceType = typename std::iterator_traits<RandomIt>::difference_type;
+  RandomIt lo = hint;
+  DistanceType step = 1;
+  while (true) {
+    DistanceType remaining = last - lo;
+    DistanceType jump = step < remaining ? step : remaining;
+    RandomIt hi = lo + jump;
+    if (hi == last || !comp(val, hi)) {
+      return upper_bound_iterator(lo, hi, val, comp);
+    }
+    lo = hi;
+    step *= 2;
+  }
+}
+
 // In place version of `ql::ranges::set_difference` which writes the output to
 // the beginning of `r1`. `std::set_difference` is undefined for this case where
 // the output overlaps with one of the input ranges. Additionally, this allows

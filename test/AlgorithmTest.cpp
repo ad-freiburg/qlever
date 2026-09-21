@@ -247,6 +247,69 @@ TEST(AlgorithmTest, lowerUpperBoundIterator) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(AlgorithmTest, gallopBoundIterator) {
+  std::vector<size_t> input{0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20};
+  auto compForLowerBound = [](auto iterator, size_t value) {
+    return *iterator < value;
+  };
+  auto compForUpperBound = [](size_t value, auto iterator) {
+    return value < *iterator;
+  };
+  // Every hint at or before the answer must find it; begin and end are
+  // always valid hints (sorted-batch resolving carries a valid hint by
+  // construction).
+  for (size_t value = 0; value <= 22; ++value) {
+    auto expectedLower = ql::ranges::lower_bound(input, value);
+    auto expectedUpper = ql::ranges::upper_bound(input, value);
+    auto answerIdx =
+        static_cast<size_t>(expectedLower - input.begin());
+    for (size_t hintIdx = 0; hintIdx <= answerIdx; ++hintIdx) {
+      auto hint = input.begin() + hintIdx;
+      EXPECT_EQ(ad_utility::gallop_lower_bound_iterator(
+                    input.begin(), input.end(), value, compForLowerBound,
+                    hint),
+                expectedLower)
+          << "value " << value << " hintIdx " << hintIdx;
+      EXPECT_EQ(ad_utility::gallop_upper_bound_iterator(
+                    input.begin(), input.end(), value, compForUpperBound,
+                    hint),
+                expectedUpper)
+          << "value " << value << " hintIdx " << hintIdx;
+    }
+    // The end hint is only valid when the answer is the end.
+    if (expectedLower == input.end()) {
+      EXPECT_EQ(ad_utility::gallop_lower_bound_iterator(
+                    input.begin(), input.end(), value, compForLowerBound,
+                    input.end()),
+                expectedLower)
+          << "value " << value;
+    }
+    if (expectedUpper == input.end()) {
+      EXPECT_EQ(ad_utility::gallop_upper_bound_iterator(
+                    input.begin(), input.end(), value, compForUpperBound,
+                    input.end()),
+                expectedUpper)
+          << "value " << value;
+    }
+  }
+  // Empty and single-element ranges.
+  std::vector<size_t> empty;
+  EXPECT_EQ(ad_utility::gallop_lower_bound_iterator(
+                empty.begin(), empty.end(), 1u, compForLowerBound,
+                empty.begin()),
+            empty.end());
+  std::vector<size_t> single{5};
+  EXPECT_EQ(ad_utility::gallop_lower_bound_iterator(
+                single.begin(), single.end(), 5u, compForLowerBound,
+                single.begin()),
+            single.begin());
+  EXPECT_EQ(ad_utility::gallop_lower_bound_iterator(
+                single.begin(), single.end(), 6u, compForLowerBound,
+                single.begin()),
+            single.end());
+}
+
 // ____________________________________________________________________________
 TEST(AlgorithmTest, SetDifference) {
   using Vec = std::vector<int>;
