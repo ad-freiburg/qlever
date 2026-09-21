@@ -305,6 +305,8 @@ addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
 
 addLinkAndDiscoverTest(TaskQueueTest)
 
+addLinkAndDiscoverTest(AsyncTaskQueueTest)
+
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
 addLinkAndDiscoverTestNoLibs(TypeTraitsTest)
@@ -607,6 +609,8 @@ addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(GlobalExecutorTest qlever_util)
 
 addLinkAndDiscoverTest(MetricsTest metrics)
 
