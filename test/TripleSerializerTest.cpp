@@ -199,7 +199,7 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
 }
 
 // _____________________________________________________________________________
-TEST(TripleSerializer, serializeLocalVocabWithoutWords) {
+TEST(TripleSerializer, serializeOnlyBlankNodeBlocksFromLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
   LocalVocab localVocab;
   auto LV = [&localVocab, qec](std::string_view value) {
@@ -219,7 +219,8 @@ TEST(TripleSerializer, serializeLocalVocabWithoutWords) {
   ASSERT_EQ(localVocab.size(), 3);
 
   ad_utility::serialization::ByteBufferWriteSerializer writer;
-  ad_utility::detail::serializeLocalVocabWithoutWords(writer, localVocab);
+  ad_utility::detail::serializeOnlyBlankNodeBlocksFromLocalVocab(writer,
+                                                                 localVocab);
   ad_utility::serialization::ByteBufferReadSerializer reader{
       std::move(writer).data()};
   auto [localVocabOut, mapping] = ad_utility::detail::deserializeLocalVocab(

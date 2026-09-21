@@ -892,7 +892,7 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
 }
 
 // _____________________________________________________________________________
-TEST(ByteBufferWriteSerializer, overwriteBytes) {
+TEST(ByteBufferWriteSerializer, serializeAtPosition) {
   ByteBufferWriteSerializer writer;
   writer << uint32_t{1};
   // Remember the position of the value that is patched below, and write a
@@ -902,9 +902,7 @@ TEST(ByteBufferWriteSerializer, overwriteBytes) {
   writer << uint32_t{0};
   writer << uint32_t{3};
 
-  uint32_t patchedValue = 42;
-  writer.overwriteBytes(position, reinterpret_cast<const char*>(&patchedValue),
-                        sizeof(patchedValue));
+  serializeAtPosition(writer, position, uint32_t{42});
   // The number of bytes is unchanged, only the middle value was replaced.
   EXPECT_EQ(writer.getCurrentPosition(), 3 * sizeof(uint32_t));
 
@@ -919,23 +917,21 @@ TEST(ByteBufferWriteSerializer, overwriteBytes) {
 }
 
 // _____________________________________________________________________________
-TEST(ByteBufferWriteSerializer, overwriteBytesOutOfRangeThrows) {
+TEST(ByteBufferWriteSerializer, serializeAtPositionOutOfRangeThrows) {
   ByteBufferWriteSerializer writer;
   writer << uint32_t{1};
-  uint32_t value = 7;
-  const char* pointer = reinterpret_cast<const char*>(&value);
 
   // Overwriting exactly the bytes that were written is still allowed.
-  EXPECT_NO_THROW(writer.overwriteBytes(0, pointer, sizeof(value)));
+  EXPECT_NO_THROW(serializeAtPosition(writer, 0, uint32_t{7}));
 
   // Overwriting a single byte past the end throws, as does an overwrite that
   // starts inside the data but reaches past its end.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      writer.overwriteBytes(sizeof(value), pointer, 1),
-      ::testing::HasSubstr("position + numBytes <= data_.size()"));
+      serializeAtPosition(writer, sizeof(uint32_t), char{0}),
+      ::testing::HasSubstr("position_ + numBytes <= data_.size()"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      writer.overwriteBytes(1, pointer, sizeof(value)),
-      ::testing::HasSubstr("position + numBytes <= data_.size()"));
+      serializeAtPosition(writer, 1, uint32_t{7}),
+      ::testing::HasSubstr("position_ + numBytes <= data_.size()"));
 }
 
 // _____________________________________________________________________________

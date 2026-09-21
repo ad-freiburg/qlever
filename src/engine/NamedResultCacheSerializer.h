@@ -43,7 +43,7 @@ CPP_template_def(typename Serializer)(
   serializer << namedResultCacheSerializer::detail::magicByte;
   serializer << namedResultCacheSerializer::detail::formatVersion;
 
-  auto entries = getAllEntries();
+  auto entries = getAllEntriesSortedByKey();
 
   // Serialize the number of entries.
   serializer << entries.size();
@@ -118,8 +118,8 @@ namespace namedResultCacheSerializer {
 // `columns` therefore only have to agree with `value.result_` in their number
 // and in the number of rows, which is checked. If `writeLocalVocabWords` is
 // `false`, the words of the local vocab of the `value` are not written (only
-// its blank node blocks, see `serializeLocalVocabWithoutWords`), because such
-// a caller has stored them elsewhere.
+// its blank node blocks, see `serializeOnlyBlankNodeBlocksFromLocalVocab`),
+// because such a caller has stored them elsewhere.
 template <typename Serializer, typename Columns>
 void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
                 const Columns& columns,
@@ -130,8 +130,8 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
   if (writeLocalVocabWords) {
     ad_utility::detail::serializeLocalVocab(serializer, value.localVocab_);
   } else {
-    ad_utility::detail::serializeLocalVocabWithoutWords(serializer,
-                                                        value.localVocab_);
+    ad_utility::detail::serializeOnlyBlankNodeBlocksFromLocalVocab(
+        serializer, value.localVocab_);
   }
 
   // Serialize the `IdTable` (uses the `serializeIds` helper which handles
@@ -147,10 +147,11 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
     // don't work yet, and will only be mitigated in the future. Note that a
     // caller that has rewritten the `columns` (see above) has already replaced
     // all such `Id`s, so this check only applies to the `Id`s that are
-    // actually written. NOTE2: Even though we disallow the local vocab, it is
-    // crucial to serialize the local vocab because of possible added blank
-    // node indices, which we do handle correctly, and which also rely on the
-    // local vocab.
+    // actually written.
+    //
+    // NOTE 2: Even though we disallow the local vocab, it is crucial to
+    // serialize the local vocab because of possible added blank node indices,
+    // which we do handle correctly, and which also rely on the local vocab.
     // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
     // allow local vocab entries here.
     AD_CORRECTNESS_CHECK(
@@ -164,30 +165,9 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
     ad_utility::detail::serializeIds(serializer, col);
   }
 
-  // Serialize `VariableToColumnMap` manually (`Variable` is not
-  // default-constructible, so we cannot automatically read the hash map from
-  // a serializer, and therefore for consistency we also manually handle the
-  // writing to the serializer, s.t. we do not depend on the internals of
-  // `HashMap` serialization.
-  //
-  // NOTE: The entries are written sorted by the name of the variable, so that
-  // identical contents yield identical bytes (which a byte-level comparison of
-  // serialized caches relies on). The reading side does not depend on the
-  // order.
-  serializer << value.varToColMap_.size();
-  std::vector<const VariableToColumnMap::value_type*> sortedEntries;
-  sortedEntries.reserve(value.varToColMap_.size());
-  for (const auto& entry : value.varToColMap_) {
-    sortedEntries.push_back(&entry);
-  }
-  ql::ranges::sort(sortedEntries, {},
-                   [](const auto* entry) -> const std::string& {
-                     return entry->first.name();
-                   });
-  for (const auto* entry : sortedEntries) {
-    serializer << entry->first;
-    serializer << entry->second;
-  }
+  // Serialize the `VariableToColumnMap` deterministically, see
+  // `serializeDeterministically` in `VariableToColumnMap.h`.
+  serializeDeterministically(serializer, value.varToColMap_);
 
   // Serialize `resultSortedOn` (vector of `ColumnIndex`).
   serializer << resultSortedOn;
@@ -265,17 +245,10 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       resultTable = std::make_shared<const IdTable>(std::move(idTable));
     }
 
-    // Deserialize VariableToColumnMap manually.
-    size_t mapSize;
-    serializer >> mapSize;
+    // Deserialize the `VariableToColumnMap`, see `serializeDeterministically`
+    // in `VariableToColumnMap.h`.
     VariableToColumnMap varToColMap;
-    for (size_t i = 0; i < mapSize; ++i) {
-      Variable var{"?dummy"};  // Variable needs a non-empty name
-      serializer >> var;
-      ColumnIndexAndTypeInfo colInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined};
-      serializer >> colInfo;
-      varToColMap[std::move(var)] = colInfo;
-    }
+    serializeDeterministically(serializer, varToColMap);
 
     // Deserialize `resultSortedOn`.
     std::vector<ColumnIndex> resultSortedOn;

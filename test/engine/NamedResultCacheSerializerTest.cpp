@@ -310,17 +310,17 @@ TEST_F(NamedResultCacheSerializerTest, WrongMagicByteOrFormatVersionThrows) {
 }
 
 // _____________________________________________________________________________
-// Test that `getAllEntries` returns all entries of the cache, sorted by their
-// key, no matter in which order they were stored.
-TEST_F(NamedResultCacheSerializerTest, GetAllEntries) {
+// Test that `getAllEntriesSortedByKey` returns all entries of the cache,
+// sorted by their key, no matter in which order they were stored.
+TEST_F(NamedResultCacheSerializerTest, GetAllEntriesSortedByKey) {
   NamedResultCache cache;
-  EXPECT_THAT(cache.getAllEntries(), ::testing::IsEmpty());
+  EXPECT_THAT(cache.getAllEntriesSortedByKey(), ::testing::IsEmpty());
 
   cache.store("zebra", makeSimpleValue("key-zebra"));
   cache.store("apple", makeSimpleValue("key-apple"));
   cache.store("mango", makeSimpleValue("key-mango"));
 
-  auto entries = cache.getAllEntries();
+  auto entries = cache.getAllEntriesSortedByKey();
   ASSERT_EQ(entries.size(), 3);
   EXPECT_THAT(entries | ql::views::keys,
               ElementsAre("apple", "mango", "zebra"));
