@@ -59,6 +59,9 @@ jobs:
           echo "NPM_CONFIG_PREFIX=${prefix}" >> "$GITHUB_ENV"
           echo "OCR_NPM_PREFIX=${prefix}" >> "$GITHUB_ENV"
           echo "${prefix}/bin" >> "$GITHUB_PATH"
+          # The job-level PATH override masks GITHUB_PATH additions, so
+          # export the prefix bin explicitly for subsequent steps.
+          echo "PATH=${prefix}/bin:${PATH}" >> "$GITHUB_ENV"
           npmcache="${RUNNER_TEMP}/ocr-npm-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           mkdir -p "${npmcache}"
           echo "NPM_CONFIG_CACHE=${npmcache}" >> "$GITHUB_ENV"
