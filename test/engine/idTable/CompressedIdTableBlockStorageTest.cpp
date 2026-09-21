@@ -169,25 +169,26 @@ MergePlan<NumCols> makePlan(size_t numChunks, size_t numBlocksPerChunk,
 // Create a storage that spills to the file with the given `filename`, that runs
 // its compression and its I/O on `ioContext`, that keeps
 // `maxBufferedBlocksPerChunk` blocks per chunk in memory, and that stores the
-// spilled blocks with the given `compression`.
+// spilled blocks with the given `compressionLevel`.
 template <size_t NumCols>
-Storage<NumCols> makeStorage(net::io_context& ioContext, std::string filename,
-                             size_t maxBufferedBlocksPerChunk,
-                             ad_utility::CompressedBlockFile::Compression
-                                 compression = ad_utility::ZSTD_DEFAULT_LEVEL) {
+Storage<NumCols> makeStorage(
+    net::io_context& ioContext, std::string filename,
+    size_t maxBufferedBlocksPerChunk,
+    ad_utility::CompressedBlockFile::CompressionLevel compressionLevel =
+        ad_utility::ZSTD_DEFAULT_LEVEL) {
   return Storage<NumCols>{ioContext.get_executor(), std::move(filename),
                           ad_utility::testing::makeAllocator(),
-                          maxBufferedBlocksPerChunk, compression};
+                          maxBufferedBlocksPerChunk, compressionLevel};
 }
 
-// The compressions that the round trips below are run with: the default ZSTD
-// level, and no compression at all. A spilled block has to arrive unchanged
-// either way, and which of the two is faster is a decision of the caller, see
-// `CompressedBlockFile::Compression`.
-const std::vector<ad_utility::CompressedBlockFile::Compression>&
-compressions() {
-  static const std::vector<ad_utility::CompressedBlockFile::Compression> result{
-      ad_utility::ZSTD_DEFAULT_LEVEL, ad_utility::NO_BLOCK_COMPRESSION};
+// The compression levels that the round trips below are run with: the default
+// ZSTD level, and no compression at all. A spilled block has to arrive
+// unchanged either way, and which of the two is faster is a decision of the
+// caller, see `CompressedBlockFile::CompressionLevel`.
+const std::vector<ad_utility::CompressedBlockFile::CompressionLevel>&
+compressionLevels() {
+  static const std::vector<ad_utility::CompressedBlockFile::CompressionLevel>
+      result{ad_utility::ZSTD_DEFAULT_LEVEL, ad_utility::NO_BLOCK_COMPRESSION};
   return result;
 }
 
@@ -355,12 +356,12 @@ class Producer {
 
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlockStorage, directRoundTripWithoutAnyBuffering) {
-  for (size_t i = 0; i < compressions().size(); ++i) {
+  for (size_t i = 0; i < compressionLevels().size(); ++i) {
     net::io_context ioContext;
     // Buffer nothing, such that every single block is spilled.
     Storage<0> storage = makeStorage<0>(
         ioContext, gtestCurrentTestName() + "." + std::to_string(i), 0,
-        compressions().at(i));
+        compressionLevels().at(i));
     Producer<0> producer{storage, 0, makeValues<0>(2, {{0, 1}, {}, {2}}, true)};
     GetOutcomes gets;
     runAndPoll({&ioContext}, [&] {
@@ -726,17 +727,17 @@ using Latch =
 
 // Create a sink whose storage spills to the file with the given `filename`,
 // keeps `maxBufferedBlocksPerChunk` blocks per chunk in memory, and stores the
-// spilled blocks with the given `compression`.
+// spilled blocks with the given `compressionLevel`.
 template <size_t NumCols>
 Sink<NumCols> makeSink(net::io_context& ioContext, size_t numChunks,
                        std::string filename, size_t maxBufferedBlocksPerChunk,
-                       ad_utility::CompressedBlockFile::Compression
-                           compression = ad_utility::ZSTD_DEFAULT_LEVEL) {
+                       ad_utility::CompressedBlockFile::CompressionLevel
+                           compressionLevel = ad_utility::ZSTD_DEFAULT_LEVEL) {
   return Sink<NumCols>{ioContext.get_executor(), numChunks,
                        ad_utility::makeCompressedIdTableStorageFactory<NumCols>(
                            ioContext.get_executor(), std::move(filename),
                            ad_utility::testing::makeAllocator(),
-                           maxBufferedBlocksPerChunk, compression)};
+                           maxBufferedBlocksPerChunk, compressionLevel)};
 }
 
 // Push all `blocks` to the `sink` as the chunk with the given `chunkIndex`,
@@ -796,20 +797,20 @@ net::awaitable<void> abortAfterYielding(Sink<0>& sink,
 
 // Run a full round trip of `numChunks` chunks with `numBlocksPerChunk` blocks
 // each through a sink whose storage buffers `maxBufferedBlocksPerChunk` blocks
-// per chunk and spills the rest with `compression`, and check that the consumer
-// sees exactly the rows of the plan, in exactly that order.
+// per chunk and spills the rest with `compressionLevel`, and check that the
+// consumer sees exactly the rows of the plan, in exactly that order.
 template <size_t NumCols>
 net::awaitable<void> checkRoundTrip(
     net::io_context& ioContext, size_t numColumns, size_t numChunks,
     size_t numBlocksPerChunk, size_t maxBufferedBlocksPerChunk,
     std::string filename,
-    ad_utility::CompressedBlockFile::Compression compression =
+    ad_utility::CompressedBlockFile::CompressionLevel compressionLevel =
         ad_utility::ZSTD_DEFAULT_LEVEL) {
   MergePlan<NumCols> plan =
       makePlan<NumCols>(numChunks, numBlocksPerChunk, numColumns);
   Sink<NumCols> sink =
       makeSink<NumCols>(ioContext, numChunks, std::move(filename),
-                        maxBufferedBlocksPerChunk, compression);
+                        maxBufferedBlocksPerChunk, compressionLevel);
   Latch latch{ioContext.get_executor(), numChunks};
   // Spawn the producers in reverse order, such that the blocks of the later
   // chunks tend to be produced first.
@@ -823,9 +824,10 @@ net::awaitable<void> checkRoundTrip(
   std::vector<Row> rows = co_await collectRows<NumCols>(sink);
   EXPECT_THAT(rows, ::testing::ElementsAreArray(plan.expectedRows_))
       << "maxBufferedBlocksPerChunk = " << maxBufferedBlocksPerChunk
-      << ", compression = "
-      << (compression.has_value() ? std::to_string(compression.value())
-                                  : std::string{"none"});
+      << ", compressionLevel = "
+      << (compressionLevel.has_value()
+              ? std::to_string(compressionLevel.value())
+              : std::string{"none"});
   co_await waitForLatch(latch, numChunks);
 }
 
@@ -841,26 +843,26 @@ const std::vector<size_t>& bufferSizes() {
 
 // _____________________________________________________________________________
 ASYNC_TEST(CompressedIdTableBlockStorage, roundTripWithDynamicNumberOfColumns) {
-  for (size_t i = 0; i < compressions().size(); ++i) {
+  for (size_t i = 0; i < compressionLevels().size(); ++i) {
     for (size_t maxBufferedBlocksPerChunk : bufferSizes()) {
       co_await checkRoundTrip<0>(ioContext, 2, 3, 6, maxBufferedBlocksPerChunk,
                                  gtestCurrentTestName() + "." +
                                      std::to_string(i) + "." +
                                      std::to_string(maxBufferedBlocksPerChunk),
-                                 compressions().at(i));
+                                 compressionLevels().at(i));
     }
   }
 }
 
 // _____________________________________________________________________________
 ASYNC_TEST(CompressedIdTableBlockStorage, roundTripWithStaticNumberOfColumns) {
-  for (size_t i = 0; i < compressions().size(); ++i) {
+  for (size_t i = 0; i < compressionLevels().size(); ++i) {
     for (size_t maxBufferedBlocksPerChunk : bufferSizes()) {
       co_await checkRoundTrip<3>(ioContext, 3, 3, 6, maxBufferedBlocksPerChunk,
                                  gtestCurrentTestName() + "." +
                                      std::to_string(i) + "." +
                                      std::to_string(maxBufferedBlocksPerChunk),
-                                 compressions().at(i));
+                                 compressionLevels().at(i));
     }
   }
 }

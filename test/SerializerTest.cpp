@@ -1248,6 +1248,15 @@ TEST(BufferedWriteSerializer, IsWriteSerializer) {
 }
 
 // _____________________________________________________________________________
+// A blocksize of zero is rejected, as it would make `serializeBytes` loop
+// forever.
+TEST(BufferedWriteSerializer, ThrowsOnZeroBlocksize) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (BufferedWriteSerializer{ByteBufferWriteSerializer{}, 0_B}),
+      ::testing::HasSubstr("blocksize_ > 0"));
+}
+
+// _____________________________________________________________________________
 // The serialization position of a `BufferedWriteSerializer` also accounts for
 // the bytes that are still sitting in its buffer, and `serializeAtPosition`
 // (which first flushes that buffer) can overwrite data that has already been

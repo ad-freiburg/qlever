@@ -8,6 +8,7 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -22,6 +23,7 @@
 #include "backports/filesystem.h"
 #include "util/CompressedBlockFile.h"
 #include "util/File.h"
+#include "util/Random.h"
 
 namespace {
 
@@ -30,18 +32,14 @@ using ad_utility::CompressedBlockFile;
 // Create a deterministic but not trivially compressible sequence of
 // `numBytes` bytes, seeded by `seed`.
 std::vector<char> makeBytes(size_t numBytes, uint64_t seed) {
+  ad_utility::FastRandomIntGenerator<char> generator{
+      ad_utility::RandomSeed::make(seed)};
   std::vector<char> result;
   // Reserve one byte more than needed, such that `data()` is never `nullptr`,
   // also for the empty block.
   result.reserve(numBytes + 1);
-  uint64_t state = seed * 2654435761u + 1;
   for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numBytes)) {
-    // A simple xorshift, so that the test does not depend on any RNG
-    // implementation.
-    state ^= state << 13;
-    state ^= state >> 7;
-    state ^= state << 17;
-    result.push_back(static_cast<char>(state & 0xFFu));
+    result.push_back(generator());
   }
   return result;
 }
@@ -91,7 +89,6 @@ RoundTrip checkRoundTrip(CompressedBlockFile& file) {
         file.appendBlock(roundTrip.expected_.back().data(), numBytes));
     EXPECT_EQ(roundTrip.metadata_.back().uncompressedSize_, numBytes);
   }
-  file.flush();
 
   // The blocks are stored one after the other, without gaps or overlaps.
   size_t expectedOffset = 0;
@@ -117,10 +114,10 @@ RoundTrip checkRoundTrip(CompressedBlockFile& file) {
   return roundTrip;
 }
 
-// The compressions that the round trip below is run with: no compression at
-// all, the fastest ZSTD level, the default level, and a slow one.
-const std::vector<CompressedBlockFile::Compression>& compressions() {
-  static const std::vector<CompressedBlockFile::Compression> result{
+// The compression levels that the round trip below is run with: no compression
+// at all, the fastest ZSTD level, the default level, and a slow one.
+const std::vector<CompressedBlockFile::CompressionLevel>& compressionLevels() {
+  static const std::vector<CompressedBlockFile::CompressionLevel> result{
       ad_utility::NO_BLOCK_COMPRESSION, 1, ad_utility::ZSTD_DEFAULT_LEVEL, 9};
   return result;
 }
@@ -135,7 +132,7 @@ TEST(CompressedBlockFile, appendAndReadBlocks) {
     // ZSTD level.
     CompressedBlockFile file{filename};
     ASSERT_EQ(file.filename(), filename);
-    EXPECT_EQ(file.compression(), ad_utility::ZSTD_DEFAULT_LEVEL);
+    EXPECT_EQ(file.compressionLevel(), ad_utility::ZSTD_DEFAULT_LEVEL);
     checkRoundTrip(file);
     ASSERT_TRUE(ql::filesystem::exists(filename));
   }
@@ -147,12 +144,13 @@ TEST(CompressedBlockFile, appendAndReadBlocks) {
 // The very same round trip, but with each of the compressions that a caller may
 // choose, including `NO_BLOCK_COMPRESSION`.
 TEST(CompressedBlockFile, appendAndReadBlocksWithExplicitCompression) {
-  for (size_t i : ql::views::iota(size_t{0}, compressions().size())) {
-    CompressedBlockFile::Compression compression = compressions().at(i);
-    std::string filename = gtestCurrentTestName() + "." + std::to_string(i);
+  for (size_t i : ql::views::iota(size_t{0}, compressionLevels().size())) {
+    CompressedBlockFile::CompressionLevel compression =
+        compressionLevels().at(i);
+    std::string filename = absl::StrCat(gtestCurrentTestName(), ".", i);
     {
       CompressedBlockFile file{filename, compression};
-      EXPECT_EQ(file.compression(), compression);
+      EXPECT_EQ(file.compressionLevel(), compression);
       checkRoundTrip(file);
     }
     EXPECT_FALSE(ql::filesystem::exists(filename));
@@ -167,7 +165,7 @@ TEST(CompressedBlockFile, uncompressedBlocksAreStoredVerbatim) {
   std::string filename = gtestCurrentTestName();
   {
     CompressedBlockFile file{filename, ad_utility::NO_BLOCK_COMPRESSION};
-    EXPECT_EQ(file.compression(), ad_utility::NO_BLOCK_COMPRESSION);
+    EXPECT_EQ(file.compressionLevel(), ad_utility::NO_BLOCK_COMPRESSION);
     RoundTrip roundTrip = checkRoundTrip(file);
     std::vector<char> contents = rawFileContents(filename);
     for (size_t i : ql::views::iota(size_t{0}, roundTrip.metadata_.size())) {
@@ -195,15 +193,17 @@ TEST(CompressedBlockFile, theRequestedCompressionIsApplied) {
   // A block of a single repeated byte, so that every ZSTD level compresses it
   // by a large factor.
   std::vector<char> block(100'000, 'a');
-  auto appendedSize = [&block](CompressedBlockFile::Compression compression,
-                               const std::string& filename) {
+  auto appendedSize = [&block](
+                          CompressedBlockFile::CompressionLevel compression,
+                          const std::string& filename) {
     CompressedBlockFile file{filename, compression};
     return file.appendBlock(block.data(), block.size()).compressedSize_;
   };
-  size_t uncompressed = appendedSize(ad_utility::NO_BLOCK_COMPRESSION,
-                                     gtestCurrentTestName() + ".none");
-  size_t fast = appendedSize(1, gtestCurrentTestName() + ".fast");
-  size_t slow = appendedSize(9, gtestCurrentTestName() + ".slow");
+  size_t uncompressed =
+      appendedSize(ad_utility::NO_BLOCK_COMPRESSION,
+                   absl::StrCat(gtestCurrentTestName(), ".none"));
+  size_t fast = appendedSize(1, absl::StrCat(gtestCurrentTestName(), ".fast"));
+  size_t slow = appendedSize(9, absl::StrCat(gtestCurrentTestName(), ".slow"));
   EXPECT_EQ(uncompressed, block.size());
   EXPECT_LT(fast, block.size() / 2);
   EXPECT_LE(slow, fast);
@@ -216,7 +216,6 @@ TEST(CompressedBlockFile, clearTruncatesAndAllowsReuse) {
     CompressedBlockFile file{filename};
     auto firstBytes = makeBytes(50'000, 1);
     auto firstBlock = file.appendBlock(firstBytes.data(), firstBytes.size());
-    file.flush();
     ASSERT_GT(ql::filesystem::file_size(filename), 0u);
     ASSERT_EQ(readBytes(file, firstBlock), firstBytes);
 
@@ -227,7 +226,6 @@ TEST(CompressedBlockFile, clearTruncatesAndAllowsReuse) {
     auto secondBytes = makeBytes(1234, 2);
     auto secondBlock = file.appendBlock(secondBytes.data(), secondBytes.size());
     EXPECT_EQ(secondBlock.offsetInFile_, 0u);
-    file.flush();
     EXPECT_EQ(readBytes(file, secondBlock), secondBytes);
   }
   EXPECT_FALSE(ql::filesystem::exists(filename));
@@ -247,10 +245,26 @@ TEST(CompressedBlockFile, destructorDeletesTheFile) {
     CompressedBlockFile file{filename};
     auto bytes = makeBytes(100, 42);
     file.appendBlock(bytes.data(), bytes.size());
-    file.flush();
     ASSERT_TRUE(ql::filesystem::exists(filename));
   }
   EXPECT_FALSE(ql::filesystem::exists(filename));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedBlockFile, failedWriteThrows) {
+  // `/dev/full` accepts every write and then fails the flush with `ENOSPC`,
+  // exactly like a disk that ran full.
+  const std::string devFull = "/dev/full";
+  if (!ql::filesystem::exists(devFull)) {
+    GTEST_SKIP() << "no " << devFull << " on this platform";
+  }
+  CompressedBlockFile file{devFull, ad_utility::NO_BLOCK_COMPRESSION};
+  auto bytes = makeBytes(100, 7);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      file.appendBlock(bytes.data(), bytes.size()),
+      ::testing::AllOf(::testing::HasSubstr("Writing 100 bytes"),
+                       ::testing::HasSubstr(devFull),
+                       ::testing::HasSubstr("No space left on device")));
 }
 
 // _____________________________________________________________________________
@@ -265,7 +279,6 @@ TEST(CompressedBlockFile, concurrentReads) {
     metadata.push_back(
         file.appendBlock(expected.back().data(), expected.back().size()));
   }
-  file.flush();
 
   // Each of the threads reads all the blocks, in a different order.
   static constexpr size_t numThreads = 8;
@@ -303,7 +316,6 @@ TEST(CompressedBlockFile, concurrentAppendsAndReads) {
         expected.push_back(makeBytes(500 + i, 1000 * (threadIdx + 1) + i));
         metadata.push_back(
             file.appendBlock(expected.back().data(), expected.back().size()));
-        file.flush();
       }
       for (size_t i : ql::views::iota(size_t{0}, numBlocksPerThread)) {
         EXPECT_EQ(readBytes(file, metadata.at(i)), expected.at(i))

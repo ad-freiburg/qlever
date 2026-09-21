@@ -21,6 +21,7 @@
 #include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Generator.h"
+#include "util/HashSet.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -1058,6 +1059,17 @@ class CompressedRelationReader {
                                     file_.duplicateForReading(),
                                     useGraphPostProcessing_};
   }
+
+  // Return the set of all graph IDs that occur in the blocks of
+  // `scanSpecAndBlocks`, including the `locatedTriplesPerBlock`. A block is
+  // only decompressed if its metadata says that it contains a graph that has
+  // not been seen before, or if the metadata contains no graph information
+  // at all (more than `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA` graphs).
+  ad_utility::HashSetWithMemoryLimit<Id::T> computeUniqueGraphIds(
+      const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const CancellationHandle& cancellationHandle,
+      const Allocator& allocator) const;
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.

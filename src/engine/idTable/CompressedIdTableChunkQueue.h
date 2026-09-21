@@ -102,7 +102,7 @@ class ChunkQueue : public NoCopyNoMove,
   Strand strand_;
   AllocatorWithLimit<Id> allocator_;
   std::string filename_;
-  CompressedBlockFile::Compression compression_;
+  CompressedBlockFile::CompressionLevel compressionLevel_;
   size_t maxBufferedBlocks_;
   EntryChannel entries_;
   // The number of entries in `entries_` that are blocks which are still in
@@ -122,22 +122,23 @@ class ChunkQueue : public NoCopyNoMove,
   bool wasFinished_ = false;
 
  public:
-  // Construct from the `ioExecutor` on which the compression, the decompression
-  // and the I/O are run and from which the strand of this queue is derived, the
-  // `allocator` for the blocks that are read back, the name of the file to
-  // spill to (which is overwritten if it already exists and deleted again as
-  // soon as this queue is done with it), the `compression` that the spilled
-  // blocks are stored with, and the number of blocks that are kept in memory
-  // before this queue starts spilling. That number may be zero, in which case
-  // every block is spilled.
+  // Construct from the `ioExecutor` on which the compression, the
+  // decompression and the I/O are run and from which the strand of this queue
+  // is derived, the `allocator` for the blocks that are read back, the name of
+  // the file to spill to (which is overwritten if it already exists and deleted
+  // again as soon as this queue is done with it), the `compressionLevel` that
+  // the spilled blocks are stored with, and the number of blocks that are kept
+  // in memory before this queue starts spilling. That number may be zero, in
+  // which case every block is spilled.
   ChunkQueue(net::any_io_executor ioExecutor, AllocatorWithLimit<Id> allocator,
-             std::string filename, CompressedBlockFile::Compression compression,
+             std::string filename,
+             CompressedBlockFile::CompressionLevel compressionLevel,
              size_t maxBufferedBlocks)
       : ioExecutor_{std::move(ioExecutor)},
         strand_{net::make_strand(ioExecutor_)},
         allocator_{std::move(allocator)},
         filename_{std::move(filename)},
-        compression_{compression},
+        compressionLevel_{compressionLevel},
         maxBufferedBlocks_{maxBufferedBlocks},
         entries_{strand_, std::numeric_limits<size_t>::max()} {}
 
@@ -264,11 +265,11 @@ class ChunkQueue : public NoCopyNoMove,
     BlockMetadata metadata = co_await runFunctionOnExecutor(
         ioExecutor_,
         [file = std::move(file), block = std::move(block)] {
-          BlockMetadata metadata = writeBlock(*file, block, 0, block.numRows());
-          // The block has to become readable immediately, because its chunk may
-          // be consumed while further blocks are still being written.
-          file->flush();
-          return metadata;
+          // NOTE: The block becomes readable as soon as `writeBlock` has
+          // returned, because the `CompressedBlockFile` flushes every append,
+          // and its chunk may indeed be consumed while further blocks are
+          // still being written.
+          return writeBlock(*file, block, 0, block.numRows());
         },
         net::use_awaitable);
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
@@ -312,7 +313,7 @@ class ChunkQueue : public NoCopyNoMove,
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
     if (spillFile_ == nullptr) {
       spillFile_ =
-          std::make_shared<CompressedBlockFile>(filename_, compression_);
+          std::make_shared<CompressedBlockFile>(filename_, compressionLevel_);
     }
     return spillFile_;
   }

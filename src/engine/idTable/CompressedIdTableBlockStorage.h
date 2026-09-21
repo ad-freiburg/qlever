@@ -110,19 +110,20 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   AllocatorWithLimit<Id> allocator_;
   size_t maxBufferedBlocksPerChunk_;
   std::string filenamePrefix_;
-  CompressedBlockFile::Compression compression_;
+  CompressedBlockFile::CompressionLevel compressionLevel_;
   std::shared_ptr<State> state_ = std::make_shared<State>();
 
  public:
-  // Construct from the `ioExecutor` on which the compression, the decompression
-  // and the I/O are run and from which the strands of this storage and of its
-  // chunks are derived, the name of the file to spill to, the `allocator` for
-  // the blocks that are read back, and the number of blocks that are kept in
-  // memory per chunk before that chunk starts spilling. That number may be
-  // zero, in which case every block is spilled. The `compression` decides how
-  // the spilled blocks are stored, see `CompressedBlockFile::Compression`; a
-  // spill file is short-lived and read back almost immediately, so a low level
-  // (or `NO_BLOCK_COMPRESSION`) is often faster than the default.
+  // Construct from the `ioExecutor` on which the compression, the
+  // decompression and the I/O are run and from which the strands of this
+  // storage and of its chunks are derived, the name of the file to spill to,
+  // the `allocator` for the blocks that are read back, and the number of blocks
+  // that are kept in memory per chunk before that chunk starts spilling. That
+  // number may be zero, in which case every block is spilled. The
+  // `compressionLevel` decides how the spilled blocks are stored, see
+  // `CompressedBlockFile::CompressionLevel`; a spill file is short-lived and
+  // read back almost immediately, so a low level (or `NO_BLOCK_COMPRESSION`) is
+  // often faster than the default.
   //
   // NOTE: The `filenamePrefix` is not a filename but the prefix of one per
   // chunk, see `spillFilename`. It has to be unique among all the storages that
@@ -131,13 +132,14 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   CompressedIdTableBlockStorage(
       net::any_io_executor ioExecutor, std::string filenamePrefix,
       AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
-      CompressedBlockFile::Compression compression = ZSTD_DEFAULT_LEVEL)
+      CompressedBlockFile::CompressionLevel compressionLevel =
+          ZSTD_DEFAULT_LEVEL)
       : ioExecutor_{std::move(ioExecutor)},
         strand_{net::make_strand(ioExecutor_)},
         allocator_{std::move(allocator)},
         maxBufferedBlocksPerChunk_{maxBufferedBlocksPerChunk},
         filenamePrefix_{std::move(filenamePrefix)},
-        compression_{compression} {}
+        compressionLevel_{compressionLevel} {}
 
   // The common prefix of the names of all the files of this storage.
   const std::string& filenamePrefix() const { return filenamePrefix_; }
@@ -240,7 +242,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
     SharedChunkQueue& chunk = state.chunks_[chunkIndex];
     if (chunk == nullptr) {
       chunk = std::make_shared<ChunkQueue>(
-          ioExecutor_, allocator_, spillFilename(chunkIndex), compression_,
+          ioExecutor_, allocator_, spillFilename(chunkIndex), compressionLevel_,
           maxBufferedBlocksPerChunk_);
     }
     return chunk;
@@ -253,18 +255,19 @@ template <size_t NumCols>
 auto makeCompressedIdTableStorageFactory(
     net::any_io_executor ioExecutor, std::string filenamePrefix,
     AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
-    CompressedBlockFile::Compression compression = ZSTD_DEFAULT_LEVEL) {
-  return
-      [ioExecutor = std::move(ioExecutor),
-       filenamePrefix = std::move(filenamePrefix),
-       allocator = std::move(allocator), maxBufferedBlocksPerChunk,
-       compression]([[maybe_unused]] const parallelBlockMerge::Strand& strand) {
-        // NOTE: This storage brings a strand of its own, so the one that the
-        // sink offers is not needed.
-        return CompressedIdTableBlockStorage<NumCols>{
-            ioExecutor, filenamePrefix, allocator, maxBufferedBlocksPerChunk,
-            compression};
-      };
+    CompressedBlockFile::CompressionLevel compressionLevel =
+        ZSTD_DEFAULT_LEVEL) {
+  return [ioExecutor = std::move(ioExecutor),
+          filenamePrefix = std::move(filenamePrefix),
+          allocator = std::move(allocator), maxBufferedBlocksPerChunk,
+          compressionLevel](
+             [[maybe_unused]] const parallelBlockMerge::Strand& strand) {
+    // NOTE: This storage brings a strand of its own, so the one that the
+    // sink offers is not needed.
+    return CompressedIdTableBlockStorage<NumCols>{
+        ioExecutor, filenamePrefix, allocator, maxBufferedBlocksPerChunk,
+        compressionLevel};
+  };
 }
 
 }  // namespace ad_utility

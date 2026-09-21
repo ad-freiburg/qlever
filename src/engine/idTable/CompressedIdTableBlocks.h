@@ -11,6 +11,7 @@
 #define QLEVER_SRC_ENGINE_IDTABLE_COMPRESSEDIDTABLEBLOCKS_H
 
 #include <cstddef>
+#include <range/v3/view/zip.hpp>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -57,8 +58,7 @@ BlockMetadata writeBlock(CompressedBlockFile& file, const Table& table,
   BlockMetadata metadata;
   metadata.numRows_ = endRow - beginRow;
   metadata.columns_.reserve(table.numColumns());
-  for (size_t columnIdx : ql::views::iota(size_t{0}, table.numColumns())) {
-    decltype(auto) column = table.getColumn(columnIdx);
+  for (const auto& column : table.getColumns()) {
     metadata.columns_.push_back(file.appendBlock(
         column.data() + beginRow, (endRow - beginRow) * sizeof(Id)));
   }
@@ -76,10 +76,11 @@ IdTableStatic<NumCols> readBlock(const CompressedBlockFile& file,
                                  const AllocatorWithLimit<Id>& allocator) {
   IdTableStatic<NumCols> block{metadata.numColumns(), allocator};
   block.resize(metadata.numRows_);
-  for (size_t columnIdx : ql::views::iota(size_t{0}, metadata.numColumns())) {
-    decltype(auto) column = block.getColumn(columnIdx);
+  AD_CORRECTNESS_CHECK(block.numColumns() == metadata.numColumns());
+  for (auto [columnMetadata, column] :
+       ::ranges::views::zip(metadata.columns_, block.getColumns())) {
     AD_CORRECTNESS_CHECK(column.size() == metadata.numRows_);
-    file.readBlock(metadata.columns_.at(columnIdx), column.data());
+    file.readBlock(columnMetadata, column.data());
   }
   return block;
 }

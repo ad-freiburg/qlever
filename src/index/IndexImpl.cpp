@@ -40,7 +40,6 @@
 #include "parser/RdfAsyncMultifileParser.h"
 #endif
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/CachingMemoryResource.h"
 #include "util/CancellationHandle.h"
 #include "util/FilesystemHelpers.h"
 #include "util/HashMap.h"
@@ -117,27 +116,19 @@ std::unique_ptr<AsyncRdfParserBase> IndexImpl::makeRdfParser(
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // The reduced feature set has no coroutines (and only Boost 1.71), so the
   // asynchronous multifile parser is not available. Fall back to the
-  // synchronous `RdfMultifileParser` behind an `AsyncSerialParserAdapter`, and
-  // ignore the request for parallel parsing, so that every file is parsed by
-  // the simple stream parser. The files are still produced lazily.
-  auto serialFiles =
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>{
-          ql::views::transform(std::move(files),
-                               [](qlever::InputFileSpecification file) {
-                                 file.parseInParallel_ = false;
-                                 return file;
-                               })};
+  // synchronous `RdfMultifileParser` behind an `AsyncSerialParserAdapter`. That
+  // parser has no parallel parser for a single file and therefore ignores
+  // `parseInParallel_` (with a warning, see the comment on that class). The
+  // files are still produced lazily.
   // NOTE: The adapter creates the parser lazily on the first `asyncGetBatch()`
   // call, see the constructor of `AsyncSerialParserAdapter`.
   return std::make_unique<AsyncSerialParserAdapter>(
       executor,
-      [serialFiles = std::move(serialFiles),
-       encodedIriManager = &encodedIriManager(),
+      [files = std::move(files), encodedIriManager = &encodedIriManager(),
        bufferSize = parserBufferSize(),
        parserSettings]() mutable -> std::unique_ptr<RdfParserBase> {
-        return std::make_unique<RdfMultifileParser>(std::move(serialFiles),
-                                                    encodedIriManager,
-                                                    bufferSize, parserSettings);
+        return std::make_unique<RdfMultifileParser>(
+            std::move(files), encodedIriManager, bufferSize, parserSettings);
       });
 #else
   return std::make_unique<RdfAsyncMultifileParser>(
@@ -552,12 +543,9 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
                  "per batch, using "
               << numThreads << " threads ..." << std::endl;
 
-  ad_utility::CachingMemoryResource cachingMemoryResource;
-  ItemAlloc itemAlloc(&cachingMemoryResource);
-
   using namespace qlever::partialVocabularyBuilder;
   FirstPassSharedState<IndexImpl> shared{this, &vocab_.getCaseComparator(),
-                                         itemAlloc, linesPerPartial};
+                                         linesPerPartial};
   // The thread pool and the parser are owned by `runTaskChains`, which only
   // returns once no asynchronous operation is left.
   runTaskChains(shared, numThreads,
@@ -569,10 +557,10 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   // partial vocabulary, because the vocabulary has to contain the special IDs
   // (which every `ItemMapManager` adds to its map).
   if (shared.nextPartialVocabIdx_ == 0) {
-    writePartialVocabulary(
-        shared.nextPartialVocabIdx_++,
-        ItemMapManager{0, &vocab_.getCaseComparator(), itemAlloc}.moveMap(),
-        {});
+    ItemMapManager itemMap{0, &vocab_.getCaseComparator()};
+    std::vector<IdRow> noTriples;
+    writePartialVocabulary(shared.nextPartialVocabIdx_++, itemMap.map_,
+                           noTriples);
   }
 
   // The task chains have claimed all the indices below the counter, and each
@@ -1530,7 +1518,10 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    if (vocab_.shouldBeExternalized(toRdfLiteral(iriOrLiteral))) {
+    // The view always exists here: `handleStringOrId` above has turned all
+    // values that can be directly encoded into an `Id` into one, so what is
+    // left is a literal, an IRI, or a blank node string.
+    if (vocab_.shouldBeExternalized(toRdfLiteralView(iriOrLiteral).value())) {
       component.isExternal_ = true;
     }
   }
@@ -1623,14 +1614,6 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
         << std::endl;
   }
 
-  if (j.count("parser-batch-size")) {
-    parserBatchSize_ = size_t{j["parser-batch-size"]};
-    AD_LOG_INFO << "Overriding setting parser-batch-size to "
-                << parserBatchSize_
-                << " This might influence performance during index build."
-                << std::endl;
-  }
-
   std::string overflowingIntegersThrow = "overflowing-integers-throw";
   std::string overflowingIntegersBecomeDoubles =
       "overflowing-integers-become-doubles";
@@ -1675,8 +1658,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 
 // ___________________________________________________________________________
 void IndexImpl::writePartialVocabulary(
-    size_t partialVocabIdx, ItemMapAndBuffer items,
-    std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds) const {
+    size_t partialVocabIdx, const ItemMapAndBuffer& items,
+    std::vector<std::array<Id, NumColumnsIndexBuilding>>& localIds) const {
   using namespace ad_utility::vocabulary_merger;
   AD_LOG_DEBUG
       << "Triples processed, also counting internal triples added by QLever: "
@@ -1718,7 +1701,7 @@ void IndexImpl::writePartialVocabulary(
   }
   {
     ad_utility::TimeBlockAndLog l{"writing to file"};
-    writeMappedIdsToFile(std::move(localIds), mapping,
+    writeMappedIdsToFile(localIds, mapping,
                          unsortedTriplesFilename(onDiskBase_, partialVocabIdx));
   }
   {
@@ -1902,12 +1885,17 @@ CPP_template_def(typename... NextSorter)(requires(
         if (graph.getDatatype() != Datatype::EncodedVal) {
           return;
         }
+        // NOTE: The payload may only be decoded after the prefix has been
+        // checked, because the payload of a general pattern is not a single
+        // decimal number (see `EncodedIriManager`).
         auto [prefix, payload] =
-            EncodedIriManager::splitIntoPrefixIdxAndDecodedPayload(graph);
+            EncodedIriManager::splitIntoPrefixIdxAndPayload(graph);
         if (prefix != newGraphPrefixIdx) {
           return;
         }
-        nextAvailableIndex = std::max(nextAvailableIndex, payload + 1);
+        nextAvailableIndex =
+            std::max(nextAvailableIndex,
+                     EncodedIriManager::decodeDecimalFrom64Bit(payload) + 1);
       };
   size_t numPredicates =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
@@ -2030,9 +2018,10 @@ ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
 
 // _____________________________________________________________________________
 void IndexImpl::setPrefixesForEncodedValues(
-    std::vector<std::string> prefixesWithoutAngleBrackets) {
-  encodedIriManager_ =
-      EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
+    std::vector<std::string> prefixesWithoutAngleBrackets,
+    std::vector<encodedIri::Pattern> patterns) {
+  encodedIriManager_ = EncodedIriManager{
+      std::move(prefixesWithoutAngleBrackets), std::move(patterns)};
 }
 
 // _____________________________________________________________________________

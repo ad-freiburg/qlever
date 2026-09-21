@@ -87,8 +87,8 @@ std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
             settings_);
       }};
   // The call to `callFixedSize` lifts the runtime booleans to compile-time
-  // integers, exactly like `makeSingleRdfParser` in `RdfParser.cpp` (which
-  // this function mirrors for the asynchronous parsers).
+  // integers, exactly like `makeStreamParserForSingleFile` in `RdfParser.cpp`
+  // (which this function mirrors for the asynchronous parsers).
   return ad_utility::callFixedSize(
       std::array{settings_.useRelaxedParsing_ ? 1 : 0,
                  spec.filetype_ == qlever::Filetype::Turtle ? 1 : 0},
