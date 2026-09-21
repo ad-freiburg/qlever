@@ -15,6 +15,7 @@
 #include <optional>
 
 #include "engine/Result.h"
+#include "engine/Values.h"
 #include "global/Constants.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
@@ -87,4 +88,30 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   ql::ranges::transform(graphIds, idTable.getColumn(0).begin(), Id::fromBits);
   numOfDistinctGraphs_ = graphIds.size();
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+}
+
+// ____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> DistinctGraphs::makeAllGraphs(
+    QueryExecutionContext* qec, const Variable& graphVariable,
+    const qlever::index::GraphFilter<TripleComponent>& activeGraphs) {
+  if (const auto* whitelist = activeGraphs.whitelistIfPresent()) {
+    parsedQuery::SparqlValues values;
+    values._variables.push_back(graphVariable);
+    for (const auto& graph : *whitelist) {
+      values._values.push_back({graph});
+    }
+    // The order of a hash set is unspecified, so sort to get a deterministic
+    // cache key.
+    ql::ranges::sort(values._values, {},
+                     [](const std::vector<TripleComponent>& row) {
+                       return row.at(0).toString();
+                     });
+    return ad_utility::makeExecutionTree<Values>(qec, std::move(values));
+  }
+  // The only graph that is ever blacklisted is the default graph (see
+  // `QueryPlanner::getActiveGraphs`).
+  bool includeDefaultGraph = activeGraphs.isGraphAllowed(TripleComponent{
+      ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)});
+  return ad_utility::makeExecutionTree<DistinctGraphs>(qec, graphVariable,
+                                                       includeDefaultGraph);
 }
