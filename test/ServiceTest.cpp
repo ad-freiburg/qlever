@@ -1030,20 +1030,23 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
   reset();
 
-  // Compute (large) sibling -> sibling result is computed
-  const auto maxValueRowsDefault =
-      getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
-  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(0);
-  Service::precomputeSiblingResult(sibling, service, true, false);
-  ASSERT_TRUE(
-      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
-  EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
-                  .value()
-                  ->isFullyMaterialized());
-  EXPECT_FALSE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
-  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(
-      maxValueRowsDefault);
+  // Compute (large) sibling -> sibling result is computed. Note: Use the
+  // scoped `setRuntimeParameterForTest` and not the plain setter, so that the
+  // global parameter is also restored when one of the assertions below fails
+  // and this function returns early.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+    Service::precomputeSiblingResult(sibling, service, true, false);
+    ASSERT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                    .has_value());
+    EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                    .value()
+                    ->isFullyMaterialized());
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+    EXPECT_FALSE(
+        service->precomputedResultBecauseSiblingOfService().has_value());
+  }
   reset();
 
   // Lazy compute (small) sibling -> sibling result is fully materialized and
@@ -1060,17 +1063,19 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Lazy compute (large) sibling -> partially materialized result is passed
   // back to sibling
-  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(0);
-  Service::precomputeSiblingResult(service, sibling, false, true);
-  ASSERT_TRUE(
-      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
-  EXPECT_FALSE(siblingOperation->precomputedResultBecauseSiblingOfService()
-                   .value()
-                   ->isFullyMaterialized());
-  EXPECT_FALSE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
-  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(
-      maxValueRowsDefault);
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+    Service::precomputeSiblingResult(service, sibling, false, true);
+    ASSERT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                    .has_value());
+    EXPECT_FALSE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                     .value()
+                     ->isFullyMaterialized());
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+    EXPECT_FALSE(
+        service->precomputedResultBecauseSiblingOfService().has_value());
+  }
 
   // consume the sibling result-generator
   for ([[maybe_unused]] auto& _ :

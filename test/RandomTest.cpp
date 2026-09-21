@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (October of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include <absl/strings/str_format.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -214,16 +215,20 @@ TEST(RandomNumberGeneratorTest, PerformanceTes) {
     for (size_t i = 0; i < n; i++) {
       sum += generator();
     }
-    // Show in ns per number with one digit after the comma.
-    std::cout << "Speed of " << name << ": " << std::fixed
-              << std::setprecision(1)
-              << (static_cast<double>(
-                      std::chrono::duration_cast<std::chrono::nanoseconds>(
-                          std::chrono::high_resolution_clock::now() - start)
-                          .count()) /
-                  n)
-              << " ns per number" << std::setprecision(4)
-              << " [average value: " << (sum / n) << "]" << std::endl;
+    // Show in ns per number with one digit after the comma. Note: Format the
+    // number with `absl::StrFormat` and not with `std::fixed` and
+    // `std::setprecision`, which would permanently change the state of
+    // `std::cout` for the rest of the test binary.
+    std::cout << "Speed of " << name << ": "
+              << absl::StrFormat(
+                     "%.1f",
+                     static_cast<double>(
+                         std::chrono::duration_cast<std::chrono::nanoseconds>(
+                             std::chrono::high_resolution_clock::now() - start)
+                             .count()) /
+                         n)
+              << " ns per number" << " [average value: " << (sum / n) << "]"
+              << std::endl;
   };
   // Measure the time of our two random number generators.
   measureAndShowSpeed(fastIntGenerator, "FastRandomIntGenerator");

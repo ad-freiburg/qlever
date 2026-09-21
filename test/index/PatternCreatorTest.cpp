@@ -162,11 +162,10 @@ TEST(PatternCreator, writeAndReadWithFinish) {
 }
 
 // _____________________________________________________________________________
-// `printStatistics` (which is called by `finish`) prints the averages with
-// `std::fixed` and a reduced precision. As these manipulators permanently
-// change the state of the global log stream, check that the default float
-// format is restored for everything that is logged afterwards.
-TEST(PatternCreator, printStatisticsRestoresDefaultFloatFormat) {
+// `printStatistics` (which is called by `finish`) prints the averages with a
+// reduced precision. Check that this is done without changing the state of the
+// global log stream, which would also affect everything that is logged later.
+TEST(PatternCreator, printStatisticsFloatFormat) {
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
@@ -175,8 +174,8 @@ TEST(PatternCreator, printStatisticsRestoresDefaultFloatFormat) {
   [[maybe_unused]] auto hasPatternAsPSOPtr = createExamplePatterns(creator);
   creator.finish();
 
-  // The averages themselves are printed with a reduced precision (`7 / 3` with
-  // a precision of one, and `7 / 4` with a precision of zero).
+  // The averages are `7 / 3` with one digit and `7 / 4` with no digit after
+  // the decimal point.
   EXPECT_THAT(
       logStream.str(),
       ::testing::HasSubstr("Average number of predicates per subject: 2.3"));
@@ -184,7 +183,8 @@ TEST(PatternCreator, printStatisticsRestoresDefaultFloatFormat) {
       logStream.str(),
       ::testing::HasSubstr("Average number of subjects per predicate: 2\n"));
 
-  // But the default precision of six is restored afterwards.
+  // The float format of the log stream is untouched, so a number that is
+  // logged afterwards still has the default precision of six.
   logStream.str("");
   AD_LOG_INFO << 1.0 / 3.0 << std::endl;
   EXPECT_THAT(logStream.str(), ::testing::HasSubstr("0.333333"));
