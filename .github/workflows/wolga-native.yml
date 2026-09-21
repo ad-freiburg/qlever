@@ -1,15 +1,21 @@
 name: Wolga native
 
-# Heavy Linux CI legs on Wolga self-hosted runners (rootless podman,
+# Heavy Linux CI legs on self-hosted runners (rootless podman,
 # prebuilt localhost/qlever-ci images). Immune to the Launchpad PPA outages
 # that keep killing the GitHub-hosted legs. Isolated workflow: not required,
 # zero impact on the existing matrix.
 #
-# Legs mirror native-build.yml configurations:
-# - gcc-13 Release (default flags)
-# - clang-21 Release
-# - clang-16 ASan / UBSan (RelWithDebInfo, like the GitHub sanitizer legs)
-# - clang-17 TSan (Debug, timing tests off)
+# Legs mirror native-build.yml configurations (same toolchains, build types,
+# flags, and per-leg options). Deviations from native-build.yml are marked
+# VOLGA-DEVIATION and are intentional:
+# - RUN_EXPENSIVE_TESTS stays OFF on all legs until ctest durations fit the
+#   timeout on shared hosts (native runs expensive tests on plain Release).
+# - TSan stays on the GitHub-hosted leg (needs root vm.mmap_rnd_bits sysctl).
+#
+# Image coverage (localhost/qlever-ci:<tag> must exist in the runner host's
+# podman storage): gcc13, clang16, clang21, clang17. Missing images with a
+# recipe in misc/ci-images: gcc11. Missing recipe and image: gcc12, clang18.
+# Legs without a runnable image are present below as commented placeholders.
 
 on:
   push:
@@ -29,7 +35,7 @@ jobs:
   build:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
     # Pinned to image-bearing hosts: only runners sharing the podman storage
-    # that holds localhost/qlever-ci carry wolga-img (see ural-w1..w4).
+    # that holds localhost/qlever-ci carry wolga-img (Wolga fleet).
     runs-on: [self-hosted, linux, x64, wolga-img]
     timeout-minutes: 240
     strategy:
@@ -44,6 +50,12 @@ jobs:
             toolchain: clang21
             build-type: Release
             extra-flags: ""
+            allocator-backend: pmr
+          - image: clang16
+            toolchain: clang16
+            build-type: Release
+            extra-flags: ""
+            skip-if-pr: true
           - image: clang16
             toolchain: clang16
             build-type: RelWithDebInfo
@@ -52,6 +64,30 @@ jobs:
             toolchain: clang16
             build-type: RelWithDebInfo
             extra-flags: "-fsanitize=undefined"
+          # VOLGA-DEVIATION (placeholder): gcc11 legs need a gcc11 image
+          # (recipe: misc/ci-images/Containerfile.gcc11). Uncomment once the
+          # image is in the runner hosts' podman storage.
+          # - image: gcc11
+          #   toolchain: gcc11
+          #   build-type: Release
+          #   extra-flags: ""
+          # - image: gcc11
+          #   toolchain: gcc11
+          #   build-type: Release
+          #   extra-flags: ""
+          #   additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"
+          # VOLGA-DEVIATION (placeholder): gcc12/clang18 run on master only in
+          # native-build.yml and need images without a recipe yet.
+          # - image: gcc12
+          #   toolchain: gcc12
+          #   build-type: Release
+          #   extra-flags: ""
+          #   skip-if-pr: true
+          # - image: clang18
+          #   toolchain: clang18
+          #   build-type: Release
+          #   extra-flags: ""
+          #   skip-if-pr: true
           # NOTE: no TSan leg here. ThreadSanitizer aborts with "unexpected
           # memory mapping" unless the host sets vm.mmap_rnd_bits=28, which
           # needs root on the runner hosts. TSan stays on the GitHub-hosted
@@ -60,10 +96,14 @@ jobs:
       PODMAN_ROOT: /local/data-ssd/stoetzem/containers-storage
       PODMAN_TMP: /local/data-ssd/stoetzem/containers-tmp
     steps:
+      - name: Skip early if master-only leg on a PR
+        if: github.event_name == 'pull_request' && matrix.skip-if-pr == true
+        run: exit 0;
       - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Native ${{ matrix.toolchain }} build + tests inside prebuilt CI image
+        if: github.event_name != 'pull_request' || matrix.skip-if-pr != true
         run: |
           mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
           podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
@@ -77,10 +117,11 @@ jobs:
                 -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror ${{ matrix.extra-flags }}" \
                 -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
                 -DENABLE_EXPENSIVE_CHECKS=true \
+                ${{ matrix.additional-cmake-options }} \
                 -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold" \
                 -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON \
-                -DUSE_PRECOMPILED_HEADERS=OFF -DCHEAPER_COMPILATION=OFF \
-                -DQLEVER_ALLOCATOR_BACKEND=limit
+                -DUSE_PRECOMPILED_HEADERS=${{ matrix.toolchain == 'clang21' && 'ON' || 'OFF' }} -DCHEAPER_COMPILATION=${{ matrix.toolchain == 'gcc11' && 'ON' || 'OFF' }} \
+                -DQLEVER_ALLOCATOR_BACKEND=${{ matrix.allocator-backend || 'limit' }}
               cmake --build /work/build --config ${{ matrix.build-type }} -- -j $(nproc)
               cd /work/build/test
               env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{ matrix.build-type }} -j $(nproc) .
