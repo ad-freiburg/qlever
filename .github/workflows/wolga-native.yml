@@ -28,7 +28,9 @@ permissions:
 jobs:
   build:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
-    runs-on: [self-hosted, linux, x64, wolga]
+    # Pinned to image-bearing hosts: only runners sharing the podman storage
+    # that holds localhost/qlever-ci carry wolga-img (see ural-w1..w4).
+    runs-on: [self-hosted, linux, x64, wolga-img]
     timeout-minutes: 240
     strategy:
       fail-fast: false
