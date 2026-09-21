@@ -26,10 +26,10 @@ jobs:
         github.event.comment.author_association == 'COLLABORATOR') &&
        (startsWith(github.event.comment.body, '/open-code-review') ||
         startsWith(github.event.comment.body, '@open-code-review')))
-    runs-on: [self-hosted, linux, x64, ocr-local]
+    runs-on: [self-hosted, linux, x64, wolga]
     timeout-minutes: 240
     env:
-      PATH: /home/userNoPriv/.local/bin:/home/userNoPriv/.local/share/npm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PATH: /home/stoetzem/.local/bin:/local/data-ssd/stoetzem/node22/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - name: Resolve PR context for comment-triggered reviews
         id: pr-context
