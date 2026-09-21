@@ -33,6 +33,11 @@ jobs:
       # freshly installed binary ever goes missing mid-job, review steps
       # still resolve a pinned v1.11.7 copy from local SSD.
       PATH: /home/stoetzem/.local/bin:/local/data-ssd/stoetzem/node22/bin:/local/data-ssd/stoetzem/ocr-stable/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      # The review tool self-upgrades in the background when the registry
+      # `latest` is newer than the pinned install; the upgrade replaces the
+      # running tree mid-job and the review spawn then fails with ENOENT.
+      # Pinned 1.11.7 must stay put, so updates stay off in CI.
+      OCR_NO_UPDATE: '1'
     steps:
       - name: Resolve PR context for comment-triggered reviews
         id: pr-context
