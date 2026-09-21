@@ -132,3 +132,20 @@ TEST(VocabularyInternalExternal, ScanAllEmptyVocabulary) {
   auto vocab = createVocabulary("ScanAllEmpty")(std::vector<std::string>{});
   EXPECT_TRUE(scanAllToVector(vocab.scanAll()).empty());
 }
+
+// _____________________________________________________________________________
+TEST(VocabularyInternalExternal, LookupBatch) {
+  // Shuffled indices with duplicates, mixing internal-vocabulary hits (odd
+  // indices are cached in RAM, see `VocabularyCreator`) and external-vocabulary
+  // misses (even indices). The batch result must match the sequential single
+  // lookups in input order.
+  const std::vector<std::string> words{"alpha", "beta",    "gamma",
+                                       "delta", "epsilon", "zeta"};
+  auto vocab = createVocabulary("LookupBatch")(words);
+  std::vector<size_t> indices{3, 0, 3, 5, 1, 4, 0, 5, 2, 1};
+  auto result = vocab.lookupBatch(indices);
+  EXPECT_THAT((*result), ::testing::ElementsAre(
+                             "delta", "alpha", "delta", "zeta", "beta",
+                             "epsilon", "alpha", "zeta", "gamma", "beta"));
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+}
