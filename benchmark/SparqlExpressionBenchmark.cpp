@@ -18,6 +18,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/NumericOperandClassification.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "infrastructure/Benchmark.h"
 #include "infrastructure/BenchmarkMeasurementContainer.h"
@@ -191,19 +192,28 @@ void evaluateGenericBinaryAddCoreRepeatedly(const Left& left,
   }
 }
 
-using NumericType =
-    sparqlExpression::detail::homogeneousNumeric::HomogeneousNumericType;
+using NumericType = sparqlExpression::detail::homogeneousNumeric::NumericType;
 
 template <typename Left, typename Right>
 void classifyRepeatedly(const Left& left, const Right& right,
                         EvaluationContext& context, size_t repetitions,
-                        NumericType expectedLeft, NumericType expectedRight) {
+                        NumericType expectedLeftHomogeneous,
+                        NumericType expectedRightHomogeneous,
+                        NumericType expectedLeftMajority,
+                        NumericType expectedRightMajority) {
   for (size_t repetition = 0; repetition < repetitions; ++repetition) {
-    const auto classification = sparqlExpression::detail::homogeneousNumeric::
-        classifyNumericOperandsWithPreferredType(&context, left, right);
+    const auto classification =
+        sparqlExpression::detail::homogeneousNumeric::classifyNumericOperands(
+            &context, left, right);
 
-    AD_CORRECTNESS_CHECK(classification[0].homogeneousType_ == expectedLeft);
-    AD_CORRECTNESS_CHECK(classification[1].homogeneousType_ == expectedRight);
+    AD_CORRECTNESS_CHECK(classification[0].homogeneousType_ ==
+                         expectedLeftHomogeneous);
+    AD_CORRECTNESS_CHECK(classification[1].homogeneousType_ ==
+                         expectedRightHomogeneous);
+    AD_CORRECTNESS_CHECK(classification[0].majorityType_ ==
+                         expectedLeftMajority);
+    AD_CORRECTNESS_CHECK(classification[1].majorityType_ ==
+                         expectedRightMajority);
   }
 }
 
@@ -270,6 +280,78 @@ VectorWithMemoryLimit<Id> makeFortyThirtyFiveTwentyFiveMix(
   return result;
 }
 
+VectorWithMemoryLimit<Id> makeFortyTenFiftyMix(ql::span<const ValueId> input,
+                                               EvaluationContext* context) {
+  VectorWithMemoryLimit<Id> result{context->_allocator};
+  result.reserve(input.size());
+
+  for (size_t i = 0; i < input.size(); ++i) {
+    const auto position = i % 10;
+
+    if (position < 4) {
+      // 40% Int.
+      result.push_back(input[i]);
+    } else if (position == 4) {
+      // 10% Double.
+      result.push_back(
+          Id::makeFromDouble(static_cast<double>(input[i].getInt())));
+    } else {
+      // 50% VocabIndex.
+      result.push_back(
+          Id::makeFromVocabIndex(VocabIndex::make(static_cast<uint64_t>(i))));
+    }
+  }
+
+  return result;
+}
+
+VectorWithMemoryLimit<Id> makeSixtyFortyMix(ql::span<const ValueId> input,
+                                            EvaluationContext* context) {
+  VectorWithMemoryLimit<Id> result{context->_allocator};
+  result.reserve(input.size());
+
+  for (size_t i = 0; i < input.size(); ++i) {
+    if (i % 5 < 3) {
+      // 60% Int.
+      result.push_back(input[i]);
+    } else {
+      // 40% Double.
+      result.push_back(
+          Id::makeFromDouble(static_cast<double>(input[i].getInt())));
+    }
+  }
+
+  return result;
+}
+
+VectorWithMemoryLimit<Id> makeThirtyTwentyFiveTwentyFiveTwentyMix(
+    ql::span<const ValueId> input, EvaluationContext* context) {
+  VectorWithMemoryLimit<Id> result{context->_allocator};
+  result.reserve(input.size());
+
+  for (size_t i = 0; i < input.size(); ++i) {
+    const auto position = i % 20;
+
+    if (position < 6) {
+      // 30% Int.
+      result.push_back(input[i]);
+    } else if (position < 11) {
+      // 25% Double.
+      result.push_back(
+          Id::makeFromDouble(static_cast<double>(input[i].getInt())));
+    } else if (position < 16) {
+      // 25% Bool.
+      result.push_back(Id::makeFromBool(i % 2 == 0));
+    } else {
+      // 20% VocabIndex.
+      result.push_back(
+          Id::makeFromVocabIndex(VocabIndex::make(static_cast<uint64_t>(i))));
+    }
+  }
+
+  return result;
+}
+
 VectorWithMemoryLimit<Id> makeDoubleVector(ql::span<const ValueId> input,
                                            EvaluationContext* context) {
   VectorWithMemoryLimit<Id> result{context->_allocator};
@@ -323,6 +405,13 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
         makeVectorWithDoubleEvery(leftIds, 2, &benchmarkContext.context);
     auto fortyThirtyFiveTwentyFiveStorage =
         makeFortyThirtyFiveTwentyFiveMix(leftIds, &benchmarkContext.context);
+    auto fortyTenFiftyStorage =
+        makeFortyTenFiftyMix(leftIds, &benchmarkContext.context);
+    auto sixtyFortyStorage =
+        makeSixtyFortyMix(leftIds, &benchmarkContext.context);
+    auto thirtyTwentyFiveTwentyFiveTwentyStorage =
+        makeThirtyTwentyFiveTwentyFiveTwentyMix(leftIds,
+                                                &benchmarkContext.context);
 
     ql::span<const ValueId> mismatchMiddle{mismatchMiddleStorage.data(),
                                            mismatchMiddleStorage.size()};
@@ -338,6 +427,13 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     ql::span<const ValueId> fortyThirtyFiveTwentyFive{
         fortyThirtyFiveTwentyFiveStorage.data(),
         fortyThirtyFiveTwentyFiveStorage.size()};
+    ql::span<const ValueId> fortyTenFifty{fortyTenFiftyStorage.data(),
+                                          fortyTenFiftyStorage.size()};
+    ql::span<const ValueId> sixtyForty{sixtyFortyStorage.data(),
+                                       sixtyFortyStorage.size()};
+    ql::span<const ValueId> thirtyTwentyFiveTwentyFiveTwenty{
+        thirtyTwentyFiveTwentyFiveTwentyStorage.data(),
+        thirtyTwentyFiveTwentyFiveTwentyStorage.size()};
 
     auto legacyVectorVector = makeLegacyVectorVectorExpression();
     auto newVectorVector = makeNewVectorVectorExpression();
@@ -358,7 +454,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
                                              benchmarkContext.context, 1);
       evaluateBinaryAddCoreRepeatedly(left, right, benchmarkContext.context, 1);
       classifyRepeatedly(left, right, benchmarkContext.context, 1, leftType,
-                         rightType);
+                         rightType, leftType, rightType);
     };
 
     warmUpHomogeneousCase(leftIds, rightIds, NumericType::Int,
@@ -383,6 +479,9 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     warmUpMixedCase(ninetyPercentInt, rightIds);
     warmUpMixedCase(fiftyPercentInt, rightIds);
     warmUpMixedCase(fortyThirtyFiveTwentyFive, rightIds);
+    warmUpMixedCase(fortyTenFifty, rightIds);
+    warmUpMixedCase(sixtyForty, rightIds);
+    warmUpMixedCase(thirtyTwentyFiveTwentyFiveTwenty, rightIds);
 
     BenchmarkResults results{};
 
@@ -428,7 +527,8 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     results.addMeasurement(
         "Classification only: integer vector-vector, 100k rows x 50", [&]() {
           classifyRepeatedly(leftIds, rightIds, benchmarkContext.context,
-                             repetitions, NumericType::Int, NumericType::Int);
+                             repetitions, NumericType::Int, NumericType::Int,
+                             NumericType::Int, NumericType::Int);
         });
 
     // Double vector-vector.
@@ -448,6 +548,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
         "Classification only: double vector-vector, 100k rows x 50", [&]() {
           classifyRepeatedly(doubleLeft, doubleRight, benchmarkContext.context,
                              repetitions, NumericType::Double,
+                             NumericType::Double, NumericType::Double,
                              NumericType::Double);
         });
 
@@ -467,7 +568,8 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     results.addMeasurement(
         "Classification only: integer vector-constant, 100k rows x 50", [&]() {
           classifyRepeatedly(leftIds, constantTwo, benchmarkContext.context,
-                             repetitions, NumericType::Int, NumericType::Int);
+                             repetitions, NumericType::Int, NumericType::Int,
+                             NumericType::Int, NumericType::Int);
         });
 
     // Double vector-constant.
@@ -489,6 +591,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
         "Classification only: double vector-constant, 100k rows x 50", [&]() {
           classifyRepeatedly(doubleLeft, constantTwoDouble,
                              benchmarkContext.context, repetitions,
+                             NumericType::Double, NumericType::Double,
                              NumericType::Double, NumericType::Double);
         });
 
@@ -523,7 +626,8 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
         "Classification only: 99.9% integer, 100k rows x 50", [&]() {
           classifyRepeatedly(ninetyNineNinePercentInt, rightIds,
                              benchmarkContext.context, repetitions,
-                             NumericType::Other, NumericType::Int);
+                             NumericType::Other, NumericType::Int,
+                             NumericType::Int, NumericType::Int);
         });
 
     results.addMeasurement(
@@ -544,7 +648,8 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
         "Classification only: 99% integer, 100k rows x 50", [&]() {
           classifyRepeatedly(ninetyNinePercentInt, rightIds,
                              benchmarkContext.context, repetitions,
-                             NumericType::Other, NumericType::Int);
+                             NumericType::Other, NumericType::Int,
+                             NumericType::Int, NumericType::Int);
         });
 
     results.addMeasurement(
@@ -565,7 +670,8 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
         "Classification only: 90% integer, 100k rows x 50", [&]() {
           classifyRepeatedly(ninetyPercentInt, rightIds,
                              benchmarkContext.context, repetitions,
-                             NumericType::Other, NumericType::Int);
+                             NumericType::Other, NumericType::Int,
+                             NumericType::Int, NumericType::Int);
         });
 
     results.addMeasurement(
@@ -584,6 +690,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
         "Classification only: 50% integer, 100k rows x 50", [&]() {
           classifyRepeatedly(fiftyPercentInt, rightIds,
                              benchmarkContext.context, repetitions,
+                             NumericType::Other, NumericType::Int,
                              NumericType::Other, NumericType::Int);
         });
 
@@ -610,7 +717,81 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
         [&]() {
           classifyRepeatedly(fortyThirtyFiveTwentyFive, rightIds,
                              benchmarkContext.context, repetitions,
+                             NumericType::Other, NumericType::Int,
+                             NumericType::Int, NumericType::Int);
+        });
+
+    results.addMeasurement(
+        "Generic mixed add: 40% integer, 10% double, 50% vocab index, "
+        "100k rows x 50",
+        [&]() {
+          evaluateGenericBinaryAddCoreRepeatedly(
+              fortyTenFifty, rightIds, benchmarkContext.context, repetitions);
+        });
+
+    results.addMeasurement(
+        "BinaryExpression mixed add: 40% integer, 10% double, 50% vocab index, "
+        "100k rows x 50",
+        [&]() {
+          evaluateBinaryAddCoreRepeatedly(
+              fortyTenFifty, rightIds, benchmarkContext.context, repetitions);
+        });
+
+    results.addMeasurement(
+        "Classification only: 40% integer, 10% double, 50% vocab index, "
+        "100k rows x 50",
+        [&]() {
+          classifyRepeatedly(fortyTenFifty, rightIds, benchmarkContext.context,
+                             repetitions, NumericType::Other, NumericType::Int,
                              NumericType::Other, NumericType::Int);
+        });
+
+    results.addMeasurement(
+        "Generic mixed add: 60% integer, 40% double, 100k rows x 50", [&]() {
+          evaluateGenericBinaryAddCoreRepeatedly(
+              sixtyForty, rightIds, benchmarkContext.context, repetitions);
+        });
+
+    results.addMeasurement(
+        "BinaryExpression mixed add: 60% integer, 40% double, 100k rows x 50",
+        [&]() {
+          evaluateBinaryAddCoreRepeatedly(
+              sixtyForty, rightIds, benchmarkContext.context, repetitions);
+        });
+
+    results.addMeasurement(
+        "Classification only: 60% integer, 40% double, 100k rows x 50", [&]() {
+          classifyRepeatedly(sixtyForty, rightIds, benchmarkContext.context,
+                             repetitions, NumericType::Other, NumericType::Int,
+                             NumericType::Int, NumericType::Int);
+        });
+
+    results.addMeasurement(
+        "Generic mixed add: 30% integer, 25% double, 25% bool, "
+        "20% vocab index, 100k rows x 50",
+        [&]() {
+          evaluateGenericBinaryAddCoreRepeatedly(
+              thirtyTwentyFiveTwentyFiveTwenty, rightIds,
+              benchmarkContext.context, repetitions);
+        });
+
+    results.addMeasurement(
+        "BinaryExpression mixed add: 30% integer, 25% double, 25% bool, "
+        "20% vocab index, 100k rows x 50",
+        [&]() {
+          evaluateBinaryAddCoreRepeatedly(thirtyTwentyFiveTwentyFiveTwenty,
+                                          rightIds, benchmarkContext.context,
+                                          repetitions);
+        });
+
+    results.addMeasurement(
+        "Classification only: 30% integer, 25% double, 25% bool, "
+        "20% vocab index, 100k rows x 50",
+        [&]() {
+          classifyRepeatedly(thirtyTwentyFiveTwentyFiveTwenty, rightIds,
+                             benchmarkContext.context, repetitions,
+                             NumericType::Other, NumericType::Int,
+                             NumericType::Int, NumericType::Int);
         });
 
     return results;

@@ -118,87 +118,35 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedOperandTypes) {
 }
 
 // _____________________________________________________________________________
-TEST_F(HomogeneousNumericExpressionHelpersTest, HomogeneousNumericTypeToIndex) {
-  EXPECT_EQ(homogeneousNumericTypeToIndex(HomogeneousNumericType::Int), 0);
-  EXPECT_EQ(homogeneousNumericTypeToIndex(HomogeneousNumericType::Double), 1);
-  EXPECT_ANY_THROW(
-      homogeneousNumericTypeToIndex(HomogeneousNumericType::Other));
+TEST_F(HomogeneousNumericExpressionHelpersTest, NumericTypeToIndex) {
+  EXPECT_EQ(numericTypeToIndex(NumericType::Int), 0);
+  EXPECT_EQ(numericTypeToIndex(NumericType::Double), 1);
+  EXPECT_ANY_THROW(numericTypeToIndex(NumericType::Other));
 }
 
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySingleValueId) {
-  EXPECT_EQ(classifyNumericOperand(I(42)), HomogeneousNumericType::Int);
-  EXPECT_EQ(classifyNumericOperand(D(3.5)), HomogeneousNumericType::Double);
-  EXPECT_EQ(classifyNumericOperand(Id::makeFromBool(true)),
-            HomogeneousNumericType::Other);
-  EXPECT_EQ(classifyNumericOperand(Id::makeUndefined()),
-            HomogeneousNumericType::Other);
+  const auto intClassification = classifyNumericOperand(I(42));
+  EXPECT_EQ(intClassification.homogeneousType_, NumericType::Int);
+  EXPECT_EQ(intClassification.majorityType_, NumericType::Int);
+
+  const auto doubleClassification = classifyNumericOperand(D(3.5));
+  EXPECT_EQ(doubleClassification.homogeneousType_, NumericType::Double);
+  EXPECT_EQ(doubleClassification.majorityType_, NumericType::Double);
+
+  const auto boolClassification =
+      classifyNumericOperand(Id::makeFromBool(true));
+  EXPECT_EQ(boolClassification.homogeneousType_, NumericType::Other);
+  EXPECT_EQ(boolClassification.majorityType_, NumericType::Other);
+
+  const auto undefinedClassification =
+      classifyNumericOperand(Id::makeUndefined());
+  EXPECT_EQ(undefinedClassification.homogeneousType_, NumericType::Other);
+  EXPECT_EQ(undefinedClassification.majorityType_, NumericType::Other);
 }
 
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySpan) {
-  std::array<ValueId, 3> ints{I(1), I(-2), I(3)};
-  std::array<ValueId, 3> doubles{D(1.0), D(-2.5), D(3.5)};
-  std::array<ValueId, 3> mixed{I(1), D(2.0), I(3)};
-  std::array<ValueId, 0> empty{};
-
-  EXPECT_EQ(classifyNumericOperand(ql::span<const ValueId>{ints}, &context_),
-            HomogeneousNumericType::Int);
-
-  EXPECT_EQ(classifyNumericOperand(ql::span<const ValueId>{doubles}, &context_),
-            HomogeneousNumericType::Double);
-
-  EXPECT_EQ(classifyNumericOperand(ql::span<const ValueId>{mixed}, &context_),
-            HomogeneousNumericType::Other);
-
-  EXPECT_EQ(classifyNumericOperand(ql::span<const ValueId>{empty}, &context_),
-            HomogeneousNumericType::Other);
-}
-
-// _____________________________________________________________________________
-TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifyOperands) {
-  std::array<ValueId, 3> ints{I(1), I(2), I(3)};
-  std::array<ValueId, 3> doubles{D(1.0), D(2.0), D(3.0)};
-
-  auto intsSpan = ql::span<const ValueId>{ints};
-  auto doublesSpan = ql::span<const ValueId>{doubles};
-
-  const auto types = classifyNumericOperands(&context_, intsSpan, doublesSpan);
-
-  EXPECT_EQ(types[0], HomogeneousNumericType::Int);
-  EXPECT_EQ(types[1], HomogeneousNumericType::Double);
-
-  const auto ternaryTypes =
-      classifyNumericOperands(&context_, intsSpan, doublesSpan, I(1));
-
-  EXPECT_EQ(ternaryTypes[0], HomogeneousNumericType::Int);
-  EXPECT_EQ(ternaryTypes[1], HomogeneousNumericType::Double);
-  EXPECT_EQ(ternaryTypes[2], HomogeneousNumericType::Int);
-}
-
-// _____________________________________________________________________________
-TEST_F(HomogeneousNumericExpressionHelpersTest,
-       ClassifySingleValueIdWithPreferredType) {
-  const auto intClassification = classifyNumericOperandWithPreferredType(I(42));
-  EXPECT_EQ(intClassification.homogeneousType_, HomogeneousNumericType::Int);
-  EXPECT_EQ(intClassification.preferredType_, HomogeneousNumericType::Int);
-
-  const auto doubleClassification =
-      classifyNumericOperandWithPreferredType(D(3.5));
-  EXPECT_EQ(doubleClassification.homogeneousType_,
-            HomogeneousNumericType::Double);
-  EXPECT_EQ(doubleClassification.preferredType_,
-            HomogeneousNumericType::Double);
-
-  const auto otherClassification =
-      classifyNumericOperandWithPreferredType(Id::makeFromBool(true));
-  EXPECT_EQ(otherClassification.homogeneousType_,
-            HomogeneousNumericType::Other);
-  EXPECT_EQ(otherClassification.preferredType_, HomogeneousNumericType::Other);
-}
-
-// _____________________________________________________________________________
-TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySpanWithPreferredType) {
   std::array<ValueId, 4> ints{I(1), I(2), I(3), I(4)};
   std::array<ValueId, 4> doubles{D(1.0), D(2.0), D(3.0), D(4.0)};
   std::array<ValueId, 4> mostlyInts{I(1), I(2), I(3), D(4.0)};
@@ -217,77 +165,76 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySpanWithPreferredType) {
   std::array<ValueId, 5> tiedWithNonNumeric{
       I(1), I(2), D(3.0), Id::makeFromBool(true), Id::makeFromBool(false)};
 
-  auto classification = classifyNumericOperandWithPreferredType(
-      ql::span<const ValueId>{ints}, &context_);
-  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Int);
-  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Int);
+  auto classification =
+      classifyNumericOperand(ql::span<const ValueId>{ints}, &context_);
+  EXPECT_EQ(classification.homogeneousType_, NumericType::Int);
+  EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
-  classification = classifyNumericOperandWithPreferredType(
-      ql::span<const ValueId>{doubles}, &context_);
-  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Double);
-  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Double);
+  classification =
+      classifyNumericOperand(ql::span<const ValueId>{doubles}, &context_);
+  EXPECT_EQ(classification.homogeneousType_, NumericType::Double);
+  EXPECT_EQ(classification.majorityType_, NumericType::Double);
 
-  classification = classifyNumericOperandWithPreferredType(
-      ql::span<const ValueId>{mostlyInts}, &context_);
-  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Int);
+  classification =
+      classifyNumericOperand(ql::span<const ValueId>{mostlyInts}, &context_);
+  EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
-  classification = classifyNumericOperandWithPreferredType(
-      ql::span<const ValueId>{mostlyDoubles}, &context_);
-  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Double);
+  classification =
+      classifyNumericOperand(ql::span<const ValueId>{mostlyDoubles}, &context_);
+  EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classification.majorityType_, NumericType::Double);
 
-  classification = classifyNumericOperandWithPreferredType(
-      ql::span<const ValueId>{tied}, &context_);
-  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Other);
+  classification =
+      classifyNumericOperand(ql::span<const ValueId>{tied}, &context_);
+  EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classification.majorityType_, NumericType::Other);
 
-  classification = classifyNumericOperandWithPreferredType(
-      ql::span<const ValueId>{empty}, &context_);
-  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Other);
+  classification =
+      classifyNumericOperand(ql::span<const ValueId>{empty}, &context_);
+  EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classification.majorityType_, NumericType::Other);
 
-  classification = classifyNumericOperandWithPreferredType(
+  classification = classifyNumericOperand(
       ql::span<const ValueId>{withNonNumeric}, &context_);
-  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Int);
+  EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
-  classification = classifyNumericOperandWithPreferredType(
-      ql::span<const ValueId>{withUndefined}, &context_);
-  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Int);
+  classification =
+      classifyNumericOperand(ql::span<const ValueId>{withUndefined}, &context_);
+  EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
-  classification = classifyNumericOperandWithPreferredType(
+  classification = classifyNumericOperand(
       ql::span<const ValueId>{mostlyNonNumeric}, &context_);
-  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classification.majorityType_, NumericType::Other);
 
-  classification = classifyNumericOperandWithPreferredType(
+  classification = classifyNumericOperand(
       ql::span<const ValueId>{tiedWithNonNumeric}, &context_);
-  EXPECT_EQ(classification.homogeneousType_, HomogeneousNumericType::Other);
-  EXPECT_EQ(classification.preferredType_, HomogeneousNumericType::Other);
+  EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classification.majorityType_, NumericType::Other);
 }
 
 // _____________________________________________________________________________
-TEST_F(HomogeneousNumericExpressionHelpersTest,
-       ClassifyOperandsWithPreferredType) {
+TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifyOperands) {
   std::array<ValueId, 3> mostlyInts{I(1), I(2), D(3.0)};
   std::array<ValueId, 3> mostlyDoubles{I(1), D(2.0), D(3.0)};
 
   auto intsSpan = ql::span<const ValueId>{mostlyInts};
   auto doublesSpan = ql::span<const ValueId>{mostlyDoubles};
 
-  const auto classifications = classifyNumericOperandsWithPreferredType(
-      &context_, intsSpan, doublesSpan, I(5));
+  const auto classifications =
+      classifyNumericOperands(&context_, intsSpan, doublesSpan, I(5));
 
-  EXPECT_EQ(classifications[0].homogeneousType_, HomogeneousNumericType::Other);
-  EXPECT_EQ(classifications[0].preferredType_, HomogeneousNumericType::Int);
+  EXPECT_EQ(classifications[0].homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classifications[0].majorityType_, NumericType::Int);
 
-  EXPECT_EQ(classifications[1].homogeneousType_, HomogeneousNumericType::Other);
-  EXPECT_EQ(classifications[1].preferredType_, HomogeneousNumericType::Double);
+  EXPECT_EQ(classifications[1].homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classifications[1].majorityType_, NumericType::Double);
 
-  EXPECT_EQ(classifications[2].homogeneousType_, HomogeneousNumericType::Int);
-  EXPECT_EQ(classifications[2].preferredType_, HomogeneousNumericType::Int);
+  EXPECT_EQ(classifications[2].homogeneousType_, NumericType::Int);
+  EXPECT_EQ(classifications[2].majorityType_, NumericType::Int);
 }
 
 // _____________________________________________________________________________
@@ -333,6 +280,12 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   EXPECT_EQ((*resultVector)[0], I(5));
   EXPECT_EQ((*resultVector)[1], I(7));
   EXPECT_EQ((*resultVector)[2], I(9));
+}
+
+// _____________________________________________________________________________
+TEST_F(HomogeneousNumericExpressionHelpersTest, DatatypeForNumericType) {
+  EXPECT_EQ(datatypeForNumericType<int64_t>(), Datatype::Int);
+  EXPECT_EQ(datatypeForNumericType<double>(), Datatype::Double);
 }
 
 // _____________________________________________________________________________
@@ -445,17 +398,16 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
 }
 
 // _____________________________________________________________________________
-TEST_F(HomogeneousNumericExpressionHelpersTest,
-       DispatchHomogeneousNumericTypes) {
-  auto result = dispatchHomogeneousNumericTypes(
-      std::array{HomogeneousNumericType::Int, HomogeneousNumericType::Double},
-      [](auto leftType, auto rightType) {
-        using Left = typename decltype(leftType)::type;
-        using Right = typename decltype(rightType)::type;
+TEST_F(HomogeneousNumericExpressionHelpersTest, DispatchNumericTypes) {
+  auto result =
+      dispatchNumericTypes(std::array{NumericType::Int, NumericType::Double},
+                           [](auto leftType, auto rightType) {
+                             using Left = typename decltype(leftType)::type;
+                             using Right = typename decltype(rightType)::type;
 
-        return ql::concepts::same_as<Left, int64_t> &&
-               ql::concepts::same_as<Right, double>;
-      });
+                             return ql::concepts::same_as<Left, int64_t> &&
+                                    ql::concepts::same_as<Right, double>;
+                           });
 
   EXPECT_TRUE(result);
 }

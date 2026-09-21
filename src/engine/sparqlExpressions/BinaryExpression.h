@@ -100,17 +100,11 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                   supportsHomogeneousNumericOperand<Left>() &&
                   supportsHomogeneousNumericOperand<Right>()) {
       const auto classifications =
-          classifyNumericOperandsWithPreferredType(context, left, right);
+          classifyNumericOperands(context, left, right);
 
-      const std::array<HomogeneousNumericType, 2> homogeneousTypes{
-          classifications[0].homogeneousType_,
-          classifications[1].homogeneousType_};
-
-      if (ql::ranges::all_of(homogeneousTypes, [](HomogeneousNumericType type) {
-            return type != HomogeneousNumericType::Other;
-          })) {
-        return dispatchHomogeneousNumericTypes(
-            homogeneousTypes,
+      if (auto homogeneousTypes = getHomogeneousNumericTypes(classifications)) {
+        return dispatchNumericTypes(
+            *homogeneousTypes,
             [&left, &right, context](auto leftType,
                                      auto rightType) -> ExpressionResult {
               using LeftNumericType = typename decltype(leftType)::type;
@@ -122,14 +116,9 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
             });
       }
 
-      const std::array<HomogeneousNumericType, 2> preferredTypes{
-          classifications[0].preferredType_, classifications[1].preferredType_};
-
-      if (ql::ranges::all_of(preferredTypes, [](HomogeneousNumericType type) {
-            return type != HomogeneousNumericType::Other;
-          })) {
-        return dispatchHomogeneousNumericTypes(
-            preferredTypes,
+      if (auto majorityTypes = getMajorityNumericTypes(classifications)) {
+        return dispatchNumericTypes(
+            *majorityTypes,
             [&left, &right, context](auto leftType,
                                      auto rightType) -> ExpressionResult {
               using LeftNumericType = typename decltype(leftType)::type;
@@ -155,7 +144,6 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
         [context]() { context->cancellationHandle_->throwIfCancelled(); });
 
     return result;
-
   } else {
     static_assert(ad_utility::alwaysFalse<std::tuple<LeftType, RightType>>,
                   "Unhandled binary expression operand types");

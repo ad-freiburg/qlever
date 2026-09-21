@@ -28,21 +28,17 @@
 
 namespace sparqlExpression::detail::homogeneousNumeric {
 
-// Helpers for evaluating numeric expressions on primitive C++ numeric types
-// after their operands have been classified.
+// Helpers for evaluating numeric expressions directly on primitive C++ numeric
+// types after operand classification.
 //
 // The generic numeric value getters return variants and therefore require
-// variant dispatch for every result row. These helpers classify numeric
-// operands and evaluate homogeneous inputs directly on primitive C++ types.
-// For mixed inputs, the classification can additionally determine a preferred
-// numeric type that is used as the expected type for the speculative fast path.
+// variant dispatch for every result row. These helpers avoid that overhead for
+// homogeneous inputs and provide a speculative fast path for mixed inputs.
 
-// Map homogeneous numeric datatypes to their primitive C++ types.
-inline constexpr auto homogeneousNumericTypeMap =
-    std::tuple{std::pair{HomogeneousNumericType::Int,
-                         ad_utility::use_type_identity::ti<int64_t>},
-               std::pair{HomogeneousNumericType::Double,
-                         ad_utility::use_type_identity::ti<double>}};
+// Map supported numeric datatypes to their primitive C++ types.
+inline constexpr auto numericTypeMap = std::tuple{
+    std::pair{NumericType::Int, ad_utility::use_type_identity::ti<int64_t>},
+    std::pair{NumericType::Double, ad_utility::use_type_identity::ti<double>}};
 
 // Extract the primitive numeric value from a `ValueId` whose datatype was
 // already established by homogeneous classification.
@@ -97,44 +93,41 @@ struct RawNumericFunction<MakeNumericExpression<Function, NanOrInfToUndef>> {
 template <typename Function>
 using RawNumericFunctionT = typename RawNumericFunction<Function>::type;
 
-// Map a homogeneous numeric type to the corresponding compile-time index used
+// Map a supported numeric type to the corresponding compile-time index used
 // for dispatching to the primitive C++ numeric type. The `type` must be one of
-// the types in `homogeneousNumericTypeMap` above, in particular it must not be
-// `Other`, which has no primitive C++ type. Callers therefore have to classify
+// the types in `numericTypeMap` above, in particular it must not be `Other`,
+// which has no primitive C++ type. Callers therefore have to classify
 // all operands first and only dispatch if none of them is `Other`, see
 // `evaluateBinaryOperationOnVectorOrConstant`.
 template <size_t I = 0>
-inline int homogeneousNumericTypeToIndex(HomogeneousNumericType type) {
-  if constexpr (I == std::tuple_size_v<decltype(homogeneousNumericTypeMap)>) {
+inline int numericTypeToIndex(NumericType type) {
+  if constexpr (I == std::tuple_size_v<decltype(numericTypeMap)>) {
     AD_FAIL();
   } else {
-    if (std::get<I>(homogeneousNumericTypeMap).first == type) {
+    if (std::get<I>(numericTypeMap).first == type) {
       return static_cast<int>(I);
     }
-    return homogeneousNumericTypeToIndex<I + 1>(type);
+    return numericTypeToIndex<I + 1>(type);
   }
 }
 
-// Dispatch runtime homogeneous numeric types to compile-time primitive numeric
-// types and invoke the supplied function with those types.
+// Dispatch runtime numeric types to compile-time primitive numeric types and
+// invoke the supplied function with those types.
 template <size_t N, typename Function>
-decltype(auto) dispatchHomogeneousNumericTypes(
-    const std::array<HomogeneousNumericType, N>& types, Function&& function) {
+decltype(auto) dispatchNumericTypes(const std::array<NumericType, N>& types,
+                                    Function&& function) {
   std::array<int, N> indices;
 
-  ql::ranges::transform(types, indices.begin(),
-                        [](HomogeneousNumericType type) {
-                          return homogeneousNumericTypeToIndex(type);
-                        });
+  ql::ranges::transform(types, indices.begin(), [](NumericType type) {
+    return numericTypeToIndex(type);
+  });
 
-  constexpr int maxIndex =
-      std::tuple_size_v<decltype(homogeneousNumericTypeMap)> - 1;
+  constexpr int maxIndex = std::tuple_size_v<decltype(numericTypeMap)> - 1;
 
   return ad_utility::callFixedSizeVi<maxIndex>(
       indices, [function = AD_FWD(function)](auto... typeIndices) {
         return function(
-            std::get<decltype(typeIndices)::value>(homogeneousNumericTypeMap)
-                .second...);
+            std::get<decltype(typeIndices)::value>(numericTypeMap).second...);
       });
 }
 
@@ -201,10 +194,10 @@ ExpressionResult evaluateHomogeneousNumericOperation(
   return result;
 }
 
-// Return the `ValueId` at `index` for a supported numeric operand. For a
-// constant operand, the same value is returned for every index.
+// Return the `ValueId` at `index` for a supported operand. Constant operands
+// return the same value for every index.
 template <typename Operand>
-ValueId getNumericOperandValueId(const Operand& operand, size_t index) {
+ValueId getIdAt(const Operand& operand, size_t index) {
   using OperandType = std::decay_t<Operand>;
 
   static_assert(supportsHomogeneousNumericOperand<Operand>(),
@@ -217,31 +210,33 @@ ValueId getNumericOperandValueId(const Operand& operand, size_t index) {
   }
 }
 
-// Evaluate an uncommon pair of numeric operand types outside the hot
-// speculative evaluation loop. Integer and double combinations still use the
-// primitive fast function. Other datatypes fall back to the regular value
-// getters to preserve the generic expression semantics.
+// The fallback path for the speculative evaluation below when a pair of
+// operands does not match the majority types. Integer and double combinations
+// are dispatched explicitly because this was measurably faster than always
+// using the generic fallback. Other datatypes use the regular value getters to
+// preserve the generic expression semantics.
 template <typename Function, typename LeftValueGetter,
           typename RightValueGetter>
 AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
     ValueId leftValue, ValueId rightValue, EvaluationContext* context,
     RawNumericFunctionT<Function>& fastFunction, Function& genericFunction) {
+  using enum Datatype;
   const auto leftType = leftValue.getDatatype();
   const auto rightType = rightValue.getDatatype();
 
-  if (leftType == Datatype::Int && rightType == Datatype::Int) {
+  if (leftType == Int && rightType == Int) {
     return fastFunction(leftValue.getInt(), rightValue.getInt());
   }
 
-  if (leftType == Datatype::Int && rightType == Datatype::Double) {
+  if (leftType == Int && rightType == Double) {
     return fastFunction(leftValue.getInt(), rightValue.getDouble());
   }
 
-  if (leftType == Datatype::Double && rightType == Datatype::Int) {
+  if (leftType == Double && rightType == Int) {
     return fastFunction(leftValue.getDouble(), rightValue.getInt());
   }
 
-  if (leftType == Datatype::Double && rightType == Datatype::Double) {
+  if (leftType == Double && rightType == Double) {
     return fastFunction(leftValue.getDouble(), rightValue.getDouble());
   }
 
@@ -254,11 +249,10 @@ template <typename NumericType>
 constexpr Datatype datatypeForNumericType() {
   if constexpr (ql::concepts::same_as<NumericType, int64_t>) {
     return Datatype::Int;
-  } else if constexpr (ql::concepts::same_as<NumericType, double>) {
-    return Datatype::Double;
   } else {
-    static_assert(ad_utility::alwaysFalse<NumericType>,
+    static_assert(ql::concepts::same_as<NumericType, double>,
                   "Unsupported primitive numeric type");
+    return Datatype::Double;
   }
 }
 
@@ -285,10 +279,10 @@ ExpressionResult evaluateSpeculativeNumericOperation(
 
   ad_utility::chunkedForLoop<1000>(
       0, context->size(),
-      [&left, &right, &result, &fastFunction, &genericFunction, context,
-       expectedLeftType, expectedRightType](size_t i) {
-        const auto leftValue = getNumericOperandValueId(left, i);
-        const auto rightValue = getNumericOperandValueId(right, i);
+      [&left, &right, &result, &fastFunction, &genericFunction,
+       context](size_t i) {
+        const auto leftValue = getIdAt(left, i);
+        const auto rightValue = getIdAt(right, i);
 
         if (leftValue.getDatatype() == expectedLeftType &&
             rightValue.getDatatype() == expectedRightType) {
