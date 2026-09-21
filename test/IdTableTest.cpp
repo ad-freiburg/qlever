@@ -520,6 +520,52 @@ TEST(IdTable, insertAtEndEmptyInput) {
   EXPECT_EQ(noColumns.size(), 0u);
 }
 
+// _____________________________________________________________________________
+// The `std::memcpy`-based fast path of `insertAtEnd` requires that the source
+// and the destination do not overlap. Test that the corresponding check fires,
+// no matter which of the two ranges starts first.
+TEST(IdTable, insertAtEndOverlappingRanges) {
+  // Set up a table with ten rows, take a view of the four rows starting at
+  // `offset`, and then shrink the table to five rows. Inserting the view then
+  // writes to the rows `[5, 9)`, which overlap the rows the view points to.
+  // The capacity of the table remains at ten rows, so the shrinking and the
+  // subsequent growing inside `insertAtEnd` do not reallocate and the spans of
+  // the view stay valid.
+  auto overlappingInsert = [](size_t offset) {
+    IdTable table{1, makeAllocator()};
+    for (size_t i = 0; i < 10; ++i) {
+      table.push_back({V(i)});
+    }
+    auto view = table.subView(offset, 4);
+    table.resize(5);
+    table.insertAtEnd(view);
+  };
+
+  // The source starts before the destination (the first operand of the `||` in
+  // the check is false): source `[4, 8)`, destination `[5, 9)`.
+  AD_EXPECT_THROW_WITH_MESSAGE(overlappingInsert(4),
+                               ::testing::HasSubstr("destinationBegin"));
+  // The destination starts before the source (the second operand of the `||`
+  // is false): source `[6, 10)`, destination `[5, 9)`.
+  AD_EXPECT_THROW_WITH_MESSAGE(overlappingInsert(6),
+                               ::testing::HasSubstr("destinationBegin"));
+
+  // A source range that lies completely before the destination is fine, which
+  // is the typical case of appending a table to itself. Reserve the final
+  // capacity upfront, such that the view is not invalidated by the growing
+  // inside `insertAtEnd`.
+  IdTable table{1, makeAllocator()};
+  table.reserve(14);
+  for (size_t i = 0; i < 10; ++i) {
+    table.push_back({V(i)});
+  }
+  table.insertAtEnd(table.subView(0, 4));
+  ASSERT_EQ(table.size(), 14u);
+  for (size_t i = 0; i < 4; ++i) {
+    EXPECT_EQ(table(10 + i, 0), V(i)) << i;
+  }
+}
+
 TEST(IdTable, insertSubsetAtEnd) {
   auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
     using Table = typename decltype(t)::type;

@@ -792,9 +792,10 @@ class IdTable {
   // the permutation contains an index that is out of bounds for the input
   // table, the corresponding column is filled with the `defaultValue`.
   // Precondition: The `table` must not alias the rows that are appended to
-  // this table. This always holds, because the appended rows are freshly
-  // created by this function, and it is checked explicitly in
-  // `copyColumnEntries`.
+  // this table. This automatically holds whenever `table` and `*this` do not
+  // share their memory, and also for the typical case of appending a table to
+  // itself, because the appended rows are freshly created by this function.
+  // The precondition is checked explicitly in `copyColumnEntries`.
   // TODO<joka921> Can/should we constraint this functions by a concept?
   template <typename Table>
   void insertAtEnd(
@@ -913,11 +914,11 @@ class IdTable {
       const T* sourceBegin = source.data();
       const T* destinationBegin = destination.data();
       // `std::memcpy` has undefined behavior for overlapping ranges, so
-      // explicitly check the non-overlap precondition of `insertAtEnd` here.
-      // These are simple comparisons and therefore cheap enough to always run.
-      AD_CORRECTNESS_CHECK(sourceBegin + source.size() <= destinationBegin ||
-                           destinationBegin + destination.size() <=
-                               sourceBegin);
+      // explicitly check the non-overlap precondition that callers of
+      // `insertAtEnd` have to satisfy. These are simple comparisons and
+      // therefore cheap enough to always run.
+      AD_CONTRACT_CHECK(sourceBegin + source.size() <= destinationBegin ||
+                        destinationBegin + destination.size() <= sourceBegin);
       std::memcpy(destination.data(), source.data(), source.size() * sizeof(T));
     } else {
       ql::ranges::copy(source, destination.begin());
