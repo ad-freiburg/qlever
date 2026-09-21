@@ -1,0 +1,4 @@
+FROM ubuntu:24.04
+RUN chown -R 0:0 / \
+ && chmod 640 /etc/shadow /etc/gshadow \
+ && echo BASE-CLONE-OK
