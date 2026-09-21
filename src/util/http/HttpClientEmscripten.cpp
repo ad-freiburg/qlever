@@ -37,6 +37,10 @@
 //   the request, as natively) from larger values ("follow up to the limit of
 //   the JavaScript environment"). Following them ourselves would need
 //   `redirect: "manual"`, whose response is opaque in a browser.
+// * The `Location` header is never reported (`location_` stays empty).
+//   `fetch` only ever hands us the *final* response of a redirect chain, and
+//   the one non-redirect status that may carry the header (`300`, `305`) is
+//   not one that our caller follows either.
 // * `User-Agent` cannot be set in a browser, `Content-Type` is only sent with a
 //   non-empty body, and `fetch` rejects a `GET` or `HEAD` that has one.
 // * The proxy configured for the process (see `globalProxy()`) is ignored,
@@ -87,7 +91,7 @@ constexpr std::chrono::milliseconds CANCELLATION_CHECK_INTERVAL{100};
 // Perform one HTTP request as a generator over its response: `next()` takes the
 // next step and resolves to what that step yielded, `cancel()` gives up on the
 // response and closes the connection. A step yields one of
-//   {kind: "head", status, contentType, location}
+//   {kind: "head", status, contentType}
 //   {kind: "chunk", data}
 //   {kind: "done"}
 //   {kind: "error", message}
@@ -155,8 +159,7 @@ EM_JS(void, qleverFetch, (EM_VAL handle), {
       yield {
         kind : "head",
         status : fetched.status,
-        contentType : fetched.headers.get("content-type") ?? "",
-        location : fetched.headers.get("location") ?? ""
+        contentType : fetched.headers.get("content-type") ?? ""
       };
       // A `204 No Content` for example has no body at all.
       if (fetched.body) {
@@ -231,7 +234,6 @@ val startRequest(const RequestDescription& description) {
 struct ResponseHead {
   http::status status_;
   std::string contentType_;
-  std::string location_;
 };
 
 // The next chunk of a response body, or `nullopt` at its end. An `std::string`
@@ -313,8 +315,7 @@ val performStep(val response, std::string url,
     if (kind == "head") {
       promise->set_value(
           ResponseHead{static_cast<http::status>(step["status"].as<int>()),
-                       step["contentType"].as<std::string>(),
-                       step["location"].as<std::string>()});
+                       step["contentType"].as<std::string>()});
     } else if (kind == "chunk") {
       promise->set_value(BodyChunk{step["data"].as<std::string>()});
     } else if (kind == "done") {
@@ -412,17 +413,23 @@ cppcoro::generator<ql::span<std::byte>> readResponseBody(
   }
 }
 
-// Complain if the JavaScript environment cannot perform our requests at all.
-void checkEnvironment(const ad_utility::httpUtils::Url& url) {
-  if (val::global("fetch").isUndefined()) {
-    throw std::runtime_error(
-        "HTTP requests from WebAssembly require the `fetch` function, which "
-        "this JavaScript environment does not provide");
-  }
-  // Waiting for a response that can only arrive once we return to the event
-  // loop would freeze the page. The main thread of Node.js may block, and so
-  // may a Web Worker (which is what Emscripten's threads are), hence the check
-  // for a browser rather than just for the main thread.
+// Complain if the request is issued from a thread that may not block, which
+// the main thread of a browser is: waiting there for a response that can only
+// arrive once we return to the event loop freezes the page, and the very first
+// request deadlocks outright, because the Web Worker of the network thread
+// only comes up once the main thread reaches its event loop. The main thread
+// of Node.js may block, and so may a Web Worker (which is what Emscripten's
+// threads are), hence the check for a browser rather than just for the main
+// thread. This is the same distinction that Emscripten itself makes in
+// `emscripten_check_blocking_allowed`, which only warns.
+//
+// NOTE: There is deliberately no check for `fetch` itself. Every environment
+// that Emscripten supports has it (Node.js >= 18.3 and browsers far older than
+// the oldest it targets), this is not even the thread that calls it (each
+// Emscripten thread is a Web Worker with a JavaScript global scope of its
+// own), and were it missing after all, `qleverFetch` would report a plain
+// "fetch is not defined" like any other failure of the request.
+void checkThatThisThreadMayBlock(const ad_utility::httpUtils::Url& url) {
   bool isMainThreadOfABrowser =
       val::global("WorkerGlobalScope").isUndefined() &&
       !val::global("window").isUndefined();
@@ -445,7 +452,7 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
   // The handle is dereferenced while we wait for the response, exactly as in
   // the native implementation.
   AD_CONTRACT_CHECK(handle != nullptr);
-  checkEnvironment(url);
+  checkThatThisThreadMayBlock(url);
 
   Request request{
       RequestDescription{.url_ = url.asString(),
@@ -460,7 +467,6 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
   ResponseHead& head = stepAs<ResponseHead>(step);
   return {.status_ = head.status_,
           .contentType_ = std::move(head.contentType_),
-          .location_ = std::move(head.location_),
           .body_ = readResponseBody(std::move(request), std::move(handle))};
 }
 
