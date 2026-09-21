@@ -81,21 +81,23 @@ class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
   // Like `push`, but never blocks: if the queue is full, the value is not
   // pushed and `TryPushResult::Full` is returned, and the caller has to try
   // again later. Use this in a producer that must not block, for example one on
-  // a thread that has to stay responsive (see `HttpClientEmscripten.cpp`). The
-  // `value` is only moved from if the result is `Pushed`, so that the caller
-  // can hand the very same value over again once there is space.
+  // a thread that has to stay responsive. The `value` is only moved from if the
+  // result is `Pushed`, so that the caller can hand the very same value over
+  // again once there is space.
   TryPushResult tryPush(T&& value) {
-    std::unique_lock lock{mutex_};
-    if (finish_) {
-      return TryPushResult::Finished;
+    using enum TryPushResult;
+    {
+      std::unique_lock lock{mutex_};
+      if (finish_) {
+        return Finished;
+      }
+      if (queue_.size() >= maxSize_) {
+        return Full;
+      }
+      queue_.push(std::move(value));
     }
-    if (queue_.size() >= maxSize_) {
-      return TryPushResult::Full;
-    }
-    queue_.push(std::move(value));
-    lock.unlock();
     pushNotification_.notify_one();
-    return TryPushResult::Pushed;
+    return Pushed;
   }
 
   // The semantics of pushing an exception are as follows: All subsequent
@@ -148,9 +150,9 @@ class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
   // explicit call to `finish` is missing.
   ~ThreadSafeQueue() { finish(); }
 
-  // Blocks until another thread pushes an element via push() which is
-  // hen returned or signalLastElementWasPushed() is called resulting in an
-  // empty optional, whatever happens first
+  // Block until another thread pushes an element, which is then returned, or
+  // until `finish` is called, which results in an empty optional, whatever
+  // happens first.
   std::optional<T> pop() {
     std::unique_lock lock{mutex_};
     pushNotification_.wait(lock, [this] { return canPop(); });
@@ -162,11 +164,15 @@ class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
   // is available right away). This makes the wait interruptible: `onWait` may
   // throw, in which case the exception is propagated and the queue is left
   // unchanged, which lets a blocked consumer react to a cancelled query.
-  // `onWait` must not access this queue, as the mutex is not held while it
-  // runs.
-  template <typename Callback>
-  std::optional<T> pop(std::chrono::milliseconds interval,
-                       const Callback& onWait) {
+  // The mutex is not held while `onWait` runs, so `onWait` may even call
+  // `finish` on this queue.
+  //
+  // NOTE: Throwing is the only way for `onWait` to abort. Returning `false`
+  // would require a richer return type than `std::optional<T>`, as the caller
+  // then has to distinguish "value", "queue done" and "aborted".
+  CPP_template_2(typename Callback)(requires ql::concepts::invocable<Callback>)
+      std::optional<T> pop(std::chrono::milliseconds interval,
+                           const Callback& onWait) {
     std::unique_lock lock{mutex_};
     while (!canPop()) {
       lock.unlock();
@@ -179,8 +185,9 @@ class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
 
  private:
   // Whether a call to `pop` can currently return without waiting. `mutex_` has
-  // to be held while this is called.
-  bool canPop() const { return !queue_.empty() || finish_ || pushedException_; }
+  // to be held while this is called. A pushed exception needs no separate
+  // check, because `pushException` also sets `finish_`.
+  bool canPop() const { return !queue_.empty() || finish_; }
 
   // The common part of the two `pop` functions above: rethrow a pushed
   // exception, report the end of the queue, or return its front element.
