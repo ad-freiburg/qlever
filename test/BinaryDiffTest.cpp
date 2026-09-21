@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "./util/GTestHelpers.h"
+#include "backports/span.h"
 #include "util/AlignedAllocator.h"
 #include "util/BinaryDiff.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -212,6 +213,33 @@ TEST(BinaryDiff, roundTripWithoutAlignment) {
   EXPECT_EQ(diff.targetSize(), 8U);
   EXPECT_EQ(toString(diff.apply(base)), "012XY56!");
   EXPECT_EQ(diff.statistics(), statistics(2, 2, 0, 5, 3));
+}
+
+// _____________________________________________________________________________
+TEST(BinaryDiff, addInsertFromASpan) {
+  auto base = toBytes("0123456789");
+  BinaryDiff diff{base};
+  // A buffer that is not a `std::vector<char>`, so that the `ql::span`
+  // overload of `addInsert` is chosen.
+  std::string inserted = "XY";
+  diff.addCopy(0, 3);
+  diff.addInsert(ql::span<const char>{inserted.data(), inserted.size()});
+  // The inserted bytes become part of the diff, so overwriting the buffer that
+  // they were taken from does not change the diff or its target.
+  inserted = "ZZ";
+  EXPECT_THAT(diff.instructions(),
+              ElementsAre(copyInstruction(0, 3), insertInstruction("XY")));
+  EXPECT_EQ(diff.targetSize(), 5U);
+  EXPECT_EQ(toString(diff.apply(base)), "012XY");
+  EXPECT_EQ(diff.statistics(), statistics(1, 1, 0, 3, 2));
+
+  // The two overloads of `addInsert` are interchangeable.
+  BinaryDiff diffFromVector{base};
+  diffFromVector.addCopy(0, 3);
+  diffFromVector.addInsert(toBytes("XY"));
+  EXPECT_EQ(diff.instructions(), diffFromVector.instructions());
+  EXPECT_EQ(diff.targetSize(), diffFromVector.targetSize());
+  EXPECT_EQ(diff.statistics(), diffFromVector.statistics());
 }
 
 // _____________________________________________________________________________
