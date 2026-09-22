@@ -8,9 +8,7 @@
 #include <array>
 #include <cassert>
 #include <cstdlib>
-#include <cstring>
 #include <initializer_list>
-#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -791,11 +789,6 @@ class IdTable {
   // the columns are inserted in the order they appear in the input table. If
   // the permutation contains an index that is out of bounds for the input
   // table, the corresponding column is filled with the `defaultValue`.
-  // Precondition: The `table` must not alias the rows that are appended to
-  // this table. This automatically holds whenever `table` and `*this` do not
-  // share their memory, and also for the typical case of appending a table to
-  // itself, because the appended rows are freshly created by this function.
-  // The precondition is checked explicitly in `copyColumnEntries`.
   // TODO<joka921> Can/should we constraint this functions by a concept?
   template <typename Table>
   void insertAtEnd(
@@ -823,9 +816,19 @@ class IdTable {
             ql::ranges::fill(getColumn(i).subspan(oldSize), defaultValue);
             return;
           }
-          copyColumnEntries(
-              table.getColumn(mappedIndex).subspan(begin, numInserted),
-              getColumn(i).subspan(oldSize, numInserted));
+          // NOTE: Deliberately use `std::copy` instead of
+          // `ql::ranges::copy`, because only the former is reliably turned
+          // into a `std::memmove` for trivially copyable value types like
+          // `Id` (see the `static_assert` in `global/Id.h`). libstdc++ misses
+          // this optimization for `std::ranges::copy` before version 13.4
+          // (GCC bug 116754; 13.3 is the default on Ubuntu 24.04), and the
+          // `range-v3` implementation that `ql::ranges` uses in C++17 mode
+          // never has it at all. Without the `std::memmove` the compilers
+          // emit a scalar loop, which is significantly slower.
+          auto sourceColumn =
+              table.getColumn(mappedIndex).subspan(begin, numInserted);
+          std::copy(sourceColumn.begin(), sourceColumn.end(),
+                    getColumn(i).begin() + oldSize);
         });
   }
 
@@ -893,37 +896,6 @@ class IdTable {
   // Get direct access to the underlying data() as a reference.
   Data& data() { return data_; }
   const Data& data() const { return data_; }
-
-  // Copy all entries of the column range `source` to the column range
-  // `destination`. The two ranges must have the same size and must not overlap.
-  // For trivially copyable value types this is a single `std::memcpy`. This has
-  // to be spelled out manually, because the compilers do not reliably turn the
-  // generic element-wise copy from the `else` branch into such a call, but emit
-  // a scalar loop instead.
-  template <typename SourceType>
-  static void copyColumnEntries(ql::span<const SourceType> source,
-                                ql::span<T> destination) {
-    AD_CORRECTNESS_CHECK(source.size() == destination.size());
-    // `std::memcpy` requires valid pointers even for a size of zero, which we
-    // cannot guarantee for empty columns.
-    if (source.empty()) {
-      return;
-    }
-    if constexpr (std::is_same_v<SourceType, T> &&
-                  std::is_trivially_copyable_v<T>) {
-      const T* sourceBegin = source.data();
-      const T* destinationBegin = destination.data();
-      // `std::memcpy` has undefined behavior for overlapping ranges, so
-      // explicitly check the non-overlap precondition that callers of
-      // `insertAtEnd` have to satisfy. These are simple comparisons and
-      // therefore cheap enough to always run.
-      AD_CONTRACT_CHECK(sourceBegin + source.size() <= destinationBegin ||
-                        destinationBegin + destination.size() <= sourceBegin);
-      std::memcpy(destination.data(), source.data(), source.size() * sizeof(T));
-    } else {
-      ql::ranges::copy(source, destination.begin());
-    }
-  }
 
   // Common implementation for const and mutable overloads of `getColumns`
   // (see below).

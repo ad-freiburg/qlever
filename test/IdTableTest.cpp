@@ -10,7 +10,6 @@
 
 #include <array>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 #include "./util/AllocatorTestHelpers.h"
@@ -36,26 +35,6 @@ struct VectorWithExtraConstructor : public std::vector<T> {
   using std::vector<T>::vector;
   VectorWithExtraConstructor(size_t, std::string) {}
 };
-
-// A value type that is *not* trivially copyable because of the user-provided
-// copy constructor and copy assignment operator. It is used to test that the
-// `memcpy`-based fast path of `IdTable::insertAtEnd` correctly falls back to
-// the generic element-wise copy for such types.
-struct NonTriviallyCopyable {
-  int value_ = 0;
-  NonTriviallyCopyable() = default;
-  explicit NonTriviallyCopyable(int value) : value_{value} {}
-  NonTriviallyCopyable(const NonTriviallyCopyable& other)
-      : value_{other.value_} {}
-  NonTriviallyCopyable& operator=(const NonTriviallyCopyable& other) {
-    value_ = other.value_;
-    return *this;
-  }
-  bool operator==(const NonTriviallyCopyable& other) const {
-    return value_ == other.value_;
-  }
-};
-static_assert(!std::is_trivially_copyable_v<NonTriviallyCopyable>);
 }  // namespace
 
 // This unit tests is part of the documentation of the `IdTable` class. It
@@ -417,153 +396,6 @@ TEST(IdTable, insertAtEnd) {
     }
   };
   runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
-}
-
-// _____________________________________________________________________________
-// For trivially copyable value types (like `Id`) `insertAtEnd` copies each
-// column with a single `std::memcpy`. Test that this fast path yields the same
-// result as the generic implementation, also for larger inputs where the copy
-// spans multiple cache lines, and for a partial range of the input.
-TEST(IdTable, insertAtEndTriviallyCopyableFastPath) {
-  static_assert(std::is_trivially_copyable_v<Id>);
-  constexpr size_t numRows = 1000;
-  constexpr size_t numColumns = 3;
-  IdTable source{numColumns, makeAllocator()};
-  for (size_t i = 0; i < numRows; ++i) {
-    source.push_back({V(i), V(i + numRows), V(i + 2 * numRows)});
-  }
-
-  // Insert the complete table into an empty table.
-  IdTable target{numColumns, makeAllocator()};
-  target.insertAtEnd(source);
-  ASSERT_EQ(target.size(), numRows);
-  for (size_t i = 0; i < numRows; ++i) {
-    ASSERT_EQ(source[i], target[i]) << i;
-  }
-
-  // Insert a partial range into the now nonempty table.
-  target.insertAtEnd(source, 17, 42);
-  ASSERT_EQ(target.size(), numRows + 25);
-  for (size_t i = 0; i < 25; ++i) {
-    ASSERT_EQ(source[i + 17], target[numRows + i]) << i;
-  }
-}
-
-// _____________________________________________________________________________
-// For value types that are not trivially copyable, `insertAtEnd` has to fall
-// back to the generic element-wise copy.
-TEST(IdTable, insertAtEndNonTriviallyCopyableFallback) {
-  using Table = columnBasedIdTable::IdTable<NonTriviallyCopyable, 0>;
-  auto make = [](int value) { return NonTriviallyCopyable{value}; };
-
-  Table source{2};
-  source.push_back({make(1), make(2)});
-  source.push_back({make(3), make(4)});
-  source.push_back({make(5), make(6)});
-
-  Table target{2};
-  target.push_back({make(7), make(8)});
-  target.insertAtEnd(source);
-
-  ASSERT_EQ(target.size(), 4u);
-  EXPECT_EQ(target(0, 0), make(7));
-  EXPECT_EQ(target(0, 1), make(8));
-  for (size_t i = 0; i < source.size(); ++i) {
-    EXPECT_EQ(target(i + 1, 0), source(i, 0)) << i;
-    EXPECT_EQ(target(i + 1, 1), source(i, 1)) << i;
-  }
-
-  // The permutation and default value variant also uses the generic path.
-  Table target2{3};
-  std::vector<ColumnIndex> permutation{1, 0, 2};
-  target2.insertAtEnd(source, 1, 3, permutation, make(13));
-  ASSERT_EQ(target2.size(), 2u);
-  EXPECT_EQ(target2(0, 0), make(4));
-  EXPECT_EQ(target2(0, 1), make(3));
-  EXPECT_EQ(target2(0, 2), make(13));
-  EXPECT_EQ(target2(1, 0), make(6));
-  EXPECT_EQ(target2(1, 1), make(5));
-  EXPECT_EQ(target2(1, 2), make(13));
-}
-
-// _____________________________________________________________________________
-// `insertAtEnd` must handle inputs with zero rows (where the `std::memcpy`
-// would get an empty and possibly invalid pointer range) and tables without
-// any columns.
-TEST(IdTable, insertAtEndEmptyInput) {
-  IdTable target{2, makeAllocator()};
-  target.push_back({V(1), V(2)});
-
-  // Insert a table that has no rows at all.
-  IdTable emptyTable{2, makeAllocator()};
-  target.insertAtEnd(emptyTable);
-  ASSERT_EQ(target.size(), 1u);
-
-  // Insert an empty subrange of a nonempty table.
-  IdTable source{2, makeAllocator()};
-  source.push_back({V(3), V(4)});
-  target.insertAtEnd(source, 1, 1);
-  ASSERT_EQ(target.size(), 1u);
-  EXPECT_EQ(target(0, 0), V(1));
-  EXPECT_EQ(target(0, 1), V(2));
-
-  // Insert into an empty table, which also is empty afterwards.
-  IdTable stillEmpty{2, makeAllocator()};
-  stillEmpty.insertAtEnd(emptyTable);
-  EXPECT_EQ(stillEmpty.size(), 0u);
-
-  // Tables without any columns have no column to copy at all.
-  IdTable noColumns{0, makeAllocator()};
-  IdTable otherNoColumns{0, makeAllocator()};
-  noColumns.insertAtEnd(otherNoColumns);
-  EXPECT_EQ(noColumns.numColumns(), 0u);
-  EXPECT_EQ(noColumns.size(), 0u);
-}
-
-// _____________________________________________________________________________
-// The `std::memcpy`-based fast path of `insertAtEnd` requires that the source
-// and the destination do not overlap. Test that the corresponding check fires,
-// no matter which of the two ranges starts first.
-TEST(IdTable, insertAtEndOverlappingRanges) {
-  // Set up a table with ten rows, take a view of the four rows starting at
-  // `offset`, and then shrink the table to five rows. Inserting the view then
-  // writes to the rows `[5, 9)`, which overlap the rows the view points to.
-  // The capacity of the table remains at ten rows, so the shrinking and the
-  // subsequent growing inside `insertAtEnd` do not reallocate and the spans of
-  // the view stay valid.
-  auto overlappingInsert = [](size_t offset) {
-    IdTable table{1, makeAllocator()};
-    for (size_t i = 0; i < 10; ++i) {
-      table.push_back({V(i)});
-    }
-    auto view = table.subView(offset, 4);
-    table.resize(5);
-    table.insertAtEnd(view);
-  };
-
-  // The source starts before the destination (the first operand of the `||` in
-  // the check is false): source `[4, 8)`, destination `[5, 9)`.
-  AD_EXPECT_THROW_WITH_MESSAGE(overlappingInsert(4),
-                               ::testing::HasSubstr("destinationBegin"));
-  // The destination starts before the source (the second operand of the `||`
-  // is false): source `[6, 10)`, destination `[5, 9)`.
-  AD_EXPECT_THROW_WITH_MESSAGE(overlappingInsert(6),
-                               ::testing::HasSubstr("destinationBegin"));
-
-  // A source range that lies completely before the destination is fine, which
-  // is the typical case of appending a table to itself. Reserve the final
-  // capacity upfront, such that the view is not invalidated by the growing
-  // inside `insertAtEnd`.
-  IdTable table{1, makeAllocator()};
-  table.reserve(14);
-  for (size_t i = 0; i < 10; ++i) {
-    table.push_back({V(i)});
-  }
-  table.insertAtEnd(table.subView(0, 4));
-  ASSERT_EQ(table.size(), 14u);
-  for (size_t i = 0; i < 4; ++i) {
-    EXPECT_EQ(table(10 + i, 0), V(i)) << i;
-  }
 }
 
 TEST(IdTable, insertSubsetAtEnd) {
