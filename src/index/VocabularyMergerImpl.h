@@ -154,7 +154,7 @@ using TripleReader = ad_utility::serialization::ZstdReadSerializer<
 
 // ________________________________________________________________________________________________________
 inline void writeMappedIdsToFile(
-    std::vector<std::array<Id, NumColumnsIndexBuilding>> input,
+    std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
     const HashMap<uint64_t, uint64_t>& map, const std::string& filename) {
   for (auto& curTriple : input) {
     for (Id& id : curTriple) {
