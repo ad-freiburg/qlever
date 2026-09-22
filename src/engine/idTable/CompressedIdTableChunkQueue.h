@@ -252,19 +252,21 @@ class ChunkQueue : public NoCopyNoMove,
   // first if this is the first block that this queue spills.
   net::awaitable<bool> spillBlock(Block block) {
     SharedSpillFile file = getOrCreateSpillFile();
+    // NOTE: The function that runs on the `ioExecutor_` is a named variable and
+    // not a temporary inside the `co_await` expression, because GCC 11 destroys
+    // such a temporary twice (a double free of the columns of the `block`).
+    auto writeToFile = [file = std::move(file), block = std::move(block)] {
+      // NOTE: This runs on the plain `ioExecutor_` and may therefore
+      // overlap with a read of the same file (never with another write, as
+      // a chunk has a single producer). That is safe, because a
+      // `CompressedBlockFile` synchronizes its operations internally. The
+      // block becomes readable as soon as `writeBlock` has returned,
+      // because that file flushes every append, and its chunk may indeed be
+      // consumed while further blocks are still being written.
+      return writeBlock(*file, block, 0, block.numRows());
+    };
     BlockMetadata metadata = co_await runFunctionOnExecutor(
-        ioExecutor_,
-        [file = std::move(file), block = std::move(block)] {
-          // NOTE: This runs on the plain `ioExecutor_` and may therefore
-          // overlap with a read of the same file (never with another write, as
-          // a chunk has a single producer). That is safe, because a
-          // `CompressedBlockFile` synchronizes its operations internally. The
-          // block becomes readable as soon as `writeBlock` has returned,
-          // because that file flushes every append, and its chunk may indeed be
-          // consumed while further blocks are still being written.
-          return writeBlock(*file, block, 0, block.numRows());
-        },
-        net::use_awaitable);
+        ioExecutor_, std::move(writeToFile), net::use_awaitable);
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
     if (wasFinished_) {
       // This chunk was finished while the block was being written, so there is
@@ -285,21 +287,21 @@ class ChunkQueue : public NoCopyNoMove,
     // file is passed on as a `shared_ptr`, so finishing this queue concurrently
     // cannot delete it while it is being read.
     AD_CORRECTNESS_CHECK(spillFile_ != nullptr);
+    // NOTE: A named variable and not a temporary, see the NOTE at `spillBlock`.
+    auto readFromFile = [file = spillFile_, metadata = std::move(metadata),
+                         allocator = allocator_] {
+      // NOTE: This runs on the plain `ioExecutor_` and may therefore
+      // overlap with other reads and with a write of the same file, which
+      // is safe, because a `CompressedBlockFile` synchronizes its
+      // operations internally.
+      //
+      // NOTE: The block is wrapped in an `std::optional`, because
+      // `runFunctionOnExecutor` requires a default-constructible result and
+      // an `IdTable` is not default-constructible.
+      return OptionalBlock{readBlock<NumCols>(*file, metadata, allocator)};
+    };
     OptionalBlock block = co_await runFunctionOnExecutor(
-        ioExecutor_,
-        [file = spillFile_, metadata = std::move(metadata),
-         allocator = allocator_] {
-          // NOTE: This runs on the plain `ioExecutor_` and may therefore
-          // overlap with other reads and with a write of the same file, which
-          // is safe, because a `CompressedBlockFile` synchronizes its
-          // operations internally.
-          //
-          // NOTE: The block is wrapped in an `std::optional`, because
-          // `runFunctionOnExecutor` requires a default-constructible result and
-          // an `IdTable` is not default-constructible.
-          return OptionalBlock{readBlock<NumCols>(*file, metadata, allocator)};
-        },
-        net::use_awaitable);
+        ioExecutor_, std::move(readFromFile), net::use_awaitable);
     co_return GetResult::fromBlock(std::move(block).value());
   }
 
