@@ -162,10 +162,6 @@ void PatternCreator::printStatistics(
               << " [all]" << std::endl;
   AD_LOG_INFO << "Total number of distinct subject-predicate pairs: "
               << numDistinctSubjectPredicatePairs_ << std::endl;
-  // Note: Format the averages with `absl::StrFormat` and not with `std::fixed`
-  // and `std::setprecision`. The latter would permanently change the state of
-  // the global log stream, so that every floating point number that is logged
-  // later in the index build would also be printed with a reduced precision.
   AD_LOG_INFO << "Average number of predicates per subject: "
               << absl::StrFormat(
                      "%.1f",

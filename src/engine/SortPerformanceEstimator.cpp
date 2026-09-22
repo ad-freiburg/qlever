@@ -188,11 +188,6 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
               << "Setting all estimates to 0. This means that no sort "
               << "operations will be canceled." << std::endl;
         }
-        // Note: Format the number of seconds with `absl::StrFormat` and not
-        // with `std::fixed` and `std::setprecision`. The latter would
-        // permanently change the state of the global log stream, so that every
-        // floating point number that is logged later would also be printed
-        // with a reduced precision.
         AD_LOG_TRACE << "Estimated the sort time to be "
                      << absl::StrFormat("%.3f",
                                         Timer::toSeconds(_samples[i][j]))

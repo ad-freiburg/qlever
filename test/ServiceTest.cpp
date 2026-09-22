@@ -1030,10 +1030,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
   reset();
 
-  // Compute (large) sibling -> sibling result is computed. Note: Use the
-  // scoped `setRuntimeParameterForTest` and not the plain setter, so that the
-  // global parameter is also restored when one of the assertions below fails
-  // and this function returns early.
+  // Compute (large) sibling -> sibling result is computed
   {
     auto cleanup =
         setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);

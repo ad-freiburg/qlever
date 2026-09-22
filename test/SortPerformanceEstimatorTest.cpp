@@ -38,18 +38,17 @@ TEST(SortPerformanceEstimator, TestManyEstimates) {
             SortPerformanceEstimator::measureSortingTime(i, numColumns,
                                                          allocator);
         Timer::Duration estimate = t.estimatedSortTime(i, numColumns);
-        // Note: Format the numbers of seconds with `absl::StrFormat` and not
-        // with `std::fixed` and `std::setprecision`, which would permanently
-        // change the state of the global log stream.
-        AD_LOG_INFO << "input of size " << i << "with " << numColumns
-                    << " columns took "
-                    << absl::StrFormat("%.3f", Timer::toSeconds(measurement))
-                    << " seconds, estimate was "
-                    << absl::StrFormat("%.3f", Timer::toSeconds(estimate))
-                    << " seconds" << std::endl;
-        ASSERT_GE(2 * measurement, estimate);
+        // Only report the measurement in the case of a failure.
+        auto message = [&i, &numColumns, &measurement, &estimate]() {
+          return absl::StrFormat(
+              "Input of size %d with %d columns took %.3f seconds, estimate "
+              "was %.3f seconds.",
+              i, numColumns, Timer::toSeconds(measurement),
+              Timer::toSeconds(estimate));
+        };
+        ASSERT_GE(2 * measurement, estimate) << message();
         if (!isFirst) {
-          EXPECT_LE(0.5 * measurement, estimate);
+          EXPECT_LE(0.5 * measurement, estimate) << message();
         } else if (0.5 * measurement > estimate) {
           AD_LOG_WARN
               << "The first measurement with a new column size took "

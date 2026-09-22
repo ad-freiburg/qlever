@@ -107,9 +107,7 @@ auto testTokenizeAndNormalizeText =
     };
 
 // Set the `LC_CTYPE` locale to the locale from the environment and restore the
-// previous locale when the returned cleanup is destroyed. Note: `setlocale`
-// changes the locale of the whole process, so without the cleanup the tests
-// that run afterwards would also be affected.
+// previous locale when the returned cleanup is destroyed.
 [[nodiscard]] auto setLocaleFromEnvironment() {
   std::string previousLocale = setlocale(LC_CTYPE, nullptr);
   std::cout << "Set locale LC_CTYPE to: " << setlocale(LC_CTYPE, "")

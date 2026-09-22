@@ -215,10 +215,7 @@ TEST(RandomNumberGeneratorTest, PerformanceTes) {
     for (size_t i = 0; i < n; i++) {
       sum += generator();
     }
-    // Show in ns per number with one digit after the comma. Note: Format the
-    // number with `absl::StrFormat` and not with `std::fixed` and
-    // `std::setprecision`, which would permanently change the state of
-    // `std::cout` for the rest of the test binary.
+    // Show in ns per number with one digit after the comma.
     std::cout << "Speed of " << name << ": "
               << absl::StrFormat(
                      "%.1f",

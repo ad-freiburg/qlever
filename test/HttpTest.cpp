@@ -472,10 +472,6 @@ TYPED_TEST(HttpServerBodyTest, RequestBodySizeLimit) {
     constexpr auto testingRequestBodyLimit = 50_kB;
 
     // Set a smaller limit for testing. The default of 100 MB is quite large.
-    // Note: The cleanup restores the default limit at the end of this scope;
-    // the runtime parameter is global, so the tests that run afterwards would
-    // otherwise inherit the disabled limit that is set at the end of this
-    // block.
     auto requestBodyLimitCleanup =
         setRuntimeParameterForTest<&RuntimeParameters::requestBodyLimit_>(
             50_kB);
