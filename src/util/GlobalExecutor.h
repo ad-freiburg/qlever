@@ -29,9 +29,8 @@ namespace ad_utility {
 
 // Set the number of threads of the global thread pool (see `globalExecutor`).
 // The `numThreads` have to be greater than zero. This function has to be called
-// before the first call to `globalExecutor()`; if the pool already exists, then
-// it is *not* recreated, but a warning is logged and the call has no effect.
-// Thread-safe.
+// before the first call to `globalExecutor()`, because the pool cannot be
+// resized once it exists; calling it afterwards therefore throws. Thread-safe.
 void setGlobalExecutorNumThreads(size_t numThreads);
 
 // Return the number of threads that the global thread pool has (if it already

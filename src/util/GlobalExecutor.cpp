@@ -9,13 +9,14 @@
 
 #include "util/GlobalExecutor.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <algorithm>
 #include <boost/asio/thread_pool.hpp>
 #include <mutex>
 #include <thread>
 
 #include "util/Exception.h"
-#include "util/Log.h"
 
 namespace ad_utility {
 
@@ -48,12 +49,11 @@ void setGlobalExecutorNumThreads(size_t numThreads) {
   auto& conf = config();
   std::lock_guard lock{conf.mutex_};
   if (conf.poolWasCreated_) {
-    AD_LOG_WARN << "The number of threads of the global thread pool was set to "
-                << numThreads
-                << " after the pool had already been created with "
-                << conf.numThreads_ << " threads; the new setting is ignored"
-                << std::endl;
-    return;
+    AD_THROW(absl::StrCat(
+        "The number of threads of the global thread pool must not be set after "
+        "the pool has already been accessed: it was set to ",
+        numThreads, ", but the pool had already been created with ",
+        conf.numThreads_, " threads"));
   }
   conf.numThreads_ = numThreads;
 }

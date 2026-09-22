@@ -17,6 +17,7 @@
 
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
+#include "util/GTestHelpers.h"
 #include "util/GlobalExecutor.h"
 
 // NOTE: The global executor is a process-wide singleton, so none of the
@@ -30,7 +31,9 @@ TEST(GlobalExecutor, numThreadsIsPositive) {
 
 // _____________________________________________________________________________
 TEST(GlobalExecutor, numThreadsMustBePositive) {
-  EXPECT_ANY_THROW(ad_utility::setGlobalExecutorNumThreads(0));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::setGlobalExecutorNumThreads(0),
+      ::testing::HasSubstr("Assertion `numThreads > 0` failed"));
 }
 
 // _____________________________________________________________________________
@@ -59,14 +62,18 @@ TEST(GlobalExecutor, executorRunsManyTasks) {
 }
 
 // _____________________________________________________________________________
-TEST(GlobalExecutor, settingTheNumThreadsTooLateIsIgnored) {
+TEST(GlobalExecutor, settingTheNumThreadsTooLateThrows) {
   // Make sure that the pool exists, no matter in which order the tests run.
   auto numThreadsBefore = ad_utility::globalExecutorNumThreads();
   ad_utility::globalExecutor();
-  // The pool now exists, so the following call only logs a warning and does
-  // nothing else. In particular, the executor still works afterwards.
-  ad_utility::setGlobalExecutorNumThreads(numThreadsBefore + 1);
+  // The pool now exists and cannot be resized, so the following call throws and
+  // leaves the configuration unchanged.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::setGlobalExecutorNumThreads(numThreadsBefore + 1),
+      ::testing::HasSubstr(
+          "must not be set after the pool has already been accessed"));
   EXPECT_EQ(ad_utility::globalExecutorNumThreads(), numThreadsBefore);
+  // In particular, the executor still works afterwards.
   auto future = ad_utility::runFunctionOnExecutor(
       ad_utility::globalExecutor(), []() { return 1; },
       ad_utility::net::use_future);
