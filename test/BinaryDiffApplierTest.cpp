@@ -22,15 +22,15 @@
 #include "./util/GTestHelpers.h"
 #include "backports/span.h"
 #include "util/AlignedAllocator.h"
-#include "util/BinaryDiff.h"
+#include "util/BinaryDiffApplier.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
-using ad_utility::BinaryDiff;
-using Align = BinaryDiff::Align;
-using Copy = BinaryDiff::Copy;
-using Insert = BinaryDiff::Insert;
-using Instruction = BinaryDiff::Instruction;
-using Statistics = BinaryDiff::Statistics;
+using ad_utility::BinaryDiffApplier;
+using Align = BinaryDiffApplier::Align;
+using Copy = BinaryDiffApplier::Copy;
+using Insert = BinaryDiffApplier::Insert;
+using Instruction = BinaryDiffApplier::Instruction;
+using Statistics = BinaryDiffApplier::Statistics;
 using ad_utility::serialization::ByteBufferReadSerializer;
 using ad_utility::serialization::ByteBufferWriteSerializer;
 using ::testing::ElementsAre;
@@ -53,7 +53,7 @@ std::vector<char> toBytes(std::string_view string) {
 
 // Convert a checksum to its hexadecimal representation, so that a mismatch is
 // reported readably by GoogleTest.
-std::string toHex(const BinaryDiff::Checksum& checksum) {
+std::string toHex(const BinaryDiffApplier::Checksum& checksum) {
   return absl::BytesToHexString(
       std::string_view{checksum.data(), checksum.size()});
 }
@@ -78,12 +78,12 @@ Statistics statistics(size_t numCopyInstructions, size_t numInsertInstructions,
 
 // The header of the serialization of a diff, so that the tests below can write
 // diffs "by hand" (see `writeRawDiff`), in particular diffs that the interface
-// of `BinaryDiff` refuses to create.
+// of `BinaryDiffApplier` refuses to create.
 struct RawDiffHeader {
   std::array<char, 8> magicBytes_{'Q', 'L', 'V', 'R', 'D', 'I', 'F', 'F'};
   uint16_t formatVersion_ = 1;
   uint64_t baseSize_ = 0;
-  BinaryDiff::Checksum baseChecksum_{};
+  BinaryDiffApplier::Checksum baseChecksum_{};
 };
 
 // Write the serialization of a diff that consists of the given `header` and of
@@ -102,9 +102,9 @@ std::vector<char> writeRawDiff(const RawDiffHeader& header,
   return std::move(writer).data();
 }
 
-// The index of an instruction in the `BinaryDiff::Instruction` variant, which
-// is what the generic serialization of a `std::variant` writes to identify the
-// instruction (see `util/Serializer/SerializeVariant.h`).
+// The index of an instruction in the `BinaryDiffApplier::Instruction` variant,
+// which is what the generic serialization of a `std::variant` writes to
+// identify the instruction (see `util/Serializer/SerializeVariant.h`).
 constexpr uint64_t copyIndex = 0;
 constexpr uint64_t alignIndex = 2;
 
@@ -126,15 +126,15 @@ auto writeRawAlign(uint64_t alignment) {
 }
 
 // Deserialize a diff from `bytes`.
-BinaryDiff deserializeDiff(std::vector<char> bytes) {
+BinaryDiffApplier deserializeDiff(std::vector<char> bytes) {
   ByteBufferReadSerializer reader{std::move(bytes)};
-  BinaryDiff diff;
+  BinaryDiffApplier diff;
   reader >> diff;
   return diff;
 }
 
 // Serialize `diff` and immediately deserialize it again.
-BinaryDiff serializeAndDeserialize(const BinaryDiff& diff) {
+BinaryDiffApplier serializeAndDeserialize(const BinaryDiffApplier& diff) {
   ByteBufferWriteSerializer writer;
   writer << diff;
   return deserializeDiff(std::move(writer).data());
@@ -143,9 +143,9 @@ BinaryDiff serializeAndDeserialize(const BinaryDiff& diff) {
 }  // namespace
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, alignmentHasToBeAPowerOfTwo) {
+TEST(BinaryDiffApplier, alignmentHasToBeAPowerOfTwo) {
   auto base = toBytes("0123456789");
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   // The alignment only takes effect once the target is not empty, because an
   // empty target trivially has every alignment.
   diff.addInsert(toBytes("x"));
@@ -157,7 +157,7 @@ TEST(BinaryDiff, alignmentHasToBeAPowerOfTwo) {
                   "two"));
   }
   for (uint64_t alignment : {uint64_t{1}, uint64_t{2}, uint64_t{16}}) {
-    BinaryDiff otherDiff{base};
+    BinaryDiffApplier otherDiff{base};
     otherDiff.addInsert(toBytes("x"));
     otherDiff.addAlign(alignment);
     EXPECT_EQ(otherDiff.targetSize(), alignment);
@@ -165,32 +165,35 @@ TEST(BinaryDiff, alignmentHasToBeAPowerOfTwo) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, checksum) {
+TEST(BinaryDiffApplier, checksum) {
   // The checksum is the SHA-256 digest, here for the empty input.
-  EXPECT_EQ(toHex(BinaryDiff::checksum({})),
+  EXPECT_EQ(toHex(BinaryDiffApplier::checksum({})),
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-  EXPECT_EQ(toHex(BinaryDiff::checksum(toBytes("abc"))),
+  EXPECT_EQ(toHex(BinaryDiffApplier::checksum(toBytes("abc"))),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   // The checksum is deterministic, and it differs for different inputs.
   auto hello = toBytes("hello");
-  EXPECT_EQ(BinaryDiff::checksum(hello), BinaryDiff::checksum(hello));
-  EXPECT_NE(BinaryDiff::checksum(hello),
-            BinaryDiff::checksum(toBytes("hellp")));
-  EXPECT_NE(BinaryDiff::checksum(hello),
-            BinaryDiff::checksum(toBytes("olleh")));
-  EXPECT_NE(BinaryDiff::checksum(hello), BinaryDiff::checksum(toBytes("hell")));
+  EXPECT_EQ(BinaryDiffApplier::checksum(hello),
+            BinaryDiffApplier::checksum(hello));
+  EXPECT_NE(BinaryDiffApplier::checksum(hello),
+            BinaryDiffApplier::checksum(toBytes("hellp")));
+  EXPECT_NE(BinaryDiffApplier::checksum(hello),
+            BinaryDiffApplier::checksum(toBytes("olleh")));
+  EXPECT_NE(BinaryDiffApplier::checksum(hello),
+            BinaryDiffApplier::checksum(toBytes("hell")));
   // Bytes with the highest bit set are also covered (`char` may be signed).
   std::vector<char> highBitSet{'\x80'};
   std::vector<char> zeroByte{'\0'};
-  EXPECT_NE(BinaryDiff::checksum(highBitSet), BinaryDiff::checksum(zeroByte));
+  EXPECT_NE(BinaryDiffApplier::checksum(highBitSet),
+            BinaryDiffApplier::checksum(zeroByte));
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, emptyDiff) {
+TEST(BinaryDiffApplier, emptyDiff) {
   auto base = toBytes("0123456789");
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   EXPECT_EQ(diff.baseSize(), base.size());
-  EXPECT_EQ(diff.baseChecksum(), BinaryDiff::checksum(base));
+  EXPECT_EQ(diff.baseChecksum(), BinaryDiffApplier::checksum(base));
   EXPECT_THAT(diff.instructions(), IsEmpty());
   EXPECT_EQ(diff.targetSize(), 0U);
   EXPECT_EQ(diff.statistics(), statistics(0, 0, 0, 0, 0));
@@ -198,9 +201,9 @@ TEST(BinaryDiff, emptyDiff) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, roundTripWithoutAlignment) {
+TEST(BinaryDiffApplier, roundTripWithoutAlignment) {
   auto base = toBytes("0123456789");
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   diff.addCopy(0, 3);
   diff.addInsert(toBytes("XY"));
   diff.addCopy(5, 2);
@@ -216,9 +219,9 @@ TEST(BinaryDiff, roundTripWithoutAlignment) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, addInsertFromASpan) {
+TEST(BinaryDiffApplier, addInsertFromASpan) {
   auto base = toBytes("0123456789");
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   // A buffer that is not a `std::vector<char>`, so that the `ql::span`
   // overload of `addInsert` is chosen.
   std::string inserted = "XY";
@@ -234,7 +237,7 @@ TEST(BinaryDiff, addInsertFromASpan) {
   EXPECT_EQ(diff.statistics(), statistics(1, 1, 0, 3, 2));
 
   // The two overloads of `addInsert` are interchangeable.
-  BinaryDiff diffFromVector{base};
+  BinaryDiffApplier diffFromVector{base};
   diffFromVector.addCopy(0, 3);
   diffFromVector.addInsert(toBytes("XY"));
   EXPECT_EQ(diff.instructions(), diffFromVector.instructions());
@@ -243,13 +246,13 @@ TEST(BinaryDiff, addInsertFromASpan) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, roundTripWithAlignment) {
+TEST(BinaryDiffApplier, roundTripWithAlignment) {
   // A base that consists of three 16-byte blocks.
   std::string blockA(16, 'A');
   std::string blockB(16, 'B');
   std::string blockC(16, 'C');
   auto base = toBytes(blockA + blockB + blockC);
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   diff.addAlign(16);
   diff.addCopy(32, 16);
   diff.addAlign(16);
@@ -271,9 +274,9 @@ TEST(BinaryDiff, roundTripWithAlignment) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, alignmentMayChangeWithinADiff) {
+TEST(BinaryDiffApplier, alignmentMayChangeWithinADiff) {
   auto base = toBytes(std::string(32, 'x'));
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   diff.addInsert(toBytes("ab"));
   // Align to 8, then to 16, and finally to 1 (which never pads).
   diff.addAlign(8);
@@ -282,10 +285,11 @@ TEST(BinaryDiff, alignmentMayChangeWithinADiff) {
   diff.addInsert(toBytes("f"));
   diff.addAlign(1);
   diff.addInsert(toBytes("g"));
+  // The alignment to one is a no-op, so the inserts around it are merged.
   EXPECT_THAT(diff.instructions(),
               ElementsAre(insertInstruction("ab"), alignInstruction(8),
                           insertInstruction("cde"), alignInstruction(16),
-                          insertInstruction("f"), insertInstruction("g")));
+                          insertInstruction("fg")));
   std::string expected =
       "ab" + std::string(6, '\0') + "cde" + std::string(5, '\0') + "f" + "g";
   ASSERT_EQ(expected.size(), 18U);
@@ -294,9 +298,9 @@ TEST(BinaryDiff, alignmentMayChangeWithinADiff) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, applyUsesTheGivenAllocator) {
+TEST(BinaryDiffApplier, applyUsesTheGivenAllocator) {
   auto base = toBytes(std::string(64, 'x'));
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   diff.addCopy(0, 64);
   using Allocator =
       ad_utility::AlignedAllocator<char, std::allocator<char>, 64>;
@@ -306,9 +310,9 @@ TEST(BinaryDiff, applyUsesTheGivenAllocator) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, applyToAGivenTarget) {
+TEST(BinaryDiffApplier, applyToAGivenTarget) {
   auto base = toBytes("0123456789");
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   diff.addCopy(0, 3);
   diff.addAlign(8);
   diff.addInsert(toBytes("XY"));
@@ -338,11 +342,11 @@ TEST(BinaryDiff, applyToAGivenTarget) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, mergeOfAdjacentCopies) {
+TEST(BinaryDiffApplier, mergeOfAdjacentCopies) {
   auto base = toBytes("0123456789");
   {
     // Two directly adjacent copies are merged.
-    BinaryDiff diff{base};
+    BinaryDiffApplier diff{base};
     diff.addCopy(0, 3);
     diff.addCopy(3, 4);
     EXPECT_THAT(diff.instructions(), ElementsAre(copyInstruction(0, 7)));
@@ -351,7 +355,7 @@ TEST(BinaryDiff, mergeOfAdjacentCopies) {
   }
   {
     // A gap between the two copies prevents the merge.
-    BinaryDiff diff{base};
+    BinaryDiffApplier diff{base};
     diff.addCopy(0, 3);
     diff.addCopy(4, 2);
     EXPECT_THAT(diff.instructions(),
@@ -360,7 +364,7 @@ TEST(BinaryDiff, mergeOfAdjacentCopies) {
   }
   {
     // An insert between the two copies prevents the merge.
-    BinaryDiff diff{base};
+    BinaryDiffApplier diff{base};
     diff.addCopy(0, 3);
     diff.addInsert(toBytes("-"));
     diff.addCopy(3, 3);
@@ -371,7 +375,7 @@ TEST(BinaryDiff, mergeOfAdjacentCopies) {
   }
   {
     // An alignment that actually pads also prevents the merge.
-    BinaryDiff diff{base};
+    BinaryDiffApplier diff{base};
     diff.addCopy(0, 3);
     diff.addAlign(4);
     diff.addCopy(3, 3);
@@ -383,12 +387,49 @@ TEST(BinaryDiff, mergeOfAdjacentCopies) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, redundantAlignmentsAreNotStored) {
+TEST(BinaryDiffApplier, mergeOfAdjacentInserts) {
+  auto base = toBytes("0123456789");
+  {
+    // Two directly adjacent inserts are merged.
+    BinaryDiffApplier diff{base};
+    diff.addInsert(toBytes("XY"));
+    diff.addInsert(toBytes("Z"));
+    EXPECT_THAT(diff.instructions(), ElementsAre(insertInstruction("XYZ")));
+    EXPECT_EQ(diff.targetSize(), 3U);
+    EXPECT_EQ(diff.statistics(), statistics(0, 1, 0, 0, 3));
+    EXPECT_EQ(toString(diff.apply(base)), "XYZ");
+  }
+  {
+    // A copy between the two inserts prevents the merge.
+    BinaryDiffApplier diff{base};
+    diff.addInsert(toBytes("XY"));
+    diff.addCopy(0, 2);
+    diff.addInsert(toBytes("Z"));
+    EXPECT_THAT(diff.instructions(),
+                ElementsAre(insertInstruction("XY"), copyInstruction(0, 2),
+                            insertInstruction("Z")));
+    EXPECT_EQ(toString(diff.apply(base)), "XY01Z");
+  }
+  {
+    // An alignment that actually pads also prevents the merge.
+    BinaryDiffApplier diff{base};
+    diff.addInsert(toBytes("XY"));
+    diff.addAlign(4);
+    diff.addInsert(toBytes("Z"));
+    EXPECT_THAT(diff.instructions(),
+                ElementsAre(insertInstruction("XY"), alignInstruction(4),
+                            insertInstruction("Z")));
+    EXPECT_EQ(toString(diff.apply(base)), "XY" + std::string(2, '\0') + "Z");
+  }
+}
+
+// _____________________________________________________________________________
+TEST(BinaryDiffApplier, redundantAlignmentsAreNotStored) {
   auto base = toBytes("0123456789");
   {
     // An alignment at the very beginning of a diff is always a no-op, because
     // the empty target has every alignment.
-    BinaryDiff diff{base};
+    BinaryDiffApplier diff{base};
     diff.addAlign(16);
     EXPECT_THAT(diff.instructions(), IsEmpty());
     EXPECT_EQ(diff.targetSize(), 0U);
@@ -396,7 +437,7 @@ TEST(BinaryDiff, redundantAlignmentsAreNotStored) {
   {
     // An alignment that the target already has is dropped, so that the copies
     // around it are still merged.
-    BinaryDiff diff{base};
+    BinaryDiffApplier diff{base};
     diff.addCopy(0, 8);
     diff.addAlign(8);
     diff.addCopy(8, 2);
@@ -404,8 +445,9 @@ TEST(BinaryDiff, redundantAlignmentsAreNotStored) {
     EXPECT_EQ(toString(diff.apply(base)), "0123456789");
   }
   {
-    // Consecutive alignments only pad once.
-    BinaryDiff diff{base};
+    // Consecutive alignments only pad once, because each of them replaces the
+    // previous one.
+    BinaryDiffApplier diff{base};
     diff.addCopy(0, 3);
     diff.addAlign(8);
     diff.addAlign(4);
@@ -414,12 +456,36 @@ TEST(BinaryDiff, redundantAlignmentsAreNotStored) {
                 ElementsAre(copyInstruction(0, 3), alignInstruction(8)));
     EXPECT_EQ(diff.targetSize(), 8U);
   }
+  {
+    // An alignment also replaces a previous alignment that is stronger,
+    // because nothing was written in between, so the region that the previous
+    // alignment aligned is empty.
+    BinaryDiffApplier diff{base};
+    diff.addCopy(0, 3);
+    diff.addAlign(8);
+    diff.addAlign(4);
+    EXPECT_THAT(diff.instructions(),
+                ElementsAre(copyInstruction(0, 3), alignInstruction(4)));
+    EXPECT_EQ(diff.targetSize(), 4U);
+    EXPECT_EQ(toString(diff.apply(base)), "012" + std::string(1, '\0'));
+  }
+  {
+    // An alignment of one is always a no-op, so it removes a previous
+    // alignment without adding an instruction of its own.
+    BinaryDiffApplier diff{base};
+    diff.addCopy(0, 3);
+    diff.addAlign(8);
+    diff.addAlign(1);
+    EXPECT_THAT(diff.instructions(), ElementsAre(copyInstruction(0, 3)));
+    EXPECT_EQ(diff.targetSize(), 3U);
+    EXPECT_EQ(toString(diff.apply(base)), "012");
+  }
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, addCopyChecksItsArguments) {
+TEST(BinaryDiffApplier, addCopyChecksItsArguments) {
   auto base = toBytes(std::string(32, 'x'));
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   AD_EXPECT_THROW_WITH_MESSAGE(
       diff.addCopy(16, 32),
       HasSubstr("copied range [16, 48) does not lie within the base of size "
@@ -436,9 +502,9 @@ TEST(BinaryDiff, addCopyChecksItsArguments) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, applyToTheWrongBase) {
+TEST(BinaryDiffApplier, applyToTheWrongBase) {
   auto base = toBytes("0123456789");
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   diff.addCopy(0, 10);
   const std::string expectedMessage =
       "created against a different base (the size or the checksum of the base "
@@ -454,11 +520,11 @@ TEST(BinaryDiff, applyToTheWrongBase) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, applyChecksTheInstructions) {
+TEST(BinaryDiffApplier, applyChecksTheInstructions) {
   auto base = toBytes(std::string(32, 'x'));
   RawDiffHeader header{};
   header.baseSize_ = base.size();
-  header.baseChecksum_ = BinaryDiff::checksum(base);
+  header.baseChecksum_ = BinaryDiffApplier::checksum(base);
   // A copy whose range does not lie within the base.
   AD_EXPECT_THROW_WITH_MESSAGE(
       deserializeDiff(writeRawDiff(header, 1, writeRawCopy(16, 32)))
@@ -474,11 +540,11 @@ TEST(BinaryDiff, applyChecksTheInstructions) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, serializationRoundTrip) {
+TEST(BinaryDiffApplier, serializationRoundTrip) {
   std::string blockA(16, 'A');
   std::string blockB(16, 'B');
   auto base = toBytes(blockA + blockB);
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   diff.addCopy(16, 16);
   diff.addInsert(toBytes("insert"));
   diff.addAlign(16);
@@ -491,7 +557,7 @@ TEST(BinaryDiff, serializationRoundTrip) {
   EXPECT_EQ(toString(deserialized.apply(base)), toString(diff.apply(base)));
 
   // A diff without instructions also survives the round trip.
-  BinaryDiff emptyDiff{base};
+  BinaryDiffApplier emptyDiff{base};
   auto deserializedEmptyDiff = serializeAndDeserialize(emptyDiff);
   EXPECT_THAT(deserializedEmptyDiff.instructions(), IsEmpty());
   EXPECT_EQ(deserializedEmptyDiff.targetSize(), 0U);
@@ -499,18 +565,19 @@ TEST(BinaryDiff, serializationRoundTrip) {
 
   // A default-constructed diff is the diff of an empty base into an empty
   // target.
-  auto deserializedDefaultDiff = serializeAndDeserialize(BinaryDiff{});
+  auto deserializedDefaultDiff = serializeAndDeserialize(BinaryDiffApplier{});
   EXPECT_EQ(deserializedDefaultDiff.baseSize(), 0U);
-  EXPECT_EQ(deserializedDefaultDiff.baseChecksum(), BinaryDiff::checksum({}));
+  EXPECT_EQ(deserializedDefaultDiff.baseChecksum(),
+            BinaryDiffApplier::checksum({}));
   EXPECT_THAT(deserializedDefaultDiff.apply({}), IsEmpty());
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, serializationRoundTripWithAnAlignedSerializer) {
+TEST(BinaryDiffApplier, serializationRoundTripWithAnAlignedSerializer) {
   // A diff can also be written to and read from a serializer that inserts
   // alignment padding for trivially serializable types.
   auto base = toBytes(std::string(32, 'A'));
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   diff.addCopy(16, 16);
   diff.addInsert(toBytes("insert"));
   diff.addAlign(16);
@@ -518,7 +585,7 @@ TEST(BinaryDiff, serializationRoundTripWithAnAlignedSerializer) {
   writer << diff;
   ad_utility::serialization::AlignedByteBufferReadSerializer reader{
       std::move(writer).data()};
-  BinaryDiff deserialized;
+  BinaryDiffApplier deserialized;
   reader >> deserialized;
   EXPECT_EQ(deserialized.baseSize(), diff.baseSize());
   EXPECT_EQ(deserialized.baseChecksum(), diff.baseChecksum());
@@ -527,15 +594,15 @@ TEST(BinaryDiff, serializationRoundTripWithAnAlignedSerializer) {
 }
 
 // _____________________________________________________________________________
-TEST(BinaryDiff, deserializationChecksTheInput) {
+TEST(BinaryDiffApplier, deserializationChecksTheInput) {
   auto base = toBytes("0123456789");
-  BinaryDiff diff{base};
+  BinaryDiffApplier diff{base};
   diff.addCopy(0, 10);
   ByteBufferWriteSerializer writer;
   writer << diff;
   auto serialized = std::move(writer).data();
   const std::string notReadableMessage =
-      "not a serialized `ad_utility::BinaryDiff`, or is corrupted";
+      "not a serialized `ad_utility::BinaryDiffApplier`, or is corrupted";
 
   // Wrong magic bytes.
   auto wrongMagicBytes = serialized;

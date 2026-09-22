@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_UTIL_BINARYDIFF_H
-#define QLEVER_SRC_UTIL_BINARYDIFF_H
+#ifndef QLEVER_SRC_UTIL_BINARYDIFFAPPLIER_H
+#define QLEVER_SRC_UTIL_BINARYDIFFAPPLIER_H
 
 #include <absl/strings/str_cat.h>
 
@@ -33,8 +33,8 @@
 
 namespace ad_utility {
 
-// The serialization of a `BinaryDiff`, see below.
-class BinaryDiffSerializer;
+// The serialization of a `BinaryDiffApplier`, see below.
+class BinaryDiffApplierSerializer;
 
 // A diff that turns a "base" byte buffer into a "target" byte buffer. It is a
 // sequence of instructions, each of which copies a range of the base (`Copy`),
@@ -44,8 +44,13 @@ class BinaryDiffSerializer;
 // see BASE IDENTIFICATION below) and then appending instructions (see
 // `addAlign`, `addCopy` and `addInsert`), and it is applied to a base via
 // `apply`. It can be serialized and deserialized with the QLever serializer
-// framework (see `util/Serializer/Serializer.h`, and `BinaryDiffSerializer`
-// below for the format).
+// framework (see `util/Serializer/Serializer.h`, and
+// `BinaryDiffApplierSerializer` below for the format).
+//
+// NOTE: This class does not *compute* the difference between two buffers.
+// The instructions are recorded by the creator of the diff, which knows how
+// the target differs from the base; this class only stores them and applies
+// them, hence the name.
 //
 // ALIGNMENT: The alignment is not a property of the diff, but an ordinary
 // instruction, so that it can change within a single target ("align to 8, copy
@@ -57,7 +62,7 @@ class BinaryDiffSerializer;
 // both. A diff therefore has to be applied to exactly the base that it was
 // created against; applying it to any other buffer throws instead of silently
 // producing garbage.
-class BinaryDiff {
+class BinaryDiffApplier {
  public:
   // The checksum of a base, which is its SHA-256 digest, see `checksum`.
   using Checksum = std::array<char, 32>;
@@ -91,6 +96,9 @@ class BinaryDiff {
   // An instruction that pads the target with zeros until its size is a multiple
   // of `alignment_`, which has to be a power of two.
   struct Align {
+    // NOTE: Conceptually this is a `size_t`, but the instructions are
+    // serialized, and the serialized format has to be the same on all
+    // platforms, so all of them use fixed-width integers.
     uint64_t alignment_ = 1;
 
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Align, alignment_)
@@ -127,15 +135,20 @@ class BinaryDiff {
   // maintained incrementally, so that `addAlign` can detect an alignment that
   // the target already has without walking all instructions.
   size_t targetSize_ = 0;
+  // The size of the target directly before the last `Align` instruction, which
+  // allows `addAlign` to replace a trailing alignment (see `addAlign`). NOTE:
+  // It is meaningful only if the last instruction is an `Align`, and is
+  // ignored otherwise.
+  size_t targetSizeBeforeLastAlign_ = 0;
 
   // The serialization needs access to the members above, and is factored out
   // into its own class to keep this class free of the details of the format.
-  friend class BinaryDiffSerializer;
+  friend class BinaryDiffApplierSerializer;
 
  public:
   // The default constructor creates an empty diff for an empty base. It is
   // needed for deserialization; to create a diff, use the constructor below.
-  BinaryDiff() = default;
+  BinaryDiffApplier() = default;
 
   // Start an empty diff against `base`, to which the instructions that produce
   // the target are then appended (see `addAlign`, `addCopy` and `addInsert`).
@@ -144,7 +157,7 @@ class BinaryDiff {
   // size and its checksum (see BASE IDENTIFICATION in the class comment). The
   // `base` therefore does not have to outlive the diff, but the buffer that is
   // later passed to `apply` has to have exactly the same contents.
-  explicit BinaryDiff(ql::span<const char> base);
+  explicit BinaryDiffApplier(ql::span<const char> base);
 
   // Append an instruction that pads the target with zeros until its size is a
   // multiple of `alignment`, which has to be a power of two.
@@ -153,6 +166,11 @@ class BinaryDiff {
   // instruction would be a no-op. This keeps a diff free of redundant
   // alignments, and it allows the copies around such an alignment to be merged
   // (see `addCopy`).
+  //
+  // If the previous instruction is also an alignment, then it is replaced by
+  // this one, even if this one is weaker. Nothing has been written since that
+  // previous alignment, so the target region that it aligned is empty, and the
+  // alignment of an empty region is irrelevant.
   void addAlign(uint64_t alignment);
 
   // Append an instruction that copies the bytes
@@ -166,6 +184,9 @@ class BinaryDiff {
 
   // Append an instruction that inserts the given literal bytes, which become
   // part of the diff itself.
+  //
+  // If the previous instruction is also an insert, the bytes are appended to
+  // it, so that the two become a single instruction.
   void addInsert(std::vector<char> bytes);
   void addInsert(ql::span<const char> bytes);
 
@@ -235,22 +256,23 @@ class BinaryDiff {
                             ql::span<char> target) const;
 };
 
-// The serialization format of a `BinaryDiff`: a header of magic bytes, a format
-// version, and the identification of the base, followed by the instructions
+// The serialization format of a `BinaryDiffApplier`: a header of magic bytes, a
+// format version, and the identification of the base, followed by the
+// instructions
 // (as an ordinary `std::vector` of `std::variant`s, which the serialization
 // framework can handle generically, see `util/Serializer/SerializeVariant.h`).
 // When reading, verify the magic bytes, the format version, and the
 // alignments, and report a truncated or otherwise unreadable input with a
 // descriptive message.
 //
-// This is a separate class so that `BinaryDiff` itself is concerned only with
-// the building and the application of a diff. It is used by the `serialize`
-// function below, which is the only intended entry point.
-class BinaryDiffSerializer {
+// This is a separate class so that `BinaryDiffApplier` itself is concerned only
+// with the building and the application of a diff. It is used by the
+// `serialize` function below, which is the only intended entry point.
+class BinaryDiffApplierSerializer {
  private:
-  using Align = BinaryDiff::Align;
-  using Checksum = BinaryDiff::Checksum;
-  using Instruction = BinaryDiff::Instruction;
+  using Align = BinaryDiffApplier::Align;
+  using Checksum = BinaryDiffApplier::Checksum;
+  using Instruction = BinaryDiffApplier::Instruction;
 
   // The header that is written at the beginning of the serialization of a
   // diff, to guard against reading data that is not a diff at all, or that was
@@ -260,15 +282,15 @@ class BinaryDiffSerializer {
   static constexpr uint16_t formatVersion = 1;
 
   // The message that is reported for any input that is not the serialization
-  // of a `BinaryDiff`, or that is truncated or otherwise corrupted.
+  // of a `BinaryDiffApplier`, or that is truncated or otherwise corrupted.
   static constexpr std::string_view notReadableMessage =
-      "The given input is not a serialized `ad_utility::BinaryDiff`, or is "
-      "corrupted";
+      "The given input is not a serialized `ad_utility::BinaryDiffApplier`, or "
+      "is corrupted";
 
  public:
   // Write `diff` to `serializer`, see the class comment for the format.
   template <typename S>
-  static void write(S& serializer, const BinaryDiff& diff) {
+  static void write(S& serializer, const BinaryDiffApplier& diff) {
     serializer << magicBytes;
     serializer << formatVersion;
     serializer << diff.baseSize_;
@@ -279,7 +301,7 @@ class BinaryDiffSerializer {
   // Read a `diff` that was written by `write`, and throw with a descriptive
   // message if `serializer` does not hold such a diff.
   template <typename S>
-  static void read(S& serializer, BinaryDiff& diff) {
+  static void read(S& serializer, BinaryDiffApplier& diff) {
     auto readMagicBytes =
         readOrThrow<std::decay_t<decltype(magicBytes)>>(serializer);
     AD_CONTRACT_CHECK(readMagicBytes == magicBytes, notReadableMessage);
@@ -319,20 +341,21 @@ class BinaryDiffSerializer {
   // Throw if an `Align` instruction of `diff` has an alignment that is not a
   // power of two, which can only happen for a corrupted input. NOTE: The
   // `Copy` instructions cannot be checked here, as their validity depends on
-  // the base (they are checked by `BinaryDiff::apply`).
-  static void checkAlignments(const BinaryDiff& diff);
+  // the base (they are checked by `BinaryDiffApplier::apply`).
+  static void checkAlignments(const BinaryDiffApplier& diff);
 };
 
-// Serialize and deserialize a `BinaryDiff`, see `BinaryDiffSerializer` for the
-// format and `util/Serializer/Serializer.h` for the framework.
-AD_SERIALIZE_FUNCTION(BinaryDiff) {
+// Serialize and deserialize a `BinaryDiffApplier`, see
+// `BinaryDiffApplierSerializer` for the format and
+// `util/Serializer/Serializer.h` for the framework.
+AD_SERIALIZE_FUNCTION(BinaryDiffApplier) {
   if constexpr (ad_utility::serialization::WriteSerializer<S>) {
-    BinaryDiffSerializer::write(serializer, arg);
+    BinaryDiffApplierSerializer::write(serializer, arg);
   } else {
-    BinaryDiffSerializer::read(serializer, arg);
+    BinaryDiffApplierSerializer::read(serializer, arg);
   }
 }
 
 }  // namespace ad_utility
 
-#endif  // QLEVER_SRC_UTIL_BINARYDIFF_H
+#endif  // QLEVER_SRC_UTIL_BINARYDIFFAPPLIER_H

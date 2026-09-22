@@ -23,9 +23,10 @@
 // itself. Every alternative has to be serializable and (for reading) default
 // constructible.
 //
-// NOTE: Reading an index that is out of range (which can only happen for a
-// corrupted or otherwise unsuitable input) throws, so that the variant never
-// ends up holding an alternative that was not written.
+// NOTE: An index that is out of range is cheap to detect and therefore throws.
+// This does not make the deserialization of arbitrary input safe in general
+// (the alternative itself may still be garbage), it only guarantees that the
+// variant never ends up holding an alternative that was not written.
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::similarToInstantiation<T, std::variant>)) {

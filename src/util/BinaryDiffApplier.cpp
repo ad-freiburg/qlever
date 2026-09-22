@@ -7,7 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "util/BinaryDiff.h"
+#include "util/BinaryDiffApplier.h"
 
 #include <absl/numeric/bits.h>
 
@@ -24,25 +24,33 @@
 namespace ad_utility {
 
 // _____________________________________________________________________________
-BinaryDiff::BinaryDiff(ql::span<const char> base)
+BinaryDiffApplier::BinaryDiffApplier(ql::span<const char> base)
     : baseSize_{base.size()}, baseChecksum_{checksum(base)} {}
 
 // _____________________________________________________________________________
-void BinaryDiff::addAlign(uint64_t alignment) {
+void BinaryDiffApplier::addAlign(uint64_t alignment) {
   AD_CONTRACT_CHECK(absl::has_single_bit(alignment),
                     "The alignment of an `Align` instruction has to be a power "
                     "of two, but is ",
                     alignment);
+  // An alignment that directly follows another alignment replaces it, because
+  // no bytes were written in between, see `addAlign` in the header.
+  if (!instructions_.empty() &&
+      std::holds_alternative<Align>(instructions_.back())) {
+    instructions_.pop_back();
+    targetSize_ = targetSizeBeforeLastAlign_;
+  }
   size_t alignedSize = alignUp(targetSize_, alignment);
   // An alignment that the target already has is a no-op, see `addAlign` in the
   // header.
-  if (std::exchange(targetSize_, alignedSize) != alignedSize) {
+  if (alignedSize != targetSize_) {
+    targetSizeBeforeLastAlign_ = std::exchange(targetSize_, alignedSize);
     instructions_.push_back(Align{alignment});
   }
 }
 
 // _____________________________________________________________________________
-void BinaryDiff::addCopy(uint64_t baseOffset, uint64_t length) {
+void BinaryDiffApplier::addCopy(uint64_t baseOffset, uint64_t length) {
   AD_CONTRACT_CHECK(baseOffset <= baseSize_ && length <= baseSize_ - baseOffset,
                     "The copied range [", baseOffset, ", ", baseOffset + length,
                     ") does not lie within the base of size ", baseSize_);
@@ -61,18 +69,28 @@ void BinaryDiff::addCopy(uint64_t baseOffset, uint64_t length) {
 }
 
 // _____________________________________________________________________________
-void BinaryDiff::addInsert(std::vector<char> bytes) {
+void BinaryDiffApplier::addInsert(std::vector<char> bytes) {
   targetSize_ += bytes.size();
+  // If the previous instruction is also an insert, then merge the two into a
+  // single insert instruction.
+  if (!instructions_.empty()) {
+    if (auto* previous = std::get_if<Insert>(&instructions_.back());
+        previous != nullptr) {
+      previous->bytes_.insert(previous->bytes_.end(), bytes.begin(),
+                              bytes.end());
+      return;
+    }
+  }
   instructions_.push_back(Insert{std::move(bytes)});
 }
 
 // _____________________________________________________________________________
-void BinaryDiff::addInsert(ql::span<const char> bytes) {
+void BinaryDiffApplier::addInsert(ql::span<const char> bytes) {
   addInsert(std::vector<char>{bytes.begin(), bytes.end()});
 }
 
 // _____________________________________________________________________________
-BinaryDiff::Statistics BinaryDiff::statistics() const {
+BinaryDiffApplier::Statistics BinaryDiffApplier::statistics() const {
   Statistics statistics;
   auto visitor = OverloadCallOperator{
       [&statistics](const Copy& copy) {
@@ -91,7 +109,8 @@ BinaryDiff::Statistics BinaryDiff::statistics() const {
 }
 
 // _____________________________________________________________________________
-BinaryDiff::Checksum BinaryDiff::checksum(ql::span<const char> bytes) {
+BinaryDiffApplier::Checksum BinaryDiffApplier::checksum(
+    ql::span<const char> bytes) {
   auto digest = HashSha256{}(std::string_view{bytes.data(), bytes.size()});
   Checksum result{};
   AD_CORRECTNESS_CHECK(digest.size() == result.size());
@@ -100,12 +119,14 @@ BinaryDiff::Checksum BinaryDiff::checksum(ql::span<const char> bytes) {
 }
 
 // _____________________________________________________________________________
-void BinaryDiff::recomputeTargetSize() {
+void BinaryDiffApplier::recomputeTargetSize() {
   targetSize_ = 0;
+  targetSizeBeforeLastAlign_ = 0;
   auto visitor = OverloadCallOperator{
       [this](const Copy& copy) { targetSize_ += copy.length_; },
       [this](const Insert& insert) { targetSize_ += insert.bytes_.size(); },
       [this](const Align& align) {
+        targetSizeBeforeLastAlign_ = targetSize_;
         targetSize_ = alignUp(targetSize_, align.alignment_);
       }};
   for (const auto& instruction : instructions_) {
@@ -114,17 +135,18 @@ void BinaryDiff::recomputeTargetSize() {
 }
 
 // _____________________________________________________________________________
-void BinaryDiff::apply(ql::span<const char> base, ql::span<char> target) const {
+void BinaryDiffApplier::apply(ql::span<const char> base,
+                              ql::span<char> target) const {
   checkApplicable(base);
   AD_CONTRACT_CHECK(target.size() == targetSize(),
-                    "The target of a `BinaryDiff` has to have exactly ",
+                    "The target of a `BinaryDiffApplier` has to have exactly ",
                     targetSize(), " bytes, but has ", target.size());
   applyToCheckedTarget(base, target);
 }
 
 // _____________________________________________________________________________
-void BinaryDiff::applyToCheckedTarget(ql::span<const char> base,
-                                      ql::span<char> target) const {
+void BinaryDiffApplier::applyToCheckedTarget(ql::span<const char> base,
+                                             ql::span<char> target) const {
   size_t offset = 0;
   auto visitor = OverloadCallOperator{
       [&base, &target, &offset](const Copy& copy) {
@@ -151,7 +173,7 @@ void BinaryDiff::applyToCheckedTarget(ql::span<const char> base,
 }
 
 // _____________________________________________________________________________
-void BinaryDiff::checkApplicable(ql::span<const char> base) const {
+void BinaryDiffApplier::checkApplicable(ql::span<const char> base) const {
   checkBase(base);
   // Validate all instructions before the first byte is written, so that a
   // partially written target cannot result from an invalid instruction.
@@ -159,7 +181,7 @@ void BinaryDiff::checkApplicable(ql::span<const char> base) const {
 }
 
 // _____________________________________________________________________________
-void BinaryDiff::checkBase(ql::span<const char> base) const {
+void BinaryDiffApplier::checkBase(ql::span<const char> base) const {
   constexpr std::string_view wrongBaseMessage =
       "The given diff was created against a different base (the size or the "
       "checksum of the base does not match). Note that a diff has to be "
@@ -170,7 +192,7 @@ void BinaryDiff::checkBase(ql::span<const char> base) const {
 }
 
 // _____________________________________________________________________________
-void BinaryDiff::checkInstructions(ql::span<const char> base) const {
+void BinaryDiffApplier::checkInstructions(ql::span<const char> base) const {
   constexpr std::string_view invalidInstructionMessage =
       "The given diff contains an invalid instruction; it is either corrupted, "
       "or it was created against a different base";
@@ -186,7 +208,8 @@ void BinaryDiff::checkInstructions(ql::span<const char> base) const {
 }
 
 // _____________________________________________________________________________
-void BinaryDiffSerializer::checkAlignments(const BinaryDiff& diff) {
+void BinaryDiffApplierSerializer::checkAlignments(
+    const BinaryDiffApplier& diff) {
   for (const Align& align :
        filterRangeOfVariantsByType<Align>(diff.instructions_)) {
     AD_CONTRACT_CHECK(absl::has_single_bit(align.alignment_),

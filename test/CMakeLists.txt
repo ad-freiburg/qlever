@@ -176,7 +176,7 @@ addLinkAndDiscoverTest(StringUtilsTest qlever_util)
 
 addLinkAndDiscoverTest(RegexSetTest qlever_util)
 
-addLinkAndDiscoverTest(BinaryDiffTest qlever_util)
+addLinkAndDiscoverTest(BinaryDiffApplierTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
 

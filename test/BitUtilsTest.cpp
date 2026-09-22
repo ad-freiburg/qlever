@@ -133,6 +133,15 @@ TEST(BitUtils, alignUp) {
   }
   // The alignment may also be large.
   EXPECT_EQ(alignUp(1, uint64_t{1} << 40), uint64_t{1} << 40);
+
+  // An alignment that is not a power of two is a precondition violation, which
+  // is only checked if the expensive checks are enabled.
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    for (size_t alignment : {size_t{0}, size_t{3}, size_t{12}}) {
+      AD_EXPECT_THROW_WITH_MESSAGE(alignUp(16, alignment),
+                                   ::testing::HasSubstr("has_single_bit"));
+    }
+  }
 }
 
 }  // namespace
