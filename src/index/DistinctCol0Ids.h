@@ -122,7 +122,9 @@ class BlockSelector {
 // vocabulary entry, and vice versa. Note that this only affects the
 // deduplication, not the order: the graphs are sorted as `Id`s.
 struct HashGraphIdByBits {
-  size_t operator()(Id id) const { return absl::Hash<Id::T>{}(id.getBits()); }
+  size_t operator()(Id id) const {
+    return absl::Hash<Id::BitRepresentation>{}(id.getBits());
+  }
 };
 struct GraphIdBitsEqual {
   bool operator()(Id a, Id b) const { return a.getBits() == b.getBits(); }

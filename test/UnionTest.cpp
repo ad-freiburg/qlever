@@ -622,7 +622,12 @@ TEST(Union, checkChunkSizeSplitsProperly) {
   using ::testing::Each;
   auto* qec = ad_utility::testing::getQec();
 
-  IdTable reference{1, qec->getAllocator()};
+  // A dedicated, unlimited allocator (rather than `qec->getAllocator()`,
+  // whose 100 MB budget is shared with the rest of this cached `qec`):
+  // `reference` alone needs `1.5 * chunkSize * sizeof(Id) == 24 MB`, and is
+  // then cloned once more below, which would otherwise risk exceeding that
+  // shared budget together with whatever else already uses it.
+  IdTable reference{1, ad_utility::testing::makeAllocator()};
   reference.resize(Union::chunkSize + (Union::chunkSize / 2) + 1);
   ql::ranges::fill(reference.getColumn(0), Id::makeFromInt(42));
   // Make sure we compute the expensive way

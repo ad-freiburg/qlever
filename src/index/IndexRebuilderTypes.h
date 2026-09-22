@@ -19,7 +19,7 @@ using OwnedBlocksEntry =
     ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
 using OwnedBlocks = std::vector<OwnedBlocksEntry>;
 using InsertionPositions = std::vector<VocabIndex>;
-using LocalVocabMapping = ad_utility::HashMap<Id::T, Id>;
+using LocalVocabMapping = ad_utility::HashMap<Id::BitRepresentation, Id>;
 using BlankNodeBlocks = std::vector<uint64_t>;
 
 // Helper struct that groups together the data required to remap IDs from the

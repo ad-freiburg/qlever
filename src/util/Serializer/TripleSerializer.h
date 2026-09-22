@@ -115,8 +115,9 @@ CPP_template(typename Serializer)(
 // Deserialize the local vocabulary from the input stream.
 CPP_template(typename Serializer)(
     requires serialization::ReadSerializer<Serializer>) std::
-    tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
-        Serializer& serializer, const LocalVocabContext& context) {
+    tuple<LocalVocab, absl::flat_hash_map<Id::BitRepresentation, Id>>
+    deserializeLocalVocab(Serializer& serializer,
+                          const LocalVocabContext& context) {
   LocalVocab vocab;
   vocab.reserveBlankNodeBlocksFromExplicitIndices(
       readValue<std::vector<
@@ -126,14 +127,14 @@ CPP_template(typename Serializer)(
   auto size = readValue<uint64_t>(serializer);
   // Note:: It might happen that the `size` is zero because the local vocab was
   // empty.
-  absl::flat_hash_map<Id::T, Id> mapping{};
+  absl::flat_hash_map<Id::BitRepresentation, Id> mapping{};
   mapping.reserve(size);
   for (uint64_t i = 0; i < size; ++i) {
-    auto id = readValue<Id::T>(serializer);
+    auto id = readValue<Id>(serializer);
     auto s = readValue<std::string>(serializer);
     auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
         LocalVocabEntry::fromStringRepresentation(std::move(s), context));
-    mapping.emplace(id, Id::makeFromLocalVocabIndex(localVocabIndex));
+    mapping.emplace(id.getBits(), Id::makeFromLocalVocabIndex(localVocabIndex));
   }
   return {std::move(vocab), std::move(mapping)};
 }
@@ -157,8 +158,9 @@ CPP_template(typename Range, typename Serializer)(
 }
 
 // TODO<joka921> Comments.
-inline void remapLocalVocab(IdColumn ids,
-                            const absl::flat_hash_map<Id::T, Id>& mapping) {
+inline void remapLocalVocab(
+    IdColumn ids,
+    const absl::flat_hash_map<Id::BitRepresentation, Id>& mapping) {
   for (Id& id : ids) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
       id = mapping.at(id.getBits());
@@ -169,17 +171,19 @@ inline void remapLocalVocab(IdColumn ids,
 // Deserialize a range of Ids from the input stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id after reading it.
 template <typename Serializer>
-void deserializeIds(Serializer& serializer,
-                    const absl::flat_hash_map<Id::T, Id>& mapping,
-                    IdColumn ids) {
+void deserializeIds(
+    Serializer& serializer,
+    const absl::flat_hash_map<Id::BitRepresentation, Id>& mapping,
+    IdColumn ids) {
   serializer >> ids;
   remapLocalVocab(ids, mapping);
 }
 // Deserialize a range of Ids from the input stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id after reading it.
 template <typename Serializer>
-std::vector<Id> deserializeIds(Serializer& serializer,
-                               const absl::flat_hash_map<Id::T, Id>& mapping) {
+std::vector<Id> deserializeIds(
+    Serializer& serializer,
+    const absl::flat_hash_map<Id::BitRepresentation, Id>& mapping) {
   std::vector<Id> ids = readValue<std::vector<Id>>(serializer);
   remapLocalVocab(ids, mapping);
   return ids;

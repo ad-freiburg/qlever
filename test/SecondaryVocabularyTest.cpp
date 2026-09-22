@@ -149,7 +149,7 @@ TEST(SecondaryVocabIndex, valueIdBasics) {
   // its bits.
   EXPECT_TRUE(id.canBeComparedBitwise());
   EXPECT_THROW(Id::makeFromSecondaryVocabIndex(
-                   SecondaryVocabIndex::make(Id::maxIndex + 1)),
+                   SecondaryVocabIndex::make(Id::maxSecondaryVocabIndex + 1)),
                Id::IndexTooLargeException);
 
   auto visitor = [](const auto& value) -> std::optional<uint64_t> {

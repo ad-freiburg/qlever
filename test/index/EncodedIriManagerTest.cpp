@@ -49,7 +49,7 @@ TEST(EncodedIriManger, EncodingAndDecoding) {
     EXPECT_EQ(encodedIriManager.toString(id.value()), wdq)
         << std::hex << id.value().getBits();
     stringsAndEncodings.push_back(
-        std::pair{std::move(wdq), id.value().getBits()});
+        std::pair{std::move(wdq), id.value().getEncodedVal()});
   }
 
   // Test the sorting;
@@ -394,8 +394,8 @@ TEST(EncodedIriManager, illegalPatterns) {
               "enclosed in angle brackets");
   // The patterns are checked against the number of payload bits of the
   // manager (see `validatePattern` in `EncodedIriPatternTest.cpp`).
-  expectThrow(Pattern{"http://example.org/", {Part{53, {}, ""}}},
-              "it requires 53 bits, but only 52 bits are available");
+  expectThrow(Pattern{"http://example.org/", {Part{57, {}, ""}}},
+              "it requires 57 bits, but only 56 bits are available");
 }
 
 // _____________________________________________________________________________

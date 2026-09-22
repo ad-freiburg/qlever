@@ -108,7 +108,9 @@ void testLazyScanForJoinOfTwoScans(
     const SparqlTripleSimple& tripleRight,
     const std::vector<IndexPair>& leftRows,
     const std::vector<IndexPair>& rightRows,
-    ad_utility::MemorySize blocksizePermutations = 16_B,
+    // `32_B` (2 rows per block, since `sizeof(Id) == 16`), matching the
+    // "two triples per block" comments on the call sites below.
+    ad_utility::MemorySize blocksizePermutations = 32_B,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   // As soon as there is a LIMIT clause present, we cannot use the prefiltered
@@ -298,7 +300,8 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{1, 5}}, {{0, 4}});
   }
   {
-    // In this example we use 3 triples per block (24 bytes) and the `<p>`
+    // In this example we use 3 triples per block (48 bytes, since
+    // `sizeof(Id) == 16`) and the `<p>`
     // permutation is standing in a single block together with the previous
     // `<o>` relation. The lazy scans are however still aware that the relevant
     // part of the block (`<b> <p> ?x`) only  goes from `<x80>` through `<x90>`,
@@ -308,7 +311,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<a> <o> <a1>. <b> <p> <x80>. <b> <p> <x90>. "
         "<x2> <q> <xb>. <x5> <q> <xb2> . <x5> <q> <xb>. "
         "<x9> <q> <xb2> . <x91> <q> <xb>. <x93> <q> <xb2> .";
-    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 24_B);
+    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 48_B);
   }
   {
     std::string kg =
@@ -1302,7 +1305,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
   // a and b are supposed to share one block and c and d.
   config.turtleInput =
       "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  config.blocksizePermutations = 16_B;
+  config.blocksizePermutations = 32_B;  // 2 rows/block, sizeof(Id) == 16
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
 
@@ -1327,7 +1330,7 @@ TEST_P(IndexScanWithLazyJoin,
   // a and b are supposed to share one block and c and d.
   config.turtleInput =
       "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  config.blocksizePermutations = 16_B;
+  config.blocksizePermutations = 32_B;  // 2 rows/block, sizeof(Id) == 16
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
   LocalVocab extraVocab;

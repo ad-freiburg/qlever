@@ -1102,13 +1102,14 @@ auto CompressedRelationReader::getFirstAndLastTripleIgnoringGraph(
 }
 
 // ____________________________________________________________________________
-ad_utility::HashSetWithMemoryLimit<Id::T>
+ad_utility::HashSetWithMemoryLimit<Id::BitRepresentation>
 CompressedRelationReader::computeUniqueGraphIds(
     const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     const CancellationHandle& cancellationHandle,
     const Allocator& allocator) const {
-  ad_utility::HashSetWithMemoryLimit<Id::T> graphIds{allocator.as<Id::T>()};
+  ad_utility::HashSetWithMemoryLimit<Id::BitRepresentation> graphIds{
+      allocator.as<Id::BitRepresentation>()};
   std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
   const auto scanConfig =
       getScanConfig(ScanSpecification{std::nullopt, std::nullopt, std::nullopt},

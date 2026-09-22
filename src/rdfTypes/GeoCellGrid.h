@@ -114,9 +114,15 @@ class GeoCellGrid {
 
   // The number of bits remaining for the position of a word inside the geo
   // vocabulary: the data bits of a `ValueId` minus one marker bit of the
-  // `SplitVocabulary` minus the cell bits.
+  // `SplitVocabulary`, minus the cell bits, minus one more bit of headroom.
+  // That extra bit of headroom is needed so that the exclusive upper bound
+  // computed by `vocabIndexRangeForCells` for the sentinel cell (which sets
+  // the bit directly below the marker bit, one past the highest regular cell
+  // index) never collides with the marker bit itself; without it, that bound
+  // would carry into (and overflow past) the marker bit instead of just
+  // setting the next lower bit.
   uint64_t numPositionBits() const {
-    return ValueId::numDataBits - 1 - numCellBits();
+    return ValueId::numDataBits - 2 - numCellBits();
   }
 
   // The maximum number of words the geo vocabulary can hold with this grid.

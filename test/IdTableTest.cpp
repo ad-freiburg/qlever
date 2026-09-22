@@ -1176,16 +1176,16 @@ TEST(IdTable, shrinkToFit) {
   ASSERT_EQ(allocator.amountMemoryLeft(), 1_kB);
   table.reserve(20);
   ASSERT_TRUE(table.empty());
-  // 20 rows * 2 columns * 8 bytes per ID were allocated.
-  ASSERT_EQ(allocator.amountMemoryLeft(), 680_B);
+  // 20 rows * 2 columns * 16 bytes per ID were allocated.
+  ASSERT_EQ(allocator.amountMemoryLeft(), 360_B);
   table.emplace_back();
   table.emplace_back();
   ASSERT_EQ(table.numRows(), 2u);
-  ASSERT_EQ(allocator.amountMemoryLeft(), 680_B);
+  ASSERT_EQ(allocator.amountMemoryLeft(), 360_B);
   table.shrinkToFit();
   ASSERT_EQ(table.numRows(), 2u);
-  // Now only 2 rows * 2 columns * 8 bytes were allocated.
-  ASSERT_EQ(allocator.amountMemoryLeft(), 968_B);
+  // Now only 2 rows * 2 columns * 16 bytes were allocated.
+  ASSERT_EQ(allocator.amountMemoryLeft(), 936_B);
 }
 
 TEST(IdTable, staticAsserts) {

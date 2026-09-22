@@ -49,9 +49,11 @@ class BlankNodeManager {
   // Number of indices that make up a single block.
   static constexpr uint32_t blockSize_ = 1000;
 
-  // Number of blocks available.
+  // Number of blocks available. Note: As `maxIndex` is the maximum value of
+  // `uint64_t`, we must not add 1 to the difference (this would overflow for
+  // `minIndex_ == 0`), so we deliberately ignore the very last index.
   const uint64_t totalAvailableBlocks_ =
-      (ValueId::maxIndex - minIndex_ + 1) / blockSize_;
+      (ValueId::maxIndex - minIndex_) / blockSize_;
 
  private:
   // Forward declaration because of cyclic dependency.
