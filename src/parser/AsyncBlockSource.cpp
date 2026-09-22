@@ -114,16 +114,11 @@ AsyncStatementBoundaryBlockSource::AsyncStatementBoundaryBlockSource(
 
 // ____________________________________________________________________________
 void AsyncStatementBoundaryBlockSource::assembleAndDeliver(Handler& handler,
-                                                           Block& rawInput,
+                                                           Block& input,
                                                            size_t endPosition) {
-  Block result;
-  result.reserve(remainder_.size() + endPosition);
-  result.insert(result.end(), remainder_.begin(), remainder_.end());
-  result.insert(result.end(), rawInput.begin(), rawInput.begin() + endPosition);
-  remainder_.clear();
-  remainder_.insert(remainder_.end(), rawInput.begin() + endPosition,
-                    rawInput.end());
-  handler(nullptr, std::move(result));
+  remainder_.assign(input.begin() + endPosition, input.end());
+  input.resize(endPosition);
+  handler(nullptr, std::move(input));
 }
 
 // ____________________________________________________________________________
@@ -138,30 +133,29 @@ void AsyncStatementBoundaryBlockSource::deliverRemainder(Handler& handler) {
 
 // ____________________________________________________________________________
 void AsyncStatementBoundaryBlockSource::handleMissingBoundary(Handler handler,
-                                                              Block rawInput) {
+                                                              Block input) {
   AsyncBlockSource::callAsyncGetNextBlockImpl(
-      *inner_,
-      AsyncBlockSource::forwardErrors(
-          std::move(handler),
-          [this, rawInput = std::move(rawInput)](
-              Handler handler, std::optional<Block> peek) mutable {
-            if (!peek.has_value()) {
-              // `peek` is the result of fetching another block from
-              // `inner_` right after `rawInput`, so `nullopt` here means
-              // `inner_` is genuinely exhausted and `rawInput` is the last
-              // block. It is thus correct to also mark this source
-              // exhausted and return `remainder_ + rawInput` without
-              // requiring a statement boundary in it.
-              exhausted_ = true;
-              return assembleAndDeliver(handler, rawInput, rawInput.size());
-            }
-            // Inner source has more data, so the block really cannot be
-            // split.
-            return handler(
-                getNoBlockBoundaryError(description_, rawInput.size(),
-                                        inputName_, isParsedInParallel_),
-                std::nullopt);
-          }));
+      *inner_, AsyncBlockSource::forwardErrors(
+                   std::move(handler),
+                   [this, input = std::move(input)](
+                       Handler handler, std::optional<Block> peek) mutable {
+                     if (!peek.has_value()) {
+                       // `peek` is the result of fetching another block from
+                       // `inner_` right after `input`, so `nullopt` here means
+                       // `inner_` is genuinely exhausted and `input` is the
+                       // last block. It is thus correct to also mark this
+                       // source exhausted and return `input` without requiring
+                       // a statement boundary in it.
+                       exhausted_ = true;
+                       return assembleAndDeliver(handler, input, input.size());
+                     }
+                     // Inner source has more data, so the block really cannot
+                     // be split.
+                     return handler(getNoBlockBoundaryError(
+                                        description_, input.size(), inputName_,
+                                        isParsedInParallel_),
+                                    std::nullopt);
+                   }));
 }
 
 // ____________________________________________________________________________
@@ -184,22 +178,27 @@ void AsyncStatementBoundaryBlockSource::asyncGetNextBlockImpl(Handler handler) {
             if (!rawOpt.has_value()) {
               return deliverRemainder(handler);
             }
-            Block rawInput = std::move(*rawOpt);
+            // Prepend the remainder of the previous block, such that the
+            // search below starts at the end of the previous statement, see
+            // the class comment.
+            Block input = std::move(*rawOpt);
+            input.insert(input.begin(), remainder_.begin(), remainder_.end());
+            remainder_.clear();
 
             // Search for the end of the last statement near the end of the
-            // raw block. `findEndPosition_` is user-supplied code, so an
+            // block. `findEndPosition_` is user-supplied code, so an
             // exception from it is delivered via the handler like any other
             // error (and must not escape into the code that invoked this
             // callback, see `BlockingBlockSource::asyncGetNextBlockImpl`).
             std::optional<size_t> endPosition;
             try {
               endPosition = findEndPosition_(
-                  std::string_view{rawInput.data(), rawInput.size()});
+                  std::string_view{input.data(), input.size()});
             } catch (...) {
               return handler(std::current_exception(), std::nullopt);
             }
             if (endPosition.has_value()) {
-              return assembleAndDeliver(handler, rawInput, endPosition.value());
+              return assembleAndDeliver(handler, input, endPosition.value());
             }
 
             // No boundary found. Peek at the next raw block to decide how
@@ -207,7 +206,7 @@ void AsyncStatementBoundaryBlockSource::asyncGetNextBlockImpl(Handler handler) {
             // current block is too short for a full statement and parsing
             // must fail. If the inner source is exhausted, the current
             // block is the last one; return it without requiring a match.
-            handleMissingBoundary(std::move(handler), std::move(rawInput));
+            handleMissingBoundary(std::move(handler), std::move(input));
           }));
 }
 }  // namespace qlever::parser

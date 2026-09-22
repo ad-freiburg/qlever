@@ -1110,6 +1110,48 @@ TEST(RdfParserTest, commentThatEndsWithADot) {
   forAllParsers(testWithParser);
 }
 
+// The same, but with a comment that is larger than the buffer, such that the
+// `#` that starts it and the dot that ends it are in different blocks of the
+// block source. The `#` is only visible to the search because the block source
+// searches from the end of the previous statement on.
+TEST(RdfParserTest, commentThatEndsWithADotAndIsLargerThanTheBuffer) {
+  std::string filename{gtestCurrentTestName()};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  std::string statement = "<subject> <predicate> <object> .\n";
+  // The comment is 100 bytes long, the statement it interrupts 134.
+  std::string interruptedStatement = absl::StrCat(
+      "<subject> # ", std::string(97, 'x'), ".\n<predicate> <object> .\n");
+  ad_utility::makeOfstream(filename)
+      << statement << interruptedStatement << statement;
+  auto bufferSize = 80_B;
+
+  // The interrupted statement doesn't fit into the buffer, so the parallel
+  // parsers report that they cannot split the input, instead of cutting inside
+  // the comment and then failing with a confusing parse error.
+  auto testWithParallelParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, bufferSize)),
+        ::testing::AllOf(
+            ::testing::HasSubstr(
+                absl::StrCat("Could not split the input \"", filename, "\"")),
+            ::testing::HasSubstr("a dot that is followed by a newline")));
+  };
+  forAllParallelParsers(testWithParallelParser);
+
+  // The serial parser can resume a statement that crosses a block boundary,
+  // which is exactly the fix that the error message above suggests.
+  std::vector<TurtleTriple> expected(
+      3, {iri("<subject>"), iri("<predicate>"), iri("<object>")});
+  auto testWithSerialParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    EXPECT_THAT(parseFromFile<Parser>(filename, bufferSize),
+                ::testing::ElementsAreArray(expected));
+  };
+  testWithSerialParser(ti<RdfStreamParser<TurtleParser<Tokenizer>>>);
+  testWithSerialParser(ti<RdfStreamParser<TurtleParser<TokenizerCtre>>>);
+}
+
 // Test that exceptions during the turtle parsing are properly propagated to the
 // calling code. This is especially important for the parallel parsers where the
 // actual parsing happens on background threads.
@@ -2777,6 +2819,13 @@ TEST(RdfParserTest, findEndOfLastStatementIgnoresComments) {
   expectIsCompleteStatement("<s> <p> \"an escaped quote \\\" # \" .\n");
   expectIsCompleteStatement("<s> <p> \"a backslash \\\\\" .\n");
   expectIsCompleteStatement("ex:subject\\#1 <p> <o> .\n");
+  // A `"""` or `'''` literal that is confined to a single line also works,
+  // see the comment on `dotIsCommentedOut`.
+  expectIsCompleteStatement("<s> <p> \"\"\"a # in a long literal\"\"\" .\n");
+  expectIsCompleteStatement("<s> <p> '''a # in a long literal''' .\n");
+  // The same, followed by a comment, which is skipped.
+  EXPECT_THAT(findEndOfLastStatement("<s> <p> \"\"\"#\"\"\" .\n# A comment.\n"),
+              Optional(Eq(18u)));
   // An IRI or a literal that isn't closed before the dot means that the input
   // is broken or has a multiline literal. Both are left to the parser, which
   // reports them much better, so the dot counts as a statement end.

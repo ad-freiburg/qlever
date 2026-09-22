@@ -83,10 +83,11 @@ std::optional<size_t> findEndOfLastNewline(std::string_view input);
 // Find the end of the last match of the regex `\.[\t ]*[\r\n]+` in `input`
 // that is not commented out, or `std::nullopt` if there is none. Used by the
 // parallel `RdfAsyncParallelParser`, whose sub-parsers can't back up into the
-// previous block. To detect a comment, only the line of the dot is inspected,
-// so a comment that already started in the previous block can still fool the
-// search, as can a dot inside a multiline literal (which the parallel parser
-// rejects for that reason, see `TurtleParser::stringParseImpl`).
+// previous block. To detect a comment, the line of the dot is inspected from
+// its beginning, so `input` must start at the beginning of a line, which
+// `AsyncStatementBoundaryBlockSource` guarantees. A dot inside a multiline
+// literal can still fool the search, which is why the parallel parser rejects
+// those, see `TurtleParser::stringParseImpl`.
 std::optional<size_t> findEndOfLastStatement(std::string_view input);
 
 // The human-readable description of what `findEndOfLastStatement` looks for,

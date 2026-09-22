@@ -62,6 +62,12 @@ std::optional<MatchPositions> findLastMatch(const Search& search,
 // line that precedes it) is commented out. The line is scanned from its
 // beginning, because a `#` inside an IRI (like `<http://example.org#thing>`) or
 // inside a literal doesn't start a comment.
+// A `"""` or `'''` literal that is confined to a single line also works,
+// although the scan doesn't know those delimiters: six quotes toggle the state
+// an even number of times, so a `#` between them is ignored. The parallel
+// parser rejects such literals (see `TurtleParser::stringParseImpl`), but only
+// when it parses them, which is after the split, so splitting correctly here
+// preserves that clear error message.
 bool dotIsCommentedOut(std::string_view lineUpToDot) {
   // Whether the scan is currently inside an IRI or a literal, in which a `#`
   // doesn't start a comment.
@@ -74,8 +80,7 @@ bool dotIsCommentedOut(std::string_view lineUpToDot) {
   // part of an escape sequence, for example the `\#` in `ex:foo\#bar`.
   bool escaped = false;
   for (char c : lineUpToDot) {
-    if (escaped) {
-      escaped = false;
+    if (std::exchange(escaped, false)) {
       continue;
     }
     switch (state) {

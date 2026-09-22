@@ -198,12 +198,16 @@ class FileBlockSource : public BlockingBlockSource {
 };
 
 // Wrap an `AsyncBlockSource` and cut blocks at statement boundaries. For each
-// block produced by the inner source, `findEndPosition` determines the number
-// of bytes until the end of the last statement in the block (it is expected to
-// scan the block from the back); the block is returned up to that position,
-// with the tail carried over from the previous block prepended. If no statement
-// boundary can be found in a complete block, an exception is thrown with a
-// message that indicates possible mitigations for this error.
+// block produced by the inner source, with the tail carried over from the
+// previous block prepended, `findEndPosition` determines the number of bytes
+// until the end of the last statement in it (it is expected to scan from the
+// back); the block is returned up to that position, and the rest becomes the
+// new tail. The tail is prepended before the search, such that
+// `findEndPosition` always sees the input from the end of the previous
+// statement on and can hence also recognize constructs that start before the
+// current block, like a comment. If no statement boundary can be found in a
+// complete block, an exception is thrown with a message that indicates possible
+// mitigations for this error.
 class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
  public:
   // A function that, given a block, returns the number of bytes until the end
@@ -244,22 +248,21 @@ class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
   void asyncGetNextBlockImpl(Handler handler) override;
 
  private:
-  // Assemble the result block from `remainder_` and `rawInput[0,
-  // endPosition)`, update `remainder_` to `rawInput[endPosition, end)`, and
-  // pass the result to `handler`.
-  void assembleAndDeliver(Handler& handler, Block& rawInput,
-                          size_t endPosition);
+  // Split `input` (which already has the previous `remainder_` prepended) at
+  // `endPosition`: the part before it is passed to `handler`, the part after it
+  // becomes the new `remainder_`.
+  void assembleAndDeliver(Handler& handler, Block& input, size_t endPosition);
 
   // Mark this source exhausted and pass whatever is left in `remainder_` to
   // `handler` (`nullopt` if empty).
   void deliverRemainder(Handler& handler);
 
-  // Called when `findEndPosition_` found no boundary in `rawInput`. Peeks at
-  // the next block from `inner_` to decide whether `rawInput` is simply the
+  // Called when `findEndPosition_` found no boundary in `input`. Peeks at
+  // the next block from `inner_` to decide whether `input` is simply the
   // last block (delivered as-is via `assembleAndDeliver`) or the search
   // failed because the batch was too small (in which case `handler` receives
   // a "statement too large" error).
-  void handleMissingBoundary(Handler handler, Block rawInput);
+  void handleMissingBoundary(Handler handler, Block input);
 };
 
 }  // namespace qlever::parser
