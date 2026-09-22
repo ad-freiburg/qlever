@@ -445,8 +445,8 @@ TEST(BinaryDiffApplier, redundantAlignmentsAreNotStored) {
     EXPECT_EQ(toString(diff.apply(base)), "0123456789");
   }
   {
-    // Consecutive alignments only pad once, because each of them replaces the
-    // previous one.
+    // Consecutive alignments only pad once, because all but the strongest of
+    // them are no-ops.
     BinaryDiffApplier diff{base};
     diff.addCopy(0, 3);
     diff.addAlign(8);
@@ -455,30 +455,6 @@ TEST(BinaryDiffApplier, redundantAlignmentsAreNotStored) {
     EXPECT_THAT(diff.instructions(),
                 ElementsAre(copyInstruction(0, 3), alignInstruction(8)));
     EXPECT_EQ(diff.targetSize(), 8U);
-  }
-  {
-    // An alignment also replaces a previous alignment that is stronger,
-    // because nothing was written in between, so the region that the previous
-    // alignment aligned is empty.
-    BinaryDiffApplier diff{base};
-    diff.addCopy(0, 3);
-    diff.addAlign(8);
-    diff.addAlign(4);
-    EXPECT_THAT(diff.instructions(),
-                ElementsAre(copyInstruction(0, 3), alignInstruction(4)));
-    EXPECT_EQ(diff.targetSize(), 4U);
-    EXPECT_EQ(toString(diff.apply(base)), "012" + std::string(1, '\0'));
-  }
-  {
-    // An alignment of one is always a no-op, so it removes a previous
-    // alignment without adding an instruction of its own.
-    BinaryDiffApplier diff{base};
-    diff.addCopy(0, 3);
-    diff.addAlign(8);
-    diff.addAlign(1);
-    EXPECT_THAT(diff.instructions(), ElementsAre(copyInstruction(0, 3)));
-    EXPECT_EQ(diff.targetSize(), 3U);
-    EXPECT_EQ(toString(diff.apply(base)), "012");
   }
 }
 

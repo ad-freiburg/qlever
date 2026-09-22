@@ -33,18 +33,16 @@ void BinaryDiffApplier::addAlign(uint64_t alignment) {
                     "The alignment of an `Align` instruction has to be a power "
                     "of two, but is ",
                     alignment);
-  // An alignment that directly follows another alignment replaces it, because
-  // no bytes were written in between, see `addAlign` in the header.
-  if (!instructions_.empty() &&
-      std::holds_alternative<Align>(instructions_.back())) {
-    instructions_.pop_back();
-    targetSize_ = targetSizeBeforeLastAlign_;
-  }
   size_t alignedSize = alignUp(targetSize_, alignment);
   // An alignment that the target already has is a no-op, see `addAlign` in the
   // header.
-  if (alignedSize != targetSize_) {
-    targetSizeBeforeLastAlign_ = std::exchange(targetSize_, alignedSize);
+  //
+  // NOTE: In contrast to the `Copy` and the `Insert` instructions, two
+  // consecutive `Align` instructions are deliberately not merged into one.
+  // They arise when the section of the target in between them is empty, and a
+  // consumer of such a section reads zero bytes from it, but might still check
+  // the alignment of the pointer to it, so keep the padding of both.
+  if (std::exchange(targetSize_, alignedSize) != alignedSize) {
     instructions_.push_back(Align{alignment});
   }
 }
@@ -121,12 +119,10 @@ BinaryDiffApplier::Checksum BinaryDiffApplier::checksum(
 // _____________________________________________________________________________
 void BinaryDiffApplier::recomputeTargetSize() {
   targetSize_ = 0;
-  targetSizeBeforeLastAlign_ = 0;
   auto visitor = OverloadCallOperator{
       [this](const Copy& copy) { targetSize_ += copy.length_; },
       [this](const Insert& insert) { targetSize_ += insert.bytes_.size(); },
       [this](const Align& align) {
-        targetSizeBeforeLastAlign_ = targetSize_;
         targetSize_ = alignUp(targetSize_, align.alignment_);
       }};
   for (const auto& instruction : instructions_) {

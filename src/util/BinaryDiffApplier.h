@@ -135,11 +135,6 @@ class BinaryDiffApplier {
   // maintained incrementally, so that `addAlign` can detect an alignment that
   // the target already has without walking all instructions.
   size_t targetSize_ = 0;
-  // The size of the target directly before the last `Align` instruction, which
-  // allows `addAlign` to replace a trailing alignment (see `addAlign`). NOTE:
-  // It is meaningful only if the last instruction is an `Align`, and is
-  // ignored otherwise.
-  size_t targetSizeBeforeLastAlign_ = 0;
 
   // The serialization needs access to the members above, and is factored out
   // into its own class to keep this class free of the details of the format.
@@ -166,11 +161,6 @@ class BinaryDiffApplier {
   // instruction would be a no-op. This keeps a diff free of redundant
   // alignments, and it allows the copies around such an alignment to be merged
   // (see `addCopy`).
-  //
-  // If the previous instruction is also an alignment, then it is replaced by
-  // this one, even if this one is weaker. Nothing has been written since that
-  // previous alignment, so the target region that it aligned is empty, and the
-  // alignment of an empty region is irrelevant.
   void addAlign(uint64_t alignment);
 
   // Append an instruction that copies the bytes
