@@ -22,16 +22,25 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/MaterializedViewConstants.h"
+#include "index/CompressedRelationMetadata.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
 #include "index/IndexFormatConverter.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
+#include "index/IndexMetaData.h"
+#include "index/PatternCreator.h"
 #include "util/BitUtils.h"
 #include "util/CancellationHandle.h"
+#include "util/CompactStringVector.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/File.h"
 #include "util/FilesystemHelpers.h"
+#include "util/NBitInteger.h"
 #include "util/ProgressBar.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/Serializer.h"
 #include "util/json.h"
 
 namespace {
@@ -49,16 +58,17 @@ fs::path oldIndexDirectory() {
   return fs::path{QLEVER_TEST_DATA_DIR} / "oldIndexFormat";
 }
 
-// Return the `Id` of the previous index format with the given datatype bits and
-// value bits.
-Id oldFormatId(uint64_t datatypeBits, uint64_t valueBits) {
-  return Id::fromBits((datatypeBits << ValueId::numDataBits) | valueBits);
-}
+// The number of bits used for the datatype resp. the payload in the previous
+// index format (a single 64-bit word, unlike the current format's full
+// datatype byte and full 64-bit payload word).
+constexpr uint64_t oldNumDatatypeBits = 4;
+constexpr uint64_t oldNumDataBits = 64 - oldNumDatatypeBits;
 
-// Return the value bits of the given `id`, that is, its bits without the
-// datatype bits.
-uint64_t valueBits(Id id) {
-  return id.getBits() & ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
+// Return the raw bits of an `Id` of the previous index format with the given
+// datatype bits and payload (which must fit into `oldNumDataBits` bits).
+uint64_t oldFormatId(uint64_t datatypeBits, uint64_t payload) {
+  AD_CONTRACT_CHECK(payload <= ad_utility::bitMaskForLowerBits(oldNumDataBits));
+  return (datatypeBits << oldNumDataBits) | payload;
 }
 
 // The 20 triples of the index in the previous format, in the order of the `SPO`
@@ -163,52 +173,111 @@ class IndexFormatConverterTest : public ::testing::Test {
 
 // _____________________________________________________________________________
 TEST(IndexFormatConverter, convertIdOfEachDatatype) {
-  // The datatype of each `Id` of the previous format, in the order of the
-  // datatype bits that it had there. The value bits always stay the same.
-  std::vector<Datatype> expectedDatatypes{Datatype::Undefined,
-                                          Datatype::Bool,
-                                          Datatype::Int,
-                                          Datatype::Double,
-                                          Datatype::VocabIndex,
-                                          Datatype::LocalVocabIndex,
-                                          Datatype::TextRecordIndex,
-                                          Datatype::Date,
-                                          Datatype::GeoPoint,
-                                          Datatype::WordVocabIndex,
-                                          Datatype::BlankNodeIndex,
-                                          Datatype::EncodedVal};
-  for (uint64_t datatypeBits = 0; datatypeBits < expectedDatatypes.size();
+  // Datatype numbering is unchanged between the two formats, so the datatype
+  // bits of a previous-format `Id` are directly the current `Datatype` value.
+  for (uint8_t datatypeBits = 0;
+       datatypeBits <= static_cast<uint8_t>(Datatype::MaxValue);
        ++datatypeBits) {
-    SCOPED_TRACE(absl::StrCat("datatype bits ", datatypeBits));
-    auto expectedDatatype = expectedDatatypes.at(datatypeBits);
+    SCOPED_TRACE(absl::StrCat("datatype bits ", static_cast<int>(datatypeBits)));
+    auto datatype = static_cast<Datatype>(datatypeBits);
     // An `Id` of type `LocalVocabIndex` is never stored on disk, so it always
     // is an error, see the test below.
-    if (expectedDatatype == Datatype::LocalVocabIndex) {
+    if (datatype == Datatype::LocalVocabIndex) {
       continue;
     }
-    for (uint64_t value : {uint64_t{0}, uint64_t{17}, ValueId::maxIndex}) {
-      Id converted = convertId(oldFormatId(datatypeBits, value));
-      EXPECT_EQ(converted.getDatatype(), expectedDatatype);
-      EXPECT_EQ(valueBits(converted), value);
+    if (datatype == Datatype::Double) {
+      // Values whose lowest `oldNumDatatypeBits` mantissa bits are zero
+      // survive the shift-based round trip without loss.
+      for (double value : {0.0, 1.0, -1.0, 3.5, 1e10}) {
+        uint64_t rawBits = absl::bit_cast<uint64_t>(value);
+        ASSERT_EQ(rawBits & ad_utility::bitMaskForLowerBits(oldNumDatatypeBits),
+                  0u);
+        Id converted =
+            convertId(oldFormatId(datatypeBits, rawBits >> oldNumDatatypeBits));
+        EXPECT_EQ(converted.getDatatype(), Datatype::Double);
+        EXPECT_EQ(converted.getDouble(), value);
+      }
+      continue;
+    }
+    if (datatype == Datatype::Int) {
+      // The payload is a 60-bit two's complement integer (see
+      // `ad_utility::NBitInteger`).
+      for (int64_t value :
+           {int64_t{0}, int64_t{17}, int64_t{-17},
+            ad_utility::NBitInteger<oldNumDataBits>::max(),
+            ad_utility::NBitInteger<oldNumDataBits>::min()}) {
+        uint64_t payload =
+            ad_utility::NBitInteger<oldNumDataBits>::toNBit(value);
+        Id converted = convertId(oldFormatId(datatypeBits, payload));
+        EXPECT_EQ(converted.getDatatype(), Datatype::Int);
+        EXPECT_EQ(converted.getInt(), value);
+      }
+      continue;
+    }
+    if (datatype == Datatype::EncodedVal) {
+      // Like `Double`, shifted the same way; no separate value to decode,
+      // the encoding is internal to `EncodedIriManager`.
+      for (uint64_t payload :
+           {uint64_t{0}, uint64_t{17},
+            ad_utility::bitMaskForLowerBits(oldNumDataBits)}) {
+        Id converted = convertId(oldFormatId(datatypeBits, payload));
+        EXPECT_EQ(converted.getDatatype(), Datatype::EncodedVal);
+        EXPECT_EQ(converted.getBits().payload_, payload << oldNumDatatypeBits);
+      }
+      continue;
+    }
+    // Every other datatype stores its payload directly and unshifted.
+    for (uint64_t payload :
+         {uint64_t{0}, uint64_t{17},
+          ad_utility::bitMaskForLowerBits(oldNumDataBits)}) {
+      Id converted = convertId(oldFormatId(datatypeBits, payload));
+      EXPECT_EQ(converted.getDatatype(), datatype);
+      EXPECT_EQ(converted.getBits().payload_, payload);
     }
   }
 }
 
 // _____________________________________________________________________________
 TEST(IndexFormatConverter, convertIdPreservesTheOrder) {
-  // The conversion of a permutation relies on the order of the `Id`s being
-  // preserved, so that the converted permutation is still sorted.
+  // Permutation conversion relies on `Id` order being preserved. `Double`/
+  // `Int` are covered separately below in this test: an arbitrary raw
+  // payload isn't order-preserving for them until decoded to its value.
   std::vector<Id> convertedIds;
-  for (uint64_t datatypeBits = 0; datatypeBits < 12; ++datatypeBits) {
-    if (datatypeBits == static_cast<uint64_t>(Datatype::LocalVocabIndex)) {
+  for (uint8_t datatypeBits = 0;
+       datatypeBits <= static_cast<uint8_t>(Datatype::MaxValue);
+       ++datatypeBits) {
+    auto datatype = static_cast<Datatype>(datatypeBits);
+    if (datatype == Datatype::LocalVocabIndex ||
+        datatype == Datatype::Double || datatype == Datatype::Int) {
       continue;
     }
-    for (uint64_t value : {uint64_t{0}, uint64_t{17}}) {
-      convertedIds.push_back(convertId(oldFormatId(datatypeBits, value)));
+    for (uint64_t payload : {uint64_t{0}, uint64_t{17}}) {
+      convertedIds.push_back(convertId(oldFormatId(datatypeBits, payload)));
     }
   }
   EXPECT_TRUE(ql::ranges::is_sorted(convertedIds));
   EXPECT_TRUE(ql::ranges::adjacent_find(convertedIds) == convertedIds.end());
+
+  // `ValueId`'s ordering ("positive doubles ascending, then negative doubles
+  // reversed" for `Double`, "positive then negative ascending" for `Int`)
+  // holds identically in both formats, so listing values in that order and
+  // checking the conversion keeps them sorted is a meaningful check.
+  std::vector<Id> convertedDoubles;
+  for (double value : {0.0, 1.0, 3.5, 1e10, -1.0, -3.5, -1e10}) {
+    uint64_t rawBits = absl::bit_cast<uint64_t>(value) >> oldNumDatatypeBits;
+    convertedDoubles.push_back(convertId(
+        oldFormatId(static_cast<uint64_t>(Datatype::Double), rawBits)));
+  }
+  EXPECT_TRUE(ql::ranges::is_sorted(convertedDoubles));
+
+  std::vector<Id> convertedInts;
+  for (int64_t value : {int64_t{0}, int64_t{1}, int64_t{1000}, int64_t{-1000},
+                        int64_t{-1}}) {
+    uint64_t payload = ad_utility::NBitInteger<oldNumDataBits>::toNBit(value);
+    convertedInts.push_back(
+        convertId(oldFormatId(static_cast<uint64_t>(Datatype::Int), payload)));
+  }
+  EXPECT_TRUE(ql::ranges::is_sorted(convertedInts));
 }
 
 // _____________________________________________________________________________
@@ -220,9 +289,10 @@ TEST(IndexFormatConverter, convertIdOfInvalidId) {
       convertId(
           oldFormatId(static_cast<uint64_t>(Datatype::LocalVocabIndex), 17)),
       HasSubstr("must never be stored on disk"));
-  // The previous format had 12 datatypes, so the four remaining values of the
-  // datatype bits are invalid.
-  for (uint64_t datatypeBits = 12; datatypeBits < 16; ++datatypeBits) {
+  // The datatype bits are 4 bits wide, so values beyond `Datatype::MaxValue`
+  // are invalid.
+  for (uint64_t datatypeBits = static_cast<uint64_t>(Datatype::MaxValue) + 1;
+       datatypeBits < 16; ++datatypeBits) {
     AD_EXPECT_THROW_WITH_MESSAGE(convertId(oldFormatId(datatypeBits, 17)),
                                  HasSubstr("invalid datatype"));
   }
@@ -364,11 +434,11 @@ TEST_F(IndexFormatConverterTest, convertedIndexHasPatternsAndTextIndex) {
 
 // _____________________________________________________________________________
 TEST_F(IndexFormatConverterTest, convertedMaterializedView) {
-  // The version of the on-disk format of the materialized views was raised
-  // together with the index format, so the view of the index in the previous
-  // format cannot be loaded.
-  AD_EXPECT_THROW_WITH_MESSAGE(MaterializedView(oldBasename_, "testview"),
-                               HasSubstr("saved with format version 1"));
+  // This transition leaves a view's own `version` metadata unchanged (see
+  // `materializedViewsVersionOfSourceFormat`), so it cannot detect the still
+  // incompatible `Id` byte layout in the view's permutation; loading it
+  // directly fails, but without a graceful, user-facing message.
+  EXPECT_ANY_THROW(MaterializedView(oldBasename_, "testview"));
 
   convertIndexToCurrentFormat(oldBasename_, newBasename_);
 
@@ -512,17 +582,19 @@ TEST_F(IndexFormatConverterTest, refusesToConvertUnsuitableMaterializedViews) {
   std::string viewBasename =
       materializedViewFilenameBase(oldBasename_, "testview");
 
-  // A view that is not in the format version that belongs to the source format
-  // of the converter.
+  // A view not in the converter's source format version. The source format's
+  // views already have the current `MATERIALIZED_VIEWS_VERSION`, so the
+  // "wrong" version here must be some other, genuinely unsuitable value.
   std::string viewInfoFilename = absl::StrCat(viewBasename, VIEW_INFO_SUFFIX);
   nlohmann::json viewInfo;
   ad_utility::makeIfstream(viewInfoFilename) >> viewInfo;
   auto originalViewInfo = viewInfo;
-  viewInfo["version"] = MATERIALIZED_VIEWS_VERSION;
+  viewInfo["version"] = MATERIALIZED_VIEWS_VERSION + 1;
   ad_utility::makeOfstream(viewInfoFilename) << viewInfo.dump();
   AD_EXPECT_THROW_WITH_MESSAGE(
       convertIndexToCurrentFormat(oldBasename_, newBasename_),
-      HasSubstr("only converts views in the format version 1"));
+      HasSubstr(absl::StrCat("only converts views in the format version ",
+                              MATERIALIZED_VIEWS_VERSION)));
   ad_utility::makeOfstream(viewInfoFilename) << originalViewInfo.dump();
 
   // A view of which only some of its files exist. Note that the file that is
@@ -556,25 +628,167 @@ TEST_F(IndexFormatConverterTest, equalBasenamesAreAUserFacingError) {
       HasSubstr("has to differ from the base name"));
 }
 
-// A fixture for the conversion of indexes with properties that the checked-in
-// index in the previous format (see `oldIndexDirectory` above) does not have:
-// permutations with more than one block, empty permutations, and a relation
-// that is large enough to have a metadata entry of its own. That index has
-// exactly one block per permutation and only tiny relations, and it cannot be
-// changed, because the current code can no longer create an index in that
-// format. The tests below therefore build an index with the *current* index
-// builder and pretend that it is in the previous format, which works because
-// the two formats differ only in the numbering of the datatypes:
+// The exact inverse of `LegacyId::convert`: encode a current-format `Id` as
+// the raw bits of the previous (4 datatype bits + 60 payload bits) format.
+// Used to "downgrade" a current-format index into synthetic fixtures for
+// `MultiBlockIndexFormatConverterTest` below.
+uint64_t legacyBitsFromId(Id id) {
+  auto bits = id.getBits();
+  auto datatype = static_cast<Datatype>(bits.datatype_);
+  uint64_t payload = bits.payload_;
+  if (datatype == Datatype::Double || datatype == Datatype::EncodedVal) {
+    payload = payload >> oldNumDatatypeBits;
+  } else if (datatype == Datatype::Int) {
+    payload = ad_utility::NBitInteger<oldNumDataBits>::toNBit(id.getInt());
+  }
+  return oldFormatId(bits.datatype_, payload);
+}
+
+// A previous-format `Id`/`PermutedTriple`, laid out like `LegacyId`/
+// `LegacyPermutedTriple` expect to read them. Write-only: `legacyBitsFromId`
+// above already covers the only needed conversion direction.
+struct TestLegacyId {
+  uint64_t bits_;
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(TestLegacyId, T);
+};
+struct TestLegacyPermutedTriple {
+  TestLegacyId col0Id_;
+  TestLegacyId col1Id_;
+  TestLegacyId col2Id_;
+  TestLegacyId graphId_;
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(TestLegacyPermutedTriple, T);
+};
+
+// Mirrors `LegacyCompressedBlockMetadata` (see `IndexFormatConverter.cpp`)
+// field for field, so that it serializes to exactly the bytes that the
+// converter's own `LegacyCompressedBlockMetadata` reads.
+struct TestLegacyBlockMetadata {
+  std::vector<CompressedBlockMetadata::OffsetAndCompressedSize>
+      offsetsAndCompressedSize_;
+  size_t numRows_;
+  TestLegacyPermutedTriple firstTriple_;
+  TestLegacyPermutedTriple lastTriple_;
+  std::optional<std::vector<TestLegacyId>> graphInfo_;
+  bool containsDuplicatesWithDifferentGraphs_;
+  size_t blockIndex_;
+};
+AD_SERIALIZE_FUNCTION(TestLegacyBlockMetadata) {
+  serializer | arg.offsetsAndCompressedSize_;
+  serializer | arg.numRows_;
+  serializer | arg.firstTriple_;
+  serializer | arg.lastTriple_;
+  serializer | arg.graphInfo_;
+  serializer | arg.containsDuplicatesWithDifferentGraphs_;
+  serializer | arg.blockIndex_;
+}
+
+// Write `allRows` (from `scanAllColumns`) to `filename` as a *previous*-
+// format permutation file, split into blocks per `blockMetadata` (the
+// *current* format's block boundaries of the same, unconverted permutation;
+// row counts and first/last triples are reused, `Id`s downgraded via
+// `legacyBitsFromId`). `graphInfo_`/`containsDuplicatesWithDifferentGraphs_`/
+// `blockIndex_` are set to innocuous constants: the converter recomputes
+// them fresh and never reads them from the source format.
 //
-// The conversion of an `Id` is the identity for every datatype that precedes
-// `Datatype::SecondaryVocabIndex` (which is the datatype that was inserted, see
-// `datatypesOfSourceFormat`). This includes `Datatype::Undefined`,
-// `Datatype::Int`, and `Datatype::VocabIndex`, so an index whose input consists
-// only of IRIs contains only `Id`s that are converted to themselves (the
-// pattern columns hold integers, the graph column holds an IRI). Converting
-// such an index has to yield an index with exactly the same content, and
-// `convertAndExpectTheSameContent` below checks both that premise and that
-// result.
+// Exists so `MultiBlockIndexFormatConverterTest` can build varying fixtures
+// dynamically instead of needing more checked-in binaries like
+// `test/data/oldIndexFormat`.
+void writeLegacyPermutationFile(
+    const std::string& filename, size_t numColumns,
+    const std::vector<CompressedBlockMetadata>& blockMetadata,
+    const IdTable& allRows) {
+  ad_utility::File file{filename, "w"};
+  std::vector<TestLegacyBlockMetadata> blocks;
+  blocks.reserve(blockMetadata.size());
+  size_t rowOffset = 0;
+  for (size_t blockIdx = 0; blockIdx < blockMetadata.size(); ++blockIdx) {
+    size_t numRows = blockMetadata[blockIdx].numRows_;
+    std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
+    offsets.reserve(numColumns);
+    for (size_t col = 0; col < numColumns; ++col) {
+      std::vector<uint64_t> legacyBits;
+      legacyBits.reserve(numRows);
+      for (size_t row = rowOffset; row < rowOffset + numRows; ++row) {
+        legacyBits.push_back(legacyBitsFromId(allRows(row, col)));
+      }
+      auto compressed = ZstdWrapper::compress(
+          legacyBits.data(), legacyBits.size() * sizeof(uint64_t));
+      off_t offsetInFile = file.tell();
+      file.write(compressed.data(), compressed.size());
+      offsets.push_back({offsetInFile, compressed.size()});
+    }
+    auto tripleAt = [&](size_t row) {
+      return TestLegacyPermutedTriple{
+          TestLegacyId{legacyBitsFromId(allRows(row, 0))},
+          TestLegacyId{legacyBitsFromId(allRows(row, 1))},
+          TestLegacyId{legacyBitsFromId(allRows(row, 2))},
+          TestLegacyId{legacyBitsFromId(allRows(row, 3))}};
+    };
+    blocks.push_back(TestLegacyBlockMetadata{
+        std::move(offsets), numRows, tripleAt(rowOffset),
+        tripleAt(rowOffset + numRows - 1), std::nullopt, false, blockIdx});
+    rowOffset += numRows;
+  }
+  off_t startOfMeta = file.tell();
+  ad_utility::serialization::FileWriteSerializer serializer{std::move(file)};
+  uint64_t magicNumber = MAGIC_NUMBER_FOR_SERIALIZATION;
+  serializer << magicNumber;
+  uint64_t version = V_CURRENT;
+  serializer << version;
+  std::string name;
+  serializer << name;
+  serializer << blocks;
+  off_t offsetAfter = 0;
+  serializer << offsetAfter;
+  size_t totalElements = rowOffset;
+  serializer << totalElements;
+  size_t numDistinctCol0 = 0;
+  serializer << numDistinctCol0;
+  file = std::move(serializer).file();
+  file.write(&startOfMeta, sizeof(startOfMeta));
+}
+
+// The counterpart of `writeLegacyPermutationFile` for the patterns file (if
+// the index at `basename` has one), mirroring `convertPatterns` in
+// `IndexFormatConverter.cpp` in the write direction.
+void downgradePatternsFile(const std::string& basename) {
+  std::string filename = absl::StrCat(basename, PATTERNS_FILE_SUFFIX);
+  if (!fs::exists(filename)) {
+    return;
+  }
+  PatternStatistics statistics;
+  CompactVectorOfStrings<Id> patterns;
+  {
+    ad_utility::serialization::FileReadSerializer reader{filename};
+    reader >> statistics;
+    reader >> patterns;
+  }
+  std::vector<std::vector<TestLegacyId>> converted;
+  converted.reserve(patterns.size());
+  for (auto pattern : patterns) {
+    std::vector<TestLegacyId> convertedPattern;
+    convertedPattern.reserve(pattern.size());
+    for (Id id : pattern) {
+      convertedPattern.push_back(TestLegacyId{legacyBitsFromId(id)});
+    }
+    converted.push_back(std::move(convertedPattern));
+  }
+  CompactVectorOfStrings<TestLegacyId> legacyPatterns{converted};
+  ad_utility::serialization::FileWriteSerializer writer{filename};
+  writer << statistics;
+  writer << legacyPatterns;
+}
+
+// A fixture for indexes with properties the checked-in previous-format index
+// (`oldIndexDirectory` above) can't have (it has exactly one block per
+// permutation and only tiny relations, and can no longer be regenerated):
+// multi-block permutations, empty permutations, a relation large enough for
+// its own metadata entry. Built with the *current* index builder, then
+// downgraded in place (see `writeLegacyPermutationFile`/
+// `downgradePatternsFile` above), so fixtures stay dynamic instead of more
+// checked-in binaries.
 class MultiBlockIndexFormatConverterTest : public ::testing::Test {
  protected:
   // The directory of this test, which contains both the index that is converted
@@ -621,13 +835,38 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
         *locatedTriples);
   }
 
-  // Return true iff the conversion of an `Id` is the identity for every `Id` of
-  // the given `table`, which is the premise of this fixture.
-  static bool allIdsAreConvertedToThemselves(const IdTable& table) {
-    return ql::ranges::all_of(table.getColumns(), [](const auto& column) {
-      return ql::ranges::all_of(column,
-                                [](Id id) { return convertId(id) == id; });
-    });
+  // Downgrade `oldIndex`'s permutation files (plus its patterns file, if
+  // any) at `oldBasename_` to the previous format, in place, via
+  // `writeLegacyPermutationFile`/`downgradePatternsFile`.
+  // `pretendThatTheIndexIsInThePreviousFormat` must still be called
+  // afterwards for the converter to accept the downgraded files.
+  void downgradeIndexToLegacyFormat(
+      const Index& oldIndex, const std::vector<Permutation::Enum>& permutations,
+      const LocatedTriplesSharedState& locatedTriples) {
+    auto downgrade = [&](const Permutation& permutation, bool isInternal) {
+      // An empty permutation needs no downgrading: with zero blocks, the
+      // trailing metadata serializes to just its length (0), which already
+      // parses correctly as either format's trailer.
+      if (permutation.metaData().blockData().empty()) {
+        return;
+      }
+      std::string filename = absl::StrCat(
+          oldBasename_, isInternal ? QLEVER_INTERNAL_INDEX_INFIX : "",
+          PERMUTATION_FILE_INFIX, permutation.fileSuffix());
+      writeLegacyPermutationFile(filename, numColumnsOnDisk(permutation),
+                                 permutation.metaData().blockData(),
+                                 scanAllColumns(permutation, locatedTriples));
+    };
+    for (auto permutationEnum : permutations) {
+      downgrade(oldIndex.getImpl().getPermutation(permutationEnum), false);
+    }
+    downgrade(
+        oldIndex.getImpl().getPermutation(Permutation::PSO).internalPermutation(),
+        true);
+    downgrade(
+        oldIndex.getImpl().getPermutation(Permutation::POS).internalPermutation(),
+        true);
+    downgradePatternsFile(oldBasename_);
   }
 
   // Set the index format version in the configuration of the index at
@@ -690,13 +929,8 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
             oldIndex.getImpl().getPermutation(permutationEnum);
         numBlocks.push_back(permutation.metaData().blockData().size());
         expectedContent.push_back(scanAllColumns(permutation, locatedTriples));
-        // Check the premise of this fixture. Without this check, a future
-        // change of the index builder (say, one that stores the graph column as
-        // an encoded IRI) would silently turn these tests into no-ops or let
-        // them fail for the wrong reason.
-        EXPECT_TRUE(allIdsAreConvertedToThemselves(expectedContent.back()))
-            << Permutation::toString(permutationEnum);
       }
+      downgradeIndexToLegacyFormat(oldIndex, permutations, locatedTriples);
     }
     pretendThatTheIndexIsInThePreviousFormat();
 
@@ -865,8 +1099,12 @@ TEST_F(MultiBlockIndexFormatConverterTest, relationWithItsOwnMetadata) {
   // triples per block, which is the same block size that the index that is
   // converted is built with (see `convertAndExpectTheSameContent` above). A
   // relation with two rows then already is large enough.
+  //
+  // Two rows per block means two `Id`s (16 bytes each in the current format)
+  // per column per block, i.e. 32 bytes, matching the default
+  // `blocksizePermutations` of `TestIndexConfig` (see `IndexTestHelpers.h`).
   ad_utility::MemorySize previousBlocksize = blocksizeOfConvertedPermutations();
-  blocksizeOfConvertedPermutations() = 16_B;
+  blocksizeOfConvertedPermutations() = 32_B;
   absl::Cleanup restoreBlocksize = [previousBlocksize]() {
     blocksizeOfConvertedPermutations() = previousBlocksize;
   };

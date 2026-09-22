@@ -49,11 +49,14 @@
 #include "util/CancellationHandle.h"
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
+#include "util/NBitInteger.h"
 #include "util/ProgressBar.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/json.h"
 
 namespace qlever::indexFormatConverter {
@@ -68,58 +71,245 @@ std::string versionAsString(const IndexFormatVersion& version) {
                       ", Date = ", version.date_.toStringAndType().first);
 }
 
-// The `Datatype`s of the source format (see `sourceVersion`), in the order of
-// the numeric values that they had in that format. In other words, an `Id`
-// whose datatype bits are `i` in the source format is an `Id` of datatype
-// `datatypesOfSourceFormat[i]` in the target format. The only difference
-// between the two formats is that `Datatype::SecondaryVocabIndex` was inserted
-// (see the note there), which is why this array is exactly the current enum
-// without that datatype.
-constexpr std::array<Datatype, 12> datatypesOfSourceFormat{
-    Datatype::Undefined,
-    Datatype::Bool,
-    Datatype::Int,
-    Datatype::Double,
-    Datatype::VocabIndex,
-    Datatype::LocalVocabIndex,
-    Datatype::TextRecordIndex,
-    Datatype::Date,
-    Datatype::GeoPoint,
-    Datatype::WordVocabIndex,
-    Datatype::BlankNodeIndex,
-    Datatype::EncodedVal};
+// The source format's `Id` bit layout (see `global/ValueId.h` as of
+// `qlever::previousIndexFormatVersion`): 4 datatype bits + a 60-bit payload
+// in one 64-bit word. Datatype numbering is unchanged from the target
+// format; only the payload width (and, for a few datatypes, its encoding)
+// differs -- see `convert()` below.
+struct LegacyId {
+  static constexpr uint8_t numDatatypeBits = 4;
+  static constexpr uint8_t numDataBits = 64 - numDatatypeBits;
+  static constexpr uint64_t payloadMask =
+      ad_utility::bitMaskForLowerBits(numDataBits);
 
-// Return true iff `datatypes` is strictly ascending. NOTE: This is `consteval`,
-// because it is only ever used in the `static_assert` below.
-QL_CONSTEVAL bool isStrictlyAscending(
-    const std::array<Datatype, 12>& datatypes) noexcept {
-  for (size_t i = 1; i < datatypes.size(); ++i) {
-    if (!(datatypes[i - 1] < datatypes[i])) {
-      return false;
-    }
+  uint64_t bits_;
+
+  uint8_t datatypeBits() const noexcept {
+    return static_cast<uint8_t>(bits_ >> numDataBits);
   }
-  return true;
+  uint64_t payload() const noexcept { return bits_ & payloadMask; }
+
+  // Convert to the target format's `Id`. Throws on an invalid datatype or on
+  // `LocalVocabIndex` (never valid on disk, see `convertId` in the header).
+  // Most datatypes just zero-extend the payload into the wider field. Three
+  // need actual re-encoding, because the source format packs their value
+  // differently depending on the payload width: `Double` stores the
+  // IEEE-754 bits shifted right by `numDatatypeBits` (shifting back left
+  // restores them); `Int` uses a 60-bit two's complement encoding
+  // (`NBitInteger<60>`), decoded and re-encoded via `Id::makeFromInt`;
+  // `EncodedVal` (`EncodedIriManager.h`) uses the entire payload width like
+  // `Double` and is shifted the same way.
+  Id convert() const {
+    auto datatypeBits = this->datatypeBits();
+    if (datatypeBits > static_cast<uint8_t>(Datatype::MaxValue)) {
+      throw std::runtime_error{absl::StrCat(
+          "Encountered an `Id` with the invalid datatype ",
+          static_cast<int>(datatypeBits),
+          ", the index that is converted is corrupted")};
+    }
+    auto datatype = static_cast<Datatype>(datatypeBits);
+    if (datatype == Datatype::LocalVocabIndex) {
+      throw std::runtime_error{
+          "Encountered an `Id` of type `LocalVocabIndex`, which must never be "
+          "stored on disk (it holds a pointer into the memory of the process "
+          "that created it), so the index that is converted is corrupted"};
+    }
+    if (datatype == Datatype::Double) {
+      return Id::fromBits(
+          {static_cast<uint8_t>(datatype), payload() << numDatatypeBits});
+    }
+    if (datatype == Datatype::Int) {
+      return Id::makeFromInt(
+          ad_utility::NBitInteger<numDataBits>::fromNBit(payload()));
+    }
+    if (datatype == Datatype::EncodedVal) {
+      return Id::fromBits(
+          {static_cast<uint8_t>(datatype), payload() << numDatatypeBits});
+    }
+    return Id::fromBits({static_cast<uint8_t>(datatype), payload()});
+  }
+
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(LegacyId, T);
+};
+
+// Mirrors `CompressedBlockMetadata::PermutedTriple` with `LegacyId` in place
+// of `Id`, so the generic `ad_utility::serialization` framework can read it
+// from a source-format permutation file; converted via `convert()` on read.
+struct LegacyPermutedTriple {
+  LegacyId col0Id_;
+  LegacyId col1Id_;
+  LegacyId col2Id_;
+  LegacyId graphId_;
+
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(LegacyPermutedTriple, T);
+};
+
+// Mirrors `CompressedBlockMetadata`, field for field, with
+// `LegacyPermutedTriple`/`LegacyId` in place of `PermutedTriple`/`Id`, so the
+// same (de)serialization code parses a source-format permutation's per-block
+// metadata correctly. `OffsetAndCompressedSize` is reused as is: it stores a
+// file offset and byte count, neither of which depends on the width of `Id`.
+struct LegacyCompressedBlockMetadata {
+  std::optional<std::vector<CompressedBlockMetadata::OffsetAndCompressedSize>>
+      offsetsAndCompressedSize_;
+  size_t numRows_;
+  LegacyPermutedTriple firstTriple_;
+  LegacyPermutedTriple lastTriple_;
+  std::optional<std::vector<LegacyId>> graphInfo_;
+  bool containsDuplicatesWithDifferentGraphs_;
+  size_t blockIndex_;
+};
+
+// Field order must stay in lockstep with `CompressedBlockMetadata`'s own
+// serialization (see `CompressedRelation.h`).
+AD_SERIALIZE_FUNCTION(LegacyCompressedBlockMetadata) {
+  if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+    AD_CORRECTNESS_CHECK(arg.offsetsAndCompressedSize_.has_value());
+  } else {
+    static_assert(ad_utility::serialization::ReadSerializer<S>);
+    arg.offsetsAndCompressedSize_.emplace();
+  }
+  serializer | arg.offsetsAndCompressedSize_.value();
+  serializer | arg.numRows_;
+  serializer | arg.firstTriple_;
+  serializer | arg.lastTriple_;
+  serializer | arg.graphInfo_;
+  serializer | arg.containsDuplicatesWithDifferentGraphs_;
+  serializer | arg.blockIndex_;
 }
 
-// The conversion preserves the relative order of all datatypes of the source
-// format. This is what makes it possible to convert a permutation by rewriting
-// its `Id`s one by one: the result is still sorted, so it does not have to be
-// sorted again. If a future change of the format violates this, then this
-// converter is not applicable to it.
-static_assert(isStrictlyAscending(datatypesOfSourceFormat));
+// Everything needed from a source-format permutation's per-block metadata,
+// read from its trailing metadata blob (mirrors
+// `IndexMetaData::appendToFile`/`readFromFile`). `firstTriple_`/
+// `lastTriple_`/`totalElements_` are already converted, used only by
+// `verifyConvertedPermutation`'s sanity check. The per-relation `.meta` file
+// is deliberately never read: `writePermutation` recomputes it from the
+// converted row data.
+struct LegacyPermutationSummary {
+  size_t numColumns_;
+  size_t totalElements_;
+  CompressedBlockMetadata::PermutedTriple firstTriple_;
+  CompressedBlockMetadata::PermutedTriple lastTriple_;
+  std::vector<LegacyCompressedBlockMetadata> blocks_;
+};
 
-// Exactly one datatype was added, so no datatype of the source format was
-// removed or duplicated above.
-static_assert(datatypesOfSourceFormat.size() + 1 ==
-              static_cast<size_t>(Datatype::MaxValue) + 1);
+// Read the `LegacyPermutationSummary` of the permutation file `filename` (in
+// the source format).
+LegacyPermutationSummary readLegacyPermutationSummary(
+    const std::string& filename) {
+  ad_utility::File permutationFile{filename, "r"};
+  auto [endOfMeta, startOfMeta] = permutationFile.getLastOffset();
+  std::vector<char> buf(static_cast<size_t>(endOfMeta - startOfMeta));
+  permutationFile.read(buf.data(), buf.size(), startOfMeta);
+  ad_utility::serialization::ByteBufferReadSerializer serializer{
+      std::move(buf)};
 
-// The version of the on-disk format of the materialized views (see
-// `MATERIALIZED_VIEWS_VERSION`) that the views of an index in the source format
-// have. That version was raised together with the index format, so the views
-// have to be converted as well.
-constexpr size_t materializedViewsVersionOfSourceFormat = 1;
-static_assert(materializedViewsVersionOfSourceFormat + 1 ==
-              MATERIALIZED_VIEWS_VERSION);
+  // Mirrors `IndexMetaData`'s own `AD_SERIALIZE_FRIEND_FUNCTION` (see
+  // `IndexMetaData.h`): same fields, same order, `LegacyCompressedBlockMetadata`
+  // in place of `CompressedBlockMetadata`.
+  uint64_t magicNumber;
+  serializer | magicNumber;
+  if (magicNumber != MAGIC_NUMBER_FOR_SERIALIZATION) {
+    throw WrongFormatException{
+        "The binary format of this index is not supported by this "
+        "converter. Please rebuild the index."};
+  }
+  uint64_t version;
+  serializer | version;
+  if (version != V_CURRENT) {
+    throw WrongFormatException{
+        "The binary format of this index is not supported by this "
+        "converter. Please rebuild the index."};
+  }
+  std::string name;
+  serializer | name;
+  std::vector<LegacyCompressedBlockMetadata> blocks;
+  serializer | blocks;
+  [[maybe_unused]] off_t offsetAfter;
+  serializer | offsetAfter;
+  size_t totalElements;
+  serializer | totalElements;
+  [[maybe_unused]] size_t numDistinctCol0;
+  serializer | numDistinctCol0;
+
+  auto convertTriple = [](const LegacyPermutedTriple& triple) {
+    return CompressedBlockMetadata::PermutedTriple{
+        triple.col0Id_.convert(), triple.col1Id_.convert(),
+        triple.col2Id_.convert(), triple.graphId_.convert()};
+  };
+  size_t numColumns =
+      blocks.empty() ? NumColumnsIndexBuilding
+                     : blocks.front().offsetsAndCompressedSize_->size();
+  CompressedBlockMetadata::PermutedTriple firstTriple{};
+  CompressedBlockMetadata::PermutedTriple lastTriple{};
+  if (!blocks.empty()) {
+    firstTriple = convertTriple(blocks.front().firstTriple_);
+    lastTriple = convertTriple(blocks.back().lastTriple_);
+  }
+  return {numColumns, totalElements, firstTriple, lastTriple,
+         std::move(blocks)};
+}
+
+// Read, decompress, and convert the column at `offset` (which holds `numRows`
+// `Id`s in the source format) from `file`.
+std::vector<Id> readAndConvertLegacyColumn(
+    const ad_utility::File& file,
+    const CompressedBlockMetadata::OffsetAndCompressedSize& offset,
+    size_t numRows) {
+  std::vector<char> compressed(offset.compressedSize_);
+  file.read(compressed.data(), offset.compressedSize_, offset.offsetInFile_);
+  std::vector<LegacyId> legacyIds(numRows);
+  auto numBytesRead = ZstdWrapper::decompressToBuffer(
+      compressed.data(), compressed.size(), legacyIds.data(),
+      numRows * sizeof(LegacyId));
+  AD_CORRECTNESS_CHECK(numBytesRead == numRows * sizeof(LegacyId));
+  std::vector<Id> result;
+  result.reserve(numRows);
+  for (const auto& legacyId : legacyIds) {
+    result.push_back(legacyId.convert());
+  }
+  return result;
+}
+
+// Counterpart of `scanAndConvertIds` for a source-format permutation: a lazy
+// range converting one block at a time. `summary` is taken by reference, not
+// by value: the per-block transform only reads a block, and both call sites
+// need `summary` again afterward (for `verifyConvertedPermutation`), so a
+// copy of `summary.blocks_` would be wasted. Safe because both callers
+// consume the returned range synchronously via `writePermutation` before
+// touching `summary` again.
+ad_utility::InputRangeTypeErased<IdTableStatic<0>> legacyScanAndConvert(
+    std::string filename, const LegacyPermutationSummary& summary,
+    std::function<void(size_t)> progress) {
+  auto transformed =
+      summary.blocks_ |
+      ql::views::transform(
+          [filename = std::move(filename), numColumns = summary.numColumns_,
+           progress = std::move(progress)](
+              const LegacyCompressedBlockMetadata& block) {
+            ad_utility::File file{filename, "r"};
+            IdTableStatic<0> table{numColumns,
+                                   ad_utility::makeUnlimitedAllocator<Id>()};
+            table.resize(block.numRows_);
+            const auto& offsets = block.offsetsAndCompressedSize_.value();
+            for (size_t col = 0; col < numColumns; ++col) {
+              auto ids =
+                  readAndConvertLegacyColumn(file, offsets.at(col), block.numRows_);
+              ql::ranges::copy(ids, table.getColumn(col).begin());
+            }
+            progress(block.numRows_);
+            return table;
+          });
+  return ad_utility::InputRangeTypeErased{std::move(transformed)};
+}
+
+// The `MATERIALIZED_VIEWS_VERSION` of a source-format index's views: this
+// transition does not change a view's own metadata format (only the `Id`s in
+// its permutation, see `LegacyId` above), so it's already the current one.
+constexpr size_t materializedViewsVersionOfSourceFormat =
+    MATERIALIZED_VIEWS_VERSION;
 
 // The permutations of an index, as pairs of "twins" (like `PSO` and `POS`),
 // together with the information whether the pair is the pair of internal
@@ -230,57 +420,6 @@ void throwIfPersistedUpdatesExist(const std::string& basename) {
   }
 }
 
-// An empty `LocatedTriplesState` for the given `permutation`, which is what a
-// scan of that permutation requires. It is empty because the index that is
-// converted has no delta triples (see `throwIfPersistedUpdatesExist` above).
-std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState(
-    const Permutation& permutation) {
-  LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
-  emptyLocatedTriples.at(static_cast<size_t>(permutation.permutation()))
-      .setOriginalMetadata(permutation.metaData().blockDataShared());
-  // NOTE: The located triples of the internal permutations deliberately stay
-  // untouched. `loadPermutation` below loads every permutation with
-  // `Permutation::Type::NORMAL`, including the internal ones, so a scan always
-  // looks up its located triples in the array above.
-  LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
-  LocalVocab emptyVocab;
-  return std::make_shared<LocatedTriplesState>(
-      LocatedTriplesState{emptyLocatedTriples, emptyInternalLocatedTriples,
-                          emptyVocab.getLifetimeExtender(), 0});
-}
-
-// Return the number of columns that the given `permutation` has on disk. Note
-// that this is not stored explicitly, but can be read off the metadata of any
-// of its blocks.
-size_t getNumColumns(const Permutation& permutation) {
-  const auto& blocks = permutation.metaData().blockData();
-  if (blocks.empty()) {
-    // The permutation is empty, so its number of columns is irrelevant. Use the
-    // minimum, which is what the index builder would use.
-    return NumColumnsIndexBuilding;
-  }
-  const auto& offsets = blocks.front().offsetsAndCompressedSize_;
-  AD_CORRECTNESS_CHECK(offsets.has_value(),
-                       "A block that was read from disk always knows the "
-                       "offsets of its columns");
-  return offsets.value().size();
-}
-
-// Return the columns of a permutation with `numColumns` columns that a scan has
-// to request explicitly, that is, all columns except for the three columns of
-// the (permuted) triple itself. These are the graph column and, for the
-// permutations that store the patterns, the two pattern columns.
-std::vector<ColumnIndex> getAdditionalColumns(size_t numColumns) {
-  AD_CORRECTNESS_CHECK(numColumns >= NumColumnsIndexBuilding);
-  std::vector<ColumnIndex> additionalColumns;
-  for (size_t column = NumColumnsIndexBuilding - 1; column < numColumns;
-       ++column) {
-    additionalColumns.push_back(static_cast<ColumnIndex>(column));
-  }
-  AD_CORRECTNESS_CHECK(additionalColumns.at(0) == ADDITIONAL_COLUMN_GRAPH_ID);
-  return additionalColumns;
-}
-
 // Return a callback for the given `progressBar`, which reports that `numSteps`
 // steps have been processed and displays an update when one is due. The
 // callback is threadsafe (see `ConcurrentProgressBar`), which matters because
@@ -310,55 +449,6 @@ std::function<void(size_t)> progressCallbackFor(
 // lines per phase (`IndexRebuilder.cpp`).
 size_t batchSizeFor(size_t total) {
   return std::max<size_t>(total / 1000, 100'000);
-}
-
-// Return a lazy full scan of `permutation` in which all `Id`s are converted to
-// the current index format, reporting the number of triples of each block to
-// `progress`. The returned range has to be consumed before `permutation` is
-// destroyed.
-ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
-    const Permutation& permutation, std::function<void(size_t)> progress) {
-  auto locatedTriplesState = makeEmptyLocatedTriplesState(permutation);
-  auto scanSpecAndBlocks = permutation.getScanSpecAndBlocks(
-      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
-      *locatedTriplesState);
-  auto additionalColumns = getAdditionalColumns(getNumColumns(permutation));
-  // The cancellation handle of the scan, which never cancels anything.
-  //
-  // NOTE: The scan stores a *reference* to this `SharedCancellationHandle` (see
-  // the `Generator` in `CompressedRelationReader::lazyScan`), not a copy of it.
-  // It is therefore not enough that the `CancellationHandle` stays alive, the
-  // `shared_ptr` that holds it has to stay alive as well, and at an address
-  // that does not change. That is what this extra indirection is for: the
-  // `unique_ptr` is moved into the lambda below (which keeps everything alive
-  // that the scan borrows), and moving it does not move its pointee. Note that
-  // a scan only touches the handle if the permutation has more than one block,
-  // so getting this wrong is not caught by a test with a tiny permutation.
-  auto cancellationHandle =
-      std::make_unique<ad_utility::SharedCancellationHandle>(
-          std::make_shared<ad_utility::CancellationHandle<>>());
-  // NOTE: Deliberately no structured binding, because the members are captured
-  // by the lambda below, which is only valid in C++20.
-  auto scanWithReader = permutation.lazyScanWithUnlimitedReader(
-      scanSpecAndBlocks, additionalColumns, *cancellationHandle,
-      *locatedTriplesState);
-
-  // NOTE: The scan borrows the `reader`, the `locatedTriplesState` and the
-  // `cancellationHandle`, so all of them are moved into the transformation
-  // below to keep them alive for as long as the returned range is.
-  return ad_utility::InputRangeTypeErased{
-      ad_utility::CachingTransformInputRange{
-          std::move(scanWithReader.blocks_),
-          [reader = std::move(scanWithReader.reader_),
-           locatedTriplesState = std::move(locatedTriplesState),
-           cancellationHandle = std::move(cancellationHandle),
-           progress = std::move(progress)](IdTable& idTable) {
-            for (auto column : idTable.getColumns()) {
-              ql::ranges::for_each(column, [](Id& id) { id = convertId(id); });
-            }
-            progress(idTable.numRows());
-            return IdTableStatic<0>{std::move(idTable)};
-          }}};
 }
 
 // Write the given `blocks` as a single permutation to the file `filename`, and
@@ -394,8 +484,8 @@ IndexMetaData writePermutation(
           metaData.add(relationMetadata);
         }
       };
-  // The blocks already are in the correct order (the conversion does not change
-  // the order of the `Id`s, see `datatypesOfSourceFormat` above), so the
+  // The blocks already are in the correct order (the conversion does not
+  // change the order of the `Id`s, see `LegacyId::convert` above), so the
   // identity is the correct key order here.
   auto [numDistinctCol0, blockMetadata] =
       CompressedRelationWriter::createPermutation(
@@ -415,10 +505,13 @@ void writeMetaData(IndexMetaData& metaData, const std::string& filename) {
 }
 
 // Check that the permutation that was written (`newMetaData`) has the same
-// content as the permutation that it was converted from (`oldMetaData`). Only
+// content as the permutation that it was converted from (`oldSummary`). Only
 // the number of triples and the first and last triple are compared, which is
 // cheap because it only looks at the metadata that is in memory anyway.
-void verifyConvertedPermutation(const IndexMetaData& oldMetaData,
+// `oldSummary`'s `firstTriple_`/`lastTriple_` are already converted (see
+// `readLegacyPermutationSummary`), so they are compared to `newMetaData`'s
+// directly, without calling `convertId` again.
+void verifyConvertedPermutation(const LegacyPermutationSummary& oldSummary,
                                 const IndexMetaData& newMetaData,
                                 const std::string& filename) {
   // NOTE: This can only fail if the converter itself is broken, hence a
@@ -429,22 +522,14 @@ void verifyConvertedPermutation(const IndexMetaData& oldMetaData,
         "\" does not have the same content as the permutation it was converted "
         "from. The converted index is incomplete and has to be deleted.");
   };
-  check(oldMetaData.totalElements() == newMetaData.totalElements());
-  const auto& oldBlocks = oldMetaData.blockData();
+  check(oldSummary.totalElements_ == newMetaData.totalElements());
   const auto& newBlocks = newMetaData.blockData();
-  check(oldBlocks.empty() == newBlocks.empty());
-  if (oldBlocks.empty()) {
+  check(oldSummary.blocks_.empty() == newBlocks.empty());
+  if (oldSummary.blocks_.empty()) {
     return;
   }
-  auto convertTriple = [](CompressedBlockMetadata::PermutedTriple triple) {
-    return CompressedBlockMetadata::PermutedTriple{
-        convertId(triple.col0Id_), convertId(triple.col1Id_),
-        convertId(triple.col2Id_), convertId(triple.graphId_)};
-  };
-  check(convertTriple(oldBlocks.front().firstTriple_) ==
-        newBlocks.front().firstTriple_);
-  check(convertTriple(oldBlocks.back().lastTriple_) ==
-        newBlocks.back().lastTriple_);
+  check(oldSummary.firstTriple_ == newBlocks.front().firstTriple_);
+  check(oldSummary.lastTriple_ == newBlocks.back().lastTriple_);
 }
 
 // Whether the index with the base name `basename` has the given permutation.
@@ -457,26 +542,28 @@ bool hasPermutation(const std::string& basename,
   return fs::exists(filenameForPermutation(basename, permutation, isInternal));
 }
 
-// Load the given `permutation` of the index with the base name `basename` from
-// disk. Return `nullptr` if it does not exist.
-std::unique_ptr<Permutation> loadPermutation(const std::string& basename,
-                                             Permutation::Enum permutationEnum,
-                                             bool isInternal) {
-  if (!hasPermutation(basename, permutationEnum, isInternal)) {
-    return nullptr;
-  }
-  auto permutation = std::make_unique<Permutation>(
-      permutationEnum, ad_utility::makeUnlimitedAllocator<Id>());
+// A permutation of the index in the source format, as loaded by
+// `loadPermutation` below: enough to convert it (`summary_`, plus `filename_`
+// for `legacyScanAndConvert` to reread and decompress its actual row data) and
+// to name the corresponding file of the converted index (`permutationEnum_`).
+struct LoadedLegacyPermutation {
+  Permutation::Enum permutationEnum_;
+  std::string filename_;
+  LegacyPermutationSummary summary_;
+};
 
-  // NOTE: The "Registered ... permutation" message that `loadFromDisk` logs by
-  // default is suppressed here, because it would interrupt the progress bar of
-  // `convertPermutations` below. The statistics of each permutation are in the
-  // log of the index build, and those of the upgraded index are logged when it
-  // is checked (see `checkUpgradedIndex`).
-  permutation->loadFromDisk(basenameForPermutations(basename, isInternal),
-                            false, Permutation::Type::NORMAL, {},
-                            /* logRegistration = */ false);
-  return permutation;
+// Load the given permutation of the index with the base name `basename` from
+// disk (in the source format). Return `nullopt` if it does not exist.
+std::optional<LoadedLegacyPermutation> loadPermutation(
+    const std::string& basename, Permutation::Enum permutationEnum,
+    bool isInternal) {
+  if (!hasPermutation(basename, permutationEnum, isInternal)) {
+    return std::nullopt;
+  }
+  Permutation dummy{permutationEnum, ad_utility::makeUnlimitedAllocator<Id>()};
+  std::string filename = filenameForPermutation(basename, dummy, isInternal);
+  return LoadedLegacyPermutation{permutationEnum, filename,
+                                 readLegacyPermutationSummary(filename)};
 }
 
 // The number of normal and of internal permutations that the index with the
@@ -506,17 +593,21 @@ Index::NumNormalAndInternal numPermutationsOfIndex(
 // shared between them. That is why the files of the old permutation are
 // recorded by the caller and not here, and why the progress is reported to a
 // threadsafe `progress` callback instead of being logged here.
-IndexMetaData convertPermutation(const Permutation& oldPermutation,
+IndexMetaData convertPermutation(const LoadedLegacyPermutation& oldPermutation,
                                  const std::string& newBasename,
                                  bool isInternal,
                                  const std::function<void(size_t)>& progress) {
+  Permutation dummy{oldPermutation.permutationEnum_,
+                    ad_utility::makeUnlimitedAllocator<Id>()};
   std::string newFilename =
-      filenameForPermutation(newBasename, oldPermutation, isInternal);
-  auto newMetaData =
-      writePermutation(newFilename, getNumColumns(oldPermutation),
-                       scanAndConvertIds(oldPermutation, progress));
-  newMetaData.setName(oldPermutation.metaData().getName());
-  verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
+      filenameForPermutation(newBasename, dummy, isInternal);
+  auto newMetaData = writePermutation(
+      newFilename, oldPermutation.summary_.numColumns_,
+      legacyScanAndConvert(oldPermutation.filename_, oldPermutation.summary_,
+                          progress));
+  newMetaData.setName(
+      std::string{Permutation::toString(oldPermutation.permutationEnum_)});
+  verifyConvertedPermutation(oldPermutation.summary_, newMetaData,
                              newFilename);
   return newMetaData;
 }
@@ -552,13 +643,13 @@ void convertPermutations(const std::string& oldBasename,
     bool isInternal = permutationPair.second;
     auto permutationA = loadPermutation(oldBasename, enumA, isInternal);
     auto permutationB = loadPermutation(oldBasename, enumB, isInternal);
-    if (permutationA == nullptr && permutationB == nullptr) {
+    if (!permutationA.has_value() && !permutationB.has_value()) {
       // The index does not have this pair of permutations at all, which is the
       // case for `SPO`, `SOP`, `OPS`, and `OSP` if the index was built with
       // `--only-pso-and-pos-permutations`.
       continue;
     }
-    if (permutationA == nullptr || permutationB == nullptr) {
+    if (!permutationA.has_value() || !permutationB.has_value()) {
       throw std::runtime_error{absl::StrCat(
           "The index \"", oldBasename, "\" has only one of the permutations ",
           Permutation::toString(enumA), " and ", Permutation::toString(enumB),
@@ -568,12 +659,10 @@ void convertPermutations(const std::string& oldBasename,
     // `checkAllFilesWereHandled`). This happens here and not in
     // `convertPermutation`, because `handledFiles` is shared between the two
     // conversions below, which run concurrently.
-    auto recordOldFiles = [&handledFiles, &oldBasename,
-                           isInternal](const Permutation& permutation) {
-      std::string oldFilename =
-          filenameForPermutation(oldBasename, permutation, isInternal);
-      handledFiles.emplace_back(oldFilename);
-      handledFiles.emplace_back(absl::StrCat(oldFilename, META_FILE_SUFFIX));
+    auto recordOldFiles = [&handledFiles](const LoadedLegacyPermutation& permutation) {
+      handledFiles.emplace_back(permutation.filename_);
+      handledFiles.emplace_back(
+          absl::StrCat(permutation.filename_, META_FILE_SUFFIX));
     };
     recordOldFiles(*permutationA);
     recordOldFiles(*permutationB);
@@ -591,7 +680,7 @@ void convertPermutations(const std::string& oldBasename,
     // leaves this function. That is exactly what we want: no thread must still
     // be writing to the incomplete index when the caller handles the error.
     auto convert = [&newBasename, isInternal,
-                    &progress](const Permutation& permutation) {
+                    &progress](const LoadedLegacyPermutation& permutation) {
       return convertPermutation(permutation, newBasename, isInternal, progress);
     };
     auto futureB =
@@ -602,16 +691,24 @@ void convertPermutations(const std::string& oldBasename,
     // metadata of its twin, so they have to be exchanged before the metadata is
     // written.
     newMetaA.exchangeMultiplicities(newMetaB);
-    writeMetaData(newMetaA, filenameForPermutation(newBasename, *permutationA,
-                                                   isInternal));
-    writeMetaData(newMetaB, filenameForPermutation(newBasename, *permutationB,
-                                                   isInternal));
+    Permutation dummyA{permutationA->permutationEnum_,
+                       ad_utility::makeUnlimitedAllocator<Id>()};
+    Permutation dummyB{permutationB->permutationEnum_,
+                       ad_utility::makeUnlimitedAllocator<Id>()};
+    writeMetaData(newMetaA,
+                  filenameForPermutation(newBasename, dummyA, isInternal));
+    writeMetaData(newMetaB,
+                  filenameForPermutation(newBasename, dummyB, isInternal));
   }
   progressBar.logFinalProgressString();
 }
 
 // Convert the patterns of the index with the base name `oldBasename` (if it has
 // them) and write them to the index with the base name `newBasename`.
+//
+// NOTE: `PatternCreator::readPatternsFromFile` is hardcoded to
+// `CompactVectorOfStrings<Id>`, so the patterns file is read directly
+// instead, using `CompactVectorOfStrings<LegacyId>`.
 void convertPatterns(const std::string& oldBasename,
                      const std::string& newBasename,
                      std::vector<fs::path>& handledFiles) {
@@ -622,14 +719,24 @@ void convertPatterns(const std::string& oldBasename,
   handledFiles.emplace_back(oldFilename);
   AD_LOG_INFO << "Converting the patterns ..." << std::endl;
   PatternStatistics statistics;
-  CompactVectorOfStrings<Id> patterns;
-  PatternCreator::readPatternsFromFile(
-      oldFilename, statistics.avgNumDistinctSubjectsPerPredicate_,
-      statistics.avgNumDistinctPredicatesPerSubject_,
-      statistics.numDistinctSubjectPredicatePairs_, patterns);
+  CompactVectorOfStrings<LegacyId> legacyPatterns;
+  ad_utility::serialization::FileReadSerializer patternReader{oldFilename};
+  patternReader >> statistics;
+  patternReader >> legacyPatterns;
+
+  std::vector<std::vector<Id>> converted;
+  converted.reserve(legacyPatterns.size());
+  for (auto pattern : legacyPatterns) {
+    std::vector<Id> convertedPattern;
+    convertedPattern.reserve(pattern.size());
+    for (const auto& legacyId : pattern) {
+      convertedPattern.push_back(legacyId.convert());
+    }
+    converted.push_back(std::move(convertedPattern));
+  }
   PatternCreator::writePatternsToFile(
       absl::StrCat(newBasename, PATTERNS_FILE_SUFFIX),
-      patterns.cloneAndRemap(&convertId), statistics);
+      CompactVectorOfStrings<Id>{converted}, statistics);
 }
 
 // Convert the materialized view with the given `name` of the index with the
@@ -646,22 +753,19 @@ void convertMaterializedView(const std::string& oldBasename,
   // Convert the permutation of the view. A view always is a single `SPO`
   // permutation and never has a twin, so unlike the permutations of the index
   // itself, its multiplicities are not exchanged.
-  Permutation oldPermutation{Permutation::SPO,
-                             ad_utility::makeUnlimitedAllocator<Id>(), name};
-  oldPermutation.loadFromDisk(oldViewBasename, false,
-                              Permutation::Type::MATERIALIZED_VIEW, {},
-                              /* logRegistration = */ false);
+  std::string oldFilename = absl::StrCat(oldViewBasename, VIEW_SPO_SUFFIX);
+  auto oldSummary = readLegacyPermutationSummary(oldFilename);
   std::string newFilename = absl::StrCat(newViewBasename, VIEW_SPO_SUFFIX);
-  size_t numTriples = oldPermutation.metaData().totalElements();
   ad_utility::ConcurrentProgressBar progressBar{
-      "Triples converted: ", numTriples, batchSizeFor(numTriples)};
+      "Triples converted: ", oldSummary.totalElements_,
+      batchSizeFor(oldSummary.totalElements_)};
   auto newMetaData = writePermutation(
-      newFilename, getNumColumns(oldPermutation),
-      scanAndConvertIds(oldPermutation, progressCallbackFor(progressBar)));
+      newFilename, oldSummary.numColumns_,
+      legacyScanAndConvert(oldFilename, oldSummary,
+                          progressCallbackFor(progressBar)));
   progressBar.logFinalProgressString();
   newMetaData.setName(newViewBasename);
-  verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
-                             newFilename);
+  verifyConvertedPermutation(oldSummary, newMetaData, newFilename);
   writeMetaData(newMetaData, newFilename);
 
   // Copy the metadata of the view, with the version of the on-disk format of
@@ -803,25 +907,7 @@ std::string conversionDescription() {
 }
 
 // _____________________________________________________________________________
-Id convertId(Id id) {
-  auto datatypeBits = id.getBits() >> ValueId::numDataBits;
-  if (datatypeBits >= datatypesOfSourceFormat.size()) {
-    throw std::runtime_error{absl::StrCat(
-        "Encountered an `Id` with the invalid datatype ", datatypeBits,
-        ", the index that is converted is corrupted")};
-  }
-  auto datatype = datatypesOfSourceFormat.at(datatypeBits);
-  if (datatype == Datatype::LocalVocabIndex) {
-    throw std::runtime_error{
-        "Encountered an `Id` of type `LocalVocabIndex`, which must never be "
-        "stored on disk (it holds a pointer into the memory of the process "
-        "that created it), so the index that is converted is corrupted"};
-  }
-  auto valueBits =
-      id.getBits() & ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
-  return Id::fromBits(
-      valueBits | (static_cast<uint64_t>(datatype) << ValueId::numDataBits));
-}
+Id convertId(uint64_t legacyBits) { return LegacyId{legacyBits}.convert(); }
 
 // _____________________________________________________________________________
 void convertIndexToCurrentFormat(const std::string& oldBasename,

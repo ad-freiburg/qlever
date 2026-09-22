@@ -25,38 +25,34 @@ namespace qlever::indexFormatConverter {
 
 // The index format that this converter converts from, and the index format that
 // it converts to. They are deliberately hardcoded here, because the conversion
-// is specific to exactly this pair of formats: the *only* difference between
-// them is that the datatype `Datatype::SecondaryVocabIndex` was inserted into
-// the `Datatype` enum (directly after `Datatype::LocalVocabIndex`, see the note
-// there), which renumbered the datatypes after it. The `Id`s of an index in the
-// source format are therefore converted by rewriting their datatype bits, and
-// nothing else in the index changes.
+// is specific to exactly this pair of formats: `Id`/`ValueId` changed its bit
+// representation from a single 64-bit word (4 datatype bits, 60-bit payload)
+// to a full datatype byte plus a full 64-bit payload word (see `LegacyId` in
+// the implementation for the per-datatype conversion). The `Datatype` enum
+// numbering itself is unchanged.
 //
 // `convertIndexToCurrentFormat` checks that these two formats still are the
 // previous and the current index format (`qlever::previousIndexFormatVersion`
 // resp. `qlever::indexFormatVersion`), so that this converter cannot silently
 // be applied to a different change of the index format.
 inline const IndexFormatVersion sourceVersion{
-    1572, DateYearOrDuration{Date{2024, 10, 22}}};
-inline const IndexFormatVersion targetVersion{
     3159, DateYearOrDuration{Date{2026, 9, 1}}};
+inline const IndexFormatVersion targetVersion{
+    3425, DateYearOrDuration{Date{2026, 9, 22}}};
 
 // Return a human-readable description of the two index formats above and of
 // their difference. This is the overview message of `qlever-upgrade-index`.
 std::string conversionDescription();
 
-// Convert a single `Id` from the source format to the target format. As only
-// the numbering of the `Datatype` enum differs between the two (see above),
-// this only rewrites the datatype bits and leaves the value bits untouched. In
-// particular, the conversion preserves the order of any two `Id`s, which is why
-// a permutation can be converted by rewriting its `Id`s one by one, without
-// having to sort it again (there is a `static_assert` for this in the
-// implementation).
+// Convert a single `Id` of the source format, given as its raw bit
+// representation (see `LegacyId::convert` in the implementation for the
+// per-datatype details), to the corresponding `Id` of the target format.
+// Order-preserving, so a permutation can be converted row by row without
+// re-sorting.
 //
-// Throw if `id` is not a valid `Id` of the source format, and also if it is of
-// type `LocalVocabIndex`, which must never be stored on disk (such an `Id`
-// holds a pointer into the memory of the process that created it).
-Id convertId(Id id);
+// Throw if `legacyBits` is not a valid `Id` of the source format, or is of
+// type `LocalVocabIndex` (never valid on disk).
+Id convertId(uint64_t legacyBits);
 
 // The block size (per column) with which the permutations of the converted
 // index are written. It is the default block size of the index builder, so that
