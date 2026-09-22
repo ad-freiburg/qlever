@@ -111,6 +111,7 @@ jobs:
           mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
           podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
             --network=host \
+            --security-opt seccomp=unconfined \
             -v "${{ github.workspace }}:/work" \
             -w /work \
             localhost/qlever-ci:${{ matrix.image }} bash -c '
@@ -125,7 +126,15 @@ jobs:
                 -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON \
                 -DUSE_PRECOMPILED_HEADERS=${{ matrix.toolchain == 'clang21' && 'ON' || 'OFF' }} -DCHEAPER_COMPILATION=${{ matrix.toolchain == 'gcc11' && 'ON' || 'OFF' }} \
                 -DQLEVER_ALLOCATOR_BACKEND=${{ matrix.allocator-backend || 'limit' }}
-              cmake --build /work/build --config ${{ matrix.build-type }} -- -j $(nproc)
+              # -j8, not -j$(nproc): the 16-core host is shared (OCR jobs,
+              # other users) and RAM-bound. -j16 OOM-killed the UBSan leg
+              # (SIGKILL 54min in) and starved a gcc13 rebuild into a
+              # CancellationException-429 flake.
+              cmake --build /work/build --config ${{ matrix.build-type }} -- -j 8
               cd /work/build/test
-              env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{ matrix.build-type }} -j $(nproc) .
+              # Drop stale per-test dirs: /work/build persists across runs on
+              # the same host, and leftover previous.*/rebuild.* dirs from a
+              # killed run pollute the next run's assertions.
+              find /work/build - \( -name 'previous.*' -o -name 'rebuild.*' \) -exec rm -rf {} + 2>/dev/null || true
+              env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{ matrix.build-type }} -j 8 .
             '
