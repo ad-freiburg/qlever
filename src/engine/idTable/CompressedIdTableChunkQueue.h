@@ -64,8 +64,10 @@ namespace ad_utility::compressedIdTable {
 // decompression and the I/O all run on the `ioExecutor`.
 //
 // LIFETIME: This queue and its spill file have to outlive every operation of
-// them that is in flight, which is why both are held by a `shared_ptr` of which
-// every operation keeps a copy.
+// them that is in flight. The operations of this class itself use a raw `this`
+// and rely on the `CompressedIdTableBlockStorage`, whose operations hold a
+// `shared_ptr` to the queue for their whole duration. The spill file is shared
+// with the I/O that runs on the `ioExecutor` and may outlive the queue.
 template <size_t NumCols = 0>
 class ChunkQueue : public NoCopyNoMove,
                    public std::enable_shared_from_this<ChunkQueue<NumCols>> {

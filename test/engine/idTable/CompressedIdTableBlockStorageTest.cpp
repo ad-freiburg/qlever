@@ -278,9 +278,8 @@ struct GetOutcomes {
 };
 
 // Retrieve a single value of the chunk with the given `chunkIndex` and record
-// it in
-// `outcomes`. If `keepGoing` is true, immediately retrieve the next value as
-// well, until the end-of-chunk sentinel or a cancellation arrives.
+// it in `outcomes`. If `keepGoing` is true, immediately retrieve the next value
+// as well, until the end-of-chunk sentinel or a cancellation arrives.
 template <size_t NumCols>
 void get(Storage<NumCols>& storage, size_t chunkIndex, GetOutcomes& outcomes,
          bool keepGoing) {
