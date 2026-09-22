@@ -26,11 +26,18 @@ using std::string;
 using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
-QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
-    : qec_(qec) {
+QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec,
+                                       std::shared_ptr<Operation> operation)
+    : qec_{qec}, rootOperation_{std::move(operation)} {
   // A `QueryExecutionTree` always needs a `QueryExecutionContext`, if only to
   // obtain the memory limited allocator of the query.
   AD_CONTRACT_CHECK(qec_ != nullptr);
+  AD_CONTRACT_CHECK(rootOperation_ != nullptr);
+  resultWidth_ = rootOperation_->getResultWidth();
+  cacheKey_ = rootOperation_->getCacheKey();
+  if (!readFromCache()) {
+    readFromMaterializedView();
+  }
 }
 
 // _____________________________________________________________________________
@@ -50,7 +57,6 @@ size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
 // _____________________________________________________________________________
 std::optional<size_t> QueryExecutionTree::getVariableColumnOrNullopt(
     const Variable& variable) const {
-  AD_CONTRACT_CHECK(rootOperation_);
   const auto& varCols = getVariableColumns();
   if (!varCols.contains(variable)) {
     return std::nullopt;
@@ -121,7 +127,6 @@ size_t QueryExecutionTree::getSizeEstimate() {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     std::vector<Operation::PrefilterVariablePair> prefilterPairs) const {
-  AD_CONTRACT_CHECK(rootOperation_);
   VariableToColumnMap varToColMap = getVariableColumns();
 
   // Note: Variables that have been stripped are still semantically part of the
@@ -150,7 +155,6 @@ bool QueryExecutionTree::knownEmptyResult() {
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::isVariableCovered(Variable variable) const {
-  AD_CONTRACT_CHECK(rootOperation_);
   return getVariableColumns().contains(variable);
 }
 

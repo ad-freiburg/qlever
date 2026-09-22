@@ -34,6 +34,7 @@
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
@@ -435,6 +436,98 @@ TEST(IndexTest, emptyIndex) {
   test(iri("<x>"), Permutation::PSO, {});
 }
 
+// Test the first pass of the index building (see
+// `IndexImpl::buildPartialVocabularies`) with the number of threads set to `1`
+// (a single task chain, i.e. no racing for batches from the parser) and to `3`
+// (several task chains racing for batches). Together with the
+// `numTriplesPerBatch_` of `2` that `IndexTestHelpers.cpp` sets for all test
+// indices, the 7 triples below already span several partial vocabularies for
+// both configurations.
+// _____________________________________________________________________________
+TEST(IndexTest, buildPartialVocabulariesFirstPassNumThreads) {
+  using enum Permutation::Enum;
+  std::string kb =
+      "<a>  <b>  <c>  . \n"
+      "<a>  <b>  <c2> . \n"
+      "<a>  <b2> <c>  . \n"
+      "<a2> <b2> <c2> . \n"
+      "<a3> <b3> <c3> . \n"
+      "<a4> <b3> <c4> . \n"
+      "<a5> <b5> <c5> .   ";
+
+  auto runWithNumThreads = [&kb](size_t numThreads,
+                                 ad_utility::source_location l =
+                                     AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    TestIndexConfig config{kb};
+    config.numThreads = numThreads;
+    auto* qec =
+        getQec(absl::StrCat(gtestCurrentTestName(), ".", numThreads, "."),
+               std::move(config));
+    const IndexImpl& index = qec->getIndex().getImpl();
+    EXPECT_EQ(index.numTriples().normal, 7u);
+
+    auto getId = makeGetId(qec->getIndex());
+    Id a = getId("<a>");
+    Id c = getId("<c>");
+    Id c2 = getId("<c2>");
+    auto testTwo = makeTestScanWidthTwo(index, *qec);
+    testTwo(iri("<b>"), PSO, {{a, c}, {a, c2}});
+  };
+
+  runWithNumThreads(1);
+  runWithNumThreads(3);
+}
+
+// Test that the `parser-integer-overflow-behavior` setting from the
+// `.settings.json` file reaches the parsers of the index build, for an input
+// that is parsed in parallel as well as for one that is parsed serially. With
+// the default behavior, an integer literal that overflows QLever's 64-bit
+// integers is an error and the index build fails. With
+// `overflowing-integers-become-doubles`, the literal is stored as a double, and
+// with `all-integers-become-doubles`, all integer literals are.
+// _____________________________________________________________________________
+TEST(IndexTest, parserIntegerOverflowBehaviorFromSettingsFile) {
+  using enum Permutation::Enum;
+  std::string kb = "<a> <b> 99999999999999999999999 .\n<a> <c> 42 .\n";
+  auto makeConfig = [&kb](bool parseInParallel, std::string_view behavior) {
+    TestIndexConfig config{kb};
+    config.parseInParallel = parseInParallel;
+    config.additionalSettings = {{"parser-integer-overflow-behavior",
+                                  absl::StrCat("\"", behavior, "\"")}};
+    return config;
+  };
+
+  for (bool parseInParallel : {true, false}) {
+    std::string basename =
+        absl::StrCat(gtestCurrentTestName(), ".", parseInParallel);
+    absl::Cleanup cleanup = [&basename] {
+      for (const auto& filename : getAllIndexFilenames(basename)) {
+        ad_utility::deleteFile(filename, false);
+      }
+    };
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        makeTestIndex(basename, makeConfig(parseInParallel,
+                                           "overflowing-integers-throw")),
+        ::testing::HasSubstr("cannot be represented as an integer"));
+
+    // Build the index with the given `behavior` and check the objects of `<b>`
+    // (the overflowing integer) and `<c>` (the integer `42`).
+    auto checkObjects = [&](std::string_view behavior, Id expectedObjectOfC) {
+      auto* qec = getQec(absl::StrCat(basename, "."),
+                         makeConfig(parseInParallel, behavior));
+      auto getId = makeGetId(qec->getIndex());
+      Id a = getId("<a>");
+      auto testTwo = makeTestScanWidthTwo(qec->getIndex().getImpl(), *qec);
+      testTwo(iri("<b>"), PSO,
+              {{a, Id::makeFromDouble(99999999999999999999999.0)}});
+      testTwo(iri("<c>"), PSO, {{a, expectedObjectOfC}});
+    };
+    checkObjects("overflowing-integers-become-doubles", Id::makeFromInt(42));
+    checkObjects("all-integers-become-doubles", Id::makeFromDouble(42.0));
+  }
+}
+
 // Regression test for https://github.com/ad-freiburg/qlever/issues/2768
 TEST(IndexTest, emptyTextIndex) {
   std::array<std::string, 2> inputs = {
@@ -452,6 +545,47 @@ TEST(IndexTest, emptyTextIndex) {
         qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
     EXPECT_EQ(result.size(), 0);
   }
+}
+
+// Test that the geo cell grid (see `GeoVocabulary`) is read from the index
+// configuration when an index is loaded, with `flat` as the default scheme.
+// NOTE: Building an index with a grid is a follow-up change, so the
+// configuration of an index built without a grid is edited by hand here.
+TEST(IndexTest, geoCellGridFromConfiguration) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> \"LINESTRING(7 48, 8 49)\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral> ."};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& base = qec->getIndex().getOnDiskBase();
+  EXPECT_FALSE(qec->getIndex().getVocab().getGeoCellGrid().has_value());
+
+  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
+  auto loadWithConfiguration = [&](const nlohmann::json& additionalKeys) {
+    nlohmann::json configuration;
+    {
+      std::ifstream in{configFilename};
+      in >> configuration;
+    }
+    configuration.update(additionalKeys);
+    {
+      auto out = ad_utility::makeOfstream(configFilename);
+      out << configuration;
+    }
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.createFromOnDiskIndex(base, false);
+    return index.getVocab().getGeoCellGrid();
+  };
+  EXPECT_EQ(loadWithConfiguration({{"geo-cell-grid-level", 2}}),
+            std::optional{ad_utility::GeoCellGrid{2}});
+  EXPECT_EQ(loadWithConfiguration(
+                {{"geo-cell-grid-level", 3}, {"geo-cell-grid-scheme", "flat"}}),
+            std::optional{ad_utility::GeoCellGrid{3}});
+
+  // A level that does not fit the grid is rejected.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration({{"geo-cell-grid-level", 300}}),
+      ::testing::HasSubstr("Invalid value 300"));
 }
 
 // Regression test for #3191.
@@ -731,12 +865,13 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   using namespace ::testing;
 
   // Wrap a matcher for a substring that comes from an `AD_LOG_INFO` line so
-  // that the assertion is only active when `LOGLEVEL >= INFO`. At
-  // `LOGLEVEL=WARN` the INFO output is suppressed, but the test still runs to
-  // cover the WARN-level `"deprecated"` assertions; the wrapper degrades to
-  // `testing::_` (match anything) in that case.
+  // that the assertion is only active when the compile-time log level is at
+  // least `INFO`. At `LOGLEVEL=WARN` the INFO output is suppressed, but the
+  // test still runs to cover the WARN-level `"deprecated"` assertions; the
+  // wrapper degrades to `testing::_` (match anything) in that case.
   auto onlyAtInfoOrAbove = [](auto matcher) {
-    if constexpr (LOGLEVEL < INFO) {
+    if constexpr (ad_utility::compileTimeLogLevel <
+                  ad_utility::LogLevel::Enum::INFO) {
       return testing::_;
     } else {
       return matcher;
@@ -1371,6 +1506,37 @@ TEST(IndexImpl, graphNameManagerIntegration) {
   EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
   EXPECT_THAT(graphManager.prefixWithoutBraces_,
               testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
+}
+
+// _____________________________________________________________________________
+// Build an index for IRIs that match a general `encodedIri::Pattern` and check
+// that the pattern is correctly stored in the index and restored from it, and
+// that the matching IRIs are not stored in the vocabulary.
+TEST(IndexImpl, encodedIriPatterns) {
+  std::string encodedIri = "<http://example.org/range_545554944_3_4P>";
+  std::string plainIri = "<http://example.org/range_1_2_3P>";
+  TestIndexConfig c{
+      absl::StrCat("<a> <b> ", encodedIri, " . <a> <b> ", plainIri, " .")};
+  c.encodedIriPatterns = {encodedIri::Pattern{
+      "http://example.org/range_",
+      {encodedIri::Part{32, {{29, 32, 1}}, "_"}, encodedIri::Part{8, {}, "_"},
+       encodedIri::Part{8, {}, "P"}}}};
+  const auto& index = getQec(c)->getIndex();
+  const auto& manager = index.encodedIriManager();
+
+  // The IRI that matches the pattern is encoded in an `Id` and therefore not
+  // part of the vocabulary.
+  auto id = manager.encode(encodedIri);
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(manager.toString(id.value()), encodedIri);
+  auto [lower, upper] = index.getVocab().getPositionOfWord(encodedIri);
+  EXPECT_EQ(lower, upper);
+
+  // The first number of the other IRI doesn't have the required bits, so the
+  // IRI is stored in the vocabulary as usual.
+  EXPECT_FALSE(manager.encode(plainIri).has_value());
+  auto [lower2, upper2] = index.getVocab().getPositionOfWord(plainIri);
+  EXPECT_NE(lower2, upper2);
 }
 
 // _____________________________________________________________________________

@@ -54,8 +54,8 @@ class QueryPlanner {
 
   // Create the best execution tree for the given query according to the
   // optimization algorithm and cost estimates of the QueryPlanner.
-  QueryExecutionTree createExecutionTree(ParsedQuery& pq,
-                                         bool isSubquery = false);
+  std::shared_ptr<QueryExecutionTree> createExecutionTree(
+      ParsedQuery& pq, bool isSubquery = false);
 
   class TripleGraph {
    public:
@@ -148,8 +148,8 @@ class QueryPlanner {
    public:
     enum Type { BASIC, OPTIONAL, MINUS };
 
-    explicit SubtreePlan(QueryExecutionContext* qec)
-        : _qet(std::make_shared<QueryExecutionTree>(qec)) {}
+    explicit SubtreePlan(std::shared_ptr<QueryExecutionTree> qet)
+        : _qet{std::move(qet)} {}
 
     template <typename Operation>
     SubtreePlan(QueryExecutionContext* qec,
@@ -728,6 +728,14 @@ class QueryPlanner {
     // The distinction between "normal" groups, OPTIONALs and MINUS clauses
     // is made via the type member of the `SubtreePlan`s.
     void visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& candidates);
+
+    // Helper function for `graphPatternOperationVisitor`. For a
+    // `GRAPH ?graphVar {...}` clause, make sure that `graphVar` is bound in
+    // every candidate: if a candidate does not already contain a column for
+    // `graphVar`, cross-join it with all graphs that could possibly match (see
+    // `DistinctGraphs::makeAllGraphs`).
+    void bindGraphVariableIfUnbound(const Variable& graphVar,
+                                    std::vector<SubtreePlan>& candidates);
 
     // This function finds a set of candidates that unite all the different
     // `candidatePlans_` and `candidateTriples_`. It then replaces the contents

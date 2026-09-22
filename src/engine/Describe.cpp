@@ -25,7 +25,7 @@ Describe::Describe(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> Describe::getChildren() {
+std::vector<QueryExecutionTree*> Describe::getChildrenImpl() const {
   return {subtree_.get()};
 }
 

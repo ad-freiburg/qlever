@@ -1,0 +1,166 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#ifndef QLEVER_SRC_PARSER_RDFASYNCPARALLELPARSER_H
+#define QLEVER_SRC_PARSER_RDFASYNCPARALLELPARSER_H
+
+#include <atomic>
+#include <boost/asio/awaitable.hpp>
+#include <optional>
+#include <utility>
+#include <vector>
+
+#include "backports/asio.h"
+#include "global/SpecialIds.h"
+#include "index/InputFileSpecification.h"
+#include "parser/AsyncBlockSource.h"
+#include "parser/AsyncRdfParserBase.h"
+#include "parser/RdfParser.h"
+#include "util/AsyncResourcePool.h"
+#include "util/MemorySize/MemorySize.h"
+
+// An RDF parser that parses a single input file by splitting it into batches
+// and parsing those batches in parallel, scheduling all of its work via
+// `boost::asio` on an externally-provided executor instead of owning its own
+// threads. It is an `AsyncRdfParserBase` (see there for the documentation of
+// `asyncGetBatch`), not an `RdfParserBase`, because its interface is
+// asynchronous (the unit tests drive it through the synchronous
+// `RdfParserBase` interface via `RdfParallelParserViaAsync`, see
+// `test/util/AsyncParserDriver.h`).
+//
+// This class does not prefetch or buffer batches on its own behalf:
+// parallelism comes entirely from the caller keeping several calls to
+// `asyncGetBatch()` in flight at once. Fetching the next block is serialized
+// (at most one fetch is in flight at any time, as required by
+// `AsyncBlockSource`), while parsing of different blocks happens in parallel on
+// `executor()`.
+//
+// The constructor does nothing but open the input; in particular it neither
+// blocks nor starts any asynchronous operation. The leading declarations of
+// the input (the "header", see `RdfParallelParsingState`) are parsed by the
+// first `asyncGetBatch()` call, which holds the single permit of
+// `blockFetchPermit_` while doing so. Every `asyncGetBatch()` call has to
+// acquire that permit before it may touch the input, so the calls that arrive
+// in the meantime automatically suspend (without blocking a thread) until the
+// header has been dealt with. An error during the parsing of the header is
+// reported to the call that ran into it, exactly like an error during the
+// parsing of a batch.
+//
+// Once the header or any batch fails to parse, `errorWasEncountered_` is set
+// and:
+//   - the failing call completes with that exception, and
+//   - every subsequent `asyncGetBatch()` call completes with `nullopt` to
+//     trigger early stopping in the caller.
+//
+// An instance of this class must outlive all of its in-flight
+// `asyncGetBatch()` calls. Because it owns no threads, its destructor cannot
+// wait for pending work.
+//
+// NOTE: This class is implemented using C++20 coroutines, and
+// `ad_utility::AsyncResourcePool` requires Boost 1.80 or newer. It is
+// therefore excluded from the `REDUCED_FEATURE_SET_FOR_CPP17` build, see
+// `src/parser/CMakeLists.txt`.
+template <typename Parser>
+class RdfAsyncParallelParser : public AsyncRdfParserBase {
+ public:
+  // The result of a single `asyncGetBatch()` call: the triples of the next
+  // batch, or `nullopt` at the end of the input, inherited from
+  // `AsyncRdfParserBase`.
+  using AsyncRdfParserBase::OptionalTriples;
+
+ private:
+  // A handle for the single permit of `blockFetchPermit_` below.
+  using Permit = ad_utility::AsyncResourcePool<void>::Handle;
+
+  // The state that this parser shares with all of its workers, in particular
+  // the header of the input file.
+  RdfParallelParsingState<Parser> state_;
+
+  // Owns the file-reading and block-splitting logic. It cuts the input into
+  // blocks at statement boundaries; concurrent `asyncGetBatch()` calls parse
+  // different blocks in parallel.
+  qlever::parser::AsyncStatementBoundaryBlockSource blockSource_;
+
+  // A semaphore with a single permit that serializes the fetches from
+  // `blockSource_`, which requires that at most one call to
+  // `asyncGetNextBlock` is in flight at any time. A concurrent
+  // `asyncGetBatch()` call that arrives while a fetch is in flight suspends
+  // here instead of blocking its thread. The permit is also held for the whole
+  // duration of the parsing of the header, see the class comment above.
+  //
+  // NOTE: A `strand` would not be enough here. It serializes the *execution*
+  // of handlers, whereas `AsyncBlockSource` requires that at most one
+  // operation is *outstanding*: initiating the next fetch is only allowed once
+  // the previous fetch's completion handler has run. Two initiations posted to
+  // a strand would still overlap, because `asyncGetNextBlock` returns as soon
+  // as it has initiated. Hence the single permit, which is held for the whole
+  // duration of a fetch, and which suspends a waiting caller instead of
+  // blocking its thread.
+  ad_utility::AsyncResourcePool<void> blockFetchPermit_;
+
+  // True once the parsing of the header has been attempted, such that only the
+  // first `asyncGetBatch()` call does it. This is only accessed while the
+  // permit of `blockFetchPermit_` is held and hence needs no further
+  // synchronization.
+  bool headerWasParsed_ = false;
+
+  // The offset of the next block within the input file. Each call claims the
+  // current value for the block it fetches and advances it by the size of that
+  // block, so that the worker parsers can report file-absolute positions in
+  // their error messages (see `RdfStringParser::setPositionOffset`). Like
+  // `headerWasParsed_` this is only accessed while the permit of
+  // `blockFetchPermit_` is held and hence needs no further synchronization.
+  size_t nextBlockOffset_ = 0;
+
+  // Set to true by the first `asyncGetBatch()` call that encounters an error.
+  // All subsequent calls complete with `nullopt` instead of propagating
+  // further exceptions, so that the caller's pipeline stops cleanly.
+  std::atomic_bool errorWasEncountered_{false};
+
+ public:
+  // Construct a parser that reads from `spec` and schedules all of its work
+  // on `executor`. The constructor does not block and starts no asynchronous
+  // operation, see the class comment above. The `settings` are applied to
+  // every worker parser (see `RdfParserSettings`).
+  RdfAsyncParallelParser(const ql::any_io_executor& executor,
+                         const qlever::InputFileSpecification& spec,
+                         ad_utility::MemorySize blocksize,
+                         const EncodedIriManager* encodedIriManager,
+                         const TripleComponent& defaultGraphIri =
+                             qlever::specialIds().at(DEFAULT_GRAPH_IRI),
+                         RdfParserSettings settings = {});
+
+ protected:
+  // Implement `AsyncRdfParserBase::asyncGetBatchImpl` by simply `co_spawn`ing
+  // `getBatchCoroutine()` on `executor()`. The completion signature of that
+  // coroutine (`void(std::exception_ptr, OptionalTriples)`) matches `Handler`
+  // exactly, so `handler` itself is a valid completion token for `co_spawn`.
+  //
+  // NOTE: There is deliberately nothing to return here. `Handler` is a plain
+  // callable and not a completion token with an associated async result type
+  // (like `boost::asio::use_future`), so `co_spawn` returns `void` for it, and
+  // the whole completion-token machinery lives one level up, in
+  // `AsyncRdfParserBase::asyncGetBatch`.
+  void asyncGetBatchImpl(Handler handler) override;
+
+ private:
+  // Parse the header if this is the first call, then fetch the next block and
+  // parse it into triples. Throw on a parse error, and return `nullopt` at the
+  // end of the input. See the class comment for the exact error semantics.
+  boost::asio::awaitable<OptionalTriples> getBatchCoroutine();
+
+  // Parse the leading declarations of the input (the "header") by feeding the
+  // blocks of the input to `state_` one by one until it reports that the
+  // header is complete. Only called by the first `asyncGetBatch()` call, and
+  // only while the permit of `blockFetchPermit_` is held, see the class
+  // comment above.
+  boost::asio::awaitable<void> parseHeader();
+};
+
+#endif  // QLEVER_SRC_PARSER_RDFASYNCPARALLELPARSER_H

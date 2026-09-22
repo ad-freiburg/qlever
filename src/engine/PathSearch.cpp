@@ -118,7 +118,7 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> PathSearch::getChildren() {
+std::vector<QueryExecutionTree*> PathSearch::getChildrenImpl() const {
   std::vector<QueryExecutionTree*> res;
   res.push_back(subtree_.get());
 

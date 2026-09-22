@@ -36,7 +36,6 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   // Decrease various default batch sizes such that there are multiple batches
   // also for the very small test indices (important for test coverage).
-  BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() = 10;
   DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   index.parserBufferSize() =
@@ -213,6 +212,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       settingsJson["prefixes-external"] = std::vector<std::string>{""};
       settingsJson["languages-internal"] = std::vector<std::string>{""};
     }
+    for (const auto& [key, value] : c.additionalSettings) {
+      settingsJson[key] = nlohmann::json::parse(value);
+    }
     settingsFile << settingsJson.dump();
   }
   {
@@ -230,17 +232,24 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.addHasWordTriples() = c.addHasWordTriples;
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
+    if (c.parseInParallel.has_value()) {
+      spec.parseInParallel_ = c.parseInParallel.value();
+      spec.parseInParallelSetExplicitly_ = true;
+    }
     // Use the explicitly configured vocabulary type, or a random one
     // otherwise.
     index.getImpl().setVocabularyTypeForIndexBuilding(
         c.vocabularyType.has_value()
             ? c.vocabularyType.value()
             : VocabularyType::randomForIndexBuilding());
-    if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
+    if (c.encodedPrefixesWithoutAngleBrackets.has_value() ||
+        !c.encodedIriPatterns.empty()) {
       index.getImpl().setPrefixesForEncodedValues(
-          std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
+          std::move(c.encodedPrefixesWithoutAngleBrackets)
+              .value_or(std::vector<std::string>{}),
+          std::move(c.encodedIriPatterns));
     }
-    index.createFromFiles({spec});
+    index.createFromFiles({spec}, c.numThreads);
     if (c.createTextIndex) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
       throw std::runtime_error("The text index is not available in C++17 mode");

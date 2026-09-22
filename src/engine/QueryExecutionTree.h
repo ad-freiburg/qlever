@@ -28,24 +28,14 @@ enum class HideStrippedColumns { False, True };
 // operations needed to solve a query.
 class QueryExecutionTree {
  public:
-  explicit QueryExecutionTree(QueryExecutionContext* qec);
   QueryExecutionTree(QueryExecutionContext* qec,
-                     std::shared_ptr<Operation> operation)
-      : QueryExecutionTree(qec) {
-    rootOperation_ = std::move(operation);
-    resultWidth_ = rootOperation_->getResultWidth();
-    cacheKey_ = rootOperation_->getCacheKey();
-    if (!readFromCache()) {
-      readFromMaterializedView();
-    }
-  }
+                     std::shared_ptr<Operation> operation);
 
   std::string getCacheKey() const;
 
   const QueryExecutionContext* getQec() const { return qec_; }
 
   const VariableToColumnMap& getVariableColumns() const {
-    AD_CONTRACT_CHECK(rootOperation_);
     return rootOperation_->getExternallyVisibleVariableColumns();
   }
 
@@ -58,8 +48,6 @@ class QueryExecutionTree {
       ColumnIndex colIdx) const;
 
   std::shared_ptr<Operation> getRootOperation() const { return rootOperation_; }
-
-  bool isEmpty() const { return !rootOperation_; }
 
   // Get the column index that the given `variable` will have in the result of
   // this query. Throw if the variable is not part of the `VariableToColumnMap`.
@@ -341,10 +329,7 @@ class QueryExecutionTree {
   DEFINE_MAKE_SHARED_MEMBER(qec_->getAllocator())
 
   std::shared_ptr<QueryExecutionTree> clone() const {
-    // A tree without a root operation is cloned to another such tree.
-    return rootOperation_
-               ? makeShared<QueryExecutionTree>(qec_, rootOperation_->clone())
-               : makeShared<QueryExecutionTree>(qec_);
+    return makeShared<QueryExecutionTree>(qec_, rootOperation_->clone());
   }
 };
 

@@ -307,18 +307,15 @@ TEST(QueryExecutionTree,
 }
 
 // _____________________________________________________________________________
-TEST(QueryExecutionTree, constructorRequiresQueryExecutionContext) {
+TEST(QueryExecutionTree, constructorRequiresQecAndRootOperation) {
+  auto* qec = getQec();
+  auto operation = std::make_shared<ValuesForTesting>(
+      qec, makeIdTableFromVector({{3}}),
+      std::vector<std::optional<Variable>>{Variable{"?x"}});
   AD_EXPECT_THROW_WITH_MESSAGE(
-      QueryExecutionTree{nullptr},
+      QueryExecutionTree(nullptr, operation),
       ::testing::HasSubstr("Assertion `qec_ != nullptr` failed."));
-}
-
-// _____________________________________________________________________________
-TEST(QueryExecutionTree, cloneOfEmptyTreeIsEmpty) {
-  QueryExecutionTree tree{getQec()};
-  ASSERT_TRUE(tree.isEmpty());
-  auto clone = tree.clone();
-  ASSERT_NE(clone, nullptr);
-  EXPECT_TRUE(clone->isEmpty());
-  EXPECT_EQ(clone->getQec(), tree.getQec());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      QueryExecutionTree(qec, nullptr),
+      ::testing::HasSubstr("Assertion `rootOperation_ != nullptr` failed."));
 }

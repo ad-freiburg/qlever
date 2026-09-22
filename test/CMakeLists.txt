@@ -142,6 +142,7 @@ add_subdirectory(backports)
 add_subdirectory(rdfTypes)
 add_subdirectory(joinAlgorithms)
 add_subdirectory(libqlever)
+add_subdirectory(parallelBlockMerge)
 
 OPTION(_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS "Disable some tests that cause undefined symbol errors when building with Emscripten." OFF)
 
@@ -302,6 +303,8 @@ addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)
 
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
+addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
+
 addLinkAndDiscoverTest(TaskQueueTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
@@ -404,6 +407,8 @@ addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
 addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
 addLinkAndDiscoverTestNoLibs(NoCopyNoMoveTest)
+
+addLinkAndDiscoverTestNoLibs(CopyOnWritePtrTest)
 
 addLinkAndDiscoverTestSerial(TimerTest)
 
@@ -509,16 +514,7 @@ addLinkAndDiscoverTestNoLibs(CancellationHandleTest qlever_util)
 
 addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 
-addLinkAndDiscoverTest(CachingMemoryResourceTest)
-
 addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
-
-addLinkAndDiscoverTestNoLibs(RunsInputPolicyTest)
-
-addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
-
-addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
-addLinkAndDiscoverTestNoLibs(MergeHelpersTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 

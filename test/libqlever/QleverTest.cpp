@@ -14,6 +14,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
+#include "./QleverTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExternalValues.h"
 #include "engine/MaterializedViews.h"
@@ -235,6 +236,10 @@ TEST(IndexBuilderConfig, validate) {
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be between"));
 
   c = IndexBuilderConfig{};
+  c.numThreads_ = 0;
+  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be at least 1"));
+
+  c = IndexBuilderConfig{};
   c.wordsfile_ = "blibb";
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
                                HasSubstr("Only specified wordsfile"));
@@ -267,6 +272,19 @@ TEST(IndexBuilderConfig, validate) {
       ad_utility::VocabularyType::Enum::InMemoryCompressedWithHoles};
   AD_EXPECT_THROW_WITH_MESSAGE(Qlever::buildIndex(c),
                                HasSubstr("cannot be used for index building"));
+}
+
+// _____________________________________________________________________________
+// The descriptions from the `EngineConfig` replace the names stored in the
+// index files.
+TEST(LibQlever, indexAndTextDescription) {
+  EngineConfig ec = buildTestIndex("<s> <p> <o> .");
+  ec.indexDescription_ = "Some dataset, version 42";
+  ec.textDescription_ = "Some text";
+  Qlever engine{ec};
+  const auto& index = engine.indexAndViewsSnapshot()->index_;
+  EXPECT_EQ(index.getKbName(), "Some dataset, version 42");
+  EXPECT_EQ(index.getTextName(), "Some text");
 }
 
 // _____________________________________________________________________________
@@ -779,26 +797,10 @@ TEST(LibQlever, applyUpdate) {
   EXPECT_EQ(engine.cache().numNonPinnedEntries(), 0U);
 }
 
-namespace {
-// Parse and plan `update` and apply it to `engine` via `Qlever::applyUpdate`,
-// returning the metadata. For why the update has to be parsed separately and
-// for the thread-safety caveat of taking the snapshot only here, see the
-// comments in `LibQlever.applyUpdate` above.
-UpdateMetadata applyUpdateToEngine(Qlever& engine, const std::string& update) {
-  ad_utility::BlankNodeManager bnm;
-  auto parsedUpdates = SparqlParser::parseUpdate(
-      &bnm, ad_utility::testing::encodedIriManager(), update);
-  AD_CORRECTNESS_CHECK(parsedUpdates.size() == 1);
-  auto plannedUpdate =
-      engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  auto snapshot = engine.indexAndViewsSnapshot();
-  return snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(
-      [&](DeltaTriples& deltaTriples) {
-        return engine.applyUpdate(plannedUpdate, handle, deltaTriples);
-      });
-}
-}  // namespace
+// `applyUpdateToEngine` (used below) is defined in `QleverTestHelpers.h`; see
+// the comment there for why the update has to be parsed separately and for
+// the thread-safety caveat of taking the snapshot only here.
+using ad_utility::testing::applyUpdateToEngine;
 
 // _____________________________________________________________________________
 // Direct counterpart to `ServerTest.clearDeltaTriples`: populate the delta
@@ -942,4 +944,16 @@ TEST(Qlever, makeIndexRebuildConfig) {
   AD_EXPECT_THROW_WITH_MESSAGE(makeConfig(std::nullopt, std::nullopt),
                                AllOf(HasSubstr("all already exist"),
                                      HasSubstr("rebuild-previous-index-dir")));
+}
+
+// _____________________________________________________________________________
+// A `PlannedQuery` always needs an actual `QueryExecutionTree`, as all of its
+// accessors dereference it.
+TEST(LibQlever, plannedQueryRequiresQueryExecutionTree) {
+  auto* qec = ad_utility::testing::getQec();
+  ParsedQuery parsedQuery = SparqlParser::parseQuery(
+      &qec->getIndex().encodedIriManager(), "SELECT * { ?s ?p ?o }");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      PlannedQuery(std::move(parsedQuery), nullptr, *qec),
+      HasSubstr("Assertion `queryExecutionTree_ != nullptr` failed."));
 }
