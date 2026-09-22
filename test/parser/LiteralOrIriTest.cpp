@@ -38,21 +38,27 @@ TEST(IriTest, IriCreation) {
 }
 
 // _____________________________________________________________________________
-TEST(IriTest, fromOwnedIriref) {
-  // Whether or not the input has to be unescaped, the result is the same as
-  // that of `fromIriref`.
+TEST(IriTest, fromIrirefOwnedString) {
+  // Whether or not the input has to be unescaped, the overload for owned
+  // strings yields the same result as the one for `std::string_view`.
   for (std::string_view input : {"<http://www.wikidata.org/entity/Q3138>",
                                  R"(<http://example.org/\u0061>)"}) {
-    EXPECT_EQ(Iri::fromOwnedIriref(std::string{input}), Iri::fromIriref(input));
+    EXPECT_EQ(Iri::fromIriref(std::string{input}), Iri::fromIriref(input));
   }
-  // If there is nothing to unescape, the input string is moved into the `Iri`
-  // instead of being copied. Note that the string is long enough to be stored
-  // on the heap, so moving it preserves the address of its data.
+  // If the input is an owned string with nothing to unescape, it is moved into
+  // the `Iri` instead of being copied. Note that the string is long enough to
+  // be stored on the heap, so moving it preserves the address of its data.
   std::string input = "<http://www.wikidata.org/entity/Q3138>";
   const char* data = input.data();
   std::string representation =
-      Iri::fromOwnedIriref(std::move(input)).toStringRepresentation();
+      Iri::fromIriref(std::move(input)).toStringRepresentation();
   EXPECT_EQ(representation.data(), data);
+  // An lvalue `std::string` is not moved from, but takes the `std::string_view`
+  // overload.
+  std::string lvalue = "<http://www.wikidata.org/entity/Q3139>";
+  std::string copied = Iri::fromIriref(lvalue).toStringRepresentation();
+  EXPECT_EQ(copied, lvalue);
+  EXPECT_NE(copied.data(), lvalue.data());
 }
 
 // _____________________________________________________________________________

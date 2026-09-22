@@ -116,6 +116,10 @@ class Iri : public BasicIri<true> {
  private:
   explicit Iri(BasicIri<true>&& base) : BasicIri<true>(std::move(base)) {}
 
+  // The implementation of the `fromIriref` overload for owned strings (see
+  // below).
+  static Iri fromOwnedIriref(std::string stringWithBrackets);
+
  public:
   using BasicIri<true>::toStringRepresentation;
 
@@ -131,10 +135,16 @@ class Iri : public BasicIri<true> {
   // with `<` and end with `>`.
   static Iri fromIriref(std::string_view stringWithBrackets);
 
-  // Same as `fromIriref`, but for callers that already own the input string.
-  // If it contains no escape sequence (by far the most common case), the
-  // string is moved into the `Iri` instead of being copied.
-  static Iri fromOwnedIriref(std::string stringWithBrackets);
+  // Overload of `fromIriref` for callers that already own the input string. If
+  // it contains no escape sequence (by far the most common case), the string
+  // is moved into the `Iri` instead of being copied. Note that this only binds
+  // to rvalues of exactly `std::string`; for everything else (in particular
+  // lvalues) the `std::string_view` overload above is chosen.
+  CPP_template(typename S)(
+      requires ql::concepts::same_as<S, std::string>) static Iri
+      fromIriref(S&& stringWithBrackets) {
+    return fromOwnedIriref(std::move(stringWithBrackets));
+  }
 
   // Create a new `Iri` for QLever's internal representation of a
   // language-tagged predicate, which prefixes the IRI with the language tag,

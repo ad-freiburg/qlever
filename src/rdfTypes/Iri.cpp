@@ -92,7 +92,7 @@ Iri Iri::fromLangtagAndIriref(std::string_view langtag,
 
 // ____________________________________________________________________________
 Iri Iri::fromLangtag(std::string_view langtag) {
-  return fromOwnedIriref(makeQleverInternalIri("@", langtag));
+  return fromIriref(makeQleverInternalIri("@", langtag));
 }
 
 // ____________________________________________________________________________
