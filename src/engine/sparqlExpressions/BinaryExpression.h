@@ -102,9 +102,10 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
       const auto classifications =
           classifyNumericOperands(context, left, right);
 
-      if (auto homogeneousTypes = getHomogeneousNumericTypes(classifications)) {
+      if (auto homogeneousTypes = getHomogeneousNumericTypes(classifications);
+          homogeneousTypes.has_value()) {
         return dispatchNumericTypes(
-            *homogeneousTypes,
+            homogeneousTypes.value(),
             [&left, &right, context](auto leftType,
                                      auto rightType) -> ExpressionResult {
               using LeftNumericType = typename decltype(leftType)::type;
@@ -116,9 +117,10 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
             });
       }
 
-      if (auto majorityTypes = getMajorityNumericTypes(classifications)) {
+      if (auto majorityTypes = getMajorityNumericTypes(classifications);
+          majorityTypes.has_value()) {
         return dispatchNumericTypes(
-            *majorityTypes,
+            majorityTypes.value(),
             [&left, &right, context](auto leftType,
                                      auto rightType) -> ExpressionResult {
               using LeftNumericType = typename decltype(leftType)::type;

@@ -112,6 +112,10 @@ inline NumericOperandClassification classifyNumericOperand(
 
   // Otherwise, check whether some non-numeric datatype occurs at least as often
   // as the numeric candidate.
+  // The second scan is worthwhile for cases where a numeric datatype is the
+  // unique most common datatype but does not exceed 50% of the input. There are
+  // still possible refinements, for example treating datatypes that
+  // unconditionally lead to `UNDEF` separately.
   constexpr size_t numDatatypes = static_cast<size_t>(Datatype::MaxValue) + 1;
   std::array<size_t, numDatatypes> datatypeCounts{};
 
@@ -179,21 +183,33 @@ inline auto classifyNumericOperands(const EvaluationContext* context,
       classifyNumericOperand(operands, context)...};
 }
 
+// Extract the numeric type selected by `projection` from every operand.
+// Return `std::nullopt` if any operand has type `Other`.
+template <size_t N, typename Projection>
+std::optional<std::array<NumericType, N>> getNumericTypes(
+    const std::array<NumericOperandClassification, N>& classifications,
+    Projection projection) {
+  std::array<NumericType, N> types;
+
+  for (size_t i = 0; i < N; ++i) {
+    const auto type = projection(classifications[i]);
+    if (type == NumericType::Other) {
+      return std::nullopt;
+    }
+    types[i] = type;
+  }
+
+  return types;
+}
+
 // Return the homogeneous numeric type of every operand if all operands are
 // homogeneous. Otherwise return `std::nullopt`.
 template <size_t N>
 std::optional<std::array<NumericType, N>> getHomogeneousNumericTypes(
     const std::array<NumericOperandClassification, N>& classifications) {
-  std::array<NumericType, N> types;
-
-  for (size_t i = 0; i < N; ++i) {
-    if (classifications[i].homogeneousType_ == NumericType::Other) {
-      return std::nullopt;
-    }
-    types[i] = classifications[i].homogeneousType_;
-  }
-
-  return types;
+  return getNumericTypes(classifications, [](const auto& classification) {
+    return classification.homogeneousType_;
+  });
 }
 
 // Return the majority numeric type of every operand if all operands have one.
@@ -201,16 +217,9 @@ std::optional<std::array<NumericType, N>> getHomogeneousNumericTypes(
 template <size_t N>
 std::optional<std::array<NumericType, N>> getMajorityNumericTypes(
     const std::array<NumericOperandClassification, N>& classifications) {
-  std::array<NumericType, N> types;
-
-  for (size_t i = 0; i < N; ++i) {
-    if (classifications[i].majorityType_ == NumericType::Other) {
-      return std::nullopt;
-    }
-    types[i] = classifications[i].majorityType_;
-  }
-
-  return types;
+  return getNumericTypes(classifications, [](const auto& classification) {
+    return classification.majorityType_;
+  });
 }
 
 }  // namespace sparqlExpression::detail::homogeneousNumeric

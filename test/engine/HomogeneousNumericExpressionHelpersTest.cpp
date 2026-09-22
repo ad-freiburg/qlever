@@ -436,4 +436,34 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   EXPECT_EQ((*resultVector)[2], D(15.5));
 }
 
+// _____________________________________________________________________________
+TEST_F(HomogeneousNumericExpressionHelpersTest, GetHomogeneousNumericTypes) {
+  std::array classifications{
+      NumericOperandClassification{NumericType::Int, NumericType::Double},
+      NumericOperandClassification{NumericType::Double, NumericType::Int}};
+
+  const auto result = getHomogeneousNumericTypes(classifications);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result.value()[0], NumericType::Int);
+  EXPECT_EQ(result.value()[1], NumericType::Double);
+
+  classifications[1].homogeneousType_ = NumericType::Other;
+  EXPECT_FALSE(getHomogeneousNumericTypes(classifications).has_value());
+}
+
+// _____________________________________________________________________________
+TEST_F(HomogeneousNumericExpressionHelpersTest, GetMajorityNumericTypes) {
+  std::array classifications{
+      NumericOperandClassification{NumericType::Other, NumericType::Int},
+      NumericOperandClassification{NumericType::Other, NumericType::Double}};
+
+  const auto result = getMajorityNumericTypes(classifications);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result.value()[0], NumericType::Int);
+  EXPECT_EQ(result.value()[1], NumericType::Double);
+
+  classifications[1].majorityType_ = NumericType::Other;
+  EXPECT_FALSE(getMajorityNumericTypes(classifications).has_value());
+}
+
 }  // namespace
