@@ -18,6 +18,7 @@
 
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/RuntimeInformation.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
@@ -255,6 +256,12 @@ class QueryPlanner {
 
   void setEnablePatternTrick(bool enablePatternTrick);
 
+  // How each connected component of the query graph was planned, in the order
+  // in which they were planned (see `ConnectedComponentPlanningInfo`).
+  const std::vector<ConnectedComponentPlanningInfo>& planningInfo() const {
+    return planningInfo_;
+  }
+
   // Create a set of possible execution trees for the given parsed query. The
   // best (cheapest) execution tree according to the QueryPlanner is part of
   // that set. When the query has no `ORDER BY` clause, the set contains one
@@ -285,6 +292,14 @@ class QueryPlanner {
   // are then passed on to the created `QueryExecutionTree` such that they can
   // be reported as part of the query result if desired.
   std::vector<std::string> warnings_;
+
+  // See `planningInfo()`.
+  std::vector<ConnectedComponentPlanningInfo> planningInfo_;
+
+  // The number of candidate plans that `merge` created so far, for the
+  // `numCandidatePlans_` of `planningInfo_`. It is `mutable` because `merge`
+  // and the functions that call it are `const`.
+  mutable size_t numCandidatePlans_ = 0;
 
   std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);

@@ -233,6 +233,30 @@ TEST_F(OperationTestFixture,
 }
 
 // _____________________________________________________________________________
+TEST_F(OperationTestFixture, updatesCarryInformationAboutTheWholeQuery) {
+  // Without information about the whole query, the updates are just the
+  // runtime information of the operations.
+  operation.getResult(true);
+  ASSERT_FALSE(jsonHistory.empty());
+  EXPECT_FALSE(nlohmann::json::parse(jsonHistory.back()).contains("meta"));
+
+  // Once it is set, every update carries it as the key `meta`, with the same
+  // content as in the `application/qlever-results+json` format.
+  RuntimeInformationWholeQuery wholeQuery;
+  wholeQuery.timeQueryPlanning = std::chrono::milliseconds{17};
+  wholeQuery.queryPlanning.push_back({false, 3, 6, 1500, 42});
+  qec.setRuntimeInfoWholeQuery(wholeQuery);
+  jsonHistory.clear();
+  qec.clearCacheUnpinnedOnly();
+  operation.getResult(true);
+  ASSERT_FALSE(jsonHistory.empty());
+  for (const auto& json : jsonHistory) {
+    EXPECT_EQ(nlohmann::ordered_json::parse(json)["meta"],
+              nlohmann::ordered_json(wholeQuery));
+  }
+}
+
+// _____________________________________________________________________________
 
 TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
   // Run twice and clear history to get cached values

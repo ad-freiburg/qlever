@@ -76,7 +76,11 @@ void QueryExecutionContext::signalQueryUpdate(
   if (sendPriority == RuntimeInformation::SendPriority::Always ||
       enoughTimeSinceLastUpdate()) {
     lastWebsocketUpdate_ = now;
-    updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
+    nlohmann::ordered_json json(runtimeInformation);
+    if (runtimeInfoWholeQuery_.has_value()) {
+      json["meta"] = runtimeInfoWholeQuery_.value();
+    }
+    updateCallback_(json.dump());
   }
 }
 

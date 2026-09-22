@@ -1240,6 +1240,7 @@ std::vector<SubtreePlan> QueryPlanner::merge(
   for (const auto& ai : a) {
     for (const auto& bj : b) {
       for (auto& plan : createJoinCandidates(ai, bj, tg)) {
+        ++numCandidatePlans_;
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
             .emplace_back(std::move(plan));
         checkCancellation();
@@ -1881,7 +1882,9 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
 
     const size_t budget =
         getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>();
-    bool useGreedyPlanning = countSubgraphs(g, filters, budget) > budget;
+    size_t numConnectedSubgraphs = countSubgraphs(g, filters, budget);
+    bool useGreedyPlanning = numConnectedSubgraphs > budget;
+    size_t numCandidatePlansBefore = numCandidatePlans_;
     if (useGreedyPlanning) {
       AD_LOG_INFO
           << "Using the greedy query planner for a large connected component"
@@ -1920,6 +1923,10 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
     addCandidates(std::invoke(impl, this, std::move(component),
                               filtersAndOptSubstitutes, textLimitVec, tg,
                               std::move(applicableReplacementPlans)));
+    planningInfo_.push_back(ConnectedComponentPlanningInfo{
+        useGreedyPlanning, static_cast<size_t>(absl::popcount(coveredNodes)),
+        numConnectedSubgraphs, budget,
+        numCandidatePlans_ - numCandidatePlansBefore});
     lastDpRowFromComponents.push_back(std::move(lastDpRow));
     checkCancellation();
   }

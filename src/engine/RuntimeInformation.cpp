@@ -222,7 +222,19 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
 void to_json(nlohmann::ordered_json& j,
              const RuntimeInformationWholeQuery& rti) {
   j = nlohmann::ordered_json{
-      {"time_query_planning", rti.timeQueryPlanning.count()}};
+      {"time_query_planning", rti.timeQueryPlanning.count()},
+      {"query_planning", rti.queryPlanning}};
+}
+
+// __________________________________________________________________________
+void to_json(nlohmann::ordered_json& j,
+             const ConnectedComponentPlanningInfo& info) {
+  j = nlohmann::ordered_json{
+      {"algorithm", info.greedy_ ? "greedy" : "dynamic-programming"},
+      {"num_nodes", info.numNodes_},
+      {"num_connected_subgraphs", info.numConnectedSubgraphs_},
+      {"budget", info.budget_},
+      {"num_candidate_plans", info.numCandidatePlans_}};
 }
 
 // __________________________________________________________________________
