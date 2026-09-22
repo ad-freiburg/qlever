@@ -39,28 +39,120 @@ namespace {
 constexpr ctll::fixed_string newlineRegex = R"([\r\n]+)";
 constexpr ctll::fixed_string statementEndRegex = R"([\r\n]+[\t ]*\.)";
 
-// Run `search` against the reversed `sv`, and return the number of bytes up to
-// and including the rightmost match, or `std::nullopt` if there is no match.
+// The position of a match in the original (that is, not reversed) input.
+struct MatchPositions {
+  size_t begin_;
+  size_t end_;
+};
+
+// Run `search` against the reversed `sv`, and return the positions of the
+// rightmost match, or `std::nullopt` if there is no match.
 template <typename Search>
-std::optional<size_t> findEndOfLastMatch(const Search& search,
-                                         std::string_view sv) {
+std::optional<MatchPositions> findLastMatch(const Search& search,
+                                            std::string_view sv) {
   auto match = search(sv.rbegin(), sv.rend());
   if (!match) {
     return std::nullopt;
   }
-  return match.begin().base() - sv.begin();
+  // The match is reversed, so its end is its beginning in `sv` and vice versa.
+  return MatchPositions{static_cast<size_t>(match.end().base() - sv.begin()),
+                        static_cast<size_t>(match.begin().base() - sv.begin())};
+}
+
+// Check whether the dot that directly follows `lineUpToDot` (the part of its
+// line that precedes it) is commented out. The line is scanned from its
+// beginning, because a `#` inside an IRI (like `<http://example.org#thing>`) or
+// inside a literal doesn't start a comment.
+// A `"""` or `'''` literal that is confined to a single line usually also
+// works, although the scan doesn't know those delimiters: six quotes toggle the
+// state an even number of times, so a `#` between them is ignored. This fails
+// only if the literal contains an unpaired quote of its own kind, like
+// `'''it's # x'''`, and then the block merely ends at an earlier statement.
+// The parallel parser rejects such literals anyway (see
+// `TurtleParser::stringParseImpl`), but only when it parses them, which is
+// after the split, so splitting correctly here preserves that clear error
+// message.
+bool dotIsCommentedOut(std::string_view lineUpToDot) {
+  // Whether the scan is currently inside an IRI or a literal, in which a `#`
+  // doesn't start a comment.
+  enum class State { Default, Iri, Literal };
+  using enum State;
+  auto state = Default;
+  // The character that will close the current literal, either `"` or `'`.
+  char quote = '\0';
+  // Whether the previous character was a backslash, which makes this character
+  // part of an escape sequence, for example the `\#` in `ex:foo\#bar`.
+  bool escaped = false;
+  for (char c : lineUpToDot) {
+    if (std::exchange(escaped, false)) {
+      continue;
+    }
+    switch (state) {
+      case Default:
+        if (c == '#') {
+          // The rest of the line, including the dot, is a comment.
+          return true;
+        } else if (c == '\\') {
+          escaped = true;
+        } else if (c == '<') {
+          state = Iri;
+        } else if (c == '"' || c == '\'') {
+          state = Literal;
+          quote = c;
+        }
+        break;
+      case Iri:
+        // An IRI may contain a `#`, but neither a `>` nor a line break, and it
+        // has no escape sequences that could hide the closing `>`.
+        if (c == '>') {
+          state = Default;
+        }
+        break;
+      case Literal:
+        // A literal may contain a `#` and a `<`, and a `\"` or `\\` doesn't
+        // close it.
+        if (c == '\\') {
+          escaped = true;
+        } else if (c == quote) {
+          state = Default;
+        }
+        break;
+    }
+  }
+  // Either no `#` was found, or the line ends inside an IRI or a literal, which
+  // means that the input is broken or contains a multiline literal. Both are
+  // left to the parser, which reports them much better than this function
+  // could.
+  return false;
 }
 }  // namespace
 
 namespace detail {
 // _____________________________________________________________________________
 std::optional<size_t> findEndOfLastNewline(std::string_view input) {
-  return findEndOfLastMatch(ctre::search<newlineRegex>, input);
+  auto match = findLastMatch(ctre::search<newlineRegex>, input);
+  return match.has_value() ? std::optional{match.value().end_} : std::nullopt;
 }
 
 // _____________________________________________________________________________
 std::optional<size_t> findEndOfLastStatement(std::string_view input) {
-  return findEndOfLastMatch(ctre::search<statementEndRegex>, input);
+  std::string_view remaining = input;
+  while (auto match =
+             findLastMatch(ctre::search<statementEndRegex>, remaining)) {
+    // The beginning of the line that contains the dot. The beginning of the
+    // input counts as the beginning of a line, see the header.
+    size_t lineStart = remaining.find_last_of("\r\n", match.value().begin_);
+    lineStart = lineStart == std::string_view::npos ? 0 : lineStart + 1;
+    if (!dotIsCommentedOut(
+            remaining.substr(lineStart, match.value().begin_ - lineStart))) {
+      return match.value().end_;
+    }
+    // The dot is commented out, so continue the search before that line. There
+    // can be at most one match per line, because a match ends with a line
+    // break.
+    remaining = remaining.substr(0, lineStart);
+  }
+  return std::nullopt;
 }
 }  // namespace detail
 
@@ -93,7 +185,15 @@ template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::raise(std::string_view error_message) const {
   auto d = tok_.view();
   std::stringstream errorMessage;
-  errorMessage << "Parse error at byte position " << getParsePosition() << ": "
+  errorMessage << "Parse error";
+  // An index build parses many inputs at the same time, so the byte position
+  // alone is useless unless the input is named. Parsers without a name (for
+  // example the `RdfStringParser` for a single term of a SPARQL query) keep the
+  // shorter message.
+  if (!inputName().empty()) {
+    errorMessage << " in \"" << inputName() << '"';
+  }
+  errorMessage << " at byte position " << getParsePosition() << ": "
                << error_message << '\n';
   if (!d.empty()) {
     size_t num_bytes = 500;
@@ -831,15 +931,15 @@ bool TurtleParser<Tokenizer_T>::check(bool result) const {
 
 // _____________________________________________________________________________
 template <class Tokenizer_T>
-TripleComponent::Iri TurtleParser<Tokenizer_T>::expandPrefix(
+const TripleComponent::Iri& TurtleParser<Tokenizer_T>::expandPrefix(
     const std::string& prefix) {
-  if (!prefixMap().count(prefix)) {
+  auto it = prefixMap().find(prefix);
+  if (it == prefixMap().end()) {
     raise("Prefix " + prefix +
           " was not previously defined using a PREFIX or @prefix "
           "declaration");
-  } else {
-    return prefixMap()[prefix];
   }
+  return it->second;
 }
 
 // _____________________________________________________________________________
@@ -1040,6 +1140,7 @@ template <class T>
 void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
                                     ad_utility::MemorySize blocksize) {
   this->clear();
+  this->setInputName(spec.filename());
   // Make sure that a block of data ends with a newline. This is important for
   // two reasons:
   //
@@ -1064,7 +1165,11 @@ void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
 
 // _____________________________________________________________________________
 template <class T>
-std::optional<std::vector<TurtleTriple>> RdfStreamParser<T>::getBatch() {
+std::optional<std::vector<TurtleTriple>> RdfStreamParser<T>::getBatch(
+    std::vector<TurtleTriple> buffer) {
+  // Parse into the buffer that the caller has passed back, so that its
+  // capacity is reused.
+  this->setTripleBuffer(std::move(buffer));
   // If parsing a statement fails because our buffer ends before the end of
   // that statement, we need to be able to recover.
   TurtleParserBackupState b = backupState();
@@ -1149,6 +1254,7 @@ bool RdfParallelParsingState<Parser>::parseHeaderStep(
     std::optional<qlever::parser::ByteBlock> block) {
   if (!declarationParser_.has_value()) {
     declarationParser_.emplace(encodedIriManager_);
+    declarationParser_.value().setInputName(inputName_);
   }
   auto& declarationParser = declarationParser_.value();
   std::string_view remainder;
@@ -1181,16 +1287,21 @@ bool RdfParallelParsingState<Parser>::parseHeaderStep(
 // ____________________________________________________________________________
 template <typename Parser>
 std::vector<TurtleTriple> RdfParallelParsingState<Parser>::parseBatch(
-    qlever::parser::ByteBlock batch, size_t positionOffset) const {
+    qlever::parser::ByteBlock batch, size_t positionOffset,
+    std::vector<TurtleTriple> buffer) const {
   RdfStringParser<Parser> parser{encodedIriManager_, defaultGraphIri_,
                                  settings_};
   parser.header() = header_;
   parser.useSimplifiedGrammar();
   parser.setPositionOffset(positionOffset);
+  parser.setInputName(inputName_);
   // Ensure that all sub-parsers use the same file-level blank node prefix
   // so that user-specified blank node labels (_:foo) have the same ID
   // across all batches of the same file.
   parser.setFileBlankNodePrefix(fileBlankNodePrefix_);
+  // Parse into the buffer that the caller has passed back, so that its
+  // capacity is reused across the (short-lived) worker parsers.
+  parser.setTripleBuffer(std::move(buffer));
   parser.setInputStream(std::move(batch));
   return parser.parseAndReturnAllTriples();
 }
@@ -1306,7 +1417,8 @@ RdfMultifileParser::~RdfMultifileParser() {
 }
 
 // _____________________________________________________________________________
-std::optional<std::vector<TurtleTriple>> RdfMultifileParser::getBatch() {
+std::optional<std::vector<TurtleTriple>> RdfMultifileParser::getBatch(
+    [[maybe_unused]] std::vector<TurtleTriple> buffer) {
   return finishedBatchQueue_.pop();
 }
 

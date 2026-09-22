@@ -32,9 +32,8 @@ using std::string;
 auto iri = ad_utility::testing::iri;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
-PropertyPath PathIri(std::string_view iri) {
-  return PropertyPath::fromIri(
-      ad_utility::triple_component::Iri::fromIriref(iri));
+PropertyPath PathIri(std::string_view iriref) {
+  return PropertyPath::fromIri(ad_utility::testing::iri(iriref));
 }
 using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
 }  // namespace

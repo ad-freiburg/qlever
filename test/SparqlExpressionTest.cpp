@@ -29,11 +29,11 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "index/Index.h"
+#include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
-#include "util/Conversions.h"
 #include "util/IdTestHelpers.h"
 
 namespace {
@@ -940,6 +940,16 @@ TEST(SparqlExpression, stringOperators) {
                                  lit("https://www.bimbimbam/2001/bamString"),
                                  lit("/hello"), iriref("</hello>")},
           IdOrLocalVocabEntry{iriref("<http://example.com/hi/>")}});
+
+  // `IRI()` does not unescape its argument, so the content of the resulting IRI
+  // may contain a backslash. Resolving it against a base IRI must not read that
+  // backslash as an escape sequence: `a\\u0062c` must not silently become
+  // `abc`. A backslash is not a valid URI character, so this is reported as an
+  // error instead.
+  EXPECT_ANY_THROW(checkIriOrUri(
+      IdOrLocalVocabEntryVec{U},
+      std::tuple{IdOrLocalVocabEntryVec{lit(R"(a\\u0062c)")},
+                 IdOrLocalVocabEntry{iriref("<http://example.com/hi/>")}}));
 
   // The ParsedUriGetter::operator()(ValueId, ...) overload is required by the
   // Mixin interface but logically unreachable (the base IRI is always a
