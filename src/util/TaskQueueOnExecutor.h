@@ -74,9 +74,10 @@ class TaskQueueOnExecutor {
  private:
   boost::asio::any_io_executor executor_;
   size_t maxNumTasksInFlight_;
-  // The message that is logged if a task throws (it contains the name of this
-  // queue). It is precomputed, because it is needed for every single task.
-  std::string taskErrorMessage_;
+  // The message that is logged if a task throws or cannot be scheduled (it
+  // contains the name of this queue). It is precomputed, because it is needed
+  // for every single task.
+  std::string errorMessage_;
 
   // The mutex that protects all of the following members, together with the
   // condition variable that is notified whenever one of them changes.
@@ -105,8 +106,8 @@ class TaskQueueOnExecutor {
                       size_t maxNumTasksInFlight, std::string name = "")
       : executor_{std::move(executor)},
         maxNumTasksInFlight_{maxNumTasksInFlight},
-        taskErrorMessage_{absl::StrCat(
-            "During a task of the TaskQueueOnExecutor \"", name, "\".")} {
+        errorMessage_{
+            absl::StrCat("In the TaskQueueOnExecutor \"", name, "\".")} {
     AD_CONTRACT_CHECK(static_cast<bool>(executor_));
     AD_CONTRACT_CHECK(maxNumTasksInFlight_ > 0);
   }
@@ -118,10 +119,8 @@ class TaskQueueOnExecutor {
   // NOTE: If the execution of the task throws, then `std::terminate` will be
   // called (this matches the behavior of `TaskQueue`, where an exception
   // escapes the worker thread). Use `submit` below if the exception should
-  // instead be propagated to the pushing thread. An exception that is thrown
-  // while the task is *scheduled* (which only happens if the executor runs
-  // out of resources) is not a task exception; it is propagated to the caller
-  // of `push`, and the task is then never run.
+  // instead be propagated to the pushing thread. The *scheduling* of the task
+  // also terminates if it throws, see below.
   void push(Task task) {
     std::unique_lock lock{mutex_};
     AD_CONTRACT_CHECK(!startedFinishing_);
@@ -129,16 +128,22 @@ class TaskQueueOnExecutor {
              [this]() { return numTasksInFlight_ < maxNumTasksInFlight_; });
     ++numTasksInFlight_;
     lock.unlock();
-    try {
-      boost::asio::post(executor_, [this, task = std::move(task)]() mutable {
-        ad_utility::terminateIfThrows([&task]() { task(); }, taskErrorMessage_);
-        taskIsDone();
-      });
-    } catch (...) {
-      // The task will never be run, so it doesn't occupy a slot.
-      taskIsDone();
-      throw;
-    }
+    // NOTE: The only way in which `boost::asio::post` can fail is that the
+    // executor runs out of resources while scheduling the task (in practice,
+    // one of the allocations for the queued operation throws `std::bad_alloc`;
+    // the `boost::asio::bad_executor` for an empty executor is excluded by the
+    // contract check in the constructor). Such a failure is not recoverable,
+    // so we terminate instead of leaving the queue in a state where a slot is
+    // occupied by a task that will never be run.
+    ad_utility::terminateIfThrows(
+        [this, &task]() {
+          boost::asio::post(executor_, [this,
+                                        task = std::move(task)]() mutable {
+            ad_utility::terminateIfThrows([&task]() { task(); }, errorMessage_);
+            taskIsDone();
+          });
+        },
+        errorMessage_);
   }
 
   // Submit a callable and return a `std::future` for its result. The returned
