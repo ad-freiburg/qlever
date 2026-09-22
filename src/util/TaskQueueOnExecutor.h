@@ -47,11 +47,15 @@ namespace ad_utility {
 // 1. This class owns no threads. The number of threads (and thus the actual
 //    parallelism) is a property of the executor and not of this queue. The
 //    queue only bounds how much work it keeps *in flight* (see `push`).
-// 2. `finish()`, `waitUntilFinished()`, and the destructor block the calling
-//    thread. They must therefore NOT be called from a thread that runs the
-//    executor, because then the tasks that are waited for might never get a
-//    thread to run on (the same holds for a `push` that has to wait for a free
-//    slot).
+// 2. No member function of this class may be called from a thread that runs
+//    the executor. The complete interface is blocking (see the NOTE above), so
+//    such a call would occupy one of the executor's threads while waiting for
+//    tasks that then might never get a thread to run on. Depending on the
+//    executor and the number of tasks this is prone to deadlock, or even
+//    guaranteed to deadlock (for example for a single-threaded executor).
+//    Unfortunately this precondition cannot be checked: the concrete asio
+//    executors have a `running_in_this_thread()`, but the type-erased
+//    `boost::asio::any_io_executor` that we store does not.
 // 3. The execution context behind the executor has to outlive this queue,
 //    because the destructor waits for tasks that run on that context.
 // 4. Whether the tasks run concurrently, and in which order, is a property of
@@ -74,9 +78,9 @@ class TaskQueueOnExecutor {
  private:
   boost::asio::any_io_executor executor_;
   size_t maxNumTasksInFlight_;
-  // The message that is logged if a task throws or cannot be scheduled (it
-  // contains the name of this queue). It is precomputed, because it is needed
-  // for every single task.
+  // The message that is logged if a task throws or cannot be scheduled. It is
+  // the only thing that uses the `name` that is passed to the constructor, so
+  // we store the complete message directly instead of that name.
   std::string errorMessage_;
 
   // The mutex that protects all of the following members, together with the
@@ -163,10 +167,10 @@ class TaskQueueOnExecutor {
     return future;
   }
 
-  // Block until all tasks that have been pushed have been completed. After a
-  // call to `finish()`, no more calls to `push` are allowed. Calling `finish()`
-  // several times is allowed; all calls but the first one simply wait until the
-  // first call has completed (and thus return immediately if it already has).
+  // Block until all tasks that have been pushed so far have been completed.
+  // After a call to `finish()`, no more tasks may be pushed. Calling `finish()`
+  // several times is allowed; each of those calls blocks until all pushed tasks
+  // are done.
   void finish() {
     std::unique_lock lock{mutex_};
     if (startedFinishing_) {
@@ -218,6 +222,9 @@ class TaskQueueOnExecutor {
     std::lock_guard lock{mutex_};
     AD_CORRECTNESS_CHECK(numTasksInFlight_ > 0);
     --numTasksInFlight_;
+    // NOTE: `cv_` is shared by several distinct predicates (a free slot, an
+    // empty queue, a completed `finish()`), so every change of the state has to
+    // wake up ALL waiters, and not only one of them.
     cv_.notify_all();
   }
 };

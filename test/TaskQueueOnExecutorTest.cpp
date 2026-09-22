@@ -121,6 +121,9 @@ TEST(TaskQueueOnExecutor, destructorWaitsForAllTasks) {
     TaskQueueOnExecutor queue{pool.get_executor(), 3, "destructorWaits"};
     for (size_t i = 0; i < numTasks; ++i) {
       queue.push([&counter]() {
+        // The `yield` slows the tasks down, such that the destructor below is
+        // likely to be entered while tasks are still in flight (otherwise the
+        // test would also pass for a destructor that doesn't wait at all).
         std::this_thread::yield();
         ++counter;
       });
