@@ -51,6 +51,10 @@ jobs:
             toolchain: clang16
             build-type: RelWithDebInfo
             extra-flags: "-fsanitize=address -fno-omit-frame-pointer"
+            # LeakSanitizer fatals at process startup under rootless podman
+            # (restricted syscalls), which aborts gtest test discovery, so
+            # leak detection stays off on this leg. Plain ASan is unaffected.
+            container-env: "ASAN_OPTIONS=detect_leaks=0"
           - image: clang16
             toolchain: clang16
             build-type: RelWithDebInfo
@@ -75,6 +79,9 @@ jobs:
             -w /work \
             localhost/qlever-ci:${{ matrix.image }} bash -c '
               set -e
+              # Per-leg extra environment inside the container (empty for
+              # legs without a `container-env` matrix key).
+              if [ -n "${{ matrix.container-env }}" ]; then export ${{ matrix.container-env }}; fi
               cmake -B /work/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
                 -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/${{ matrix.toolchain }}.cmake" \
                 -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror ${{ matrix.extra-flags }}" \
