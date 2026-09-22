@@ -29,6 +29,7 @@ RuntimeParameters::RuntimeParameters() {
   add(cacheMaxSizeSingleEntry_);
   add(lazyIndexScanQueueSize_);
   add(lazyIndexScanNumThreads_);
+  add(queryCpuQuotaCores_);
   add(rebuildIndexScanNumThreads_);
   add(rebuildPermutationWriterNumThreads_);
   add(rebuildMaxConcurrentPermutationPairs_);
