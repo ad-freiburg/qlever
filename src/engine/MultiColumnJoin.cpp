@@ -19,7 +19,7 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> t1,
                                  std::shared_ptr<QueryExecutionTree> t2,
                                  bool allowSwappingChildrenOnlyForTesting)
-    : Operation{qec} {
+    : Operation{qec}, _multiplicities{allocator().template as<float>()} {
   // Make sure subtrees are ordered so that identical queries can be identified.
   if (allowSwappingChildrenOnlyForTesting &&
       t1->getCacheKey() > t2->getCacheKey()) {
@@ -214,8 +214,9 @@ void MultiColumnJoin::computeMultiColumnJoin(
     return;
   }
 
-  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
-                                               right.numColumns()};
+  ad_utility::JoinColumnMapping joinColumnData{
+      joinColumns, left.numColumns(), right.numColumns(),
+      allocator().template as<ColumnIndex>()};
 
   IdTableView<0> leftJoinColumns =
       left.asColumnSubsetView(joinColumnData.jcsLeft());

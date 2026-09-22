@@ -20,6 +20,7 @@
 #include "engine/idTable/IdTableConcepts.h"
 #include "global/Id.h"
 #include "index/LocalVocab.h"
+#include "util/Allocator.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
@@ -33,7 +34,7 @@ namespace ad_utility {
 // (configurable, default value 100'000) is reached, the results are actually
 // written to the table.
 class AddCombinedRowToIdTable {
-  std::vector<size_t> numUndefinedPerColumn_;
+  std::vector<size_t, qlever::Allocator<size_t>> numUndefinedPerColumn_;
   size_t numJoinColumns_;
   // If set to false, then the join columns will not be written to the output.
   // The result table will also have no columns corresponding to the join
@@ -53,8 +54,11 @@ class AddCombinedRowToIdTable {
     size_t targetIndex_;
     std::array<size_t, 2> rowIndices_;
   };
-  // Store the indices that have not yet been written.
-  std::vector<TargetIndexAndRowIndices> indexBuffer_;
+  // Store the indices that have not yet been written. This buffer scales with
+  // the number of rows processed per batch, so it is allocated via the
+  // `qlever::Allocator` seam (see the `allocator` constructor parameter).
+  std::vector<TargetIndexAndRowIndices, qlever::Allocator<TargetIndexAndRowIndices>>
+      indexBuffer_;
 
   // Store the information, which row index from the left input is written to a
   // given index in the output. This is used for OPTIONAL joins where there are
@@ -65,7 +69,8 @@ class AddCombinedRowToIdTable {
   };
 
   // Store the indices of OPTIONAL inputs that have not yet been written.
-  std::vector<TargetIndexAndRowIndex> optionalIndexBuffer_;
+  std::vector<TargetIndexAndRowIndex, qlever::Allocator<TargetIndexAndRowIndex>>
+      optionalIndexBuffer_;
 
   // The total number of optional and non-optional rows that are currently
   // buffered but not yet written to the result. The first row index in the
@@ -88,17 +93,25 @@ class AddCombinedRowToIdTable {
 
  public:
   // Construct from the number of join columns, the two inputs, and the output.
-  // The `bufferSize` can be configured for testing.
+  // The `bufferSize` can be configured for testing. The `allocator` is used for
+  // the internal row-index buffers (`indexBuffer_`/`optionalIndexBuffer_`),
+  // which scale with the number of rows processed per batch; it defaults to an
+  // unlimited allocator so that existing callers that don't pass one are
+  // unaffected.
   explicit AddCombinedRowToIdTable(
       size_t numJoinColumns, IdTableView<0> input1, IdTableView<0> input2,
       IdTable output, CancellationHandle cancellationHandle,
       bool keepJoinColumns = true, size_t bufferSize = 100'000,
-      BlockwiseCallback blockwiseCallback = ad_utility::noop)
-      : numUndefinedPerColumn_(output.numColumns()),
+      BlockwiseCallback blockwiseCallback = ad_utility::noop,
+      qlever::Allocator<Id> allocator = qlever::makeUnlimitedAllocator<Id>())
+      : numUndefinedPerColumn_(output.numColumns(),
+                               allocator.template as<size_t>()),
         numJoinColumns_{numJoinColumns},
         keepJoinColumns_{keepJoinColumns},
         inputLeftAndRight_{std::array{input1, input2}},
         resultTable_{std::move(output)},
+        indexBuffer_{allocator.template as<TargetIndexAndRowIndices>()},
+        optionalIndexBuffer_{allocator.template as<TargetIndexAndRowIndex>()},
         bufferSize_{bufferSize},
         blockwiseCallback_{std::move(blockwiseCallback)},
         cancellationHandle_{std::move(cancellationHandle)} {
@@ -115,12 +128,16 @@ class AddCombinedRowToIdTable {
       size_t numJoinColumns, IdTable output,
       CancellationHandle cancellationHandle, bool keepJoinColumns = true,
       size_t bufferSize = 100'000,
-      BlockwiseCallback blockwiseCallback = ad_utility::noop)
-      : numUndefinedPerColumn_(output.numColumns()),
+      BlockwiseCallback blockwiseCallback = ad_utility::noop,
+      qlever::Allocator<Id> allocator = qlever::makeUnlimitedAllocator<Id>())
+      : numUndefinedPerColumn_(output.numColumns(),
+                               allocator.template as<size_t>()),
         numJoinColumns_{numJoinColumns},
         keepJoinColumns_{keepJoinColumns},
         inputLeftAndRight_{std::nullopt},
         resultTable_{std::move(output)},
+        indexBuffer_{allocator.template as<TargetIndexAndRowIndices>()},
+        optionalIndexBuffer_{allocator.template as<TargetIndexAndRowIndex>()},
         bufferSize_{bufferSize},
         blockwiseCallback_{std::move(blockwiseCallback)},
         cancellationHandle_{std::move(cancellationHandle)} {
@@ -129,7 +146,7 @@ class AddCombinedRowToIdTable {
   }
 
   // Return the number of UNDEF values per column.
-  const std::vector<size_t>& numUndefinedPerColumn() {
+  const std::vector<size_t, qlever::Allocator<size_t>>& numUndefinedPerColumn() {
     flush();
     return numUndefinedPerColumn_;
   }

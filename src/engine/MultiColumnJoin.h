@@ -10,6 +10,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/Allocator.h"
 
 class MultiColumnJoin : public Operation {
  private:
@@ -18,7 +19,7 @@ class MultiColumnJoin : public Operation {
 
   std::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
-  std::vector<float> _multiplicities;
+  std::vector<float, qlever::Allocator<float>> _multiplicities;
   size_t _sizeEstimate;
   bool _multiplicitiesComputed = false;
 

@@ -11,6 +11,7 @@
 #include "engine/JoinHelpers.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
+#include "util/Allocator.h"
 #include "util/CancellationHandle.h"
 #include "util/ChunkedForLoop.h"
 #include "util/CompilerExtensions.h"
@@ -59,7 +60,8 @@ struct RightFiller {
 // Helper class for `IndexNestedLoopJoin::matchLeft` tracks matches to be used
 // by `OptionalJoin`.
 struct Adder {
-  std::vector<std::array<size_t, 2>> matchingPairs_;
+  std::vector<std::array<size_t, 2>, qlever::Allocator<std::array<size_t, 2>>>
+      matchingPairs_;
   // Should conceptually be bool, but doesn't allow the compiler to use
   // memset in `matchLeft`.
   ad_utility::VectorWithMemoryLimit<char> missingIndices_;
@@ -71,7 +73,8 @@ struct Adder {
                  const ad_utility::AllocatorWithLimit<char>& allocator,
                  ad_utility::SharedCancellationHandle cancellationHandle,
                  size_t numJoinColumns, bool keepJoinColumns)
-      : missingIndices_(size, true, allocator),
+      : matchingPairs_(allocator.template as<std::array<size_t, 2>>()),
+        missingIndices_(size, true, allocator),
         cancellationHandle_{std::move(cancellationHandle)},
         numJoinColumns_{numJoinColumns},
         keepJoinColumns_{keepJoinColumns} {}
@@ -220,7 +223,7 @@ class OptionalJoinRange
 // Helper function for common pattern.
 template <size_t JOIN_COLUMNS, typename IdTableT>
 IdTableView<JOIN_COLUMNS> toStaticView(
-    const IdTableT& idTable, const std::vector<ColumnIndex>& joinColumns) {
+    const IdTableT& idTable, ql::span<const ColumnIndex> joinColumns) {
   static_assert(IdTableLike<IdTableT>);
   return idTable.asColumnSubsetView(joinColumns)
       .template asStaticView<JOIN_COLUMNS>();
@@ -382,7 +385,9 @@ class IndexNestedLoopJoin {
           const IdTableView<0>& leftTable = leftResult_->idTableView();
           size_t numColsLeft = leftTable.numColumns();
           ad_utility::JoinColumnMapping joinColumnData{
-              joinColumns_, numColsLeft, numColsRight, keepJoinColumns};
+              joinColumns_, numColsLeft, numColsRight,
+              leftTable.getAllocator().template as<ColumnIndex>(),
+              keepJoinColumns};
           auto leftTableView = detail::toStaticView<JOIN_COLUMNS>(
               leftTable, joinColumnData.jcsLeft());
           auto matchHelper =
