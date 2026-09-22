@@ -301,6 +301,8 @@ addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)
 
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
+addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
+
 addLinkAndDiscoverTest(TaskQueueTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
@@ -509,8 +511,6 @@ addLinkAndDiscoverTest(MessageSenderTest http)
 addLinkAndDiscoverTestNoLibs(CancellationHandleTest qlever_util)
 
 addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
-
-addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 

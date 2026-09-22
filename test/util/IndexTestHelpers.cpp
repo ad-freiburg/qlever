@@ -246,9 +246,12 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       index.getImpl().setGeoCellGridForIndexBuilding(
           ad_utility::GeoCellGrid{c.geoCellGridLevel});
     }
-    if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
+    if (c.encodedPrefixesWithoutAngleBrackets.has_value() ||
+        !c.encodedIriPatterns.empty()) {
       index.getImpl().setPrefixesForEncodedValues(
-          std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
+          std::move(c.encodedPrefixesWithoutAngleBrackets)
+              .value_or(std::vector<std::string>{}),
+          std::move(c.encodedIriPatterns));
     }
     index.createFromFiles({spec}, c.numThreads);
     if (c.createTextIndex) {

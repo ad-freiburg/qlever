@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_PARSER_ASYNCPARSERDRIVER_H
-#define QLEVER_SRC_PARSER_ASYNCPARSERDRIVER_H
+#ifndef QLEVER_TEST_UTIL_ASYNCPARSERDRIVER_H
+#define QLEVER_TEST_UTIL_ASYNCPARSERDRIVER_H
 
 #include <absl/cleanup/cleanup.h>
 
@@ -25,18 +25,26 @@
 #include <vector>
 
 #include "index/ConstantsIndexBuilding.h"
+#include "index/InputFileSpecification.h"
+#include "index/vocabulary/EncodedIriManager.h"
+#include "parser/RdfAsyncMultifileParser.h"
+#include "parser/RdfAsyncParallelParser.h"
 #include "parser/RdfParser.h"
 #include "util/Forward.h"
+#include "util/Iterators.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/ThreadSafeQueue.h"
 
-// Drive an asynchronous RDF parser from its own thread pool and expose it
-// through the synchronous `RdfParserBase` interface, so that it can be used
-// wherever `RdfParallelParser` can.
+// TEST-ONLY. Drive an asynchronous RDF parser from its own thread pool and
+// expose it through the synchronous `RdfParserBase` interface. The index
+// builder drives the asynchronous parsers directly (see
+// `IndexImpl::buildPartialVocabularies`); this adapter only exists so that the
+// unit tests can exercise them with the same code as the synchronous parsers.
 //
 // `AsyncParser` may be any type with a
 // `asyncGetBatch(CompletionToken)` operation whose completion signature is
 // `void(std::exception_ptr, std::optional<std::vector<TurtleTriple>>)`, see
-// `RdfAsyncParallelParser` for the (currently only) such parser.
+// `RdfAsyncParallelParser` and `RdfAsyncMultifileParser` for such parsers.
 //
 // `NUM_PARALLEL_PARSER_THREADS` task chains each keep one `asyncGetBatch()`
 // call in flight concurrently and push the parsed batches into a bounded
@@ -65,7 +73,7 @@ class AsyncParserDriver : public RdfParserBase {
   // Construct the `AsyncParser` on this driver's own thread pool. The `args`
   // are forwarded to its constructor after the executor of that pool, so a
   // derived class only has to supply whatever the concrete parser needs (see
-  // `RdfParallelParserViaAsync`).
+  // `RdfParallelParserViaAsync` below).
   template <typename... Args>
   explicit AsyncParserDriver(const EncodedIriManager* encodedIriManager,
                              Args&&... args)
@@ -128,4 +136,46 @@ class AsyncParserDriver : public RdfParserBase {
   }
 };
 
-#endif  // QLEVER_SRC_PARSER_ASYNCPARSERDRIVER_H
+// TEST-ONLY. The `RdfAsyncParallelParser` driven by its own thread pool, which
+// exposes it through the synchronous `RdfParserBase` interface. The only
+// purpose of this class is to provide that constructor; everything else is
+// inherited from `AsyncParserDriver`. The default graph and the
+// `RdfParserSettings` are left at their defaults, because no test needs to
+// vary them for this parser.
+template <typename Parser>
+class RdfParallelParserViaAsync
+    : public AsyncParserDriver<RdfAsyncParallelParser<Parser>> {
+ public:
+  // Construct a parser that reads from `spec` on an internally-managed thread
+  // pool. The argument order matches that of `RdfStreamParser`, so that the
+  // tests can construct both with the same code.
+  RdfParallelParserViaAsync(const qlever::InputFileSpecification& spec,
+                            ad_utility::MemorySize blocksize,
+                            const EncodedIriManager* ev)
+      : AsyncParserDriver<RdfAsyncParallelParser<Parser>>{ev, spec, blocksize,
+                                                          ev} {}
+};
+
+// TEST-ONLY. The `RdfAsyncMultifileParser` driven by its own thread pool,
+// which exposes it through the synchronous `RdfParserBase` interface. The only
+// purpose of this class is to provide that constructor; everything else is
+// inherited from `AsyncParserDriver`. The `RdfParserSettings` are left at their
+// defaults, because the tests that vary them use `RdfAsyncMultifileParser`
+// directly (see `RdfParserTest.multifileParsersHonorParserSettings`).
+class RdfMultifileParserViaAsync
+    : public AsyncParserDriver<RdfAsyncMultifileParser> {
+ public:
+  // Construct a parser that reads the files produced by `files` on an
+  // internally-managed thread pool. The argument order matches that of
+  // `RdfMultifileParser`, so that the tests can construct both with the same
+  // code.
+  RdfMultifileParserViaAsync(
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      const EncodedIriManager* encodedIriManager,
+      ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE)
+      : AsyncParserDriver<RdfAsyncMultifileParser>{
+            encodedIriManager, std::move(files), encodedIriManager,
+            bufferSize} {}
+};
+
+#endif  // QLEVER_TEST_UTIL_ASYNCPARSERDRIVER_H
