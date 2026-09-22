@@ -63,10 +63,12 @@ jobs:
             toolchain: clang16
             build-type: RelWithDebInfo
             extra-flags: "-fsanitize=address -fno-omit-frame-pointer"
+            needs-seccomp: true
           - image: clang16
             toolchain: clang16
             build-type: RelWithDebInfo
             extra-flags: "-fsanitize=undefined"
+            needs-seccomp: true
           - image: gcc11
             toolchain: gcc11
             build-type: Release
@@ -99,15 +101,17 @@ jobs:
         if: github.event_name == 'pull_request' && matrix.skip-if-pr == true
         run: exit 0;
       - uses: actions/checkout@v7
+        if: github.event_name != 'pull_request' || matrix.skip-if-pr != true
         with:
           submodules: recursive
       - name: Native ${{ matrix.toolchain }} build + tests inside prebuilt CI image
         if: github.event_name != 'pull_request' || matrix.skip-if-pr != true
+        shell: bash
         run: |
           mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
           podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
             --network=host \
-            --security-opt seccomp=unconfined \
+            ${{ matrix.needs-seccomp == true && '--security-opt seccomp=unconfined' || '' }} \
             -v "${{ github.workspace }}:/work" \
             -w /work \
             localhost/qlever-ci:${{ matrix.image }} bash -c '
@@ -120,7 +124,7 @@ jobs:
                 ${{ matrix.additional-cmake-options }} \
                 -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold" \
                 -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON \
-                -DUSE_PRECOMPILED_HEADERS=${{ matrix.toolchain == 'clang21' && 'ON' || 'OFF' }} -DCHEAPER_COMPILATION=${{ matrix.toolchain == 'gcc11' && 'ON' || 'OFF' }} \
+                -DUSE_PRECOMPILED_HEADERS=${{ matrix.toolchain == 'clang21' && 'ON' || 'OFF' }} -DCHEAPER_COMPILATION=OFF \
                 -DQLEVER_ALLOCATOR_BACKEND=${{ matrix.allocator-backend || 'limit' }}
               # -j8, not -j$(nproc): the 16-core host is shared (OCR jobs,
               # other users) and RAM-bound. -j16 OOM-killed the UBSan leg
