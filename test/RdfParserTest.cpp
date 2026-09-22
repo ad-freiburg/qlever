@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "./util/AsyncParserDriver.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
@@ -175,6 +176,11 @@ TEST(RdfParserTest, prefixedName) {
   {
     CtreParser p{encodedIriManager()};
     runCommonTests(p);
+    // Input that contains none of the delimiters that `pnameLnRelaxed` looks
+    // for, so neither `pnameLnRelaxed` nor `pnameNS` finds a `:`.
+    p.setInputStream("noDelimiterAtAll");
+    ASSERT_FALSE(p.prefixedName());
+    ASSERT_EQ(p.getPosition(), 0u);
     // These unit tests document the current (fast, but suboptimal) behavior of
     // the CTRE parser. TODO: Try to improve the parser without sacrificing
     // speed. If that succeeds, adapt this unit test.
@@ -631,7 +637,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
       Parser parser{encodedIriManager()};
       parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
-      parser.integerOverflowBehavior() =
+      parser.settings().integerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
       for (const auto& input : nonWorkingInputs) {
         assertParsingFails(parser, input);
@@ -651,7 +657,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
       Parser parser{encodedIriManager()};
       parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
-      parser.integerOverflowBehavior() =
+      parser.settings().integerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::AllToDouble;
       for (const auto& input : nonWorkingInputs) {
         assertParsingFails(parser, input);
@@ -684,7 +690,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       std::vector<TurtleTriple> expected{{iri("<a>"), iri("<b>"), 123},
                                          {iri("<e>"), iri("<f>"), 234}};
       Parser parser{encodedIriManager()};
-      parser.invalidLiteralsAreSkipped() = true;
+      parser.settings().invalidLiteralsAreSkipped_ = true;
       auto result = parseAllTriples(parser, input);
       ASSERT_EQ(result, expected);
     }
@@ -699,8 +705,8 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           {iri("<e>"), iri("<f>"), 234}};
       Parser parser{encodedIriManager()};
       parser.prefixMap()["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
-      parser.invalidLiteralsAreSkipped() = true;
-      parser.integerOverflowBehavior() =
+      parser.settings().invalidLiteralsAreSkipped_ = true;
+      parser.settings().integerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
       auto result = parseAllTriples(parser, input);
       ASSERT_EQ(result, expected);
@@ -959,7 +965,6 @@ std::vector<TurtleTriple> parseFromFile(
   std::vector<TurtleTriple> result;
   while (auto batch = parser.getBatch()) {
     result.insert(result.end(), batch.value().begin(), batch.value().end());
-    parser.printAndResetQueueStatistics();
   }
   return result;
 }
@@ -967,11 +972,11 @@ std::vector<TurtleTriple> parseFromFile(
 // Run a function that takes a type identity of the parser as the first argument
 // and possible additional args, and run this function for all the different
 // parsers that can read from a file (stream and parallel parser, with all the
-// combinations of the different tokenizers).
+// combinations of the different tokenizers). The parallel parsers are the
+// `RdfAsyncParallelParser` instantiations behind the synchronous
+// `RdfParallelParserViaAsync` interface.
 template <typename Function, typename... Args>
 auto forAllParallelParsers(const Function& function, const Args&... args) {
-  function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, args...);
-  function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, args...);
   function(ti<RdfParallelParserViaAsync<TurtleParser<Tokenizer>>>, args...);
   function(ti<RdfParallelParserViaAsync<TurtleParser<TokenizerCtre>>>, args...);
 }
@@ -1084,6 +1089,74 @@ TEST(RdfParserTest, multilineComments) {
   forAllParsers(testWithParser, input, expected);
 }
 
+// A comment that ends with a dot looks exactly like the end of a statement, but
+// must not be used as the end of a block, because the statement it interrupts
+// then remains unfinished.
+TEST(RdfParserTest, commentThatEndsWithADot) {
+  std::string filename{gtestCurrentTestName()};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  std::string statement = "<subject> <predicate> <object> .\n";
+  std::string interruptedStatement =
+      "<subject> # A comment that ends with a dot.\n<predicate> <object> .\n";
+  ad_utility::makeOfstream(filename)
+      << statement << interruptedStatement << statement;
+  // A buffer that ends two bytes after the comment, such that the last dot
+  // followed by a newline in the first block is the one inside the comment.
+  auto bufferSize = ad_utility::MemorySize::bytes(
+      statement.size() + interruptedStatement.find('\n') + 3);
+
+  std::vector<TurtleTriple> expected(
+      3, {iri("<subject>"), iri("<predicate>"), iri("<object>")});
+  auto testWithParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    EXPECT_THAT(parseFromFile<Parser>(filename, bufferSize),
+                ::testing::UnorderedElementsAreArray(expected));
+  };
+  forAllParsers(testWithParser);
+}
+
+// The same, but with a comment that is larger than the buffer, such that the
+// `#` that starts it and the dot that ends it are in different blocks of the
+// block source. The `#` is only visible to the search because the block source
+// searches from the end of the previous statement on.
+TEST(RdfParserTest, commentThatEndsWithADotAndIsLargerThanTheBuffer) {
+  std::string filename{gtestCurrentTestName()};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  std::string statement = "<subject> <predicate> <object> .\n";
+  // The comment is 100 bytes long, the statement it interrupts 134.
+  std::string interruptedStatement = absl::StrCat(
+      "<subject> # ", std::string(97, 'x'), ".\n<predicate> <object> .\n");
+  ad_utility::makeOfstream(filename)
+      << statement << interruptedStatement << statement;
+  auto bufferSize = 80_B;
+
+  // The interrupted statement doesn't fit into the buffer, so the parallel
+  // parsers report that they cannot split the input, instead of cutting inside
+  // the comment and then failing with a confusing parse error.
+  auto testWithParallelParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, bufferSize)),
+        ::testing::AllOf(
+            ::testing::HasSubstr(
+                absl::StrCat("Could not split the input \"", filename, "\"")),
+            ::testing::HasSubstr("a dot that is followed by a newline")));
+  };
+  forAllParallelParsers(testWithParallelParser);
+
+  // The serial parser can resume a statement that crosses a block boundary,
+  // which is exactly the fix that the error message above suggests.
+  std::vector<TurtleTriple> expected(
+      3, {iri("<subject>"), iri("<predicate>"), iri("<object>")});
+  auto testWithSerialParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    EXPECT_THAT(parseFromFile<Parser>(filename, bufferSize),
+                ::testing::ElementsAreArray(expected));
+  };
+  testWithSerialParser(ti<RdfStreamParser<TurtleParser<Tokenizer>>>);
+  testWithSerialParser(ti<RdfStreamParser<TurtleParser<TokenizerCtre>>>);
+}
+
 // Test that exceptions during the turtle parsing are properly propagated to the
 // calling code. This is especially important for the parallel parsers where the
 // actual parsing happens on background threads.
@@ -1116,8 +1189,15 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         (parseFromFile<Parser>(filename, bufferSize)),
         ::testing::AllOf(
-            ::testing::HasSubstr("No statement boundary"),
+            // The input has to be named, see issue #3288.
+            ::testing::HasSubstr(
+                absl::StrCat("Could not split the input \"", filename, "\"")),
+            // What a block may end at, and which part of that rule goes
+            // beyond what the Turtle grammar itself demands.
+            ::testing::HasSubstr("a dot that is followed by a newline"),
+            ::testing::HasSubstr("Turtle itself does not require that newline"),
             ::testing::HasSubstr("use `--parser-buffer-size`"),
+            // These parsers do parse in parallel, so disabling that is a fix.
             ::testing::HasSubstr("use `--parallel-parsing false`")));
     ad_utility::deleteFile(filename);
   };
@@ -1293,8 +1373,7 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
         } else {
           return Parser{qlever::InputFileSpecification{
                             filename, qlever::Filetype::Turtle, std::nullopt},
-                        ad_utility::MemorySize::bytes(40), encodedIriManager(),
-                        qlever::specialIds().at(DEFAULT_GRAPH_IRI), 10ms};
+                        ad_utility::MemorySize::bytes(40), encodedIriManager()};
         }
       }();
       timer.cont();
@@ -1528,7 +1607,7 @@ TEST(RdfParserTest, asyncParallelParserHaltsOnHeaderError) {
     ASSERT_NE(error, nullptr);
     AD_EXPECT_THROW_WITH_MESSAGE(
         std::rethrow_exception(error),
-        ::testing::ContainsRegex("Parse error at byte position 12"));
+        ::testing::ContainsRegex("at byte position 12"));
   };
   forAllAsyncParallelParsers(testWithParser);
 }
@@ -1625,6 +1704,76 @@ TEST(RdfParserTest, asyncSerialParserAdapterEofAfterExhaustion) {
   // Further calls after EOF keep returning `nullopt`.
   EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(), std::nullopt);
   EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(), std::nullopt);
+}
+
+// _____________________________________________________________________________
+// Test that the parse errors of all the parsers that read from a file name that
+// file. An index build parses many files at the same time, so without the name
+// an error cannot be attributed to any of them (see issue #3288).
+TEST(RdfParserTest, parseErrorNamesTheInputFile) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  ad_utility::makeOfstream(filename) << "<subject> <predicate> .\n";
+  absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
+
+  auto testWithParser = [&filename](auto t) {
+    using Parser = typename decltype(t)::type;
+    AD_EXPECT_THROW_WITH_MESSAGE((parseFromFile<Parser>(filename)),
+                                 ::testing::HasSubstr(absl::StrCat(
+                                     "Parse error in \"", filename, "\"")));
+  };
+  forAllParsers(testWithParser);
+}
+
+// _____________________________________________________________________________
+// Test that a parser that reads from an unnamed input (for example a term of a
+// SPARQL query) keeps the shorter error message without a file name.
+TEST(RdfParserTest, parseErrorOfStringParserHasNoInputName) {
+  Re2Parser parser{encodedIriManager()};
+  parser.setInputStream("<subject> <predicate> .");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parser.parseAndReturnAllTriples(),
+      ::testing::AllOf(::testing::HasSubstr("Parse error at byte position"),
+                       ::testing::Not(::testing::HasSubstr("Parse error in"))));
+}
+
+// Test that a parse error of a parallel parser reports a byte position that is
+// relative to the beginning of the input file, and not to the beginning of the
+// block in which the error occurred. The offset of a block is tracked by
+// `RdfAsyncParallelParser` and applied by
+// `RdfParallelParsingState::parseBatch`.
+// _____________________________________________________________________________
+TEST(RdfParserTest, parallelParserReportsFileAbsoluteErrorPosition) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  // A header, then enough valid triples for the input to be split into many
+  // blocks, and finally something that is not a triple at all.
+  std::string input = "@prefix ex: <http://example.org/> .\n";
+  for ([[maybe_unused]] auto i : ad_utility::integerRange(200u)) {
+    absl::StrAppend(&input, "ex:s <p> ex:o .\n");
+  }
+  // The blocks are cut directly after a `.` that is followed by a newline, so
+  // the block with the invalid input starts exactly here.
+  size_t expectedPosition = input.size();
+  absl::StrAppend(&input, "!!! not a triple\n");
+  ad_utility::makeOfstream(filename) << input;
+  absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
+  // Without the offset the reported position would be 0 (the error is at the
+  // very beginning of its block), so the test cannot pass by accident.
+  ASSERT_GT(expectedPosition, 3000u);
+
+  auto testWithParser = [&filename, expectedPosition](auto t) {
+    using Parser = typename decltype(t)::type;
+    Parser parser{qlever::InputFileSpecification{
+                      filename, qlever::Filetype::Turtle, std::nullopt},
+                  100_B, encodedIriManager()};
+    auto drain = [&parser]() {
+      while (parser.getBatch()) {
+      }
+    };
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        drain(), ::testing::HasSubstr(
+                     absl::StrCat("at byte position ", expectedPosition, ":")));
+  };
+  forAllParallelParsers(testWithParser);
 }
 
 // Test that the parallel parsers report a parse position of 0, because they
@@ -1752,6 +1901,52 @@ TEST(RdfParserTest, multifileParser) {
   forAllMultifileParsers(impl, true);
 }
 
+// Test that `RdfMultifileParser` parses a file that requests parallel parsing
+// serially anyway (it has no parallel parser for a single file, see the comment
+// on that class), and that it warns about that for each such file, naming it.
+// _____________________________________________________________________________
+TEST(RdfParserTest, multifileParserIgnoresRequestForParallelParsing) {
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
+  std::string file1 = absl::StrCat(gtestCurrentTestName(), "1.ttl");
+  std::string file2 = absl::StrCat(gtestCurrentTestName(), "2.ttl");
+  ad_utility::makeOfstream(file1) << "<x> <y> <z> .\n";
+  ad_utility::makeOfstream(file2) << "<a> <b> <c> .\n";
+  absl::Cleanup cleanup{[&file1, &file2]() {
+    ad_utility::deleteFile(file1);
+    ad_utility::deleteFile(file2);
+  }};
+  auto defaultGraph = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  std::vector<TurtleTriple> expected{
+      {iri("<x>"), iri("<y>"), iri("<z>"), defaultGraph},
+      {iri("<a>"), iri("<b>"), iri("<c>"), defaultGraph}};
+
+  // Both input files request parallel parsing, so both are named in a warning.
+  auto parse = [&file1, &file2]() {
+    std::vector<qlever::InputFileSpecification> specs;
+    specs.emplace_back(file1, qlever::Filetype::Turtle, std::nullopt, true);
+    specs.emplace_back(file2, qlever::Filetype::Turtle, std::nullopt, true);
+    RdfMultifileParser parser{
+        ad_utility::InputRangeTypeErased{std::move(specs)},
+        encodedIriManager()};
+    std::vector<TurtleTriple> result;
+    while (auto batch = parser.getBatch()) {
+      ql::ranges::copy(batch.value(), std::back_inserter(result));
+    }
+    return result;
+  };
+
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  EXPECT_THAT(parse(), ::testing::UnorderedElementsAreArray(expected));
+  EXPECT_THAT(logStream.str(),
+              ::testing::AllOf(
+                  ::testing::HasSubstr(absl::StrCat(
+                      "Parallel parsing was requested for the input file \"",
+                      file1, "\"")),
+                  ::testing::HasSubstr(absl::StrCat(
+                      "Parallel parsing was requested for the input file \"",
+                      file2, "\""))));
+}
+
 // _____________________________________________________________________________
 // The `ascii-prefixes-only` setting selects the relaxed `TokenizerCtre` for all
 // input files of the `RdfMultifileParser`. We detect which tokenizer was
@@ -1770,9 +1965,11 @@ TEST(RdfParserTest, multifileParserSelectsTokenizer) {
   auto parse = [&filename](bool useRelaxedParsing) {
     std::vector<qlever::InputFileSpecification> specs;
     specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt, false);
+    RdfParserSettings settings;
+    settings.useRelaxedParsing_ = useRelaxedParsing;
     RdfMultifileParser parser{
         ad_utility::InputRangeTypeErased{std::move(specs)}, encodedIriManager(),
-        DEFAULT_PARSER_BUFFER_SIZE, useRelaxedParsing};
+        DEFAULT_PARSER_BUFFER_SIZE, settings};
     std::vector<TurtleTriple> result;
     while (auto batch = parser.getBatch()) {
       ql::ranges::copy(batch.value(), std::back_inserter(result));
@@ -1836,6 +2033,71 @@ TEST(RdfParserTest, asyncMultifileParserBasic) {
   impl(false, false);
   impl(true, false);
   impl(false, true);
+}
+
+// Test that the `RdfParserSettings` that are passed to the multifile parsers
+// (`RdfMultifileParser` and `RdfAsyncMultifileParser`) reach the parsers of
+// the individual files, for a file that is parsed in parallel as well as for
+// one that is parsed serially. With the default settings, the overflowing
+// integer and the invalid literal in the input are errors.
+// _____________________________________________________________________________
+TEST(RdfParserTest, multifileParsersHonorParserSettings) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  ad_utility::makeOfstream(filename)
+      << "<a> <b> 99999999999999999999999 .\n<c> <d> "
+         "\"invalid\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+         "<e> <f> 234 .\n";
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  std::vector<TurtleTriple> expected{
+      {iri("<a>"), iri("<b>"), 99999999999999999999999.0},
+      {iri("<e>"), iri("<f>"), 234}};
+  RdfParserSettings settings{
+      TurtleParserIntegerOverflowBehavior::OverflowingToDouble, true};
+
+  auto makeFiles = [&filename](bool parseInParallel) {
+    std::vector<qlever::InputFileSpecification> specs;
+    specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt,
+                       parseInParallel);
+    return ad_utility::InputRangeTypeErased{std::move(specs)};
+  };
+  auto drainSyncParser = [](RdfParserBase& parser) {
+    std::vector<TurtleTriple> result;
+    while (auto batch = parser.getBatch()) {
+      ql::ranges::copy(batch.value(), std::back_inserter(result));
+    }
+    return result;
+  };
+
+  for (bool parseInParallel : {true, false}) {
+    {
+      RdfMultifileParser parser{makeFiles(parseInParallel), encodedIriManager(),
+                                DEFAULT_PARSER_BUFFER_SIZE, settings};
+      EXPECT_THAT(drainSyncParser(parser),
+                  ::testing::UnorderedElementsAreArray(expected));
+    }
+    {
+      boost::asio::thread_pool pool{defaultConcurrency};
+      RdfAsyncMultifileParser parser{
+          pool.get_executor(), makeFiles(parseInParallel), encodedIriManager(),
+          DEFAULT_PARSER_BUFFER_SIZE, settings};
+      absl::Cleanup joinPool = [&pool] { pool.join(); };
+      EXPECT_THAT(drainAsyncParser(parser, defaultConcurrency),
+                  ::testing::UnorderedElementsAreArray(expected));
+    }
+    // With the default settings, the input is rejected.
+    {
+      RdfMultifileParser parser{makeFiles(parseInParallel),
+                                encodedIriManager()};
+      EXPECT_ANY_THROW(drainSyncParser(parser));
+    }
+    {
+      boost::asio::thread_pool pool{defaultConcurrency};
+      RdfAsyncMultifileParser parser{
+          pool.get_executor(), makeFiles(parseInParallel), encodedIriManager()};
+      absl::Cleanup joinPool = [&pool] { pool.join(); };
+      EXPECT_ANY_THROW(drainAsyncParser(parser, defaultConcurrency));
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -1990,9 +2252,9 @@ TEST(RdfParserTest, asyncMultifileParserConcurrentErrors) {
 }
 
 // The `RdfAsyncMultifileParser` counterpart of
-// `multifileParserSelectsTokenizer` above: the `useRelaxedParsing` constructor
-// argument selects the tokenizer for all files, exactly like the
-// `ascii-prefixes-only` setting of `RdfMultifileParser`.
+// `multifileParserSelectsTokenizer` above: the `useRelaxedParsing_` setting
+// selects the tokenizer for all files, exactly like the `ascii-prefixes-only`
+// setting of `RdfMultifileParser`.
 // _____________________________________________________________________________
 TEST(RdfParserTest, asyncMultifileParserSelectsTokenizer) {
   std::string filename = gtestCurrentTestName() + ".ttl";
@@ -2004,9 +2266,11 @@ TEST(RdfParserTest, asyncMultifileParserSelectsTokenizer) {
     std::vector<qlever::InputFileSpecification> specs;
     specs.emplace_back(filename, qlever::Filetype::Turtle, std::nullopt, false);
     boost::asio::thread_pool pool{2};
+    RdfParserSettings settings;
+    settings.useRelaxedParsing_ = useRelaxedParsing;
     RdfAsyncMultifileParser parser{
         pool.get_executor(), ad_utility::InputRangeTypeErased{std::move(specs)},
-        encodedIriManager(), DEFAULT_PARSER_BUFFER_SIZE, useRelaxedParsing};
+        encodedIriManager(), DEFAULT_PARSER_BUFFER_SIZE, settings};
     absl::Cleanup joinPool = [&pool] { pool.join(); };
     return drainAsyncParser(parser, 1);
   };
@@ -2530,4 +2794,47 @@ TEST(RdfParserTest, findEndOfLastStatement) {
   // The last statement end is found.
   EXPECT_THAT(findEndOfLastStatement("a.\nbc.\ndef"), Optional(Eq(7u)));
   EXPECT_THAT(findEndOfLastStatement("a.\n# comment\n"), Optional(Eq(3u)));
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, findEndOfLastStatementIgnoresComments) {
+  using detail::findEndOfLastStatement;
+  using ::testing::Eq;
+  using ::testing::Optional;
+
+  // A dot inside a comment doesn't end a statement, so the search continues
+  // before the line of that comment.
+  EXPECT_THAT(findEndOfLastStatement("a.\n# A comment.\n"), Optional(Eq(3u)));
+  EXPECT_THAT(findEndOfLastStatement("a.\n# One.\n# Two.\n"), Optional(Eq(3u)));
+  EXPECT_EQ(findEndOfLastStatement("# Only a comment.\n"), std::nullopt);
+  // A dot that is followed by a comment instead of a newline is no match
+  // either.
+  EXPECT_EQ(findEndOfLastStatement("<s> <p> <o> . # A comment\n"),
+            std::nullopt);
+
+  // A `#` that is part of an IRI, of a literal, or of an escape sequence in a
+  // prefixed name doesn't start a comment, so these are all statement ends.
+  auto expectIsCompleteStatement = [](std::string_view input) {
+    EXPECT_THAT(findEndOfLastStatement(input), Optional(Eq(input.size())))
+        << input;
+  };
+  expectIsCompleteStatement("<s> <p> <http://example.org#object> .\n");
+  expectIsCompleteStatement("<s> <p> \"a literal # with a hash\" .\n");
+  expectIsCompleteStatement("<s> <p> 'a literal # with a hash' .\n");
+  expectIsCompleteStatement("<s> <p> \"an escaped quote \\\" # \" .\n");
+  expectIsCompleteStatement("<s> <p> \"a backslash \\\\\" .\n");
+  expectIsCompleteStatement("ex:subject\\#1 <p> <o> .\n");
+  // A `"""` or `'''` literal that is confined to a single line also works,
+  // see the comment on `dotIsCommentedOut`.
+  expectIsCompleteStatement("<s> <p> \"\"\"a # in a long literal\"\"\" .\n");
+  expectIsCompleteStatement("<s> <p> '''a # in a long literal''' .\n");
+  // The same, followed by a comment, which is skipped.
+  EXPECT_THAT(findEndOfLastStatement("<s> <p> \"\"\"#\"\"\" .\n# A comment.\n"),
+              Optional(Eq(18u)));
+  // An IRI or a literal that isn't closed before the dot means that the input
+  // is broken or has a multiline literal. Both are left to the parser, which
+  // reports them much better, so the dot counts as a statement end.
+  expectIsCompleteStatement("<s> <p> <unclosed .\n");
+  expectIsCompleteStatement("<s> <p> \"unclosed .\n");
+  expectIsCompleteStatement("<s> <p> 'unclosed .\n");
 }

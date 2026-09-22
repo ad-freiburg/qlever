@@ -15,7 +15,7 @@
 #include <limits>
 #include <thread>
 
-#include "util/GTestHelpers.h"
+#include "../util/GTestHelpers.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 
 using namespace ad_utility::parallelBlockMerge;
@@ -32,6 +32,8 @@ TEST(MergeOptions, Defaults) {
   EXPECT_EQ(options.targetChunksPerThread,
             DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD);
   EXPECT_EQ(options.maxNumChunksInFlight, 0u);
+  EXPECT_EQ(options.serialNumElementsThreshold,
+            DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD);
 }
 
 // _____________________________________________________________________________
@@ -92,6 +94,40 @@ TEST(MergeOptions, NumChunksInFlight) {
   options.maxNumChunksInFlight = 0;
   EXPECT_EQ(options.numChunksInFlight(2), 2u);
   EXPECT_EQ(options.numChunksInFlight(1), 1u);
+}
+
+// _____________________________________________________________________________
+TEST(MergeOptions, ShouldMergeSerially) {
+  MergeOptions options;
+  options.parallelismHint = 4;
+  options.serialNumElementsThreshold = 100;
+  // The threshold is inclusive: an input with exactly that many elements is
+  // still merged serially.
+  EXPECT_TRUE(options.shouldMergeSerially(0));
+  EXPECT_TRUE(options.shouldMergeSerially(99));
+  EXPECT_TRUE(options.shouldMergeSerially(100));
+  EXPECT_FALSE(options.shouldMergeSerially(101));
+  EXPECT_FALSE(options.shouldMergeSerially(1'000'000));
+
+  // A single thread cannot merge two chunks concurrently, so it always merges
+  // serially, no matter how large the input is.
+  options.parallelismHint = 1;
+  EXPECT_TRUE(options.shouldMergeSerially(1'000'000));
+
+  // A threshold of zero means "always merge in parallel" (unless there is only
+  // a single thread, see above), and the maximal threshold means "never".
+  options.parallelismHint = 4;
+  options.serialNumElementsThreshold = 0;
+  EXPECT_TRUE(options.shouldMergeSerially(0));
+  EXPECT_FALSE(options.shouldMergeSerially(1));
+  options.serialNumElementsThreshold = std::numeric_limits<size_t>::max();
+  EXPECT_TRUE(options.shouldMergeSerially(std::numeric_limits<size_t>::max()));
+
+  // The `parallelismHint` of zero is resolved first, see `parallelism()`.
+  options.parallelismHint = 0;
+  options.serialNumElementsThreshold = 100;
+  EXPECT_EQ(options.shouldMergeSerially(1'000'000),
+            defaultMergeParallelism() <= 1);
 }
 
 // _____________________________________________________________________________

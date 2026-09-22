@@ -108,3 +108,45 @@ TEST(RdfEscapingTest, normalizeLanguageTagToNormalizedString) {
   ASSERT_EQ("se", asStringViewUnsafe(normalizeLanguageTag("@se")));
   ASSERT_EQ("se", asStringViewUnsafe(normalizeLanguageTag("se")));
 }
+
+// ___________________________________________________________________________
+TEST(RdfEscapingTest, unescapePrefixedIri) {
+  // Inputs without any escape sequence are returned unchanged.
+  ASSERT_EQ(unescapePrefixedIri(""), "");
+  ASSERT_EQ(unescapePrefixedIri("Q3138"), "Q3138");
+  // A percent encoding is not an escape sequence and is left alone.
+  ASSERT_EQ(unescapePrefixedIri("a%20b"), "a%20b");
+
+  // A single escape sequence, at the beginning, in the middle, and at the end
+  // (the last case leaves an empty remainder).
+  ASSERT_EQ(unescapePrefixedIri(R"(\-abc)"), "-abc");
+  ASSERT_EQ(unescapePrefixedIri(R"(ab\.cd)"), "ab.cd");
+  ASSERT_EQ(unescapePrefixedIri(R"(abc\-)"), "abc-");
+
+  // Several escape sequences, including two directly after one another.
+  ASSERT_EQ(unescapePrefixedIri(R"(a\.b\-c\~d)"), "a.b-c~d");
+  ASSERT_EQ(unescapePrefixedIri(R"(\$\$)"), "$$");
+
+  // All characters that may be escaped, and nothing else.
+  ASSERT_EQ(unescapePrefixedIri(R"(\_\~\.\-\!\$\&\'\(\)\*\+\,\;\=\/\?\#\@\%)"),
+            R"(_~.-!$&'()*+,;=/?#@%)");
+}
+
+// ___________________________________________________________________________
+TEST(RdfEscapingTest, unescapePrefixedIriInvalidEscape) {
+  // A backslash at the very end has nothing to escape.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      unescapePrefixedIri(R"(abc\)"),
+      ::testing::HasSubstr(R"(Could not unescape the prefixed iri abc\)"));
+  // A backslash followed by a character that may not be escaped. Note that `z`
+  // is a perfectly valid character inside a prefixed IRI, it just may not be
+  // preceded by a backslash.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      unescapePrefixedIri(R"(ab\zc)"),
+      ::testing::HasSubstr(R"(Could not unescape the prefixed iri ab\zc)"));
+  // The invalid escape is only reached in the second iteration of the loop.
+  // The error message reports the complete input, not just the unparsed rest.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      unescapePrefixedIri(R"(a\.b\zc)"),
+      ::testing::HasSubstr(R"(Could not unescape the prefixed iri a\.b\zc)"));
+}
