@@ -150,10 +150,39 @@ class RuntimeInformation {
 // the time spent during query planning. Note: The information about the
 // `QueryExecutionTree` (e.g. how much time was spent in which operation) is
 // stored in the `RuntimeInformation` class above.
+// How the query planner planned one connected component of a query graph, that
+// is, of a set of triples (and filters) of one group graph pattern that are
+// connected by shared variables.
+struct ConnectedComponentPlanningInfo {
+  // Whether the greedy planner was used, and not the one based on dynamic
+  // programming.
+  bool greedy_ = false;
+  // The number of nodes of the component. A node is a triple, or an operation
+  // like a text search that the planner treats like a triple.
+  size_t numNodes_ = 0;
+  // The number of connected subgraphs of the component, which decides between
+  // the two planners: the greedy one is used if this number exceeds the
+  // `budget_`. The counting stops early, so the value is at most `budget_ + 1`.
+  size_t numConnectedSubgraphs_ = 0;
+  // The value of the runtime parameter `query-planning-budget`.
+  size_t budget_ = 0;
+  // The number of candidate plans that the planner created for the joins of
+  // the component, before the pruning that keeps only the cheapest plan per
+  // set of nodes and sort order.
+  size_t numCandidatePlans_ = 0;
+
+  // Output as json, see `RuntimeInformationWholeQuery`.
+  friend void to_json(nlohmann::ordered_json& j,
+                      const ConnectedComponentPlanningInfo& info);
+};
+
 struct RuntimeInformationWholeQuery {
   // The time spent during query planning (this does not include the time spent
   // on `IndexScan`s that were executed during the query planning).
   std::chrono::milliseconds timeQueryPlanning = RuntimeInformation::ZERO;
+  // How each connected component of the query was planned, in the order in
+  // which the planner handled them.
+  std::vector<ConnectedComponentPlanningInfo> queryPlanning;
   /// Output as json. The signature of this function is mandated by the json
   /// library to allow for implicit conversion.
   friend void to_json(nlohmann::ordered_json& j,
