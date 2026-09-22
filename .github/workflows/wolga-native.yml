@@ -134,7 +134,7 @@ jobs:
               cd /work/build/test
               # Drop stale per-test dirs: /work/build persists across runs on
               # the same host, and leftover previous.*/rebuild.* dirs from a
-              # killed run pollute the next run's assertions.
-              find /work/build - \( -name 'previous.*' -o -name 'rebuild.*' \) -exec rm -rf {} + 2>/dev/null || true
+              # killed run pollute later runs assertions.
+              find /work/build - \( -name "previous.*" -o -name "rebuild.*" \) -exec rm -rf {} + 2>/dev/null || true
               env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{ matrix.build-type }} -j 8 .
             '
