@@ -10,7 +10,9 @@
 #include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionTree.h"
 #include "index/TripleComponentConversions.h"
+#include "parser/TripleComponent.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 
@@ -21,6 +23,14 @@ Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
       ql::ranges::all_of(parsedValues_._values, [&](const auto& row) {
         return row.size() == parsedValues_._variables.size();
       }));
+}
+
+// ____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
+    QueryExecutionContext* qec, Variable variable, TripleComponent value) {
+  return ad_utility::makeExecutionTree<Values>(
+      qec,
+      parsedQuery::SparqlValues{{std::move(variable)}, {{std::move(value)}}});
 }
 
 // ____________________________________________________________________________

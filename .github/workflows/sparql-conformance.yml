@@ -4,7 +4,7 @@ on:
   push:
     branches: [ master ]
   pull_request:
-    branches: [ master ]
+    types: [opened, synchronize, reopened, labeled]
   merge_group:
 
 # The default GITHUB_TOKEN only needs to read the repository here.
@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
     env:
       compiler: clang
       compiler-version: 16

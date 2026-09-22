@@ -15,7 +15,7 @@ on:
   push:
     branches: [ master ]
   pull_request:
-    branches: [ master ]
+    types: [opened, synchronize, reopened, labeled]
   merge_group:
 
 concurrency:
@@ -28,6 +28,7 @@ permissions:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
     env:
           compiler: clang
           # The compiler and the LLVM coverage tools have to use the same major
@@ -67,7 +68,7 @@ jobs:
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       # Precompiled headers have to be disabled to make coverage deterministic.
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{env.compiler-version}}.cmake" -DUSE_PRECOMPILED_HEADERS=OFF -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=TIMING -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}} ${{env.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{env.coverage-flags}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON -DENABLE_EXPENSIVE_CHECKS=true -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{env.compiler-version}}.cmake" -DUSE_PRECOMPILED_HEADERS=OFF -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=TIMING -DBRANCHLESS_LOGGING=ON -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}} ${{env.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{env.coverage-flags}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON -DENABLE_EXPENSIVE_CHECKS=true -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
 
     - name: Build
         # Build your program with the given configuration

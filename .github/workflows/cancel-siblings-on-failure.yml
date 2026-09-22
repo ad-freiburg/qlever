@@ -1,0 +1,75 @@
+name: Cancel sibling runs on failure
+
+# Cross-workflow counterpart to fail-fast: when any watched CI workflow
+# fails for a pull request head, cancel the other still-running workflow
+# runs for the same head SHA so broken code stops consuming runners.
+# Restarting (rerun --failed) stays a manual step after the fix lands.
+# OpenCodeReview is deliberately not watched (a review failure must not
+# kill builds), but it is still cancelled as a sibling by head SHA.
+on:
+  workflow_run:
+    workflows:
+      - "Native build"
+      - "Native build with conan"
+      - "Native build with conan on MacOS"
+      - "Native build with AppleClang on MacOS"
+      - "CPP17 libQLever"
+      - "measure-code-coverage"
+      - "sparql-conformance"
+      - "sparql-conformance-new"
+      - "Format check"
+      - "Codespell"
+      - "Docker build and publish"
+      - "Native build to WebAssembly using Conan and Emscripten"
+      - "Check index version"
+      - "sonarcloud-analysis"
+    types:
+      - completed
+
+# Cancelling sibling runs needs write access to Actions.
+permissions:
+  actions: write
+
+jobs:
+  cancel-siblings:
+    # Only failed runs trigger cancellations. Successful and cancelled
+    # runs (including this workflow's own completions) no-op, so the
+    # workflow can never trigger a cascade off itself.
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          SELF_ID: ${{ github.event.workflow_run.id }}
+          PULL_REQUESTS: ${{ toJson(github.event.workflow_run.pull_requests) }}
+        run: |
+          set -u
+          if [ "$(printf '%s' "$PULL_REQUESTS" | jq 'length')" -eq 0 ]; then
+            echo "Not a pull request head; nothing to cancel."
+            exit 0
+          fi
+          for status in queued in_progress; do
+            # NOTE: `head_sha` and `status` must be URL query parameters here.
+            # Passing them via `gh api -f` makes this endpoint answer
+            # `404 Not Found`, whose error body would otherwise be mistaken
+            # for run IDs below (and nothing would ever be cancelled).
+            if ! SIBLING_IDS=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$HEAD_SHA&status=$status&per_page=100" --paginate --jq '.workflow_runs[].id'); then
+              echo "::warning::Could not list $status runs for $HEAD_SHA; skipping them."
+              continue
+            fi
+            printf '%s\n' "$SIBLING_IDS" | while read -r run_id; do
+              # Only real run IDs may reach the cancel endpoint, never an
+              # API error body.
+              case "$run_id" in
+                ''|*[!0-9]*) continue;;
+              esac
+              if [ "$run_id" = "$SELF_ID" ]; then
+                continue
+              fi
+              echo "Cancelling sibling run $run_id ($status)."
+              gh api -X POST \
+                "repos/${{ github.repository }}/actions/runs/$run_id/cancel" \
+                || echo "Cancel of $run_id refused; leaving it alone."
+            done
+          done
