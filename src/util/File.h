@@ -162,7 +162,9 @@ class File {
     return fwrite(sourceBuffer, (size_t)1, nofBytesToWrite, file_);
   }
 
-  void flush() { fflush(file_); }
+  // Flush the buffered writes to the operating system. Return `false` if
+  // that failed (for example because the disk is full), see `fflush`.
+  bool flush() { return fflush(file_) == 0; }
 
   //! Seeks a position in the file.
   //! Sets the file position indicator for the stream.
