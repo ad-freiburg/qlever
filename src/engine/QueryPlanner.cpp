@@ -3114,24 +3114,11 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
 
 // ____________________________________________________________
 void QueryPlanner::GraphPatternPlanner::bindGraphVariableIfUnbound(
-    const Variable& graphVar,
-    p::GroupGraphPattern::GraphVariableBehaviour behaviour,
-    std::vector<SubtreePlan>& candidates) {
-  const auto& namedGraphs = planner_.activeDatasetClauses_.namedGraphs();
-  auto graphsCand = [&namedGraphs, &graphVar, behaviour, this]() {
-    if (!namedGraphs.has_value()) {
-      bool includeDefaultGraph =
-          behaviour == p::GroupGraphPattern::GraphVariableBehaviour::ALL;
-      return makeSubtreePlan<DistinctGraphs>(qec_, graphVar,
-                                             includeDefaultGraph);
-    }
-    p::SparqlValues values;
-    values._variables.push_back(graphVar);
-    for (const auto& graph : namedGraphs.value()) {
-      values._values.push_back({graph});
-    }
-    return makeSubtreePlan<Values>(qec_, std::move(values));
-  }();
+    const Variable& graphVar, std::vector<SubtreePlan>& candidates) {
+  // Inside a `GRAPH ?var {...}` clause the active graphs are exactly the graphs
+  // that `?var` ranges over.
+  auto graphsCand = SubtreePlan{DistinctGraphs::makeAllGraphs(
+      qec_, graphVar, planner_.getActiveGraphs())};
   for (auto& innerCand : candidates) {
     if (!innerCand._qet->getVariableColumns().contains(graphVar)) {
       innerCand = makeSubtreePlan<CartesianProductJoin>(
@@ -3191,8 +3178,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       if (const auto* graphPair = std::get_if<std::pair<
               Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
               &arg.graphSpec_)) {
-        bindGraphVariableIfUnbound(graphPair->first, graphPair->second,
-                                   candidates);
+        bindGraphVariableIfUnbound(graphPair->first, candidates);
       }
     }
 

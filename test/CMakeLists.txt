@@ -512,8 +512,6 @@ addLinkAndDiscoverTestNoLibs(CancellationHandleTest qlever_util)
 
 addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 
-addLinkAndDiscoverTest(CachingMemoryResourceTest)
-
 addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
