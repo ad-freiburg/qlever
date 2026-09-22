@@ -892,6 +892,49 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
 }
 
 // _____________________________________________________________________________
+TEST(ByteBufferWriteSerializer, serializeAtPosition) {
+  ByteBufferWriteSerializer writer;
+  writer << uint32_t{1};
+  // Remember the position of the value that is patched below, and write a
+  // placeholder for it, as a caller would do for a size that is only known
+  // once the data that it describes has been written.
+  size_t position = writer.getCurrentPosition();
+  writer << uint32_t{0};
+  writer << uint32_t{3};
+
+  serializeAtPosition(writer, position, uint32_t{42});
+  // The number of bytes is unchanged, only the middle value was replaced.
+  EXPECT_EQ(writer.getCurrentPosition(), 3 * sizeof(uint32_t));
+
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  uint32_t first, second, third;
+  reader >> first;
+  reader >> second;
+  reader >> third;
+  EXPECT_EQ(first, 1u);
+  EXPECT_EQ(second, 42u);
+  EXPECT_EQ(third, 3u);
+}
+
+// _____________________________________________________________________________
+TEST(ByteBufferWriteSerializer, serializeAtPositionOutOfRangeThrows) {
+  ByteBufferWriteSerializer writer;
+  writer << uint32_t{1};
+
+  // Overwriting exactly the bytes that were written is still allowed.
+  EXPECT_NO_THROW(serializeAtPosition(writer, 0, uint32_t{7}));
+
+  // Overwriting a single byte past the end throws, as does an overwrite that
+  // starts inside the data but reaches past its end.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serializeAtPosition(writer, sizeof(uint32_t), char{0}),
+      ::testing::HasSubstr("position_ + numBytes <= data_.size()"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serializeAtPosition(writer, 1, uint32_t{7}),
+      ::testing::HasSubstr("position_ + numBytes <= data_.size()"));
+}
+
+// _____________________________________________________________________________
 TEST(ByteBufferReadSerializer, ThrowsWhenReadingPastEnd) {
   ByteBufferWriteSerializer writer;
   int x = 42;
@@ -1245,6 +1288,15 @@ TEST(BufferedWriteSerializer, IsWriteSerializer) {
   static_assert(WriteSerializer<BufferedWriteSerializer<FileWriteSerializer>>);
   static_assert(
       WriteSerializer<BufferedWriteSerializer<ByteBufferWriteSerializer>>);
+}
+
+// _____________________________________________________________________________
+// A blocksize of zero is rejected, as it would make `serializeBytes` loop
+// forever.
+TEST(BufferedWriteSerializer, ThrowsOnZeroBlocksize) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (BufferedWriteSerializer{ByteBufferWriteSerializer{}, 0_B}),
+      ::testing::HasSubstr("blocksize_ > 0"));
 }
 
 // _____________________________________________________________________________

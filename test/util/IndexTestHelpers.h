@@ -28,6 +28,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
 #include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriPattern.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
@@ -95,6 +96,9 @@ struct TestIndexConfig {
       ad_utility::GeoCellGridScheme::Flat;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
+  // The general patterns for IRIs that are encoded directly in an `Id`, see
+  // `index/vocabulary/EncodedIriPattern.h`.
+  std::vector<encodedIri::Pattern> encodedIriPatterns{};
   // If true, add `ql:has-word` triples for each word in each literal during
   // index building.
   bool addHasWordTriples = false;
@@ -135,17 +139,18 @@ struct TestIndexConfig {
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
         c.vocabularyType, c.geoCellGridLevel, c.geoCellGridScheme,
-        c.encodedPrefixesWithoutAngleBrackets, c.addHasWordTriples,
-        c.secondaryVocabWords, c.numThreads, c.parseInParallel,
-        c.additionalSettings);
+        c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
+        c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
+        c.parseInParallel, c.additionalSettings);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, blocksizePermutations, createTextIndex,
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
       scoringMetric, bAndKParam, indexType, vocabularyType, geoCellGridLevel,
-      geoCellGridScheme, encodedPrefixesWithoutAngleBrackets, addHasWordTriples,
-      secondaryVocabWords, numThreads, parseInParallel, additionalSettings)
+      geoCellGridScheme, encodedPrefixesWithoutAngleBrackets,
+      encodedIriPatterns, addHasWordTriples, secondaryVocabWords, numThreads,
+      parseInParallel, additionalSettings)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.
