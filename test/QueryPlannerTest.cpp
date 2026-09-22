@@ -367,6 +367,60 @@ TEST(QueryPlanner, testFilterAfterJoin) {
       qec);
 }
 
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3429 : A
+// filter must not be applied to a subtree in which one of its variables might
+// be UNDEF, because a subsequent join can still bind that variable, in which
+// case the filter has to be evaluated on the bound value.
+TEST(QueryPlanner, filtersAreNotAppliedToPossiblyUndefinedVariables) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<s> <r> <x>. <s> <r2> <y>.");
+
+  // `?p` might be UNDEF because of the `VALUES` clause. Applying the filter
+  // directly to the `VALUES` clause would remove the UNDEF row and thus make
+  // the whole result empty, although the correct result is "all triples with a
+  // predicate other than `<r>`".
+  auto undefValues = h::ValuesClause("VALUES (?p) { (UNDEF) }");
+  std::string queryWithUndef =
+      "SELECT * { ?s ?p ?o . FILTER(?p != <r>) VALUES ?p { UNDEF } }";
+  // The greedy planner applies the filter to the index scan, where `?p` is
+  // always defined.
+  h::expectGreedy(queryWithUndef,
+                  h::Join(h::Sort(undefValues),
+                          h::Filter("?p != <r>", scan("?s", "?p", "?o"))),
+                  qec);
+  // The dynamic programming planner applies it after the join.
+  h::expectDynamicProgramming(
+      queryWithUndef,
+      h::Filter("?p != <r>",
+                h::Join(h::Sort(undefValues), scan("?s", "?p", "?o"))),
+      qec);
+
+  // The definedness is tracked per variable: `?s` is always defined by the
+  // `VALUES` clause, so the filter on `?s` may still be applied to it (and to
+  // the index scan), while the filter on the possibly undefined `?o` may only
+  // be applied at the very end.
+  std::string queryWithTwoFilters =
+      "SELECT * { ?s <r> ?x . VALUES (?s ?o) { (<s> UNDEF) } "
+      "FILTER(?s != <x>) FILTER(?o != <y>) }";
+  auto valuesWithFilter = h::Sort(h::Filter(
+      "?s != <x>", h::ValuesClause("VALUES (?s\t?o) { (<s> UNDEF) }")));
+  h::expectGreedy(
+      queryWithTwoFilters,
+      h::Filter("?o != <y>",
+                h::Join(valuesWithFilter,
+                        h::Filter("?s != <x>", scan("?s", "<r>", "?x")))),
+      qec);
+
+  // Sanity check that filters are still applied as early as possible if all
+  // their variables are always defined.
+  h::expectGreedy(
+      "SELECT * { ?s ?p ?o . FILTER(?p != <r>) VALUES ?p { <r2> } }",
+      h::Join(h::Sort(h::Filter("?p != <r>",
+                                h::ValuesClause("VALUES (?p) { (<r2>) }"))),
+              h::Filter("?p != <r>", scan("?s", "?p", "?o"))),
+      qec);
+}
+
 TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;

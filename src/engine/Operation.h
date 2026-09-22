@@ -312,6 +312,10 @@ class Operation {
     return false;
   }
 
+  // Check whether the given variable is covered by this `Operation` and is
+  // always defined (that is, it is never UNDEF in the result).
+  bool coversVariable(const Variable& variable) const;
+
   // Check whether all variables given are covered by this `Operation` and are
   // always defined.
   bool coversVariables(const std::vector<const Variable*>& variables) const;
