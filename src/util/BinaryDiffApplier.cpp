@@ -15,6 +15,7 @@
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "util/Algorithm.h"
 #include "util/BitUtils.h"
 #include "util/CryptographicHashUtils.h"
 #include "util/OverloadCallOperator.h"
@@ -74,8 +75,7 @@ void BinaryDiffApplier::addInsert(std::vector<char> bytes) {
   if (!instructions_.empty()) {
     if (auto* previous = std::get_if<Insert>(&instructions_.back());
         previous != nullptr) {
-      previous->bytes_.insert(previous->bytes_.end(), bytes.begin(),
-                              bytes.end());
+      ad_utility::appendVector(previous->bytes_, std::move(bytes));
       return;
     }
   }
