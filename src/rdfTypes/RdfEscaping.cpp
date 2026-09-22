@@ -246,18 +246,35 @@ static void unescapeIriWithBrackets(std::string_view input, std::string& res) {
   unescapeIriWithoutBrackets(input, res);
 }
 
-/**
- * In an Iriref, the only allowed escapes are \uXXXX and '\UXXXXXXXX' ,where X
- * is hexadecimal ([0-9a-fA-F]). This function replaces these escapes by the
- * corresponding UTF-8 character.
- * @param iriref An Iriref of the form <Content...>
- * @return The same Iriref but with the escape sequences replaced by their
- * actual value
- */
+// __________________________________________________________________________
+std::string_view unescapeIriref(std::string_view iriref, std::string& buffer) {
+  AD_CONTRACT_CHECK(ql::starts_with(iriref, "<") && ql::ends_with(iriref, ">"));
+  AD_CONTRACT_CHECK(buffer.empty());
+  // Fast path: an IRI that contains no backslash at all has no escape
+  // sequences, so the input can be used as it is. This is by far the most
+  // common case when parsing RDF input.
+  if (iriref.find('\\') == std::string_view::npos) {
+    return iriref;
+  }
+  // Unescaping never makes the IRI longer (the shortest numeric escape,
+  // `\uXXXX`, is six characters long and expands to at most three bytes), so a
+  // single allocation suffices.
+  buffer.reserve(iriref.size());
+  buffer.push_back('<');
+  unescapeIriWithBrackets(iriref, buffer);
+  buffer.push_back('>');
+  return buffer;
+}
+
+// __________________________________________________________________________
 std::string unescapeIriref(std::string_view iriref) {
-  std::string result = "<";
-  unescapeIriWithBrackets(iriref, result);
-  result.push_back('>');
+  std::string result;
+  unescapeIriref(iriref, result);
+  // `result` is only filled if the IRI actually contained escape sequences, in
+  // which case it already holds the unescaped IRI.
+  if (result.empty()) {
+    result = iriref;
+  }
   return result;
 }
 
@@ -361,28 +378,6 @@ NormalizedString normalizeLiteralWithoutQuotes(std::string_view input) {
   std::string returnValue;
   literalUnescape(input, returnValue);
   return toNormalizedString(returnValue);
-}
-
-// __________________________________________________________________________
-NormalizedString normalizeIriWithBrackets(std::string_view input) {
-  std::string result;
-  unescapeIriWithBrackets(input, result);
-  return toNormalizedString(result);
-}
-
-// __________________________________________________________________________
-NormalizedString normalizeIriWithoutBrackets(std::string_view input) {
-  std::string result;
-  unescapeIriWithoutBrackets(input, result);
-  return toNormalizedString(result);
-}
-
-// __________________________________________________________________________
-NormalizedString normalizeLanguageTag(std::string_view input) {
-  if (ql::starts_with(input, '@')) {
-    input.remove_prefix(1);
-  }
-  return toNormalizedString(input);
 }
 
 }  // namespace RdfEscaping
