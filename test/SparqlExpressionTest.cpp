@@ -509,6 +509,34 @@ TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
   testPlus(V<Id>{{I(2), D(3.0), I(4)}, alloc}, mixed, I(1));
 }
 
+// _____________________________________________________________________________
+TEST(SparqlExpression, speculativeNumericBinaryFastPath) {
+  // Integers are the majority, so the speculative path is taken with `Int`
+  // as the expected datatype. The other rows must reach the generic fallback
+  // of the slow path: a `Bool` counts as `0` or `1` there, an `UNDEF`, a
+  // vocabulary entry, and (for `+`) a date all yield `UNDEF`.
+  V<Id> mostlyInts{{I(1), I(2), I(3), I(4), I(5), D(0.5), B(true), U, Voc(4),
+                    Dat(DateYearOrDuration::parseXsdDate, "2000-01-01")},
+                   alloc};
+  testPlus(V<Id>{{I(2), I(3), I(4), I(5), I(6), D(1.5), I(2), U, U, U}, alloc},
+           mostlyInts, I(1));
+  testMultiply(
+      V<Id>{{D(2.0), D(4.0), D(6.0), D(8.0), D(10.0), D(1.0), D(2.0), U, U, U},
+            alloc},
+      mostlyInts, D(2.0));
+
+  // Doubles are the majority and the constant is an integer, so the slow path
+  // sees the `Int`/`Int` and `Int`/`Double` combinations.
+  V<Id> mostlyDoubles{{D(0.5), D(1.5), D(2.5), I(3), B(false)}, alloc};
+  testPlus(V<Id>{{D(1.5), D(2.5), D(3.5), I(4), I(1)}, alloc}, mostlyDoubles,
+           I(1));
+
+  // A tie between integers and doubles has no majority type and takes the
+  // generic path; the result must be the same either way.
+  V<Id> tied{{I(1), D(2.0), U}, alloc};
+  testPlus(V<Id>{{I(2), D(3.0), U}, alloc}, tied, I(1));
+}
+
 // _____________________________________________________________________________________
 TEST(SparqlExpression, arithmeticOperators) {
   // Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
