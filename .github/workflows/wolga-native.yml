@@ -67,30 +67,26 @@ jobs:
             toolchain: clang16
             build-type: RelWithDebInfo
             extra-flags: "-fsanitize=undefined"
-          # VOLGA-DEVIATION (placeholder): gcc11 legs need a gcc11 image
-          # (recipe: misc/ci-images/Containerfile.gcc11). Uncomment once the
-          # image is in the runner hosts' podman storage.
-          # - image: gcc11
-          #   toolchain: gcc11
-          #   build-type: Release
-          #   extra-flags: ""
-          # - image: gcc11
-          #   toolchain: gcc11
-          #   build-type: Release
-          #   extra-flags: ""
-          #   additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"
-          # VOLGA-DEVIATION (placeholder): gcc12/clang18 run on master only in
-          # native-build.yml and need images without a recipe yet.
-          # - image: gcc12
-          #   toolchain: gcc12
-          #   build-type: Release
-          #   extra-flags: ""
-          #   skip-if-pr: true
-          # - image: clang18
-          #   toolchain: clang18
-          #   build-type: Release
-          #   extra-flags: ""
-          #   skip-if-pr: true
+          - image: gcc11
+            toolchain: gcc11
+            build-type: Release
+            extra-flags: ""
+          - image: gcc11
+            toolchain: gcc11
+            build-type: Release
+            extra-flags: ""
+            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"
+          # gcc12/clang18 run on master only in native-build.yml.
+          - image: gcc12
+            toolchain: gcc12
+            build-type: Release
+            extra-flags: ""
+            skip-if-pr: true
+          - image: clang18
+            toolchain: clang18
+            build-type: Release
+            extra-flags: ""
+            skip-if-pr: true
           # NOTE: no TSan leg here. ThreadSanitizer aborts with "unexpected
           # memory mapping" unless the host sets vm.mmap_rnd_bits=28, which
           # needs root on the runner hosts. TSan stays on the GitHub-hosted
