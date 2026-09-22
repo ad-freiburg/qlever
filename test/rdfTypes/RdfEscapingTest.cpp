@@ -90,23 +90,35 @@ TEST(RdfEscapingTest, normalizeLiteralWithoutQuotesToNormalizedString) {
 }
 
 // ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeIriWithBracketsToNormalizedString) {
-  ASSERT_EQ("https://example.org/books/book1",
-            asStringViewUnsafe(
-                normalizeIriWithBrackets("<https://example.org/books/book1>")));
-}
-
-// ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeIriWithoutBracketsToNormalizedString) {
-  ASSERT_EQ("https://example.org/books/book1",
-            asStringViewUnsafe(normalizeIriWithoutBrackets(
-                "https://example.org/books/book1")));
-}
-
-// ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeLanguageTagToNormalizedString) {
-  ASSERT_EQ("se", asStringViewUnsafe(normalizeLanguageTag("@se")));
-  ASSERT_EQ("se", asStringViewUnsafe(normalizeLanguageTag("se")));
+TEST(RdfEscapingTest, unescapeIrirefIntoBuffer) {
+  // If there is nothing to unescape, the input itself is returned and the
+  // buffer is left untouched, which tells the caller that it may keep using
+  // the original string.
+  {
+    std::string buffer;
+    std::string_view input = "<http://example.org/a>";
+    std::string_view result = unescapeIriref(input, buffer);
+    EXPECT_EQ(result, input);
+    EXPECT_EQ(result.data(), input.data());
+    EXPECT_TRUE(buffer.empty());
+  }
+  // Otherwise the unescaped IRI is stored in the buffer, and a view of the
+  // buffer is returned.
+  {
+    std::string buffer;
+    std::string_view result =
+        unescapeIriref(R"(<http://example.org/B\u00E4>)", buffer);
+    EXPECT_EQ(result, "<http://example.org/Bä>");
+    EXPECT_EQ(result.data(), buffer.data());
+  }
+  // The buffer has to be empty, else the result of the fast path (an untouched
+  // buffer) could not be distinguished from an actual unescaping.
+  {
+    std::string buffer = "notEmpty";
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        unescapeIriref("<http://example.org/a>", buffer),
+        ::testing::HasSubstr("buffer.empty()"));
+  }
 }
 
 // ___________________________________________________________________________
