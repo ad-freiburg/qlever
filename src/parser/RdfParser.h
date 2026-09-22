@@ -95,9 +95,9 @@ std::optional<size_t> findEndOfLastStatement(std::string_view input);
 // mentions the newline explicitly, because that (and not the dot) is the part
 // of the rule that a valid Turtle file can violate.
 inline constexpr std::string_view blockBoundaryDescription =
-    "a dot that is followed by a newline and is not commented out (Turtle "
+    "a dot that is followed by a newline and is not commented out. Turtle "
     "itself does not require that newline, but QLever does, so that it can "
-    "split the input into blocks without parsing it)";
+    "split the input into blocks without parsing it";
 }  // namespace detail
 
 struct TurtleTriple {

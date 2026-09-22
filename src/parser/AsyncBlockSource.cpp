@@ -36,14 +36,14 @@ std::exception_ptr getNoBlockBoundaryError(std::string_view description,
                                            std::string_view inputName,
                                            bool isParsedInParallel) {
   return std::make_exception_ptr(std::runtime_error{absl::StrCat(
-      "Could not split the input \"", inputName,
-      "\" into blocks: QLever ends a block at ", description,
-      ", but the current block (which is not the last one) of size ",
+      "Could not split the input \"", inputName, "\" into blocks. A block of ",
       ad_utility::insertThousandSeparator(std::to_string(inputSize), ','),
-      " bytes contains no such position. To fix this, use "
-      "`--parser-buffer-size` to increase the buffer size",
+      " bytes, which is not the last one, contains no position at which a "
+      "block may end. Such a position is ",
+      description,
+      ". To fix this, use `--parser-buffer-size` to increase the buffer size",
       isParsedInParallel
-          ? ", or use `--parallel-parsing false` for this input: the serial "
+          ? ", or use `--parallel-parsing false` for this input. The serial "
             "parser can resume a statement that crosses a block boundary and "
             "therefore ends a block at any newline"
           : "",
@@ -113,9 +113,9 @@ AsyncStatementBoundaryBlockSource::AsyncStatementBoundaryBlockSource(
       isParsedInParallel_{isParsedInParallel} {}
 
 // ____________________________________________________________________________
-void AsyncStatementBoundaryBlockSource::assembleAndDeliver(Handler& handler,
-                                                           Block& input,
-                                                           size_t endPosition) {
+void AsyncStatementBoundaryBlockSource::splitAndDeliver(Handler& handler,
+                                                        Block& input,
+                                                        size_t endPosition) {
   remainder_.assign(input.begin() + endPosition, input.end());
   input.resize(endPosition);
   handler(nullptr, std::move(input));
@@ -147,7 +147,7 @@ void AsyncStatementBoundaryBlockSource::handleMissingBoundary(Handler handler,
                        // source exhausted and return `input` without requiring
                        // a statement boundary in it.
                        exhausted_ = true;
-                       return assembleAndDeliver(handler, input, input.size());
+                       return splitAndDeliver(handler, input, input.size());
                      }
                      // Inner source has more data, so the block really cannot
                      // be split.
@@ -198,7 +198,7 @@ void AsyncStatementBoundaryBlockSource::asyncGetNextBlockImpl(Handler handler) {
               return handler(std::current_exception(), std::nullopt);
             }
             if (endPosition.has_value()) {
-              return assembleAndDeliver(handler, input, endPosition.value());
+              return splitAndDeliver(handler, input, endPosition.value());
             }
 
             // No boundary found. Peek at the next raw block to decide how

@@ -1706,10 +1706,10 @@ TEST(RdfParserTest, asyncSerialParserAdapterEofAfterExhaustion) {
   EXPECT_EQ(parser.asyncGetBatch(boost::asio::use_future).get(), std::nullopt);
 }
 
+// _____________________________________________________________________________
 // Test that the parse errors of all the parsers that read from a file name that
 // file. An index build parses many files at the same time, so without the name
 // an error cannot be attributed to any of them (see issue #3288).
-// _____________________________________________________________________________
 TEST(RdfParserTest, parseErrorNamesTheInputFile) {
   std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
   ad_utility::makeOfstream(filename) << "<subject> <predicate> .\n";
@@ -1724,9 +1724,9 @@ TEST(RdfParserTest, parseErrorNamesTheInputFile) {
   forAllParsers(testWithParser);
 }
 
+// _____________________________________________________________________________
 // Test that a parser that reads from an unnamed input (for example a term of a
 // SPARQL query) keeps the shorter error message without a file name.
-// _____________________________________________________________________________
 TEST(RdfParserTest, parseErrorOfStringParserHasNoInputName) {
   Re2Parser parser{encodedIriManager()};
   parser.setInputStream("<subject> <predicate> .");

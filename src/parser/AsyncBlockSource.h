@@ -251,7 +251,7 @@ class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
   // Split `input` (which already has the previous `remainder_` prepended) at
   // `endPosition`: the part before it is passed to `handler`, the part after it
   // becomes the new `remainder_`.
-  void assembleAndDeliver(Handler& handler, Block& input, size_t endPosition);
+  void splitAndDeliver(Handler& handler, Block& input, size_t endPosition);
 
   // Mark this source exhausted and pass whatever is left in `remainder_` to
   // `handler` (`nullopt` if empty).
@@ -259,7 +259,7 @@ class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
 
   // Called when `findEndPosition_` found no boundary in `input`. Peeks at
   // the next block from `inner_` to decide whether `input` is simply the
-  // last block (delivered as-is via `assembleAndDeliver`) or the search
+  // last block (delivered as-is via `splitAndDeliver`) or the search
   // failed because the batch was too small (in which case `handler` receives
   // a "statement too large" error).
   void handleMissingBoundary(Handler handler, Block input);
