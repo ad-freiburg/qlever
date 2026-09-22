@@ -127,9 +127,13 @@ class TaskQueueOnExecutor {
   // also terminates if it throws, see below.
   void push(Task task) {
     std::unique_lock lock{mutex_};
+    cv_.wait(lock, [this]() {
+      return startedFinishing_ || numTasksInFlight_ < maxNumTasksInFlight_;
+    });
+    // NOTE: This is checked after the wait and not before it, because another
+    // thread may call `finish()` while this push waits for a free slot. A task
+    // that is enqueued afterwards would not be waited for by that `finish()`.
     AD_CONTRACT_CHECK(!startedFinishing_);
-    cv_.wait(lock,
-             [this]() { return numTasksInFlight_ < maxNumTasksInFlight_; });
     ++numTasksInFlight_;
     lock.unlock();
     // NOTE: The only way in which `boost::asio::post` can fail is that the
@@ -178,6 +182,9 @@ class TaskQueueOnExecutor {
       return;
     }
     startedFinishing_ = true;
+    // Wake up the pushes that wait for a free slot, so that they can report
+    // the contract violation right away, see `push`.
+    cv_.notify_all();
     cv_.wait(lock, [this]() { return numTasksInFlight_ == 0; });
     finishedFinishing_ = true;
     cv_.notify_all();

@@ -329,3 +329,37 @@ TEST(TaskQueueOnExecutor, aBoundOfOneRunsTheTasksSequentiallyAndInOrder) {
   EXPECT_EQ(result, expected);
   EXPECT_FALSE(sawConcurrentTasks);
 }
+
+// _____________________________________________________________________________
+TEST(TaskQueueOnExecutor, aPushThatIsBlockedWhenFinishStartsIsRejected) {
+  // A `push` that waits for a free slot while another thread calls `finish()`
+  // must not enqueue its task once that slot becomes free, because `finish()`
+  // (and hence the destructor) could then return while the task is still
+  // pending. It reports the contract violation instead, like a push that is
+  // initiated after `finish()`.
+  net::thread_pool pool{2};
+  Latch latch;
+  TaskQueueOnExecutor queue{pool.get_executor(), 1, "blockedPushVsFinish"};
+  queue.push([&latch]() { latch.wait(); });
+  std::atomic<bool> pushHasThrown = false;
+  std::atomic<bool> pushHasReturned = false;
+  ad_utility::JThread pusher{[&queue, &pushHasThrown, &pushHasReturned]() {
+    try {
+      queue.push([]() {});
+    } catch (const std::exception&) {
+      pushHasThrown = true;
+    }
+    pushHasReturned = true;
+  }};
+  // The pusher is now blocked, because the single slot is taken.
+  std::this_thread::sleep_for(shortTimeout);
+  EXPECT_FALSE(pushHasReturned.load());
+  ad_utility::JThread finisher{[&queue]() { queue.finish(); }};
+  // The finisher has now started finishing and waits for the first task.
+  std::this_thread::sleep_for(shortTimeout);
+  latch.release();
+  pusher.join();
+  finisher.join();
+  EXPECT_TRUE(pushHasThrown.load());
+  queue.waitUntilFinished();
+}
