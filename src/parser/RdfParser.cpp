@@ -1165,7 +1165,11 @@ void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
 
 // _____________________________________________________________________________
 template <class T>
-std::optional<std::vector<TurtleTriple>> RdfStreamParser<T>::getBatch() {
+std::optional<std::vector<TurtleTriple>> RdfStreamParser<T>::getBatch(
+    std::vector<TurtleTriple> buffer) {
+  // Parse into the buffer that the caller has passed back, so that its
+  // capacity is reused.
+  this->setTripleBuffer(std::move(buffer));
   // If parsing a statement fails because our buffer ends before the end of
   // that statement, we need to be able to recover.
   TurtleParserBackupState b = backupState();
@@ -1283,7 +1287,8 @@ bool RdfParallelParsingState<Parser>::parseHeaderStep(
 // ____________________________________________________________________________
 template <typename Parser>
 std::vector<TurtleTriple> RdfParallelParsingState<Parser>::parseBatch(
-    qlever::parser::ByteBlock batch, size_t positionOffset) const {
+    qlever::parser::ByteBlock batch, size_t positionOffset,
+    std::vector<TurtleTriple> buffer) const {
   RdfStringParser<Parser> parser{encodedIriManager_, defaultGraphIri_,
                                  settings_};
   parser.header() = header_;
@@ -1294,6 +1299,9 @@ std::vector<TurtleTriple> RdfParallelParsingState<Parser>::parseBatch(
   // so that user-specified blank node labels (_:foo) have the same ID
   // across all batches of the same file.
   parser.setFileBlankNodePrefix(fileBlankNodePrefix_);
+  // Parse into the buffer that the caller has passed back, so that its
+  // capacity is reused across the (short-lived) worker parsers.
+  parser.setTripleBuffer(std::move(buffer));
   parser.setInputStream(std::move(batch));
   return parser.parseAndReturnAllTriples();
 }
@@ -1409,7 +1417,8 @@ RdfMultifileParser::~RdfMultifileParser() {
 }
 
 // _____________________________________________________________________________
-std::optional<std::vector<TurtleTriple>> RdfMultifileParser::getBatch() {
+std::optional<std::vector<TurtleTriple>> RdfMultifileParser::getBatch(
+    [[maybe_unused]] std::vector<TurtleTriple> buffer) {
   return finishedBatchQueue_.pop();
 }
 
