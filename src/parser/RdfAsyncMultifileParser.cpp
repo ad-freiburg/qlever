@@ -195,7 +195,11 @@ RdfAsyncMultifileParser::getBatchCoroutine(std::vector<TurtleTriple> buffer) {
       // (possibly) another file. That call got the buffer and did not return
       // it, so the next one starts with a fresh (empty) one. This costs one
       // buffer per exhausted file, which only matters if there are many more
-      // files than concurrent calls.
+      // files than concurrent calls and those files additionally consist of
+      // very few batches each. The buffer could in principle also be returned
+      // for an exhausted file, but that would require `asyncGetBatch` to
+      // complete with something more explicit than an `optional<vector>`,
+      // which is not worth it for now.
       continue;
     } catch (...) {
       // Only the first error is propagated to its caller, all subsequent

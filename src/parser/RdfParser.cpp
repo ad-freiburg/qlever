@@ -1067,8 +1067,7 @@ template <class T>
 std::optional<std::vector<TurtleTriple>> RdfStreamParser<T>::getBatch(
     std::vector<TurtleTriple> buffer) {
   // Parse into the buffer that the caller has passed back, so that its
-  // capacity is reused. `triples_` is empty here, because the previous call
-  // has moved its buffer out (see the end of this function).
+  // capacity is reused.
   this->setTripleBuffer(std::move(buffer));
   // If parsing a statement fails because our buffer ends before the end of
   // that statement, we need to be able to recover.

@@ -124,11 +124,11 @@ class RdfParserBase {
   // Main access method to the parser. Return the next batch of triples, or
   // `nullopt` if the parser is exhausted.
   //
-  // `buffer` (which has to be empty) becomes the storage of the returned
-  // batch, so that a caller can pass back a batch it has consumed and thus
-  // reuse its capacity instead of having a fresh buffer grown for every batch.
-  // It is only an optimization: passing an empty buffer (see the overload
-  // below) is always correct, and a parser may ignore it (see
+  // `buffer` becomes the storage of the returned batch (its contents are
+  // discarded), so that a caller can pass back a batch it has consumed and
+  // thus reuse its capacity instead of having a fresh buffer grown for every
+  // batch. It is only an optimization: passing no buffer at all (see the
+  // overload below) is always correct, and a parser may ignore it (see
   // `RdfMultifileParser`). On `nullopt` the buffer is not returned.
   //
   // NOTE: The parsers that are used for the index building (currently only the
@@ -419,13 +419,11 @@ class TurtleParser : public RdfParserBase {
 
   // Use `buffer` as the storage for the triples that are parsed next, so that
   // its capacity is reused instead of growing a fresh buffer (see
-  // `RdfParserBase::getBatch`). `buffer` has to be empty, and so has the
-  // current buffer of this parser.
+  // `RdfParserBase::getBatch`). `buffer` is cleared first, and the current
+  // buffer of this parser has to be empty, so that no triples are lost.
   void setTripleBuffer(std::vector<TurtleTriple> buffer) {
-    // NOTE: Two separate checks, because the short-circuiting `&&` of a
-    // single check would always be reported as partially covered.
     AD_CORRECTNESS_CHECK(triples_.empty());
-    AD_CORRECTNESS_CHECK(buffer.empty());
+    buffer.clear();
     triples_ = std::move(buffer);
   }
 

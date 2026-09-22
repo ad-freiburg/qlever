@@ -85,11 +85,11 @@ class AsyncRdfParserBase {
   // The completion handler is always `post`ed (never `dispatch`ed) onto its
   // associated executor, and is therefore never invoked inline.
   //
-  // `buffer` (which has to be empty) becomes the storage of the batch that
-  // this call completes with, so that a caller can pass back a batch it has
-  // consumed and thus reuse its capacity instead of having a fresh buffer
-  // grown for every batch. It is only an optimization: passing an empty buffer
-  // (see the overload below) is always correct. A call that completes with
+  // `buffer` becomes the storage of the batch that this call completes with
+  // (its contents are discarded), so that a caller can pass back a batch it
+  // has consumed and thus reuse its capacity instead of having a fresh buffer
+  // grown for every batch. It is only an optimization: passing no buffer at
+  // all (see the overload below) is always correct. A call that completes with
   // `nullopt` or with an error does not return the buffer.
   template <typename CompletionToken>
   auto asyncGetBatch(std::vector<TurtleTriple> buffer,
