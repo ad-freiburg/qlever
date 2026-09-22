@@ -327,18 +327,28 @@ class ChunkQueue : public NoCopyNoMove,
   // benchmark.
   //
   // PRECONDITION: This runs on `strand_`.
-  void finish() {
-    wasFinished_ = true;
-    if (spillFile_ == nullptr) {
-      return;
-    }
-    net::post(ioExecutor_, [file = std::move(spillFile_)]() mutable {
-      // NOTE: A handler must not throw, and the destructor of a
-      // `CompressedBlockFile` may (it deletes the file).
-      ad_utility::terminateIfThrows([&file] { file.reset(); },
-                                    "Deleting the spill file of a chunk "
-                                    "failed.");
-    });
+  void finish() noexcept {
+    // NOTE: The whole body is guarded, not only the deletion of the file:
+    // failing to schedule that deletion would leak the file, and there is
+    // nobody left who could handle that, as this is called from the middle of
+    // a coroutine that is about to hand out the end-of-chunk sentinel.
+    ad_utility::terminateIfThrows(
+        [this] {
+          wasFinished_ = true;
+          if (spillFile_ == nullptr) {
+            return;
+          }
+          net::post(ioExecutor_, [file = std::move(spillFile_)]() mutable {
+            // NOTE: The handler runs long after this function has returned and
+            // is therefore guarded separately. A handler must not throw, and
+            // the destructor of a `CompressedBlockFile` may (it deletes the
+            // file).
+            ad_utility::terminateIfThrows([&file] { file.reset(); },
+                                          "Deleting the spill file of a chunk "
+                                          "failed.");
+          });
+        },
+        "Finishing a chunk of a `CompressedIdTableBlockStorage` failed.");
   }
 };
 

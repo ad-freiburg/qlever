@@ -137,11 +137,14 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   // already buffers `maxBufferedBlocksPerChunk` blocks, see
   // `BlockStorageConcept::storeBlock`.
   //
-  // NOTE: `co_spawn` completes with `void(std::exception_ptr, bool)`, which is
-  // exactly the completion signature that the `BlockStorageConcept` requires,
-  // so a failure of the bookkeeping below is reported through the completion
-  // and not by throwing at the caller, as that CONTRACT demands. The same holds
-  // for `getBlock`.
+  // NOTE: `co_spawn` of an awaitable that `co_return`s a `bool` completes with
+  // `void(std::exception_ptr, bool)`, which is exactly the completion signature
+  // that the `BlockStorageConcept` requires: the `bool` is what the coroutine
+  // `co_return`s, and an exception that escapes it becomes the
+  // `std::exception_ptr`. A failure of the bookkeeping below is therefore
+  // reported through the completion and not by throwing at the caller, as that
+  // CONTRACT demands. The same holds for `getBlock`, whose awaitable
+  // `co_return`s a `GetResult`.
   template <typename CompletionToken>
   auto storeBlock(size_t chunkIndex, OptionalBlock block,
                   CompletionToken&& completionToken) {
@@ -197,6 +200,12 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   // that has to be immediate is that no caller is left suspended forever, and
   // the `InOrderBlockSink` initiates no further operation once it has stopped
   // the merge, see its class comment.
+  //
+  // NOTE: Calling this repeatedly is harmless: setting `wasCancelled_` again is
+  // a no-op, and so is cancelling a chunk whose consumer is no longer waiting,
+  // because that only cancels the currently suspended receive and neither
+  // closes the channel of that chunk nor discards anything that it holds, see
+  // `ChunkQueue::cancelWaitingConsumer`.
   void cancelAll() noexcept {
     ad_utility::terminateIfThrows(
         [this] {
