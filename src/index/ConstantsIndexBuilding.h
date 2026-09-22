@@ -22,10 +22,6 @@ constexpr inline size_t MAX_INTERNAL_LITERAL_BYTES = 1'000'000;
 // Reduce to save RAM
 constexpr inline int NUM_TRIPLES_PER_PARTIAL_VOCAB = 10'000'000;
 
-// How many Triples is the Buffer supposed to parse ahead.
-// If too big, the memory consumption is high, if too low we possibly lose speed
-constexpr inline size_t PARSER_BATCH_SIZE = 1'000'000;
-
 // That many triples does the turtle parser have to buffer before the call to
 // `getBatch` returns (unless our input reaches EOF). This makes parsing from
 // streams faster.
@@ -75,20 +71,13 @@ constexpr inline size_t NUM_PARALLEL_PARSER_THREADS = 8;
 // The number of unparsed blocks of triples, that may wait for parsing at the
 // same time
 constexpr inline size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
-// The number of parsed blocks of triples, that may wait for parsing at the same
-// time
-constexpr inline size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
-
-// The blocksize parameter of the parallel vocabulary merging. Higher values
-// mean higher memory consumption, whereas a too low value will impact the
-// performance negatively.
-constexpr inline size_t BLOCKSIZE_VOCABULARY_MERGING = 100;
 
 // The number of index mappings (which is the same as the number of merged
 // words) that are collected in a single batch of the vocabulary merging (see
-// `index/vocabulary_merger/WordBatch.h`). A single buffer of merged words
-// (see `BLOCKSIZE_VOCABULARY_MERGING`) only contains a rather small number of
-// words, which would be much too fine-grained for a task queue.
+// `index/vocabulary_merger/WordBatch.h`). A single buffer of merged words (as
+// delivered by `parallelMultiwayMerge`, see `VocabularyMergerImpl.h`) only
+// contains a rather small number of words, which would be much too
+// fine-grained for a task queue.
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_SIZE = 100'000;
 
 // The maximal total size of the words in a single batch of the vocabulary
