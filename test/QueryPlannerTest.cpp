@@ -667,8 +667,8 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
       "} LIMIT 300");
   QueryPlanner qp = makeQueryPlanner();
   auto qet = qp.createExecutionTree(pq);
-  ASSERT_TRUE(qet->isVariableCovered(Variable{"?1"}));
-  ASSERT_TRUE(qet->isVariableCovered(Variable{"?0"}));
+  ASSERT_TRUE(qet->containsVariable(Variable{"?1"}));
+  ASSERT_TRUE(qet->containsVariable(Variable{"?0"}));
 }
 
 TEST(QueryPlanner, testSimpleOptional) {

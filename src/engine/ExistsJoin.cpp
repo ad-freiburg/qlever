@@ -248,7 +248,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // variable), skip it. This can happen because some `FILTER`s (which may
     // contain `EXISTS` functions) are applied multiple times (for example,
     // when there are OPTIONAL joins in the query).
-    if (subtree->isVariableCovered(exists.variable())) {
+    if (subtree->containsVariable(exists.variable())) {
       continue;
     }
 

@@ -1433,7 +1433,7 @@ void QueryPlanner::applyFiltersIfPossible(
            ql::ranges::any_of(
                filterAndSubst.filter_.expression_.containedVariables(),
                [&plan](const auto& variable) {
-                 return plan._qet->getRootOperation()->coversVariable(
+                 return plan._qet->getRootOperation()->isVariableAlwaysDefined(
                      *variable);
                }))) {
         // Apply filter substitution
@@ -1470,16 +1470,16 @@ void QueryPlanner::applyFiltersIfPossible(
       }
       // Note: A filter may only be applied to `plan` if all its variables are
       // not only present in `plan`, but also guaranteed to be bound there
-      // (this is what `coversVariables` checks). If a variable might be UNDEF
-      // in `plan` (for example because it comes from a `VALUES` clause with
-      // `UNDEF`, from a `UNION`, or from an `OPTIONAL` inside a subquery),
+      // (this is what `areVariablesAlwaysDefined` checks). If a variable might
+      // be UNDEF in `plan` (for example because it comes from a `VALUES` clause
+      // with `UNDEF`, from a `UNION`, or from an `OPTIONAL` inside a subquery),
       // then a later join might still bind it. Evaluating the filter now would
       // then yield a different (and wrong) result than evaluating it after
       // that join. Filters that can't be applied here are applied later, at
       // the latest at the end of the group graph pattern, where the
       // `ApplyAllFiltersAndReplaceUnfiltered` mode is used.
       if (applyAll ||
-          plan._qet->getRootOperation()->coversVariables(
+          plan._qet->getRootOperation()->areVariablesAlwaysDefined(
               filterAndSubst.filter_.expression_.containedVariables())) {
         // Apply this filter regularly.
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
