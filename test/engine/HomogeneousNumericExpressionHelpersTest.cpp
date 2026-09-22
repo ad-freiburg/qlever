@@ -101,20 +101,20 @@ class HomogeneousNumericExpressionHelpersTest : public ::testing::Test {
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedValueGetters) {
   struct UnsupportedValueGetter {};
-  static_assert(supportsHomogeneousNumericFastPath<NumericValueGetter>);
-  static_assert(supportsHomogeneousNumericFastPath<NumericOrDateValueGetter>);
-  static_assert(!supportsHomogeneousNumericFastPath<UnsupportedValueGetter>);
+  static_assert(supportsNumericFastPath<NumericValueGetter>);
+  static_assert(supportsNumericFastPath<NumericOrDateValueGetter>);
+  static_assert(!supportsNumericFastPath<UnsupportedValueGetter>);
 }
 
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedOperandTypes) {
-  static_assert(supportsHomogeneousNumericOperand<ValueId>());
-  static_assert(supportsHomogeneousNumericOperand<ql::span<const ValueId>>());
-  static_assert(!supportsHomogeneousNumericOperand<int>());
+  static_assert(supportsNumericFastPathOperand<ValueId>());
+  static_assert(supportsNumericFastPathOperand<ql::span<const ValueId>>());
+  static_assert(!supportsNumericFastPathOperand<int>());
 
-  EXPECT_TRUE(supportsHomogeneousNumericOperand<ValueId>());
-  EXPECT_TRUE(supportsHomogeneousNumericOperand<ql::span<const ValueId>>());
-  EXPECT_FALSE(supportsHomogeneousNumericOperand<int>());
+  EXPECT_TRUE(supportsNumericFastPathOperand<ValueId>());
+  EXPECT_TRUE(supportsNumericFastPathOperand<ql::span<const ValueId>>());
+  EXPECT_FALSE(supportsNumericFastPathOperand<int>());
 }
 
 // _____________________________________________________________________________
@@ -239,8 +239,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifyOperands) {
 
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, GetHomogeneousNumericValue) {
-  EXPECT_EQ(getHomogeneousNumericValue<int64_t>(I(-42)), -42);
-  EXPECT_DOUBLE_EQ(getHomogeneousNumericValue<double>(D(3.5)), 3.5);
+  EXPECT_EQ(getPrimitiveNumericValue<int64_t>(I(-42)), -42);
+  EXPECT_DOUBLE_EQ(getPrimitiveNumericValue<double>(D(3.5)), 3.5);
 }
 
 // _____________________________________________________________________________

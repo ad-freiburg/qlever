@@ -29,7 +29,7 @@
 namespace sparqlExpression::detail::homogeneousNumeric {
 
 // Helpers for evaluating numeric expressions directly on primitive C++ numeric
-// types after operand classification.
+// types after operand classification (see `NumericOperandClassification.h`).
 //
 // The generic numeric value getters return variants and therefore require
 // variant dispatch for every result row. These helpers avoid that overhead for
@@ -42,34 +42,34 @@ inline constexpr auto numericTypeMap = std::tuple{
 
 // Extract the primitive numeric value from a `ValueId` whose datatype was
 // already established by homogeneous classification.
-template <typename NumericType>
-NumericType getHomogeneousNumericValue(ValueId value) {
-  if constexpr (ql::concepts::same_as<NumericType, int64_t>) {
+template <typename Primitive>
+Primitive getPrimitiveNumericValue(ValueId value) {
+  if constexpr (ql::concepts::same_as<Primitive, int64_t>) {
     return value.getInt();
-  } else if constexpr (ql::concepts::same_as<NumericType, double>) {
+  } else if constexpr (ql::concepts::same_as<Primitive, double>) {
     return value.getDouble();
   } else {
-    static_assert(ad_utility::alwaysFalse<NumericType>,
+    static_assert(ad_utility::alwaysFalse<Primitive>,
                   "Unsupported homogeneous numeric type");
   }
 }
 
 // Return an indexed getter that extracts already-classified primitive numeric
 // values from either a vector-like operand or a constant.
-template <typename NumericType, typename Operand>
+template <typename Primitive, typename Operand>
 auto makeHomogeneousNumericGetter(const Operand& operand) {
   using OperandType = std::decay_t<Operand>;
 
   if constexpr (isVectorResult<OperandType>) {
     return [&operand](size_t i) {
-      return getHomogeneousNumericValue<NumericType>(operand[i]);
+      return getPrimitiveNumericValue<Primitive>(operand[i]);
     };
   } else {
     static_assert(ad_utility::isSimilar<OperandType, ValueId>,
                   "Homogeneous numeric fast path currently supports "
                   "ValueId constants");
 
-    const auto value = getHomogeneousNumericValue<NumericType>(operand);
+    const auto value = getPrimitiveNumericValue<Primitive>(operand);
 
     return [value]([[maybe_unused]] size_t index) { return value; };
   }
@@ -134,8 +134,8 @@ decltype(auto) dispatchNumericTypes(const std::array<NumericType, N>& types,
 // Check that a vector-like operand has the expected size. Constant operands
 // don't require a size check.
 template <typename Operand>
-void checkHomogeneousNumericOperandSize(const Operand& operand,
-                                        const EvaluationContext* context) {
+void checkNumericOperandSize(const Operand& operand,
+                             const EvaluationContext* context) {
   using OperandType = std::decay_t<Operand>;
   if constexpr (isVectorResult<OperandType>) {
     AD_CORRECTNESS_CHECK(ql::ranges::size(operand) == context->size());
@@ -144,11 +144,11 @@ void checkHomogeneousNumericOperandSize(const Operand& operand,
 
 // Apply the size check to all operands of a homogeneous numeric operation.
 template <typename... Operands>
-void checkHomogeneousNumericOperandSizes(
-    const std::tuple<Operands...>& operands, EvaluationContext* context) {
+void checkNumericOperandSizes(const std::tuple<Operands...>& operands,
+                              EvaluationContext* context) {
   std::apply(
       [context](const auto&... operand) {
-        (checkHomogeneousNumericOperandSize(operand, context), ...);
+        (checkNumericOperandSize(operand, context), ...);
       },
       operands);
 }
@@ -164,7 +164,7 @@ ExpressionResult evaluateHomogeneousNumericOperation(
                 "At least one operand must be vector-like");
 
   // Check the size of every vector-like operand.
-  checkHomogeneousNumericOperandSizes(operands, context);
+  checkNumericOperandSizes(operands, context);
 
   using FastFunction = RawNumericFunctionT<Function>;
   FastFunction function;
@@ -200,7 +200,7 @@ template <typename Operand>
 ValueId getIdAt(const Operand& operand, size_t index) {
   using OperandType = std::decay_t<Operand>;
 
-  static_assert(supportsHomogeneousNumericOperand<Operand>(),
+  static_assert(supportsNumericFastPathOperand<Operand>(),
                 "Unsupported operand representation for numeric fast path");
 
   if constexpr (isVectorResult<OperandType>) {
@@ -245,12 +245,12 @@ AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
 }
 
 // Return the `ValueId` datatype corresponding to a primitive numeric C++ type.
-template <typename NumericType>
+template <typename Primitive>
 constexpr Datatype datatypeForNumericType() {
-  if constexpr (ql::concepts::same_as<NumericType, int64_t>) {
+  if constexpr (ql::concepts::same_as<Primitive, int64_t>) {
     return Datatype::Int;
   } else {
-    static_assert(ql::concepts::same_as<NumericType, double>,
+    static_assert(ql::concepts::same_as<Primitive, double>,
                   "Unsupported primitive numeric type");
     return Datatype::Double;
   }
@@ -264,8 +264,8 @@ template <typename Function, typename LeftValueGetter,
           typename RightNumericType, typename Left, typename Right>
 ExpressionResult evaluateSpeculativeNumericOperation(
     const Left& left, const Right& right, EvaluationContext* context) {
-  checkHomogeneousNumericOperandSize(left, context);
-  checkHomogeneousNumericOperandSize(right, context);
+  checkNumericOperandSize(left, context);
+  checkNumericOperandSize(right, context);
 
   using FastFunction = RawNumericFunctionT<Function>;
   FastFunction fastFunction;
@@ -287,8 +287,8 @@ ExpressionResult evaluateSpeculativeNumericOperation(
         if (leftValue.getDatatype() == expectedLeftType &&
             rightValue.getDatatype() == expectedRightType) {
           result[i] = fastFunction(
-              getHomogeneousNumericValue<LeftNumericType>(leftValue),
-              getHomogeneousNumericValue<RightNumericType>(rightValue));
+              getPrimitiveNumericValue<LeftNumericType>(leftValue),
+              getPrimitiveNumericValue<RightNumericType>(rightValue));
         } else {
           result[i] =
               evaluateSpeculativeNumericSlowPath<Function, LeftValueGetter,

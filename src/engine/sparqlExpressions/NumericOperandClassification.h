@@ -46,7 +46,7 @@ struct NumericOperandClassification {
 
 // Whether a value getter can participate in the homogeneous numeric fast path.
 template <typename ValueGetter>
-inline constexpr bool supportsHomogeneousNumericFastPath =
+inline constexpr bool supportsNumericFastPath =
     ad_utility::SameAsAny<ValueGetter, NumericValueGetter,
                           NumericOrDateValueGetter>;
 
@@ -54,7 +54,7 @@ inline constexpr bool supportsHomogeneousNumericFastPath =
 // by the homogeneous numeric classifier. Currently this is restricted to
 // `ValueId` constants and vectors whose elements are `ValueId`s.
 template <typename Operand>
-constexpr bool supportsHomogeneousNumericOperand() {
+constexpr bool supportsNumericFastPathOperand() {
   using OperandType = std::decay_t<Operand>;
 
   if constexpr (ad_utility::isSimilar<OperandType, ValueId>) {
@@ -116,6 +116,11 @@ inline NumericOperandClassification classifyNumericOperand(
   // unique most common datatype but does not exceed 50% of the input. There are
   // still possible refinements, for example treating datatypes that
   // unconditionally lead to `UNDEF` separately.
+  //
+  // NOTE: For operands without a numeric majority the classification is wasted
+  // work. Measured with `SparqlExpressionBenchmark` on 100k rows x 50, the
+  // first scan costs about 2 ms and both scans about 3 ms, which makes such
+  // expressions 3 to 7 percent slower than the generic path.
   constexpr size_t numDatatypes = static_cast<size_t>(Datatype::MaxValue) + 1;
   std::array<size_t, numDatatypes> datatypeCounts{};
 
@@ -163,7 +168,7 @@ inline NumericOperandClassification classifyNumericOperand(
   using OperandType = std::decay_t<Operand>;
 
   static_assert(
-      supportsHomogeneousNumericOperand<Operand>(),
+      supportsNumericFastPathOperand<Operand>(),
       "Unsupported operand representation for numeric classification");
 
   if constexpr (ad_utility::isSimilar<OperandType, ValueId>) {

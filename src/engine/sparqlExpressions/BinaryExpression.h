@@ -95,10 +95,10 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                         isConstantResult<RightType>)) {
     // Use the homogeneous numeric fast path when both operands and value
     // getters support it.
-    if constexpr (supportsHomogeneousNumericFastPath<LeftValueGetter> &&
-                  supportsHomogeneousNumericFastPath<RightValueGetter> &&
-                  supportsHomogeneousNumericOperand<Left>() &&
-                  supportsHomogeneousNumericOperand<Right>()) {
+    if constexpr (supportsNumericFastPath<LeftValueGetter> &&
+                  supportsNumericFastPath<RightValueGetter> &&
+                  supportsNumericFastPathOperand<Left>() &&
+                  supportsNumericFastPathOperand<Right>()) {
       const auto classifications =
           classifyNumericOperands(context, left, right);
 
