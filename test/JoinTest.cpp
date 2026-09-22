@@ -942,6 +942,32 @@ TEST(JoinTest, clone) {
 }
 
 // _____________________________________________________________________________
+// A `BIND` must not be pushed down into a child that already has a column for
+// the target variable, even if that child has all the variables the `BIND`
+// expression needs.
+TEST(JoinTest, makeTreeWithBindColumnSkipsChildThatAlreadyHasTheTarget) {
+  auto qec = ad_utility::testing::getQec();
+  auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1), I(1), I(1)}}),
+      Vars{Variable{"?s"}, Variable{"?o"}, Variable{"?bind"}}, false,
+      std::vector<ColumnIndex>{0});
+  // The right tree doesn't contain `?o`, so the `BIND` can't be pushed down
+  // into it either.
+  auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1)}}), Vars{Variable{"?s"}}, false,
+      std::vector<ColumnIndex>{0});
+  auto join = ad_utility::makeExecutionTree<Join>(qec, std::move(leftTree),
+                                                  std::move(rightTree), 0, 0);
+
+  parsedQuery::Bind bind{
+      sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+          Variable{"?o"}),
+      Variable{"?bind"}};
+  EXPECT_FALSE(
+      join->getRootOperation()->makeTreeWithBindColumn(bind).has_value());
+}
+
+// _____________________________________________________________________________
 TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
   auto keepJoinCol = GetParam();
   using ad_utility::triple_component::Iri;
