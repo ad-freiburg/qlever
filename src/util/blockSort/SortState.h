@@ -95,7 +95,7 @@ class ScratchBuffers : public ad_utility::NoCopyNoMove {
   // Borrow a buffer. Only spins if more threads run the executor than there
   // are buffers.
   Lease acquire() {
-    while (true) {
+    for (;;) {
       {
         std::lock_guard<std::mutex> lock{mutex_};
         if (!unused_.empty()) {
@@ -180,9 +180,7 @@ class SortState {
   }
 
   bool hasError() const noexcept { return errors_.hasError(); }
-  void storeError(std::exception_ptr error) noexcept {
-    errors_.store(std::move(error));
-  }
+  void storeError(std::exception_ptr error) { errors_.store(std::move(error)); }
 
   TaskGroup makeTaskGroup() { return TaskGroup{executor_, errors_}; }
 };

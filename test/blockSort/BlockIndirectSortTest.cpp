@@ -87,7 +87,7 @@ std::vector<uint32_t> ascending(size_t numElements) {
 // sort has a unique result.
 std::vector<uint32_t> randomDistinct(size_t numElements, uint64_t seed) {
   std::vector<uint32_t> values = ascending(numElements);
-  std::shuffle(values.begin(), values.end(), std::mt19937_64{seed});
+  ql::ranges::shuffle(values, std::mt19937_64{seed});
   return values;
 }
 
@@ -199,7 +199,7 @@ TEST(BlockIndirectSort, stringElements) {
     expected.push_back(absl::StrFormat("value_%010d_with_some_padding", i));
   }
   auto values = expected;
-  std::shuffle(values.begin(), values.end(), std::mt19937_64{7});
+  ql::ranges::shuffle(values, std::mt19937_64{7});
   expectSortsTo(std::move(values), expected, numPoolThreads);
 }
 
@@ -231,6 +231,23 @@ TEST(BlockIndirectSort, exceptionFromComparatorIsPropagated) {
       blockIndirectSort(ql::span<uint32_t>{values}, comp, numPoolThreads,
                         threadPool().get_executor()),
       ::testing::HasSubstr("comparator failed"));
+}
+
+// _____________________________________________________________________________
+// The first stored exception wins, and a null exception is rejected.
+TEST(BlockIndirectSort, errorSink) {
+  ad_utility::blockSort::detail::ErrorSink sink;
+  EXPECT_FALSE(sink.hasError());
+  EXPECT_NO_THROW(sink.rethrowIfError());
+  AD_EXPECT_THROW_WITH_MESSAGE(sink.store(nullptr),
+                               ::testing::HasSubstr("error != nullptr"));
+  EXPECT_FALSE(sink.hasError());
+
+  sink.store(std::make_exception_ptr(std::runtime_error("first")));
+  sink.store(std::make_exception_ptr(std::runtime_error("second")));
+  EXPECT_TRUE(sink.hasError());
+  AD_EXPECT_THROW_WITH_MESSAGE(sink.rethrowIfError(),
+                               ::testing::StrEq("first"));
 }
 
 // _____________________________________________________________________________

@@ -52,11 +52,10 @@ class ErrorSink {
     return hasError_.load(std::memory_order_acquire);
   }
 
-  // Store `error` unless an exception has already been stored.
-  void store(std::exception_ptr error) noexcept {
-    if (error == nullptr) {
-      return;
-    }
+  // Store `error`, which must not be null, unless an exception has already been
+  // stored.
+  void store(std::exception_ptr error) {
+    AD_CONTRACT_CHECK(error != nullptr);
     std::lock_guard<std::mutex> lock{mutex_};
     if (error_ == nullptr) {
       error_ = std::move(error);
@@ -145,7 +144,9 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
         try {
           net::co_spawn(executor_, std::move(child),
                         [this](std::exception_ptr error) {
-                          errors_.store(std::move(error));
+                          if (error != nullptr) {
+                            errors_.store(std::move(error));
+                          }
                           childIsDone();
                         });
         } catch (...) {
@@ -218,11 +219,12 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
     co_await join();
   }
 
-  // Suspend the parent until all spawned children have finished.
+  // Suspend the parent until all spawned children have finished. Must be
+  // awaited exactly once.
   net::awaitable<void> join() {
     // Fast path: only the parent's own count is left, so all children are done.
     if (numPending_.load(std::memory_order_acquire) == 1) {
-      numPending_.store(0, std::memory_order_relaxed);
+      numPending_.store(0);
       co_return;
     }
     co_await initiateJoin(net::use_awaitable);
@@ -230,11 +232,10 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
 
  private:
   // Resume the parent if this was the last child. Resuming may destroy
-  // `*this`, so the handler is moved out first.
+  // `*this`, so the handler is moved out into a temporary first.
   void childIsDone() {
     if (numPending_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-      auto resumeParent = std::move(resumeParent_);
-      std::move(resumeParent)();
+      std::exchange(resumeParent_, nullptr)();
     }
   }
 };
