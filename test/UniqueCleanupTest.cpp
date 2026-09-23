@@ -142,7 +142,8 @@ TEST(UniqueCleanup, RunNowPropagatesExceptions) {
 
 // _____________________________________________________________________________
 TEST(UniqueCleanup, ThrowingCleanupInDestructorTerminates) {
-  EXPECT_DEATH((UniqueCleanup<int, std::function<void(int)>>{
-                   1, [](int) { throw std::runtime_error{"cleanup failed"}; }}),
-               "The cleanup of a `UniqueCleanup` failed");
+  EXPECT_DEATH_IF_SUPPORTED(
+      (UniqueCleanup<int, std::function<void(int)>>{
+          1, [](int) { throw std::runtime_error{"cleanup failed"}; }}),
+      "The cleanup of a `UniqueCleanup` failed");
 }
