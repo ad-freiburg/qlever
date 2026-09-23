@@ -85,8 +85,8 @@ jobs:
               # legs without a `container-env` matrix key).
               if [ -n "${{ matrix.container-env }}" ]; then export ${{ matrix.container-env }}; fi
               # Fresh configure per leg: self-hosted workspaces persist
-              # across jobs, so a previous leg's CMake cache (different
-              # toolchain/sanitizer flags) must not be reused.
+              # across jobs, so the CMake cache of a previous leg
+              # (different toolchain/sanitizer flags) must not be reused.
               rm -rf /work/build
               cmake -B /work/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
                 -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/${{ matrix.toolchain }}.cmake" \
