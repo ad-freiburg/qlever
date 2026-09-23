@@ -101,6 +101,37 @@ TEST(RdfEscapingTest, unescapeLiteral) {
 }
 
 // ___________________________________________________________________________
+TEST(RdfEscapingTest, unescapeNewlinesAndBackslashes) {
+  ASSERT_EQ(unescapeNewlinesAndBackslashes(""), "");
+  ASSERT_EQ(unescapeNewlinesAndBackslashes("Hello World"), "Hello World");
+  ASSERT_EQ(unescapeNewlinesAndBackslashes(R"(a\nb\\c\n)"), "a\nb\\c\n");
+  // Roundtrip with `escapeNewlinesAndBackslashes`.
+  std::string_view original = "line1\nline2\\\t\"end";
+  ASSERT_EQ(
+      unescapeNewlinesAndBackslashes(escapeNewlinesAndBackslashes(original)),
+      original);
+
+  // All other string escapes are not allowed.
+  for (std::string_view input :
+       {R"(a\tb)", R"(a\rb)", R"(a\bb)", R"(a\fb)", R"(a\"b)", R"(a\'b)"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        unescapeNewlinesAndBackslashes(input),
+        ::testing::HasSubstr("String escapes like \\n or \\t are not allowed"));
+  }
+  // Numeric escapes are not allowed.
+  for (std::string_view input : {R"(a\u00e4)", R"(a\U0001F600)"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        unescapeNewlinesAndBackslashes(input),
+        ::testing::HasSubstr("Numeric escapes escapes like"));
+  }
+  // Unknown escapes and a trailing backslash violate contract checks.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      unescapeNewlinesAndBackslashes(R"(a\zb)"),
+      ::testing::HasSubstr("Unsupported escape sequence"));
+  ASSERT_THROW(unescapeNewlinesAndBackslashes("a\\"), ad_utility::Exception);
+}
+
+// ___________________________________________________________________________
 TEST(RdfEscapingTest, unescapeIrirefIntoBuffer) {
   // If there is nothing to unescape, the input itself is returned and the
   // buffer is left untouched, which tells the caller that it may keep using
