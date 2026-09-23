@@ -438,6 +438,11 @@ void IndexImpl::createFromFiles(
   configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
   configurationJson_[DATE_OF_INDEX_BUILD_KEY] =
       formatIndexBuildTime(absl::Now());
+  // The block size is stored so that everything that writes permutations of
+  // this index later on (the server for a materialized view, the index format
+  // converter) uses the same block size as this build.
+  configurationJson_[BLOCKSIZE_PERMUTATIONS_PER_COLUMN_KEY] =
+      blocksizePermutationPerColumn_.getBytes();
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
@@ -1426,6 +1431,24 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
       ad_utility::VocabularyType::Enum::OnDiskCompressed);
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
+
+  // The block size with which the permutations of this index were written. It
+  // is needed when further permutations of this index are written later on (a
+  // materialized view, for example), so that all permutations of an index have
+  // the same block size. Indexes that were built before this key existed were
+  // built with the default.
+  uint64_t blocksizePermutationsPerColumnInBytes =
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN.getBytes();
+  loadDataMember(BLOCKSIZE_PERMUTATIONS_PER_COLUMN_KEY,
+                 blocksizePermutationsPerColumnInBytes,
+                 blocksizePermutationsPerColumnInBytes);
+  if (blocksizePermutationsPerColumnInBytes == 0) {
+    throw std::runtime_error{absl::StrCat("Invalid value 0 for the key \"",
+                                          BLOCKSIZE_PERMUTATIONS_PER_COLUMN_KEY,
+                                          "\" in the `meta-data.json`")};
+  }
+  blocksizePermutationPerColumn_ =
+      ad_utility::MemorySize::bytes(blocksizePermutationsPerColumnInBytes);
 
   // The geo cell grid of the geo vocabulary, if the index was built with one
   // (see `GeoCellGrid`). The vocabulary needs it before it is opened, because

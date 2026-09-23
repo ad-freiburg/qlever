@@ -59,12 +59,18 @@ std::string conversionDescription();
 Id convertId(Id id);
 
 // The block size (per column) with which the permutations of the converted
-// index are written. It is the default block size of the index builder, so that
-// the converted permutations have exactly the blocks that a freshly built index
-// would have. It is not `const`, so that a unit test can set it to a much
-// smaller value; with the default, a relation only gets a
-// `CompressedRelationMetadata` of its own if it has more than 25000 rows, which
-// no unit test can afford to build (see `writePermutation` in the
+// index are written. It is set from the configuration of the index that is
+// converted (`BLOCKSIZE_PERMUTATIONS_PER_COLUMN_KEY`), so that the converted
+// permutations have exactly the blocks that a fresh build of that index with
+// the same block size would have. Indexes that were built before that key
+// existed use the default block size of the index builder.
+//
+// NOTE: It is a mutable global because the conversion writes the permutations
+// deep inside a call chain that it is not worth threading a parameter through
+// (the converter converts one index per process run). A unit test may also set
+// it directly; with the default, a relation only gets a
+// `CompressedRelationMetadata` of its own if it has more than 25000 rows,
+// which no unit test can afford to build (see `writePermutation` in the
 // implementation).
 inline ad_utility::MemorySize& blocksizeOfConvertedPermutations() {
   static ad_utility::MemorySize blocksize =

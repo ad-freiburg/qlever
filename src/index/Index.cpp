@@ -185,6 +185,11 @@ ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
 }
 
 // ____________________________________________________________________________
+const ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() const {
+  return pimpl_->blocksizePermutationPerColumn();
+}
+
+// ____________________________________________________________________________
 void Index::setOnDiskBase(const std::string& onDiskBase) {
   return pimpl_->setOnDiskBase(onDiskBase);
 }
