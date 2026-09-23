@@ -1436,6 +1436,15 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
   auto configuration = readAndCheckConfiguration(oldBasename);
   throwIfPersistedUpdatesExist(oldBasename);
 
+  // The converted permutations must have the block size of the index that is
+  // converted, because the configuration (which records that block size) is
+  // copied unchanged, see below.
+  if (configuration.contains(BLOCKSIZE_PERMUTATIONS_PER_COLUMN_KEY)) {
+    blocksizeOfConvertedPermutations() = ad_utility::MemorySize::bytes(
+        configuration.at(BLOCKSIZE_PERMUTATIONS_PER_COLUMN_KEY)
+            .get<uint64_t>());
+  }
+
   // The converted index must not overwrite any existing file.
   fs::path newDirectory = fs::path{newBasename}.parent_path();
   if (!newDirectory.empty()) {
