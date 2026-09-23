@@ -204,13 +204,14 @@ TEST(BlockIndirectSort, stringElements) {
 }
 
 // _____________________________________________________________________________
-// An empty executor sorts in the calling thread.
-TEST(BlockIndirectSort, emptyExecutorSortsInCallingThread) {
-  size_t numElements = numElementsForParallelPath<uint32_t>(numPoolThreads);
-  auto values = randomDistinct(numElements, 5);
-  blockIndirectSort(ql::span<uint32_t>{values}, std::less<uint32_t>{},
-                    numPoolThreads, ql::any_io_executor{});
-  EXPECT_EQ(values, ascending(numElements));
+// An empty executor violates the contract, even for inputs that would be
+// sorted in the calling thread.
+TEST(BlockIndirectSort, emptyExecutorIsRejected) {
+  std::vector<uint32_t> values{3, 1, 2};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      blockIndirectSort(ql::span<uint32_t>{values}, std::less<uint32_t>{},
+                        numPoolThreads, ql::any_io_executor{}),
+      ::testing::HasSubstr("exec"));
 }
 
 // _____________________________________________________________________________

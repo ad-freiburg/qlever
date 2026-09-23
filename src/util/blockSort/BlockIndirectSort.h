@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <numeric>
 #include <utility>
 
 #include "backports/algorithm.h"
@@ -80,7 +81,7 @@ net::awaitable<void> splitRange(State& state, size_t posIndex1,
     boost::sort::pdqsort(first, last, state.cmp_);
     co_return;
   }
-  size_t posIndexMid = posIndex1 + (numBlocks >> 1);
+  size_t posIndexMid = std::midpoint(posIndex1, posIndex2);
 
   TaskGroup group = state.makeTaskGroup();
   if (levelThread != 0) {
@@ -90,7 +91,7 @@ net::awaitable<void> splitRange(State& state, size_t posIndex1,
           splitRange(state, posIndex1, posIndexMid, levelThread - 1));
     }
   } else {
-    auto mid = first + (numBlocks >> 1) * State::blockSize_;
+    auto mid = state.getBlockBegin(posIndexMid);
     group.spawn(parallelSort(state, mid, last));
     if (!state.hasError()) {
       co_await group.runInline(parallelSort(state, first, mid));
@@ -155,9 +156,8 @@ void runSort(Iterator first, Iterator last, Compare comp, uint32_t nthread,
   nthread = std::min(nthread, static_cast<uint32_t>(
                                   numElements / (blockSize * groupSize) + 1));
 
-  // Sort small inputs (or without threads/executor) in the calling thread.
-  if (numElements < maxElementsPerTask<Value>() || nthread < 2 ||
-      !static_cast<bool>(exec)) {
+  // Sort small inputs (or without threads) in the calling thread.
+  if (numElements < maxElementsPerTask<Value>() || nthread < 2) {
     boost::sort::pdqsort(first, last, comp);
     return;
   }
@@ -173,9 +173,9 @@ void runSort(Iterator first, Iterator last, Compare comp, uint32_t nthread,
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // Sort `range` by `comp` (a strict weak ordering) on up to `nthread` threads
-// of `exec`. The sort is not stable. Small inputs, `nthread < 2` or an empty
-// `exec` are sorted in the calling thread, and below `minNumThreadsForBlocks`
-// threads only the parallel quicksort is used.
+// of `exec`, which must not be empty. The sort is not stable. Small inputs and
+// `nthread < 2` are sorted in the calling thread, and below
+// `minNumThreadsForBlocks` threads only the parallel quicksort is used.
 //
 // `nthread` should be the number of threads that run `exec`: it determines the
 // number of parts and of scratch buffers (one block each).
@@ -199,11 +199,11 @@ CPP_template(typename Range, typename Compare)(
             Range>) void blockIndirectSort(Range range, Compare comp,
                                            uint32_t nthread,
                                            ql::any_io_executor exec) {
+  AD_CONTRACT_CHECK(static_cast<bool>(exec));
   auto first = ql::ranges::begin(range);
   auto last = first + ql::ranges::distance(range);
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   static_cast<void>(nthread);
-  static_cast<void>(exec);
   boost::sort::pdqsort(first, last, comp);
 #else
   detail::runSort(first, last, std::move(comp), nthread, std::move(exec));

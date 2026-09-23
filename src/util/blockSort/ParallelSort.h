@@ -66,7 +66,7 @@ Iterator median3(Iterator it1, Iterator it2, Iterator it3, const Compare& cmp) {
 // `first`, Boost's `pivot9`.
 template <typename Iterator, typename Compare>
 void movePivotToFront(Iterator first, Iterator last, const Compare& cmp) {
-  size_t step = static_cast<size_t>(last - first) >> 3;
+  size_t step = static_cast<size_t>(last - first) / 8;
   Iterator pivot = median3(
       median3(first + 1, first + step, first + 2 * step, cmp),
       median3(first + 3 * step, first + 4 * step, first + 5 * step, cmp),
@@ -78,7 +78,7 @@ void movePivotToFront(Iterator first, Iterator last, const Compare& cmp) {
 // elements, like in Boost.
 template <typename Value>
 constexpr size_t maxElementsPerTask() {
-  auto bitsOfSize = static_cast<uint32_t>(std::bit_width(sizeof(Value))) >> 1;
+  auto bitsOfSize = static_cast<uint32_t>(std::bit_width(sizeof(Value))) / 2;
   return size_t{1} << (18 - std::min(bitsOfSize, uint32_t{5}));
 }
 

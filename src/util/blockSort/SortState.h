@@ -134,7 +134,6 @@ class SortState {
   using RangeIt = bsc::range<Iterator>;
   using RangePos = bsc::range<size_t>;
   using CompareBlockPos = bsd::compare_block_pos<BlockSize, Iterator, Compare>;
-  static constexpr uint32_t blockSize_ = BlockSize;
 
   // The whole range to sort.
   RangeIt globalRange_;
