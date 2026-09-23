@@ -147,7 +147,7 @@ jobs:
                   if "$@" && [ -f /work/build/CMakeCache.txt ]; then return 0; fi
                   echo "cmake configure attempt ${attempt} failed, retrying in 15s..."
                   attempt=$((attempt + 1))
-                  sleep 15
+                  if [ "${attempt}" -le 3 ]; then sleep 15; fi
                 done
                 return 1
               }
@@ -197,11 +197,10 @@ jobs:
                 local attempt=1
                 while [ "${attempt}" -le 3 ]; do
                   rm -rf /work/build && mkdir -p /work/build
-                  (cd /work/build && conan install .. -pr:b=default -of=. --build=missing)
-                  if "$@" && [ -f /work/build/CMakeCache.txt ]; then return 0; fi
+                  if (cd /work/build && conan install .. -pr:b=default -of=. --build=missing) && "$@" && [ -f /work/build/CMakeCache.txt ]; then return 0; fi
                   echo "cmake configure attempt ${attempt} failed, retrying in 15s..."
                   attempt=$((attempt + 1))
-                  sleep 15
+                  if [ "${attempt}" -le 3 ]; then sleep 15; fi
                 done
                 return 1
               }
