@@ -1,1 +1,1 @@
-addLinkAndDiscoverTestNoLibs(BlockIndirectSortTest)
+addLinkAndDiscoverTestNoLibs(BlockIndirectSortTest qlever_util)

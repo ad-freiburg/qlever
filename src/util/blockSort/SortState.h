@@ -12,9 +12,6 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#include <boost/sort/block_indirect_sort/blk_detail/block.hpp>
-#include <boost/sort/common/range.hpp>
-#include <boost/sort/common/util/algorithm.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -28,38 +25,29 @@
 
 #include "backports/asio.h"
 #include "util/Exception.h"
+#include "util/blockSort/BoostSortHeaders.h"
 #include "util/blockSort/TaskGroup.h"
 
 namespace ad_utility::blockSort::detail {
 
-// The parts of Boost.Sort that we reuse instead of writing them again: the
-// `range` type together with its merge and move primitives, the low-level
-// algorithms (`nbits64`, `initialize`, `destroy`, ...), and the two index
-// helpers `block_pos` (a block position plus a side bit, packed into a
-// `size_t`) and `compare_block_pos` (which compares two blocks by their first
-// element).
+// The parts of Boost.Sort that are reused as they are: `range` with its merge
+// and move primitives, and the index helpers `block_pos` (a block position plus
+// a side bit) and `compare_block_pos` (compares blocks by their first element).
 namespace bsc = boost::sort::common;
 namespace bscu = boost::sort::common::util;
 namespace bsd = boost::sort::blk_detail;
 
-// A fixed set of scratch buffers of `bufferSize` elements each, which the tasks
-// of a sort borrow while they merge or move blocks.
+// A fixed pool of scratch buffers of `bufferSize` elements each, borrowed by
+// the tasks that merge or move blocks. Replaces the `thread_local` buffer of
+// Boost's `backbone`, which doesn't work for coroutines that may change
+// threads.
 //
-// This replaces the `static thread_local value_t* buf` of Boost's `backbone`,
-// which cannot be carried over to coroutines: a coroutine is not tied to a
-// thread, so a buffer that a coroutine picked up from the thread it started on
-// may well belong to a different coroutine after the next suspension.
-//
-// A borrowed buffer is therefore never held across a suspension point — every
-// user of one is a stretch of straight-line code — which is also why
-// `numBuffers` buffers are always enough for `numBuffers` threads, and why
-// `acquire()` never has to wait in practice: a thread that holds a buffer
-// always gives it back without waiting for anything.
+// A buffer is never held across a suspension point, so one buffer per thread
+// is enough and `acquire()` doesn't wait in practice.
 template <typename Value>
 class ScratchBuffers {
  private:
-  // The raw storage. `Value` may be over-aligned, so this needs the aligned
-  // form of `operator new` rather than plain `malloc`.
+  // Aligned, because `Value` may be over-aligned.
   struct Deallocate {
     void operator()(Value* pointer) const noexcept {
       ::operator delete(static_cast<void*>(pointer),
@@ -70,13 +58,11 @@ class ScratchBuffers {
   size_t bufferSize_;
   size_t numValues_;
   std::mutex mutex_;
-  // The buffers that nobody currently holds. Contended `numBlocks / GroupSize`
-  // times per sort at most, so a plain mutex is more than good enough.
+  // The buffers that are currently not borrowed.
   std::vector<Value*> unused_;
 
  public:
-  // A borrowed buffer, which is returned to the pool when this object goes out
-  // of scope.
+  // A borrowed buffer, returned to the pool on destruction.
   class Lease {
    private:
     ScratchBuffers* pool_;
@@ -99,13 +85,10 @@ class ScratchBuffers {
     }
   };
 
-  // Allocate `numBuffers` buffers of `bufferSize` elements. The elements are
-  // *initialized* (the algorithm move-assigns into them, so they have to be
-  // live objects), which `initialValue` is the seed for: it is moved into the
-  // first slot, that slot into the second, and so on, and the last slot is
-  // finally moved back into `initialValue`. This needs nothing but a move
-  // constructor and a move assignment of `Value`, see
-  // `boost::sort::common::initialize`.
+  // Allocate `numBuffers` buffers of `bufferSize` elements. The elements have
+  // to be live objects (they are move-assigned to), so they are constructed by
+  // chaining moves from `initialValue`, which gets its value back at the end,
+  // see `boost::sort::common::initialize`.
   ScratchBuffers(size_t numBuffers, size_t bufferSize, Value& initialValue)
       : storage_{static_cast<Value*>(
             ::operator new(numBuffers * bufferSize * sizeof(Value),
@@ -124,9 +107,8 @@ class ScratchBuffers {
 
   ~ScratchBuffers() { bsc::destroy(allValues()); }
 
-  // Borrow a buffer. There is always one available unless more threads run the
-  // executor than the sort was told about; in that case this spins, which
-  // terminates because a buffer is never held across a suspension point.
+  // Borrow a buffer. Only spins if more threads run the executor than there
+  // are buffers.
   Lease acquire() {
     while (true) {
       {
@@ -152,15 +134,9 @@ class ScratchBuffers {
   }
 };
 
-// Everything that the tasks of a single sort share. This is the equivalent of
-// Boost's `backbone`, minus its concurrent stack of work items and its
-// `exec()` loop (the executor does that job, see `TaskGroup`) and with the
-// thread local buffer replaced by the `ScratchBuffers` above.
-//
-// The elements to sort are divided into `numBlocks_` blocks of `BlockSize`
-// elements (the last one, the *tail*, may be shorter). The algorithm first
-// sorts the blocks logically, by permuting `index_`, and only afterwards moves
-// them to where the index says they belong.
+// The state shared by the tasks of a single sort, Boost's `backbone` without
+// its work stack. The input is divided into `numBlocks_` blocks of `BlockSize`
+// elements; only the last one (the *tail*) may be shorter.
 template <uint32_t BlockSize, uint32_t GroupSize, typename Iterator,
           typename Compare>
 class SortState {
@@ -175,29 +151,29 @@ class SortState {
 
   // The whole range to sort.
   RangeIt globalRange_;
-  // The logical order of the blocks: `index_[i]` is the block that ends up at
-  // position `i`. Permuted by the merging, applied by the moving.
+  // `index_[i]` is the block that ends up at position `i`.
   std::vector<bsd::block_pos> index_;
   size_t numElements_;
   size_t numBlocks_;
-  // The elements of the last block, which is the only one that may be shorter
-  // than `BlockSize`. Empty if the last block is full.
+  // The last block if it is incomplete, empty otherwise.
   RangeIt tailRange_;
   Compare cmp_;
+  // A copy of the first element to initialize `buffers_` from (a proxy
+  // `*first` can't be passed by reference). Must be declared before `buffers_`.
+  Value bufferSeed_;
   ScratchBuffers<Value> buffers_;
   ql::any_io_executor executor_;
   ErrorSink errors_;
 
-  // Set up the state for sorting `[first, last)`, with `numBuffers` scratch
-  // buffers (one per thread that is expected to run the `executor`). The range
-  // must not be empty.
+  // Sort the non-empty `[first, last)` with `numBuffers` scratch buffers.
   SortState(Iterator first, Iterator last, Compare cmp, size_t numBuffers,
             ql::any_io_executor executor)
       : globalRange_{first, last},
         numElements_{static_cast<size_t>(last - first)},
         numBlocks_{(numElements_ + BlockSize - 1) / BlockSize},
         cmp_{std::move(cmp)},
-        buffers_{numBuffers, BlockSize, *first},
+        bufferSeed_{*first},
+        buffers_{numBuffers, BlockSize, bufferSeed_},
         executor_{std::move(executor)} {
     AD_CORRECTNESS_CHECK(first != last);
     index_.reserve(numBlocks_ + 1);
@@ -210,14 +186,12 @@ class SortState {
     tailRange_.last = last;
   }
 
-  // The first element of the block at position `pos`. NOTE: For a block that
-  // has not been moved yet, the physical position *is* the logical position.
+  // The first element of the block at physical position `pos`.
   Iterator getBlockBegin(size_t pos) const {
     return globalRange_.first + pos * BlockSize;
   }
 
-  // The elements of the block at position `pos`, which for the last block are
-  // only the `numElements_ % BlockSize` elements of the tail.
+  // The elements of the block at physical position `pos`.
   RangeIt getRange(size_t pos) const {
     Iterator first = getBlockBegin(pos);
     Iterator last =
@@ -225,7 +199,6 @@ class SortState {
     return {first, last};
   }
 
-  // Borrow one of the scratch buffers, see `ScratchBuffers`.
   typename ScratchBuffers<Value>::Lease acquireBuffer() {
     return buffers_.acquire();
   }
@@ -235,7 +208,6 @@ class SortState {
     errors_.store(std::move(error));
   }
 
-  // A fresh group of children for a task that is about to fan out.
   TaskGroup makeTaskGroup() { return TaskGroup{executor_, errors_}; }
 };
 

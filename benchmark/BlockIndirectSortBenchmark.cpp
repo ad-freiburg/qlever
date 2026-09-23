@@ -22,21 +22,13 @@
 #include "backports/span.h"
 #include "util/blockSort/BlockIndirectSort.h"
 
-// `ad_utility::blockSort::blockIndirectSort` against the two implementations
-// it has to beat to be worth having: the original
-// `boost::sort::block_indirect_sort` that it was ported from (same algorithm,
-// but with its own threads and a spinning work-stealing loop instead of
-// coroutines) and an ordinary single-threaded sort.
-//
-// NOTE: The numbers only mean something for an input that is big enough and a
-// machine with enough cores, see `blockIndirectSort`. On a machine whose memory
-// bandwidth is already saturated by a few threads, all parallel sorts of a big
-// input converge to the same time, which is the time it takes to move the data.
+// Compare `ad_utility::blockSort::blockIndirectSort` with the original
+// `boost::sort::block_indirect_sort` and a single-threaded sort. Only
+// meaningful on a machine with many cores.
 namespace ad_benchmark {
 
 namespace {
-// An element that is too big to be moved in a register, so that the cost of
-// moving the blocks around actually shows up.
+// A big element, so that the cost of moving blocks shows up.
 struct WideElement {
   uint64_t key_ = 0;
   std::array<char, 56> payload_{};
@@ -72,8 +64,7 @@ std::vector<T> randomElements(size_t numElements) {
 }  // namespace
 
 class BlockIndirectSortBenchmark : public BenchmarkInterface {
-  // The elements are restored from this before every single measurement, so
-  // that all of them sort exactly the same input.
+  // All measurements sort the same input.
   template <typename T>
   void addMeasurementsFor(BenchmarkResults& results, const std::string& name,
                           size_t numElements, uint32_t numThreads,

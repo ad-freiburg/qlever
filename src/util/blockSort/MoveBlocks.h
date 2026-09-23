@@ -13,7 +13,6 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/sort/common/range.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -21,27 +20,19 @@
 #include <vector>
 
 #include "util/Exception.h"
+#include "util/blockSort/BoostSortHeaders.h"
 #include "util/blockSort/SortState.h"
 #include "util/blockSort/TaskGroup.h"
 
-// The last phase of the block indirect sort: the index says where every block
-// belongs, and here the blocks are finally moved there.
-//
-// The index is a permutation, so it decomposes into cycles, and the cycles are
-// independent of each other and can be applied concurrently. Rotating a cycle
-// needs one spare block, which is what the scratch buffer is for.
-//
-// This is a port of `boost::sort::blk_detail::move_blocks`.
+// Move the blocks to where the index says, by rotating the independent cycles
+// of the permutation in parallel, using a scratch buffer as the spare block. A
+// port of `boost::sort::blk_detail::move_blocks`.
 namespace ad_utility::blockSort::detail {
 
 namespace net = boost::asio;
 
-// Rotate the blocks along `cycle`: the first block goes into the scratch
-// buffer, every following block is moved into the place of its predecessor,
-// and the buffer finally goes into the place that is left over.
-//
-// A leaf of the algorithm: it never suspends, and is therefore an ordinary
-// function rather than a coroutine.
+// Rotate the blocks along `cycle`: block `cycle[i + 1]` moves to `cycle[i]`,
+// and block `cycle[0]` moves to `cycle.back()`.
 template <typename State>
 void moveSequence(State& state, const std::vector<size_t>& cycle) {
   AD_CORRECTNESS_CHECK(!cycle.empty());
@@ -58,11 +49,8 @@ void moveSequence(State& state, const std::vector<size_t>& cycle) {
   bsc::move_forward(target, buffer);
 }
 
-// Rotate the blocks along a cycle that is too long to be moved by a single
-// task. The cycle is cut into parts which are rotated concurrently; rotating
-// the parts leaves the *last* block of every part in the wrong place, so a
-// final rotation of exactly those blocks — again along a cycle, and hence again
-// by this function — completes the move.
+// Rotate a long cycle by rotating its parts in parallel, and then the cycle of
+// the last blocks of the parts, which are still in the wrong place.
 template <typename State>
 net::awaitable<void> moveLongSequence(State& state, std::vector<size_t> cycle) {
   constexpr uint32_t groupSize = State::groupSize_;
@@ -77,9 +65,9 @@ net::awaitable<void> moveLongSequence(State& state, std::vector<size_t> cycle) {
   std::vector<size_t> remainder;
 
   TaskGroup group = state.makeTaskGroup();
-  // The part that this thread moves itself, see the NOTE in `cutRange`.
+  // The part that this thread moves itself, see `cutRange`.
   std::vector<size_t> ownPart;
-  // NOTE: Nothing in here suspends, see the note in `cutRange`.
+  // `join()` is awaited below, see LIFETIME at `TaskGroup`.
   try {
     remainder.reserve(numParts);
     auto it = cycle.begin();
@@ -107,8 +95,7 @@ net::awaitable<void> moveLongSequence(State& state, std::vector<size_t> cycle) {
   co_await moveLongSequence(state, std::move(remainder));
 }
 
-// Hand a cycle to the `group`: a long one is cut into parts first (and hence is
-// a coroutine), a short one is rotated as it is.
+// Spawn the rotation of `cycle`, cut into parts if it is long.
 template <typename State>
 void spawnCycle(State& state, TaskGroup& group, std::vector<size_t> cycle) {
   if (cycle.size() < State::groupSize_) {
@@ -119,18 +106,16 @@ void spawnCycle(State& state, TaskGroup& group, std::vector<size_t> cycle) {
   }
 }
 
-// Apply the permutation in `state.index_` to the blocks themselves, by
-// rotating each of its cycles.
+// Apply the permutation `state.index_` to the blocks.
 template <typename State>
 net::awaitable<void> moveBlocks(State& state) {
   TaskGroup group = state.makeTaskGroup();
-  // The cycle that this thread rotates itself, see the NOTE in `cutRange`.
+  // The cycle that this thread rotates itself, see `cutRange`.
   std::vector<size_t> ownCycle;
   try {
     size_t cycleStart = 0;
     while (cycleStart < state.index_.size()) {
-      // Skip the blocks that are already where they belong (the cycles of
-      // length one).
+      // Skip the blocks that are already in place.
       while (cycleStart < state.index_.size() &&
              state.index_[cycleStart].pos() == cycleStart) {
         ++cycleStart;
@@ -138,8 +123,7 @@ net::awaitable<void> moveBlocks(State& state) {
       if (cycleStart == state.index_.size()) {
         break;
       }
-      // Collect the cycle that starts here, and mark its blocks as final on
-      // the way, so that the loop above skips them afterwards.
+      // Collect the cycle and mark its blocks as in place.
       std::vector<size_t> cycle;
       cycle.push_back(cycleStart);
       size_t destination = cycleStart;
@@ -151,8 +135,7 @@ net::awaitable<void> moveBlocks(State& state) {
       }
       state.index_[destination].set_pos(destination);
 
-      // Hand the previous cycle over and keep this one, so that the cycle that
-      // stays here is the last one.
+      // Keep the last cycle for this thread.
       if (!ownCycle.empty()) {
         spawnCycle(state, group, std::move(ownCycle));
       }

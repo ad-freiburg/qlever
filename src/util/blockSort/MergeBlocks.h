@@ -13,36 +13,25 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/sort/common/range.hpp>
-#include <boost/sort/common/util/merge.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <optional>
 #include <vector>
 
+#include "util/blockSort/BoostSortHeaders.h"
 #include "util/blockSort/SortState.h"
 #include "util/blockSort/TaskGroup.h"
 
-// The merging half of the block indirect sort: given two adjacent ranges of the
-// index whose blocks are each already in order, bring the blocks of both into a
-// single order. The blocks themselves are only permuted in the index here; the
-// elements are moved around only as far as two *neighbouring* blocks have to
-// exchange elements, which is what a single scratch buffer is enough for.
-//
-// This is a port of `boost::sort::blk_detail::merge_blocks`.
+// Merge two adjacent sorted ranges of blocks by permuting the index. Elements
+// are only exchanged between neighbouring blocks that overlap. A port of
+// `boost::sort::blk_detail::merge_blocks`.
 namespace ad_utility::blockSort::detail {
 
 namespace net = boost::asio;
 
-// Merge the blocks of `positions` into one sorted run of elements. The blocks
-// are already in the right order, so this only has to push the elements that
-// are out of place from one block into the next: the scratch buffer holds the
-// elements of the block that is currently being filled, and `merge_flow` moves
-// the smallest elements of the buffer and of the next block into it.
-//
-// A leaf of the algorithm: it never suspends, and is therefore an ordinary
-// function rather than a coroutine.
+// Merge the elements of the blocks at `positions`, which are already in the
+// right order (by their first element), using one scratch buffer.
 template <typename State>
 void mergeRangePos(State& state, typename State::RangePos positions) {
   if (positions.size() < 2) {
@@ -62,10 +51,9 @@ void mergeRangePos(State& state, typename State::RangePos positions) {
   bsc::move_forward(current, buffer);
 }
 
-// Handle the last block if it is the incomplete one (the *tail*). A tail is
-// merged into the block before it right away, and is then either dropped from
-// the merge or, if that block has become mergeable with its own predecessor,
-// takes that block's place in the second half.
+// Merge the incomplete last block (the *tail*) into the last block of
+// `positions1` and drop it from `positions2`. If that block now overlaps with
+// its predecessor, move it to `positions2`.
 template <typename State>
 void tailProcess(State& state, std::vector<bsd::block_pos>& positions1,
                  std::vector<bsd::block_pos>& positions2) {
@@ -93,10 +81,8 @@ void tailProcess(State& state, std::vector<bsd::block_pos>& positions1,
   }
 }
 
-// Merge a range of the index that is too big for a single `mergeRangePos` by
-// cutting it into parts that can be merged independently. Two adjacent parts
-// are made independent by merging the two blocks at the cut, after which no
-// element has to cross it any more.
+// Merge `positions` in parallel by cutting it into parts. Merging the two
+// blocks at a cut makes the parts independent.
 template <typename State>
 net::awaitable<void> cutRange(State& state,
                               typename State::RangePos positions) {
@@ -107,24 +93,19 @@ net::awaitable<void> cutRange(State& state,
   }
 
   TaskGroup group = state.makeTaskGroup();
-  // The part that this thread merges itself, see the NOTE below.
+  // The part that this thread merges itself, see below.
   std::optional<typename State::RangePos> ownPart;
-  // NOTE: Nothing in here suspends, so the `catch` may not be turned into a
-  // `co_await` of the `group` — that has to happen below, see the LIFETIME
-  // note at `TaskGroup`.
+  // `join()` is awaited below, see LIFETIME at `TaskGroup`.
   try {
     size_t numParts = (positions.size() + groupSize - 1) / groupSize;
     size_t sizePart = positions.size() / numParts;
     size_t posIni = positions.first;
     size_t posLast = positions.last;
-    // The lease ends with this scope, so that this thread does not hold two
-    // buffers at once when it merges `ownPart` below.
+    // Release the buffer before merging `ownPart`, which needs one itself.
     {
       auto lease = state.acquireBuffer();
       while (posIni < posLast) {
-        // A cut is only possible between two blocks that come from different
-        // halves of the merge, because only those can have elements to
-        // exchange.
+        // Only cut between blocks from different sides of the merge.
         size_t pos = posIni + sizePart;
         while (pos < posLast &&
                state.index_[pos - 1].side() == state.index_[pos].side()) {
@@ -138,8 +119,7 @@ net::awaitable<void> cutRange(State& state,
           pos = posLast;
         }
         if (pos - posIni > 1) {
-          // Hand the previous part over and keep this one, so that the part
-          // that stays here is the last one, see the NOTE below.
+          // Keep the last part for this thread.
           if (ownPart.has_value()) {
             group.spawnFunction([&state, part = ownPart.value()]() {
               mergeRangePos(state, part);
@@ -154,11 +134,8 @@ net::awaitable<void> cutRange(State& state,
     state.storeError(std::current_exception());
     ownPart.reset();
   }
-  // NOTE: The last part is merged by this very thread instead of being handed
-  // to the executor. Boost's equivalent of `join()` executes work items while
-  // it waits, so the thread of a task that fans out never idles; here the
-  // thread would instead suspend and look for other work, of which there is
-  // none once the last tasks of a phase are running.
+  // Merge the last part in this thread instead of suspending right away (Boost
+  // executes work items while waiting).
   if (ownPart.has_value()) {
     group.runInlineFunction(
         [&state, part = ownPart.value()]() { mergeRangePos(state, part); });
@@ -166,8 +143,7 @@ net::awaitable<void> cutRange(State& state,
   co_await group.join();
 }
 
-// Hand a run of mergeable blocks to the `group`: a big one is cut into parts
-// first (and hence is a coroutine), a small one is merged as it is.
+// Spawn the merge of `run`, cut into parts if it is big.
 template <typename State>
 void spawnRun(State& state, TaskGroup& group, typename State::RangePos run) {
   if (run.size() > State::groupSize_) {
@@ -177,10 +153,8 @@ void spawnRun(State& state, TaskGroup& group, typename State::RangePos run) {
   }
 }
 
-// Split the freshly merged index range into the maximal runs of blocks that
-// still have elements to exchange, and merge each of those runs. Blocks that
-// are already in their final shape are simply skipped, which is where most of
-// the work of a merge is saved.
+// Find the maximal runs of overlapping blocks in `positions` and merge each of
+// them. Blocks that don't overlap with their neighbours are skipped.
 template <typename State>
 net::awaitable<void> extractRanges(State& state,
                                    typename State::RangePos positions) {
@@ -190,14 +164,13 @@ net::awaitable<void> extractRanges(State& state,
   }
 
   TaskGroup group = state.makeTaskGroup();
-  // The run that this thread merges itself, see the NOTE in `cutRange`.
+  // The run that this thread merges itself, see `cutRange`.
   std::optional<typename State::RangePos> ownRun;
   try {
     size_t runBegin = positions.first;
     bsd::block_pos blockAtBegin = state.index_[runBegin];
-    // The block of the current run whose *last* element is the greatest, and
-    // the half of the merge that it came from. A block can only be mergeable
-    // with the blocks of the other half that follow it.
+    // The block of the current run with the greatest last element, and its
+    // side. Only blocks from the other side can overlap with it.
     auto rangeMax = state.getRange(blockAtBegin.pos());
     bool sideMax = blockAtBegin.side();
     auto rangeCurrent = rangeMax;
@@ -219,8 +192,7 @@ net::awaitable<void> extractRanges(State& state,
       if (isEnd || !isMergeable) {
         typename State::RangePos run{runBegin, pos};
         if (run.size() > 1) {
-          // Hand the previous run over and keep this one, so that the run that
-          // stays here is the last one.
+          // Keep the last run for this thread.
           if (ownRun.has_value()) {
             spawnRun(state, group, ownRun.value());
           }
@@ -251,13 +223,10 @@ net::awaitable<void> extractRanges(State& state,
   co_await group.join();
 }
 
-// Merge the two adjacent index ranges `[posIndex1, posIndex2)` and
-// `[posIndex2, posIndex3)`, whose blocks are each already sorted.
-//
-// The blocks are first merged *logically*, by their first element, which only
-// permutes the index. Every block then carries the side of the merge it came
-// from, and `extractRanges` uses those sides to find the blocks that still have
-// elements to exchange.
+// Merge the sorted index ranges `[posIndex1, posIndex2)` and
+// `[posIndex2, posIndex3)`: first merge the blocks by their first element in
+// the index, tagged with their side, then merge the elements of overlapping
+// blocks (`extractRanges`).
 template <typename State>
 net::awaitable<void> mergeBlocks(State& state, size_t posIndex1,
                                  size_t posIndex2, size_t posIndex3) {
