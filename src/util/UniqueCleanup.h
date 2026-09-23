@@ -13,24 +13,23 @@
 
 namespace ad_utility::unique_cleanup {
 
-/// Wrapper class that allows to call a function just before the wrapped value
-/// T is destroyed or overwritten by a move assignment.
+// Wrapper class that allows to call a function just before the wrapped value
+// T is destroyed or overwritten by a move assignment.
 CPP_template(typename T, typename Func = std::function<void(T&&)>)(
     requires ql::concepts::move_constructible<T>) class UniqueCleanup {
-  /// Boolean indicating if object was not moved out of
+  // False once the cleanup has run or was cancelled, or if this object was
+  // moved from.
   ResetWhenMoved<bool, false> active_ = true;
-  /// Wrapped value
+  // Wrapped value.
   T value_;
-  /// Cleanup function. Only run once
+  // Cleanup function. Only run once.
   Func function_;
 
  public:
-  /// Accepts a value and a function that is called just before destruction.
-  /// \param value Value to wrap.
-  /// \param function The function to run just before destruction.
-  ///                 Note: Make sure the function doesn't capture the this
-  ///                 pointer as this may lead to segfaults because the pointer
-  ///                 will point to the old object after moving.
+  // Wrap the `value` and the `function` to run on it as its cleanup. NOTE:
+  // The `function` must not capture the `this` pointer of the object owning
+  // this `UniqueCleanup`, because after a move that pointer would point to the
+  // moved-from object.
   UniqueCleanup(T value, Func function)
       : value_{std::move(value)}, function_{std::move(function)} {}
 
@@ -45,8 +44,8 @@ CPP_template(typename T, typename Func = std::function<void(T&&)>)(
 
   UniqueCleanup(UniqueCleanup&& cleanupDeleter) noexcept = default;
 
-  /// Runs the cleanup of the overwritten value (if active) before taking over
-  /// the value of `other`.
+  // Runs the cleanup of the overwritten value (if active) before taking over
+  // the value of `other`.
   UniqueCleanup& operator=(UniqueCleanup&& other) noexcept {
     if (this != &other) {
       runCleanup();
@@ -57,16 +56,16 @@ CPP_template(typename T, typename Func = std::function<void(T&&)>)(
     return *this;
   }
 
-  /// Return true if the cleanup has neither run nor been cancelled, and this
-  /// object has not been moved from.
+  // Return true if the cleanup has neither run nor been cancelled, and this
+  // object has not been moved from.
   bool isActive() const noexcept { return active_; }
 
-  /// Disable the cleanup call without executing it.
+  // Disable the cleanup call without executing it.
   void cancel() && { active_ = false; }
 
-  /// Run the cleanup right away and disable it. Unlike in the destructor, an
-  /// exception thrown by the cleanup is propagated. Returns the result of the
-  /// cleanup. The object must be active.
+  // Run the cleanup right away and disable it. Unlike in the destructor, an
+  // exception thrown by the cleanup is propagated. Returns the result of the
+  // cleanup. The object must be active.
   decltype(auto) runNow() && {
     AD_CONTRACT_CHECK(active_);
     active_ = false;
