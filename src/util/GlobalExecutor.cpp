@@ -44,18 +44,26 @@ GlobalExecutorConfig& config() {
 }  // namespace
 
 // _____________________________________________________________________________
-void setGlobalExecutorNumThreads(size_t numThreads) {
+bool trySetGlobalExecutorNumThreads(size_t numThreads) {
   AD_CONTRACT_CHECK(numThreads > 0);
   auto& conf = config();
   std::lock_guard lock{conf.mutex_};
   if (conf.poolWasCreated_) {
+    return conf.numThreads_ == numThreads;
+  }
+  conf.numThreads_ = numThreads;
+  return true;
+}
+
+// _____________________________________________________________________________
+void setGlobalExecutorNumThreads(size_t numThreads) {
+  if (!trySetGlobalExecutorNumThreads(numThreads)) {
     AD_THROW(absl::StrCat(
         "The number of threads of the global thread pool must not be set after "
         "the pool has already been accessed: it was set to ",
         numThreads, ", but the pool had already been created with ",
-        conf.numThreads_, " threads"));
+        globalExecutorNumThreads(), " threads"));
   }
-  conf.numThreads_ = numThreads;
 }
 
 // _____________________________________________________________________________

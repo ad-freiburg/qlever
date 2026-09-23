@@ -62,16 +62,24 @@ TEST(GlobalExecutor, executorRunsManyTasks) {
 }
 
 // _____________________________________________________________________________
-TEST(GlobalExecutor, settingTheNumThreadsTooLateThrows) {
+TEST(GlobalExecutor, settingTheNumThreadsTooLate) {
   // Make sure that the pool exists, no matter in which order the tests run.
   auto numThreadsBefore = ad_utility::globalExecutorNumThreads();
   ad_utility::globalExecutor();
-  // The pool now exists and cannot be resized, so the following call throws and
-  // leaves the configuration unchanged.
+  // The pool now exists and cannot be resized, so setting a different number
+  // of threads fails and leaves the configuration unchanged.
+  EXPECT_FALSE(
+      ad_utility::trySetGlobalExecutorNumThreads(numThreadsBefore + 1));
   AD_EXPECT_THROW_WITH_MESSAGE(
       ad_utility::setGlobalExecutorNumThreads(numThreadsBefore + 1),
       ::testing::HasSubstr(
           "must not be set after the pool has already been accessed"));
+  EXPECT_EQ(ad_utility::globalExecutorNumThreads(), numThreadsBefore);
+  // Setting the number of threads that the pool already has is not a change
+  // and therefore succeeds. This matters for a process that builds several
+  // indices, because each build sets the number of threads.
+  EXPECT_TRUE(ad_utility::trySetGlobalExecutorNumThreads(numThreadsBefore));
+  EXPECT_NO_THROW(ad_utility::setGlobalExecutorNumThreads(numThreadsBefore));
   EXPECT_EQ(ad_utility::globalExecutorNumThreads(), numThreadsBefore);
   // In particular, the executor still works afterwards.
   auto future = ad_utility::runFunctionOnExecutor(
