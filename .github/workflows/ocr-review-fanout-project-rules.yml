@@ -1,13 +1,12 @@
 name: OpenCodeReview (fan-out project rules)
 
 on:
-  # No `synchronize`: the fan-out review (243 project rules at high effort)
-  # takes hours and was cancelled by the next push on every actively
-  # developed PR, wasting runner time and queue slots. It runs once when a
-  # PR is opened/reopened/marked ready, and on demand via
-  # `/open-code-review-fanout` below.
+  # `synchronize` included per owner request: the fan-out review runs on
+  # every push. Note it takes hours on large diffs and `cancel-in-progress`
+  # below cancels the stale run on the next push, so actively developed PRs
+  # consume extra runner time by design.
   pull_request_target:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
     types: [created]
 
@@ -92,12 +91,6 @@ jobs:
           llm_auth_token: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           llm_model: ${{ vars.OCR_LLM_MODEL }}
           llm_use_anthropic: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
-          # Meta's Model API (api.meta.ai) validates strictly against the
-          # OpenAI schema and rejects the OCR default extra body
-          # {"thinking": {"type": "disabled"}}, so send an empty object.
-          # Same fix as ocr-review.yml (commit 4645a1e92); without this every
-          # fan-out subtask 400s and the job exits 1.
-          llm_extra_body: '{}'
           base_ref: ${{ steps.pr-context.outputs.base_ref }}
           head_sha: ${{ steps.pr-context.outputs.head_sha }}
           ocr_install_from: source
