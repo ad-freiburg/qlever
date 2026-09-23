@@ -32,6 +32,8 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(JoinAlgorithmBenchmark testUtil memorySize)
 
+    addAndLinkBenchmark(IdTableColumnBenchmark testUtil memorySize index)
+
     addAndLinkBenchmark(ParallelMergeBenchmark testUtil)
 
     addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
