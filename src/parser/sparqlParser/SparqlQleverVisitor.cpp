@@ -151,6 +151,24 @@ Variable Visitor::blankNodeToInternalVariable(std::string_view blankNode) {
 }
 
 // _____________________________________________________________________________
+void Visitor::checkBlankNodeLabelIsNotReusedAcrossBasicGraphPatterns(
+    const std::string& label, const antlr4::ParserRuleContext* ctx) {
+  // If the label was already used in the current basic graph pattern, then this
+  // is a legal repetition and there is nothing to do. Otherwise it must not
+  // have been used anywhere else in the query before.
+  if (blankNodeLabelsInCurrentBasicGraphPattern_.insert(label).second &&
+      !allBlankNodeLabels_.insert(label).second) {
+    reportError(
+        ctx,
+        absl::StrCat("The blank node label \"", label,
+                     "\" may not be used in more than one basic graph "
+                     "pattern. Consistently replace that label by a variable "
+                     "if you want the occurrences to match, or by distinct "
+                     "variables or blank node labels if not."));
+  }
+}
+
+// _____________________________________________________________________________
 std::string Visitor::getOriginalInputForContext(
     const antlr4::ParserRuleContext* context) {
   const auto& fullInput = context->getStart()->getInputStream()->toString();
@@ -404,6 +422,8 @@ void SparqlQleverVisitor::resetStateForMultipleUpdates() {
   prologueString_ = {};
   parsedQuery_ = {};
   treatBlankNodesAs_ = TreatBlankNodesAs::InternalVariables;
+  allBlankNodeLabels_.clear();
+  blankNodeLabelsInCurrentBasicGraphPattern_.clear();
 }
 
 // ____________________________________________________________________________________
@@ -656,6 +676,7 @@ GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
   }
 
   auto expression = visitExpressionPimpl(ctx->expression());
+  throwIfContainsAggregate(ctx, expression, "BIND");
   warnOrThrowIfUnboundVariables(ctx, expression, "BIND");
   addVisibleVariable(target);
   return GraphPatternOperation{Bind{std::move(expression), std::move(target)}};
@@ -1121,6 +1142,10 @@ void Visitor::selectExistsVariables(SparqlFilter& filter) const {
 GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   GraphPattern pattern;
 
+  // The triples inside a group belong to a basic graph pattern of their own,
+  // no matter which basic graph pattern was active in the enclosing scope.
+  blankNodeLabelsInCurrentBasicGraphPattern_.clear();
+
   // The following code makes sure that the variables from outside the graph
   // pattern are NOT visible inside the graph pattern, but the variables from
   // the graph pattern are visible outside the graph pattern.
@@ -1201,8 +1226,14 @@ Visitor::OperationsAndFilters Visitor::visit(
 
 Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
     Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx) {
-  return {visit(ctx->graphPatternNotTriples()),
-          visitOptional(ctx->triplesBlock())};
+  auto operationOrFilter = visit(ctx->graphPatternNotTriples());
+  // A `FILTER` is part of the surrounding basic graph pattern, everything else
+  // (`OPTIONAL`, `GRAPH`, `UNION`, `BIND`, ...) ends it, so the triples that
+  // follow belong to a new basic graph pattern.
+  if (!std::holds_alternative<SparqlFilter>(operationOrFilter)) {
+    blankNodeLabelsInCurrentBasicGraphPattern_.clear();
+  }
+  return {std::move(operationOrFilter), visitOptional(ctx->triplesBlock())};
 }
 
 // ____________________________________________________________________________________
@@ -1598,14 +1629,25 @@ auto Visitor::visitInFreshQueryContext(Ctx* ctx)
         decltype(std::declval<SparqlQleverVisitor&>().visit(ctx))> {
   auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
   auto variablesBackup = std::exchange(visibleVariables_, {});
+  // The visited group starts a basic graph pattern of its own, but the basic
+  // graph pattern of the outer query continues afterwards (an `EXISTS` is part
+  // of a `FILTER`, which does not end it), so its blank node labels must be
+  // restored as well.
+  auto blankNodeLabelsBackup =
+      std::exchange(blankNodeLabelsInCurrentBasicGraphPattern_, {});
   // The restoring assignments are moves and cannot throw, so the cleanup
   // is safe also during stack unwinding.
   static_assert(std::is_nothrow_move_assignable_v<ParsedQuery>);
   static_assert(std::is_nothrow_move_assignable_v<std::vector<Variable>>);
-  absl::Cleanup restoreBackups{[this, &queryBackup, &variablesBackup]() {
-    parsedQuery_ = std::move(queryBackup);
-    visibleVariables_ = std::move(variablesBackup);
-  }};
+  static_assert(std::is_nothrow_move_assignable_v<
+                decltype(blankNodeLabelsInCurrentBasicGraphPattern_)>);
+  absl::Cleanup restoreBackups{
+      [this, &queryBackup, &variablesBackup, &blankNodeLabelsBackup]() {
+        parsedQuery_ = std::move(queryBackup);
+        visibleVariables_ = std::move(variablesBackup);
+        blankNodeLabelsInCurrentBasicGraphPattern_ =
+            std::move(blankNodeLabelsBackup);
+      }};
   auto result = visit(ctx);
   // NOTE: The following moves happen before `restoreBackups` runs, which then
   // assigns the backups over the moved-from members.
@@ -1736,18 +1778,16 @@ Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
 GroupKey Visitor::visit(Parser::GroupConditionContext* ctx) {
   if (ctx->var() && !ctx->expression()) {
     return Variable{ctx->var()->getText()};
-  } else if (ctx->builtInCall() || ctx->functionCall()) {
-    // builtInCall and functionCall are both also an Expression
-    return (ctx->builtInCall() ? visitExpressionPimpl(ctx->builtInCall())
-                               : visitExpressionPimpl(ctx->functionCall()));
+  }
+  // `builtInCall` and `functionCall` are both also an `Expression`.
+  auto expr = ctx->builtInCall()    ? visitExpressionPimpl(ctx->builtInCall())
+              : ctx->functionCall() ? visitExpressionPimpl(ctx->functionCall())
+                                    : visitExpressionPimpl(ctx->expression());
+  throwIfContainsAggregate(ctx, expr, "GROUP BY");
+  if (ctx->AS() && ctx->var()) {
+    return Alias{std::move(expr), visit(ctx->var())};
   } else {
-    AD_CORRECTNESS_CHECK(ctx->expression());
-    auto expr = visitExpressionPimpl(ctx->expression());
-    if (ctx->AS() && ctx->var()) {
-      return Alias{std::move(expr), visit(ctx->var())};
-    } else {
-      return expr;
-    }
+    return expr;
   }
 }
 
@@ -1910,12 +1950,27 @@ void Visitor::warnOrThrowIfUnboundVariables(
 }
 
 // ____________________________________________________________________________________
+void Visitor::throwIfContainsAggregate(const antlr4::ParserRuleContext* ctx,
+                                       const SparqlExpressionPimpl& expression,
+                                       std::string_view clauseName) {
+  if (expression.containsAggregate()) {
+    reportError(
+        ctx,
+        absl::StrCat("Aggregate functions are not allowed in a ", clauseName,
+                     " clause, they may only be used in SELECT, HAVING, "
+                     "and ORDER BY clauses."));
+  }
+}
+
+// ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
   // NOTE: We cannot add a warning or throw an exception if the FILTER
   // expression contains unbound variables, because the variables of the FILTER
   // might be bound after the filter appears in the query (which is perfectly
   // legal).
-  return SparqlFilter{visitExpressionPimpl(ctx->constraint())};
+  auto expression = visitExpressionPimpl(ctx->constraint());
+  throwIfContainsAggregate(ctx, expression, "FILTER");
+  return SparqlFilter{std::move(expression)};
 }
 
 // ____________________________________________________________________________________
@@ -3205,17 +3260,22 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
     return newBlankNodeOrVariable();
   } else {
     AD_CORRECTNESS_CHECK(ctx->BLANK_NODE_LABEL());
+    const std::string label = ctx->BLANK_NODE_LABEL()->getText();
     if (mode == TreatBlankNodesAs::BlankNodes) {
+      // In this mode the label denotes an actual blank node in the data that is
+      // constructed or inserted, not a variable, so the scoping rule for basic
+      // graph patterns doesn't apply here. Repeating a label is in fact the
+      // only way to refer to the same blank node twice.
+      //
       // Strip `_:` prefix from string.
       constexpr size_t length = std::string_view{"_:"}.length();
-      const std::string label =
-          ctx->BLANK_NODE_LABEL()->getText().substr(length);
       // `False` means the blank node is not automatically generated, but
       // explicitly specified in the query.
-      return BlankNode{false, label};
+      return BlankNode{false, label.substr(length)};
     } else {
       AD_CORRECTNESS_CHECK(mode == TreatBlankNodesAs::InternalVariables);
-      return blankNodeToInternalVariable(ctx->BLANK_NODE_LABEL()->getText());
+      checkBlankNodeLabelIsNotReusedAcrossBasicGraphPatterns(label, ctx);
+      return blankNodeToInternalVariable(label);
     }
   }
 }

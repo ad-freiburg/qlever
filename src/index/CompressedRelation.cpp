@@ -1623,10 +1623,11 @@ auto CompressedRelationWriter::createPermutationPair(
 auto CompressedRelationWriter::createPermutation(
     WriterAndCallback writerAndCallback,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    qlever::KeyOrder permutation,
-    const PerBlockCallbacks& perBlockCallbacks) -> PermutationSingleResult {
+    qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks,
+    bool showProgressBar) -> PermutationSingleResult {
   PermutationWriter<false> permutationWriter{
-      std::move(writerAndCallback), std::move(permutation), perBlockCallbacks};
+      std::move(writerAndCallback), std::move(permutation), perBlockCallbacks,
+      showProgressBar};
   return permutationWriter.writePermutation(std::move(sortedTriples));
 }
 

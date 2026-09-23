@@ -7,7 +7,7 @@
 
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
-#include "rdfTypes/Variable.h"
+#include "parser/TripleComponent.h"
 #include "util/UnitOfMeasurement.h"
 
 // This header declares utilities required during query planning for rewriting
@@ -20,11 +20,13 @@
 
 namespace sparqlExpression {
 
-// Helper struct for `getGeoFunctionExpressionParameters`
+// Helper struct for `getGeoFunctionExpressionParameters`. `left_` and `right_`
+// are either a variable or a fixed value (a literal given directly in the
+// expression).
 struct GeoFunctionCall {
   SpatialJoinType function_;
-  Variable left_;
-  Variable right_;
+  TripleComponent left_;
+  TripleComponent right_;
 };
 
 // Helper to extract spatial join parameters from a parsed `geof:` function

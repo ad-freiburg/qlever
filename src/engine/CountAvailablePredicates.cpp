@@ -9,7 +9,6 @@
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
 #include "global/RuntimeParameters.h"
-#include "index/IndexImpl.h"
 #include "util/ParallelExecutor.h"
 
 // _____________________________________________________________________________
@@ -116,10 +115,14 @@ Result CountAvailablePredicates::computeResult(
   AD_CORRECTNESS_CHECK(subtree_);
   // Determine whether we can perform the full scan optimization. It can be
   // applied if the `subtree_` is a single index scan of a triple
-  // `?s ql:has-pattern ?p`.
-  // TODO<joka921> As soon as we have a lazy implementation for all index scans
-  // or even all operations Then the special case for all entities can be
-  // removed.
+  // `?s ql:has-pattern ?p`. This relation contains exactly one triple per
+  // entity. All subjects are therefore distinct, and the patterns can be
+  // counted directly while the scan is consumed lazily.
+  // TODO<joka921> The generic implementation below has to deduplicate the
+  // subjects. It therefore requires a fully materialized `IdTableView`. Make it
+  // consume its input lazily, carrying the last subject across the chunk
+  // boundaries. It then also handles the `ql:has-pattern` case, and this
+  // special case can be removed.
   bool isPatternTrickForAllEntities = [&]() {
     auto indexScan =
         dynamic_cast<const IndexScan*>(subtree_->getRootOperation().get());
@@ -130,17 +133,22 @@ Result CountAvailablePredicates::computeResult(
         !indexScan->object().isVariable()) {
       return false;
     }
-
-    return indexScan->predicate() == HAS_PATTERN_PREDICATE;
+    // Note: `HAS_PATTERN_PREDICATE` is a `std::string_view`, so it has to be
+    // explicitly turned into an `Iri` before the comparison. Comparing it
+    // directly would convert it into the `std::string` alternative of the
+    // `TripleComponent` variant, which never compares equal to the `Iri`
+    // alternative that the scan holds.
+    TripleComponent hasPattern{
+        TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE)};
+    return indexScan->predicate() == hasPattern;
   }();
 
   if (isPatternTrickForAllEntities) {
-    subtree_->getRootOperation()->runtimeInfo().status_ =
-        RuntimeInformation::Status::lazilyMaterializedInProgress;
-    signalQueryUpdate(RuntimeInformation::SendPriority::Always);
-    // Compute the predicates for all entities
-    CountAvailablePredicates::computePatternTrickAllEntities(&idTable,
-                                                             patterns);
+    // Compute the predicates for all entities.
+    auto subresult = subtree_->getResult(true);
+    CountAvailablePredicates::computePatternTrickAllEntities(
+        &idTable, patterns, *subresult,
+        subtree_->getVariableColumn(predicateVariable_));
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
     std::shared_ptr<const Result> subresult = subtree_->getResult();
@@ -161,33 +169,47 @@ Result CountAvailablePredicates::computeResult(
 
 // _____________________________________________________________________________
 void CountAvailablePredicates::computePatternTrickAllEntities(
-    IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns) const {
+    IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns,
+    const Result& subresult, ColumnIndex patternColumn) const {
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   AD_LOG_DEBUG << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
-  ad_utility::HashMap<size_t, size_t> patternCounts;
-  const auto& index = getExecutionContext()->getIndex().getImpl();
-  auto scanSpec =
-      ScanSpecificationAsTripleComponent{
-          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
-          std::nullopt}
-          .toScanSpecification(index);
-  const auto& perm = index.getPermutation(Permutation::Enum::PSO);
-  const auto& locatedTriple = locatedTriplesState();
-  auto fullHasPattern =
-      perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),
-                    std::nullopt, {}, cancellationHandle_, locatedTriple);
-  for (const auto& idTable : fullHasPattern) {
-    for (const auto& patternId : idTable.getColumn(1)) {
+  // The pattern indices are dense, so the counts are kept in a vector, which
+  // is much faster than a hash map for the hundreds of millions of rows of a
+  // large knowledge graph. The last slot counts the entities without a
+  // pattern (`Pattern::NoPattern`).
+  std::vector<size_t> patternCounts(patterns.size() + 1, 0);
+  // Note: In contrast to `computePatternTrick` the subjects don't have to be
+  // deduplicated, because the `ql:has-pattern` relation contains exactly one
+  // triple per entity.
+  auto countPatterns = [&patternCounts, &patterns,
+                        patternColumn](const auto& idTable) {
+    for (Id patternId : idTable.getColumn(patternColumn)) {
       AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
-      patternCounts[patternId.getInt()]++;
+      size_t patternIdx = patternId.getInt();
+      if (patternIdx >= patterns.size()) {
+        AD_CONTRACT_CHECK(patternIdx == Pattern::NoPattern);
+        patternIdx = patterns.size();
+      }
+      patternCounts[patternIdx]++;
+    }
+  };
+  // The subresult is lazy unless it was already fully materialized (for
+  // example because it was read from the cache).
+  if (subresult.isFullyMaterialized()) {
+    countPatterns(subresult.idTableView());
+  } else {
+    for (const auto& pair : subresult.idTables()) {
+      countPatterns(pair.idTable_);
     }
   }
 
-  AD_LOG_DEBUG << "Using " << patternCounts.size()
-               << " patterns for computing the result" << std::endl;
-  for (const auto& [patternIdx, count] : patternCounts) {
-    AD_CORRECTNESS_CHECK(patternIdx < patterns.size());
+  // Entities without a pattern contribute no predicates.
+  for (size_t patternIdx = 0; patternIdx < patterns.size(); ++patternIdx) {
+    size_t count = patternCounts[patternIdx];
+    if (count == 0) {
+      continue;
+    }
     for (const auto& predicate : patterns[patternIdx]) {
       predicateCounts[predicate] += count;
     }

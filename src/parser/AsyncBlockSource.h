@@ -12,7 +12,6 @@
 
 #include <absl/functional/any_invocable.h>
 
-#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/dispatch.hpp>
@@ -23,6 +22,7 @@
 #include <string>
 #include <string_view>
 
+#include "backports/asio.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
@@ -47,7 +47,7 @@ class AsyncBlockSource {
       absl::AnyInvocable<void(std::exception_ptr, std::optional<Block>)>;
 
  private:
-  boost::asio::any_io_executor executor_;
+  ql::any_io_executor executor_;
   ad_utility::MemorySize blocksize_;
 
  public:
@@ -56,7 +56,7 @@ class AsyncBlockSource {
   // own associated with it. `blocksize` is the preferred size for the blocks
   // to be received (a common implementation detail of all derived classes,
   // hence lives in the base class).
-  AsyncBlockSource(const boost::asio::any_io_executor& exec,
+  AsyncBlockSource(const ql::any_io_executor& exec,
                    ad_utility::MemorySize blocksize)
       : executor_{exec}, blocksize_{blocksize} {}
   virtual ~AsyncBlockSource() = default;
@@ -152,12 +152,12 @@ class AsyncBlockSource {
 // instead of blocking on it.
 class BlockingBlockSource : public AsyncBlockSource {
  private:
-  boost::asio::strand<boost::asio::any_io_executor> strand_;
+  boost::asio::strand<ql::any_io_executor> strand_;
 
  public:
   // Construct from an executor (on which a strand is created to serialize the
   // calls to `getNextBlockImpl`) and a blocksize.
-  BlockingBlockSource(const boost::asio::any_io_executor& exec,
+  BlockingBlockSource(const ql::any_io_executor& exec,
                       ad_utility::MemorySize blocksize);
 
  protected:
@@ -180,7 +180,7 @@ class FileBlockSource : public BlockingBlockSource {
  public:
   // Open `filename` immediately and prepare to deliver `blocksize`-sized
   // blocks. Throw if the file cannot be opened.
-  FileBlockSource(const boost::asio::any_io_executor& exec,
+  FileBlockSource(const ql::any_io_executor& exec,
                   ad_utility::MemorySize blocksize,
                   const std::string& filename);
 
@@ -216,7 +216,7 @@ class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
   // `findEndPosition`. `description` is used in error messages to describe what
   // marks the end of a statement. `exec` is only used as the default executor
   // for dispatching completions (see `AsyncBlockSource`'s constructor).
-  AsyncStatementBoundaryBlockSource(const boost::asio::any_io_executor& exec,
+  AsyncStatementBoundaryBlockSource(const ql::any_io_executor& exec,
                                     std::unique_ptr<AsyncBlockSource> inner,
                                     EndPositionFinder findEndPosition,
                                     std::string description);

@@ -35,7 +35,15 @@ size_t PolymorphicVocabulary::size() const {
 
 // _____________________________________________________________________________
 std::string PolymorphicVocabulary::operator[](uint64_t i) const {
-  return std::visit([i](auto& vocab) { return std::string{vocab[i]}; }, vocab_);
+  // NOTE: We cannot simply use `std::string{vocab[i]}` here, because the
+  // `operator[]` of a vocabulary with holes returns a `std::optional` that is
+  // empty if `i` is one of those holes. In that case a placeholder is reported,
+  // for details see `wordAsStringOrPlaceholder`.
+  return std::visit(
+      [i](const auto& vocab) {
+        return ad_utility::vocabulary::wordAsStringOrPlaceholder(vocab, i);
+      },
+      vocab_);
 }
 
 // _____________________________________________________________________________
@@ -98,6 +106,8 @@ void PolymorphicVocabulary::resetToType(VocabularyType type) {
     AD_CASE(InMemoryCompressed);
     AD_CASE(OnDiskCompressed);
     AD_CASE(OnDiskCompressedGeoSplit);
+    AD_CASE(InMemoryUncompressedWithHoles);
+    AD_CASE(InMemoryCompressedWithHoles);
     default:
       AD_FAIL();
   }

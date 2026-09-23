@@ -453,6 +453,62 @@ TEST(SparqlParser, Bind) {
   expectBind("bInD (?age - 10 As ?s)", m::Bind(Var{"?s"}, "?age - 10"));
 }
 
+// Aggregate functions may only be used in SELECT, HAVING, and ORDER BY clauses
+// (see section 11.1 of the SPARQL 1.1 standard), in particular not in a BIND.
+// The same test for FILTER is `FilterWithAggregateIsRejected` below.
+TEST(SparqlParser, BindWithAggregateIsRejected) {
+  auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::True;
+  auto expectBindFails = ExpectParseFails<&Parser::bind>{{}, noChecks};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a BIND clause");
+  expectBindFails("BIND(SAMPLE(?human) AS ?a)", messageMatcher);
+  expectBindFails("BIND(COUNT(?x) AS ?a)", messageMatcher);
+  // The aggregate is nested inside another expression.
+  expectBindFails("BIND(1 + SUM(?x) AS ?a)", messageMatcher);
+  // An aggregate inside the body of an `EXISTS` has its own scope and is
+  // therefore fine.
+  auto expectBind = ExpectCompleteParse<&Parser::bind>{{}, noChecks};
+  expectBind(
+      "BIND(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } } AS ?a)",
+      m::Bind(Var{"?a"},
+              "EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } }"));
+}
+
+// Same as `BindWithAggregateIsRejected` above, but for FILTER. Note that the
+// correct way to filter on the value of an aggregate is a HAVING clause.
+TEST(SparqlParser, FilterWithAggregateIsRejected) {
+  auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::True;
+  auto expectFilterFails = ExpectParseFails<&Parser::filterR>{{}, noChecks};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a FILTER clause");
+  expectFilterFails("FILTER(COUNT(?x) > 1)", messageMatcher);
+  expectFilterFails("FILTER(SAMPLE(?human) = ?x)", messageMatcher);
+  // The aggregate is nested inside another expression.
+  expectFilterFails("FILTER(1 + SUM(?x) > 0)", messageMatcher);
+  // An aggregate inside the body of an `EXISTS` has its own scope and is
+  // therefore fine.
+  auto expectFilter = ExpectCompleteParse<&Parser::filterR>{{}, noChecks};
+  expectFilter("FILTER(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })",
+               m::stringMatchesFilter(
+                   "(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })"));
+}
+
+// Same as `BindWithAggregateIsRejected` above, but for the expressions of a
+// GROUP BY clause.
+TEST(SparqlParser, GroupByWithAggregateIsRejected) {
+  auto expectGroupConditionFails = ExpectParseFails<&Parser::groupCondition>{};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a GROUP BY clause");
+  expectGroupConditionFails("COUNT(?x)", messageMatcher);
+  expectGroupConditionFails("(SAMPLE(?x))", messageMatcher);
+  expectGroupConditionFails("(1 + SUM(?x) AS ?y)", messageMatcher);
+  auto expectGroupCondition = ExpectCompleteParse<&Parser::groupCondition>{};
+  expectGroupCondition(
+      "(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })",
+      m::ExpressionGroupKey(
+          "EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } }"));
+}
+
 TEST(SparqlParser, Integer) {
   auto expectInteger = ExpectCompleteParse<&Parser::integer>{};
   auto expectIntegerFails = ExpectParseFails<&Parser::integer>();
@@ -528,7 +584,7 @@ TEST(SparqlParser, GroupCondition) {
   expectGroupCondition("(?test AS ?mehr)",
                        m::AliasGroupKey("?test", Var{"?mehr"}));
   // builtInCall
-  expectGroupCondition("COUNT(?test)", m::ExpressionGroupKey("COUNT(?test)"));
+  expectGroupCondition("STR(?test)", m::ExpressionGroupKey("STR(?test)"));
   // functionCall
   expectGroupCondition(
       "<http://www.opengis.net/def/function/geosparql/latitude>(?test)",
@@ -539,9 +595,9 @@ TEST(SparqlParser, GroupCondition) {
 TEST(SparqlParser, GroupClause) {
   expectCompleteParse(
       parse<&Parser::groupClause>(
-          "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)"),
+          "GROUP BY ?test (?foo - 10 as ?bar) STR(?baz)"),
       m::GroupKeys(
-          {Var{"?test"}, std::pair{"?foo - 10", Var{"?bar"}}, "COUNT(?baz)"}));
+          {Var{"?test"}, std::pair{"?foo - 10", Var{"?bar"}}, "STR(?baz)"}));
 }
 
 TEST(SparqlParser, SolutionModifier) {
@@ -849,6 +905,9 @@ TEST(SparqlParser, HavingCondition) {
                         m::stringMatchesFilter("(?predicate < \"<Z\")"));
   expectHavingCondition("(LANG(?x) = \"en\")",
                         m::stringMatchesFilter("(LANG(?x) = \"en\")"));
+  // In contrast to BIND and FILTER, aggregates are allowed here.
+  expectHavingCondition("(COUNT(?x) > 1)",
+                        m::stringMatchesFilter("(COUNT(?x) > 1)"));
 }
 
 TEST(SparqlParser, GroupGraphPattern) {
@@ -1795,4 +1854,101 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
             m::GraphPattern(m::OrderedTriples(
                 {{{encoded123, unencoded456, encoded789}}}))));
   }
+}
+
+// _____________________________________________________________________________
+// According to the SPARQL 1.1 standard (section 5.1.1), a blank node label
+// "can be used in only a single basic graph pattern in any query". The tests
+// below are modeled after the `syn-blabel-cross-*` syntax conformance tests
+// from the W3C SPARQL test suite.
+TEST(SparqlParser, blankNodeLabelsAreScopedToASingleBasicGraphPattern) {
+  auto expectQuery = ExpectCompleteParse<&Parser::query>{};
+  auto expectQueryFails = ExpectParseFails<&Parser::query>{};
+  auto expectUpdate = ExpectCompleteParse<&Parser::update>{};
+  auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
+  auto reusedLabel = ::testing::HasSubstr(
+      "The blank node label \"_:who\" may not be used in more than one basic "
+      "graph pattern");
+  auto bn = [](std::string_view label) {
+    return Var{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX, label)};
+  };
+
+  // A `FILTER` does not end a basic graph pattern (conformance test
+  // `syn-blabel-cross-filter`).
+  expectQuery(
+      "ASK { _:who <homepage> ?homepage FILTER(?homepage > 3) "
+      "_:who <schoolHomepage> ?schoolPage }",
+      m::AskQuery(m::GraphPattern(
+          false, {"(?homepage > 3)"},
+          m::OrderedTriples(
+              {{bn("who"), iri("<homepage>"), Var{"?homepage"}},
+               {bn("who"), iri("<schoolHomepage>"), Var{"?schoolPage"}}}))));
+
+  // Also not when the `FILTER` contains an `EXISTS`, whose argument is parsed
+  // in a fresh context.
+  expectQuery("ASK { _:who <p> ?x FILTER EXISTS { ?y <q> ?z } _:who <r> ?w }",
+              m::AskQuery(m::GraphPattern(
+                  false, {"EXISTS { ?y <q> ?z }"},
+                  m::OrderedTriples({{bn("who"), iri("<p>"), Var{"?x"}},
+                                     {bn("who"), iri("<r>"), Var{"?w"}}}))));
+
+  expectQuery("ASK { _:who <p> _:who . _:who <q> ?x }",
+              m::AskQuery(m::GraphPattern(
+                  m::OrderedTriples({{bn("who"), iri("<p>"), bn("who")},
+                                     {bn("who"), iri("<q>"), Var{"?x"}}}))));
+
+  // The conformance tests `syn-blabel-cross-{graph,optional,union}-bad`.
+  expectQueryFails(
+      "ASK { _:who <homepage> ?homepage GRAPH ?g { ?someone <made> ?homepage } "
+      "_:who <schoolHomepage> ?schoolPage }",
+      reusedLabel);
+  expectQueryFails(
+      "ASK { _:who <homepage> ?homepage OPTIONAL { ?someone <made> ?homepage } "
+      "_:who <schoolHomepage> ?schoolPage }",
+      reusedLabel);
+  expectQueryFails(
+      "ASK { _:who <homepage> ?homepage { ?someone <made> ?homepage } UNION "
+      "{ ?homepage <maker> ?someone } _:who <schoolHomepage> ?schoolPage }",
+      reusedLabel);
+
+  expectQueryFails("ASK { _:who <p> ?x MINUS { ?x <q> ?y } _:who <r> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x BIND(3 AS ?y) _:who <q> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x VALUES ?y { 3 } _:who <q> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x { ?x <q> ?y } _:who <r> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x OPTIONAL { _:who <q> ?y } }",
+                   reusedLabel);
+  expectQueryFails("ASK { { _:who <p> ?x } UNION { _:who <q> ?y } }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x FILTER EXISTS { _:who <q> ?y } }",
+                   reusedLabel);
+  expectQueryFails("SELECT * { _:who <p> ?x { SELECT * { _:who <q> ?y } } }",
+                   reusedLabel);
+
+  expectQuery("ASK { _:who <p> ?x OPTIONAL { _:someone <q> ?y } }",
+              m::AskQuery(m::GraphPattern(
+                  m::Triples({{bn("who"), iri("<p>"), Var{"?x"}}}),
+                  m::OptionalGraphPattern(
+                      m::Triples({{bn("someone"), iri("<q>"), Var{"?y"}}})))));
+
+  // Blank nodes in a CONSTRUCT template are real blank nodes, so repeating a
+  // label there is allowed and denotes the same blank node.
+  expectQuery(
+      "CONSTRUCT { _:who <p> ?x . _:who <q> ?x } WHERE { ?s <p> ?x }",
+      m::ConstructQuery(
+          {{BlankNode(false, "who"), iri("<p>"), Var{"?x"}},
+           {BlankNode(false, "who"), iri("<q>"), Var{"?x"}}},
+          m::GraphPattern(m::Triples({{Var{"?s"}, iri("<p>"), Var{"?x"}}}))));
+
+  expectUpdateFails(
+      "INSERT { <a> <b> <c> } WHERE { _:who <p> ?x OPTIONAL { _:who <q> ?y } }",
+      reusedLabel);
+  // The operations of a request with multiple updates are independent.
+  expectUpdate(
+      "INSERT { <a> <b> ?x } WHERE { _:who <p> ?x } ; "
+      "INSERT { <a> <b> ?x } WHERE { _:who <p> ?x }",
+      ::testing::SizeIs(2));
 }

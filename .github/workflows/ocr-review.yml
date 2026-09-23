@@ -1,0 +1,139 @@
+name: OpenCodeReview
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ocr-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request &&
+       github.event.comment.user.type != 'Bot' &&
+       (github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'COLLABORATOR') &&
+       (startsWith(github.event.comment.body, '/open-code-review') ||
+        startsWith(github.event.comment.body, '@open-code-review')))
+    runs-on: [self-hosted, linux, x64, wolga]
+    timeout-minutes: 240
+    env:
+      # ocr-stable is a fallback for the per-run npm prefix: if the
+      # freshly installed binary ever goes missing mid-job, review steps
+      # still resolve a pinned v1.11.7 copy from local SSD.
+      PATH: /home/stoetzem/.local/bin:/local/data-ssd/stoetzem/node22/bin:/local/data-ssd/stoetzem/ocr-stable/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      # The review tool self-upgrades in the background when the registry
+      # `latest` is newer than the pinned install; the upgrade replaces the
+      # running tree mid-job and the review spawn then fails with ENOENT.
+      # Pinned 1.11.7 must stay put, so updates stay off in CI.
+      OCR_NO_UPDATE: '1'
+    steps:
+      - name: Resolve PR context for comment-triggered reviews
+        id: pr-context
+        if: github.event_name == 'issue_comment'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            core.setOutput('base_ref', pr.base.ref);
+            core.setOutput('head_sha', pr.head.sha);
+      - name: Isolate npm prefix for this run
+        run: |
+          # Concurrent OCR jobs on the same self-hosted host share HOME *and*
+          # RUNNER_TEMP (_work/_temp is per runner, not per job), so the npm
+          # prefix must additionally be unique per run: one job's
+          # `npm install -g` would otherwise delete the `ocr` binary out from
+          # under another job's `ocr config` step (node MODULE_NOT_FOUND).
+          # The npm cache must be per-run too: the shared ~/.npm/_cacache
+          # lives on NFS home and concurrent jobs fail there with
+          # "Unknown system error -122" on Wolga.
+          prefix="${RUNNER_TEMP}/ocr-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "${prefix}"
+          echo "NPM_CONFIG_PREFIX=${prefix}" >> "$GITHUB_ENV"
+          echo "OCR_NPM_PREFIX=${prefix}" >> "$GITHUB_ENV"
+          echo "${prefix}/bin" >> "$GITHUB_PATH"
+          # The job-level PATH override masks GITHUB_PATH additions, so
+          # export the prefix bin explicitly for subsequent steps.
+          echo "PATH=${prefix}/bin:${PATH}" >> "$GITHUB_ENV"
+          npmcache="${RUNNER_TEMP}/ocr-npm-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "${npmcache}"
+          echo "NPM_CONFIG_CACHE=${npmcache}" >> "$GITHUB_ENV"
+          echo "OCR_NPM_CACHE=${npmcache}" >> "$GITHUB_ENV"
+          # HOME itself must be per-run too: the review tool creates
+          # ~/.opencodereview, and NFS home rejects new writes with
+          # "disk quota exceeded" on Wolga. RUNNER_TEMP is local SSD.
+          ocrhome="${RUNNER_TEMP}/ocr-home-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "${ocrhome}"
+          echo "HOME=${ocrhome}" >> "$GITHUB_ENV"
+          echo "OCR_HOME=${ocrhome}" >> "$GITHUB_ENV"
+      - name: Review pull request
+        uses: alibaba/open-code-review@810aeb5dc2e2b9485f5a1981485e65b25250f609 # v1.11.7
+        with:
+          # Deliberately the job-scoped GITHUB_TOKEN, not an App installation
+          # token: installation tokens expire after 1 hour, but large-diff
+          # reviews run for hours and must still post results at the end.
+          github_token: ${{ github.token }}
+          llm_url: ${{ vars.OCR_LLM_URL }}
+          llm_auth_token: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          llm_model: ${{ vars.OCR_LLM_MODEL }}
+          llm_use_anthropic: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
+          base_ref: ${{ steps.pr-context.outputs.base_ref }}
+          head_sha: ${{ steps.pr-context.outputs.head_sha }}
+          review_concurrency: '1'
+          effort: low
+          sticky_summary: 'true'
+          incremental: 'true'
+          upload_artifacts: 'true'
+          stream_progress: 'true'
+          ocr_version: '1.11.7'
+      - name: Stamp summary with Actions run URL
+        if: always()
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          OCR_POSTER_LABEL: OCR stock
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const runId = context.runId;
+            const attempt = context.runAttempt || 1;
+            const marker = `<!-- ocr-summary-run:${runId}-${attempt} -->`;
+            const linkMarker = '<!-- ocr-run-link -->';
+            const label = process.env.OCR_POSTER_LABEL || 'OpenCodeReview';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId}`;
+            const number = context.payload.pull_request?.number || context.issue.number;
+            if (!number) return;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: number,
+              per_page: 100,
+            });
+            const stamp = `${linkMarker}\n**${label}** · [Actions run ${runId}](${runUrl})\n`;
+            for (const c of comments) {
+              const body = c.body || '';
+              if (!body.includes(marker) || body.includes(linkMarker)) continue;
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: c.id,
+                body: `${stamp}\n${body}`,
+              });
+            }
+      - name: Remove isolated npm prefix, cache, and home
+        if: always()
+        run: rm -rf "${OCR_NPM_PREFIX:?}" "${OCR_NPM_CACHE:?}" "${OCR_HOME:?}"

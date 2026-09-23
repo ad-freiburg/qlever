@@ -27,7 +27,7 @@ constexpr inline int NUM_TRIPLES_PER_PARTIAL_VOCAB = 10'000'000;
 constexpr inline size_t PARSER_BATCH_SIZE = 1'000'000;
 
 // That many triples does the turtle parser have to buffer before the call to
-// getline returns (unless our input reaches EOF). This makes parsing from
+// `getBatch` returns (unless our input reaches EOF). This makes parsing from
 // streams faster.
 constexpr inline size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 

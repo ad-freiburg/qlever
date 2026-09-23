@@ -273,7 +273,7 @@ int main(int argc, char** argv) {
       "keyword search in literals via `?literal ql:has-word \"word\"`.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
-      ad_utility::VocabularyType::getListOfSupportedValues());
+      ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
 
   add("encode-as-id",

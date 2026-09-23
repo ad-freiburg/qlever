@@ -53,6 +53,7 @@ RuntimeParameters::RuntimeParameters() {
   add(patternTrickNumThreads_);
   add(parallelSortNumThreads_);
   add(spatialJoinPrefilterMaxSize_);
+  add(spatialJoinTmpDir_);
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);
   add(sparqlResultsJsonWithTime_);

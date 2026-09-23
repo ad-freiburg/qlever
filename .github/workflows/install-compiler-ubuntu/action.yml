@@ -7,6 +7,10 @@ inputs:
   compiler-version:
     description: "the version of the compiler (must be major version)"
     required: true
+  install-mold:
+    description: "Whether to install the `mold` linker. Must be set to false for jobs that run in a `container` of an older distribution (e.g. Ubuntu 20.04), which has no `mold` package"
+    required: false
+    default: "true"
 
 runs:
   using: "composite"
@@ -37,6 +41,13 @@ runs:
     - name: Install gcc8
       if :  inputs.compiler == 'gcc' && inputs.compiler-version == 8
       run:  |
+        # Ubuntu 20.04 (which jobs with a matching `container` run in) has gcc 8
+        # in its standard repositories. On newer releases (like the runner image
+        # itself) the packages have to be downloaded from the Ubuntu 20.04
+        # archive by hand.
+        if sudo apt-get install -y gcc-8 g++-8; then
+          exit 0
+        fi
         wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/gcc-8_8.4.0-3ubuntu2_amd64.deb
         wget http://mirrors.edge.kernel.org/ubuntu/pool/universe/g/gcc-8/gcc-8-base_8.4.0-3ubuntu2_amd64.deb
         wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/libgcc-8-dev_8.4.0-3ubuntu2_amd64.deb
@@ -49,6 +60,7 @@ runs:
         sudo apt install -y ./libstdc++-8-dev_8.4.0-3ubuntu2_amd64.deb ./g++-8_8.4.0-3ubuntu2_amd64.deb
       shell: bash
     - name: Install mold linker
+      if: inputs.install-mold == 'true'
       shell: bash
       run: |
         sudo apt update

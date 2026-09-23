@@ -1,0 +1,58 @@
+name: Wolga native (gcc-13)
+
+# First production Wolga leg of the heavy Linux CI migration (pilot proved
+# the rootless-podman path in wolga-build-pilot.yml). Runs the gcc-13
+# Release build + unit tests inside the prebuilt localhost/qlever-ci:gcc13
+# image, so it is immune to Launchpad PPA outages that keep killing the
+# GitHub-hosted legs. Isolated workflow: not required, zero impact on the
+# existing matrix. More toolchains follow as their images land.
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  merge_group:
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
+    runs-on: [self-hosted, linux, x64, wolga]
+    timeout-minutes: 240
+    env:
+      PODMAN_ROOT: /local/data-ssd/stoetzem/containers-storage
+      PODMAN_TMP: /local/data-ssd/stoetzem/containers-tmp
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Native gcc-13 Release build + tests inside prebuilt CI image
+        run: |
+          mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
+          podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
+            --network=host \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            localhost/qlever-ci:gcc13 bash -c '
+              set -e
+              export CC=gcc-13 CXX=g++-13
+              cmake -B /work/build -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/gcc13.cmake" \
+                -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror " \
+                -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
+                -DENABLE_EXPENSIVE_CHECKS=true \
+                -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold" \
+                -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON \
+                -DUSE_PRECOMPILED_HEADERS=OFF -DCHEAPER_COMPILATION=OFF \
+                -DQLEVER_ALLOCATOR_BACKEND=limit
+              cmake --build /work/build --config Release -- -j $(nproc)
+              cd /work/build/test
+              env CTEST_OUTPUT_ON_FAILURE=1 ctest -C Release -j $(nproc) .
+            '
