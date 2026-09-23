@@ -136,11 +136,25 @@ jobs:
               # Per-leg extra environment inside the container (empty for
               # legs without a `container-env` matrix key).
               if [ -n "${{ matrix.container-env }}" ]; then export ${{ matrix.container-env }}; fi
+              # cmake configure pulls third-party sources (googletest etc.)
+              # over anonymous github clones, which fleet egress
+              # occasionally fails and would otherwise fail the whole leg.
+              # Retry the configure (never the build) up to three times.
+              configure_with_retry() {
+                local attempt=1
+                while [ "${attempt}" -le 3 ]; do
+                  rm -rf /work/build
+                  if "$@" && [ -f /work/build/CMakeCache.txt ]; then return 0; fi
+                  echo "cmake configure attempt ${attempt} failed, retrying in 15s..."
+                  attempt=$((attempt + 1))
+                  if [ "${attempt}" -le 3 ]; then sleep 15; fi
+                done
+                return 1
+              }
               # Fresh configure per leg: self-hosted workspaces persist
               # across jobs, so the CMake cache of a previous leg
               # (different toolchain/sanitizer flags) must not be reused.
-              rm -rf /work/build
-              cmake -B /work/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+              configure_with_retry cmake -B /work/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
                 -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/${{ matrix.toolchain }}.cmake" \
                 -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror ${{ matrix.extra-flags }}" \
                 -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
@@ -175,8 +189,22 @@ jobs:
               set -e
               cd /work && rm -rf /work/build && mkdir -p /work/build
               conan profile detect
-              (cd /work/build && conan install .. -pr:b=default -of=. --build=missing)
-              cmake -B /work/build -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG \
+              # Same configure retry as the native step: anonymous github
+              # clones (googletest etc.) occasionally fail from fleet egress.
+              # Each attempt reinstalls conan outputs first, since the retry
+              # wipes /work/build (which holds conan_toolchain.cmake etc.).
+              configure_with_retry() {
+                local attempt=1
+                while [ "${attempt}" -le 3 ]; do
+                  rm -rf /work/build && mkdir -p /work/build
+                  if (cd /work/build && conan install .. -pr:b=default -of=. --build=missing) && "$@" && [ -f /work/build/CMakeCache.txt ]; then return 0; fi
+                  echo "cmake configure attempt ${attempt} failed, retrying in 15s..."
+                  attempt=$((attempt + 1))
+                  if [ "${attempt}" -le 3 ]; then sleep 15; fi
+                done
+                return 1
+              }
+              configure_with_retry cmake -B /work/build -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG \
                 -DCMAKE_TOOLCHAIN_FILE="/work/build/conan_toolchain.cmake" \
                 -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra" \
                 -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
