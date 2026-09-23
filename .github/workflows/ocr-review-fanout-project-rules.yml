@@ -1,13 +1,12 @@
 name: OpenCodeReview (fan-out project rules)
 
 on:
-  # No `synchronize`: the fan-out review (243 project rules at high effort)
-  # takes hours and was cancelled by the next push on every actively
-  # developed PR, wasting runner time and queue slots. It runs once when a
-  # PR is opened/reopened/marked ready, and on demand via
-  # `/open-code-review-fanout` below.
+  # `synchronize` included per owner request: the fan-out review runs on
+  # every push. Note it takes hours on large diffs and `cancel-in-progress`
+  # below cancels the stale run on the next push, so actively developed PRs
+  # consume extra runner time by design.
   pull_request_target:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
     types: [created]
 

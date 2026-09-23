@@ -1,11 +1,21 @@
-name: Wolga native (gcc-13)
+name: Wolga native
 
-# First production Wolga leg of the heavy Linux CI migration (pilot proved
-# the rootless-podman path in wolga-build-pilot.yml). Runs the gcc-13
-# Release build + unit tests inside the prebuilt localhost/qlever-ci:gcc13
-# image, so it is immune to Launchpad PPA outages that keep killing the
-# GitHub-hosted legs. Isolated workflow: not required, zero impact on the
-# existing matrix. More toolchains follow as their images land.
+# Heavy Linux CI legs on self-hosted runners (rootless podman,
+# prebuilt localhost/qlever-ci images). Immune to the Launchpad PPA outages
+# that keep killing the GitHub-hosted legs. Isolated workflow: not required,
+# zero impact on the existing matrix.
+#
+# Legs mirror native-build.yml configurations (same toolchains, build types,
+# flags, and per-leg options). Deviations from native-build.yml are marked
+# VOLGA-DEVIATION and are intentional:
+# - RUN_EXPENSIVE_TESTS stays OFF on all legs until ctest durations fit the
+#   timeout on shared hosts (native runs expensive tests on plain Release).
+# - TSan stays on the GitHub-hosted leg (needs root vm.mmap_rnd_bits sysctl).
+#
+# Image coverage (localhost/qlever-ci:<tag> must exist in the runner host's
+# podman storage): gcc13, clang16, clang21, clang17. Missing images with a
+# recipe in misc/ci-images: gcc11. Missing recipe and image: gcc12, clang18.
+# Legs without a runnable image are present below as commented placeholders.
 
 on:
   push:
@@ -24,35 +34,252 @@ permissions:
 jobs:
   build:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
-    runs-on: [self-hosted, linux, x64, wolga]
+    # Pinned to image-bearing hosts: only runners sharing the podman storage
+    # that holds localhost/qlever-ci carry wolga-img (Wolga fleet).
+    runs-on: [self-hosted, linux, x64, wolga-img]
     timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      # Sequential legs: one full build+test at a time per run, so a shared
+      # 16-core host is never oversubscribed and stays usable for others.
+      max-parallel: 1
+      matrix:
+        include:
+          - image: gcc13
+            toolchain: gcc13
+            build-type: Release
+            extra-flags: ""
+          - image: clang21
+            toolchain: clang21
+            build-type: Release
+            extra-flags: ""
+            allocator-backend: pmr
+          - image: clang16
+            toolchain: clang16
+            build-type: Release
+            extra-flags: ""
+            skip-if-pr: true
+          - image: clang16
+            toolchain: clang16
+            build-type: RelWithDebInfo
+            extra-flags: "-fsanitize=address -fno-omit-frame-pointer"
+            # LeakSanitizer fatals at process startup under rootless podman
+            # (restricted syscalls), which aborts gtest test discovery, so
+            # leak detection stays off on this leg. Plain ASan is unaffected.
+            # (Base fix e9cb2483d, newer than this PR's seccomp approach;
+            # leak coverage stays on the GitHub-hosted ASan leg.)
+            container-env: "ASAN_OPTIONS=detect_leaks=0"
+          - image: clang16
+            toolchain: clang16
+            build-type: RelWithDebInfo
+            extra-flags: "-fsanitize=undefined"
+            needs-seccomp: true
+          - image: gcc11
+            toolchain: gcc11
+            build-type: Release
+            extra-flags: ""
+          - image: gcc11
+            toolchain: gcc11
+            build-type: Release
+            extra-flags: ""
+            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"
+          # gcc12/clang18 run on master only in native-build.yml.
+          - image: gcc12
+            toolchain: gcc12
+            build-type: Release
+            extra-flags: ""
+            skip-if-pr: true
+          - image: clang18
+            toolchain: clang18
+            build-type: Release
+            extra-flags: ""
+            skip-if-pr: true
+          # Conan leg (mirrors native-build-conan.yml): system compiler,
+          # third-party libs via conan, plus benchmarks and E2E.
+          - image: conan
+            run-kind: conan
+            build-type: Release
+          # Emscripten/WASM leg (mirrors
+          # native-build-with-conan-and-emscripten.yml, build job only;
+          # npm publish stays on the hosted workflow): emsdk 6.0.5,
+          # node 26, conan, TypeScript, npm pack + smoke test.
+          - image: emsdk-6.0.5
+            run-kind: emsdk
+            build-type: Release
+          # NOTE: no TSan leg here. ThreadSanitizer aborts with "unexpected
+          # memory mapping" unless the host sets vm.mmap_rnd_bits=28, which
+          # needs root on the runner hosts. TSan stays on the GitHub-hosted
+          # leg (which applies the sysctl) until the host config lands.
     env:
       PODMAN_ROOT: /local/data-ssd/stoetzem/containers-storage
       PODMAN_TMP: /local/data-ssd/stoetzem/containers-tmp
     steps:
+      - name: Skip early if master-only leg on a PR
+        if: github.event_name == 'pull_request' && matrix.skip-if-pr == true
+        run: exit 0;
       - uses: actions/checkout@v7
+        if: github.event_name != 'pull_request' || matrix.skip-if-pr != true
         with:
           submodules: recursive
-      - name: Native gcc-13 Release build + tests inside prebuilt CI image
+      - name: Native ${{ matrix.toolchain }} build + tests inside prebuilt CI image
+        if: (github.event_name != 'pull_request' || matrix.skip-if-pr != true) && (!matrix.run-kind || matrix.run-kind == 'native')
+        shell: bash
+        run: |
+          mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
+          podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
+            --network=host \
+            ${{ matrix.needs-seccomp == true && '--security-opt seccomp=unconfined' || '' }} \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            localhost/qlever-ci:${{ matrix.image }} bash -c '
+              set -e
+              # Per-leg extra environment inside the container (empty for
+              # legs without a `container-env` matrix key).
+              if [ -n "${{ matrix.container-env }}" ]; then export ${{ matrix.container-env }}; fi
+              # cmake configure pulls third-party sources (googletest etc.)
+              # over anonymous github clones, which fleet egress
+              # occasionally fails and would otherwise fail the whole leg.
+              # Retry the configure (never the build) up to three times.
+              configure_with_retry() {
+                local attempt=1
+                while [ "${attempt}" -le 3 ]; do
+                  rm -rf /work/build
+                  if "$@" && [ -f /work/build/CMakeCache.txt ]; then return 0; fi
+                  echo "cmake configure attempt ${attempt} failed, retrying in 15s..."
+                  attempt=$((attempt + 1))
+                  if [ "${attempt}" -le 3 ]; then sleep 15; fi
+                done
+                return 1
+              }
+              # Fresh configure per leg: self-hosted workspaces persist
+              # across jobs, so the CMake cache of a previous leg
+              # (different toolchain/sanitizer flags) must not be reused.
+              configure_with_retry cmake -B /work/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+                -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/${{ matrix.toolchain }}.cmake" \
+                -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror ${{ matrix.extra-flags }}" \
+                -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
+                -DENABLE_EXPENSIVE_CHECKS=true \
+                ${{ matrix.additional-cmake-options }} \
+                -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold" \
+                -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON \
+                -DUSE_PRECOMPILED_HEADERS=${{ matrix.toolchain == 'clang21' && 'ON' || 'OFF' }} -DCHEAPER_COMPILATION=OFF \
+                -DQLEVER_ALLOCATOR_BACKEND=${{ matrix.allocator-backend || 'limit' }}
+              # -j8, not -j$(nproc): the 16-core host is shared (OCR jobs,
+              # other users) and RAM-bound. -j16 OOM-killed the UBSan leg
+              # (SIGKILL 54min in) and starved a gcc13 rebuild into a
+              # CancellationException-429 flake.
+              cmake --build /work/build --config ${{ matrix.build-type }} -- -j 8
+              cd /work/build/test
+              # Drop stale per-test dirs: /work/build persists across runs on
+              # the same host, and leftover previous.*/rebuild.* dirs from a
+              # killed run pollute later runs assertions.
+              find /work/build - \( -name "previous.*" -o -name "rebuild.*" \) -exec rm -rf {} + 2>/dev/null || true
+              env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{ matrix.build-type }} -j 8 .
+            '
+      - name: Conan build + tests + benchmarks + E2E inside prebuilt CI image
+        if: matrix.run-kind == 'conan'
+        shell: bash
         run: |
           mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
           podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
             --network=host \
             -v "${{ github.workspace }}:/work" \
             -w /work \
-            localhost/qlever-ci:gcc13 bash -c '
+            localhost/qlever-ci:${{ matrix.image }} bash -c '
               set -e
-              export CC=gcc-13 CXX=g++-13
-              cmake -B /work/build -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/gcc13.cmake" \
-                -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror " \
+              cd /work && rm -rf /work/build && mkdir -p /work/build
+              conan profile detect
+              # Same configure retry as the native step: anonymous github
+              # clones (googletest etc.) occasionally fail from fleet egress.
+              # Each attempt reinstalls conan outputs first, since the retry
+              # wipes /work/build (which holds conan_toolchain.cmake etc.).
+              configure_with_retry() {
+                local attempt=1
+                while [ "${attempt}" -le 3 ]; do
+                  rm -rf /work/build && mkdir -p /work/build
+                  if (cd /work/build && conan install .. -pr:b=default -of=. --build=missing) && "$@" && [ -f /work/build/CMakeCache.txt ]; then return 0; fi
+                  echo "cmake configure attempt ${attempt} failed, retrying in 15s..."
+                  attempt=$((attempt + 1))
+                  if [ "${attempt}" -le 3 ]; then sleep 15; fi
+                done
+                return 1
+              }
+              configure_with_retry cmake -B /work/build -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG \
+                -DCMAKE_TOOLCHAIN_FILE="/work/build/conan_toolchain.cmake" \
+                -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra" \
                 -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
-                -DENABLE_EXPENSIVE_CHECKS=true \
-                -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold" \
-                -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON \
-                -DUSE_PRECOMPILED_HEADERS=OFF -DCHEAPER_COMPILATION=OFF \
-                -DQLEVER_ALLOCATOR_BACKEND=limit
-              cmake --build /work/build --config Release -- -j $(nproc)
-              cd /work/build/test
-              env CTEST_OUTPUT_ON_FAILURE=1 ctest -C Release -j $(nproc) .
+                -DENABLE_EXPENSIVE_CHECKS=true
+              cmake --build /work/build --config Release -- -j 8
+              (source /work/build/conanrun.sh && cd /work/build/test &&
+                env CTEST_OUTPUT_ON_FAILURE=1 ctest -C Release -j 8 .)
+              (source /work/build/conanrun.sh &&
+                /work/build/benchmark/BenchmarkExamples -p)
+              (source /work/build/conanrun.sh && /work/e2e/e2e.sh -d /work/build)
+            '
+      - name: Emscripten/WASM build + npm pack + smoke test inside prebuilt CI image
+        if: matrix.run-kind == 'emsdk'
+        shell: bash
+        run: |
+          mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
+          podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
+            --network=host \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            localhost/qlever-ci:${{ matrix.image }} bash -c '
+              set -e
+              [ -f /work/.git/shallow ] && git -C /work fetch --tags --unshallow || true
+              printf "compiler:\n  emcc:\n    version: [\"6.0.5\"]\n" > ~/.conan2/settings_user.yml
+              cd /work && rm -rf /work/build
+              conan install . -pr:b default -pr:h conanprofiles/emscripten.profile \
+                -s build_type=Release -b missing -of build
+              cmake -S /work -B /work/build -GNinja \
+                -DCMAKE_TOOLCHAIN_FILE=/work/build/conan_toolchain.cmake \
+                -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true \
+                -D_NO_TIMING_TESTS=ON -D_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER=ON \
+                -D_NO_BENCHMARK=ON -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON
+              cmake --build /work/build --parallel
+              cd /work/src/libqlever/npm
+              cp ../../../build/src/libqlever/qlever.mjs ../../../build/src/libqlever/qlever.wasm ../../../build/src/libqlever/qlever.d.ts .
+              cp ../../../LICENSE .
+              if [ "${GITHUB_REF_TYPE}" = tag ]; then
+                VERSION="${GITHUB_REF_NAME#v}"
+              else
+                DESCRIBE=$(git -C /work describe --tags --long --match "v[0-9]*")
+                if [[ "$DESCRIBE" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)-([0-9]+)-g([0-9a-f]+)$ ]]; then
+                  VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))-dev.${BASH_REMATCH[4]}.g${BASH_REMATCH[5]}"
+                else
+                  echo "::error::Cannot derive a version from git describe output $DESCRIBE"
+                  exit 1
+                fi
+              fi
+              npm version --no-git-tag-version "${VERSION}"
+              npm pack
+            '
+      - name: Upload npm package artifact
+        if: matrix.run-kind == 'emsdk'
+        uses: actions/upload-artifact@v7
+        with:
+          name: qlever-npm-package
+          path: src/libqlever/npm/ad-freiburg-qlever-*.tgz
+      - name: Smoke-test the npm package
+        if: matrix.run-kind == 'emsdk'
+        shell: bash
+        run: |
+          mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
+          podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
+            --network=host \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            localhost/qlever-ci:${{ matrix.image }} bash -c '
+              set -e
+              SMOKE_DIR=$(mktemp -d)
+              awk "/^```js$/{n++; f=1; next} /^```$/{f=0} f; END{exit n != 1}" \
+                /work/src/libqlever/npm/README.md > "${SMOKE_DIR}/readme-example.mjs"
+              cd "${SMOKE_DIR}"
+              echo "{ \"name\": \"qlever-smoke-test\", \"private\": true }" > package.json
+              npm install --no-audit --no-fund /work/src/libqlever/npm/ad-freiburg-qlever-*.tgz
+              tsc --noEmit --allowJs --checkJs --strict --target esnext \
+                --module nodenext readme-example.mjs
+              timeout 120s node readme-example.mjs 2>&1 | tee /dev/stderr \
+                | grep -E "Number of result rows: 3$" > /dev/null
             '

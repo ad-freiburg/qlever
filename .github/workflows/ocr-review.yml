@@ -92,6 +92,10 @@ jobs:
           llm_auth_token: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           llm_model: ${{ vars.OCR_LLM_MODEL }}
           llm_use_anthropic: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
+          # Meta's Model API (api.meta.ai) validates strictly against the
+          # OpenAI schema and rejects the OCR default extra body
+          # {"thinking": {"type": "disabled"}}, so send an empty object.
+          llm_extra_body: '{}'
           base_ref: ${{ steps.pr-context.outputs.base_ref }}
           head_sha: ${{ steps.pr-context.outputs.head_sha }}
           review_concurrency: '1'

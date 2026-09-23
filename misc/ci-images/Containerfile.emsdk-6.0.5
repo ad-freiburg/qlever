@@ -1,0 +1,67 @@
+# QLever CI image: emscripten (wasm) leg on Ubuntu 24.04.
+# Mirrors native-build-with-conan-and-emscripten.yml (hosted `ubuntu-24.04`
+# leg): emsdk EMSDK_VERSION (bump together with the workflow env and
+# `conanprofiles/emscripten.profile`), Node.js 26, conan, TypeScript 7.
+# NOTE: build this on GitHub (docker as root, see
+# .github/workflows/toolchain-image-builder.yml), NOT rootless on the
+# cluster: unpacking upstream Ubuntu layers and dpkg chowns need UID/GID
+# ranges the cluster build user lacks. The trailing chown makes every file
+# 0:0 so the tarball imports cleanly under a single-UID mapping via
+# `podman load` on the cluster host.
+FROM ubuntu:24.04
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 LC_CTYPE=C.UTF-8 DEBIAN_FRONTEND=noninteractive
+ENV EMSDK_VERSION=6.0.5
+# Rootless build containers cannot setgroups(2), so apt's privilege-dropping
+# sandbox dies with "Operation not permitted". Disable it: CI legs run as
+# root anyway, so the sandbox buys nothing here.
+RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99-no-sandbox
+RUN apt-get update && apt-get install -y \
+    build-essential cmake ninja-build git wget pkg-config \
+    python3 python3-pip ca-certificates curl gnupg \
+ && rm -rf /var/lib/apt/lists/*
+# Node.js 26 (hosted leg uses actions/setup-node node-version 26).
+# NOTE: no `node/npm --version` smoke check here: under chroot build
+# isolation node aborts with a libuv fd assertion (harmless build-env
+# artifact; node runs normally in the OCI-isolated CI legs).
+RUN curl -fsSL https://deb.nodesource.com/setup_26.x | bash - \
+ && apt-get install -y nodejs \
+ && rm -rf /var/lib/apt/lists/*
+# emsdk (hosted leg uses mymindstorm/setup-emsdk). One-time slow install
+# lives in the image instead of every run.
+# GNU tar honors TAR_OPTIONS: emsdk unpacks archives with `tar -xf`,
+# and chmod fails on hosts whose container user namespace lacks ownership
+# of the archived modes (final 0:0 flatten below makes this harmless).
+ENV TAR_OPTIONS=--no-same-permissions
+# Use the system Node.js for emsdk itself: emsdk would otherwise download
+# and unpack its own bundled node, whose tarball chmod fails the same way.
+# The workflow builds use the system node anyway (hosted: setup-node 26).
+ENV EMSDK_NODE=/usr/bin/node
+RUN git clone https://github.com/emscripten-core/emsdk.git /opt/emsdk \
+ && /opt/emsdk/emsdk install ${EMSDK_VERSION} \
+ && /opt/emsdk/emsdk activate ${EMSDK_VERSION} \
+ && rm -rf /opt/emsdk/.git
+ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:${PATH}"
+ENV EMSDK=/opt/emsdk
+# conan (hosted leg: `pipx install conan`).
+RUN pip3 install --break-system-packages conan
+# TypeScript for the qleverwasm link (hosted leg: `npm install -g
+# typescript@7`). Installed WITHOUT node/npm: every node binary aborts under
+# chroot build isolation (libuv fd assertion), so the tarball is fetched
+# from the registry and unpacked explicitly ignoring archived modes (plain
+# `tar -xf` chmod fails on this host, same root cause as the emsdk node
+# issue above). tsc is pure JS and runs on the image's node 26 at CI time.
+# NOTE: `.../typescript@7` (range metadata) 404s; `.../typescript/latest`
+# resolves to the same 7.x that hosted `npm install -g typescript@7` gets.
+RUN TS_VER=$(curl -s https://registry.npmjs.org/typescript/latest \
+      | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])") \
+ && mkdir -p /usr/lib/node_modules/typescript \
+ && curl -sL "https://registry.npmjs.org/typescript/-/typescript-${TS_VER}.tgz" \
+    | tar -xz --no-same-permissions -C /usr/lib/node_modules/typescript \
+      --strip-components=1 \
+ && ln -sf /usr/lib/node_modules/typescript/bin/tsc /usr/local/bin/tsc \
+ && ln -sf /usr/lib/node_modules/typescript/bin/tsserver /usr/local/bin/tsserver
+# Flatten ownership so the image imports rootless (see header NOTE).
+RUN find / -xdev \( -path /etc/hosts -o -path /etc/hostname -o -path /etc/resolv.conf \) -prune \
+    -o -exec chown 0:0 {} + 2>/dev/null || true \
+ && chmod 640 /etc/shadow /etc/gshadow \
+ && echo TOOLCHAIN-IMAGE-OK
