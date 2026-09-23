@@ -121,11 +121,13 @@ class ScratchBuffers {
   }
 };
 
+// The number of blocks that a single task merges or moves.
+constexpr uint32_t groupSize = 64;
+
 // The state shared by the tasks of a single sort, Boost's `backbone` without
 // its work stack. The input is divided into `numBlocks_` blocks of `BlockSize`
 // elements; only the last one (the *tail*) may be shorter.
-template <uint32_t BlockSize, uint32_t GroupSize, typename Iterator,
-          typename Compare>
+template <uint32_t BlockSize, typename Iterator, typename Compare>
 class SortState {
  public:
   using Value = typename std::iterator_traits<Iterator>::value_type;
@@ -133,7 +135,6 @@ class SortState {
   using RangePos = bsc::range<size_t>;
   using CompareBlockPos = bsd::compare_block_pos<BlockSize, Iterator, Compare>;
   static constexpr uint32_t blockSize_ = BlockSize;
-  static constexpr uint32_t groupSize_ = GroupSize;
 
   // The whole range to sort.
   RangeIt globalRange_;

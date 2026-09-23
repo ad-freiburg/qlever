@@ -8,6 +8,7 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -51,7 +52,7 @@ boost::asio::thread_pool& threadPool() {
 template <typename T>
 constexpr size_t numElementsForParallelPath(uint32_t numThreads) {
   using namespace ad_utility::blockSort::detail;
-  return size_t{numThreads} * blockSizeFor<T>() * groupSizeFor<T>();
+  return size_t{numThreads} * blockSizeFor<T>() * groupSize;
 }
 
 // Expect `blockIndirectSort` to sort `input` to `expected`.
@@ -195,13 +196,15 @@ TEST(BlockIndirectSort, customComparator) {
 // Elements that are not trivially copyable.
 TEST(BlockIndirectSort, stringElements) {
   size_t numElements = numElementsForParallelPath<std::string>(numPoolThreads);
-  std::vector<std::string> values;
-  values.reserve(numElements);
-  std::mt19937_64 gen{7};
-  for (size_t i = 0; i < numElements; ++i) {
-    values.push_back(absl::StrCat("value_", gen(), "_with_some_padding"));
+  // Zero-padded, so that the lexicographic order is the numeric order.
+  std::vector<std::string> expected;
+  expected.reserve(numElements);
+  for (uint32_t i : ascending(numElements)) {
+    expected.push_back(absl::StrFormat("value_%010d_with_some_padding", i));
   }
-  expectSortedLikeStd(std::move(values), numPoolThreads);
+  auto values = expected;
+  std::shuffle(values.begin(), values.end(), std::mt19937_64{7});
+  expectSortsTo(std::move(values), expected, numPoolThreads);
 }
 
 // _____________________________________________________________________________

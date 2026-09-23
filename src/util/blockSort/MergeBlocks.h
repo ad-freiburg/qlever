@@ -94,7 +94,6 @@ void tailProcess(State& state, std::vector<bsd::block_pos>& positions1,
 template <typename State>
 net::awaitable<void> cutRange(State& state,
                               typename State::RangePos positions) {
-  constexpr uint32_t groupSize = State::groupSize_;
   if (positions.size() < groupSize) {
     mergeRangePos(state, positions);
     co_return;
@@ -154,7 +153,7 @@ net::awaitable<void> cutRange(State& state,
 // Spawn the merge of `run`, cut into parts if it is big.
 template <typename State>
 void spawnRun(State& state, TaskGroup& group, typename State::RangePos run) {
-  if (run.size() > State::groupSize_) {
+  if (run.size() > groupSize) {
     group.spawn(cutRange(state, run));
   } else {
     group.spawnFunction([&state, run]() { mergeRangePos(state, run); });
@@ -166,7 +165,6 @@ void spawnRun(State& state, TaskGroup& group, typename State::RangePos run) {
 template <typename State>
 net::awaitable<void> extractRanges(State& state,
                                    typename State::RangePos positions) {
-  constexpr uint32_t groupSize = State::groupSize_;
   if (positions.size() < 2) {
     co_return;
   }

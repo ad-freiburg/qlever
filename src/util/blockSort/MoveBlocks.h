@@ -60,7 +60,6 @@ void moveSequence(State& state, const std::vector<size_t>& cycle) {
 // the last blocks of the parts, which are still in the wrong place.
 template <typename State>
 net::awaitable<void> moveLongSequence(State& state, std::vector<size_t> cycle) {
-  constexpr uint32_t groupSize = State::groupSize_;
   if (cycle.size() < groupSize) {
     moveSequence(state, cycle);
     co_return;
@@ -105,7 +104,7 @@ net::awaitable<void> moveLongSequence(State& state, std::vector<size_t> cycle) {
 // Spawn the rotation of `cycle`, cut into parts if it is long.
 template <typename State>
 void spawnCycle(State& state, TaskGroup& group, std::vector<size_t> cycle) {
-  if (cycle.size() < State::groupSize_) {
+  if (cycle.size() < groupSize) {
     group.spawnFunction(
         [&state, cycle = std::move(cycle)]() { moveSequence(state, cycle); });
   } else {
@@ -153,7 +152,7 @@ net::awaitable<void> moveBlocks(State& state) {
     ownCycle.clear();
   }
   if (!ownCycle.empty()) {
-    if (ownCycle.size() < State::groupSize_) {
+    if (ownCycle.size() < groupSize) {
       group.runInlineFunction(
           [&state, &ownCycle]() { moveSequence(state, ownCycle); });
     } else {

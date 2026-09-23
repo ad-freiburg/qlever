@@ -23,8 +23,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
-#include <string>
-#include <type_traits>
 #include <utility>
 
 #include "backports/algorithm.h"
@@ -78,7 +76,7 @@ net::awaitable<void> splitRange(State& state, size_t posIndex1,
   // No block has been moved yet, so physical and logical positions agree.
   auto first = state.getBlockBegin(posIndex1);
   auto last = state.getRange(posIndex2 - 1).last;
-  if (numBlocks < State::groupSize_) {
+  if (numBlocks < groupSize) {
     boost::sort::pdqsort(first, last, state.cmp_);
     co_return;
   }
@@ -122,12 +120,22 @@ net::awaitable<void> startSort(State& state, uint32_t numThreads) {
   co_await moveBlocks(state);
 }
 
-// Sort `[first, last)` with the given block and group size.
-template <uint32_t BlockSize, uint32_t GroupSize, typename Iterator,
-          typename Compare>
+// The number of elements per block (Boost's `block_size`): bigger elements get
+// smaller blocks, so that a block stays in cache.
+template <typename Value>
+constexpr uint32_t blockSizeFor() {
+  constexpr size_t numBytes = sizeof(Value);
+  constexpr uint32_t sizes[] = {4096, 4096, 4096, 4096, 2048,
+                                1024, 768,  512,  256,  128};
+  return sizes[numBytes > 256 ? 9 : std::bit_width(numBytes - 1)];
+}
+
+// Sort `[first, last)`, see `blockIndirectSort` below.
+template <typename Iterator, typename Compare>
 void runSort(Iterator first, Iterator last, Compare comp, uint32_t nthread,
              ql::any_io_executor exec) {
   using Value = typename std::iterator_traits<Iterator>::value_type;
+  constexpr uint32_t blockSize = blockSizeFor<Value>();
   AD_CONTRACT_CHECK(last >= first);
   size_t numElements = static_cast<size_t>(last - first);
   if (numElements == 0) {
@@ -144,8 +152,7 @@ void runSort(Iterator first, Iterator last, Compare comp, uint32_t nthread,
   }
 
   // At most one thread per group of blocks.
-  size_t maxNumThreads =
-      numElements / (size_t{BlockSize} * size_t{GroupSize}) + 1;
+  size_t maxNumThreads = numElements / (size_t{blockSize} * groupSize) + 1;
   nthread = static_cast<uint32_t>(
       std::min(static_cast<size_t>(nthread), maxNumThreads));
 
@@ -156,44 +163,20 @@ void runSort(Iterator first, Iterator last, Compare comp, uint32_t nthread,
     return;
   }
 
-  SortState<BlockSize, GroupSize, Iterator, Compare> state{
-      first, last, std::move(comp), nthread, exec};
+  SortState<blockSize, Iterator, Compare> state{first, last, std::move(comp),
+                                                nthread, exec};
   // Blocks the calling thread, see the note at `blockIndirectSort`.
   net::co_spawn(exec, startSort(state, nthread), net::use_future).get();
   state.errors_.rethrowIfError();
-}
-
-// Like Boost, use smaller blocks and bigger groups for strings.
-template <typename Value>
-constexpr bool isString = std::is_same_v<Value, std::string>;
-
-// The number of elements per block (Boost's `block_size`): bigger elements get
-// smaller blocks, so that a block stays in cache.
-template <typename Value>
-constexpr uint32_t blockSizeFor() {
-  if constexpr (isString<Value>) {
-    return 128;
-  } else {
-    constexpr size_t numBytes = sizeof(Value);
-    constexpr uint32_t sizes[] = {4096, 4096, 4096, 4096, 2048,
-                                  1024, 768,  512,  256,  128};
-    return sizes[numBytes > 256 ? 9 : std::bit_width(numBytes - 1)];
-  }
-}
-
-// The number of blocks that a single task merges or moves.
-template <typename Value>
-constexpr uint32_t groupSizeFor() {
-  return isString<Value> ? 128 : 64;
 }
 
 }  // namespace detail
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // Sort `range` by `comp` (a strict weak ordering) on up to `nthread` threads
-// of `exec`. The sort is not stable. Pays off from about six threads upwards;
-// small inputs, `nthread < 2` or an empty `exec` are sorted in the calling
-// thread.
+// of `exec`. The sort is not stable. Small inputs, `nthread < 2` or an empty
+// `exec` are sorted in the calling thread, and below `minNumThreadsForBlocks`
+// threads only the parallel quicksort is used.
 //
 // `nthread` should be the number of threads that run `exec`: it determines the
 // number of parts and of scratch buffers (one block each).
@@ -224,9 +207,7 @@ CPP_template(typename Range, typename Compare)(
   static_cast<void>(exec);
   boost::sort::pdqsort(first, last, comp);
 #else
-  using Value = typename std::iterator_traits<decltype(first)>::value_type;
-  detail::runSort<detail::blockSizeFor<Value>(), detail::groupSizeFor<Value>()>(
-      first, last, std::move(comp), nthread, std::move(exec));
+  detail::runSort(first, last, std::move(comp), nthread, std::move(exec));
 #endif
 }
 
