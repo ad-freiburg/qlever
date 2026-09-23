@@ -32,6 +32,7 @@
 
 #include "backports/asio.h"
 #include "util/Exception.h"
+#include "util/NoCopyNoMove.h"
 #include "util/blockSort/TaskGroup.h"
 
 namespace ad_utility::blockSort::detail {
@@ -49,8 +50,10 @@ namespace bsd = boost::sort::blk_detail;
 //
 // A buffer is never held across a suspension point, so one buffer per thread
 // is enough and `acquire()` doesn't wait in practice.
+//
+// Not movable, because the `Lease`s point into this object.
 template <typename Value>
-class ScratchBuffers {
+class ScratchBuffers : public ad_utility::NoCopyNoMove {
  private:
   std::vector<Value> storage_;
   size_t bufferSize_;
@@ -60,23 +63,18 @@ class ScratchBuffers {
 
  public:
   // A borrowed buffer, returned to the pool on destruction.
-  class Lease {
+  //
+  // Not movable, so that it always gives its buffer back exactly once.
+  // `acquire()` can still return it by value, because returning a prvalue needs
+  // no move since C++17.
+  class Lease : public ad_utility::NoCopyNoMove {
    private:
     ScratchBuffers* pool_;
     Value* buffer_;
 
    public:
     Lease(ScratchBuffers* pool, Value* buffer) : pool_{pool}, buffer_{buffer} {}
-    Lease(Lease&& other) noexcept
-        : pool_{std::exchange(other.pool_, nullptr)}, buffer_{other.buffer_} {}
-    Lease(const Lease&) = delete;
-    Lease& operator=(const Lease&) = delete;
-    Lease& operator=(Lease&&) = delete;
-    ~Lease() {
-      if (pool_ != nullptr) {
-        pool_->release(buffer_);
-      }
-    }
+    ~Lease() { pool_->release(buffer_); }
     bsc::range<Value*> range() const {
       return {buffer_, buffer_ + pool_->bufferSize_};
     }
@@ -93,10 +91,6 @@ class ScratchBuffers {
       unused_.push_back(storage_.data() + i * bufferSize_);
     }
   }
-
-  // The `Lease`s point into this object.
-  ScratchBuffers(const ScratchBuffers&) = delete;
-  ScratchBuffers& operator=(const ScratchBuffers&) = delete;
 
   // Borrow a buffer. Only spins if more threads run the executor than there
   // are buffers.

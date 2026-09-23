@@ -29,6 +29,7 @@
 #include "backports/asio.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+#include "util/NoCopyNoMove.h"
 
 namespace ad_utility::blockSort::detail {
 
@@ -81,7 +82,9 @@ class ErrorSink {
 // awaited on every path, including exceptional ones. As `co_await` is not
 // allowed in a `catch` block, a parent catches, stores the exception in the
 // `ErrorSink`, and awaits `join()` afterwards.
-class TaskGroup {
+//
+// Not movable, because the children hold a pointer to this object.
+class TaskGroup : public ad_utility::NoCopyNoMove {
  private:
   const ql::any_io_executor& executor_;
   ErrorSink& errors_;
@@ -110,10 +113,6 @@ class TaskGroup {
  public:
   TaskGroup(const ql::any_io_executor& executor, ErrorSink& errors)
       : executor_{executor}, errors_{errors} {}
-
-  // The children hold a pointer to this object.
-  TaskGroup(const TaskGroup&) = delete;
-  TaskGroup& operator=(const TaskGroup&) = delete;
 
   // Children that are still running would access a dangling frame, see
   // LIFETIME above, so terminate. A count of one means that no child is
