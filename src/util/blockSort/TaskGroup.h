@@ -48,7 +48,7 @@ class ErrorSink {
   std::exception_ptr error_;
 
  public:
-  bool hasError() const noexcept {
+  [[nodiscard]] bool hasError() const noexcept {
     return hasError_.load(std::memory_order_acquire);
   }
 
@@ -56,7 +56,7 @@ class ErrorSink {
   // stored.
   void store(std::exception_ptr error) {
     AD_CONTRACT_CHECK(error != nullptr);
-    std::lock_guard<std::mutex> lock{mutex_};
+    std::lock_guard lock{mutex_};
     if (error_ == nullptr) {
       error_ = std::move(error);
       hasError_.store(true, std::memory_order_release);
@@ -132,54 +132,31 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
   //
   // NOTE: `co_spawn` starts the coroutine via `dispatch`, i.e. inline on a
   // thread of the executor, which would run all children serially. The `post`
-  // queues it instead, so that other threads can pick it up.
+  // in `postChild` queues it instead, so that other threads can pick it up.
   void spawn(net::awaitable<void> child) {
-    numPending_.fetch_add(1, std::memory_order_relaxed);
-    try {
-      net::post(executor_, [this, child = std::move(child)]() mutable {
-        if (errors_.hasError()) {
-          childIsDone();
-          return;
-        }
-        try {
-          net::co_spawn(executor_, std::move(child),
-                        [this](std::exception_ptr error) {
-                          if (error != nullptr) {
-                            errors_.store(std::move(error));
-                          }
-                          childIsDone();
-                        });
-        } catch (...) {
-          errors_.store(std::current_exception());
-          childIsDone();
-        }
-      });
-    } catch (...) {
-      // The child was never started.
-      errors_.store(std::current_exception());
-      childIsDone();
-    }
+    postChild([this, child = std::move(child)]() mutable {
+      try {
+        net::co_spawn(executor_, std::move(child),
+                      [this](std::exception_ptr error) {
+                        if (error != nullptr) {
+                          errors_.store(std::move(error));
+                        }
+                        childIsDone();
+                      });
+      } catch (...) {
+        errors_.store(std::current_exception());
+        childIsDone();
+      }
+    });
   }
 
   // Like `spawn`, but for a plain function, which needs no coroutine frame.
   template <typename Function>
   void spawnFunction(Function function) {
-    numPending_.fetch_add(1, std::memory_order_relaxed);
-    try {
-      net::post(executor_, [this, function = std::move(function)]() mutable {
-        if (!errors_.hasError()) {
-          try {
-            function();
-          } catch (...) {
-            errors_.store(std::current_exception());
-          }
-        }
-        childIsDone();
-      });
-    } catch (...) {
-      errors_.store(std::current_exception());
+    postChild([this, function = std::move(function)]() mutable {
+      runInlineFunction(std::move(function));
       childIsDone();
-    }
+    });
   }
 
   // Run `child` directly in the parent (like Boost does with the first half of
@@ -231,6 +208,26 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
   }
 
  private:
+  // Queue `task` on the executor as a new child. `task` has to call
+  // `childIsDone()` exactly once; after an error it is skipped instead.
+  template <typename Task>
+  void postChild(Task task) {
+    numPending_.fetch_add(1, std::memory_order_relaxed);
+    try {
+      net::post(executor_, [this, task = std::move(task)]() mutable {
+        if (errors_.hasError()) {
+          childIsDone();
+          return;
+        }
+        task();
+      });
+    } catch (...) {
+      // The child was never started.
+      errors_.store(std::current_exception());
+      childIsDone();
+    }
+  }
+
   // Resume the parent if this was the last child. Resuming may destroy
   // `*this`, so the handler is moved out into a temporary first.
   void childIsDone() {

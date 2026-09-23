@@ -119,7 +119,7 @@ net::awaitable<void> startSort(State& state, uint32_t numThreads) {
 // The number of elements per block (Boost's `block_size`): bigger elements get
 // smaller blocks, so that a block stays in cache.
 template <typename Value>
-constexpr uint32_t blockSizeFor() {
+[[nodiscard]] constexpr uint32_t blockSizeFor() {
   constexpr size_t numBytes = sizeof(Value);
   constexpr uint32_t sizes[] = {4096, 4096, 4096, 4096, 2048,
                                 1024, 768,  512,  256,  128};
@@ -192,13 +192,12 @@ CPP_template(typename Range, typename Compare)(
     requires ql::ranges::random_access_range<Range> CPP_and
         ql::ranges::borrowed_range<
             Range>) void blockIndirectSort(Range range, Compare comp,
-                                           uint32_t nthread,
+                                           [[maybe_unused]] uint32_t nthread,
                                            ql::any_io_executor exec) {
   AD_CONTRACT_CHECK(static_cast<bool>(exec));
   auto first = ql::ranges::begin(range);
   auto last = first + ql::ranges::distance(range);
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  static_cast<void>(nthread);
   boost::sort::pdqsort(first, last, comp);
 #else
   detail::runSort(first, last, std::move(comp), nthread, std::move(exec));

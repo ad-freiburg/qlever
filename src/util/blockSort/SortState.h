@@ -75,7 +75,7 @@ class ScratchBuffers : public ad_utility::NoCopyNoMove {
    public:
     Lease(ScratchBuffers* pool, Value* buffer) : pool_{pool}, buffer_{buffer} {}
     ~Lease() { pool_->release(buffer_); }
-    bsc::range<Value*> range() const {
+    [[nodiscard]] bsc::range<Value*> range() const {
       return {buffer_, buffer_ + pool_->bufferSize_};
     }
   };
@@ -94,10 +94,10 @@ class ScratchBuffers : public ad_utility::NoCopyNoMove {
 
   // Borrow a buffer. Only spins if more threads run the executor than there
   // are buffers.
-  Lease acquire() {
+  [[nodiscard]] Lease acquire() {
     for (;;) {
       {
-        std::lock_guard<std::mutex> lock{mutex_};
+        std::lock_guard lock{mutex_};
         if (!unused_.empty()) {
           Value* buffer = unused_.back();
           unused_.pop_back();
@@ -110,7 +110,7 @@ class ScratchBuffers : public ad_utility::NoCopyNoMove {
 
  private:
   void release(Value* buffer) {
-    std::lock_guard<std::mutex> lock{mutex_};
+    std::lock_guard lock{mutex_};
     unused_.push_back(buffer);
   }
 };
@@ -142,47 +142,49 @@ class SortState {
   ql::any_io_executor executor_;
   ErrorSink errors_;
 
-  // Sort the non-empty `[first, last)` with `numBuffers` scratch buffers.
+  // Sort `[first, last)` with `numBuffers` scratch buffers. The range must not
+  // be empty, which `runSort` makes sure of.
   SortState(Iterator first, Iterator last, Compare cmp, size_t numBuffers,
             ql::any_io_executor executor)
       : globalRange_{first, last},
         numElements_{static_cast<size_t>(last - first)},
         numBlocks_{(numElements_ + BlockSize - 1) / BlockSize},
+        tailRange_{numElements_ % BlockSize == 0
+                       ? last
+                       : getBlockBegin(numBlocks_ - 1),
+                   last},
         cmp_{std::move(cmp)},
         buffers_{numBuffers, BlockSize, Value(*first)},
         executor_{std::move(executor)} {
-    AD_CORRECTNESS_CHECK(first != last);
-    index_.reserve(numBlocks_ + 1);
+    index_.reserve(numBlocks_);
     for (size_t i = 0; i < numBlocks_; ++i) {
-      index_.emplace_back(bsd::block_pos{i});
+      index_.emplace_back(i);
     }
-    size_t numTailElements = numElements_ % BlockSize;
-    tailRange_.first =
-        numTailElements == 0 ? last : first + (numBlocks_ - 1) * BlockSize;
-    tailRange_.last = last;
   }
 
   // The first element of the block at physical position `pos`.
-  Iterator getBlockBegin(size_t pos) const {
+  [[nodiscard]] Iterator getBlockBegin(size_t pos) const {
     return globalRange_.first + pos * BlockSize;
   }
 
   // The elements of the block at physical position `pos`.
-  RangeIt getRange(size_t pos) const {
+  [[nodiscard]] RangeIt getRange(size_t pos) const {
     Iterator first = getBlockBegin(pos);
     Iterator last =
         pos == numBlocks_ - 1 ? globalRange_.last : first + BlockSize;
     return {first, last};
   }
 
-  typename ScratchBuffers<Value>::Lease acquireBuffer() {
+  [[nodiscard]] typename ScratchBuffers<Value>::Lease acquireBuffer() {
     return buffers_.acquire();
   }
 
-  bool hasError() const noexcept { return errors_.hasError(); }
+  [[nodiscard]] bool hasError() const noexcept { return errors_.hasError(); }
   void storeError(std::exception_ptr error) { errors_.store(std::move(error)); }
 
-  TaskGroup makeTaskGroup() { return TaskGroup{executor_, errors_}; }
+  [[nodiscard]] TaskGroup makeTaskGroup() {
+    return TaskGroup{executor_, errors_};
+  }
 };
 
 }  // namespace ad_utility::blockSort::detail

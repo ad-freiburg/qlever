@@ -49,7 +49,8 @@ namespace net = boost::asio;
 // like those of `IdTable`. The other parts of Boost.Sort that are used here
 // (e.g. `pdqsort`) work for `IdTable` as they are.
 template <typename Iterator, typename Compare>
-Iterator median3(Iterator it1, Iterator it2, Iterator it3, const Compare& cmp) {
+[[nodiscard]] Iterator median3(Iterator it1, Iterator it2, Iterator it3,
+                               const Compare& cmp) {
   if (cmp(*it2, *it1)) {
     ql::ranges::iter_swap(it2, it1);
   }
@@ -84,7 +85,8 @@ constexpr size_t maxElementsPerTask() {
 
 // Whether reversing `[first, last)` would sort it.
 template <typename Iterator, typename Compare>
-bool isDescending(Iterator first, Iterator last, const Compare& cmp) {
+[[nodiscard]] bool isDescending(Iterator first, Iterator last,
+                                const Compare& cmp) {
   return ql::ranges::is_sorted(
       first, last,
       [&cmp](const auto& a, const auto& b) -> bool { return cmp(b, a); });
