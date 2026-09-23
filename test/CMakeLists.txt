@@ -307,6 +307,8 @@ addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
 
 addLinkAndDiscoverTest(TaskQueueTest)
 
+addLinkAndDiscoverTest(TaskQueueOnExecutorTest)
+
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
 addLinkAndDiscoverTestNoLibs(TypeTraitsTest)
