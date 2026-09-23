@@ -65,7 +65,7 @@ namespace net = boost::asio;
 
 // Below this many threads, only the parallel quicksort is used. This is
 // Boost's `BOOST_NTHREAD_BORDER`.
-static constexpr uint32_t minNumThreadsForBlocks = 6;
+constexpr uint32_t minNumThreadsForBlocks = 6;
 
 // Sort the blocks `[posIndex1, posIndex2)`: split in half `levelThread` more
 // times, sort the halves with `parallelSort` at level zero, then merge them.
@@ -152,9 +152,8 @@ void runSort(Iterator first, Iterator last, Compare comp, uint32_t nthread,
   }
 
   // At most one thread per group of blocks.
-  size_t maxNumThreads = numElements / (size_t{blockSize} * groupSize) + 1;
-  nthread = static_cast<uint32_t>(
-      std::min(static_cast<size_t>(nthread), maxNumThreads));
+  nthread = std::min(nthread, static_cast<uint32_t>(
+                                  numElements / (blockSize * groupSize) + 1));
 
   // Sort small inputs (or without threads/executor) in the calling thread.
   if (numElements < maxElementsPerTask<Value>() || nthread < 2 ||

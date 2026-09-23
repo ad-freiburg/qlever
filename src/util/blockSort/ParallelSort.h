@@ -92,12 +92,13 @@ bool isDescending(Iterator first, Iterator last, const Compare& cmp) {
 
 // Boost's `divide_sort`: partition `[first, last)`, spawn the second half into
 // `group` and recurse into the first one, until `level` reaches zero or a part
-// has fewer than `maxPerTask` elements. All recursive calls spawn into the
-// `group` of `parallelSort`, which is awaited only after all of them.
+// has fewer than `maxElementsPerTask` elements. All recursive calls spawn into
+// the `group` of `parallelSort`, which is awaited only after all of them.
 template <typename State, typename Iterator>
 void divideSort(State& state, Iterator first, Iterator last, uint32_t level,
-                size_t maxPerTask, TaskGroup& group) {
+                TaskGroup& group) {
   using Value = typename State::Value;
+  constexpr size_t maxPerTask = maxElementsPerTask<Value>();
   const auto& cmp = state.cmp_;
   if (ql::ranges::is_sorted(first, last, cmp)) {
     return;
@@ -133,13 +134,13 @@ void divideSort(State& state, Iterator first, Iterator last, uint32_t level,
   }
   ql::ranges::iter_swap(first, cLast);
 
-  group.spawnFunction([&state, cFirst, last, level, maxPerTask, &group]() {
-    divideSort(state, cFirst, last, level - 1, maxPerTask, group);
+  group.spawnFunction([&state, cFirst, last, level, &group]() {
+    divideSort(state, cFirst, last, level - 1, group);
   });
   if (state.hasError()) {
     return;
   }
-  divideSort(state, first, cLast, level - 1, maxPerTask, group);
+  divideSort(state, first, cLast, level - 1, group);
 }
 
 // Sort `[first, last)` with a parallel quicksort, Boost's `parallel_sort`.
@@ -172,7 +173,7 @@ net::awaitable<void> parallelSort(State& state, Iterator first, Iterator last) {
   // `join()` is awaited below, see LIFETIME at `TaskGroup`.
   try {
     if (!state.hasError()) {
-      divideSort(state, first, last, level, maxPerTask, group);
+      divideSort(state, first, last, level, group);
     }
   } catch (...) {
     state.storeError(std::current_exception());

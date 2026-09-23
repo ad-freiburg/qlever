@@ -122,7 +122,7 @@ class ScratchBuffers {
 };
 
 // The number of blocks that a single task merges or moves.
-constexpr uint32_t groupSize = 64;
+constexpr size_t groupSize = 64;
 
 // The state shared by the tasks of a single sort, Boost's `backbone` without
 // its work stack. The input is divided into `numBlocks_` blocks of `BlockSize`

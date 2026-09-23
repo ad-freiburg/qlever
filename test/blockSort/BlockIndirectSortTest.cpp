@@ -52,7 +52,7 @@ boost::asio::thread_pool& threadPool() {
 template <typename T>
 constexpr size_t numElementsForParallelPath(uint32_t numThreads) {
   using namespace ad_utility::blockSort::detail;
-  return size_t{numThreads} * blockSizeFor<T>() * groupSize;
+  return numThreads * blockSizeFor<T>() * groupSize;
 }
 
 // Expect `blockIndirectSort` to sort `input` to `expected`.
@@ -95,7 +95,7 @@ std::vector<uint32_t> randomDistinct(size_t numElements, uint64_t seed) {
 
 // _____________________________________________________________________________
 TEST(BlockIndirectSort, emptyAndTinyInputs) {
-  for (uint32_t nthread : {uint32_t{1}, uint32_t{8}}) {
+  for (uint32_t nthread : {1, 8}) {
     expectSortedLikeStd<uint32_t>({}, nthread);
     expectSortedLikeStd<uint32_t>({42}, nthread);
     expectSortedLikeStd<uint32_t>({2, 1}, nthread);
@@ -108,10 +108,8 @@ TEST(BlockIndirectSort, emptyAndTinyInputs) {
 // _____________________________________________________________________________
 // Small inputs around the thresholds of the sequential fallback.
 TEST(BlockIndirectSort, smallInputsOfEverySize) {
-  for (size_t numElements : {size_t{5}, size_t{63}, size_t{64}, size_t{65},
-                             size_t{4095}, size_t{4096}, size_t{4097}}) {
-    for (uint32_t nthread :
-         {uint32_t{1}, uint32_t{2}, uint32_t{5}, uint32_t{6}, uint32_t{8}}) {
+  for (size_t numElements : {5, 63, 64, 65, 4095, 4096, 4097}) {
+    for (uint32_t nthread : {1, 2, 5, 6, 8}) {
       SCOPED_TRACE(
           absl::StrCat("numElements=", numElements, " nthread=", nthread));
       expectSortedLikeStd(randomDistinct(numElements, numElements), nthread);
@@ -124,8 +122,7 @@ TEST(BlockIndirectSort, smallInputsOfEverySize) {
 TEST(BlockIndirectSort, parallelPathWithDistinctValues) {
   size_t numElements = 2 * numElementsForParallelPath<uint32_t>(numPoolThreads);
   auto expected = ascending(numElements);
-  for (uint32_t nthread :
-       {uint32_t{5}, uint32_t{6}, uint32_t{8}, uint32_t{16}}) {
+  for (uint32_t nthread : {5, 6, 8, 16}) {
     SCOPED_TRACE(absl::StrCat("nthread=", nthread));
     expectSortsTo(randomDistinct(numElements, nthread), expected, nthread);
   }
@@ -175,8 +172,7 @@ TEST(BlockIndirectSort, specialInputPatterns) {
 // Different sizes of the incomplete last block (see `tailProcess`).
 TEST(BlockIndirectSort, incompleteLastBlock) {
   size_t base = numElementsForParallelPath<uint32_t>(numPoolThreads);
-  for (size_t extra :
-       {size_t{0}, size_t{1}, size_t{2}, size_t{4095}, size_t{4096}}) {
+  for (size_t extra : {0, 1, 2, 4095, 4096}) {
     SCOPED_TRACE(absl::StrCat("extra=", extra));
     expectSortsTo(randomDistinct(base + extra, extra), ascending(base + extra),
                   numPoolThreads);
