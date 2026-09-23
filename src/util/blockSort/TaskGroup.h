@@ -48,6 +48,7 @@ class ErrorSink {
   std::exception_ptr error_;
 
  public:
+  // Whether an exception has been stored.
   [[nodiscard]] bool hasError() const noexcept {
     return hasError_.load(std::memory_order_acquire);
   }
@@ -63,7 +64,8 @@ class ErrorSink {
     }
   }
 
-  // Only to be called once the whole sort has finished.
+  // Rethrow the stored exception, if any. Only to be called once the whole sort
+  // has finished.
   void rethrowIfError() {
     if (error_ != nullptr) {
       std::rethrow_exception(error_);
@@ -78,9 +80,11 @@ class ErrorSink {
 // skipped.
 //
 // LIFETIME: The children may refer to the parent's frame, so `join()` must be
-// awaited on every path, including exceptional ones. As `co_await` is not
-// allowed in a `catch` block, a parent catches, stores the exception in the
-// `ErrorSink`, and awaits `join()` afterwards.
+// awaited on every path on which a child was spawned. A parent therefore does
+// everything that may throw before it spawns its first child.
+//
+// NOTE: A failure to allocate the bookkeeping of a child (the queued handler or
+// the frame of a coroutine) terminates the program, see `postChild`.
 //
 // Not movable, because the children hold a pointer to this object.
 class TaskGroup : public ad_utility::NoCopyNoMove {
@@ -110,13 +114,14 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
   }
 
  public:
+  // Create a group whose children run on `executor` and report to `errors`.
   TaskGroup(const ql::any_io_executor& executor, ErrorSink& errors)
       : executor_{executor}, errors_{errors} {}
 
   // Children that are still running would access a dangling frame, see
-  // LIFETIME above, so terminate. A count of one means that no child is
-  // running, but `join()` wasn't awaited because an exception (e.g. from
-  // allocating the first child) left the parent; that exception propagates.
+  // LIFETIME above, so terminate. A count of one means that no child was
+  // spawned, but `join()` wasn't awaited because an exception left the parent;
+  // that exception propagates.
   ~TaskGroup() {
     ad_utility::terminateIfThrows(
         [this] {
@@ -135,56 +140,26 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
   // in `postChild` queues it instead, so that other threads can pick it up.
   void spawn(net::awaitable<void> child) {
     postChild([this, child = std::move(child)]() mutable {
-      try {
-        net::co_spawn(executor_, std::move(child),
-                      [this](std::exception_ptr error) {
-                        if (error != nullptr) {
-                          errors_.store(std::move(error));
-                        }
-                        childIsDone();
-                      });
-      } catch (...) {
-        errors_.store(std::current_exception());
-        childIsDone();
-      }
+      net::co_spawn(executor_, std::move(child),
+                    [this](std::exception_ptr error) {
+                      if (error != nullptr) {
+                        errors_.store(std::move(error));
+                      }
+                      childIsDone();
+                    });
     });
   }
 
   // Like `spawn`, but for a plain function, which needs no coroutine frame.
-  template <typename Function>
-  void spawnFunction(Function function) {
+  void spawnFunction(absl::AnyInvocable<void() &&> function) {
     postChild([this, function = std::move(function)]() mutable {
-      runInlineFunction(std::move(function));
+      try {
+        std::move(function)();
+      } catch (...) {
+        errors_.store(std::current_exception());
+      }
       childIsDone();
     });
-  }
-
-  // Run `child` directly in the parent (like Boost does with the first half of
-  // every split), which saves a trip through the executor and keeps the cache
-  // warm. It is not counted as a child; it only lives here because it is
-  // skipped after an error and its exception has to go to the `ErrorSink`, too.
-  net::awaitable<void> runInline(net::awaitable<void> child) {
-    if (errors_.hasError()) {
-      co_return;
-    }
-    try {
-      co_await std::move(child);
-    } catch (...) {
-      errors_.store(std::current_exception());
-    }
-  }
-
-  // `runInline` for a plain function.
-  template <typename Function>
-  void runInlineFunction(Function function) {
-    if (errors_.hasError()) {
-      return;
-    }
-    try {
-      function();
-    } catch (...) {
-      errors_.store(std::current_exception());
-    }
   }
 
   // Run `inlined` in the parent and `spawned` concurrently on the executor, and
@@ -198,34 +173,38 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
 
   // Suspend the parent until all spawned children have finished. Must be
   // awaited exactly once.
-  net::awaitable<void> join() {
-    // Fast path: only the parent's own count is left, so all children are done.
-    if (numPending_.load(std::memory_order_acquire) == 1) {
-      numPending_.store(0);
-      co_return;
-    }
-    co_await initiateJoin(net::use_awaitable);
-  }
+  net::awaitable<void> join() { return initiateJoin(net::use_awaitable); }
 
  private:
+  // Run `child` directly in the parent (like Boost does with the first half of
+  // every split), which saves a trip through the executor and keeps the cache
+  // warm. It is skipped after an error, and its exception goes to the
+  // `ErrorSink`, too.
+  net::awaitable<void> runInline(net::awaitable<void> child) {
+    if (errors_.hasError()) {
+      co_return;
+    }
+    try {
+      co_await std::move(child);
+    } catch (...) {
+      errors_.store(std::current_exception());
+    }
+  }
+
   // Queue `task` on the executor as a new child. `task` has to call
   // `childIsDone()` exactly once; after an error it is skipped instead.
-  template <typename Task>
-  void postChild(Task task) {
+  //
+  // NOTE: This is `noexcept`, because a child that could neither be queued nor
+  // started can't be accounted for without leaving the group inconsistent.
+  void postChild(absl::AnyInvocable<void() &&> task) noexcept {
     numPending_.fetch_add(1, std::memory_order_relaxed);
-    try {
-      net::post(executor_, [this, task = std::move(task)]() mutable {
-        if (errors_.hasError()) {
-          childIsDone();
-          return;
-        }
-        task();
-      });
-    } catch (...) {
-      // The child was never started.
-      errors_.store(std::current_exception());
-      childIsDone();
-    }
+    net::post(executor_, [this, task = std::move(task)]() mutable noexcept {
+      if (errors_.hasError()) {
+        childIsDone();
+        return;
+      }
+      std::move(task)();
+    });
   }
 
   // Resume the parent if this was the last child. Resuming may destroy

@@ -35,6 +35,7 @@ struct WideElement {
   bool operator<(const WideElement& other) const { return key_ < other.key_; }
 };
 
+// The element of type `T` that represents `value`.
 template <typename T>
 T makeElement(uint64_t value);
 
@@ -51,6 +52,7 @@ std::string makeElement<std::string>(uint64_t value) {
   return std::to_string(value) + "_with_some_padding_to_make_it_long";
 }
 
+// `numElements` random elements, the same ones in every run.
 template <typename T>
 std::vector<T> randomElements(size_t numElements) {
   std::mt19937_64 generator{0xC0FFEE};
@@ -64,7 +66,8 @@ std::vector<T> randomElements(size_t numElements) {
 }  // namespace
 
 class BlockIndirectSortBenchmark : public BenchmarkInterface {
-  // All measurements sort the same input.
+  // Measure the three sorts on `numElements` random elements of type `T`. All
+  // measurements sort the same input.
   template <typename T>
   void addMeasurementsFor(BenchmarkResults& results, const std::string& name,
                           size_t numElements, uint32_t numThreads,
@@ -95,10 +98,12 @@ class BlockIndirectSortBenchmark : public BenchmarkInterface {
                            });
   }
 
+  // The name of this group of benchmarks.
   std::string name() const final {
     return "Benchmarks for the parallel block indirect sort";
   }
 
+  // Measure all element types with one thread per core.
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
     uint32_t numThreads = std::max(std::thread::hardware_concurrency(), 2u);

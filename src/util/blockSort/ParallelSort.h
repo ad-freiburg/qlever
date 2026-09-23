@@ -27,12 +27,9 @@
 #include <boost/sort/pdqsort/pdqsort.hpp>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <iterator>
-#include <utility>
 
 #include "backports/algorithm.h"
-#include "util/Exception.h"
 #include "util/blockSort/SortState.h"
 #include "util/blockSort/TaskGroup.h"
 
@@ -63,7 +60,7 @@ template <typename Iterator, typename Compare>
   return it2;
 }
 
-// Move the median of nine elements of `[first, last)` (at least nine) to
+// Move the median of nine elements of `[first, last)` (at least 16) to
 // `first`, Boost's `pivot9`.
 template <typename Iterator, typename Compare>
 void movePivotToFront(Iterator first, Iterator last, const Compare& cmp) {
@@ -75,8 +72,8 @@ void movePivotToFront(Iterator first, Iterator last, const Compare& cmp) {
   ql::ranges::iter_swap(first, pivot);
 }
 
-// The number of elements that one task sorts on its own; smaller for bigger
-// elements, like in Boost.
+// The default number of elements that one task sorts on its own; smaller for
+// bigger elements, like in Boost.
 template <typename Value>
 constexpr size_t maxElementsPerTask() {
   auto bitsOfSize = static_cast<uint32_t>(std::bit_width(sizeof(Value))) / 2;
@@ -92,23 +89,21 @@ template <typename Iterator, typename Compare>
       [&cmp](const auto& a, const auto& b) -> bool { return cmp(b, a); });
 }
 
-// Boost's `divide_sort`: partition `[first, last)`, spawn the second half into
-// `group` and recurse into the first one, until `level` reaches zero or a part
-// has fewer than `maxElementsPerTask` elements. All recursive calls spawn into
-// the `group` of `parallelSort`, which is awaited only after all of them.
+// Boost's `divide_sort`: partition `[first, last)` and sort the two parts
+// concurrently, until `level` reaches zero or a part has fewer than
+// `maxElementsPerTask_` elements, which is then sorted by a single task.
 template <typename State, typename Iterator>
-void divideSort(State& state, Iterator first, Iterator last, uint32_t level,
-                TaskGroup& group) {
+net::awaitable<void> divideSort(State& state, Iterator first, Iterator last,
+                                uint32_t level) {
   using Value = typename State::Value;
-  constexpr size_t maxPerTask = maxElementsPerTask<Value>();
   const auto& cmp = state.cmp_;
   if (ql::ranges::is_sorted(first, last, cmp)) {
-    return;
+    co_return;
   }
   size_t numElements = static_cast<size_t>(last - first);
-  if (level == 0 || numElements < maxPerTask) {
+  if (level == 0 || numElements < state.maxElementsPerTask_) {
     boost::sort::pdqsort(first, last, cmp);
-    return;
+    co_return;
   }
 
   // Partition around the median of nine. The pivot is a copy, because `*first`
@@ -136,23 +131,17 @@ void divideSort(State& state, Iterator first, Iterator last, uint32_t level,
   }
   ql::ranges::iter_swap(first, cLast);
 
-  group.spawnFunction([&state, cFirst, last, level, &group]() {
-    divideSort(state, cFirst, last, level - 1, group);
-  });
-  if (state.hasError()) {
-    return;
-  }
-  divideSort(state, first, cLast, level - 1, group);
+  // Everything that may throw is done, so the children can be spawned, see
+  // LIFETIME at `TaskGroup`.
+  TaskGroup group = state.makeTaskGroup();
+  co_await group.runConcurrently(divideSort(state, first, cLast, level - 1),
+                                 divideSort(state, cFirst, last, level - 1));
 }
 
 // Sort `[first, last)` with a parallel quicksort, Boost's `parallel_sort`.
 template <typename State, typename Iterator>
 net::awaitable<void> parallelSort(State& state, Iterator first, Iterator last) {
-  using Value = typename State::Value;
   const auto& cmp = state.cmp_;
-  AD_CORRECTNESS_CHECK(last >= first);
-  size_t numElements = static_cast<size_t>(last - first);
-
   // Cheap special cases: already sorted, or sorted in reverse.
   if (ql::ranges::is_sorted(first, last, cmp)) {
     co_return;
@@ -161,26 +150,11 @@ net::awaitable<void> parallelSort(State& state, Iterator first, Iterator last) {
     ql::ranges::reverse(first, last);
     co_return;
   }
-
-  constexpr size_t maxPerTask = maxElementsPerTask<Value>();
-  if (numElements < maxPerTask) {
-    boost::sort::pdqsort(first, last, cmp);
-    co_return;
-  }
   // The maximal recursion depth, with some slack for uneven splits.
-  auto level =
-      static_cast<uint32_t>((std::bit_width(numElements / maxPerTask) * 3) / 2);
-
-  TaskGroup group = state.makeTaskGroup();
-  // `join()` is awaited below, see LIFETIME at `TaskGroup`.
-  try {
-    if (!state.hasError()) {
-      divideSort(state, first, last, level, group);
-    }
-  } catch (...) {
-    state.storeError(std::current_exception());
-  }
-  co_await group.join();
+  size_t numElements = static_cast<size_t>(last - first);
+  auto level = static_cast<uint32_t>(
+      (std::bit_width(numElements / state.maxElementsPerTask_) * 3) / 2);
+  co_await divideSort(state, first, last, level);
 }
 
 }  // namespace ad_utility::blockSort::detail

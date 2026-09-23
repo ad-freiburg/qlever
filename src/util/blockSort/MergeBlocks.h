@@ -22,9 +22,6 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/sort/common/range.hpp>
 #include <cstddef>
-#include <cstdint>
-#include <exception>
-#include <optional>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -42,9 +39,6 @@ namespace net = boost::asio;
 // right order (by their first element), using one scratch buffer.
 template <typename State>
 void mergeRangePos(State& state, typename State::RangePos positions) {
-  if (positions.size() < 2) {
-    return;
-  }
   auto lease = state.acquireBuffer();
   auto buffer = lease.range();
 
@@ -61,13 +55,10 @@ void mergeRangePos(State& state, typename State::RangePos positions) {
 
 // Merge the incomplete last block (the *tail*) into the last block of
 // `positions1` and drop it from `positions2`. If that block now overlaps with
-// its predecessor, move it to `positions2`.
+// its predecessor, move it to `positions2`. Both have at least two blocks.
 template <typename State>
 void tailProcess(State& state, std::vector<bsd::block_pos>& positions1,
                  std::vector<bsd::block_pos>& positions2) {
-  if (positions1.empty() || positions2.empty()) {
-    return;
-  }
   positions2.pop_back();
 
   size_t posBack1 = positions1.back().pos();
@@ -80,72 +71,48 @@ void tailProcess(State& state, std::vector<bsd::block_pos>& positions1,
     bsc::merge_uncontiguous(rangeBack1, state.tailRange_, lease.range(),
                             state.cmp_);
   }
-  if (positions1.size() > 1) {
-    size_t posBefore = positions1[positions1.size() - 2].pos();
-    if (bsc::is_mergeable(state.getRange(posBefore), rangeBack1, state.cmp_)) {
-      positions2.emplace_back(posBack1, false);
-      positions1.pop_back();
-    }
+  size_t posBefore = positions1[positions1.size() - 2].pos();
+  if (bsc::is_mergeable(state.getRange(posBefore), rangeBack1, state.cmp_)) {
+    positions2.emplace_back(posBack1, false);
+    positions1.pop_back();
   }
 }
 
-// Merge `positions` in parallel by cutting it into parts. Merging the two
-// blocks at a cut makes the parts independent.
+// Merge `positions` (more than `groupSize` blocks) in parallel by cutting it
+// into parts. Merging the two blocks at a cut makes the parts independent.
 template <typename State>
 net::awaitable<void> cutRange(State& state,
                               typename State::RangePos positions) {
-  if (positions.size() < groupSize) {
-    mergeRangePos(state, positions);
-    co_return;
-  }
-
-  TaskGroup group = state.makeTaskGroup();
-  // The part that this thread merges itself, see below.
-  std::optional<typename State::RangePos> ownPart;
-  // `join()` is awaited below, see LIFETIME at `TaskGroup`.
-  try {
-    size_t numParts = (positions.size() + groupSize - 1) / groupSize;
-    size_t sizePart = positions.size() / numParts;
+  size_t numParts = (positions.size() + groupSize - 1) / groupSize;
+  size_t sizePart = positions.size() / numParts;
+  // Make all cuts before the first part is spawned, see LIFETIME at
+  // `TaskGroup`.
+  std::vector<typename State::RangePos> parts;
+  {
+    auto lease = state.acquireBuffer();
     size_t posIni = positions.first;
     size_t posLast = positions.last;
-    // Release the buffer before merging `ownPart`, which needs one itself.
-    {
-      auto lease = state.acquireBuffer();
-      while (posIni < posLast) {
-        // Only cut between blocks from different sides of the merge.
-        size_t pos = posIni + sizePart;
-        while (pos < posLast &&
-               state.index_[pos - 1].side() == state.index_[pos].side()) {
-          ++pos;
-        }
-        if (pos < posLast) {
-          bsc::merge_uncontiguous(state.getRange(state.index_[pos - 1].pos()),
-                                  state.getRange(state.index_[pos].pos()),
-                                  lease.range(), state.cmp_);
-        } else {
-          pos = posLast;
-        }
-        if (pos - posIni > 1) {
-          // Keep the last part for this thread.
-          if (ownPart.has_value()) {
-            group.spawnFunction([&state, part = ownPart.value()]() {
-              mergeRangePos(state, part);
-            });
-          }
-          ownPart = typename State::RangePos{posIni, pos};
-        }
-        posIni = pos;
+    while (posIni < posLast) {
+      // Only cut between blocks from different sides of the merge.
+      size_t pos = posIni + sizePart;
+      while (pos < posLast &&
+             state.index_[pos - 1].side() == state.index_[pos].side()) {
+        ++pos;
       }
+      if (pos < posLast) {
+        bsc::merge_uncontiguous(state.getRange(state.index_[pos - 1].pos()),
+                                state.getRange(state.index_[pos].pos()),
+                                lease.range(), state.cmp_);
+      } else {
+        pos = posLast;
+      }
+      parts.emplace_back(posIni, pos);
+      posIni = pos;
     }
-  } catch (...) {
-    state.storeError(std::current_exception());
-    ownPart.reset();
   }
-  // Merge the last part in this thread instead of suspending right away (Boost
-  // executes work items while waiting).
-  if (ownPart.has_value()) {
-    group.runInlineFunction(
-        [&state, part = ownPart.value()]() { mergeRangePos(state, part); });
+  TaskGroup group = state.makeTaskGroup();
+  for (auto part : parts) {
+    group.spawnFunction([&state, part]() { mergeRangePos(state, part); });
   }
   co_await group.join();
 }
@@ -165,66 +132,45 @@ void spawnRun(State& state, TaskGroup& group, typename State::RangePos run) {
 template <typename State>
 net::awaitable<void> extractRanges(State& state,
                                    typename State::RangePos positions) {
-  if (positions.size() < 2) {
-    co_return;
+  // Find all runs before the first one is spawned, see LIFETIME at
+  // `TaskGroup`.
+  std::vector<typename State::RangePos> runs;
+  size_t runBegin = positions.first;
+  bsd::block_pos blockAtBegin = state.index_[runBegin];
+  // The block of the current run with the greatest last element, and its side.
+  // Only blocks from the other side can overlap with it.
+  auto rangeMax = state.getRange(blockAtBegin.pos());
+  bool sideMax = blockAtBegin.side();
+  auto rangeCurrent = rangeMax;
+  bool sideCurrent = sideMax;
+
+  for (size_t pos = runBegin + 1; pos <= positions.last; ++pos) {
+    bool isEnd = pos == positions.last;
+    bool isMergeable = false;
+    if (!isEnd) {
+      bsd::block_pos blockAtPos = state.index_[pos];
+      rangeCurrent = state.getRange(blockAtPos.pos());
+      sideCurrent = blockAtPos.side();
+      isMergeable = sideMax != sideCurrent &&
+                    bsc::is_mergeable(rangeMax, rangeCurrent, state.cmp_);
+    }
+    if (isEnd || !isMergeable) {
+      typename State::RangePos run{runBegin, pos};
+      if (run.size() > 1) {
+        runs.push_back(run);
+      }
+      runBegin = pos;
+      rangeMax = rangeCurrent;
+      sideMax = sideCurrent;
+    } else if (state.cmp_(*rangeMax.back(), *rangeCurrent.back())) {
+      rangeMax = rangeCurrent;
+      sideMax = sideCurrent;
+    }
   }
 
   TaskGroup group = state.makeTaskGroup();
-  // The run that this thread merges itself, see `cutRange`.
-  std::optional<typename State::RangePos> ownRun;
-  try {
-    size_t runBegin = positions.first;
-    bsd::block_pos blockAtBegin = state.index_[runBegin];
-    // The block of the current run with the greatest last element, and its
-    // side. Only blocks from the other side can overlap with it.
-    auto rangeMax = state.getRange(blockAtBegin.pos());
-    bool sideMax = blockAtBegin.side();
-    auto rangeCurrent = rangeMax;
-    bool sideCurrent = sideMax;
-
-    for (size_t pos = runBegin + 1; pos <= positions.last; ++pos) {
-      bool isEnd = pos == positions.last;
-      bool isMergeable = false;
-      if (!isEnd) {
-        bsd::block_pos blockAtPos = state.index_[pos];
-        rangeCurrent = state.getRange(blockAtPos.pos());
-        sideCurrent = blockAtPos.side();
-        isMergeable = sideMax != sideCurrent &&
-                      bsc::is_mergeable(rangeMax, rangeCurrent, state.cmp_);
-      }
-      if (state.hasError()) {
-        break;
-      }
-      if (isEnd || !isMergeable) {
-        typename State::RangePos run{runBegin, pos};
-        if (run.size() > 1) {
-          // Keep the last run for this thread.
-          if (ownRun.has_value()) {
-            spawnRun(state, group, ownRun.value());
-          }
-          ownRun = run;
-        }
-        runBegin = pos;
-        if (!isEnd) {
-          rangeMax = rangeCurrent;
-          sideMax = sideCurrent;
-        }
-      } else if (state.cmp_(*rangeMax.back(), *rangeCurrent.back())) {
-        rangeMax = rangeCurrent;
-        sideMax = sideCurrent;
-      }
-    }
-  } catch (...) {
-    state.storeError(std::current_exception());
-    ownRun.reset();
-  }
-  if (ownRun.has_value()) {
-    if (ownRun->size() > groupSize) {
-      co_await group.runInline(cutRange(state, ownRun.value()));
-    } else {
-      group.runInlineFunction(
-          [&state, run = ownRun.value()]() { mergeRangePos(state, run); });
-    }
+  for (auto run : runs) {
+    spawnRun(state, group, run);
   }
   co_await group.join();
 }
@@ -236,16 +182,10 @@ net::awaitable<void> extractRanges(State& state,
 template <typename State>
 net::awaitable<void> mergeBlocks(State& state, size_t posIndex1,
                                  size_t posIndex2, size_t posIndex3) {
-  size_t numBlocks1 = posIndex2 - posIndex1;
-  size_t numBlocks2 = posIndex3 - posIndex2;
-  if (numBlocks1 == 0 || numBlocks2 == 0) {
-    co_return;
-  }
-
   std::vector<bsd::block_pos> positions1;
   std::vector<bsd::block_pos> positions2;
-  positions1.reserve(numBlocks1 + 1);
-  positions2.reserve(numBlocks2 + 1);
+  positions1.reserve(posIndex2 - posIndex1);
+  positions2.reserve(posIndex3 - posIndex2);
   for (size_t i = posIndex1; i < posIndex2; ++i) {
     positions1.emplace_back(state.index_[i].pos(), true);
   }
@@ -256,23 +196,15 @@ net::awaitable<void> mergeBlocks(State& state, size_t posIndex1,
   if (positions2.back().pos() == state.numBlocks_ - 1 &&
       state.tailRange_.not_empty()) {
     tailProcess(state, positions1, positions2);
-    numBlocks1 = positions1.size();
-    numBlocks2 = positions2.size();
-  }
-  if (state.hasError()) {
-    co_return;
   }
 
-  typename State::CompareBlockPos compareBlocks{state.globalRange_.first,
-                                                state.cmp_};
   ql::ranges::merge(positions1, positions2, state.index_.begin() + posIndex1,
-                    compareBlocks);
-  if (state.hasError()) {
-    co_return;
-  }
+                    [&state](bsd::block_pos a, bsd::block_pos b) {
+                      return state.blockIsLess(a, b);
+                    });
   co_await extractRanges(
-      state,
-      typename State::RangePos{posIndex1, posIndex1 + numBlocks1 + numBlocks2});
+      state, typename State::RangePos{
+                 posIndex1, posIndex1 + positions1.size() + positions2.size()});
 }
 
 }  // namespace ad_utility::blockSort::detail
