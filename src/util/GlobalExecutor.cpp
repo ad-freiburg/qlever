@@ -24,6 +24,13 @@ namespace {
 
 // The configuration of the global thread pool. All its members are protected by
 // the `mutex_`.
+//
+// NOTE: Two atomics would not do instead of the mutex, because the creation of
+// the pool has to mark the configuration as final and read the number of
+// threads in one step. Otherwise a concurrent `setGlobalExecutorNumThreads`
+// could pass its check and change the number after the pool has read it, and
+// `globalExecutorNumThreads()` would then report a number that the pool does
+// not have.
 struct GlobalExecutorConfig {
   std::mutex mutex_;
   // The number of threads that the pool has or will have.
