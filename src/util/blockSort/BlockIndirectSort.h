@@ -85,19 +85,14 @@ net::awaitable<void> splitRange(State& state, size_t posIndex1,
 
   TaskGroup group = state.makeTaskGroup();
   if (levelThread != 0) {
-    group.spawn(splitRange(state, posIndexMid, posIndex2, levelThread - 1));
-    if (!state.hasError()) {
-      co_await group.runInline(
-          splitRange(state, posIndex1, posIndexMid, levelThread - 1));
-    }
+    co_await group.runConcurrently(
+        splitRange(state, posIndex1, posIndexMid, levelThread - 1),
+        splitRange(state, posIndexMid, posIndex2, levelThread - 1));
   } else {
     auto mid = state.getBlockBegin(posIndexMid);
-    group.spawn(parallelSort(state, mid, last));
-    if (!state.hasError()) {
-      co_await group.runInline(parallelSort(state, first, mid));
-    }
+    co_await group.runConcurrently(parallelSort(state, first, mid),
+                                   parallelSort(state, mid, last));
   }
-  co_await group.join();
   if (state.hasError()) {
     co_return;
   }

@@ -74,7 +74,8 @@ class ErrorSink {
 // The children of a parent coroutine, which the parent awaits with
 // `co_await group.join()`. Replaces Boost's `counter` + `backbone::exec`: the
 // parent suspends instead of spinning. Exceptions of children go to the
-// `ErrorSink`, and children that start after an error are skipped.
+// `ErrorSink`, and children (spawned or inline) that start after an error are
+// skipped.
 //
 // LIFETIME: The children may refer to the parent's frame, so `join()` must be
 // awaited on every path, including exceptional ones. As `co_await` is not
@@ -183,9 +184,12 @@ class TaskGroup {
 
   // Run `child` directly in the parent (like Boost does with the first half of
   // every split), which saves a trip through the executor and keeps the cache
-  // warm. It is not counted as a child; it only lives here because its
-  // exception has to go to the `ErrorSink`, too.
+  // warm. It is not counted as a child; it only lives here because it is
+  // skipped after an error and its exception has to go to the `ErrorSink`, too.
   net::awaitable<void> runInline(net::awaitable<void> child) {
+    if (errors_.hasError()) {
+      co_return;
+    }
     try {
       co_await std::move(child);
     } catch (...) {
@@ -196,11 +200,23 @@ class TaskGroup {
   // `runInline` for a plain function.
   template <typename Function>
   void runInlineFunction(Function function) {
+    if (errors_.hasError()) {
+      return;
+    }
     try {
       function();
     } catch (...) {
       errors_.store(std::current_exception());
     }
+  }
+
+  // Run `inlined` in the parent and `spawned` concurrently on the executor, and
+  // wait for both (and all other children).
+  net::awaitable<void> runConcurrently(net::awaitable<void> inlined,
+                                       net::awaitable<void> spawned) {
+    spawn(std::move(spawned));
+    co_await runInline(std::move(inlined));
+    co_await join();
   }
 
   // Suspend the parent until all spawned children have finished.
