@@ -18,13 +18,12 @@
 #include "backports/concepts.h"
 #include "backports/span.h"
 #include "util/Exception.h"
-#include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/Iterators.h"
-#include "util/ResetWhenMoved.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
+#include "util/UniqueCleanup.h"
 
 namespace detail {
 template <typename DataT>
@@ -211,62 +210,52 @@ struct CompactStringVectorWriter {
  private:
   using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
 
-  // The data members are encapsulated in a separate struct to make the
-  // definition of the move-assignment operator easier. NOTE: If you add
-  // additional data members to this class, add them inside the `Data` struct.
   struct Data {
     ad_utility::File file_;
     off_t startOfFile_{};
     std::vector<offset_type> offsets_{};
-    // A `CompactStringVectorWriter` that has been moved from may not call
-    // `finish()` any more in its destructor.
-    ad_utility::ResetWhenMoved<bool, true> finished_ = false;
     offset_type nextOffset_ = 0;
   };
-  Data d_;
   static_assert(std::is_nothrow_move_assignable_v<Data>);
   static_assert(std::is_nothrow_move_constructible_v<Data>);
 
+  // Write the offsets and return the moved file. Runs on destruction and when
+  // the writer is overwritten, unless `finish()` was called before.
+  struct Finisher {
+    ad_utility::File operator()(Data&& d) const {
+      d.offsets_.push_back(d.nextOffset_);
+      d.file_.seek(d.startOfFile_, SEEK_SET);
+      d.file_.write(&d.nextOffset_, sizeof(size_t));
+      d.file_.seek(0, SEEK_END);
+      ad_utility::serialization::FileWriteSerializer f{std::move(d.file_)};
+      f << d.offsets_;
+      return std::move(f).file();
+    }
+  };
+  ad_utility::unique_cleanup::UniqueCleanup<Data, Finisher> d_;
+
  public:
   explicit CompactStringVectorWriter(const std::string& filename)
-      : d_{{filename, "w"}} {
-    commonInitialization();
-  }
+      : CompactStringVectorWriter{ad_utility::File{filename, "w"}} {}
 
   explicit CompactStringVectorWriter(ad_utility::File&& file)
-      : d_{std::move(file)} {
-    commonInitialization();
-  }
+      : d_{initialize(std::move(file)), Finisher{}} {}
 
   void push(const data_type* data, size_t elementSize) {
-    AD_CONTRACT_CHECK(!d_.finished_);
-    d_.offsets_.push_back(d_.nextOffset_);
-    d_.nextOffset_ += elementSize;
-    d_.file_.write(data, elementSize * sizeof(data_type));
+    AD_CONTRACT_CHECK(d_.isActive());
+    d_->offsets_.push_back(d_->nextOffset_);
+    d_->nextOffset_ += elementSize;
+    d_->file_.write(data, elementSize * sizeof(data_type));
   }
 
   // Finish writing, and return the moved file. If the return value is
   // discarded, then the file will be closed immediately by the destructor of
-  // the `File` class.
+  // the `File` class. Calling this again returns an empty `File`.
   ad_utility::File finish() {
-    if (d_.finished_) {
+    if (!d_.isActive()) {
       return {};
     }
-    d_.finished_ = true;
-    d_.offsets_.push_back(d_.nextOffset_);
-    d_.file_.seek(d_.startOfFile_, SEEK_SET);
-    d_.file_.write(&d_.nextOffset_, sizeof(size_t));
-    d_.file_.seek(0, SEEK_END);
-    ad_utility::serialization::FileWriteSerializer f{std::move(d_.file_)};
-    f << d_.offsets_;
-    return std::move(f).file();
-  }
-
-  ~CompactStringVectorWriter() {
-    ad_utility::terminateIfThrows(
-        [this]() { finish(); },
-        "Finishing the underlying File of a `CompactStringVectorWriter` "
-        "during destruction failed");
+    return std::move(d_).runNow();
   }
 
   // The copy operations would be deleted implicitly (because `File` is not
@@ -275,27 +264,20 @@ struct CompactStringVectorWriter {
   CompactStringVectorWriter& operator=(const CompactStringVectorWriter&) =
       delete;
 
-  // The defaulted move constructor behave correctly because of the usage
-  // of `ResetWhenMoved` with the `finished` member.
+  // The `UniqueCleanup` finishes a writer that is overwritten, and never a
+  // moved-from one.
   CompactStringVectorWriter(CompactStringVectorWriter&&) = default;
-
-  // The move assignment first has to `finish` the current object, which already
-  // might have been written to.
-  CompactStringVectorWriter& operator=(
-      CompactStringVectorWriter&& other) noexcept {
-    finish();
-    d_ = std::move(other.d_);
-    return *this;
-  }
+  CompactStringVectorWriter& operator=(CompactStringVectorWriter&&) = default;
 
  private:
-  // Has to be run by all the constructors
-  void commonInitialization() {
-    AD_CORRECTNESS_CHECK(d_.file_.isOpen());
-    // We don't know the data size yet.
-    d_.startOfFile_ = d_.file_.tell();
+  // Reserve the space for the data size, which is not known yet.
+  static Data initialize(ad_utility::File&& file) {
+    AD_CORRECTNESS_CHECK(file.isOpen());
+    Data d{std::move(file)};
+    d.startOfFile_ = d.file_.tell();
     size_t dataSizeDummy = 0;
-    d_.file_.write(&dataSizeDummy, sizeof(dataSizeDummy));
+    d.file_.write(&dataSizeDummy, sizeof(dataSizeDummy));
+    return d;
   }
 };
 static_assert(

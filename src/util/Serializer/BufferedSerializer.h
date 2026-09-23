@@ -21,11 +21,10 @@
 #include "backports/memory.h"
 #include "backports/span.h"
 #include "util/Exception.h"
-#include "util/ExceptionHandling.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/ResetWhenMoved.h"
 #include "util/Serializer/Serializer.h"
 #include "util/UninitializedAllocator.h"
+#include "util/UniqueCleanup.h"
 
 namespace ad_utility::serialization {
 
@@ -64,22 +63,45 @@ CPP_template(typename UnderlyingSerializer,
   using SerializerType = WriteSerializerTag;
 
  private:
-  std::optional<UnderlyingSerializer> underlyingSerializer_;
-  BlockProcessor blockProcessor_;
-  size_t blocksize_;
-  // The buffer for the not-yet-forwarded data, allocated once with exactly
-  // `blocksize_` bytes and never reallocated.
-  //
-  // NOTE: Both a `std::vector<char, default_init_allocator<char>>` and a plain
-  // `std::vector<char>` are slower here: the custom allocator loses the
-  // `memcpy` fast path for bulk copies, which is only taken for exactly
-  // `std::allocator`, and `insert` also handles reallocation and insertion in
-  // the middle, neither of which can happen here.
-  std::unique_ptr<char[]> buffer_;
-  // The number of bytes currently in the `buffer_`. A `ResetWhenMoved`, so that
-  // the defaulted move operations leave a moved-from serializer (whose
-  // `buffer_` is then null) with an empty buffer.
-  ResetWhenMoved<size_t, 0> bufferSize_;
+  struct State {
+    UnderlyingSerializer underlyingSerializer_;
+    BlockProcessor blockProcessor_;
+    size_t blocksize_;
+    // The buffer for the not-yet-forwarded data, allocated once with exactly
+    // `blocksize_` bytes and never reallocated.
+    //
+    // NOTE: Both a `std::vector<char, default_init_allocator<char>>` and a
+    // plain `std::vector<char>` are slower here: the custom allocator loses the
+    // `memcpy` fast path for bulk copies, which is only taken for exactly
+    // `std::allocator`, and `insert` also handles reallocation and insertion in
+    // the middle, neither of which can happen here.
+    std::unique_ptr<char[]> buffer_;
+    // The number of bytes currently in the `buffer_`.
+    size_t bufferSize_ = 0;
+
+    // Forward the contents of the `buffer_` to the `blockProcessor_` (which
+    // writes them to the underlying serializer) and clear it.
+    void flushBlock() {
+      if (bufferSize_ == 0) {
+        return;
+      }
+      std::invoke(blockProcessor_,
+                  ql::span<const char>{buffer_.get(), bufferSize_},
+                  underlyingSerializer_);
+      bufferSize_ = 0;
+    }
+  };
+
+  // Flush the remaining buffered data and move out the underlying serializer.
+  // Runs on destruction and when the serializer is overwritten, unless `close`
+  // or `underlyingSerializer` was called before.
+  struct Closer {
+    UnderlyingSerializer operator()(State&& state) const {
+      state.flushBlock();
+      return std::move(state.underlyingSerializer_);
+    }
+  };
+  unique_cleanup::UniqueCleanup<State, Closer> state_;
 
  public:
   // Create from the underlying serializer and the `blocksize` (the amount of
@@ -91,60 +113,55 @@ CPP_template(typename UnderlyingSerializer,
   BufferedWriteSerializer(UnderlyingSerializer underlyingSerializer,
                           MemorySize blocksize,
                           BlockProcessor blockProcessor = {})
-      : underlyingSerializer_{std::move(underlyingSerializer)},
-        blockProcessor_{std::move(blockProcessor)},
-        blocksize_{blocksize.getBytes()},
-        // NOTE: `make_unique_for_overwrite` (as opposed to `make_unique`)
-        // doesn't zero-initialize the buffer.
-        buffer_{ql::make_unique_for_overwrite<char[]>(blocksize.getBytes())} {
+      : state_{
+            State{std::move(underlyingSerializer), std::move(blockProcessor),
+                  blocksize.getBytes(),
+                  // NOTE: `make_unique_for_overwrite` (as opposed to
+                  // `make_unique`) doesn't zero-initialize the buffer.
+                  ql::make_unique_for_overwrite<char[]>(blocksize.getBytes())},
+            Closer{}} {
     // A blocksize of zero would make `serializeBytes` below loop forever.
-    AD_CONTRACT_CHECK(blocksize_ > 0);
+    AD_CONTRACT_CHECK(state_->blocksize_ > 0);
   }
 
-  // This is a move-only class.
+  // This is a move-only class. The `UniqueCleanup` closes a serializer that is
+  // overwritten, and never a moved-from one.
   BufferedWriteSerializer(const BufferedWriteSerializer&) = delete;
   BufferedWriteSerializer& operator=(const BufferedWriteSerializer&) = delete;
   BufferedWriteSerializer(BufferedWriteSerializer&&) = default;
   BufferedWriteSerializer& operator=(BufferedWriteSerializer&&) = default;
 
-  ~BufferedWriteSerializer() {
-    ad_utility::terminateIfThrows(
-        [this]() { close(); },
-        "The closing of a `BufferedWriteSerializer` failed");
-  }
-
   // Main serialization function.
   void serializeBytes(const char* bytePointer, size_t numBytes) {
+    State& state = *state_;
     while (numBytes > 0) {
-      size_t capacity = blocksize_ - bufferSize_;
+      size_t capacity = state.blocksize_ - state.bufferSize_;
       size_t bytesToCopy = std::min(capacity, numBytes);
-      std::memcpy(buffer_.get() + bufferSize_, bytePointer, bytesToCopy);
-      bufferSize_ += bytesToCopy;
+      std::memcpy(state.buffer_.get() + state.bufferSize_, bytePointer,
+                  bytesToCopy);
+      state.bufferSize_ += bytesToCopy;
       if (bytesToCopy < capacity) {
         return;
       }
-      flushBlock();
+      state.flushBlock();
       numBytes -= bytesToCopy;
       bytePointer += bytesToCopy;
     }
   }
 
+  // Flush the remaining buffered data and destroy the underlying serializer.
   // After a call to `close` no more calls to `serializeBytes` are allowed.
   void close() {
-    if (underlyingSerializer_.has_value()) {
-      flushBlock();
-      underlyingSerializer_.reset();
+    if (state_.isActive()) {
+      std::move(state_).runNow();
     }
   }
 
   // Flush the remaining buffered data, and then move out the underlying
   // serializer.
   UnderlyingSerializer underlyingSerializer() && {
-    AD_CORRECTNESS_CHECK(underlyingSerializer_.has_value());
-    flushBlock();
-    UnderlyingSerializer serializer = std::move(underlyingSerializer_.value());
-    underlyingSerializer_.reset();
-    return serializer;
+    AD_CORRECTNESS_CHECK(state_.isActive());
+    return std::move(state_).runNow();
   }
 
   // Return the position at which the next serialized byte will end up in the
@@ -162,9 +179,9 @@ CPP_template(typename UnderlyingSerializer,
         std::is_same_v<BlockProcessor, PassthroughBlockProcessor>,
         "`getSerializationPosition` is only supported by a "
         "`BufferedWriteSerializer` that forwards its blocks unchanged");
-    AD_CORRECTNESS_CHECK(underlyingSerializer_.has_value());
-    return underlyingSerializer_.value().getSerializationPosition() +
-           bufferSize_;
+    AD_CORRECTNESS_CHECK(state_.isActive());
+    return state_->underlyingSerializer_.getSerializationPosition() +
+           state_->bufferSize_;
   }
 
   // Overload of `serializeAtPosition` (see `Serializer.h`) for a
@@ -182,23 +199,10 @@ CPP_template(typename UnderlyingSerializer,
         std::is_same_v<BlockProcessor, PassthroughBlockProcessor>,
         "`serializeAtPosition` is only supported by a "
         "`BufferedWriteSerializer` that forwards its blocks unchanged");
-    serializer.flushBlock();
-    AD_CORRECTNESS_CHECK(serializer.underlyingSerializer_.has_value());
-    serializeAtPosition(serializer.underlyingSerializer_.value(), position,
+    AD_CORRECTNESS_CHECK(serializer.state_.isActive());
+    serializer.state_->flushBlock();
+    serializeAtPosition(serializer.state_->underlyingSerializer_, position,
                         element);
-  }
-
- private:
-  // Forward the contents of the `buffer_` to the `blockProcessor_` (which
-  // writes them to the underlying serializer) and clear it.
-  void flushBlock() {
-    if (bufferSize_ == 0) {
-      return;
-    }
-    std::invoke(blockProcessor_,
-                ql::span<const char>{buffer_.get(), bufferSize_},
-                underlyingSerializer_.value());
-    bufferSize_ = 0;
   }
 };
 

@@ -1465,3 +1465,65 @@ TEST(VectorIncrementalSerializer, MoveConstructor) {
   reader >> read;
   EXPECT_EQ(read, original);
 }
+
+namespace {
+// Read a `std::vector<int>` from the file with the given name.
+std::vector<int> readIntVector(const std::string& filename) {
+  FileReadSerializer reader{filename};
+  std::vector<int> result;
+  reader >> result;
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Overwriting a `BufferedWriteSerializer` flushes its buffered data.
+TEST(BufferedWriteSerializer, MoveAssignmentFlushesOverwrittenSerializer) {
+  std::string filenameA = gtestCurrentTestName() + "A";
+  std::string filenameB = gtestCurrentTestName() + "B";
+  auto cleanup = absl::Cleanup{[&filenameA, &filenameB]() {
+    deleteFile(filenameA);
+    deleteFile(filenameB);
+  }};
+  std::vector<int> originalA{1, 2, 3};
+  std::vector<int> originalB{4, 5};
+  {
+    BufferedWriteSerializer writerA{FileWriteSerializer{filenameA}, 1_MB};
+    writerA << originalA;
+    BufferedWriteSerializer writerB{FileWriteSerializer{filenameB}, 1_MB};
+    writerB << originalB;
+    writerA = std::move(writerB);
+    // The file of the overwritten serializer is complete and closed.
+    EXPECT_EQ(readIntVector(filenameA), originalA);
+  }
+  EXPECT_EQ(readIntVector(filenameB), originalB);
+}
+
+// _____________________________________________________________________________
+// Overwriting a `VectorIncrementalSerializer` finishes it.
+TEST(VectorIncrementalSerializer, MoveAssignmentFinishesOverwrittenSerializer) {
+  std::string filenameA = gtestCurrentTestName() + "A";
+  std::string filenameB = gtestCurrentTestName() + "B";
+  auto cleanup = absl::Cleanup{[&filenameA, &filenameB]() {
+    deleteFile(filenameA);
+    deleteFile(filenameB);
+  }};
+  std::vector<int> originalA{1, 2, 3};
+  std::vector<int> originalB{4, 5, 6, 7};
+  {
+    using Writer = VectorIncrementalSerializer<int, FileWriteSerializer>;
+    Writer writerA{FileWriteSerializer{filenameA}};
+    writerA.push(originalA.at(0));
+    writerA.push(originalA.at(1));
+    writerA.push(originalA.at(2));
+    Writer writerB{FileWriteSerializer{filenameB}};
+    writerB.push(originalB.at(0));
+    writerA = std::move(writerB);
+    // The file of the overwritten serializer is complete and closed.
+    EXPECT_EQ(readIntVector(filenameA), originalA);
+    for (size_t i = 1; i < originalB.size(); ++i) {
+      writerA.push(originalB.at(i));
+    }
+  }
+  EXPECT_EQ(readIntVector(filenameB), originalB);
+}

@@ -7,12 +7,14 @@
 
 #include "backports/concepts.h"
 #include "backports/functional.h"
+#include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/ResetWhenMoved.h"
 
 namespace ad_utility::unique_cleanup {
 
-/// Wrapper class that allows to call a function
-/// just before the wrapper value T is destroyed.
+/// Wrapper class that allows to call a function just before the wrapped value
+/// T is destroyed or overwritten by a move assignment.
 CPP_template(typename T, typename Func = std::function<void(T&&)>)(
     requires ql::concepts::move_constructible<T>) class UniqueCleanup {
   /// Boolean indicating if object was not moved out of
@@ -43,13 +45,42 @@ CPP_template(typename T, typename Func = std::function<void(T&&)>)(
 
   UniqueCleanup(UniqueCleanup&& cleanupDeleter) noexcept = default;
 
-  UniqueCleanup& operator=(UniqueCleanup&& cleanupDeleter) noexcept = default;
+  /// Runs the cleanup of the overwritten value (if active) before taking over
+  /// the value of `other`.
+  UniqueCleanup& operator=(UniqueCleanup&& other) noexcept {
+    if (this != &other) {
+      runCleanup();
+      active_ = std::move(other.active_);
+      value_ = std::move(other.value_);
+      function_ = std::move(other.function_);
+    }
+    return *this;
+  }
+
+  /// Return true if the cleanup has neither run nor been cancelled, and this
+  /// object has not been moved from.
+  bool isActive() const noexcept { return active_; }
 
   /// Disable the cleanup call without executing it.
   void cancel() && { active_ = false; }
 
+  /// Run the cleanup right away and disable it. Unlike in the destructor, an
+  /// exception thrown by the cleanup is propagated. Returns the result of the
+  /// cleanup. The object must be active.
+  decltype(auto) runNow() && {
+    AD_CONTRACT_CHECK(active_);
+    active_ = false;
+    return std::invoke(std::move(function_), std::move(value_));
+  }
+
   ~UniqueCleanup() {
-    if (active_) {
+    ad_utility::terminateIfThrows([this]() { runCleanup(); },
+                                  "The cleanup of a `UniqueCleanup` failed");
+  }
+
+ private:
+  void runCleanup() {
+    if (std::exchange(active_.value_, false)) {
       std::invoke(std::move(function_), std::move(value_));
     }
   }
