@@ -142,9 +142,7 @@ static size_t maxSuffixSize(
             return datatype.toStringRepresentation().size() + 2;
           },
           // `@` plus the language tag (which may already contain the `@`).
-          [](const std::string& languageTag) {
-            return languageTag.size() + 1;
-          }},
+          [](std::string_view languageTag) { return languageTag.size() + 1; }},
       descriptor.value());
 }
 
