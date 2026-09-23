@@ -15,6 +15,7 @@
 #include "backports/functional.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
 struct TransitivePathSide {
@@ -338,7 +339,7 @@ class TransitivePathBase : public Operation {
       const std::optional<Variable>& graphVariable = std::nullopt);
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
   VariableToColumnMap computeVariableToColumnMap() const override;

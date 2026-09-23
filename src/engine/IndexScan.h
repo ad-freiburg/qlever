@@ -10,6 +10,7 @@
 #include "engine/Operation.h"
 #include "index/DeltaTriples.h"
 #include "util/HashMap.h"
+#include "util/ContainersWithAllocator.h"
 
 class SparqlTriple;
 class SparqlTripleSimple;
@@ -235,8 +236,8 @@ class IndexScan final : public Operation {
 
   Result computeResult(bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
   }
 
   // Compute the size estimate of the index scan, taking delta triples (from

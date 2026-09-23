@@ -17,6 +17,7 @@
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
 
@@ -72,8 +73,8 @@ class JoinImpl : public Operation {
   float getMultiplicity(size_t col) override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {left_.get(), right_.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{left_.get(), right_.get()}, allocator()};
   }
 
  public:

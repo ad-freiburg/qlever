@@ -10,6 +10,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 class MultiColumnJoin : public Operation {
  private:
@@ -52,8 +53,8 @@ class MultiColumnJoin : public Operation {
   size_t getCostEstimate() override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {_left.get(), _right.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_left.get(), _right.get()}, allocator()};
   }
 
  public:

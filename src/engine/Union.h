@@ -13,6 +13,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashMap.h"
 
 class Union : public Operation {
@@ -65,8 +66,8 @@ class Union : public Operation {
       const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {_subtrees[0].get(), _subtrees[1].get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_subtrees[0].get(), _subtrees[1].get()}, allocator()};
   }
 
  public:

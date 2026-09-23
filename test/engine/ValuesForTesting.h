@@ -10,6 +10,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
 #include "util/Algorithm.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Random.h"
 
 // An operation that yields a given `IdTable` as its result. It is used for
@@ -205,8 +206,8 @@ class ValuesForTesting : public Operation {
   }
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
   }
 
  public:

@@ -7,6 +7,7 @@
 
 #include "engine/Operation.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/ContainersWithAllocator.h"
 
 // Operation for DESCRIBE queries according to the Concise Bounded Description
 // (CBD) specification: https://www.w3.org/submissions/2005/SUBM-CBD-20050603 .
@@ -47,7 +48,7 @@ class Describe : public Operation {
   bool knownEmptyResult() override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;

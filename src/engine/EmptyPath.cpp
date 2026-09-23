@@ -140,11 +140,11 @@ EmptyPath::EmptyPath(QueryExecutionContext* qec, Variable variable,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> EmptyPath::getChildrenImpl() const {
+qlm::vector<QueryExecutionTree*> EmptyPath::getChildrenImpl() const {
   if (!checkedChild_.has_value()) {
-    return {};
+    return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  return {&child()};
+  return {{&child()}, allocator()};
 }
 
 // _____________________________________________________________________________

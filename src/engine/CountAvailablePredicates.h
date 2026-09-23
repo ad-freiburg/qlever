@@ -12,6 +12,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/CompactStringVector.h"
+#include "util/ContainersWithAllocator.h"
 
 // This Operation takes a Result with at least one column containing ids,
 // and a column index referring to such a column. It then creates a Result
@@ -50,9 +51,11 @@ class CountAvailablePredicates : public Operation {
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    using R = std::vector<QueryExecutionTree*>;
-    return subtree_ != nullptr ? R{subtree_.get()} : R{};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    if (subtree_ == nullptr) {
+      return qlm::vector<QueryExecutionTree*>{allocator()};
+    }
+    return {{subtree_.get()}, allocator()};
   }
 
  public:

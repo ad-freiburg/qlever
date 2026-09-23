@@ -30,7 +30,7 @@ class NeutralOptional : public Operation {
   bool singleRowCroppedByLimit() const;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
   std::string getDescriptor() const override;

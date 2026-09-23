@@ -22,6 +22,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "index/ScanSpecification.h"
 #include "util/Generator.h"
+#include "util/ContainersWithAllocator.h"
 
 // Operation that yields all the entities that occur as a subject or an object
 // in the knowledge graph, optionally together with the graphs they occur in.
@@ -131,7 +132,7 @@ class EmptyPath : public Operation {
   std::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
   std::string getCacheKeyImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
