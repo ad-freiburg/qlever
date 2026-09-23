@@ -9,7 +9,8 @@ name: Wolga native
 # - gcc-13 Release (default flags)
 # - clang-21 Release
 # - clang-16 ASan / UBSan (RelWithDebInfo, like the GitHub sanitizer legs)
-# - clang-17 TSan (Debug, timing tests off)
+# (No TSan leg: ThreadSanitizer needs host vm.mmap_rnd_bits=28, which
+# requires root on the runner hosts. TSan stays on the GitHub-hosted leg.)
 
 on:
   push:
@@ -71,6 +72,7 @@ jobs:
         with:
           submodules: recursive
       - name: Native ${{ matrix.toolchain }} build + tests inside prebuilt CI image
+        shell: bash
         run: |
           mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
           podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
@@ -82,6 +84,10 @@ jobs:
               # Per-leg extra environment inside the container (empty for
               # legs without a `container-env` matrix key).
               if [ -n "${{ matrix.container-env }}" ]; then export ${{ matrix.container-env }}; fi
+              # Fresh configure per leg: self-hosted workspaces persist
+              # across jobs, so a previous leg's CMake cache (different
+              # toolchain/sanitizer flags) must not be reused.
+              rm -rf /work/build
               cmake -B /work/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
                 -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/${{ matrix.toolchain }}.cmake" \
                 -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror ${{ matrix.extra-flags }}" \
