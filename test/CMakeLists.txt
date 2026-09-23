@@ -612,6 +612,8 @@ addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
 
+addLinkAndDiscoverTestNoLibs(GlobalExecutorTest qlever_util)
+
 addLinkAndDiscoverTest(MetricsTest metrics)
 
 addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
