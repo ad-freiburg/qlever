@@ -6,12 +6,20 @@
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
+//
+// Derived from Boost.Sort, file
+// `boost/sort/block_indirect_sort/block_indirect_sort.hpp`:
+// Copyright (c) 2016 Francisco Jose Tapia (fjtapia@gmail.com)
+// Distributed under the Boost Software License, Version 1.0. (See the
+// accompanying file `LICENSE_1_0.txt` or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
 
 #ifndef QLEVER_SRC_UTIL_BLOCKSORT_BLOCKINDIRECTSORT_H
 #define QLEVER_SRC_UTIL_BLOCKSORT_BLOCKINDIRECTSORT_H
 
 #include <algorithm>
 #include <bit>
+#include <boost/sort/pdqsort/pdqsort.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
@@ -23,7 +31,6 @@
 #include "backports/asio.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
-#include "util/blockSort/SortPrimitives.h"
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <boost/asio/awaitable.hpp>
@@ -72,7 +79,7 @@ net::awaitable<void> splitRange(State& state, size_t posIndex1,
   auto first = state.getBlockBegin(posIndex1);
   auto last = state.getRange(posIndex2 - 1).last;
   if (numBlocks < State::groupSize_) {
-    sortSequentially(first, last, state.cmp_);
+    boost::sort::pdqsort(first, last, state.cmp_);
     co_return;
   }
   size_t posIndexMid = posIndex1 + (numBlocks >> 1);
@@ -145,7 +152,7 @@ void runSort(Iterator first, Iterator last, Compare comp, uint32_t nthread,
   // Sort small inputs (or without threads/executor) in the calling thread.
   if (numElements < maxElementsPerTask<Value>() || nthread < 2 ||
       !static_cast<bool>(exec)) {
-    sortSequentially(first, last, comp);
+    boost::sort::pdqsort(first, last, comp);
     return;
   }
 
@@ -156,21 +163,28 @@ void runSort(Iterator first, Iterator last, Compare comp, uint32_t nthread,
   state.errors_.rethrowIfError();
 }
 
-// The number of elements per block for elements of `numBytes` bytes (Boost's
-// `block_size`): bigger elements get smaller blocks, so a block stays in cache.
-constexpr uint32_t blockSizeForElements(size_t numBytes) {
-  constexpr uint32_t sizes[] = {4096, 4096, 4096, 4096, 2048,
-                                1024, 768,  512,  256,  128};
-  size_t index = numBytes == 0 ? 0
-                 : numBytes > 256
-                     ? 9
-                     : static_cast<size_t>(std::bit_width(numBytes - 1));
-  return sizes[index];
+// Like Boost, use smaller blocks and bigger groups for strings.
+template <typename Value>
+constexpr bool isString = std::is_same_v<Value, std::string>;
+
+// The number of elements per block (Boost's `block_size`): bigger elements get
+// smaller blocks, so that a block stays in cache.
+template <typename Value>
+constexpr uint32_t blockSizeFor() {
+  if constexpr (isString<Value>) {
+    return 128;
+  } else {
+    constexpr size_t numBytes = sizeof(Value);
+    constexpr uint32_t sizes[] = {4096, 4096, 4096, 4096, 2048,
+                                  1024, 768,  512,  256,  128};
+    return sizes[numBytes > 256 ? 9 : std::bit_width(numBytes - 1)];
+  }
 }
 
 // The number of blocks that a single task merges or moves.
-constexpr uint32_t groupSizeForElements(bool isString) {
-  return isString ? 128 : 64;
+template <typename Value>
+constexpr uint32_t groupSizeFor() {
+  return isString<Value> ? 128 : 64;
 }
 
 }  // namespace detail
@@ -188,10 +202,13 @@ constexpr uint32_t groupSizeForElements(bool isString) {
 // be run by other threads (e.g. a `boost::asio::thread_pool` that this thread
 // is not part of), and must not be a strand.
 //
-// The iterators may hand out proxy references, like those of `IdTable`, see
-// `SortPrimitives.h`. The `range` must be borrowed (e.g. a `ql::span` or a
+// The iterators may hand out proxy references, like those of `IdTable`. The
+// `range` must be borrowed (e.g. a `ql::span` or a
 // `ql::ranges::subrange`), so that the caller's elements are sorted, not a
 // copy.
+//
+// If an exception is thrown (e.g. by `comp`), it is rethrown once all tasks
+// have finished, and the contents of `range` are unspecified.
 //
 // In C++17 mode (no coroutines) this always sorts in the calling thread.
 CPP_template(typename Range, typename Compare)(
@@ -205,16 +222,11 @@ CPP_template(typename Range, typename Compare)(
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   static_cast<void>(nthread);
   static_cast<void>(exec);
-  detail::sortSequentially(first, last, comp);
+  boost::sort::pdqsort(first, last, comp);
 #else
   using Value = typename std::iterator_traits<decltype(first)>::value_type;
-  constexpr bool isString = std::is_same_v<Value, std::string>;
-  // Like Boost, use smaller blocks and bigger groups for strings.
-  constexpr uint32_t blockSize =
-      isString ? 128 : detail::blockSizeForElements(sizeof(Value));
-  constexpr uint32_t groupSize = detail::groupSizeForElements(isString);
-  detail::runSort<blockSize, groupSize>(first, last, std::move(comp), nthread,
-                                        std::move(exec));
+  detail::runSort<detail::blockSizeFor<Value>(), detail::groupSizeFor<Value>()>(
+      first, last, std::move(comp), nthread, std::move(exec));
 #endif
 }
 

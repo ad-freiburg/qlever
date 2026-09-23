@@ -6,6 +6,13 @@
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
+//
+// Derived from Boost.Sort, file
+// `boost/sort/block_indirect_sort/blk_detail/merge_blocks.hpp`:
+// Copyright (c) 2016 Francisco Jose Tapia (fjtapia@gmail.com)
+// Distributed under the Boost Software License, Version 1.0. (See the
+// accompanying file `LICENSE_1_0.txt` or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
 
 #ifndef QLEVER_SRC_UTIL_BLOCKSORT_MERGEBLOCKS_H
 #define QLEVER_SRC_UTIL_BLOCKSORT_MERGEBLOCKS_H
@@ -13,13 +20,14 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/sort/common/range.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <optional>
 #include <vector>
 
-#include "util/blockSort/BoostSortHeaders.h"
+#include "backports/algorithm.h"
 #include "util/blockSort/SortState.h"
 #include "util/blockSort/TaskGroup.h"
 
@@ -259,9 +267,8 @@ net::awaitable<void> mergeBlocks(State& state, size_t posIndex1,
 
   typename State::CompareBlockPos compareBlocks{state.globalRange_.first,
                                                 state.cmp_};
-  bscu::merge(positions1.begin(), positions1.end(), positions2.begin(),
-              positions2.end(), state.index_.begin() + posIndex1,
-              compareBlocks);
+  ql::ranges::merge(positions1, positions2, state.index_.begin() + posIndex1,
+                    compareBlocks);
   if (state.hasError()) {
     co_return;
   }

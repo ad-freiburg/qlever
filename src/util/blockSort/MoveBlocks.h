@@ -6,6 +6,13 @@
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
+//
+// Derived from Boost.Sort, file
+// `boost/sort/block_indirect_sort/blk_detail/move_blocks.hpp`:
+// Copyright (c) 2016 Francisco Jose Tapia (fjtapia@gmail.com)
+// Distributed under the Boost Software License, Version 1.0. (See the
+// accompanying file `LICENSE_1_0.txt` or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
 
 #ifndef QLEVER_SRC_UTIL_BLOCKSORT_MOVEBLOCKS_H
 #define QLEVER_SRC_UTIL_BLOCKSORT_MOVEBLOCKS_H
@@ -13,6 +20,7 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/sort/common/range.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -20,7 +28,6 @@
 #include <vector>
 
 #include "util/Exception.h"
-#include "util/blockSort/BoostSortHeaders.h"
 #include "util/blockSort/SortState.h"
 #include "util/blockSort/TaskGroup.h"
 

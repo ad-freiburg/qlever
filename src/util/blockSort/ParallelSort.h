@@ -1,11 +1,20 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
+//
+// Derived from Boost.Sort, files
+// `boost/sort/block_indirect_sort/blk_detail/parallel_sort.hpp` and
+// `boost/sort/common/pivot.hpp`:
+// Copyright (c) 2010, 2015, 2016 Francisco Jose Tapia (fjtapia@gmail.com)
+// Distributed under the Boost Software License, Version 1.0. (See the
+// accompanying file `LICENSE_1_0.txt` or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
 
 #ifndef QLEVER_SRC_UTIL_BLOCKSORT_PARALLELSORT_H
 #define QLEVER_SRC_UTIL_BLOCKSORT_PARALLELSORT_H
@@ -15,6 +24,7 @@
 #include <algorithm>
 #include <bit>
 #include <boost/asio/awaitable.hpp>
+#include <boost/sort/pdqsort/pdqsort.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -23,7 +33,6 @@
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
-#include "util/blockSort/SortPrimitives.h"
 #include "util/blockSort/SortState.h"
 #include "util/blockSort/TaskGroup.h"
 
@@ -32,6 +41,38 @@
 namespace ad_utility::blockSort::detail {
 
 namespace net = boost::asio;
+
+// Sort the three elements and return the middle one, Boost's `mid3`.
+//
+// NOTE: This and `movePivotToFront` use `ql::ranges::iter_swap` instead of
+// Boost's `std::swap(*it1, *it2)`, which doesn't compile for proxy iterators
+// like those of `IdTable`. The other parts of Boost.Sort that are used here
+// (e.g. `pdqsort`) work for `IdTable` as they are.
+template <typename Iterator, typename Compare>
+Iterator median3(Iterator it1, Iterator it2, Iterator it3, const Compare& cmp) {
+  if (cmp(*it2, *it1)) {
+    ql::ranges::iter_swap(it2, it1);
+  }
+  if (cmp(*it3, *it2)) {
+    ql::ranges::iter_swap(it3, it2);
+    if (cmp(*it2, *it1)) {
+      ql::ranges::iter_swap(it2, it1);
+    }
+  }
+  return it2;
+}
+
+// Move the median of nine elements of `[first, last)` (at least nine) to
+// `first`, Boost's `pivot9`.
+template <typename Iterator, typename Compare>
+void movePivotToFront(Iterator first, Iterator last, const Compare& cmp) {
+  size_t step = static_cast<size_t>(last - first) >> 3;
+  Iterator pivot = median3(
+      median3(first + 1, first + step, first + 2 * step, cmp),
+      median3(first + 3 * step, first + 4 * step, first + 5 * step, cmp),
+      median3(first + 6 * step, first + 7 * step, last - 1, cmp), cmp);
+  ql::ranges::iter_swap(first, pivot);
+}
 
 // The number of elements that one task sorts on its own; smaller for bigger
 // elements, like in Boost.
@@ -63,12 +104,12 @@ void divideSort(State& state, Iterator first, Iterator last, uint32_t level,
   }
   size_t numElements = static_cast<size_t>(last - first);
   if (level == 0 || numElements < maxPerTask) {
-    sortSequentially(first, last, cmp);
+    boost::sort::pdqsort(first, last, cmp);
     return;
   }
 
   // Partition around the median of nine. The pivot is a copy, because `*first`
-  // may be a proxy, see `SortPrimitives.h`.
+  // may be a proxy.
   movePivotToFront(first, last, cmp);
   const Value pivot = *first;
   Iterator cFirst = first + 1;
@@ -120,7 +161,7 @@ net::awaitable<void> parallelSort(State& state, Iterator first, Iterator last) {
 
   constexpr size_t maxPerTask = maxElementsPerTask<Value>();
   if (numElements < maxPerTask) {
-    sortSequentially(first, last, cmp);
+    boost::sort::pdqsort(first, last, cmp);
     co_return;
   }
   // The maximal recursion depth, with some slack for uneven splits.

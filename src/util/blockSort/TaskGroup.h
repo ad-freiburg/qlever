@@ -13,6 +13,8 @@
 // The fork/join primitive of the block indirect sort. C++20 only.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <absl/functional/any_invocable.h>
+
 #include <atomic>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -21,7 +23,6 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <cstddef>
 #include <exception>
-#include <memory>
 #include <mutex>
 #include <utility>
 
@@ -70,40 +71,10 @@ class ErrorSink {
   }
 };
 
-// A move-only type-erased `void()` completion handler. This is
-// `boost::asio::any_completion_handler<void()>`, which needs Boost >= 1.82.
-class AnyNullaryHandler {
- private:
-  struct Base {
-    virtual void invoke() = 0;
-    virtual ~Base() = default;
-  };
-  template <typename Handler>
-  struct Holder : Base {
-    Handler handler_;
-    explicit Holder(Handler handler) : handler_{std::move(handler)} {}
-    void invoke() override { std::move(handler_)(); }
-  };
-  std::unique_ptr<Base> handler_;
-
- public:
-  AnyNullaryHandler() = default;
-  template <typename Handler>
-  explicit AnyNullaryHandler(Handler handler)
-      : handler_{std::make_unique<Holder<Handler>>(std::move(handler))} {}
-
-  // Invoke and destroy the handler. It is moved out first, because running it
-  // may destroy the `TaskGroup` that owns this object.
-  void operator()() {
-    auto handler = std::move(handler_);
-    handler->invoke();
-  }
-};
-
 // The children of a parent coroutine, which the parent awaits with
 // `co_await group.join()`. Replaces Boost's `counter` + `backbone::exec`: the
 // parent suspends instead of spinning. Exceptions of children go to the
-// `ErrorSink`.
+// `ErrorSink`, and children that start after an error are skipped.
 //
 // LIFETIME: The children may refer to the parent's frame, so `join()` must be
 // awaited on every path, including exceptional ones. As `co_await` is not
@@ -117,7 +88,7 @@ class TaskGroup {
   // its handler.
   std::atomic<size_t> numPending_{1};
   // Resumes the parent. Only used by whoever brings `numPending_` to zero.
-  AnyNullaryHandler resumeParent_;
+  absl::AnyInvocable<void() &&> resumeParent_;
 
   // Completes once `numPending_` has dropped to zero.
   template <typename CompletionToken>
@@ -125,7 +96,7 @@ class TaskGroup {
     return net::async_initiate<CompletionToken, void()>(
         [this](auto handler) {
           // Store the handler before giving up the parent's count.
-          resumeParent_ = AnyNullaryHandler{std::move(handler)};
+          resumeParent_ = std::move(handler);
           if (numPending_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
             // All children are done. Post, because we are still inside the
             // initiation.
@@ -144,12 +115,14 @@ class TaskGroup {
   TaskGroup& operator=(const TaskGroup&) = delete;
 
   // Children that are still running would access a dangling frame, see
-  // LIFETIME above, so terminate.
+  // LIFETIME above, so terminate. A count of one means that no child is
+  // running, but `join()` wasn't awaited because an exception (e.g. from
+  // allocating the first child) left the parent; that exception propagates.
   ~TaskGroup() {
     ad_utility::terminateIfThrows(
         [this] {
-          AD_CORRECTNESS_CHECK(numPending_.load(std::memory_order_acquire) ==
-                               0);
+          AD_CORRECTNESS_CHECK(numPending_.load(std::memory_order_acquire) <=
+                               1);
         },
         "A `TaskGroup` of the block indirect sort was destroyed before all of "
         "its children had finished");
@@ -165,6 +138,10 @@ class TaskGroup {
     numPending_.fetch_add(1, std::memory_order_relaxed);
     try {
       net::post(executor_, [this, child = std::move(child)]() mutable {
+        if (errors_.hasError()) {
+          childIsDone();
+          return;
+        }
         try {
           net::co_spawn(executor_, std::move(child),
                         [this](std::exception_ptr error) {
@@ -189,10 +166,12 @@ class TaskGroup {
     numPending_.fetch_add(1, std::memory_order_relaxed);
     try {
       net::post(executor_, [this, function = std::move(function)]() mutable {
-        try {
-          function();
-        } catch (...) {
-          errors_.store(std::current_exception());
+        if (!errors_.hasError()) {
+          try {
+            function();
+          } catch (...) {
+            errors_.store(std::current_exception());
+          }
         }
         childIsDone();
       });
@@ -235,12 +214,12 @@ class TaskGroup {
   }
 
  private:
-  // Resume the parent if this was the last child. May destroy `*this`, so no
-  // member may be touched after moving out the handler.
+  // Resume the parent if this was the last child. Resuming may destroy
+  // `*this`, so the handler is moved out first.
   void childIsDone() {
     if (numPending_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
       auto resumeParent = std::move(resumeParent_);
-      resumeParent();
+      std::move(resumeParent)();
     }
   }
 };

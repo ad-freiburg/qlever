@@ -6,26 +6,32 @@
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
+//
+// Derived from Boost.Sort, file
+// `boost/sort/block_indirect_sort/blk_detail/backbone.hpp`:
+// Copyright (c) 2016 Francisco Jose Tapia (fjtapia@gmail.com)
+// Distributed under the Boost Software License, Version 1.0. (See the
+// accompanying file `LICENSE_1_0.txt` or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
 
 #ifndef QLEVER_SRC_UTIL_BLOCKSORT_SORTSTATE_H
 #define QLEVER_SRC_UTIL_BLOCKSORT_SORTSTATE_H
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <boost/sort/block_indirect_sort/blk_detail/block.hpp>
+#include <boost/sort/common/range.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <iterator>
-#include <memory>
 #include <mutex>
-#include <new>
 #include <thread>
 #include <utility>
 #include <vector>
 
 #include "backports/asio.h"
 #include "util/Exception.h"
-#include "util/blockSort/BoostSortHeaders.h"
 #include "util/blockSort/TaskGroup.h"
 
 namespace ad_utility::blockSort::detail {
@@ -34,7 +40,6 @@ namespace ad_utility::blockSort::detail {
 // and move primitives, and the index helpers `block_pos` (a block position plus
 // a side bit) and `compare_block_pos` (compares blocks by their first element).
 namespace bsc = boost::sort::common;
-namespace bscu = boost::sort::common::util;
 namespace bsd = boost::sort::blk_detail;
 
 // A fixed pool of scratch buffers of `bufferSize` elements each, borrowed by
@@ -47,16 +52,8 @@ namespace bsd = boost::sort::blk_detail;
 template <typename Value>
 class ScratchBuffers {
  private:
-  // Aligned, because `Value` may be over-aligned.
-  struct Deallocate {
-    void operator()(Value* pointer) const noexcept {
-      ::operator delete(static_cast<void*>(pointer),
-                        std::align_val_t{alignof(Value)});
-    }
-  };
-  std::unique_ptr<Value, Deallocate> storage_;
+  std::vector<Value> storage_;
   size_t bufferSize_;
-  size_t numValues_;
   std::mutex mutex_;
   // The buffers that are currently not borrowed.
   std::vector<Value*> unused_;
@@ -85,27 +82,21 @@ class ScratchBuffers {
     }
   };
 
-  // Allocate `numBuffers` buffers of `bufferSize` elements. The elements have
-  // to be live objects (they are move-assigned to), so they are constructed by
-  // chaining moves from `initialValue`, which gets its value back at the end,
-  // see `boost::sort::common::initialize`.
-  ScratchBuffers(size_t numBuffers, size_t bufferSize, Value& initialValue)
-      : storage_{static_cast<Value*>(
-            ::operator new(numBuffers * bufferSize * sizeof(Value),
-                           std::align_val_t{alignof(Value)}))},
-        bufferSize_{bufferSize},
-        numValues_{numBuffers * bufferSize} {
-    bsc::initialize(allValues(), initialValue);
+  // Allocate `numBuffers` buffers of `bufferSize` copies of `initialValue`
+  // (the elements are move-assigned to, so they have to be live objects).
+  ScratchBuffers(size_t numBuffers, size_t bufferSize,
+                 const Value& initialValue)
+      : storage_(numBuffers * bufferSize, initialValue),
+        bufferSize_{bufferSize} {
     unused_.reserve(numBuffers);
     for (size_t i = 0; i < numBuffers; ++i) {
-      unused_.push_back(storage_.get() + i * bufferSize_);
+      unused_.push_back(storage_.data() + i * bufferSize_);
     }
   }
 
+  // The `Lease`s point into this object.
   ScratchBuffers(const ScratchBuffers&) = delete;
   ScratchBuffers& operator=(const ScratchBuffers&) = delete;
-
-  ~ScratchBuffers() { bsc::destroy(allValues()); }
 
   // Borrow a buffer. Only spins if more threads run the executor than there
   // are buffers.
@@ -124,10 +115,6 @@ class ScratchBuffers {
   }
 
  private:
-  bsc::range<Value*> allValues() const {
-    return {storage_.get(), storage_.get() + numValues_};
-  }
-
   void release(Value* buffer) {
     std::lock_guard<std::mutex> lock{mutex_};
     unused_.push_back(buffer);
@@ -143,7 +130,6 @@ class SortState {
  public:
   using Value = typename std::iterator_traits<Iterator>::value_type;
   using RangeIt = bsc::range<Iterator>;
-  using RangeBuf = bsc::range<Value*>;
   using RangePos = bsc::range<size_t>;
   using CompareBlockPos = bsd::compare_block_pos<BlockSize, Iterator, Compare>;
   static constexpr uint32_t blockSize_ = BlockSize;
@@ -158,9 +144,6 @@ class SortState {
   // The last block if it is incomplete, empty otherwise.
   RangeIt tailRange_;
   Compare cmp_;
-  // A copy of the first element to initialize `buffers_` from (a proxy
-  // `*first` can't be passed by reference). Must be declared before `buffers_`.
-  Value bufferSeed_;
   ScratchBuffers<Value> buffers_;
   ql::any_io_executor executor_;
   ErrorSink errors_;
@@ -172,8 +155,7 @@ class SortState {
         numElements_{static_cast<size_t>(last - first)},
         numBlocks_{(numElements_ + BlockSize - 1) / BlockSize},
         cmp_{std::move(cmp)},
-        bufferSeed_{*first},
-        buffers_{numBuffers, BlockSize, bufferSeed_},
+        buffers_{numBuffers, BlockSize, Value(*first)},
         executor_{std::move(executor)} {
     AD_CORRECTNESS_CHECK(first != last);
     index_.reserve(numBlocks_ + 1);

@@ -50,30 +50,42 @@ boost::asio::thread_pool& threadPool() {
 // indirect algorithm (one group of blocks per thread).
 template <typename T>
 constexpr size_t numElementsForParallelPath(uint32_t numThreads) {
-  return numThreads *
-         size_t{
-             ad_utility::blockSort::detail::blockSizeForElements(sizeof(T))} *
-         64;
+  using namespace ad_utility::blockSort::detail;
+  return size_t{numThreads} * blockSizeFor<T>() * groupSizeFor<T>();
+}
+
+// Expect `blockIndirectSort` to sort `input` to `expected`.
+template <typename T, typename Compare = std::less<T>>
+void expectSortsTo(std::vector<T> input, const std::vector<T>& expected,
+                   uint32_t nthread, Compare comp = {}) {
+  blockIndirectSort(ql::span<T>{input}, comp, nthread,
+                    threadPool().get_executor());
+  EXPECT_EQ(input, expected);
 }
 
 // Expect `blockIndirectSort` to sort `input` like `ql::ranges::sort`.
+//
+// NOTE: In a debug build, the reference sort takes much longer than the
+// parallel sort, so for big inputs, prefer `expectSortsTo` with a known result.
 template <typename T, typename Compare = std::less<T>>
 void expectSortedLikeStd(std::vector<T> input, uint32_t nthread,
                          Compare comp = {}) {
   std::vector<T> expected = input;
   ql::ranges::sort(expected, comp);
-
-  std::vector<T> actual = input;
-  blockIndirectSort(ql::span<T>{actual}, comp, nthread,
-                    threadPool().get_executor());
-  EXPECT_EQ(actual, expected);
+  expectSortsTo(std::move(input), expected, nthread, comp);
 }
 
-// Distinct values in random order, so that the unstable sort has a unique
-// result.
-std::vector<uint32_t> randomDistinct(size_t numElements, uint64_t seed) {
+// The values `0, ..., numElements - 1` in ascending order.
+std::vector<uint32_t> ascending(size_t numElements) {
   std::vector<uint32_t> values(numElements);
   std::iota(values.begin(), values.end(), uint32_t{0});
+  return values;
+}
+
+// The values of `ascending(numElements)` in random order, so that the unstable
+// sort has a unique result.
+std::vector<uint32_t> randomDistinct(size_t numElements, uint64_t seed) {
+  std::vector<uint32_t> values = ascending(numElements);
   std::shuffle(values.begin(), values.end(), std::mt19937_64{seed});
   return values;
 }
@@ -110,10 +122,11 @@ TEST(BlockIndirectSort, smallInputsOfEverySize) {
 // Big enough for merging and moving blocks.
 TEST(BlockIndirectSort, parallelPathWithDistinctValues) {
   size_t numElements = 2 * numElementsForParallelPath<uint32_t>(numPoolThreads);
+  auto expected = ascending(numElements);
   for (uint32_t nthread :
        {uint32_t{5}, uint32_t{6}, uint32_t{8}, uint32_t{16}}) {
     SCOPED_TRACE(absl::StrCat("nthread=", nthread));
-    expectSortedLikeStd(randomDistinct(numElements, nthread), nthread);
+    expectSortsTo(randomDistinct(numElements, nthread), expected, nthread);
   }
 }
 
@@ -123,28 +136,38 @@ TEST(BlockIndirectSort, specialInputPatterns) {
   size_t numElements = numElementsForParallelPath<uint32_t>(numPoolThreads);
   constexpr uint32_t nthread = numPoolThreads;
 
-  std::vector<uint32_t> ascending(numElements);
-  std::iota(ascending.begin(), ascending.end(), uint32_t{0});
-  expectSortedLikeStd(ascending, nthread);
+  auto sorted = ascending(numElements);
+  expectSortsTo(sorted, sorted, nthread);
 
-  std::vector<uint32_t> descending = ascending;
+  std::vector<uint32_t> descending = sorted;
   ql::ranges::reverse(descending);
-  expectSortedLikeStd(descending, nthread);
+  expectSortsTo(descending, sorted, nthread);
 
-  expectSortedLikeStd(std::vector<uint32_t>(numElements, 7u), nthread);
+  std::vector<uint32_t> constant(numElements, 7u);
+  expectSortsTo(constant, constant, nthread);
 
   // Many equal elements.
+  constexpr uint32_t numValues = 5;
   std::vector<uint32_t> fewValues(numElements);
+  std::array<size_t, numValues> counts{};
   std::mt19937_64 gen{1234};
   for (auto& value : fewValues) {
-    value = static_cast<uint32_t>(gen() % 5);
+    value = static_cast<uint32_t>(gen() % numValues);
+    ++counts[value];
   }
-  expectSortedLikeStd(fewValues, nthread);
+  std::vector<uint32_t> fewValuesSorted;
+  for (uint32_t value = 0; value < numValues; ++value) {
+    fewValuesSorted.insert(fewValuesSorted.end(), counts[value], value);
+  }
+  expectSortsTo(fewValues, fewValuesSorted, nthread);
 
   // Sorted except for the last element.
-  std::vector<uint32_t> almostSorted = ascending;
+  std::vector<uint32_t> almostSorted = sorted;
   almostSorted.back() = 0;
-  expectSortedLikeStd(almostSorted, nthread);
+  std::vector<uint32_t> almostSortedSorted = sorted;
+  almostSortedSorted.pop_back();
+  almostSortedSorted.insert(almostSortedSorted.begin(), 0);
+  expectSortsTo(almostSorted, almostSortedSorted, nthread);
 }
 
 // _____________________________________________________________________________
@@ -154,21 +177,24 @@ TEST(BlockIndirectSort, incompleteLastBlock) {
   for (size_t extra :
        {size_t{0}, size_t{1}, size_t{2}, size_t{4095}, size_t{4096}}) {
     SCOPED_TRACE(absl::StrCat("extra=", extra));
-    expectSortedLikeStd(randomDistinct(base + extra, extra), numPoolThreads);
+    expectSortsTo(randomDistinct(base + extra, extra), ascending(base + extra),
+                  numPoolThreads);
   }
 }
 
 // _____________________________________________________________________________
 TEST(BlockIndirectSort, customComparator) {
   size_t numElements = numElementsForParallelPath<uint32_t>(numPoolThreads);
-  expectSortedLikeStd(randomDistinct(numElements, 99), numPoolThreads,
-                      std::greater<uint32_t>{});
+  auto expected = ascending(numElements);
+  ql::ranges::reverse(expected);
+  expectSortsTo(randomDistinct(numElements, 99), expected, numPoolThreads,
+                std::greater<uint32_t>{});
 }
 
 // _____________________________________________________________________________
 // Elements that are not trivially copyable.
 TEST(BlockIndirectSort, stringElements) {
-  size_t numElements = numElementsForParallelPath<std::string>(4);
+  size_t numElements = numElementsForParallelPath<std::string>(numPoolThreads);
   std::vector<std::string> values;
   values.reserve(numElements);
   std::mt19937_64 gen{7};
@@ -181,13 +207,11 @@ TEST(BlockIndirectSort, stringElements) {
 // _____________________________________________________________________________
 // An empty executor sorts in the calling thread.
 TEST(BlockIndirectSort, emptyExecutorSortsInCallingThread) {
-  auto values =
-      randomDistinct(numElementsForParallelPath<uint32_t>(numPoolThreads), 5);
-  auto expected = values;
-  ql::ranges::sort(expected);
+  size_t numElements = numElementsForParallelPath<uint32_t>(numPoolThreads);
+  auto values = randomDistinct(numElements, 5);
   blockIndirectSort(ql::span<uint32_t>{values}, std::less<uint32_t>{},
                     numPoolThreads, ql::any_io_executor{});
-  EXPECT_EQ(values, expected);
+  EXPECT_EQ(values, ascending(numElements));
 }
 
 // _____________________________________________________________________________
@@ -234,8 +258,7 @@ TEST(BlockIndirectSort, concurrentSortsOnTheSameExecutor) {
 }
 
 // _____________________________________________________________________________
-// Sort the rows of an `IdTable`, whose iterators hand out proxy references,
-// with the parallel quicksort (2 threads) and the full algorithm (8 threads).
+// Sort the rows of an `IdTable`, whose iterators hand out proxy references.
 template <int NumStaticCols>
 void testSortIdTable() {
   constexpr size_t numCols = 3;
@@ -269,15 +292,23 @@ void testSortIdTable() {
       id = Id::makeFromInt(static_cast<int64_t>(gen() % 100));
     }
   }
-  for (uint32_t nthread : {uint32_t{2}, uint32_t{8}}) {
+  // Sorting the plain arrays is much cheaper than sorting the rows of a table.
+  auto expected = toBits(table);
+  ql::ranges::sort(expected);
+  // The full algorithm also uses the parallel quicksort for its parts, so the
+  // quicksort alone (2 threads) is only tested in expensive mode.
+#ifdef QLEVER_RUN_EXPENSIVE_TESTS
+  std::vector<uint32_t> numThreads{2, 8};
+#else
+  std::vector<uint32_t> numThreads{8};
+#endif
+  for (uint32_t nthread : numThreads) {
     SCOPED_TRACE(absl::StrCat("nthread=", nthread));
     Table actual{table.clone()};
-    Table expected{table.clone()};
-    ql::ranges::sort(expected, lessThanByAllColumns);
     blockIndirectSort(ql::ranges::subrange{actual.begin(), actual.end()},
                       lessThanByAllColumns, nthread,
                       threadPool().get_executor());
-    EXPECT_EQ(toBits(actual), toBits(expected));
+    EXPECT_EQ(toBits(actual), expected);
   }
 }
 

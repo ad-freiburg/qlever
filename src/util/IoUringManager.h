@@ -23,9 +23,6 @@
 
 #ifdef QLEVER_HAS_IO_URING
 #include <liburing.h>
-// `liburing.h` defines a macro `BLOCK_SIZE` (via `<linux/fs.h>`), which breaks
-// headers included later, e.g. those of `boost::sort`.
-#undef BLOCK_SIZE
 #endif
 
 #include "backports/span.h"
