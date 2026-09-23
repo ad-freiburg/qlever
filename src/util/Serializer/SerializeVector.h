@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "backports/span.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/UniqueCleanup.h"
@@ -105,7 +106,8 @@ CPP_template(typename T, typename S)(
 /// Incrementally serialize a std::vector to disk without materializing it.
 /// Call `push` for each of the elements that will become part of the vector.
 CPP_template(typename T, typename Serializer)(
-    requires WriteSerializer<Serializer>) class VectorIncrementalSerializer {
+    requires WriteSerializer<Serializer>) class VectorIncrementalSerializer
+    : public ad_utility::NoCopy {
  private:
   using SizeType = typename std::vector<T>::size_type;
   struct State {
@@ -126,16 +128,6 @@ CPP_template(typename T, typename Serializer)(
  public:
   explicit VectorIncrementalSerializer(Serializer&& serializer)
       : state_{initialize(std::move(serializer)), Finisher{}} {}
-
-  // This class is move-only, as the underlying serializers are.
-  VectorIncrementalSerializer(const VectorIncrementalSerializer&) = delete;
-  VectorIncrementalSerializer& operator=(const VectorIncrementalSerializer&) =
-      delete;
-  // The `UniqueCleanup` finishes a serializer that is overwritten, and never a
-  // moved-from one.
-  VectorIncrementalSerializer(VectorIncrementalSerializer&&) = default;
-  VectorIncrementalSerializer& operator=(VectorIncrementalSerializer&&) =
-      default;
 
   void push(const T& element) {
     state_->serializer_ << element;

@@ -20,6 +20,7 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/Iterators.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
@@ -206,7 +207,7 @@ namespace detail {
 // Allows the incremental writing of a `CompactVectorOfStrings` directly to a
 // file.
 template <typename data_type>
-struct CompactStringVectorWriter {
+struct CompactStringVectorWriter : public ad_utility::NoCopy {
  private:
   using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
 
@@ -257,17 +258,6 @@ struct CompactStringVectorWriter {
     }
     return std::move(d_).runNow();
   }
-
-  // The copy operations would be deleted implicitly (because `File` is not
-  // copyable.
-  CompactStringVectorWriter(const CompactStringVectorWriter&) = delete;
-  CompactStringVectorWriter& operator=(const CompactStringVectorWriter&) =
-      delete;
-
-  // The `UniqueCleanup` finishes a writer that is overwritten, and never a
-  // moved-from one.
-  CompactStringVectorWriter(CompactStringVectorWriter&&) = default;
-  CompactStringVectorWriter& operator=(CompactStringVectorWriter&&) = default;
 
  private:
   // Reserve the space for the data size, which is not known yet.

@@ -22,6 +22,7 @@
 #include "backports/span.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Serializer/Serializer.h"
 #include "util/UninitializedAllocator.h"
 #include "util/UniqueCleanup.h"
@@ -58,7 +59,8 @@ struct PassthroughBlockProcessor {
 CPP_template(typename UnderlyingSerializer,
              typename BlockProcessor = PassthroughBlockProcessor)(
     requires WriteSerializer<
-        UnderlyingSerializer>) class BufferedWriteSerializer {
+        UnderlyingSerializer>) class BufferedWriteSerializer
+    : public ad_utility::NoCopy {
  public:
   using SerializerType = WriteSerializerTag;
 
@@ -123,13 +125,6 @@ CPP_template(typename UnderlyingSerializer,
     // A blocksize of zero would make `serializeBytes` below loop forever.
     AD_CONTRACT_CHECK(state_->blocksize_ > 0);
   }
-
-  // This is a move-only class. The `UniqueCleanup` closes a serializer that is
-  // overwritten, and never a moved-from one.
-  BufferedWriteSerializer(const BufferedWriteSerializer&) = delete;
-  BufferedWriteSerializer& operator=(const BufferedWriteSerializer&) = delete;
-  BufferedWriteSerializer(BufferedWriteSerializer&&) = default;
-  BufferedWriteSerializer& operator=(BufferedWriteSerializer&&) = default;
 
   // Main serialization function.
   void serializeBytes(const char* bytePointer, size_t numBytes) {

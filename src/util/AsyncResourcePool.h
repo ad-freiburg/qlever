@@ -31,6 +31,7 @@
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Forward.h"
+#include "util/NoCopyNoMove.h"
 #include "util/UniqueCleanup.h"
 
 namespace ad_utility {
@@ -120,7 +121,7 @@ class AsyncResourcePool {
   //
   // NOTE: This is move-only, and it keeps the state of its pool alive, so it
   // may safely outlive the `AsyncResourcePool` object it was obtained from.
-  class Handle {
+  class Handle : public NoCopy {
    private:
     struct State {
       std::shared_ptr<Impl> impl_;
@@ -151,13 +152,6 @@ class AsyncResourcePool {
       AD_CORRECTNESS_CHECK((state_->impl_ != nullptr) ==
                            state_->resource_.has_value());
     }
-
-    // The `UniqueCleanup` returns the resource of a handle that is overwritten,
-    // and never that of a moved-from one.
-    Handle(Handle&&) noexcept = default;
-    Handle& operator=(Handle&&) noexcept = default;
-    Handle(const Handle&) = delete;
-    Handle& operator=(const Handle&) = delete;
 
     // Return `true` if this handle actually holds a resource.
     bool isValid() const noexcept { return state_->impl_ != nullptr; }
