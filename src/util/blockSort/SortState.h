@@ -19,10 +19,13 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <absl/functional/any_invocable.h>
+
+#include <atomic>
+#include <boost/asio/awaitable.hpp>
 #include <boost/sort/block_indirect_sort/blk_detail/block.hpp>
 #include <boost/sort/common/range.hpp>
 #include <cstddef>
-#include <exception>
 #include <iterator>
 #include <mutex>
 #include <thread>
@@ -168,7 +171,8 @@ class SortState {
   Compare cmp_;
   ScratchBuffers<Value> buffers_;
   ql::any_io_executor executor_;
-  ErrorSink errors_;
+  // Set as soon as any task of this sort has failed, see `TaskGroup`.
+  std::atomic<bool> stopped_{false};
 
   // Sort `[first, last)` with `numBuffers` scratch buffers. The range must not
   // be empty, which `runSort` makes sure of.
@@ -215,12 +219,19 @@ class SortState {
     return buffers_.acquire();
   }
 
-  // Whether any task of this sort has failed.
-  [[nodiscard]] bool hasError() const noexcept { return errors_.hasError(); }
+  // Run `body`, which spawns the children of a task of this sort, and wait for
+  // them, see `TaskGroup::withChildren`.
+  [[nodiscard]] net::awaitable<void> withChildren(
+      absl::AnyInvocable<void(TaskGroup&)> body) {
+    return TaskGroup::withChildren(executor_, stopped_, std::move(body));
+  }
 
-  // A new group for the children of a task of this sort.
-  [[nodiscard]] TaskGroup makeTaskGroup() {
-    return TaskGroup{executor_, errors_};
+  // Run `inlined` and `spawned` concurrently and wait for both, see
+  // `TaskGroup::runConcurrently`.
+  [[nodiscard]] net::awaitable<void> runConcurrently(
+      net::awaitable<void> inlined, net::awaitable<void> spawned) {
+    return TaskGroup::runConcurrently(executor_, stopped_, std::move(inlined),
+                                      std::move(spawned));
   }
 };
 

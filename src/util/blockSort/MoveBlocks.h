@@ -59,25 +59,19 @@ template <typename State>
 net::awaitable<void> moveLongSequence(State& state, std::vector<size_t> cycle) {
   size_t numParts = (cycle.size() + groupSize - 1) / groupSize;
   size_t sizePart = cycle.size() / numParts;
-  // Split the cycle before the first part is spawned, see LIFETIME at
-  // `TaskGroup`.
-  std::vector<std::vector<size_t>> parts;
   std::vector<size_t> remainder;
-  parts.reserve(numParts);
-  remainder.reserve(numParts);
-  for (size_t i = 0; i < numParts; ++i) {
-    auto begin = cycle.begin() + i * sizePart;
-    auto end = i + 1 == numParts ? cycle.end() : begin + sizePart;
-    parts.emplace_back(begin, end);
-    remainder.push_back(*(end - 1));
-  }
-
-  TaskGroup group = state.makeTaskGroup();
-  for (auto& part : parts) {
-    group.spawnFunction(
-        [&state, part = std::move(part)]() { moveSequence(state, part); });
-  }
-  co_await group.join();
+  co_await state.withChildren([&state, &cycle, &remainder, numParts,
+                               sizePart](TaskGroup& group) {
+    remainder.reserve(numParts);
+    for (size_t i = 0; i < numParts; ++i) {
+      auto begin = cycle.begin() + i * sizePart;
+      auto end = i + 1 == numParts ? cycle.end() : begin + sizePart;
+      remainder.push_back(*(end - 1));
+      group.spawnFunction([&state, part = std::vector<size_t>(begin, end)]() {
+        moveSequence(state, part);
+      });
+    }
+  });
   // One block per part, so this is short enough for a single task.
   moveSequence(state, remainder);
 }
@@ -96,30 +90,25 @@ void spawnCycle(State& state, TaskGroup& group, std::vector<size_t> cycle) {
 // Apply the permutation `state.index_` to the blocks.
 template <typename State>
 net::awaitable<void> moveBlocks(State& state) {
-  // Collect all cycles before the first one is spawned, see LIFETIME at
-  // `TaskGroup`. Their blocks are marked as in place on the way.
-  std::vector<std::vector<size_t>> cycles;
-  for (size_t cycleStart = 0; cycleStart < state.index_.size(); ++cycleStart) {
-    if (state.index_[cycleStart].pos() == cycleStart) {
-      continue;
-    }
-    std::vector<size_t>& cycle = cycles.emplace_back();
-    cycle.push_back(cycleStart);
-    size_t destination = cycleStart;
-    while (state.index_[destination].pos() != cycleStart) {
-      size_t source = state.index_[destination].pos();
-      cycle.push_back(source);
+  co_await state.withChildren([&state](TaskGroup& group) {
+    for (size_t cycleStart = 0; cycleStart < state.index_.size();
+         ++cycleStart) {
+      if (state.index_[cycleStart].pos() == cycleStart) {
+        continue;
+      }
+      // Collect the cycle and mark its blocks as in place on the way.
+      std::vector<size_t> cycle{cycleStart};
+      size_t destination = cycleStart;
+      while (state.index_[destination].pos() != cycleStart) {
+        size_t source = state.index_[destination].pos();
+        cycle.push_back(source);
+        state.index_[destination].set_pos(destination);
+        destination = source;
+      }
       state.index_[destination].set_pos(destination);
-      destination = source;
+      spawnCycle(state, group, std::move(cycle));
     }
-    state.index_[destination].set_pos(destination);
-  }
-
-  TaskGroup group = state.makeTaskGroup();
-  for (auto& cycle : cycles) {
-    spawnCycle(state, group, std::move(cycle));
-  }
-  co_await group.join();
+  });
 }
 
 }  // namespace ad_utility::blockSort::detail

@@ -350,19 +350,26 @@ void testValueType(size_t numIterations, size_t maxBlockSize) {
   EXPECT_EQ(Values::toKeys(values), keys);
 }
 
-// A coroutine that runs `function` on a fresh `TaskGroup`, see the tests of
-// `TaskGroup` below.
-template <typename Function>
-void runWithTaskGroup(ErrorSink& errors, Function function) {
-  ql::any_io_executor executor = threadPool().get_executor();
-  net::co_spawn(
-      executor,
-      [&]() -> net::awaitable<void> {
-        TaskGroup group{executor, errors};
-        co_await function(group);
-      },
-      net::use_future)
+// Run `awaitable` on the shared thread pool, wait for it, and rethrow its
+// exception.
+void runOnPool(net::awaitable<void> awaitable) {
+  net::co_spawn(threadPool().get_executor(), std::move(awaitable),
+                net::use_future)
       .get();
+}
+
+// Spawn a child into `group` that only finishes 50 ms after it has started,
+// and wait until it has started.
+void spawnSlowChild(TaskGroup& group, std::atomic<bool>& finished) {
+  std::atomic<bool> started{false};
+  group.spawnFunction([&started, &finished] {
+    started = true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    finished = true;
+  });
+  while (!started) {
+    std::this_thread::yield();
+  }
 }
 
 // A coroutine that throws.
@@ -438,86 +445,111 @@ TEST(BlockIndirectSort, concurrentSortsOnTheSameExecutor) {
 }
 
 // _____________________________________________________________________________
-// The first stored exception wins, and a null exception is rejected.
-TEST(BlockIndirectSort, errorSink) {
-  ErrorSink sink;
-  EXPECT_FALSE(sink.hasError());
-  EXPECT_NO_THROW(sink.rethrowIfError());
-  AD_EXPECT_THROW_WITH_MESSAGE(sink.store(nullptr),
-                               ::testing::HasSubstr("error != nullptr"));
-  EXPECT_FALSE(sink.hasError());
-
-  sink.store(std::make_exception_ptr(std::runtime_error("first")));
-  sink.store(std::make_exception_ptr(std::runtime_error("second")));
-  EXPECT_TRUE(sink.hasError());
-  AD_EXPECT_THROW_WITH_MESSAGE(sink.rethrowIfError(),
-                               ::testing::StrEq("first"));
+// If both the body and a child throw, the first of the two exceptions reaches
+// the caller.
+TEST(BlockIndirectSort, taskGroupKeepsFirstException) {
+  ql::any_io_executor executor = threadPool().get_executor();
+  std::atomic<bool> stopped{false};
+  std::atomic<bool> childStarted{false};
+  try {
+    runOnPool(TaskGroup::withChildren(executor, stopped, [&](TaskGroup& group) {
+      group.spawnFunction([&childStarted] {
+        childStarted = true;
+        throw std::runtime_error{"child failed"};
+      });
+      while (!childStarted) {
+        std::this_thread::yield();
+      }
+      throw std::runtime_error{"body failed"};
+    }));
+    ADD_FAILURE() << "No exception was thrown";
+  } catch (const std::runtime_error& e) {
+    EXPECT_THAT(e.what(), ::testing::AnyOf(::testing::StrEq("child failed"),
+                                           ::testing::StrEq("body failed")));
+  }
 }
 
 // _____________________________________________________________________________
-// Children run, their exceptions are collected, and `join()` waits for them,
-// also when they are still running when it is called.
-TEST(BlockIndirectSort, taskGroupRunsChildren) {
-  ErrorSink errors;
-  std::atomic<int> numDone{0};
-  std::promise<void> release;
-  auto released = release.get_future().share();
-  std::thread releaser{[&release] {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    release.set_value();
-  }};
-  runWithTaskGroup(errors, [&](TaskGroup& group) -> net::awaitable<void> {
-    // A child that is still running when `join()` is called.
-    group.spawnFunction([&numDone, released] {
-      released.wait();
-      ++numDone;
-    });
-    std::atomic<bool> flag{false};
-    group.spawn(setFlag(flag));
-    co_await group.join();
-    EXPECT_TRUE(flag);
-  });
-  releaser.join();
-  EXPECT_EQ(numDone, 1);
-  EXPECT_FALSE(errors.hasError());
-
-  // A group without children, and the exceptions of both kinds of children.
-  runWithTaskGroup(errors, [](TaskGroup& group) { return group.join(); });
-  runWithTaskGroup(errors, [](TaskGroup& group) -> net::awaitable<void> {
-    group.spawn(throwingCoroutine());
-    co_await group.join();
-  });
-  AD_EXPECT_THROW_WITH_MESSAGE(errors.rethrowIfError(),
-                               ::testing::StrEq("coroutine failed"));
-  ErrorSink errors2;
-  runWithTaskGroup(errors2, [](TaskGroup& group) -> net::awaitable<void> {
-    group.spawnFunction([] { throw std::runtime_error{"function failed"}; });
-    co_await group.join();
-  });
-  AD_EXPECT_THROW_WITH_MESSAGE(errors2.rethrowIfError(),
-                               ::testing::StrEq("function failed"));
-  // The inline child of `runConcurrently`. Whether the spawned child still runs
-  // depends on whether it starts before the exception is stored.
-  ErrorSink errors3;
+// `withChildren` runs all children and waits for them, also for those that are
+// still running when the body is done.
+TEST(BlockIndirectSort, taskGroupWaitsForChildren) {
+  ql::any_io_executor executor = threadPool().get_executor();
+  std::atomic<bool> stopped{false};
+  std::atomic<bool> slowFinished{false};
   std::atomic<bool> flag{false};
-  runWithTaskGroup(errors3, [&flag](TaskGroup& group) {
-    return group.runConcurrently(throwingCoroutine(), setFlag(flag));
-  });
-  AD_EXPECT_THROW_WITH_MESSAGE(errors3.rethrowIfError(),
-                               ::testing::StrEq("coroutine failed"));
+  runOnPool(TaskGroup::withChildren(executor, stopped, [&](TaskGroup& group) {
+    spawnSlowChild(group, slowFinished);
+    group.spawn(setFlag(flag));
+  }));
+  EXPECT_TRUE(slowFinished);
+  EXPECT_TRUE(flag);
+  EXPECT_FALSE(stopped);
+
+  // A group without children.
+  runOnPool(TaskGroup::withChildren(executor, stopped, [](TaskGroup&) {}));
 }
 
 // _____________________________________________________________________________
-// After an error, no child starts anymore.
-TEST(BlockIndirectSort, taskGroupSkipsChildrenAfterError) {
-  ErrorSink errors;
-  errors.store(std::make_exception_ptr(std::runtime_error{"earlier"}));
+// The first exception of the body or of a child reaches the caller, but only
+// after all children have finished, and it stops the sort.
+TEST(BlockIndirectSort, taskGroupPropagatesExceptions) {
+  ql::any_io_executor executor = threadPool().get_executor();
+  auto expectThrows = [&](auto body, std::string_view message) {
+    std::atomic<bool> stopped{false};
+    std::atomic<bool> slowFinished{false};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        runOnPool(TaskGroup::withChildren(executor, stopped,
+                                          [&](TaskGroup& group) {
+                                            spawnSlowChild(group, slowFinished);
+                                            body(group);
+                                          })),
+        ::testing::StrEq(message));
+    EXPECT_TRUE(slowFinished);
+    EXPECT_TRUE(stopped);
+  };
+  expectThrows([](TaskGroup&) { throw std::runtime_error{"body failed"}; },
+               "body failed");
+  expectThrows(
+      [](TaskGroup& group) {
+        group.spawnFunction(
+            [] { throw std::runtime_error{"function failed"}; });
+      },
+      "function failed");
+  expectThrows([](TaskGroup& group) { group.spawn(throwingCoroutine()); },
+               "coroutine failed");
+
+  // Both children of `runConcurrently`.
+  std::atomic<bool> stopped{false};
+  std::atomic<bool> flag{false};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runOnPool(TaskGroup::runConcurrently(executor, stopped,
+                                           throwingCoroutine(), setFlag(flag))),
+      ::testing::StrEq("coroutine failed"));
+  std::atomic<bool> stopped2{false};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runOnPool(TaskGroup::runConcurrently(executor, stopped2, setFlag(flag),
+                                           throwingCoroutine())),
+      ::testing::StrEq("coroutine failed"));
+  EXPECT_TRUE(flag);
+}
+
+// _____________________________________________________________________________
+// Once the sort is stopped, spawned children don't start anymore.
+TEST(BlockIndirectSort, taskGroupSkipsChildrenWhenStopped) {
+  ql::any_io_executor executor = threadPool().get_executor();
+  std::atomic<bool> stopped{true};
   std::atomic<bool> ran{false};
-  runWithTaskGroup(errors, [&ran](TaskGroup& group) -> net::awaitable<void> {
-    group.spawnFunction([&ran] { ran = true; });
-    group.spawn(setFlag(ran));
-    co_await group.runConcurrently(setFlag(ran), setFlag(ran));
-  });
+  runOnPool(
+      TaskGroup::withChildren(executor, stopped, [&ran](TaskGroup& group) {
+        group.spawnFunction([&ran] { ran = true; });
+        group.spawn(setFlag(ran));
+      }));
+  EXPECT_FALSE(ran);
+  // Only the spawned child of `runConcurrently` is skipped.
+  std::atomic<bool> inlinedRan{false};
+  runOnPool(TaskGroup::runConcurrently(executor, stopped, setFlag(inlinedRan),
+                                       setFlag(ran)));
+  EXPECT_TRUE(inlinedRan);
   EXPECT_FALSE(ran);
 }
 

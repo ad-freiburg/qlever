@@ -78,9 +78,8 @@ net::awaitable<void> splitRange(State& state, size_t posIndex1,
   AD_CORRECTNESS_CHECK(posIndex2 - posIndex1 >= groupSize);
   size_t posIndexMid = std::midpoint(posIndex1, posIndex2);
 
-  TaskGroup group = state.makeTaskGroup();
   if (levelThread != 0) {
-    co_await group.runConcurrently(
+    co_await state.runConcurrently(
         splitRange(state, posIndex1, posIndexMid, levelThread - 1),
         splitRange(state, posIndexMid, posIndex2, levelThread - 1));
   } else {
@@ -88,11 +87,8 @@ net::awaitable<void> splitRange(State& state, size_t posIndex1,
     auto first = state.getBlockBegin(posIndex1);
     auto mid = state.getBlockBegin(posIndexMid);
     auto last = state.getRange(posIndex2 - 1).last;
-    co_await group.runConcurrently(parallelSort(state, first, mid),
+    co_await state.runConcurrently(parallelSort(state, first, mid),
                                    parallelSort(state, mid, last));
-  }
-  if (state.hasError()) {
-    co_return;
   }
   co_await mergeBlocks(state, posIndex1, posIndexMid, posIndex2);
 }
@@ -108,9 +104,6 @@ net::awaitable<void> startSort(State& state, uint32_t numThreads) {
   // Split until there is one part per thread.
   auto levelThread = static_cast<uint32_t>(std::bit_width(numThreads - 1)) - 1;
   co_await splitRange(state, 0, state.numBlocks_, levelThread - 1);
-  if (state.hasError()) {
-    co_return;
-  }
   co_await moveBlocks(state);
 }
 
@@ -162,9 +155,9 @@ void runSort(Iterator first, Iterator last, Compare comp, uint32_t nthread,
 
   SortState<Iterator, Compare> state{first,  last,    std::move(comp),
                                      params, nthread, exec};
-  // Blocks the calling thread, see the note at `blockIndirectSort`.
+  // Blocks the calling thread, see the note at `blockIndirectSort`. Rethrows
+  // the first exception of any task.
   net::co_spawn(exec, startSort(state, nthread), net::use_future).get();
-  state.errors_.rethrowIfError();
 }
 
 }  // namespace detail

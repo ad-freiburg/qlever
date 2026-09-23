@@ -85,10 +85,7 @@ net::awaitable<void> cutRange(State& state,
                               typename State::RangePos positions) {
   size_t numParts = (positions.size() + groupSize - 1) / groupSize;
   size_t sizePart = positions.size() / numParts;
-  // Make all cuts before the first part is spawned, see LIFETIME at
-  // `TaskGroup`.
-  std::vector<typename State::RangePos> parts;
-  {
+  co_await state.withChildren([&state, positions, sizePart](TaskGroup& group) {
     auto lease = state.acquireBuffer();
     size_t posIni = positions.first;
     size_t posLast = positions.last;
@@ -106,15 +103,11 @@ net::awaitable<void> cutRange(State& state,
       } else {
         pos = posLast;
       }
-      parts.emplace_back(posIni, pos);
+      typename State::RangePos part{posIni, pos};
+      group.spawnFunction([&state, part]() { mergeRangePos(state, part); });
       posIni = pos;
     }
-  }
-  TaskGroup group = state.makeTaskGroup();
-  for (auto part : parts) {
-    group.spawnFunction([&state, part]() { mergeRangePos(state, part); });
-  }
-  co_await group.join();
+  });
 }
 
 // Spawn the merge of `run`, cut into parts if it is big.
@@ -132,47 +125,40 @@ void spawnRun(State& state, TaskGroup& group, typename State::RangePos run) {
 template <typename State>
 net::awaitable<void> extractRanges(State& state,
                                    typename State::RangePos positions) {
-  // Find all runs before the first one is spawned, see LIFETIME at
-  // `TaskGroup`.
-  std::vector<typename State::RangePos> runs;
-  size_t runBegin = positions.first;
-  bsd::block_pos blockAtBegin = state.index_[runBegin];
-  // The block of the current run with the greatest last element, and its side.
-  // Only blocks from the other side can overlap with it.
-  auto rangeMax = state.getRange(blockAtBegin.pos());
-  bool sideMax = blockAtBegin.side();
-  auto rangeCurrent = rangeMax;
-  bool sideCurrent = sideMax;
+  co_await state.withChildren([&state, positions](TaskGroup& group) {
+    size_t runBegin = positions.first;
+    bsd::block_pos blockAtBegin = state.index_[runBegin];
+    // The block of the current run with the greatest last element, and its
+    // side. Only blocks from the other side can overlap with it.
+    auto rangeMax = state.getRange(blockAtBegin.pos());
+    bool sideMax = blockAtBegin.side();
+    auto rangeCurrent = rangeMax;
+    bool sideCurrent = sideMax;
 
-  for (size_t pos = runBegin + 1; pos <= positions.last; ++pos) {
-    bool isEnd = pos == positions.last;
-    bool isMergeable = false;
-    if (!isEnd) {
-      bsd::block_pos blockAtPos = state.index_[pos];
-      rangeCurrent = state.getRange(blockAtPos.pos());
-      sideCurrent = blockAtPos.side();
-      isMergeable = sideMax != sideCurrent &&
-                    bsc::is_mergeable(rangeMax, rangeCurrent, state.cmp_);
-    }
-    if (isEnd || !isMergeable) {
-      typename State::RangePos run{runBegin, pos};
-      if (run.size() > 1) {
-        runs.push_back(run);
+    for (size_t pos = runBegin + 1; pos <= positions.last; ++pos) {
+      bool isEnd = pos == positions.last;
+      bool isMergeable = false;
+      if (!isEnd) {
+        bsd::block_pos blockAtPos = state.index_[pos];
+        rangeCurrent = state.getRange(blockAtPos.pos());
+        sideCurrent = blockAtPos.side();
+        isMergeable = sideMax != sideCurrent &&
+                      bsc::is_mergeable(rangeMax, rangeCurrent, state.cmp_);
       }
-      runBegin = pos;
-      rangeMax = rangeCurrent;
-      sideMax = sideCurrent;
-    } else if (state.cmp_(*rangeMax.back(), *rangeCurrent.back())) {
-      rangeMax = rangeCurrent;
-      sideMax = sideCurrent;
+      if (isEnd || !isMergeable) {
+        typename State::RangePos run{runBegin, pos};
+        if (run.size() > 1) {
+          spawnRun(state, group, run);
+        }
+        runBegin = pos;
+        rangeMax = rangeCurrent;
+        sideMax = sideCurrent;
+      } else if (state.cmp_(*rangeMax.back(), *rangeCurrent.back())) {
+        rangeMax = rangeCurrent;
+        sideMax = sideCurrent;
+      }
     }
-  }
-
-  TaskGroup group = state.makeTaskGroup();
-  for (auto run : runs) {
-    spawnRun(state, group, run);
-  }
-  co_await group.join();
+  });
 }
 
 // Merge the sorted index ranges `[posIndex1, posIndex2)` and

@@ -131,10 +131,7 @@ net::awaitable<void> divideSort(State& state, Iterator first, Iterator last,
   }
   ql::ranges::iter_swap(first, cLast);
 
-  // Everything that may throw is done, so the children can be spawned, see
-  // LIFETIME at `TaskGroup`.
-  TaskGroup group = state.makeTaskGroup();
-  co_await group.runConcurrently(divideSort(state, first, cLast, level - 1),
+  co_await state.runConcurrently(divideSort(state, first, cLast, level - 1),
                                  divideSort(state, cFirst, last, level - 1));
 }
 
