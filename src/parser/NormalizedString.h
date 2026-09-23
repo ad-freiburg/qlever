@@ -5,7 +5,6 @@
 #ifndef QLEVER_SRC_PARSER_NORMALIZEDSTRING_H
 #define QLEVER_SRC_PARSER_NORMALIZEDSTRING_H
 
-#include <string>
 #include <string_view>
 
 #include "backports/three_way_comparison.h"
@@ -21,12 +20,10 @@ struct NormalizedChar {
 // there for why we cannot rely on `std::char_traits` directly).
 using NormalizedCharTraits = ad_utility::GenericCharTraits<NormalizedChar>;
 
-// A bespoke string representation that ensures the content
-// is correctly encoded and does not contain invalid characters
-using NormalizedString =
-    std::basic_string<NormalizedChar, NormalizedCharTraits>;
-
-// A string view representation of above described normalized strings
+// A bespoke string representation that ensures the content is correctly
+// encoded and does not contain invalid characters. Normalized strings are
+// always owned by an `Iri` or a `Literal` (as a plain `std::string`), so only
+// the view is needed.
 using NormalizedStringView =
     std::basic_string_view<NormalizedChar, NormalizedCharTraits>;
 

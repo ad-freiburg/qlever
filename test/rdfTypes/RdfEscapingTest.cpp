@@ -75,18 +75,29 @@ TEST(RdfEscapingTest, escapeForXml) {
 }
 
 // ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeLiteralWithQuotesToNormalizedString) {
-  ASSERT_EQ(
-      "Hello \" \\World",
-      asStringViewUnsafe(normalizeLiteralWithQuotes(R"("Hello \" \\World")")));
-  ASSERT_THROW(normalizeLiteralWithQuotes("no quotes"), ad_utility::Exception);
+TEST(RdfEscapingTest, unescapeLiteralWithQuotesRemoved) {
+  auto f = [](std::string_view input) {
+    // Append to a non-empty string to demonstrate that the result is appended.
+    std::string result = "prefix:";
+    unescapeLiteralWithQuotesRemoved(input, result);
+    return result;
+  };
+  ASSERT_EQ("prefix:Hello \" \\World", f(R"("Hello \" \\World")"));
+  ASSERT_EQ("prefix:Hello \" \\World", f(R"('''Hello \" \\World''')"));
+  // A literal without any escape sequence is copied in a single block.
+  ASSERT_EQ("prefix:Hello World", f(R"("Hello World")"));
+  ASSERT_THROW(f("no quotes"), ad_utility::Exception);
 }
 
 // ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeLiteralWithoutQuotesToNormalizedString) {
-  ASSERT_EQ(
-      "Hello \" \\World",
-      asStringViewUnsafe(normalizeLiteralWithoutQuotes(R"(Hello \" \\World)")));
+TEST(RdfEscapingTest, unescapeLiteral) {
+  auto f = [](std::string_view input) {
+    std::string result;
+    unescapeLiteral(input, result);
+    return result;
+  };
+  ASSERT_EQ("Hello \" \\World", f(R"(Hello \" \\World)"));
+  ASSERT_EQ("Hello World", f("Hello World"));
 }
 
 // ___________________________________________________________________________

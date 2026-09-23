@@ -26,7 +26,10 @@ constexpr ctll::fixed_string tsvSpecialCharsRegex = "[\n\t]";
 constexpr ctll::fixed_string xmlSpecialCharsRegex = "[&\"<>']";
 
 // _____________________________________________________________________________
-std::string hexadecimalCharactersToUtf8Codepoint(std::string_view hex) {
+// Append the UTF-8 encoding of the codepoint that is encoded by the at most 8
+// hexadecimal characters in `hex` to `out`.
+static void appendUtf8CodepointFromHexadecimalCharacters(std::string_view hex,
+                                                         std::string& out) {
   // The input encodes a single Unicode codepoint, so it is at most 8 hex digits
   // long (the length of a `\UXXXXXXXX` escape).
   AD_CONTRACT_CHECK(hex.size() <= 8);
@@ -34,8 +37,13 @@ std::string hexadecimalCharactersToUtf8Codepoint(std::string_view hex) {
   auto result =
       std::from_chars(hex.data(), hex.data() + hex.size(), codepoint, 16);
   AD_CORRECTNESS_CHECK(result.ec == std::errc{});
+  ad_utility::utf8EncodeCodepoint(codepoint, out);
+}
+
+// _____________________________________________________________________________
+std::string hexadecimalCharactersToUtf8Codepoint(std::string_view hex) {
   std::string res;
-  ad_utility::utf8EncodeCodepoint(codepoint, res);
+  appendUtf8CodepointFromHexadecimalCharacters(hex, res);
   return res;
 }
 
@@ -46,22 +54,19 @@ std::string hexadecimalCharactersToUtf8Codepoint(std::string_view hex) {
  * newlines and backslashes. It throws an exception if an escape sequence that
  * is not allowed is found.
  */
-template <bool acceptOnlyNumericEscapes, bool acceptOnlyBackslashAndNewline,
-          typename OutputIterator>
+template <bool acceptOnlyNumericEscapes, bool acceptOnlyBackslashAndNewline>
 void unescapeStringAndNumericEscapes(std::string_view input,
-                                     OutputIterator outputIterator) {
+                                     std::string& output) {
   static_assert(!(acceptOnlyNumericEscapes && acceptOnlyBackslashAndNewline));
   auto beginIterator = input.begin();
   auto endIterator = input.end();
   // Append the `character` to the output, but only if newlines/backslashes are
   // allowed via the configuration
-  auto pushNewlineOrBackslash = [&outputIterator](
-                                    const char newlineOrBackslash) {
+  auto pushNewlineOrBackslash = [&output](const char newlineOrBackslash) {
     if constexpr (!acceptOnlyNumericEscapes || acceptOnlyBackslashAndNewline) {
-      *outputIterator = newlineOrBackslash;
-      outputIterator++;
+      output.push_back(newlineOrBackslash);
     } else {
-      (void)outputIterator;
+      (void)output;
       (void)newlineOrBackslash;
       throw std::runtime_error(
           "String escapes like \\n or \\t are not allowed in this context");
@@ -70,12 +75,11 @@ void unescapeStringAndNumericEscapes(std::string_view input,
 
   // Append the `character` to the output, but only if general string escapes
   // (e.g. "\\t") are allowed via the configuration
-  auto pushOtherStringEscape = [&outputIterator](const char otherStringEscape) {
+  auto pushOtherStringEscape = [&output](const char otherStringEscape) {
     if constexpr (!acceptOnlyNumericEscapes && !acceptOnlyBackslashAndNewline) {
-      *outputIterator = otherStringEscape;
-      outputIterator++;
+      output.push_back(otherStringEscape);
     } else {
-      (void)outputIterator;
+      (void)output;
       (void)otherStringEscape;
       throw std::runtime_error(
           "String escapes like \\n or \\t are not allowed in this context");
@@ -85,19 +89,18 @@ void unescapeStringAndNumericEscapes(std::string_view input,
   // Convert `length` hexadecimal characters (e.g. "00e4" from the `iterator`)
   // to UTF-8 and append them to the output. Throw an exception if numeric
   // escapes are not allowed via the configuration.
-  auto pushNumericEscape = [&outputIterator, &endIterator](const auto& iterator,
-                                                           size_t length) {
+  auto pushNumericEscape = [&output, &endIterator](const auto& iterator,
+                                                   size_t length) {
     if constexpr (!acceptOnlyBackslashAndNewline) {
       AD_CONTRACT_CHECK(iterator + length <= endIterator);
       // Use `&*iterator` to obtain a raw pointer rather than passing the
       // iterator directly: newer libc++ wraps the string-view iterator in
       // `__wrap_iter` and no longer converts it implicitly to `const char*`.
       // `length` is always positive here, so dereferencing is safe.
-      auto unesc = hexadecimalCharactersToUtf8Codepoint(
-          std::string_view(&*iterator, length));
-      std::copy(unesc.begin(), unesc.end(), outputIterator);
+      appendUtf8CodepointFromHexadecimalCharacters(
+          std::string_view(&*iterator, length), output);
     } else {
-      (void)outputIterator;
+      (void)output;
       (void)endIterator;
       throw std::runtime_error(
           "Numeric escapes escapes like \"\\u00e4\" are not allowed in this "
@@ -107,7 +110,10 @@ void unescapeStringAndNumericEscapes(std::string_view input,
 
   while (true) {
     auto nextBackslashIterator = std::find(beginIterator, endIterator, '\\');
-    std::copy(beginIterator, nextBackslashIterator, outputIterator);
+    // Appending the whole range at once (instead of pushing back the single
+    // characters) makes this a `memcpy`. In the common case that the input
+    // contains no escape sequence at all, this is the only work that is done.
+    output.append(beginIterator, nextBackslashIterator);
     if (nextBackslashIterator == endIterator) {
       break;
     }
@@ -163,8 +169,8 @@ void unescapeStringAndNumericEscapes(std::string_view input,
 // _____________________________________________________________________________
 std::string unescapeNewlinesAndBackslashes(std::string_view literal) {
   std::string result;
-  RdfEscaping::detail::unescapeStringAndNumericEscapes<false, true>(
-      literal, std::back_inserter(result));
+  RdfEscaping::detail::unescapeStringAndNumericEscapes<false, true>(literal,
+                                                                    result);
   return result;
 }
 
@@ -174,14 +180,13 @@ std::string escapeNewlinesAndBackslashes(std::string_view literal) {
 }
 
 // ____________________________________________________________________________
-static void literalUnescape(std::string_view input, std::string& res) {
-  detail::unescapeStringAndNumericEscapes<false, false>(
-      input, std::back_inserter(res));
+void unescapeLiteral(std::string_view input, std::string& res) {
+  detail::unescapeStringAndNumericEscapes<false, false>(input, res);
 }
 
 // ____________________________________________________________________________
-static void literalUnescapeWithQuotesRemoved(std::string_view input,
-                                             std::string& res) {
+void unescapeLiteralWithQuotesRemoved(std::string_view input,
+                                      std::string& res) {
   if (ql::starts_with(input, R"(""")") || ql::starts_with(input, R"(''')")) {
     AD_CONTRACT_CHECK(ql::ends_with(input, input.substr(0, 3)));
     input.remove_prefix(3);
@@ -194,7 +199,7 @@ static void literalUnescapeWithQuotesRemoved(std::string_view input,
     input.remove_suffix(1);
   }
 
-  literalUnescape(input, res);
+  unescapeLiteral(input, res);
 }
 
 // ________________________________________________________________________
@@ -203,7 +208,7 @@ NormalizedRDFString normalizeRDFLiteral(const std::string_view origLiteral) {
 
   // always start with one double quote "
   std::string res = "\"";
-  literalUnescapeWithQuotesRemoved(literal, res);
+  unescapeLiteralWithQuotesRemoved(literal, res);
   res.push_back('\"');
   return NormalizedRDFString{std::move(res)};
 }
@@ -234,8 +239,7 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
 static void unescapeIriWithoutBrackets(std::string_view input,
                                        std::string& res) {
   // Only numeric escapes are allowed for iriefs.
-  RdfEscaping::detail::unescapeStringAndNumericEscapes<true, false>(
-      input, std::back_inserter(res));
+  RdfEscaping::detail::unescapeStringAndNumericEscapes<true, false>(input, res);
 }
 
 // __________________________________________________________________________
@@ -353,31 +357,6 @@ std::string normalizedContentFromLiteralOrIri(std::string&& input) {
     input.resize(posLastQuote - 1);
   }
   return std::move(input);
-}
-
-// Internal function to cast a string_view to a NormalizedString.
-// Should not be used outside of this package.
-static NormalizedString toNormalizedString(std::string_view input) {
-  NormalizedString normalizedString;
-  normalizedString.resize(input.size());
-  ql::ranges::transform(input.begin(), input.end(), normalizedString.begin(),
-                        [](char c) { return NormalizedChar{c}; });
-
-  return normalizedString;
-}
-
-// __________________________________________________________________________
-NormalizedString normalizeLiteralWithQuotes(std::string_view input) {
-  std::string returnValue;
-  literalUnescapeWithQuotesRemoved(input, returnValue);
-  return toNormalizedString(returnValue);
-}
-
-// __________________________________________________________________________
-NormalizedString normalizeLiteralWithoutQuotes(std::string_view input) {
-  std::string returnValue;
-  literalUnescape(input, returnValue);
-  return toNormalizedString(returnValue);
 }
 
 }  // namespace RdfEscaping

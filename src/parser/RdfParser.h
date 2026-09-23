@@ -217,10 +217,11 @@ class TurtleParser : public RdfParserBase {
       const EncodedIriManager& encodedIriManager);
 
  private:
-  // Impl of the method above, also used in rdfLiteral parsing.
+  // Impl of the method above, also used in rdfLiteral parsing. The `literal`
+  // (which must not have a datatype or language tag yet) is taken by value so
+  // that it can be reused for the result instead of being rebuilt.
   TripleComponent literalAndDatatypeToTripleComponentImpl(
-      std::string_view normalizedLiteralContent,
-      const TripleComponent::Iri& typeIri);
+      TripleComponent::Literal literal, const TripleComponent::Iri& typeIri);
 
   static constexpr std::array<const char*, 12> integerDatatypes_ = {
       XSD_INT_TYPE,
