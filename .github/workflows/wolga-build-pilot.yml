@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: [self-hosted, linux, x64, wolga]
+    runs-on: [self-hosted, linux, x64, wolga-img]
     timeout-minutes: 240
     env:
       PODMAN_ROOT: /local/data-ssd/stoetzem/containers-storage
