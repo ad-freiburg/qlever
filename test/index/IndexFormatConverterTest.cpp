@@ -865,8 +865,8 @@ TEST_F(MultiBlockIndexFormatConverterTest, relationWithItsOwnMetadata) {
   // triples per block, which is the same block size that the index that is
   // converted is built with (see `convertAndExpectTheSameContent` above). A
   // relation with two rows then already is large enough.
-  ad_utility::MemorySize previousBlocksize = blocksizeOfConvertedPermutations();
-  blocksizeOfConvertedPermutations() = 16_B;
+  size_t previousBlocksize = blocksizeOfConvertedPermutations();
+  blocksizeOfConvertedPermutations() = 2;
   absl::Cleanup restoreBlocksize = [previousBlocksize]() {
     blocksizeOfConvertedPermutations() = previousBlocksize;
   };

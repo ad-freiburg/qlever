@@ -304,7 +304,7 @@ class CompressedRelationWriter {
       ad_utility::makeUnlimitedAllocator<Id>();
   // A buffer for small relations that will be stored in the same block.
   SmallRelationsBuffer smallRelationsBuffer_{numColumns_, allocator_};
-  ad_utility::MemorySize uncompressedBlocksizePerColumn_;
+  size_t rowsPerBlock_;
 
   // When we store a large relation with multiple blocks then we keep track of
   // its `col0Id`, mostly for sanity checks.
@@ -327,12 +327,11 @@ class CompressedRelationWriter {
   /// compress and write blocks; otherwise the runtime parameter
   /// `permutation-writer-num-threads` is used (see `makeBlockWriteQueue`).
   explicit CompressedRelationWriter(
-      size_t numColumns, ad_utility::File f,
-      ad_utility::MemorySize uncompressedBlocksizePerColumn,
+      size_t numColumns, ad_utility::File f, size_t rowsPerBlock,
       std::optional<size_t> numWriterThreads = std::nullopt)
       : outfile_{std::move(f)},
         numColumns_{numColumns},
-        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn},
+        rowsPerBlock_{rowsPerBlock},
         blockWriteQueue_{makeBlockWriteQueue(numWriterThreads)} {}
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
@@ -458,11 +457,7 @@ class CompressedRelationWriter {
   // Return the blocksize (in number of triples) of this writer. Note that the
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
-  size_t blocksize() const {
-    return std::max(
-        size_t{1},
-        size_t{uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id)});
-  }
+  size_t blocksize() const { return std::max(size_t{1}, rowsPerBlock_); }
 
  private:
   /// Finish writing all relations which have previously been added, but might

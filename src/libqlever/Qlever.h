@@ -107,8 +107,7 @@ struct IndexBuilderConfig : CommonConfig {
   // are read: an index scan always reads whole blocks, so smaller blocks make
   // selective scans read fewer rows, at the price of more block metadata
   // (which is held in RAM) and a slightly larger index. The default is a
-  // compromise that favors large scans; see
-  // `UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN`.
+  // compromise that favors large scans; see `DEFAULT_INDEX_ROWS_PER_BLOCK`.
   std::optional<size_t> indexRowsPerBlock_;
 
   // Filename of a JSON file with additional settings. Examples can be seen in

@@ -595,12 +595,10 @@ TEST(IndexTest, indexRowsPerBlockFromConfiguration) {
   // stored in its configuration, so that permutations of that index that are
   // written later on (a materialized view, for example) get the same blocks.
   ad_utility::testing::TestIndexConfig config{"<a> <p> <o> . <a> <p> <o2> ."};
-  config.blocksizePermutations = 32_B;
+  config.rowsPerBlock = 4;
   auto* qec = ad_utility::testing::getQec(config);
   const auto& base = qec->getIndex().getOnDiskBase();
-  EXPECT_EQ(qec->getIndex().blocksizePermutationsPerColumn(), 32_B);
-  // The configuration stores the number of rows per block (32 bytes per
-  // column are 4 rows).
+  EXPECT_EQ(qec->getIndex().rowsPerBlock(), 4u);
   {
     nlohmann::json configuration;
     std::ifstream in{absl::StrCat(base, CONFIGURATION_FILE)};
@@ -623,21 +621,21 @@ TEST(IndexTest, indexRowsPerBlockFromConfiguration) {
         }
         Index index{ad_utility::makeUnlimitedAllocator<Id>()};
         index.createFromOnDiskIndex(base, false);
-        return index.blocksizePermutationsPerColumn();
+        return index.rowsPerBlock();
       };
 
   // The block size of the index build is read back.
-  EXPECT_EQ(loadWithConfiguration([](nlohmann::json&) {}), 32_B);
+  EXPECT_EQ(loadWithConfiguration([](nlohmann::json&) {}), 4u);
   EXPECT_EQ(loadWithConfiguration([](nlohmann::json& configuration) {
               configuration[INDEX_ROWS_PER_BLOCK_KEY] = 512;
             }),
-            4096_B);
+            512u);
 
   // An index that was built before the block size was stored uses the default.
   EXPECT_EQ(loadWithConfiguration([](nlohmann::json& configuration) {
               configuration.erase(std::string{INDEX_ROWS_PER_BLOCK_KEY});
             }),
-            UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
+            DEFAULT_INDEX_ROWS_PER_BLOCK);
 
   // A block size of zero is rejected, it would mean blocks without rows.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1262,7 +1260,7 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   auto [directory, cleanup] = makeTemporaryDirectory("loadConfigFromOldIndex");
   auto onDiskBase = directory + "/index";
   IndexImpl other{ad_utility::makeUnlimitedAllocator<Id>()};
-  other.blocksizePermutationPerColumn() = 1337_B;
+  other.rowsPerBlock() = 1337;
   nlohmann::json stats;
 
   Index::NumNormalAndInternal numTriples{42, 1337};
@@ -1284,8 +1282,7 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   EXPECT_EQ(index.numDistinctPredicates(), numPredicates);
   EXPECT_EQ(index.numSubjects_, numSubjects);
   EXPECT_EQ(index.numObjects_, numObjects);
-  EXPECT_EQ(index.blocksizePermutationPerColumn(),
-            other.blocksizePermutationPerColumn());
+  EXPECT_EQ(index.rowsPerBlock(), other.rowsPerBlock());
   EXPECT_EQ(index.configurationJson_, stats);
 
   // The version written to disk will also have these fields.

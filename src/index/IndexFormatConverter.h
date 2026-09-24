@@ -58,7 +58,7 @@ std::string conversionDescription();
 // holds a pointer into the memory of the process that created it).
 Id convertId(Id id);
 
-// The block size (per column) with which the permutations of the converted
+// The block size (rows per block) with which the permutations of the converted
 // index are written. It is set from the configuration of the index that is
 // converted (`INDEX_ROWS_PER_BLOCK_KEY`), so that the converted
 // permutations have exactly the blocks that a fresh build of that index with
@@ -72,9 +72,8 @@ Id convertId(Id id);
 // `CompressedRelationMetadata` of its own if it has more than 25000 rows,
 // which no unit test can afford to build (see `writePermutation` in the
 // implementation).
-inline ad_utility::MemorySize& blocksizeOfConvertedPermutations() {
-  static ad_utility::MemorySize blocksize =
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
+inline size_t& blocksizeOfConvertedPermutations() {
+  static size_t blocksize = DEFAULT_INDEX_ROWS_PER_BLOCK;
   return blocksize;
 }
 

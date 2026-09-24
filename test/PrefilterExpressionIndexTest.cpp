@@ -1666,7 +1666,7 @@ TEST(PrefilterExpressionIndex, negativeNumberBoundaryEndToEnd) {
                     ".5 . ");
   }
   ad_utility::testing::TestIndexConfig config{turtle};
-  config.blocksizePermutations = 24_B;
+  config.rowsPerBlock = 3;
   auto* qec = ad_utility::testing::getQec(std::move(config));
   // The `ORDER BY ?x` makes the planner choose the scan that is sorted by
   // `?x`, which is the one the prefilter applies to.

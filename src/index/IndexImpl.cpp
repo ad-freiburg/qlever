@@ -440,10 +440,8 @@ void IndexImpl::createFromFiles(
       formatIndexBuildTime(absl::Now());
   // The block size is stored so that everything that writes sorted lists of
   // this index later on (the server for a materialized view, the index format
-  // converter) uses the same block size as this build. It is stored as the
-  // number of rows per block, computed like `CompressedRelationWriter` does.
-  configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = std::max(
-      size_t{1}, blocksizePermutationPerColumn_.getBytes() / sizeof(Id));
+  // converter) uses the same block size as this build.
+  configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
@@ -830,8 +828,8 @@ CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
     IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
     std::optional<size_t> numWriterThreads) const {
   auto writer = std::make_unique<CompressedRelationWriter>(
-      numColumns, ad_utility::File(fileName, "w"),
-      blocksizePermutationPerColumn_, numWriterThreads);
+      numColumns, ad_utility::File(fileName, "w"), rowsPerBlock_,
+      numWriterThreads);
 
   auto callback =
       liftCallback([&metaData](const auto& md) { metaData.add(md); });
@@ -1438,18 +1436,13 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   // materialized view, for example), so that all permutations of an index have
   // the same block size. Indexes that were built before this key existed were
   // built with the default.
-  uint64_t indexRowsPerBlock =
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN.getBytes() /
-      sizeof(Id);
-  loadDataMember(INDEX_ROWS_PER_BLOCK_KEY, indexRowsPerBlock,
-                 indexRowsPerBlock);
-  if (indexRowsPerBlock == 0) {
+  loadDataMember(INDEX_ROWS_PER_BLOCK_KEY, rowsPerBlock_,
+                 DEFAULT_INDEX_ROWS_PER_BLOCK);
+  if (rowsPerBlock_ == 0) {
     throw std::runtime_error{absl::StrCat("Invalid value 0 for the key \"",
                                           INDEX_ROWS_PER_BLOCK_KEY,
                                           "\" in the `meta-data.json`")};
   }
-  blocksizePermutationPerColumn_ =
-      ad_utility::MemorySize::bytes(indexRowsPerBlock * sizeof(Id));
 
   // The geo cell grid of the geo vocabulary, if the index was built with one
   // (see `GeoCellGrid`). The vocabulary needs it before it is opened, because
@@ -2090,7 +2083,7 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
   // index and write a fresh configuration file for a new index.
   setOnDiskBase(newName);
   setKbName(other.getKbName());
-  blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
+  rowsPerBlock() = other.rowsPerBlock();
   configurationJson_ = newStats;
   numTriples_ = static_cast<NumNormalAndInternal>(newStats.at("num-triples"));
   numPredicates_ =

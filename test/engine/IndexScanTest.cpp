@@ -106,8 +106,7 @@ void testLazyScanForJoinOfTwoScans(
     const std::string& kgTurtle, const SparqlTripleSimple& tripleLeft,
     const SparqlTripleSimple& tripleRight,
     const std::vector<IndexPair>& leftRows,
-    const std::vector<IndexPair>& rightRows,
-    ad_utility::MemorySize blocksizePermutations = 16_B,
+    const std::vector<IndexPair>& rightRows, size_t rowsPerBlock = 2,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   // As soon as there is a LIMIT clause present, we cannot use the prefiltered
@@ -115,7 +114,7 @@ void testLazyScanForJoinOfTwoScans(
   std::vector<LimitOffsetClause> limits{{}, {12, 3}, {2, 3}};
   for (const auto& limit : limits) {
     TestIndexConfig config{kgTurtle};
-    config.blocksizePermutations = blocksizePermutations;
+    config.rowsPerBlock = rowsPerBlock;
     auto qec = getQec(std::move(config));
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
     s1.applyLimitOffset(limit);
@@ -297,7 +296,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{1, 5}}, {{0, 4}});
   }
   {
-    // In this example we use 3 triples per block (24 bytes) and the `<p>`
+    // In this example we use 3 triples per block and the `<p>`
     // permutation is standing in a single block together with the previous
     // `<o>` relation. The lazy scans are however still aware that the relevant
     // part of the block (`<b> <p> ?x`) only  goes from `<x80>` through `<x90>`,
@@ -307,7 +306,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<a> <o> <a1>. <b> <p> <x80>. <b> <p> <x90>. "
         "<x2> <q> <xb>. <x5> <q> <xb2> . <x5> <q> <xb>. "
         "<x9> <q> <xb2> . <x91> <q> <xb>. <x93> <q> <xb2> .";
-    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 24_B);
+    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 3);
   }
   {
     std::string kg =
@@ -1231,7 +1230,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
   // a and b are supposed to share one block and c and d.
   config.turtleInput =
       "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  config.blocksizePermutations = 16_B;
+  config.rowsPerBlock = 2;
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
 
@@ -1256,7 +1255,7 @@ TEST_P(IndexScanWithLazyJoin,
   // a and b are supposed to share one block and c and d.
   config.turtleInput =
       "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  config.blocksizePermutations = 16_B;
+  config.rowsPerBlock = 2;
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
   LocalVocab extraVocab;
@@ -1540,7 +1539,7 @@ TEST(IndexScanTest, StripColumns) {
   TestIndexConfig config;
   using namespace ad_utility::memory_literals;
   // Each triple will be in a separate block.
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
   auto qec = ad_utility::testing::getQec(config);
 
@@ -1872,7 +1871,7 @@ TEST(IndexScanTest, StripColumns) {
 TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   TestIndexConfig config;
   using namespace ad_utility::memory_literals;
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
   auto qec = ad_utility::testing::getQec(config);
 

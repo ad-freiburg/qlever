@@ -118,8 +118,7 @@ class IndexImpl {
   ad_utility::MemorySize memoryLimitIndexBuilding_ =
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
-  ad_utility::MemorySize blocksizePermutationPerColumn_ =
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
+  size_t rowsPerBlock_ = DEFAULT_INDEX_ROWS_PER_BLOCK;
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
@@ -556,13 +555,9 @@ class IndexImpl {
     return parserBufferSize_;
   }
 
-  ad_utility::MemorySize& blocksizePermutationPerColumn() {
-    return blocksizePermutationPerColumn_;
-  }
+  size_t& rowsPerBlock() { return rowsPerBlock_; }
 
-  const ad_utility::MemorySize& blocksizePermutationPerColumn() const {
-    return blocksizePermutationPerColumn_;
-  }
+  const size_t& rowsPerBlock() const { return rowsPerBlock_; }
 
   void setOnDiskBase(const std::string& onDiskBase);
 

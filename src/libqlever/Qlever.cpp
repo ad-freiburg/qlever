@@ -146,8 +146,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
     index.parserBufferSize() = config.parserBufferSize_.value();
   }
   if (config.indexRowsPerBlock_.has_value()) {
-    index.blocksizePermutationsPerColumn() = ad_utility::MemorySize::bytes(
-        config.indexRowsPerBlock_.value() * sizeof(Id));
+    index.rowsPerBlock() = config.indexRowsPerBlock_.value();
   }
 
   // If no text index name was specified, take the part of the wordsfile after

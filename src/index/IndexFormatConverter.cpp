@@ -367,7 +367,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
 //
 // NOTE: The block size of the permutation is not stored in an index, so the
 // converted permutation uses the default, exactly like a freshly built index
-// (`IndexImpl::blocksizePermutationPerColumn_`, which nothing but a unit test
+// (`IndexImpl::rowsPerBlock_`, which nothing but a unit test
 // ever changes, and correspondingly `blocksizeOfConvertedPermutations` here).
 // The blocks of the converted permutation may therefore differ from the blocks
 // of the permutation that it was converted from, which is irrelevant for its
@@ -846,9 +846,8 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
   // converted, because the configuration (which records that block size) is
   // copied unchanged, see below.
   if (configuration.contains(INDEX_ROWS_PER_BLOCK_KEY)) {
-    blocksizeOfConvertedPermutations() = ad_utility::MemorySize::bytes(
-        configuration.at(INDEX_ROWS_PER_BLOCK_KEY).get<uint64_t>() *
-        sizeof(Id));
+    blocksizeOfConvertedPermutations() =
+        configuration.at(INDEX_ROWS_PER_BLOCK_KEY).get<size_t>();
   }
 
   // The converted index must not overwrite any existing file.

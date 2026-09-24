@@ -334,7 +334,7 @@ IndexMetaData MaterializedViewWriter::writePermutation(
   // `INDEX_ROWS_PER_BLOCK_KEY`).
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
       numCols(), ad_utility::File{spoFilename, "w"},
-      qec_->getIndex().blocksizePermutationsPerColumn());
+      qec_->getIndex().rowsPerBlock());
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   IndexMetaData spoMetaData;
