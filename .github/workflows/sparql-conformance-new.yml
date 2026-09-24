@@ -34,14 +34,14 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: "w3c/rdf-tests"
-          ref: 3d0b0613d0177d25aad7ec60e88df2338f461516
+          ref: 12774b0ebb385d17651b396654b19254d0fefbfa
           path: sparql-test-suite
           fetch-depth: 1
       - name: Checkout sparql-conformance
         uses: actions/checkout@v7
         with:
           repository: "ad-freiburg/sparql-conformance"
-          ref: dcff46a3f27e25f21724c6903559ea750fc63e70
+          ref: 4bbf69db9d125105a6ec0f7ea0390957258fba74
           path: sparql-conformance
           fetch-depth: 1
       - name: Set up Python
