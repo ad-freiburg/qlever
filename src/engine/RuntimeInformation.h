@@ -146,10 +146,6 @@ class RuntimeInformation {
                                 const nlohmann::json& value);
 };
 
-// A class to store information about the execution of a complete query, e.g.
-// the time spent during query planning. Note: The information about the
-// `QueryExecutionTree` (e.g. how much time was spent in which operation) is
-// stored in the `RuntimeInformation` class above.
 // How the query planner planned one connected component of a query graph, that
 // is, of a set of triples (and filters) of one group graph pattern that are
 // connected by shared variables.
@@ -176,6 +172,10 @@ struct ConnectedComponentPlanningInfo {
                       const ConnectedComponentPlanningInfo& info);
 };
 
+// A class to store information about the execution of a complete query, e.g.
+// the time spent during query planning. Note: The information about the
+// `QueryExecutionTree` (e.g. how much time was spent in which operation) is
+// stored in the `RuntimeInformation` class above.
 struct RuntimeInformationWholeQuery {
   // The time spent during query planning (this does not include the time spent
   // on `IndexScan`s that were executed during the query planning).
