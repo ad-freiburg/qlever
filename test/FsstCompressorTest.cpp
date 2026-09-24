@@ -4,6 +4,9 @@
 // 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
@@ -13,6 +16,7 @@
 
 #include "backports/span.h"
 #include "util/FsstCompressor.h"
+#include "util/GTestHelpers.h"
 
 TEST(FsstEncoder, firstTest) {
   std::vector<std::string> s{
@@ -390,6 +394,30 @@ TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
     EXPECT_EQ(decompressedView, viaString);
     EXPECT_THAT(viaString, ::testing::Eq(word));
   }
+}
+
+// Goal: `detail::decompressToOwnedString` must shrink the buffer to the number
+// of bytes the decoder reports and reject a report that exceeds the bound.
+// Method: call it with decoders that report fewer, exactly `bound`, and more
+// than `bound` bytes.
+// _____________________________________________________________________________
+TEST(FsstEncoder, DecompressToOwnedStringRespectsBound) {
+  auto writeAbc = [](ql::span<char> out) {
+    EXPECT_GE(out.size(), 3u);
+    out[0] = 'a';
+    out[1] = 'b';
+    out[2] = 'c';
+    return size_t{3};
+  };
+  EXPECT_EQ(detail::decompressToOwnedString(5, writeAbc), "abc");
+  EXPECT_EQ(detail::decompressToOwnedString(3, writeAbc), "abc");
+  EXPECT_EQ(detail::decompressToOwnedString(
+                0, [](ql::span<char>) { return size_t{0}; }),
+            "");
+  auto reportTooMany = [](ql::span<char> out) { return out.size() + 1; };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      detail::decompressToOwnedString(4, reportTooMany),
+      ::testing::HasSubstr("numBytesWritten <= bound"));
 }
 
 // _____________________________________________________________________________

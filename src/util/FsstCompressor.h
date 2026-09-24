@@ -43,13 +43,16 @@ struct CastToUnsignedPtr {
 constexpr CastToUnsignedPtr castToUnsignedPtr{};
 
 // Allocate `bound` bytes, run `decode` into that buffer, and shrink to the
-// number of bytes written.
+// number of bytes written. Throw if `decode` reports more than `bound` bytes.
 CPP_template(typename Decode)(
     requires ql::concepts::invocable<Decode, ql::span<char>>) std::string
     decompressToOwnedString(size_t bound, Decode decode) {
   std::string output;
   output.resize(bound);
-  output.resize(decode(ql::span<char>{output.data(), output.size()}));
+  const size_t numBytesWritten =
+      decode(ql::span<char>{output.data(), output.size()});
+  AD_CORRECTNESS_CHECK(numBytesWritten <= bound);
+  output.resize(numBytesWritten);
   return output;
 }
 }  // namespace detail
