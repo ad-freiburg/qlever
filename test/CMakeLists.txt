@@ -176,6 +176,8 @@ addLinkAndDiscoverTest(StringUtilsTest qlever_util)
 
 addLinkAndDiscoverTest(RegexSetTest qlever_util)
 
+addLinkAndDiscoverTest(BinaryDiffApplierTest qlever_util)
+
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
 
 addLinkAndDiscoverTest(CryptographicHashUtilsTest qlever_util)
@@ -304,6 +306,8 @@ addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
 
 addLinkAndDiscoverTest(TaskQueueTest)
+
+addLinkAndDiscoverTest(TaskQueueOnExecutorTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
@@ -607,6 +611,8 @@ addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(GlobalExecutorTest qlever_util)
 
 addLinkAndDiscoverTest(MetricsTest metrics)
 
