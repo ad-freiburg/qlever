@@ -186,7 +186,7 @@ TEST(SparqlParser, Create) {
 TEST(SparqlParser, Add) {
   auto expectAdd = ExpectCompleteParse<&Parser::add>{defaultPrefixMap};
   auto expectAddFails = ExpectParseFails<&Parser::add>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
 
   auto addMatcher = ElementsAre(m::AddAll(Iri("<foo>"), Iri("<bar>")));
   expectAdd("ADD GRAPH <baz> to GRAPH <baz>", IsEmpty());
@@ -203,7 +203,7 @@ TEST(SparqlParser, Add) {
 TEST(SparqlParser, Clear) {
   auto expectClear = ExpectCompleteParse<&Parser::clear>{defaultPrefixMap};
   auto expectClearFails = ExpectParseFails<&Parser::clear>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
 
   using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
   expectClear("CLEAR ALL", m::Clear(Variable("?g"), GVB::ALL));
@@ -218,7 +218,7 @@ TEST(SparqlParser, Drop) {
   // graph existence)
   auto expectDrop = ExpectCompleteParse<&Parser::drop>{defaultPrefixMap};
   auto expectDropFails = ExpectParseFails<&Parser::drop>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
 
   using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
   expectDrop("DROP ALL", m::Clear(Variable("?g"), GVB::ALL));
@@ -231,7 +231,7 @@ TEST(SparqlParser, Drop) {
 TEST(SparqlParser, Move) {
   auto expectMove = ExpectCompleteParse<&Parser::move>{defaultPrefixMap};
   auto expectMoveFails = ExpectParseFails<&Parser::move>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
 
   // Moving a graph onto itself changes nothing
   expectMove("MOVE SILENT DEFAULT TO DEFAULT", testing::IsEmpty());
@@ -246,7 +246,7 @@ TEST(SparqlParser, Move) {
 TEST(SparqlParser, Copy) {
   auto expectCopy = ExpectCompleteParse<&Parser::copy>{defaultPrefixMap};
   auto expectCopyFails = ExpectParseFails<&Parser::copy>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
 
   // Copying a graph onto itself changes nothing
   expectCopy("COPY SILENT DEFAULT TO DEFAULT", testing::IsEmpty());
