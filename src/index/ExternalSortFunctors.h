@@ -35,7 +35,13 @@ struct SortTriple {
       AD_EXPENSIVE_CHECK(a.size() >= ADDITIONAL_COLUMN_GRAPH_ID &&
                          b.size() >= ADDITIONAL_COLUMN_GRAPH_ID);
     }
-    constexpr auto compare = &Id::compareWithoutLocalVocab;
+    // Lambda, not `&Id::compareWithoutLocalVocab`: proxy column elements
+    // don't support pointer-to-member dispatch (see `IdColumn.h`). The
+    // lambda's `const Id&` parameters trigger the proxy's implicit
+    // conversion to `Id` instead.
+    auto compare = [](const Id& x, const Id& y) {
+      return x.compareWithoutLocalVocab(y);
+    };
     // TODO<joka921> The manual invoking is ugly, probably we could use
     // `ql::ranges::lexicographical_compare`, but we have to carefully measure
     // that this change doesn't slow down the index build.
