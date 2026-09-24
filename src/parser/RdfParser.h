@@ -70,19 +70,34 @@ struct RdfParserSettings {
 
 namespace detail {
 // Find the end of the last match of the regex `[\r\n]+` in `input`, or
-// `std::nullopt` if there is no match. Used to split a block of input at a line
-// break.
+// `std::nullopt` if there is no match. Used by the serial `RdfStreamParser`,
+// which backs up if a statement crosses a block boundary (see
+// `resetStateAndRead`), so it only needs a position at which the meaning of the
+// input doesn't depend on the previous block. The end of a newline is such a
+// position: a comment ends at the newline, and a `PN_LOCAL` can't contain one
+// (its only escapes are `%XX` and `\` plus one of `_~.-!$&'()*+,;=/?#@%`).
+// Ending directly after the dot would not do, because such a dot may also be
+// part of a `PN_LOCAL` like `ex:foo.bar`. See `RdfStreamParser::initialize`.
 std::optional<size_t> findEndOfLastNewline(std::string_view input);
 
-// Find the end of the last match of the regex `\.[\t ]*[\r\n]+` in `input`, or
-// `std::nullopt` if there is no match. Used to split a block of input at a
-// Turtle statement boundary.
+// Find the end of the last match of the regex `\.[\t ]*[\r\n]+` in `input`
+// that is not commented out, or `std::nullopt` if there is none. Used by the
+// parallel `RdfAsyncParallelParser`, whose sub-parsers can't back up into the
+// previous block. To detect a comment, the line of the dot is inspected from
+// its beginning, so `input` must start at the beginning of a line, which
+// `AsyncStatementBoundaryBlockSource` guarantees. A dot inside a multiline
+// literal can still fool the search, which is why the parallel parser rejects
+// those, see `TurtleParser::stringParseImpl`.
 std::optional<size_t> findEndOfLastStatement(std::string_view input);
 
 // The human-readable description of what `findEndOfLastStatement` looks for,
-// used in the error messages of `AsyncStatementBoundaryBlockSource`.
-inline constexpr std::string_view statementBoundaryDescription =
-    "a dot followed by a newline";
+// used in the error messages of `AsyncStatementBoundaryBlockSource`. It
+// mentions the newline explicitly, because that (and not the dot) is the part
+// of the rule that a valid Turtle file can violate.
+inline constexpr std::string_view blockBoundaryDescription =
+    "a dot that is followed by a newline and is not commented out. Turtle "
+    "itself does not require that newline, but QLever does, so that it can "
+    "split the input into blocks without parsing it";
 }  // namespace detail
 
 struct TurtleTriple {
@@ -106,6 +121,12 @@ class RdfParserBase {
 
   const EncodedIriManager* encodedIriManager_;
 
+  // The name of the input that this parser reads (typically a filename, see
+  // `qlever::InputFileSpecification::filename`), used in error messages. It is
+  // empty for parsers that read from an unnamed input, for example the
+  // `RdfStringParser` that parses a single term of a SPARQL query.
+  std::string inputName_;
+
  public:
   virtual ~RdfParserBase() = default;
 
@@ -117,6 +138,14 @@ class RdfParserBase {
   RdfParserSettings& settings() { return settings_; }
   const RdfParserSettings& settings() const { return settings_; }
 
+  // The name of the input that this parser reads, see `inputName_`. An index
+  // build parses many inputs at the same time, so naming the input is what
+  // makes an error message actionable.
+  void setInputName(std::string inputName) {
+    inputName_ = std::move(inputName);
+  }
+  const std::string& inputName() const { return inputName_; }
+
   // Get the offset (relative to the beginning of the file) of the first byte
   // that has not yet been dealt with by the parser.
   [[nodiscard]] virtual size_t getParsePosition() const = 0;
@@ -124,11 +153,22 @@ class RdfParserBase {
   // Main access method to the parser. Return the next batch of triples, or
   // `nullopt` if the parser is exhausted.
   //
+  // `buffer` becomes the storage of the returned batch (its contents are
+  // discarded), so that a caller can pass back a batch it has consumed and
+  // thus reuse its capacity instead of having a fresh buffer grown for every
+  // batch. It is only an optimization: passing no buffer at all (see the
+  // overload below) is always correct, and a parser may ignore it (see
+  // `RdfMultifileParser`). On `nullopt` the buffer is not returned.
+  //
   // NOTE: The parsers that are used for the index building (currently only the
   // `RdfMultifileParser`) have to support concurrent calls to this function,
   // because the index builder pulls the batches from several threads (see
   // `IndexImpl::buildPartialVocabularies`).
-  virtual std::optional<std::vector<TurtleTriple>> getBatch() = 0;
+  virtual std::optional<std::vector<TurtleTriple>> getBatch(
+      std::vector<TurtleTriple> buffer) = 0;
+
+  // The same for callers that have no buffer to reuse.
+  std::optional<std::vector<TurtleTriple>> getBatch() { return getBatch({}); }
 
  protected:
   const auto& encodedIriManager() const { return *encodedIriManager_; }
@@ -387,7 +427,10 @@ class TurtleParser : public RdfParserBase {
 
   // map a turtle prefix to its expanded form. Throws if the prefix was not
   // properly registered before
-  TripleComponent::Iri expandPrefix(const std::string& prefix);
+  // Look up the IRI that the given `prefix` was bound to by a `PREFIX` or
+  // `@prefix` declaration. Raises if the prefix was not declared. The result is
+  // a reference into the prefix map, which stays valid until the map changes.
+  const TripleComponent::Iri& expandPrefix(const std::string& prefix);
 
   // create a new, unused, unique blank node string
   std::string createAnonNode();
@@ -405,6 +448,16 @@ class TurtleParser : public RdfParserBase {
   // to ensure that user-specified blank node labels have the same ID across
   // all sub-parsers of the same file.
   void setFileBlankNodePrefix(size_t id) { fileBlankNodePrefix_ = id; }
+
+  // Use `buffer` as the storage for the triples that are parsed next, so that
+  // its capacity is reused instead of growing a fresh buffer (see
+  // `RdfParserBase::getBatch`). `buffer` is cleared first, and the current
+  // buffer of this parser has to be empty, so that no triples are lost.
+  void setTripleBuffer(std::vector<TurtleTriple> buffer) {
+    AD_CORRECTNESS_CHECK(triples_.empty());
+    buffer.clear();
+    triples_ = std::move(buffer);
+  }
 
   // Draw the next blank node prefix. Every parser instance implicitly draws one
   // of these, the parallel parser additionally draws the prefix that it shares
@@ -482,7 +535,9 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
                            TripleComponent defaultGraph,
                            RdfParserSettings settings = {})
       : Parser{encodedIriManager, std::move(defaultGraph), settings} {}
-  std::optional<std::vector<TurtleTriple>> getBatch() override {
+  using Parser::getBatch;
+  std::optional<std::vector<TurtleTriple>> getBatch(
+      [[maybe_unused]] std::vector<TurtleTriple> buffer) override {
     throw std::runtime_error(
         "RdfStringParser doesn't support calls to getBatch. Only use "
         "parseUtf8String() for unit tests\n");
@@ -614,9 +669,12 @@ class RdfStreamParser : public Parser {
     initialize(spec, blocksize);
   }
 
+  using Parser::getBatch;
   // Return the triples that were parsed since the last call, at most
-  // `PARSER_MIN_TRIPLES_AT_ONCE` of them.
-  std::optional<std::vector<TurtleTriple>> getBatch() override;
+  // `PARSER_MIN_TRIPLES_AT_ONCE` of them. `buffer` becomes the storage of the
+  // returned batch, see `RdfParserBase::getBatch`.
+  std::optional<std::vector<TurtleTriple>> getBatch(
+      std::vector<TurtleTriple> buffer) override;
 
   void initialize(const qlever::InputFileSpecification& spec,
                   ad_utility::MemorySize blocksize);
@@ -690,13 +748,20 @@ class RdfParallelParsingState {
   // `parseBatch`.
   RdfParserSettings settings_;
 
+  // The name of the input file, which is set on every parser that is created
+  // here, so that its error messages name the file (see
+  // `RdfParserBase::setInputName`).
+  std::string inputName_;
+
  public:
   RdfParallelParsingState(const EncodedIriManager* encodedIriManager,
                           TripleComponent defaultGraphIri,
+                          std::string inputName,
                           RdfParserSettings settings = {})
       : encodedIriManager_{encodedIriManager},
         defaultGraphIri_{std::move(defaultGraphIri)},
-        settings_{settings} {}
+        settings_{settings},
+        inputName_{std::move(inputName)} {}
 
   // Parse the leading `@base`/`@prefix` declarations of the input. Feed the
   // blocks of the input one by one (`nullopt` meaning the end of the input);
@@ -733,14 +798,16 @@ class RdfParallelParsingState {
   // Parse a single `batch` of raw bytes into triples, using a fresh worker
   // parser that is set up from the shared state. `positionOffset` is the offset
   // of `batch` within the input file and is only used to make the positions in
-  // error messages file-absolute. Throw on a parse error.
+  // error messages file-absolute. `buffer` becomes the storage of the returned
+  // triples, see `RdfParserBase::getBatch`. Throw on a parse error.
   //
   // This is thread-safe (and hence `const`): it only reads the shared state
   // and each call has its own worker parser, so arbitrarily many calls may run
   // concurrently. This requires that `parseHeaderStep`, which writes that
   // state, has already reported the header to be complete.
   std::vector<TurtleTriple> parseBatch(qlever::parser::ByteBlock batch,
-                                       size_t positionOffset) const;
+                                       size_t positionOffset,
+                                       std::vector<TurtleTriple> buffer) const;
 };
 
 // Compute the default graph for `spec`: the explicit `spec.defaultGraph_` if
@@ -774,7 +841,12 @@ class RdfMultifileParser : public RdfParserBase {
   // batches. There is no guarantee about the order in which batches from
   // different input files are returned, but each batch belongs to a distinct
   // input file.
-  std::optional<std::vector<TurtleTriple>> getBatch() override;
+  //
+  // NOTE: `buffer` is ignored, because the batches are parsed on other threads
+  // (see the class comment), which this call cannot reach.
+  std::optional<std::vector<TurtleTriple>> getBatch(
+      std::vector<TurtleTriple> buffer) override;
+  using RdfParserBase::getBatch;
 
   size_t getParsePosition() const override {
     // TODO: This function is used for better error messages, but we currently

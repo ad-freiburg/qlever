@@ -18,6 +18,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "index/vocabulary/EncodedIriManager.h"
+#include "parser/NormalizedString.h"
 #include "util/Exception.h"
 
 namespace ql::exportIds {
@@ -141,9 +142,14 @@ LiteralOrIri getLiteralOrIriFromWordVocabIndex(const IndexImpl& index, Id id) {
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
     const IndexImpl& index, Id id) {
+  // `TextIndexBuilder::buildDocsDB` stores the text of a docsfile line
+  // verbatim, so the excerpt is plain text and becomes the literal's content as
+  // it is. Unescaping it would reinterpret a backslash in the text, e.g. in a
+  // Windows path.
+  std::string excerpt = index.getTextExcerpt(id.getTextRecordIndex());
   return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithoutQuotes(
-          index.getTextExcerpt(id.getTextRecordIndex()))};
+      ad_utility::triple_component::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(excerpt))};
 }
 
 // _____________________________________________________________________________

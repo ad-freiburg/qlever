@@ -27,6 +27,7 @@
 #include "parser/SparqlParser.h"
 #include "util/BlankNodeManager.h"
 #include "util/FilesystemHelpers.h"
+#include "util/GlobalExecutor.h"
 
 using namespace qlever;
 using namespace testing;
@@ -153,6 +154,30 @@ TEST(LibQlever, buildIndexAndRunQuery) {
   ec.loadTextIndex_ = true;
   Qlever engine{ec};
 #endif
+}
+
+// _____________________________________________________________________________
+TEST(LibQlever, buildIndexWithAnExistingGlobalThreadPool) {
+  // The global thread pool is created on its first use and cannot be resized
+  // afterwards. An index build in a process where the pool already exists with
+  // a different number of threads still works and only logs a warning.
+  ad_utility::globalExecutor();
+  size_t numThreadsOfPool = ad_utility::globalExecutorNumThreads();
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  ad_utility::makeOfstream(filename) << "<s> <p> <o> .";
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  IndexBuilderConfig config;
+  config.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  config.baseName_ = gtestCurrentTestName();
+  config.numThreads_ = numThreadsOfPool + 1;
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  EXPECT_NO_THROW(Qlever::buildIndex(config));
+  EXPECT_THAT(
+      logStream.str(),
+      HasSubstr(absl::StrCat("The global thread pool already exists with ",
+                             numThreadsOfPool, " threads, so the ",
+                             numThreadsOfPool + 1, " threads")));
+  EXPECT_EQ(ad_utility::globalExecutorNumThreads(), numThreadsOfPool);
 }
 
 // _____________________________________________________________________________
