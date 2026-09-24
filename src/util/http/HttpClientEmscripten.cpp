@@ -303,7 +303,8 @@ void runOnNetworkThread(std::function<void()> work) {
 // into the coroutine `performStep`, because LLVM miscompiles a `catch` block
 // inside that coroutine for WebAssembly. With the `catch` block there, the
 // network thread crashed right after reporting a failed request, so that no
-// further request was ever performed.
+// further request was ever performed. See
+// https://github.com/llvm/llvm-project/issues/226286.
 AD_NO_INLINE void reportStep(const val& step, const std::string& url,
                              StepPromise& promise) {
   // Nothing may escape from here: an exception that escapes from the coroutine
