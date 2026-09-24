@@ -12,6 +12,7 @@
 
 #include <boost/optional.hpp>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string_view>
@@ -163,6 +164,11 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
+  if (config.geoCellGridLevel_ > 0) {
+    index.getImpl().setGeoCellGridForIndexBuilding(
+        ad_utility::GeoCellGrid{static_cast<uint8_t>(config.geoCellGridLevel_),
+                                config.geoCellGridScheme_});
+  }
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
                                               config.patternsForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(
@@ -413,6 +419,17 @@ void IndexBuilderConfig::validate() const {
         "The vocabulary type \"", vocabType_.toString(),
         "\" cannot be used for index building, the supported types are ",
         ad_utility::VocabularyType::getListOfValuesForIndexBuilding()));
+  }
+  if (geoCellGridLevel_ > 0) {
+    if (vocabType_ !=
+        ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit) {
+      throw std::invalid_argument(
+          "A geo cell grid (option --geo-cell-grid-level) requires the "
+          "vocabulary type on-disk-compressed-geo-split");
+    }
+    if (geoCellGridLevel_ > std::numeric_limits<uint8_t>::max()) {
+      throw std::invalid_argument("The geo cell grid level is too large");
+    }
   }
   if (numThreads_ == 0) {
     throw std::invalid_argument(

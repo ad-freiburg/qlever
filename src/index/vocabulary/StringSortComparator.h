@@ -9,11 +9,14 @@
 
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
 #include "index/vocabulary/LocaleManager.h"
+#include "rdfTypes/GeoCellGrid.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
 #include "util/TypeTraits.h"
@@ -265,12 +268,27 @@ class TripleComponentComparatorImpl {
   /// std::strcmp
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
                             const Level level = Level::QUARTERNARY) const {
+    // With a geo cell grid, WKT literals come after all other words and are
+    // ordered by their grid cell (see `geoSortKey`).
+    if (geoCellGrid_.has_value()) {
+      auto keyA = geoSortKey(a);
+      auto keyB = geoSortKey(b);
+      if (keyA != keyB) {
+        return keyA < keyB ? -1 : 1;
+      }
+    }
+    return compareWithoutGeoCellGrid(a, b, level);
+  }
+
+  // Like `compare` above, but as if no geo cell grid were set. This is the
+  // order among words with equal `geoSortKey`, and among all words without a
+  // grid.
+  [[nodiscard]] int compareWithoutGeoCellGrid(
+      std::string_view a, std::string_view b,
+      const Level level = Level::QUARTERNARY) const {
     auto splitA = extractComparable<SplitValNonOwning>(a, level);
     auto splitB = extractComparable<SplitValNonOwning>(b, level);
-    // We have to have a total ordering of unique elements in the vocabulary,
-    // so if they compare equal according to the locale, use strcmp
-    auto cmp = compare(splitA, splitB, level);
-    return cmp;
+    return compare(splitA, splitB, level);
   }
 
   // Total comparison, using the "is external" flags as a tiebreaker. The
@@ -281,7 +299,46 @@ class TripleComponentComparatorImpl {
   bool isLessInTotalWithExternalFlag(std::string_view a, bool aIsExternal,
                                      std::string_view b,
                                      bool bIsExternal) const {
-    int cmp = compare(a, b, Level::TOTAL);
+    return isLessInTotalWithExternalFlagAndGeoSortKeys(
+        a, aIsExternal, geoSortKey(a), b, bIsExternal, geoSortKey(b));
+  }
+
+  // The geo cell grid of the vocabulary, if it has one (see `GeoVocabulary`).
+  // With a grid, the vocabulary index of a WKT literal carries its grid cell,
+  // which only works if the WKT literals come after all other words and are
+  // ordered by their cell. This comparator produces that order. The grid must
+  // be the same when building and when reading the index, so it comes from
+  // the index configuration in both cases.
+  void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
+    geoCellGrid_ = grid;
+  }
+  const std::optional<ad_utility::GeoCellGrid>& getGeoCellGrid() const {
+    return geoCellGrid_;
+  }
+
+  // The primary sort key of a word with a geo cell grid: 0 for a word that is
+  // not a WKT literal, otherwise one plus the grid cell of the literal (an
+  // unparsable literal gets the sentinel cell, see `GeoCellGrid`). Without a
+  // grid the key is always 0. Computing the key of a WKT literal means
+  // parsing it, so a sort should compute it once per word and then use
+  // `isLessInTotalWithExternalFlagAndGeoSortKeys`.
+  [[nodiscard]] uint64_t geoSortKey(std::string_view word) const {
+    if (!geoCellGrid_.has_value() || !ad_utility::isWktLiteral(word)) {
+      return 0;
+    }
+    return 1 + geoCellGrid_->cellIndexFromWktLiteral(word);
+  }
+
+  // Like `isLessInTotalWithExternalFlag`, but with the geo sort keys of the
+  // two words provided by the caller (see `geoSortKey`). With both keys 0,
+  // this is the order as if no geo cell grid were set.
+  bool isLessInTotalWithExternalFlagAndGeoSortKeys(
+      std::string_view a, bool aIsExternal, uint64_t geoSortKeyA,
+      std::string_view b, bool bIsExternal, uint64_t geoSortKeyB) const {
+    if (geoSortKeyA != geoSortKeyB) {
+      return geoSortKeyA < geoSortKeyB;
+    }
+    int cmp = compareWithoutGeoCellGrid(a, b, Level::TOTAL);
     if (cmp != 0) {
       return cmp < 0;
     }
@@ -390,6 +447,12 @@ class TripleComponentComparatorImpl {
  private:
   LocaleManagerT locManager_;
   Level defaultLevel_ = Level::IDENTICAL;
+
+  // See `setGeoCellGrid`.
+  //
+  // NOTE: The overloads above that take a `SplitVal` ignore the geo cell grid.
+  // They serve prefix searches, which never concern WKT literals.
+  std::optional<ad_utility::GeoCellGrid> geoCellGrid_ = std::nullopt;
 
   /* Split a string into its components to prepare collation.
    * SplitValType = SplitVal will transform the inner string according to the

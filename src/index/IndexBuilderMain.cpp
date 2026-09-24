@@ -275,6 +275,15 @@ int main(int argc, char** argv) {
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
+  add("geo-cell-grid-level", po::value(&config.geoCellGridLevel_),
+      "The level L of the geo cell grid for WKT literals. The earth's surface "
+      "is divided into 2^L x 2^L cells, and the ID of each WKT literal encodes "
+      "its cell, which is the basis for the geo cell prefilter of spatial "
+      "joins. 0 (the default) means no grid. A grid requires "
+      "`--vocabulary-type on-disk-compressed-geo-split`.");
+  add("geo-cell-grid-scheme", po::value(&config.geoCellGridScheme_),
+      "The scheme by which the geo cell grid assigns cells, currently only "
+      "`flat` (the default). Only relevant with a grid level > 0.");
 
   add("encode-as-id",
       po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
