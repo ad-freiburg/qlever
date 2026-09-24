@@ -119,43 +119,57 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
                                                     predicate) -
                                column.begin());
   };
+
+  // The `Undefined` values come first, because their datatype bits are all
+  // zero. The rows after them all have the same datatype iff the first and the
+  // last of them have the same datatype, because the column is grouped by
+  // datatype. Only `Int` and `Double` are handled.
   size_t firstDefined =
       partitionPoint(0, column.size(), [](Id id) { return id.isUndefined(); });
   if (firstDefined == column.size()) {
     return std::nullopt;
   }
   Datatype type = column[firstDefined].getDatatype();
-  if (column.back().getDatatype() != type) {
+  if (column.back().getDatatype() != type ||
+      (type != Datatype::Int && type != Datatype::Double)) {
     return std::nullopt;
   }
 
+  // `ORDER BY` also puts the `Undefined` values first.
   std::vector<RowRange> ranges;
   if (firstDefined > 0) {
     ranges.push_back({0, firstDefined, false});
   }
+
+  // Ints: the non-negative ints come before the negative ones, and each of the
+  // two parts is sorted by value. So the negative ints go first.
   if (type == Datatype::Int) {
     size_t firstNegative = partitionPoint(
         firstDefined, column.size(), [](Id id) { return id.getInt() >= 0; });
     ranges.push_back({firstNegative, column.size(), false});
     ranges.push_back({firstDefined, firstNegative, false});
-  } else if (type == Datatype::Double) {
-    // The `NaN`s are at the end of the non-negative and at the end of the
-    // negative doubles, respectively.
-    auto isNotNan = [](Id id) { return !std::isnan(id.getDouble()); };
-    size_t firstNegative =
-        partitionPoint(firstDefined, column.size(),
-                       [](Id id) { return !std::signbit(id.getDouble()); });
-    size_t firstPositiveNan =
-        partitionPoint(firstDefined, firstNegative, isNotNan);
-    size_t firstNegativeNan =
-        partitionPoint(firstNegative, column.size(), isNotNan);
-    ranges.push_back({firstNegative, firstNegativeNan, true});
-    ranges.push_back({firstDefined, firstPositiveNan, false});
-    ranges.push_back({firstPositiveNan, firstNegative, false});
-    ranges.push_back({firstNegativeNan, column.size(), false});
-  } else {
-    return std::nullopt;
+    return ranges;
   }
+
+  // Doubles: the non-negative doubles come before the negative ones (that is,
+  // those with the sign bit set, including `-0.0`), and each of the two parts
+  // ends with its `NaN`s.
+  auto isNotNan = [](Id id) { return !std::isnan(id.getDouble()); };
+  size_t firstNegative = partitionPoint(firstDefined, column.size(), [](Id id) {
+    return !std::signbit(id.getDouble());
+  });
+  size_t firstPositiveNan =
+      partitionPoint(firstDefined, firstNegative, isNotNan);
+  size_t firstNegativeNan =
+      partitionPoint(firstNegative, column.size(), isNotNan);
+
+  // The negative doubles are sorted by descending value (their magnitude
+  // increases with the bits), so they go first and in reverse order. Then the
+  // non-negative doubles, and then all `NaN`s, which `ORDER BY` puts last.
+  ranges.push_back({firstNegative, firstNegativeNan, true});
+  ranges.push_back({firstDefined, firstPositiveNan, false});
+  ranges.push_back({firstPositiveNan, firstNegative, false});
+  ranges.push_back({firstNegativeNan, column.size(), false});
   return ranges;
 }
 }  // namespace
