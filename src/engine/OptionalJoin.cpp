@@ -353,8 +353,11 @@ auto OptionalJoin::computeImplementationFromIdTables(
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns)
     -> Implementation {
   auto implementation = Implementation::NoUndef;
+  // Lambda, not `&Id::isUndefined`: proxy column elements don't support
+  // pointer-to-member dispatch (see `IdColumn.h`).
   auto anyIsUndefined = [](auto column) {
-    return ql::ranges::any_of(column, &Id::isUndefined);
+    return ql::ranges::any_of(
+        column, [](const Id& id) { return id.isUndefined(); });
   };
   for (size_t i = 0; i < joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = joinColumns.at(i);
