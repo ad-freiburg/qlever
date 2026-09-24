@@ -284,12 +284,13 @@ pthread_t networkThread() {
 // thread cannot be reached, in which case `work` never runs and is destroyed
 // right here.
 void runOnNetworkThread(std::function<void()> work) {
-  // Deliberately never destroyed. Destroying it at exit would free the queue,
-  // together with any tasks that are still pending, without running them. But
-  // the network thread is never joined and keeps running while the static
-  // objects of the process are destroyed, so it could then still access the
-  // freed queue, for example to run the task with which a `Request` that was
-  // destroyed shortly before the exit cancelled its response.
+  // Deliberately never destroyed. Destroying it when the process exits would
+  // free the queue, together with any tasks that are still pending, without
+  // running them. But the network thread is never joined and keeps running
+  // while the static objects of the process are destroyed, so it could still
+  // access the freed queue. For example, a `Request` that is destroyed shortly
+  // before the process exits hands the network thread a task that cancels its
+  // response.
   static absl::NoDestructor<emscripten::ProxyingQueue> queue;
   if (!queue->proxyAsync(networkThread(), std::move(work))) {
     AD_THROW("Could not reach the thread that performs the HTTP requests");
@@ -333,8 +334,10 @@ AD_NO_INLINE void reportStep(const val& step, const std::string& url,
 
 // Take the next step of `response` and report what it yielded through
 // `promise`. Runs on the network thread, which it gives back while it waits for
-// JavaScript; that wait is what makes this a coroutine. The JavaScript promise
-// it returns itself is of no interest to anyone.
+// JavaScript; that wait is what makes this a coroutine. It returns `val` rather
+// than `void` only because that is the one coroutine return type that
+// Emscripten supports; the JavaScript promise that it returns is of no
+// interest.
 //
 // NOTE: A `co_await` of a *rejected* promise destroys the coroutine rather than
 // resuming it, which is why `qleverFetch` reports a failure as a value. Should
@@ -342,6 +345,8 @@ AD_NO_INLINE void reportStep(const val& step, const std::string& url,
 // thread, with a "broken promise" error rather than not at all.
 val performStep(val response, std::string url,
                 std::shared_ptr<StepPromise> promise) {
+  // Not a JavaScript generator's `next`, but the one that `qleverFetch` adds to
+  // `response`; it resolves to one of the steps described there.
   val step = co_await response.call<val>("next");
   reportStep(step, url, *promise);
   co_return val::undefined();
