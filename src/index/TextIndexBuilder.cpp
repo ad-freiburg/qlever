@@ -16,7 +16,6 @@
 #include "global/FileSuffixConstants.h"
 #include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
-#include "util/StringUtils.h"
 
 // _____________________________________________________________________________
 void TextIndexBuilder::buildTextIndexFile(
@@ -402,9 +401,11 @@ void TextIndexBuilder::calculateBlockBoundariesImpl(
   // 2) shorter than the minimum prefix length
   // 3) The next word is shorter than the minimum prefix length
   // 4) word.substring(0, MIN_PREFIX_LENGTH) is different from the next.
-  // Note that the evaluation of 4) is done via primary collation element
-  // counting, which handles Unicode corner cases correctly. E.g. vivae and vivæ
-  // compare equal on the PRIMARY level and both get a 4-element prefix.
+  // The prefix in 4) consists of the first `MIN_WORD_PREFIX_SIZE` collation
+  // elements that are relevant on the `PRIMARY` level. A character that expands
+  // to several elements is never split, so e.g. vivæ (v, i, v, a, e) and vivae
+  // end up in different blocks. This only affects efficiency, as prefix
+  // queries read all blocks that overlap with their word range.
   // A block boundary is always the last WordId in the block.
   // this way std::lower_bound will point to the correct bracket.
 

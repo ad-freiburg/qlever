@@ -78,9 +78,7 @@ TEST(LocaleManagerTest, CountPrimaryCollationElements) {
   EXPECT_EQ(loc.countPrimaryCollationElements("héllo"), 5u);
   // Multi-byte UTF-8: é = U+00E9 = 2 bytes, still 1 primary element.
   EXPECT_EQ(loc.countPrimaryCollationElements("\xc3\xa9"), 1u);
-  // Punctuation has raw primary weight even with ignorePunctuation=true,
-  // because CollationElementIterator returns raw weights; UCOL_SHIFTED is only
-  // applied during comparison, not during element iteration.
+  // Punctuation is relevant on the PRIMARY level if it is not ignored.
   EXPECT_EQ(loc.countPrimaryCollationElements(".hello"), 6u);
   EXPECT_EQ(loc.countPrimaryCollationElements("hello world"), 11u);
   EXPECT_EQ(loc.countPrimaryCollationElements("..."), 3u);
@@ -95,6 +93,9 @@ TEST(LocaleManagerTest, PrimaryCollationPrefixLength) {
   EXPECT_EQ(loc.primaryCollationPrefixLength("", 5), 0u);
   // Fewer elements than requested: return the full string length.
   EXPECT_EQ(loc.primaryCollationPrefixLength("hi", 10), 2u);
+  // Characters without a primary weight (here a combining acute accent) that
+  // follow the last element are part of the prefix.
+  EXPECT_EQ(loc.primaryCollationPrefixLength("cafe\xcc\x81s", 4), 6u);
 
   // Basic ASCII: one byte per codepoint, one primary element per letter.
   EXPECT_EQ(loc.primaryCollationPrefixLength("hello world", 5), 5u);
@@ -118,6 +119,24 @@ TEST(LocaleManagerTest, PrimaryCollationPrefixLength) {
     size_t n = loc.countPrimaryCollationElements(s);
     EXPECT_EQ(loc.primaryCollationPrefixLength(s, n), s.size());
   }
+}
+
+// _____________________________________________________________________________
+TEST(LocaleManagerTest, PrimaryCollationElementsIgnorePunctuation) {
+  LocaleManager loc("en", "US", true);
+  // Punctuation and spaces are ignored on the PRIMARY level, so they don't
+  // count as elements.
+  EXPECT_EQ(loc.countPrimaryCollationElements(".hello"), 5u);
+  EXPECT_EQ(loc.countPrimaryCollationElements("hello world"), 10u);
+  EXPECT_EQ(loc.countPrimaryCollationElements("..."), 0u);
+  EXPECT_EQ(loc.countPrimaryCollationElements("\"<@"), 0u);
+
+  // The prefix extends up to the next relevant element.
+  EXPECT_EQ(loc.primaryCollationPrefixLength("a.c", 1), 2u);   // "a."
+  EXPECT_EQ(loc.primaryCollationPrefixLength(".a.c", 0), 1u);  // "."
+  EXPECT_EQ(loc.primaryCollationPrefixLength("...", 0), 3u);
+  EXPECT_EQ(loc.primaryCollationPrefixLength("hello world", 5), 6u);
+  EXPECT_EQ(loc.primaryCollationPrefixLength("hello world", 6), 7u);
 }
 
 #ifndef QLEVER_NO_UNICODE

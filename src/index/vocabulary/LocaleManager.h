@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -163,19 +164,20 @@ class LocaleManagerICU : public LocaleManagerBase {
     return res;
   }
 
-  // Count the number of primary-weight collation elements (non-zero primary
-  // order) in a UTF-8 encoded string. Returns raw ICU element weights;
-  // UCOL_SHIFTED is not applied here, so variable characters (e.g.,
-  // punctuation) are still counted even when ignorePunctuation is true.
+  // Count the collation elements of a UTF-8 encoded string that are relevant
+  // on the `PRIMARY` level. Elements with a zero primary weight and, if
+  // punctuation is ignored, variable elements (punctuation, spaces, symbols)
+  // are not counted.
   [[nodiscard]] size_t countPrimaryCollationElements(
       std::string_view text) const {
     return walkPrimaryElements(text, std::numeric_limits<size_t>::max())
         .numElements;
   }
 
-  // Return the byte length of the shortest UTF-8 prefix of `text` that
-  // contains exactly `numPrimaryElements` primary-weight collation elements.
-  // If `text` has fewer than `numPrimaryElements` primary elements, returns
+  // Return the byte length of the longest UTF-8 prefix of `text` that contains
+  // at most `numPrimaryElements` elements in the sense of
+  // `countPrimaryCollationElements`, so trailing ignorable characters are
+  // included. If `text` has at most `numPrimaryElements` elements, returns
   // `text.size()`.
   [[nodiscard]] size_t primaryCollationPrefixLength(
       std::string_view text, size_t numPrimaryElements) const {
@@ -271,30 +273,53 @@ class LocaleManagerICU : public LocaleManagerBase {
     size_t byteOffset;
   };
 
-  // Iterate through primary collation elements of `text`, stopping after
-  // `targetCount` non-ignorable primary elements (or at end-of-string).
-  // Returns the number of primary elements seen and the UTF-8 byte offset
-  // directly after the last one (`text.size()` if the string ended first).
-  [[nodiscard]] PrimaryWalkResult walkPrimaryElements(
-      std::string_view text, size_t targetCount) const {
-    if (targetCount == 0) {
-      return {0, 0};
-    }
+  // Iterate through the collation elements of `text` that are relevant on the
+  // `PRIMARY` level (see `countPrimaryCollationElements`), stopping right
+  // before the element after the first `maxCount` ones. Returns the number of
+  // elements seen and the UTF-8 byte offset where the walk stopped
+  // (`text.size()` if the string ended first).
+  [[nodiscard]] PrimaryWalkResult walkPrimaryElements(std::string_view text,
+                                                      size_t maxCount) const {
     UErrorCode err = U_ZERO_ERROR;
+    const auto& collator = *collators_[static_cast<uint8_t>(Level::PRIMARY)];
+    // With `UCOL_SHIFTED`, elements with a primary weight up to the variable
+    // top are ignored on the `PRIMARY` level. Variable groups start and end at
+    // multiples of 2^16, so comparing the upper 16 bits (which is what the
+    // `CollationElementIterator` returns as the primary order) is exact.
+    std::optional<uint32_t> variableTop;
+    if (ignorePunctuationStatus_ == UCOL_SHIFTED) {
+      variableTop = collator.getVariableTop(err) >> 16;
+      raise(err);
+    }
     auto iter = makeCollationElementIterator(text);
     size_t count = 0;
+    bool previousWasVariable = false;
     while (true) {
+      int32_t offsetBefore = iter->getOffset();
       int32_t elem = iter->next(err);
       raise(err);
       if (elem == icu::CollationElementIterator::NULLORDER) {
         break;
       }
-      if (icu::CollationElementIterator::primaryOrder(elem) != 0) {
-        ++count;
-        if (count == targetCount) {
-          return {count, utf16OffsetToUtf8ByteOffset(text, iter->getOffset())};
-        }
+      uint32_t primary = icu::CollationElementIterator::primaryOrder(elem);
+      if (primary == 0) {
+        continue;
       }
+      // Primary weights longer than 16 bits are split into a first element
+      // and a continuation element, which has the bits `0xC0` set in its
+      // lowest byte. The continuation inherits the variable status.
+      bool isContinuation = (elem & 0xC0) == 0xC0;
+      bool isVariable =
+          isContinuation ? previousWasVariable
+                         : variableTop.has_value() && primary <= *variableTop;
+      previousWasVariable = isVariable;
+      if (isVariable) {
+        continue;
+      }
+      if (count == maxCount) {
+        return {count, utf16OffsetToUtf8ByteOffset(text, offsetBefore)};
+      }
+      ++count;
     }
     return {count, text.size()};
   }

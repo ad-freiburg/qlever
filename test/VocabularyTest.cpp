@@ -232,6 +232,33 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
 }
 
 // _____________________________________________________________________________
+TEST(VocabularyTest, getIdRangeForFullTextPrefixIgnorePunctuation) {
+  TextVocabulary v;
+  v.setLocale("en", "US", true);
+  // Punctuation is ignored on the PRIMARY level, so `a.c` sorts like `ac`.
+  ad_utility::HashSet<string> s{"ab", "abz", "a.bc", "a.c", "ac", "a.d", "ad"};
+  auto filename = "vocTestIgnorePunctuation.dat";
+  v.createFromSet(s, filename);
+  absl::Cleanup cleanup{[&filename] { ad_utility::deleteFile(filename); }};
+
+  auto getWords = [&v](const std::string& prefix) {
+    std::vector<std::string> result;
+    auto range = v.getIdRangeForFullTextPrefix(prefix);
+    if (range.has_value()) {
+      for (auto i = range->first().get(); i <= range->last().get(); ++i) {
+        result.emplace_back(v[WordVocabIndex::make(i)]);
+      }
+    }
+    ql::ranges::sort(result);
+    return result;
+  };
+  EXPECT_THAT(getWords("ab*"), ElementsAre("a.bc", "ab", "abz"));
+  EXPECT_THAT(getWords("a.b*"), ElementsAre("a.bc", "ab", "abz"));
+  EXPECT_THAT(getWords("ac*"), ElementsAre("a.c", "ac"));
+  EXPECT_THAT(getWords("...*"), ::testing::SizeIs(s.size()));
+}
+
+// _____________________________________________________________________________
 TEST(VocabularyTest, createFromSetTest) {
   ad_utility::HashSet<string> s;
   s.insert("a");
@@ -275,6 +302,19 @@ TEST(Vocabulary, PrefixFilter) {
   RdfsVocabulary::PrefixRanges expectedRanges{
       {std::pair{VocabIndex::make(1u), VocabIndex::make(2u)}}};
   ASSERT_EQ(ranges, expectedRanges);
+
+  // The quotes inside of the last literal are not mistaken for its end.
+  auto expectRange = [&vocabulary](std::string_view prefix, uint64_t begin,
+                                   uint64_t end) {
+    EXPECT_EQ(vocabulary.prefixRanges(prefix),
+              (RdfsVocabulary::PrefixRanges{
+                  {std::pair{VocabIndex::make(begin), VocabIndex::make(end)}}}))
+        << prefix;
+  };
+  expectRange("\"exv", 3, 4);
+  expectRange("\"ex", 0, 4);
+  expectRange("\"", 0, 4);
+  expectRange("<", 4, 4);
   ad_utility::deleteFile(filename);
 }
 

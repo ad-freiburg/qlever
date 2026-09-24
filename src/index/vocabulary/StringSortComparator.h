@@ -14,6 +14,15 @@
 #include "index/vocabulary/LocaleManager.h"
 #include "util/StringUtils.h"
 
+// Return the longest prefix of `s` that has as many collation elements relevant
+// on the `PRIMARY` level as `pattern`.
+template <typename LocaleManagerT>
+std::string_view truncateLike(const LocaleManagerT& locManager,
+                              std::string_view s, std::string_view pattern) {
+  return s.substr(0, locManager.primaryCollationPrefixLength(
+                         s, locManager.countPrimaryCollationElements(pattern)));
+}
+
 /**
  * @brief This class compares strings, e.g. strings from the text index
  * vocabulary, according to the collation of the held `LocaleManagerT`. To
@@ -68,6 +77,17 @@ class SimpleStringComparatorImpl {
       return cmpRes;
     }
     return a.compare(b);
+  }
+
+  // Compare `prefix` on the `PRIMARY` level to the prefix of `word` that has
+  // as many collation elements as `prefix` (see
+  // `LocaleManager::countPrimaryCollationElements`). The result is 0 iff `word`
+  // starts with `prefix` on the `PRIMARY` level and is monotonic in `word`,
+  // which makes it usable for binary searches of prefix ranges.
+  [[nodiscard]] int compareToPrefixOf(std::string_view prefix,
+                                      std::string_view word) const {
+    return locManager_.compare(prefix, truncateLike(locManager_, word, prefix),
+                               Level::PRIMARY);
   }
 
   /// Obtain access to the held `LocaleManagerT`
@@ -158,6 +178,25 @@ class TripleComponentComparatorImpl {
       return cmp < 0;
     }
     return aIsExternal && !bIsExternal;
+  }
+
+  // Same as `SimpleStringComparatorImpl::compareToPrefixOf`, but on the
+  // components of `prefix` and `word`: the datatypes have to match, and only
+  // the inner value of `word` is truncated, so that the truncation never
+  // interferes with the detection of the end of a literal.
+  [[nodiscard]] int compareToPrefixOf(std::string_view prefix,
+                                      std::string_view word) const {
+    auto splitPrefix = extractComparable(prefix);
+    auto splitWord = extractComparable(word);
+    if (auto res = std::strncmp(&splitPrefix.firstOriginalChar_,
+                                &splitWord.firstOriginalChar_, 1);
+        res != 0) {
+      return res;
+    }
+    return locManager_.compare(splitPrefix.innerValue_,
+                               truncateLike(locManager_, splitWord.innerValue_,
+                                            splitPrefix.innerValue_),
+                               Level::PRIMARY);
   }
 
   /**

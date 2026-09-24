@@ -192,6 +192,57 @@ TEST(StringSortComparatorTest, SimpleStringComparator) {
   ASSERT_FALSE(comp("@u2", "\"@u2"));
 }
 
+// ______________________________________________________________________________________________
+TEST(StringSortComparatorTest, SimpleStringComparatorCompareToPrefixOf) {
+  for (bool ignorePunctuation : {false, true}) {
+    SimpleStringComparator comp("en", "US", ignorePunctuation);
+    EXPECT_EQ(comp.compareToPrefixOf("ab", "ab"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("ab", "abz"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("ab", "ABZ"), 0);
+    EXPECT_LT(comp.compareToPrefixOf("ab", "ac"), 0);
+    EXPECT_GT(comp.compareToPrefixOf("ab", "aa"), 0);
+    EXPECT_GT(comp.compareToPrefixOf("ab", "a"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("", "abc"), 0);
+  }
+  SimpleStringComparator respectPunct("en", "US", false);
+  EXPECT_NE(respectPunct.compareToPrefixOf("ab", "a.b"), 0);
+  EXPECT_GT(respectPunct.compareToPrefixOf("a", ".a"), 0);
+
+  SimpleStringComparator ignorePunct("en", "US", true);
+  EXPECT_EQ(ignorePunct.compareToPrefixOf("ab", "a.b"), 0);
+  EXPECT_EQ(ignorePunct.compareToPrefixOf("a.", "ab"), 0);
+  EXPECT_EQ(ignorePunct.compareToPrefixOf("...", "abc"), 0);
+  EXPECT_LT(ignorePunct.compareToPrefixOf("ab", "a.c"), 0);
+  EXPECT_GT(ignorePunct.compareToPrefixOf("ab", "a.a"), 0);
+}
+
+// ______________________________________________________________________________________________
+TEST(StringSortComparatorTest, TripleComponentComparatorCompareToPrefixOf) {
+  for (bool ignorePunctuation : {false, true}) {
+    TripleComponentComparator comp("en", "US", ignorePunctuation);
+    EXPECT_EQ(comp.compareToPrefixOf("\"ab", "\"abc\""), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("\"ab", "\"ab\"@en"), 0);
+    EXPECT_GT(comp.compareToPrefixOf("\"abc", "\"ab\"@en"), 0);
+    EXPECT_LT(comp.compareToPrefixOf("\"ab", "\"ac\"@en"), 0);
+    // A quote inside the value of a literal must not end the literal early.
+    EXPECT_EQ(comp.compareToPrefixOf("\"a b", "\"a \"b\" c\"@en"),
+              ignorePunctuation ? 0 : 1);
+    EXPECT_EQ(comp.compareToPrefixOf("\"a ", "\"a \"b\" c\"@en"), 0);
+    // The datatype has to match, even if the prefix has no relevant elements.
+    EXPECT_LT(comp.compareToPrefixOf("\"", "<abc>"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("\"", "\"abc\""), 0);
+    EXPECT_GT(comp.compareToPrefixOf("<", "\"abc\""), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("<http://", "<http://example.org>"), 0);
+    // Without punctuation, "http" is a prefix of "https".
+    EXPECT_EQ(comp.compareToPrefixOf("<http://", "<https://example.org>") == 0,
+              ignorePunctuation);
+  }
+  TripleComponentComparator ignorePunct("en", "US", true);
+  EXPECT_LT(ignorePunct.compareToPrefixOf("\"...", "<abc>"), 0);
+  EXPECT_EQ(ignorePunct.compareToPrefixOf("\"...", "\"abc\""), 0);
+  EXPECT_LT(ignorePunct.compareToPrefixOf("\"ab", "\"a.c\""), 0);
+}
+
 // The following tests exercise the ICU-free (bytewise) comparators. They are
 // always compiled and run, regardless of whether QLever is built with ICU, so
 // that the ICU-free code paths are covered.
@@ -208,6 +259,10 @@ TEST(StringSortComparatorNoICU, SimpleStringComparator) {
 
   // Something is not smaller than itself.
   EXPECT_FALSE(comp("beta", "beta"));
+
+  EXPECT_EQ(comp.compareToPrefixOf("al", "alpha"), 0);
+  EXPECT_LT(comp.compareToPrefixOf("al", "beta"), 0);
+  EXPECT_GT(comp.compareToPrefixOf("al", "ALPHA"), 0);
 }
 
 // ______________________________________________________________________________
@@ -237,6 +292,10 @@ TEST(StringSortComparatorNoICU, TripleComponentComparator) {
       comp.isLessInTotalWithExternalFlag("\"beta\"", true, "\"beta\"", false));
   EXPECT_FALSE(
       comp.isLessInTotalWithExternalFlag("\"beta\"", false, "\"beta\"", true));
+
+  EXPECT_EQ(comp.compareToPrefixOf("\"al", "\"alpha\"@en"), 0);
+  EXPECT_EQ(comp.compareToPrefixOf("\"al", "\"al\"@en"), 0);
+  EXPECT_LT(comp.compareToPrefixOf("\"al", "<alpha>"), 0);
 
   // `normalizeUtf8` is a no-op in the ICU-free variant.
   EXPECT_EQ(comp.normalizeUtf8("\xc3\xa9"), "\xc3\xa9");
