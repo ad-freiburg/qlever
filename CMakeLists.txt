@@ -275,11 +275,14 @@ FetchContent_Declare(
 # Use URL to avoid downloading large repository as recommended here:
 # https://json.nlohmann.me/integration/cmake/#fetchcontent
 FetchContent_Declare(
-        nlohmann-json
+        nlohmann_json
         URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
         URL_HASH SHA3_224=0ad805c53f1769489a9c6bdeefd0a36c19f74239785cdb9c4344e8c1
         SYSTEM
         EXCLUDE_FROM_ALL
+        # nlohmann_json is also required by opentelemetry-cpp. It fetches the same version.
+        # `find_package` in opentelemetry-cpp will return this version instead of fetching it again and causing a clash.
+        OVERRIDE_FIND_PACKAGE
 )
 
 ###############################
@@ -713,12 +716,9 @@ if (EMSCRIPTEN)
     # and profiled with source information in the browser dev tools.
     add_link_options("$<$<CONFIG:Debug,RelWithDebInfo>:-g>")
 endif ()
-# HACK: `nlohmann-json` is made available before all others, because
-# `opentelemetry-cpp` needs it for the OTLP/HTTP exporter and would otherwise
-# provide it itself resulting in a clash. Alternatively rename to `nlohmann_json`.
-FetchContent_MakeAvailable(nlohmann-json)
-set(nlohmann_json_DIR "${nlohmann-json_BINARY_DIR}" CACHE PATH "Directory of the `nlohmann_json` package configuration" FORCE)
-FetchContent_MakeAvailable(googletest ctre abseil fsst antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
+# `nlohmann_json` is declared with `OVERRIDE_FIND_PACKAGE`, so `find_package`
+# in other dependencies (namely opentelemetry-cpp) uses our version.
+FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann_json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
 
 # Depending on `BUILD_SHARED_LIBS`, the `antlr4` build creates either a shared or
 # a static library target. Define the alias `antlr4_umbrella` such that the rest

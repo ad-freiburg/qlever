@@ -31,7 +31,8 @@
 #include <utility>
 #include <vector>
 
-#include "GTestHelpers.h"
+#include "./GTestHelpers.h"
+#include "util/HashMap.h"
 
 namespace tracingTestHelpers {
 
@@ -72,10 +73,11 @@ class ScopedInMemoryTracer {
         opentelemetry::sdk::trace::SimpleSpanProcessorFactory::Create(
             std::move(exporter)));
     opentelemetry::trace::Provider::SetTracerProvider(
-        std::shared_ptr<TracerProvider>{provider.release()});
+        std::shared_ptr<TracerProvider>{std::move(provider)});
     opentelemetry::context::propagation::GlobalTextMapPropagator::
-        SetGlobalPropagator(std::shared_ptr<TextMapPropagator>{
-            new opentelemetry::trace::propagation::HttpTraceContext{}});
+        SetGlobalPropagator(
+            std::make_shared<
+                opentelemetry::trace::propagation::HttpTraceContext>());
   }
 
   ~ScopedInMemoryTracer() {
@@ -175,17 +177,17 @@ MATCHER_P(IdIs, hex,
   return actual == hex;
 }
 
-constexpr auto TraceIdIs = [](const std::string& hex) {
+inline auto TraceIdIs(const std::string& hex) {
   return AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetTraceId,
                      IdIs(hex));
-};
-constexpr auto SpanIdIs = [](const std::string& hex) {
+}
+inline auto SpanIdIs(const std::string& hex) {
   return AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetSpanId, IdIs(hex));
-};
-constexpr auto ParentSpanIdIs = [](const std::string& hex) {
+}
+inline auto ParentSpanIdIs(const std::string& hex) {
   return AD_PROPERTY(opentelemetry::sdk::trace::SpanData, GetParentSpanId,
                      IdIs(hex));
-};
+}
 
 testing::Matcher<const opentelemetry::sdk::trace::SpanData&> Events(
     const auto m) {
@@ -235,7 +237,7 @@ IsRootSpan() {
 MATCHER(SpansAreInDistinctTraces, negation
                                       ? "has two spans in the same trace"
                                       : "has no two spans in the same trace") {
-  std::unordered_map<std::string, std::string> spanNameByTraceId;
+  ad_utility::HashMap<std::string, std::string> spanNameByTraceId;
   for (const auto& span : arg) {
     auto name = span->GetName();
     auto [it, inserted] =

@@ -30,6 +30,7 @@
 #include <type_traits>
 
 #include "util/Exception.h"
+#include "util/UniqueCleanup.h"
 #include "util/http/beast.h"
 
 // Forward declaration, so that this header does not have to pull in the OTEL
@@ -47,20 +48,18 @@ class [[nodiscard(
     "Tracing is only active while this handle is alive.")]] TracingHandle {
   // Empty when tracing is disabled. The SDK type rather than the API type,
   // because only the former can be shut down.
-  std::shared_ptr<opentelemetry::sdk::trace::TracerProvider> provider_;
+  using Provider = std::shared_ptr<opentelemetry::sdk::trace::TracerProvider>;
+
+  // Uninstalls the global tracer provider and shuts `provider` down, flushing
+  // spans buffered by the batch processor. No-op if `provider` is `nullptr`
+  // (tracing disabled, or already shut down).
+  static void shutdownProvider(Provider provider);
+
+  unique_cleanup::UniqueCleanup<Provider> provider_{nullptr, &shutdownProvider};
 
  public:
   TracingHandle() = default;
-  explicit TracingHandle(
-      std::shared_ptr<opentelemetry::sdk::trace::TracerProvider> provider);
-  ~TracingHandle();
-
-  TracingHandle(TracingHandle&&) noexcept;
-  TracingHandle& operator=(TracingHandle&&) noexcept;
-  TracingHandle(const TracingHandle&) = delete;
-  TracingHandle& operator=(const TracingHandle&) = delete;
-
-  void shutdown();
+  explicit TracingHandle(Provider provider);
 };
 
 // Sets up tracing. Configures tracing using the provided `OTEL_*` environment
@@ -72,7 +71,8 @@ std::shared_ptr<opentelemetry::trace::Tracer> tracer();
 
 // Owns a span and ends it on destruction. If none of `setOk`, `setError` or
 // `recordException` is called before the span ends, it is assumed that the
-// coroutine was cancelled.
+// call was aborted (e.g. through an unexpected exception or cancelled
+// coroutine).
 class [[nodiscard(
     "The span is ended when this guard is destroyed. Store it in a "
     "variable.")]] SpanGuard {

@@ -351,7 +351,7 @@ TEST(ServerTest, tracing) {
                    const testing::Matcher<const ResT&>& responseMatcher =
                        testing::_,
                    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(loc);
+    auto trace = generateLocationTrace(loc);
 
     tracingTestHelpers::ScopedInMemoryTracer scopedTracer;
     auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});

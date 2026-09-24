@@ -37,29 +37,12 @@ namespace semconv = opentelemetry::semconv;
 namespace ad_utility::tracing {
 
 // _____________________________________________________________________________
-TracingHandle::TracingHandle(
-    std::shared_ptr<trace_sdk::TracerProvider> provider)
-    : provider_{std::move(provider)} {}
+TracingHandle::TracingHandle(Provider provider)
+    : provider_{std::move(provider), &shutdownProvider} {}
 
 // _____________________________________________________________________________
-TracingHandle::TracingHandle(TracingHandle&& other) noexcept
-    : provider_{std::move(other.provider_)} {}
-
-// _____________________________________________________________________________
-TracingHandle& TracingHandle::operator=(TracingHandle&& other) noexcept {
-  if (this != &other) {
-    shutdown();
-    provider_ = std::move(other.provider_);
-  }
-  return *this;
-}
-
-// _____________________________________________________________________________
-TracingHandle::~TracingHandle() { shutdown(); }
-
-// _____________________________________________________________________________
-void TracingHandle::shutdown() {
-  if (provider_ == nullptr) {
+void TracingHandle::shutdownProvider(Provider provider) {
+  if (provider == nullptr) {
     return;
   }
   // Uninstall first, so that anything that creates a span from here on gets the
@@ -68,8 +51,7 @@ void TracingHandle::shutdown() {
       std::shared_ptr<trace_api::TracerProvider>{});
   // The batch processor buffers spans and exports them from a background
   // thread, so without this the spans of the last few seconds would be lost.
-  provider_->Shutdown();
-  provider_ = nullptr;
+  provider->Shutdown();
 }
 
 // _____________________________________________________________________________
