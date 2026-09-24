@@ -132,11 +132,11 @@ EM_JS(void, qleverFetch, (EM_VAL handle), {
 
   const options = {
     method,
-    headers : {},
-    signal : controller.signal,
+    headers: {},
+    signal: controller.signal,
     // The JavaScript environment follows the redirects; if we may not follow
     // them, a redirect makes the request fail.
-    redirect : followRedirects ? "follow" : "error"
+    redirect: followRedirects ? "follow" : "error"
   };
   if (accept) {
     options.headers["Accept"] = accept;
@@ -155,9 +155,9 @@ EM_JS(void, qleverFetch, (EM_VAL handle), {
     try {
       const fetched = await fetch(url, options);
       yield {
-        kind : "head",
-        status : fetched.status,
-        contentType : fetched.headers.get("Content-Type") ?? ""
+        kind: "head",
+        status: fetched.status,
+        contentType: fetched.headers.get("Content-Type") ?? ""
       };
       // A `204 No Content` for example has no body at all.
       if (fetched.body) {
@@ -170,11 +170,11 @@ EM_JS(void, qleverFetch, (EM_VAL handle), {
           if (chunk.done) {
             break;
           }
-          yield {kind : "chunk", data : chunk.value};
+          yield {kind: "chunk", data: chunk.value};
         }
       }
     } catch (error) {
-      yield {kind : "error", message : describe(error)};
+      yield {kind: "error", message: describe(error)};
     } finally {
       // A no-op for a response that we read to its end; for one that we stopped
       // reading, this closes the connection.
@@ -188,7 +188,7 @@ EM_JS(void, qleverFetch, (EM_VAL handle), {
     // yielded, or to `{done: true}` once the body has returned. The latter is
     // the end of the response, which we report as a step of its own.
     const step = await steps.next();
-    return step.done ? {kind : "done"} : step.value;
+    return step.done ? {kind: "done"} : step.value;
   };
   response.cancel = () => controller.abort();
 });

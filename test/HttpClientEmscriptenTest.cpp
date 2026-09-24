@@ -74,7 +74,7 @@ constexpr int32_t LONG_HEADER_SIZE = 4096;
 // The test server below needs `require` and a socket to listen on.
 EM_JS(bool, isNodeJs, (void), {
   return typeof process !== "undefined" &&
-         typeof process.versions?.node === "string";
+      typeof process.versions?.node === "string";
 });
 
 // Start the test server and store the port it listens on at the given address
@@ -87,7 +87,7 @@ EM_JS(void, startTestServer,
   const http = require("http");
   const server = http.createServer((request, response) => {
     if (request.url === "/hello") {
-      response.writeHead(200, {"Content-Type" : "text/turtle"});
+      response.writeHead(200, {"Content-Type": "text/turtle"});
       response.end("Hello, World!");
     } else if (request.url === "/echo") {
       // Report the request, so that the test can check it.
@@ -97,24 +97,26 @@ EM_JS(void, startTestServer,
         // Node.js gives the headers as a plain object with lowercase names;
         // `Headers` looks them up case-insensitively, like on the client side.
         const headers = new Headers(request.headers);
-        response.writeHead(200, {"Content-Type" : "application/json"});
+        response.writeHead(200, {"Content-Type": "application/json"});
         response.end(JSON.stringify({
-          method : request.method,
-          body : Buffer.concat(chunks).toString(),
-          bodyHex : Buffer.concat(chunks).toString("hex"),
-          accept : headers.get("Accept") ?? "",
-          contentType : headers.get("Content-Type") ?? ""
+          method: request.method,
+          body: Buffer.concat(chunks).toString(),
+          bodyHex: Buffer.concat(chunks).toString("hex"),
+          accept: headers.get("Accept") ?? "",
+          contentType: headers.get("Content-Type") ?? ""
         }));
       });
     } else if (request.url === "/all-bytes") {
       // Every byte value, several times over.
-      response.writeHead(200, {"Content-Type" : "application/octet-stream"});
+      response.writeHead(200, {"Content-Type": "application/octet-stream"});
       const all = Buffer.alloc(256 * numAllByteRounds);
-      for (let i = 0; i < all.length; ++i) { all[i] = i % 256; }
+      for (let i = 0; i < all.length; ++i) {
+        all[i] = i % 256;
+      }
       response.end(all);
     } else if (request.url === "/large") {
       // Sent in many small pieces, so that the client has to assemble it.
-      response.writeHead(200, {"Content-Type" : "text/plain"});
+      response.writeHead(200, {"Content-Type": "text/plain"});
       // The last piece is whatever is left, so any size works.
       const pieceSize = Math.ceil(largeBodySize / 50);
       for (let sent = 0; sent < largeBodySize; sent += pieceSize) {
@@ -124,7 +126,7 @@ EM_JS(void, startTestServer,
     } else if (request.url === "/stream") {
       // Sent slowly, so that a client which stops reading is still connected
       // when it does so.
-      response.writeHead(200, {"Content-Type" : "text/plain"});
+      response.writeHead(200, {"Content-Type": "text/plain"});
       let chunksSent = 0;
       const timer = setInterval(() => {
         if (chunksSent === numStreamChunks) {
@@ -146,17 +148,21 @@ EM_JS(void, startTestServer,
         // `writableEnded` is true iff `end()` has been called, which the timer
         // above does once it has sent all chunks.
         if (!response.writableEnded) {
-          globalThis.numAbortedRequests = (globalThis.numAbortedRequests ?? 0) + 1;
+          globalThis.numAbortedRequests =
+              (globalThis.numAbortedRequests ?? 0) + 1;
         }
       });
     } else if (request.url === "/aborted-requests") {
-      response.writeHead(200, {"Content-Type" : "text/plain"});
+      response.writeHead(200, {"Content-Type": "text/plain"});
       response.end(String(globalThis.numAbortedRequests ?? 0));
     } else if (request.url === "/redirect") {
-      response.writeHead(308, {"Location" : "/hello"});
+      response.writeHead(308, {"Location": "/hello"});
       response.end();
     } else if (request.url === "/long-content-type") {
-      response.writeHead(200, {"Content-Type" : "text/plain;x=" + "y".repeat(longHeaderSize)});
+      response.writeHead(200, {
+        "Content-Type": "text/plain;x=" +
+            "y".repeat(longHeaderSize)
+      });
       response.end("body");
     } else if (request.url === "/closed-port") {
       // A port that nobody listens on (any more), for a request that cannot
@@ -167,7 +173,7 @@ EM_JS(void, startTestServer,
       probe.listen(0, "127.0.0.1", () => {
         const port = probe.address().port;
         probe.close(() => {
-          response.writeHead(200, {"Content-Type" : "text/plain"});
+          response.writeHead(200, {"Content-Type": "text/plain"});
           response.end(String(port));
         });
       });
@@ -175,7 +181,7 @@ EM_JS(void, startTestServer,
       response.writeHead(204);
       response.end();
     } else {
-      response.writeHead(404, {"Content-Type" : "text/plain"});
+      response.writeHead(404, {"Content-Type": "text/plain"});
       response.end("not found");
     }
   });
@@ -185,8 +191,9 @@ EM_JS(void, startTestServer,
   // it). The view is built freshly because Emscripten's cached `HEAPU8` can be
   // stale after a memory growth.
   server.listen(0, "127.0.0.1", () => {
-    Atomics.store(new Int32Array(HEAPU8.buffer), Number(portAddress) / 4,
-                  server.address().port);
+    Atomics.store(
+        new Int32Array(HEAPU8.buffer), Number(portAddress) / 4,
+        server.address().port);
   });
   // Don't keep the process alive just because of the server.
   server.unref();
