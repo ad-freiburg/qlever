@@ -19,6 +19,7 @@
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
@@ -599,7 +600,7 @@ TEST(IndexScan, getResultSizeOfScan) {
 // exact iff no block of the relation has located triples.
 TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   // A large relation `<p>` and two small relations `<q>` and `<r>`. With a
-  // block size of 16 bytes, `<p>` is stored in blocks of its own and has a
+  // block size of 2 rows, `<p>` is stored in blocks of its own and has a
   // metadata entry, `<q>` and `<r>` share one block and have none.
   std::string kg;
   for (size_t i = 0; i < 50; ++i) {
@@ -607,7 +608,8 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   }
   kg += "<x0> <q> <y0> . <x0> <r> <y0> .";
   TestIndexConfig config{kg};
-  config.blocksizePermutations = 16_B;
+  config.blocksizePermutations = ad_utility::MemorySize::bytes(
+      2 * columnBasedIdTable::BYTES_PER_ID_COLUMN_ENTRY);  // 2 rows/block
   auto index = std::make_shared<Index>(makeTestIndex(std::move(config)));
   auto getId = makeGetId(*index);
   const auto& pso = index->getImpl().getPermutation(Permutation::PSO);
