@@ -101,6 +101,29 @@ class LocatedTriplesTest : public ::testing::Test {
   }
 };
 
+// Test the check whether a range of blocks has located triples.
+TEST_F(LocatedTriplesTest, containsLocatedTriplesInBlockRange) {
+  // Located triples in the blocks 2, 5 and 9. Both ends of a range are
+  // inclusive.
+  using LT = LocatedTriple;
+  auto ltpb = makeLocatedTriplesPerBlock(
+      {LT{2, IT(10, 1, 0), true}, LT{5, IT(20, 4, 0), true},
+       LT{5, IT(21, 5, 0), false}, LT{9, IT(30, 6, 0), true}});
+
+  // A range with at most three blocks is checked block by block.
+  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(2, 2));
+  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(3, 5));
+  EXPECT_FALSE(ltpb.containsLocatedTriplesInBlockRange(3, 4));
+
+  // A larger range is checked via the blocks with located triples.
+  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(6, 9));
+  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(9, 12));
+  EXPECT_FALSE(ltpb.containsLocatedTriplesInBlockRange(10, 100));
+
+  // An inverted range is rejected.
+  EXPECT_ANY_THROW(ltpb.containsLocatedTriplesInBlockRange(3, 2));
+}
+
 // Test the method that counts the number of `LocatedTriple's in a block.
 TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   auto locatedTriplesInBlock = [](const size_t blockIndex,
