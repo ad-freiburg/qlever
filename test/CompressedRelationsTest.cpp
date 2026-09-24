@@ -2000,7 +2000,7 @@ std::pair<size_t, size_t> getThreadCountAndTaskSize(
 
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, blockMustHaveRoomForAtLeastOneRow) {
-  std::string filename = "blockMustHaveRoomForAtLeastOneRow.dat";
+  std::string filename = gtestCurrentTestName();
   AD_EXPECT_THROW_WITH_MESSAGE(
       (CompressedRelationWriter{1, ad_utility::File{filename, "w"}, 0}),
       ::testing::HasSubstr("at least one row"));
