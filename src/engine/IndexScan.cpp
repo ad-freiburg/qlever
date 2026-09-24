@@ -416,21 +416,29 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   }
 
   // For a scan with a fixed first column and two variables (think `?s <p> ?o`
-  // in the PSO permutation), the exact number of rows is stored in the
-  // per-relation metadata, if the relation is large enough to have such an
-  // entry. Use it, as summing up the block sizes below is linear in the number
-  // of blocks of the relation, which can be large. This is only valid if the
-  // scan was not prefiltered and there are no located triples for this
-  // permutation, otherwise fall back to the general case below.
-  if (numVariables() == 2 && !scanSpecAndBlocksIsPrefiltered_ &&
-      permutation()
-              .getLocatedTriplesForPermutation(locatedTriplesState())
-              .numBlocks() == 0) {
+  // in the PSO permutation), the number of rows is stored in the per-relation
+  // metadata, if the relation is large enough to have such an entry. Use it,
+  // as summing up the block sizes below is linear in the number of blocks of
+  // the relation, which can be large. The estimate is exact iff none of the
+  // blocks of the relation has located triples (the general case below would
+  // return the same estimate then, as the located triples of a block count
+  // as inserted and as deleted at the same time, see
+  // `LocatedTriplesPerBlock::numTriples`). Prefiltered scans and small
+  // relations that share a block with other relations (and hence have no
+  // metadata entry) use the general case.
+  if (numVariables() == 2 && !scanSpecAndBlocksIsPrefiltered_) {
     const auto& col0Id = scanSpecAndBlocks_.scanSpec_.col0Id();
     AD_CORRECTNESS_CHECK(col0Id.has_value());
     auto metadata = permutation().metaData().getMetaDataIfPresent(*col0Id);
-    if (metadata.has_value()) {
-      return {true, metadata->numRows_};
+    if (metadata.has_value() && scanSpecAndBlocks_.sizeBlockMetadata_ > 0) {
+      const auto& blocks = scanSpecAndBlocks_.getBlockMetadataView();
+      size_t firstBlockIndex = ql::ranges::begin(blocks)->blockIndex_;
+      size_t lastBlockIndex = std::prev(ql::ranges::end(blocks))->blockIndex_;
+      bool hasUpdates =
+          permutation()
+              .getLocatedTriplesForPermutation(locatedTriplesState())
+              .containsTriplesInBlockRange(firstBlockIndex, lastBlockIndex);
+      return {!hasUpdates, metadata->numRows_};
     }
   }
 
