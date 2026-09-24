@@ -23,7 +23,7 @@
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/SpecialIds.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationWriter.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
