@@ -621,16 +621,14 @@ CPP_template(typename UnderlyingVocabulary,
         sortedIndices.begin(), sortedIndices.end(), indices);
     std::vector<std::string> words;
     words.reserve(indices.size());
-    for (size_t i = 0; i < indices.size(); ++i) {
-      size_t position = positions[i];
-      if (position < sortedIndices.size() &&
-          sortedIndices[position] == indices[i]) {
+    for (auto [index, position] : ::ranges::views::zip(indices, positions)) {
+      if (position < sortedIndices.size() && sortedIndices[position] == index) {
         words.push_back(compressionWrapper_.decompress(
             underlyingVocabulary_.wordAtPosition(position),
             getDecoderIdxFromPosition(position)));
       } else {
-        words.push_back(ad_utility::vocabulary::placeholderForMissingVocabIndex(
-            indices[i]));
+        words.push_back(
+            ad_utility::vocabulary::placeholderForMissingVocabIndex(index));
       }
     }
     return ad_utility::vocabulary::makeBatchResultFromWords(std::move(words));

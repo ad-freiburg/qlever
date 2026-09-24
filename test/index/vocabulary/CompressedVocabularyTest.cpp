@@ -1,6 +1,9 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026 The QLever Authors, in particular:
+//
+// 2022 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
@@ -351,6 +354,34 @@ TEST(CompressedVocabularyWithHoles, accessOperator) {
     EXPECT_EQ(vocab[index],
               ad_utility::vocabulary::placeholderForMissingVocabIndex(index));
   }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedVocabularyWithHoles, lookupBatch) {
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  auto vocab =
+      createVocabularyWithHoles(filename, wordsWithHoles(), indicesWithHoles());
+
+  // `lookupBatch` has to agree with `operator[]` for every index of a batch,
+  // in the order of the batch: contained indices from different decoder
+  // blocks, holes (placeholder), indices beyond the last contained one,
+  // duplicates, and unsorted batches.
+  std::vector<std::vector<size_t>> batches{
+      {1, 4, 7, 31}, {31, 7, 4, 1}, {0, 2, 3, 35},     {16, 16, 17, 0, 31},
+      {1},           {0},           {32, 1, 33, 2, 4}, {28, 29, 30, 31, 34}};
+  for (const auto& indices : batches) {
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+        vocab, vocab.lookupBatch(indices), indices);
+  }
+
+  // Spot check the placeholder for a hole and a decompressed word.
+  std::vector<size_t> indices{2, 4};
+  auto result = vocab.lookupBatch(indices);
+  ASSERT_EQ(result->size(), 2u);
+  EXPECT_EQ((*result)[0],
+            ad_utility::vocabulary::placeholderForMissingVocabIndex(2));
+  EXPECT_EQ((*result)[1], "word01m");
 }
 
 // _____________________________________________________________________________
