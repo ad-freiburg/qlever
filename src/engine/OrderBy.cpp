@@ -111,16 +111,16 @@ struct RowRange {
 // `Undefined` before everything else.
 std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
     ql::span<const Id> column) {
-  // Return the index of the first row at or after `firstDefined` for which the
-  // `predicate` is false. The predicate must be monotone on the column.
-  auto partitionPoint = [&column](size_t firstDefined, auto predicate) {
-    return static_cast<size_t>(
-        std::partition_point(column.begin() + firstDefined, column.end(),
-                             predicate) -
-        column.begin());
+  // Return the index of the first row in `[begin, end)` for which the
+  // `predicate` is false. The predicate must be monotone on that range.
+  auto partitionPoint = [&column](size_t begin, size_t end, auto predicate) {
+    return static_cast<size_t>(std::partition_point(column.begin() + begin,
+                                                    column.begin() + end,
+                                                    predicate) -
+                               column.begin());
   };
   size_t firstDefined =
-      partitionPoint(0, [](Id id) { return id.isUndefined(); });
+      partitionPoint(0, column.size(), [](Id id) { return id.isUndefined(); });
   if (firstDefined == column.size()) {
     return std::nullopt;
   }
@@ -134,19 +134,21 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
     ranges.push_back({0, firstDefined, false});
   }
   if (type == Datatype::Int) {
-    size_t firstNegative =
-        partitionPoint(firstDefined, [](Id id) { return id.getInt() >= 0; });
+    size_t firstNegative = partitionPoint(
+        firstDefined, column.size(), [](Id id) { return id.getInt() >= 0; });
     ranges.push_back({firstNegative, column.size(), false});
     ranges.push_back({firstDefined, firstNegative, false});
   } else if (type == Datatype::Double) {
-    auto isNegative = [](Id id) { return std::signbit(id.getDouble()); };
-    auto isNan = [](Id id) { return std::isnan(id.getDouble()); };
-    size_t firstPositiveNan = partitionPoint(
-        firstDefined, [&](Id id) { return !isNegative(id) && !isNan(id); });
+    // The `NaN`s are at the end of the non-negative and at the end of the
+    // negative doubles, respectively.
+    auto isNotNan = [](Id id) { return !std::isnan(id.getDouble()); };
     size_t firstNegative =
-        partitionPoint(firstDefined, [&](Id id) { return !isNegative(id); });
-    size_t firstNegativeNan = partitionPoint(
-        firstDefined, [&](Id id) { return !(isNegative(id) && isNan(id)); });
+        partitionPoint(firstDefined, column.size(),
+                       [](Id id) { return !std::signbit(id.getDouble()); });
+    size_t firstPositiveNan =
+        partitionPoint(firstDefined, firstNegative, isNotNan);
+    size_t firstNegativeNan =
+        partitionPoint(firstNegative, column.size(), isNotNan);
     ranges.push_back({firstNegative, firstNegativeNan, true});
     ranges.push_back({firstDefined, firstPositiveNan, false});
     ranges.push_back({firstPositiveNan, firstNegative, false});
