@@ -629,9 +629,8 @@ CPP_template(typename UnderlyingVocabulary,
             underlyingVocabulary_.wordAtPosition(position),
             getDecoderIdxFromPosition(position)));
       } else {
-        words.push_back(
-            ad_utility::vocabulary::placeholderForMissingVocabIndex(
-                indices[i]));
+        words.push_back(ad_utility::vocabulary::placeholderForMissingVocabIndex(
+            indices[i]));
       }
     }
     return ad_utility::vocabulary::makeBatchResultFromWords(std::move(words));
