@@ -488,6 +488,7 @@ addLinkAndDiscoverTest(MemorySizeTest memorySize)
 addLinkAndDiscoverTest(JsonUtilTest)
 
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
+addLinkAndDiscoverTest(ZipperJoinerTest)
 
 addLinkAndDiscoverTest(AsioHelpersTest)
 # With `-fwasm-exceptions`, clang's `correlated-propagation` pass (run at -O2/-O3)

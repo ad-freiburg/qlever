@@ -48,6 +48,12 @@ class BasicIdColumnIterator {
     return {payload_ + n, datatype_ + n};
   }
 
+  // Direct access to the underlying pointers, e.g. to build a
+  // `BasicIdColumnView` spanning a subrange of iterators without going
+  // through the (proxy) elements. See `IdColumnZipperJoin.h`.
+  PayloadPointer payloadPtr() const { return payload_; }
+  DatatypePointer datatypePtr() const { return datatype_; }
+
   BasicIdColumnIterator& operator++() {
     ++payload_;
     ++datatype_;
