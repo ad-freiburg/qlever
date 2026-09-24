@@ -66,6 +66,10 @@ class GetResult {
   // the state in which a storage that has nothing to report may complete.
   GetResult() = default;
 
+  // Construct the "the storage was cancelled" state explicitly, see the default
+  // constructor above.
+  static GetResult cancelled() { return GetResult{}; }
+
   // Construct the end-of-chunk sentinel.
   static GetResult endOfChunk() {
     return GetResult{OptionalBlock<Block>{std::nullopt}};
@@ -152,10 +156,13 @@ class GetResult {
 // `net::use_awaitable` rethrows a failure on the executor of the caller.
 //
 // CONTRACT: All the operations of a storage
-// * run on the single executor that the storage is associated with, on which it
-//   schedules its asynchronous work and which is also the fallback for
-//   completion handlers that have no associated executor of their own,
-// * complete their token exactly once, on that same executor,
+// * run on a single executor of the storage's own choosing: either the `strand`
+//   that the sink hands to the factory of the storage, or one that the storage
+//   creates itself (see `CompressedIdTableBlockStorage` for the latter), which
+//   is also the fallback for completion handlers that have no associated
+//   executor of their own,
+// * complete their token exactly once, on the executor that is associated with
+//   that token (the sink awaits them, so this is the strand of the sink),
 // * and may throw only *before* they have consumed their handler, in which case
 //   the caller is responsible for completing its own operation (the sink does
 //   just that). An implementation therefore has to report a failure of its own
