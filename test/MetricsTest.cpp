@@ -70,7 +70,7 @@ TEST(Metrics, resourceAttributesContainBuildInformation) {
 TEST(Metrics, sharedResourceImpl) {
   auto expectSharedResourceImpl =
       [](std::optional<std::pair<std::string, std::string>> envVariable,
-         const std::string& expectedServiceName =
+         std::string_view expectedServiceName =
              ad_utility::metrics::DEFAULT_SERVICE_NAME,
          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
@@ -84,11 +84,10 @@ TEST(Metrics, sharedResourceImpl) {
         EXPECT_THAT(attributes, QLeverResourceAttributesExist());
         // The service name is read by the OTEL sdk from the environment
         // variables. Only if no service name is set via `qlever` is injected.
-        EXPECT_THAT(
-            attributes,
-            testing::Contains(testing::Pair(
-                semconv::service::kServiceName,
-                testing::VariantWith<std::string>(expectedServiceName))));
+        EXPECT_THAT(attributes, testing::Contains(testing::Pair(
+                                    semconv::service::kServiceName,
+                                    testing::VariantWith<std::string>(
+                                        std::string{expectedServiceName}))));
       };
   expectSharedResourceImpl(std::nullopt);
   expectSharedResourceImpl({{"OTEL_SERVICE_NAME", "my-qlever"}}, "my-qlever");

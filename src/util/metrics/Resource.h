@@ -14,7 +14,7 @@
 
 namespace ad_utility::metrics {
 
-constexpr std::string DEFAULT_SERVICE_NAME = "qlever";
+constexpr std::string_view DEFAULT_SERVICE_NAME = "qlever";
 
 // The identity shared by all OTEL providers so that a backend
 // can tell that metrics and spans come from the same QLever instance.
