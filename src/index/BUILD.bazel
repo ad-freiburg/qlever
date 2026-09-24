@@ -1,0 +1,100 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `src/index/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_binary", "qlever_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory, see `//src:qlever_hdrs`.
+cc_library(
+    name = "headers",
+    hdrs = glob(["**/*.h"]),
+    strip_include_prefix = "/src",
+)
+
+# Note: `RdfParser`, `TripleComponent`, and `AsyncFileBlockDriver` live in
+# `src/parser`, but are compiled directly into the `index` library instead of
+# into a library of their own. The reason is that a separate library would be a
+# cyclic dependency:
+# 1. The `index` library needs them, because `IndexImpl` builds an index from
+#    RDF input files.
+# 2. They in turn need the `index` library. `TripleComponent::toValueId` and
+#    friends look words up in the vocabulary of an `IndexImpl` directly. More
+#    fundamentally, comparing two `Id`s calls `LocalVocabEntry::compareThreeWay`
+#    and `LocalVocabEntry::positionInVocab` (see `global/ValueId.h`), and the
+#    implementation of `LocalVocabEntry` again requires an `IndexImpl` (see
+#    `LocalVocabEntry.cpp`). Every translation unit that compares `Id`s
+#    therefore depends on the `index` library.
+# Untangling this requires decoupling `LocalVocabEntry` from `IndexImpl` (for
+# example via an abstract interface for the vocabulary lookup), which is a much
+# larger change that also touches one of the hottest code paths of the engine.
+# TODO<joka921> Decouple `LocalVocabEntry` from `IndexImpl`, then move these
+# files into a proper library of their own.
+qlever_cc_library(
+    name = "index",
+    srcs = [
+        "CompressedExternalIdTableSorterInstantiations.cpp",
+        "CompressedRelation.cpp",
+        "DeltaTriples.cpp",
+        "DocsDB.cpp",
+        "EncodedIriManager.cpp",
+        "ExportIds.cpp",
+        "FTSAlgorithms.cpp",
+        "GraphFilter.cpp",
+        "GraphNameManager.cpp",
+        "IdTableUtils.cpp",
+        "Index.cpp",
+        "IndexImpl.Text.cpp",
+        "IndexImpl.cpp",
+        "IndexMetaData.cpp",
+        "IndexRebuilder.cpp",
+        "InputFileSpecification.cpp",
+        "LocalVocab.cpp",
+        "LocalVocabEntry.cpp",
+        "LocatedTriples.cpp",
+        "MetaDataHandler.cpp",
+        "PatternCreator.cpp",
+        "Permutation.cpp",
+        "PrefixHeuristic.cpp",
+        "ScanSpecification.cpp",
+        "TextIndexBuilder.cpp",
+        "TextIndexReadWrite.cpp",
+        "TextMetaData.cpp",
+        "TextScoring.cpp",
+        "TextScoringEnum.cpp",
+        "Vocabulary.cpp",
+        "//src/parser:AsyncFileBlockDriver.cpp",
+        "//src/parser:RdfParser.cpp",
+        "//src/parser:TripleComponent.cpp",
+    ],
+    deps = [
+        "//src/global",
+        "//src/index/vocabulary",
+        "//src/parser:basicParser",
+        "//src/util:qlever_util",
+    ],
+)
+
+# `add_executable(qlever-index src/index/IndexBuilderMain.cpp)` in the top-level
+# `CMakeLists.txt`. It lives here rather than in `//src`, because Bazel expects a
+# target to be declared in the package that owns its sources.
+qlever_cc_binary(
+    name = "qlever-index",
+    srcs = ["IndexBuilderMain.cpp"],
+    deps = [
+        ":index",
+        "//src:compilationInfo",
+        "//src/global",
+        "//src/libqlever:qlever",
+        "@boost.program_options",
+    ],
+)

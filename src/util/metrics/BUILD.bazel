@@ -1,0 +1,43 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `src/util/metrics/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory, see `//src:qlever_hdrs`.
+cc_library(
+    name = "headers",
+    hdrs = glob(["**/*.h"]),
+    strip_include_prefix = "/src",
+)
+
+qlever_cc_library(
+    name = "metrics",
+    srcs = [
+        "InstrumentedExecutor.cpp",
+        "Metrics.cpp",
+        "ServerMetrics.cpp",
+    ],
+    deps = [
+        "//src/util:qlever_util",
+        # The OpenTelemetry targets that `CMakeLists.txt` calls
+        # `opentelemetry-cpp::{api,sdk,metrics,ostream_metrics_exporter,prometheus_exporter}`.
+        "@opentelemetry-cpp//api",
+        "@opentelemetry-cpp//exporters/ostream:ostream_metric_exporter",
+        "@opentelemetry-cpp//exporters/prometheus:prometheus_exporter",
+        "@opentelemetry-cpp//sdk/src/metrics",
+        # `Metrics.cpp` includes `<prometheus/text_serializer.h>` directly,
+        # which the CMake build gets transitively via the Prometheus exporter.
+        "@prometheus-cpp//core",
+    ],
+)

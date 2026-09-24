@@ -1,0 +1,50 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# `libspatialjoin` (https://github.com/ad-freiburg/spatialjoin). This is the
+# `spatialjoin-dev` target of the upstream `CMakeLists.txt`; the `spatialjoin`
+# command line tool and its tests are not built, because QLever only uses the
+# library.
+#
+# The `src/util` subdirectory is a git submodule pointing at `pbutil`, which
+# release tarballs do not contain. It is therefore a separate repository here,
+# see `@pbutil`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+licenses(["notice"])
+
+exports_files(["LICENSE"])
+
+cc_library(
+    name = "spatialjoin",
+    srcs = [
+        "src/spatialjoin/GeometryCache.cpp",
+        "src/spatialjoin/Sweeper.cpp",
+        "src/spatialjoin/WKTParse.cpp",
+    ],
+    hdrs = glob(["src/spatialjoin/*.h"]),
+    copts = ["-Wno-all"],
+    # QLever's `CMakeLists.txt` disables the bzip2 and zlib output writers
+    # ("we don't need it"). These have to be `defines` rather than
+    # `local_defines`, because `OutputWriter.h` reads them and QLever includes
+    # `spatialjoin/Sweeper.h`, which pulls that header in.
+    defines = [
+        "SPATIALJOIN_NO_BZIP2=1",
+        "SPATIALJOIN_NO_ZLIB=1",
+    ],
+    linkopts = ["-lpthread"],
+    strip_include_prefix = "src",
+    deps = [
+        "@pbutil//:pb_util",
+        "@pbutil//:pb_util_geo",
+    ],
+)
