@@ -566,7 +566,6 @@ TEST(IndexScan, getResultSizeOfScan) {
   }
 }
 
-// _____________________________________________________________________________
 // For a scan with a fixed first column and two variables, the size estimate
 // of a large relation (one that has its own entry in the per-relation
 // metadata) is taken from that metadata and not from the block metadata. It
