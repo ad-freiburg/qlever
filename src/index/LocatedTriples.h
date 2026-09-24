@@ -210,6 +210,17 @@ class LocatedTriplesPerBlock {
   // Get the number of blocks with a non-empty set of located triples.
   size_t numBlocks() const { return map_.size(); }
 
+  // Return whether any of the blocks with index in the closed range
+  // [`firstBlockIndex`, `lastBlockIndex`] has located triples. The cost is
+  // linear in the smaller of the size of the range and `numBlocks()`.
+  //
+  // NOTE: This could be done in logarithmic time with an additional ordered
+  // set of the block indices in `map_` (two binary searches). That set would
+  // have to be maintained in `add` and `erase`. We keep `map_` a hash map
+  // because the per-block lookups during scans are the hot path.
+  bool containsLocatedTriplesInBlockRange(size_t firstBlockIndex,
+                                          size_t lastBlockIndex) const;
+
   // Return whether there are any updates at all.
   bool isEmpty() const { return map_.empty(); }
 
