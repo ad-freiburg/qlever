@@ -137,6 +137,22 @@ std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
 }
 
 // ____________________________________________________________________________
+GeometryInfo GeometryInfo::withPointBitsMappedBy(
+    const std::function<uint64_t(uint64_t)>& mapBits) const {
+  GeometryInfo result{*this};
+  result.boundingBox_.lowerLeftEncoded_ =
+      mapBits(boundingBox_.lowerLeftEncoded_);
+  result.boundingBox_.upperRightEncoded_ =
+      mapBits(boundingBox_.upperRightEncoded_);
+  uint64_t centroidBits = mapBits(geometryTypeAndCentroid_ & bitMaskCentroid);
+  AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0,
+                       "Centroid bit representation exceeds available bits.");
+  result.geometryTypeAndCentroid_ =
+      (geometryTypeAndCentroid_ & bitMaskGeometryType) | centroidBits;
+  return result;
+}
+
+// ____________________________________________________________________________
 BoundingBox GeometryInfo::getBoundingBox() const {
   return {GeoPoint::fromBitRepresentation(boundingBox_.lowerLeftEncoded_),
           GeoPoint::fromBitRepresentation(boundingBox_.upperRightEncoded_)};
