@@ -637,12 +637,18 @@ TEST(IndexTest, indexRowsPerBlockFromConfiguration) {
             }),
             DEFAULT_INDEX_ROWS_PER_BLOCK);
 
-  // A block size of zero is rejected, it would mean blocks without rows.
+  // A block size of zero is rejected, it would mean blocks without rows, and
+  // so is a block size that is too large to be held in RAM.
   AD_EXPECT_THROW_WITH_MESSAGE(
       loadWithConfiguration([](nlohmann::json& configuration) {
         configuration[INDEX_ROWS_PER_BLOCK_KEY] = 0;
       }),
       ::testing::HasSubstr("Invalid value 0"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration([](nlohmann::json& configuration) {
+        configuration[INDEX_ROWS_PER_BLOCK_KEY] = MAX_INDEX_ROWS_PER_BLOCK + 1;
+      }),
+      ::testing::HasSubstr("must be between 1 and 3125000"));
 }
 
 // Regression test for #3191.

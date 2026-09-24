@@ -617,9 +617,9 @@ class CompressedRelationWriter {
   template <typename T>
   friend std::pair<std::vector<CompressedBlockMetadata>,
                    std::vector<CompressedRelationMetadata>>
-  compressedRelationTestWriteCompressedRelations(
-      T inputs, std::string filename, ad_utility::MemorySize blocksize,
-      size_t inputBlockSize);
+  compressedRelationTestWriteCompressedRelations(T inputs, std::string filename,
+                                                 size_t blocksize,
+                                                 size_t inputBlockSize);
 
   // Create a `TaskQueue` for the compression and writing of blocks. The number
   // of threads is `numThreadsOverride` if set, and otherwise determined by the

@@ -605,6 +605,12 @@ class IndexImpl {
   static std::string dateOfIndexBuild(const nlohmann::json& configurationJson,
                                       const std::string& onDiskBase);
 
+  // Return the number of rows per block of the index with the given
+  // `configurationJson` (`INDEX_ROWS_PER_BLOCK_KEY`), and the default if the
+  // index was built before that key existed. Throw if the value is not between
+  // 1 and `MAX_INDEX_ROWS_PER_BLOCK`.
+  static size_t rowsPerBlock(const nlohmann::json& configurationJson);
+
   // Format the given time as a UTC timestamp string in the
   // `DATE_OF_INDEX_BUILD_FORMAT` (e.g. `2026-07-12T14:03:52Z`).
   static std::string formatIndexBuildTime(absl::Time time);

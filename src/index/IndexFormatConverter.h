@@ -15,7 +15,6 @@
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/IndexFormatVersion.h"
-#include "util/MemorySize/MemorySize.h"
 
 // The conversion of an index from the previous on-disk format to the current
 // one, see `convertIndexToCurrentFormat` below. This is what the standalone

@@ -105,6 +105,13 @@ constexpr inline size_t VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE = 3;
 // tradeoff here.
 constexpr inline size_t DEFAULT_INDEX_ROWS_PER_BLOCK = 31'250;
 
+// The largest number of rows per block that an index can be built with. The
+// index builder holds several blocks in RAM at the same time, so a much larger
+// value would only exhaust the memory. The bound also catches a negative value
+// on the command line, which the option parser turns into a huge number.
+constexpr inline size_t MAX_INDEX_ROWS_PER_BLOCK =
+    100 * DEFAULT_INDEX_ROWS_PER_BLOCK;
+
 // The key under which the number of rows per block is stored in the
 // configuration of an index (`meta-data.json`). It is stored because an index
 // can be built with a non-default block size, and everything that writes

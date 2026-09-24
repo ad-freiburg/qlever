@@ -276,8 +276,15 @@ TEST(IndexBuilderConfig, validate) {
 
   c = IndexBuilderConfig{};
   c.indexRowsPerBlock_ = 0;
-  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be at least 1"));
+  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
+                               HasSubstr("must be between 1 and 3125000"));
+  // A negative value on the command line becomes a huge number.
+  c.indexRowsPerBlock_ = MAX_INDEX_ROWS_PER_BLOCK + 1;
+  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
+                               HasSubstr("must be between 1 and 3125000"));
   c.indexRowsPerBlock_ = 128;
+  EXPECT_NO_THROW(c.validate());
+  c.indexRowsPerBlock_ = MAX_INDEX_ROWS_PER_BLOCK;
   EXPECT_NO_THROW(c.validate());
 
   c = IndexBuilderConfig{};

@@ -422,10 +422,12 @@ void IndexBuilderConfig::validate() const {
         "The number of threads for the index build (`num-threads`) must be at "
         "least 1");
   }
-  if (indexRowsPerBlock_ == 0) {
-    throw std::invalid_argument(
+  if (indexRowsPerBlock_ == 0 ||
+      indexRowsPerBlock_ > MAX_INDEX_ROWS_PER_BLOCK) {
+    throw std::invalid_argument(absl::StrCat(
         "The number of rows per block of the index (`index-rows-per-block`) "
-        "must be at least 1");
+        "must be between 1 and ",
+        MAX_INDEX_ROWS_PER_BLOCK));
   }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");

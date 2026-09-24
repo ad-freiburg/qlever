@@ -1246,6 +1246,20 @@ std::string IndexImpl::dateOfIndexBuild(const nlohmann::json& configurationJson,
 }
 
 // ____________________________________________________________________________
+size_t IndexImpl::rowsPerBlock(const nlohmann::json& configurationJson) {
+  size_t rowsPerBlock = configurationJson.value(INDEX_ROWS_PER_BLOCK_KEY,
+                                                DEFAULT_INDEX_ROWS_PER_BLOCK);
+  if (rowsPerBlock == 0 || rowsPerBlock > MAX_INDEX_ROWS_PER_BLOCK) {
+    throw std::runtime_error{
+        absl::StrCat("Invalid value ", rowsPerBlock, " for the key \"",
+                     INDEX_ROWS_PER_BLOCK_KEY,
+                     "\" in the `meta-data.json`, it must be between 1 and ",
+                     MAX_INDEX_ROWS_PER_BLOCK)};
+  }
+  return rowsPerBlock;
+}
+
+// ____________________________________________________________________________
 std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
   return absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, time,
                           absl::UTCTimeZone());
@@ -1436,13 +1450,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   // materialized view, for example), so that all permutations of an index have
   // the same block size. Indexes that were built before this key existed were
   // built with the default.
-  loadDataMember(INDEX_ROWS_PER_BLOCK_KEY, rowsPerBlock_,
-                 DEFAULT_INDEX_ROWS_PER_BLOCK);
-  if (rowsPerBlock_ == 0) {
-    throw std::runtime_error{absl::StrCat("Invalid value 0 for the key \"",
-                                          INDEX_ROWS_PER_BLOCK_KEY,
-                                          "\" in the `meta-data.json`")};
-  }
+  rowsPerBlock_ = rowsPerBlock(configurationJson_);
 
   // The geo cell grid of the geo vocabulary, if the index was built with one
   // (see `GeoCellGrid`). The vocabulary needs it before it is opened, because
