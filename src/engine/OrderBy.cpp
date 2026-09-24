@@ -439,9 +439,8 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
 
 // _____________________________________________________________________________
 LimitOffsetHandling OrderBy::handlesLimitOffset() const {
-  return sortIndices_.size() == 1 && isInputSortedOnFirstSortColumn()
-             ? LimitOffsetHandling::FULL
-             : LimitOffsetHandling::NONE;
+  return hasSingleSortColumnWithSortedInput() ? LimitOffsetHandling::FULL
+                                              : LimitOffsetHandling::NONE;
 }
 
 // _____________________________________________________________________________
