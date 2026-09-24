@@ -98,8 +98,7 @@ TracingHandle initialize() {
   // use or need it. To use it we'd also need a `BaggagePropagator` among other
   // changes.
   otel_propagation::GlobalTextMapPropagator::SetGlobalPropagator(
-      std::shared_ptr<otel_propagation::TextMapPropagator>{
-          new trace_api::propagation::HttpTraceContext{}});
+      std::make_shared<trace_api::propagation::HttpTraceContext>());
 
   return TracingHandle{std::move(sharedProvider)};
 }
