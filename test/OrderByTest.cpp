@@ -211,6 +211,8 @@ ResultAndFastPath orderByOnSortedInput(
     const VectorTable& input, bool isDescending = false,
     std::vector<ColumnIndex> sortedColumns = {0},
     OrderBy::SortIndices sortIndices = {{0, false}}) {
+  // Sort the `input` by the `sortedColumns`, and make it the result of a
+  // subtree that reports being sorted by these columns.
   auto qec = ad_utility::testing::getQec();
   IdTable table = makeIdTableFromVector(input);
   IdTableUtils::sort(table, sortedColumns);
@@ -220,6 +222,9 @@ ResultAndFastPath orderByOnSortedInput(
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(table), vars, false, std::move(sortedColumns));
+
+  // Compute the `OrderBy` on that subtree, and check the runtime information
+  // for whether it took the fast path.
   sortIndices.front().second = isDescending;
   OrderBy orderBy{qec, std::move(subtree), std::move(sortIndices)};
   return {orderBy.getResult()->idTableView().clone(),

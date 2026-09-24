@@ -67,12 +67,16 @@ std::string OrderBy::getDescriptor() const {
 size_t OrderBy::getCostEstimate() {
   size_t size = getSizeEstimateBeforeLimit();
   size_t subcost = subtree_->getCostEstimate();
-  // If the input is already sorted by the single sort column, the result can
-  // often be computed in linear time, see `computeResultForSortedInput`.
+
+  // Return a linear cost if there is a single sort column and the input is
+  // already sorted by it (the result can then often be computed in linear
+  // time, see `computeResultForSortedInput`).
   if (hasSingleSortColumnWithSortedInput()) {
     return size + subcost;
   }
-  // NOTE: `logb(0)` is `-inf`, which must not be cast to an integer.
+
+  // Otherwise, return the cost of sorting, `n log n`, plus the cost of the
+  // input. NOTE: `logb(0)` is `-inf`, which must not be cast to an integer.
   size_t logSize = std::max(
       size_t(1), static_cast<size_t>(
                      logb(static_cast<double>(std::max(size, size_t(1))))));
@@ -180,6 +184,10 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
 // _____________________________________________________________________________
 std::optional<IdTable> OrderBy::computeResultForSortedInput(
     const IdTableView<0>& input) const {
+  // Get the row ranges of the sort column in the order of `ORDER BY ASC`.
+  // Return `std::nullopt` if the fast path does not apply (see
+  // `hasSingleSortColumnWithSortedInput` and
+  // `getRowRangesForSortedNumericColumn`).
   if (!hasSingleSortColumnWithSortedInput()) {
     return std::nullopt;
   }
@@ -188,6 +196,9 @@ std::optional<IdTable> OrderBy::computeResultForSortedInput(
   if (!ranges.has_value()) {
     return std::nullopt;
   }
+
+  // For `ORDER BY DESC`, reverse the order of the ranges and the direction of
+  // each range.
   if (isDescending) {
     ql::ranges::reverse(ranges.value());
     for (auto& range : ranges.value()) {
@@ -195,6 +206,9 @@ std::optional<IdTable> OrderBy::computeResultForSortedInput(
     }
   }
 
+  // Copy the ranges to the result, one after the other. Copy a range in
+  // reverse direction column by column (`insertAtEnd` only copies rows in
+  // their given order).
   IdTable result{input.numColumns(), allocator()};
   result.reserve(input.numRows());
   for (const auto& [begin, end, reversed] : ranges.value()) {
@@ -220,6 +234,9 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> subRes = subtree_->getResult();
   const auto& subTable = subRes->idTableView();
 
+  // Take the fast path for a sorted numeric input if it applies (see
+  // `computeResultForSortedInput`), and record that in the runtime
+  // information.
   if (auto result = computeResultForSortedInput(subTable)) {
     runtimeInfo().addDetail("sorted-numeric-input", true);
     checkCancellation();
