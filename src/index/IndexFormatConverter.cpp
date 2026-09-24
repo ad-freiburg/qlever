@@ -31,6 +31,7 @@
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "global/MaterializedViewConstants.h"
+#include "index/CompressedRelationWriter.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
