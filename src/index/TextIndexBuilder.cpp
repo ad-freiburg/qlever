@@ -401,11 +401,9 @@ void TextIndexBuilder::calculateBlockBoundariesImpl(
   // 2) shorter than the minimum prefix length
   // 3) The next word is shorter than the minimum prefix length
   // 4) word.substring(0, MIN_PREFIX_LENGTH) is different from the next.
-  // Note that the evaluation of 4) is difficult to perform in a meaningful way
-  // for all corner cases of Unicode. E.g. vivae and vivæ  compare equal on the
-  // PRIMARY level which is relevant, but have a different length (5 vs 4).
-  // We currently use several workarounds to get as close as possible to the
-  // desired behavior.
+  // The prefix in 4) consists of the primary weights of the first
+  // `MIN_WORD_PREFIX_SIZE` collation elements that are relevant on the
+  // `PRIMARY` level, so e.g. vivæ (v, i, v, a, e) and vivae share a block.
   // A block boundary is always the last WordId in the block.
   // this way std::lower_bound will point to the correct bracket.
 
@@ -426,69 +424,15 @@ void TextIndexBuilder::calculateBlockBoundariesImpl(
   size_t numBlocks = 0;
   const auto& locManager = index.textVocab_.getLocaleManager();
 
-  // iterator over aaaa, ...,  zzzz
-  auto forcedBlockStarts = fourLetterPrefixes();
-  auto forcedBlockStartsIt = forcedBlockStarts.begin();
-
-  // If there is a four letter prefix aaaa, ...., zzzz in `forcedBlockStarts`
-  // the `SortKey` of which is a prefix of `prefixSortKey`, then set
-  // `prefixSortKey` to that `SortKey` and `prefixLength` to
-  // `MIN_WORD_PREFIX_SIZE` (4). This ensures that the blocks corresponding to
-  // these prefixes are never split up because of Unicode ligatures.
-  auto adjustPrefixSortKey = [&](auto& prefixSortKey, auto& prefixLength) {
-    while (true) {
-      if (forcedBlockStartsIt == forcedBlockStarts.end()) {
-        break;
-      }
-      auto forcedBlockStartSortKey = locManager.getSortKey(
-          *forcedBlockStartsIt, LocaleManager::Level::PRIMARY);
-      if (forcedBlockStartSortKey >= prefixSortKey) {
-        break;
-      }
-      if (prefixSortKey.starts_with(forcedBlockStartSortKey)) {
-        prefixSortKey = std::move(forcedBlockStartSortKey);
-        prefixLength = MIN_WORD_PREFIX_SIZE;
-        return;
-      }
-      forcedBlockStartsIt++;
-    }
-  };
-
-  auto getLengthAndPrefixSortKey = [&](WordVocabIndex i) {
-    auto word = index.textVocab_[i];
-    auto [len, prefixSortKey] =
-        locManager.getPrefixSortKey(word, MIN_WORD_PREFIX_SIZE);
-    if (len > MIN_WORD_PREFIX_SIZE) {
-      AD_LOG_DEBUG << "The prefix sort key for word \"" << word
-                   << "\" and prefix length " << MIN_WORD_PREFIX_SIZE
-                   << " actually refers to a prefix of size " << len << '\n';
-    }
-    // If we are in a block where one of the fourLetterPrefixes are contained,
-    // use those as the block start.
-    adjustPrefixSortKey(prefixSortKey, len);
-    return std::make_tuple(std::move(len), std::move(prefixSortKey));
-  };
-  auto [currentLen, prefixSortKey] =
-      getLengthAndPrefixSortKey(WordVocabIndex::make(0));
+  // The first word of the current block.
+  std::string blockStart{index.textVocab_[WordVocabIndex::make(0)]};
   for (size_t i = 0; i < index.textVocab_.size() - 1; ++i) {
-    // we need foo.value().get() because the vocab returns
-    // a std::optional<std::reference_wrapper<string>> and the "." currently
-    // doesn't implicitly convert to a true reference (unlike function calls)
-    const auto& [nextLen, nextPrefixSortKey] =
-        getLengthAndPrefixSortKey(WordVocabIndex::make(i + 1));
-
-    bool tooShortButNotEqual =
-        (currentLen < MIN_WORD_PREFIX_SIZE || nextLen < MIN_WORD_PREFIX_SIZE) &&
-        (prefixSortKey != nextPrefixSortKey);
-    // The `startsWith` also correctly handles the case where
-    // `nextPrefixSortKey` is "longer" than `MIN_WORD_PREFIX_SIZE`, e.g. because
-    // of unicode ligatures.
-    bool samePrefix = nextPrefixSortKey.starts_with(prefixSortKey);
-    if (tooShortButNotEqual || !samePrefix) {
+    const auto& nextWord = index.textVocab_[WordVocabIndex::make(i + 1)];
+    if (!locManager.haveEqualPrimaryPrefix(blockStart, nextWord,
+                                           MIN_WORD_PREFIX_SIZE)) {
       blockBoundaryAction(i);
       numBlocks++;
-      currentLen = nextLen;
-      prefixSortKey = nextPrefixSortKey;
+      blockStart = nextWord;
     }
   }
   blockBoundaryAction(index.textVocab_.size() - 1);

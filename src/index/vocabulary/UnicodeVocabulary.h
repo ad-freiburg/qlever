@@ -51,7 +51,7 @@ class UnicodeVocabulary {
   /// `words_` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
-  /// `UnicodeComparator::SortKey`
+  /// a UTF-8 string.
   template <typename T>
   WordAndIndex lower_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
@@ -65,7 +65,7 @@ class UnicodeVocabulary {
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
-  /// `UnicodeComparator::SortKey`
+  /// a UTF-8 string.
   template <typename T>
   WordAndIndex upper_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
@@ -98,19 +98,22 @@ class UnicodeVocabulary {
   /// word is equal to `prefix` on the `PRIMARY` level of the comparator.
   /// A value of `nullopt` in the entries means "the bound is higher than the
   /// largest word in the vocabulary".
-  /// TODO<joka921> Also support other levels, but this requires intrusive
-  /// hacking of ICU's SortKeys.
   [[nodiscard]] std::pair<std::optional<uint64_t>, std::optional<uint64_t>>
   prefix_range(std::string_view prefix) const {
     if (prefix.empty()) {
       return {std::nullopt, std::nullopt};
     }
 
-    auto lb = lower_bound(prefix, SortLevel::PRIMARY);
-    auto transformed = _comparator.transformToFirstPossibleBiggerValue(
-        prefix, SortLevel::PRIMARY);
-
-    auto ub = lower_bound(transformed, SortLevel::PRIMARY);
+    // `compareToPrefixOf` is positive for the words before the range, zero
+    // for the words in the range, and negative for the words after it.
+    auto lb = _underlyingVocabulary.lower_bound(
+        prefix, [this](std::string_view word, std::string_view p) {
+          return _comparator.compareToPrefixOf(p, word) > 0;
+        });
+    auto ub = _underlyingVocabulary.upper_bound(
+        prefix, [this](std::string_view p, std::string_view word) {
+          return _comparator.compareToPrefixOf(p, word) < 0;
+        });
 
     auto toOptionalIndex = [](const WordAndIndex& wi) {
       return wi.isEnd() ? std::nullopt : std::optional{wi.index()};

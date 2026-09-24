@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include "./util/GTestHelpers.h"
-#include "backports/StartsWithAndEndsWith.h"
 #include "index/vocabulary/StringSortComparator.h"
 using namespace std::literals;
 using ad_utility::source_location;
@@ -63,40 +62,15 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
   auto comp = [&comparator](const auto& a, const auto& b) {
     return comparator(a, b, TripleComponentComparator::Level::TOTAL);
   };
-  // Test that the comparison between `a` and  `b` always yields the same
-  // result, no matter if it is done on the level of strings or on `SortKey`s.
-  auto assertConsistent = [&comparator, &comp](
-                              const auto& a, const auto& b,
-                              source_location l = AD_CURRENT_SOURCE_LOC()) {
-    auto tr = generateLocationTrace(l);
-    bool ab = comp(a, b);
-    bool ba = comp(b, a);
-    auto aSplit = comparator.extractAndTransformComparable(
-        a, TripleComponentComparator::Level::TOTAL);
-    auto bSplit = comparator.extractAndTransformComparable(
-        b, TripleComponentComparator::Level::TOTAL);
-    EXPECT_EQ(ab, comp(aSplit, bSplit));
-    EXPECT_EQ(ab, comp(a, bSplit));
-    EXPECT_EQ(ab, comp(aSplit, b));
-
-    EXPECT_EQ(ba, comp(bSplit, aSplit));
-    EXPECT_EQ(ba, comp(b, aSplit));
-    EXPECT_EQ(ba, comp(bSplit, a));
-  };
-
-  auto assertTrue = [&comp, &assertConsistent](
-                        const auto& a, const auto& b,
-                        source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto assertTrue = [&comp](const auto& a, const auto& b,
+                            source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     ASSERT_TRUE(comp(a, b));
-    assertConsistent(a, b);
   };
-  auto assertFalse = [&comp, &assertConsistent](
-                         const auto& a, const auto& b,
-                         source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto assertFalse = [&comp](const auto& a, const auto& b,
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto tr = generateLocationTrace(l);
     ASSERT_FALSE(comp(a, b));
-    assertConsistent(a, b);
   };
 
   // strange casings must not affect order
@@ -218,6 +192,67 @@ TEST(StringSortComparatorTest, SimpleStringComparator) {
   ASSERT_FALSE(comp("@u2", "\"@u2"));
 }
 
+// ______________________________________________________________________________________________
+TEST(StringSortComparatorTest, SimpleStringComparatorCompareToPrefixOf) {
+  for (bool ignorePunctuation : {false, true}) {
+    SimpleStringComparator comp("en", "US", ignorePunctuation);
+    EXPECT_EQ(comp.compareToPrefixOf("ab", "ab"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("ab", "abz"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("ab", "ABZ"), 0);
+    EXPECT_LT(comp.compareToPrefixOf("ab", "ac"), 0);
+    EXPECT_GT(comp.compareToPrefixOf("ab", "aa"), 0);
+    EXPECT_GT(comp.compareToPrefixOf("ab", "a"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("", "abc"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("gros", "groß"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("gross", "große"), 0);
+    EXPECT_LT(comp.compareToPrefixOf("gros", "grot"), 0);
+  }
+  SimpleStringComparator respectPunct("en", "US", false);
+  EXPECT_NE(respectPunct.compareToPrefixOf("ab", "a.b"), 0);
+  EXPECT_GT(respectPunct.compareToPrefixOf("a", ".a"), 0);
+
+  SimpleStringComparator ignorePunct("en", "US", true);
+  EXPECT_EQ(ignorePunct.compareToPrefixOf("ab", "a.b"), 0);
+  EXPECT_EQ(ignorePunct.compareToPrefixOf("a.", "ab"), 0);
+  EXPECT_EQ(ignorePunct.compareToPrefixOf("...", "abc"), 0);
+  EXPECT_LT(ignorePunct.compareToPrefixOf("ab", "a.c"), 0);
+  EXPECT_GT(ignorePunct.compareToPrefixOf("ab", "a.a"), 0);
+}
+
+// ______________________________________________________________________________________________
+TEST(StringSortComparatorTest, TripleComponentComparatorCompareToPrefixOf) {
+  for (bool ignorePunctuation : {false, true}) {
+    TripleComponentComparator comp("en", "US", ignorePunctuation);
+    EXPECT_EQ(comp.compareToPrefixOf("\"ab", "\"abc\""), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("\"ab", "\"ab\"@en"), 0);
+    EXPECT_GT(comp.compareToPrefixOf("\"abc", "\"ab\"@en"), 0);
+    EXPECT_LT(comp.compareToPrefixOf("\"ab", "\"ac\"@en"), 0);
+    // A quote inside the value of a literal must not end the literal early.
+    EXPECT_EQ(comp.compareToPrefixOf("\"a b", "\"a \"b\" c\"@en"),
+              ignorePunctuation ? 0 : 1);
+    EXPECT_EQ(comp.compareToPrefixOf("\"a ", "\"a \"b\" c\"@en"), 0);
+    // A quote inside the prefix doesn't end it either.
+    EXPECT_EQ(comp.compareToPrefixOf("\"a \"b", "\"a \"b\" c\"@en"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("\"a \"b\" c\"", "\"a \"b\" c\"\"@en"), 0);
+    EXPECT_LT(comp.compareToPrefixOf("\"a \"b", "\"a \"c\""), 0);
+    EXPECT_GT(comp.compareToPrefixOf("\"a \"b", "\"a \"a\""), 0);
+    // Expansions are handled correctly.
+    EXPECT_EQ(comp.compareToPrefixOf("\"gros", "\"groß\"@de"), 0);
+    // The datatype has to match, even if the prefix has no relevant elements.
+    EXPECT_LT(comp.compareToPrefixOf("\"", "<abc>"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("\"", "\"abc\""), 0);
+    EXPECT_GT(comp.compareToPrefixOf("<", "\"abc\""), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("<http://", "<http://example.org>"), 0);
+    // Without punctuation, "http" is a prefix of "https".
+    EXPECT_EQ(comp.compareToPrefixOf("<http://", "<https://example.org>") == 0,
+              ignorePunctuation);
+  }
+  TripleComponentComparator ignorePunct("en", "US", true);
+  EXPECT_LT(ignorePunct.compareToPrefixOf("\"...", "<abc>"), 0);
+  EXPECT_EQ(ignorePunct.compareToPrefixOf("\"...", "\"abc\""), 0);
+  EXPECT_LT(ignorePunct.compareToPrefixOf("\"ab", "\"a.c\""), 0);
+}
+
 // The following tests exercise the ICU-free (bytewise) comparators. They are
 // always compiled and run, regardless of whether QLever is built with ICU, so
 // that the ICU-free code paths are covered.
@@ -235,11 +270,9 @@ TEST(StringSortComparatorNoICU, SimpleStringComparator) {
   // Something is not smaller than itself.
   EXPECT_FALSE(comp("beta", "beta"));
 
-  // Consistency with the `SortKey`-based overload on the PRIMARY level.
-  using L = SimpleStringComparatorNoICU::Level;
-  auto sortKeyBeta = comp.getLocaleManager().getSortKey("beta", L::PRIMARY);
-  EXPECT_TRUE(comp("alpha", sortKeyBeta, L::PRIMARY));
-  EXPECT_FALSE(comp("gamma", sortKeyBeta, L::PRIMARY));
+  EXPECT_EQ(comp.compareToPrefixOf("al", "alpha"), 0);
+  EXPECT_LT(comp.compareToPrefixOf("al", "beta"), 0);
+  EXPECT_GT(comp.compareToPrefixOf("al", "ALPHA"), 0);
 }
 
 // ______________________________________________________________________________
@@ -269,6 +302,10 @@ TEST(StringSortComparatorNoICU, TripleComponentComparator) {
       comp.isLessInTotalWithExternalFlag("\"beta\"", true, "\"beta\"", false));
   EXPECT_FALSE(
       comp.isLessInTotalWithExternalFlag("\"beta\"", false, "\"beta\"", true));
+
+  EXPECT_EQ(comp.compareToPrefixOf("\"al", "\"alpha\"@en"), 0);
+  EXPECT_EQ(comp.compareToPrefixOf("\"al", "\"al\"@en"), 0);
+  EXPECT_LT(comp.compareToPrefixOf("\"al", "<alpha>"), 0);
 
   // `normalizeUtf8` is a no-op in the ICU-free variant.
   EXPECT_EQ(comp.normalizeUtf8("\xc3\xa9"), "\xc3\xa9");
