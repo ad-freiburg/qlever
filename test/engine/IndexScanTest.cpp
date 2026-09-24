@@ -578,7 +578,7 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   }
   kg += "<x0> <q> <y0> . <x0> <r> <y0> .";
   TestIndexConfig config{kg};
-  config.blocksizePermutations = 16_B;
+  config.rowsPerBlock = 2;
   auto index = std::make_shared<Index>(makeTestIndex(std::move(config)));
   auto getId = makeGetId(*index);
   const auto& pso = index->getImpl().getPermutation(Permutation::PSO);
