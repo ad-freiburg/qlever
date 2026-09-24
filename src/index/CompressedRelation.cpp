@@ -6,6 +6,7 @@
 
 #include "index/CompressedRelation.h"
 
+#include <algorithm>
 #include <thread>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -14,11 +15,14 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
 #include "index/DistinctCol0Ids.h"
 #include "index/GraphComputation.h"
 #include "index/IdTableUtils.h"
 #include "index/LocatedTriples.h"
+#include "util/Algorithm.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
@@ -1504,6 +1508,37 @@ auto CompressedRelationReader::getFirstAndLastTripleIgnoringGraph(
   AD_CORRECTNESS_CHECK(!actualLastBlock.empty());
   return ScanSpecAndBlocksAndBounds::FirstAndLastTriple{
       rowToTriple(firstBlock.front()), rowToTriple(actualLastBlock.back())};
+}
+
+// ____________________________________________________________________________
+ad_utility::HashSetWithMemoryLimit<Id::T>
+CompressedRelationReader::computeUniqueGraphIds(
+    const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const CancellationHandle& cancellationHandle,
+    const Allocator& allocator) const {
+  ad_utility::HashSetWithMemoryLimit<Id::T> graphIds{allocator.as<Id::T>()};
+  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+  const auto scanConfig =
+      getScanConfig(ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+                    additionalColumns, locatedTriplesPerBlock);
+
+  for (const auto& metadata : scanSpecAndBlocks.getBlockMetadataView()) {
+    bool shouldScan =
+        !metadata.graphInfo_.has_value() ||
+        ql::ranges::any_of(metadata.graphInfo_.value(), [&graphIds](Id id) {
+          return !ad_utility::contains(graphIds, id.getBits());
+        });
+    if (shouldScan) {
+      auto block = readAndDecompressBlock(metadata, scanConfig);
+      cancellationHandle->throwIfCancelled();
+      AD_CORRECTNESS_CHECK(block.has_value());
+      for (Id id : block->block_.getColumn(ADDITIONAL_COLUMN_GRAPH_ID)) {
+        graphIds.insert(id.getBits());
+      }
+    }
+  }
+  return graphIds;
 }
 
 // ____________________________________________________________________________

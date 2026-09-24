@@ -943,13 +943,13 @@ std::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
-  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  BlankNodeAdder bn{blankNodeManager_};
   return {visit(ctx->quadData()).toTriplesWithGraph(std::monostate{}, bn), {}};
 }
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
-  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  BlankNodeAdder bn{blankNodeManager_};
   auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
   auto quads = visit(ctx->quadData());
   return {{}, quads.toTriplesWithGraph(std::monostate{}, bn)};
@@ -969,7 +969,7 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   triples.forAllVariables([this](const Variable& v) { addVisibleVariable(v); });
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  BlankNodeAdder bn{blankNodeManager_};
   parsedQuery_._clause = parsedQuery::UpdateClause{
       GraphUpdate{{}, triples.toTriplesWithGraph(std::monostate{}, bn)}};
   return parsedQuery_;
@@ -989,7 +989,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
     if (ctx) {
       auto quads = this->visit(ctx);
       quads.forAllVariables(ensureVariableIsVisible);
-      Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+      BlankNodeAdder bn{blankNodeManager_};
       *target = quads.toTriplesWithGraph(defaultGraph, bn);
     }
   };
@@ -1502,11 +1502,16 @@ RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
 
 // ____________________________________________________________________________________
 TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
-  std::string langtag =
-      ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
-  return TripleComponent::Iri::fromIriref(
-      langtag +
-      visitAlternative<std::string>(ctx->iriref(), ctx->prefixedName()));
+  auto iri = visitAlternative<std::string>(ctx->iriref(), ctx->prefixedName());
+  if (!ctx->PREFIX_LANGTAG()) {
+    return TripleComponent::Iri::fromIriref(std::move(iri));
+  }
+  // The text of a `PREFIX_LANGTAG` is the language tag enclosed in `@`, e.g.
+  // `@en@`; strip those to obtain the bare language tag.
+  std::string prefixLangtag = ctx->PREFIX_LANGTAG()->getText();
+  AD_CORRECTNESS_CHECK(prefixLangtag.size() > 2);
+  return TripleComponent::Iri::fromLangtagAndIriref(
+      std::string_view{prefixLangtag}.substr(1, prefixLangtag.size() - 2), iri);
 }
 
 // ____________________________________________________________________________________
@@ -3246,7 +3251,7 @@ std::variant<int64_t, double> Visitor::visit(
 
 // ____________________________________________________________________________________
 bool Visitor::visit(Parser::BooleanLiteralContext* ctx) {
-  return ctx->getText() == "true";
+  return static_cast<bool>(ctx->BOOL_TRUE());
 }
 
 // ____________________________________________________________________________________

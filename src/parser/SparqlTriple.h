@@ -86,15 +86,13 @@ class SparqlTriple
   // Convert to a simple triple. Fails with an exception if the predicate
   // actually is a property path.
   SparqlTripleSimple getSimple() const {
-    bool holdsVariable = std::holds_alternative<Variable>(p_);
-    auto predicate = getSimplePredicate();
-    AD_CONTRACT_CHECK(holdsVariable || predicate.has_value());
-    TripleComponent p =
-        holdsVariable
-            ? TripleComponent{std::get<Variable>(p_)}
-            : TripleComponent(ad_utility::triple_component::Iri::fromIriref(
-                  predicate.value()));
-    return {s_, p, o_, additionalScanColumns_};
+    if (std::holds_alternative<Variable>(p_)) {
+      return {s_, TripleComponent{std::get<Variable>(p_)}, o_,
+              additionalScanColumns_};
+    }
+    const auto& path = std::get<PropertyPath>(p_);
+    AD_CONTRACT_CHECK(path.isIri());
+    return {s_, TripleComponent{path.getIri()}, o_, additionalScanColumns_};
   }
 
   // Constructs SparqlTriple from a simple triple. Fails with an exception if
