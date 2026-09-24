@@ -219,11 +219,10 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
 }
 
 // __________________________________________________________________________
-void to_json(nlohmann::ordered_json& j,
-             const RuntimeInformationWholeQuery& rti) {
+void to_json(nlohmann::ordered_json& j, const QueryPlanningInfo& qpi) {
   j = nlohmann::ordered_json{
-      {"time_query_planning", rti.timeQueryPlanning.count()},
-      {"query_planning", rti.queryPlanning}};
+      {"time_query_planning", qpi.timeQueryPlanning.count()},
+      {"query_planning", qpi.queryPlanning}};
 }
 
 // __________________________________________________________________________

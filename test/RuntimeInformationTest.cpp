@@ -236,19 +236,19 @@ TEST(RuntimeInformation, toStringAndJson) {
   ASSERT_EQ(j, nlohmann::ordered_json::parse(expectedJson));
 }
 
-// Test the JSON of the information about the whole query.
-TEST(RuntimeInformation, wholeQueryToJson) {
+// Test the JSON of the information about the query planning.
+TEST(RuntimeInformation, queryPlanningInfoToJson) {
   // Without any information, the planning took no time and has no components.
-  RuntimeInformationWholeQuery rti;
-  EXPECT_EQ(nlohmann::ordered_json(rti),
+  QueryPlanningInfo qpi;
+  EXPECT_EQ(nlohmann::ordered_json(qpi),
             nlohmann::ordered_json::parse(
                 R"({"time_query_planning": 0, "query_planning": []})"));
 
   // With two connected components, one planned with dynamic programming and one
   // greedily.
-  rti.timeQueryPlanning = std::chrono::milliseconds{12};
-  rti.queryPlanning.push_back({false, 3, 6, 1500, 42});
-  rti.queryPlanning.push_back({true, 20, 1501, 1500, 380});
+  qpi.timeQueryPlanning = std::chrono::milliseconds{12};
+  qpi.queryPlanning.push_back({false, 3, 6, 1500, 42});
+  qpi.queryPlanning.push_back({true, 20, 1501, 1500, 380});
   auto expected = nlohmann::ordered_json::parse(R"({
     "time_query_planning": 12,
     "query_planning": [
@@ -260,5 +260,5 @@ TEST(RuntimeInformation, wholeQueryToJson) {
        "num_candidate_plans": 380}
     ]
   })");
-  EXPECT_EQ(nlohmann::ordered_json(rti), expected);
+  EXPECT_EQ(nlohmann::ordered_json(qpi), expected);
 }

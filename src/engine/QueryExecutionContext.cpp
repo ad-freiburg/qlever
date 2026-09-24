@@ -77,8 +77,8 @@ void QueryExecutionContext::signalQueryUpdate(
       enoughTimeSinceLastUpdate()) {
     lastWebsocketUpdate_ = now;
     nlohmann::ordered_json json(runtimeInformation);
-    if (runtimeInfoWholeQuery_.has_value()) {
-      json["meta"] = runtimeInfoWholeQuery_.value();
+    if (queryPlanningInfo_.has_value()) {
+      json["meta"] = queryPlanningInfo_.value();
     }
     updateCallback_(json.dump());
   }

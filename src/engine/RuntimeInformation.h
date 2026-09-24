@@ -167,16 +167,16 @@ struct ConnectedComponentPlanningInfo {
   // set of nodes and sort order.
   size_t numCandidatePlans_ = 0;
 
-  // Output as json, see `RuntimeInformationWholeQuery`.
+  // Output as json, see `QueryPlanningInfo`.
   friend void to_json(nlohmann::ordered_json& j,
                       const ConnectedComponentPlanningInfo& info);
 };
 
-// A class to store information about the execution of a complete query, e.g.
-// the time spent during query planning. Note: The information about the
-// `QueryExecutionTree` (e.g. how much time was spent in which operation) is
-// stored in the `RuntimeInformation` class above.
-struct RuntimeInformationWholeQuery {
+// Information about the planning of a query: the time it took and how each
+// connected component was planned. Note: The information about the execution
+// of the `QueryExecutionTree` (e.g. how much time was spent in which operation)
+// is stored in the `RuntimeInformation` class above.
+struct QueryPlanningInfo {
   // The time spent during query planning (this does not include the time spent
   // on `IndexScan`s that were executed during the query planning).
   std::chrono::milliseconds timeQueryPlanning = RuntimeInformation::ZERO;
@@ -185,8 +185,7 @@ struct RuntimeInformationWholeQuery {
   std::vector<ConnectedComponentPlanningInfo> queryPlanning;
   /// Output as json. The signature of this function is mandated by the json
   /// library to allow for implicit conversion.
-  friend void to_json(nlohmann::ordered_json& j,
-                      const RuntimeInformationWholeQuery& rti);
+  friend void to_json(nlohmann::ordered_json& j, const QueryPlanningInfo& qpi);
 };
 
 #endif  // QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H

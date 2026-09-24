@@ -233,8 +233,8 @@ TEST_F(OperationTestFixture,
 }
 
 // Test that the updates of the runtime information carry the information about
-// the whole query, once it is set.
-TEST_F(OperationTestFixture, updatesCarryInformationAboutTheWholeQuery) {
+// the query planning, once it is set.
+TEST_F(OperationTestFixture, updatesCarryInformationAboutTheQueryPlanning) {
   // Without that information, an update is just the runtime information of the
   // operations.
   operation.getResult(true);
@@ -243,17 +243,17 @@ TEST_F(OperationTestFixture, updatesCarryInformationAboutTheWholeQuery) {
 
   // With it, every update carries it as the key `meta`, with the same content
   // as in the `application/qlever-results+json` format.
-  RuntimeInformationWholeQuery wholeQuery;
-  wholeQuery.timeQueryPlanning = std::chrono::milliseconds{17};
-  wholeQuery.queryPlanning.push_back({false, 3, 6, 1500, 42});
-  qec.setRuntimeInfoWholeQuery(wholeQuery);
+  QueryPlanningInfo queryPlanningInfo;
+  queryPlanningInfo.timeQueryPlanning = std::chrono::milliseconds{17};
+  queryPlanningInfo.queryPlanning.push_back({false, 3, 6, 1500, 42});
+  qec.setQueryPlanningInfo(queryPlanningInfo);
   jsonHistory.clear();
   qec.clearCacheUnpinnedOnly();
   operation.getResult(true);
   ASSERT_FALSE(jsonHistory.empty());
   for (const auto& json : jsonHistory) {
     EXPECT_EQ(nlohmann::ordered_json::parse(json)["meta"],
-              nlohmann::ordered_json(wholeQuery));
+              nlohmann::ordered_json(queryPlanningInfo));
   }
 }
 
