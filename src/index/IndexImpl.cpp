@@ -443,7 +443,7 @@ void IndexImpl::createFromFiles(
   // converter) uses the same block size as this build. It is stored as the
   // number of rows per block, computed like `CompressedRelationWriter` does.
   configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = std::max(
-      uint64_t{1}, blocksizePermutationPerColumn_.getBytes() / sizeof(Id));
+      size_t{1}, blocksizePermutationPerColumn_.getBytes() / sizeof(Id));
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
