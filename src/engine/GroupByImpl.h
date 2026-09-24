@@ -78,6 +78,9 @@ class GroupByImpl : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(const std::set<Variable>& variables) const override;
+
  public:
   uint64_t getSizeEstimateBeforeLimit() override;
   size_t getCostEstimate() override;
